@@ -59,6 +59,7 @@ export const call = <F extends Schema.Struct.Fields>(
   Effect.gen(function* () {
     const request = yield* HttpClientRequest.post(URL).pipe(
       HttpClientRequest.accept("application/json, text/event-stream"),
+      HttpClientRequest.setHeaders({ "x-api-key": process.env.EXA_API_KEY }),
       HttpClientRequest.schemaBodyJson(McpRequest(args))({
         jsonrpc: "2.0" as const,
         id: 1 as const,
