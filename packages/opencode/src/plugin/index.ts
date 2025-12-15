@@ -55,7 +55,7 @@ export namespace Plugin {
 
     let plugins = config.plugin ?? []
     if (plugins.length) await Config.waitForDependencies()
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+    if (!(Bun.env.OPENCODE_DISABLE_DEFAULT_PLUGINS == "true")) {
       plugins = [...BUILTIN, ...plugins]
     }
 
