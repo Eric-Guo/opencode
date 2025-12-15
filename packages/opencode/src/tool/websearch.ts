@@ -100,6 +100,11 @@ export const WebSearchTool = Tool.define("websearch", async () => {
           "content-type": "application/json",
         }
 
+        const apiKey = process.env.EXA_API_KEY
+        if (apiKey) {
+          headers["x-api-key"] = apiKey
+        }
+
         const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
           method: "POST",
           headers,
