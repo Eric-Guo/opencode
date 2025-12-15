@@ -277,7 +277,7 @@ export namespace ToolRegistry {
         const e2e = !!(yield* env.get("OPENCODE_E2E_LLM_URL"))
         const filtered = (yield* all()).filter((tool) => {
           if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
-            return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+            return input.providerID === ProviderID.opencode || Bun.env.OPENCODE_ENABLE_EXA == "true"
           }
 
           const usePatch =
