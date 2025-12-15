@@ -145,7 +145,7 @@ export namespace ToolRegistry {
         .filter((t) => {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
-            return model.providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+            return model.providerID === "opencode" || Bun.env.OPENCODE_ENABLE_EXA == "true"
           }
 
           if (hashline) {
