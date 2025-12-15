@@ -56,7 +56,10 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "tool.registry" })
 
-export function webSearchEnabled(providerID: ProviderID, flags = { exa: false, parallel: false }) {
+export function webSearchEnabled(
+  providerID: ProviderID,
+  flags = { exa: Bun.env.OPENCODE_ENABLE_EXA == "true", parallel: Flag.OPENCODE_ENABLE_PARALLEL },
+) {
   return providerID === ProviderID.opencode || flags.exa || flags.parallel
 }
 
