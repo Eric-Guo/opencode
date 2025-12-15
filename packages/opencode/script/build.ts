@@ -134,7 +134,7 @@ const targets = (
 
         return true
       })
-    : allTargets
+    : allTargets.filter((item) => item.os === "darwin" && item.arch === "arm64")
 )
   // Bun does not publish a current Darwin x64 baseline canary, so we must not publish one either :(
   .filter((item) => !(canary && item.os === "darwin" && item.arch === "x64" && item.avx2 === false))
