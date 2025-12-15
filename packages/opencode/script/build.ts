@@ -160,7 +160,7 @@ const targets = singleFlag
 
       return true
     })
-  : allTargets
+  : allTargets.filter((item) => item.os === "darwin" && item.arch === "arm64")
 
 await $`rm -rf dist`
 
