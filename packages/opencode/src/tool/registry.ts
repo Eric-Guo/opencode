@@ -56,7 +56,7 @@ const log = Log.create({ service: "tool.registry" })
 
 export function webSearchEnabled(
   providerID: ProviderID,
-  flags = { exa: Flag.OPENCODE_ENABLE_EXA, parallel: Flag.OPENCODE_ENABLE_PARALLEL },
+  flags = { exa: Bun.env.OPENCODE_ENABLE_EXA == "true", parallel: Flag.OPENCODE_ENABLE_PARALLEL },
 ) {
   return providerID === ProviderID.opencode || flags.exa || flags.parallel
 }
