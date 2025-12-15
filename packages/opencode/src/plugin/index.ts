@@ -44,7 +44,7 @@ export namespace Plugin {
     }
 
     const plugins = [...(config.plugin ?? [])]
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+    if (!(Bun.env.OPENCODE_DISABLE_DEFAULT_PLUGINS == "true")) {
       plugins.push(...BUILTIN)
     }
 
