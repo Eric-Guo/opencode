@@ -1,3 +1,5 @@
+/// <reference path="./sst-env.d.ts" />
+
 import { SECRET } from "./secret"
 import { shortDomain } from "./stage"
 
