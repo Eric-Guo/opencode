@@ -36,6 +36,7 @@ function Mcp(props: { context: Plugin.Context }) {
 
 function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
+  const user = createMemo(() => Bun.env.THAPE_SSO_USER_NAME ?? props.context.app.version)
 
   return (
     <Show when={dimensions().height >= 12 && dimensions().width >= 44}>
@@ -52,7 +53,7 @@ function View(props: { context: Plugin.Context }) {
         <Mcp context={props.context} />
         <box flexGrow={1} />
         <box flexShrink={0}>
-          <text fg={props.context.theme.text.subdued}>{props.context.app.version}</text>
+          <text fg={props.context.theme.text.subdued}>{user()}</text>
         </box>
       </box>
     </Show>
