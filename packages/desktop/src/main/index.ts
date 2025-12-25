@@ -5,6 +5,7 @@ import * as http from "node:http"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import type { Event } from "electron"
 import { app, BrowserWindow } from "electron"
 
@@ -178,6 +179,7 @@ const main = Effect.gen(function* () {
   })
 
   ensureLoopbackNoProxy()
+  yield* Effect.promise(() => ensureSsoUsername())
   useEnvProxy()
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
