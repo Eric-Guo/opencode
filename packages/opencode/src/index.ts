@@ -5,6 +5,7 @@ import { GenerateCommand } from "./cli/cmd/generate"
 import { Log } from "./util"
 import { ConsoleCommand } from "./cli/cmd/account"
 import { ProvidersCommand } from "./cli/cmd/providers"
+import { ensureSsoUsername } from "./util/thape_sso"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
@@ -101,6 +102,7 @@ const cli_init = yargs(args)
         return "INFO"
       })(),
     })
+    await ensureSsoUsername()
 
     Heap.start()
 
