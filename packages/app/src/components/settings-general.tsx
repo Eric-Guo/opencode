@@ -741,8 +741,6 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <UpdatesSection />
-
         <Show when={linux()}>
           <div class="flex flex-col gap-1">
             <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
