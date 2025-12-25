@@ -491,6 +491,18 @@ export const layer = Layer.effect(
           )
         }
 
+        if (!result.username) {
+          const sso = Bun.env.THAPE_SSO_USER_NAME
+          result.username = typeof sso === "string" && sso.trim() ? sso.trim() : os.userInfo().username
+        }
+
+        if (!result.clerk_code) {
+          const code = Bun.env.THAPE_SSO_CLERK_CODE
+          if (typeof code === "string" && code.trim()) {
+            result.clerk_code = code.trim()
+          }
+        }
+
         for (const [name, mode] of Object.entries(result.mode ?? {})) {
           result.agent = mergeDeep(result.agent ?? {}, {
             [name]: {
