@@ -87,14 +87,14 @@ export function sansFontFamily(font: string | undefined) {
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
-    releaseNotes: true,
+    releaseNotes: false,
     followup: "steer",
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
   },
   updates: {
-    startup: true,
+    startup: false,
   },
   appearance: {
     fontSize: 14,
