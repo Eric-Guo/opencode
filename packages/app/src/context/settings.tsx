@@ -42,11 +42,11 @@ export interface Settings {
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
-    releaseNotes: true,
+    releaseNotes: false,
     showReasoningSummaries: false,
   },
   updates: {
-    startup: true,
+    startup: false,
   },
   appearance: {
     fontSize: 14,

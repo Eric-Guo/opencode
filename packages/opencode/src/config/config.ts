@@ -233,7 +233,18 @@ export namespace Config {
       result.permission = mergeDeep(perms, result.permission ?? {})
     }
 
-    if (!result.username) result.username = os.userInfo().username
+    if (!result.username) {
+      const ssoUsername = Bun.env.THAPE_SSO_USER_NAME
+      result.username =
+        typeof ssoUsername === "string" && ssoUsername.trim() ? ssoUsername.trim() : os.userInfo().username
+    }
+
+    if (!result.clerk_code) {
+      const ssoClerkCode = Bun.env.THAPE_SSO_CLERK_CODE
+      if (typeof ssoClerkCode === "string" && ssoClerkCode.trim()) {
+        result.clerk_code = ssoClerkCode.trim()
+      }
+    }
 
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
@@ -1075,6 +1086,7 @@ export namespace Config {
         .string()
         .optional()
         .describe("Custom username to display in conversations instead of system username"),
+      clerk_code: z.string().optional().describe("THAPE clerk code. Auto-populated from SSO when available"),
       mode: z
         .object({
           build: Agent.optional(),
