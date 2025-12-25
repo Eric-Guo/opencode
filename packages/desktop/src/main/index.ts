@@ -1,4 +1,5 @@
 import { app, session } from "electron"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import { Deferred, Effect, Fiber } from "effect"
 import type { ServerReadyData } from "../shared/ipc-contract"
 import { checkAppExists, resolveAppPath } from "./files/apps"
@@ -97,6 +98,7 @@ const main = Effect.gen(function* () {
       hasBypassRules: Boolean(sessionProxy.proxyBypassRules),
     })
   startAutoUpdater(updater)
+  yield* Effect.promise(() => ensureSsoUsername())
   yield* Effect.promise(() => startNetworkLogging())
 
   const loadingTask = yield* Effect.gen(function* () {
