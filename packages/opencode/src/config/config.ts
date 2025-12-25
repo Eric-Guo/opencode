@@ -146,6 +146,7 @@ export const Info = z
         "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
       ),
     username: z.string().optional().describe("Custom username to display in conversations instead of system username"),
+    clerk_code: z.string().optional().describe("THAPE clerk code. Auto-populated from SSO when available"),
     mode: z
       .object({
         build: ConfigAgent.Info.optional(),
@@ -639,7 +640,17 @@ export const layer = Layer.effect(
         result.permission = mergeDeep(perms, result.permission ?? {})
       }
 
-      if (!result.username) result.username = os.userInfo().username
+      if (!result.username) {
+        const sso = Bun.env.THAPE_SSO_USER_NAME
+        result.username = typeof sso === "string" && sso.trim() ? sso.trim() : os.userInfo().username
+      }
+
+      if (!result.clerk_code) {
+        const code = Bun.env.THAPE_SSO_CLERK_CODE
+        if (typeof code === "string" && code.trim()) {
+          result.clerk_code = code.trim()
+        }
+      }
 
       if (result.autoshare === true && !result.share) {
         result.share = "auto"
