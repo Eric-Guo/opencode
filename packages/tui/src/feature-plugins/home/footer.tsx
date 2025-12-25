@@ -54,10 +54,11 @@ function Mcp(props: { api: TuiPluginApi }) {
 
 function Version(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
+  const user = createMemo(() => props.api.state.config.username ?? props.api.app.version)
 
   return (
     <box flexShrink={0}>
-      <text fg={theme().textMuted}>{props.api.app.version}</text>
+      <text fg={theme().textMuted}>{user()}</text>
     </box>
   )
 }
