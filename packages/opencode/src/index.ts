@@ -4,6 +4,7 @@ import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { ConsoleCommand } from "./cli/cmd/account"
 import { ProvidersCommand } from "./cli/cmd/providers"
+import { ensureSsoUsername } from "./util/thape_sso"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
@@ -71,6 +72,7 @@ const cli_init = yargs(args)
       process.env.OPENCODE_PURE = "1"
     }
 
+    await ensureSsoUsername()
     Heap.start()
 
     process.env.AGENT = "1"
