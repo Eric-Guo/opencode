@@ -50,6 +50,7 @@ function Mcp(props: { context: Plugin.Context }) {
 function View(props: { context: Plugin.Context }) {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  const user = createMemo(() => Bun.env.THAPE_SSO_USER_NAME ?? InstallationVersion)
   const mcpWidth = createMemo(() => {
     const list = props.context.data.location.mcp.server.list(props.context.location) ?? []
     if (list.length === 0) return 0
@@ -70,12 +71,12 @@ function View(props: { context: Plugin.Context }) {
     >
       <Directory
         context={props.context}
-        maxWidth={Math.max(2, dimensions().width - 8 - Bun.stringWidth(InstallationVersion) - mcpWidth())}
+        maxWidth={Math.max(2, dimensions().width - 8 - Bun.stringWidth(user()) - mcpWidth())}
       />
       <Mcp context={props.context} />
       <box flexGrow={1} />
       <box flexShrink={0}>
-        <text fg={theme.textMuted}>{InstallationVersion}</text>
+        <text fg={theme.textMuted}>{user()}</text>
       </box>
     </box>
   )
