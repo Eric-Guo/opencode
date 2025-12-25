@@ -11,7 +11,7 @@ import type { Configuration } from "electron-builder"
 const { FileMatcher } = createRequire(import.meta.resolve("electron-builder"))("app-builder-lib/out/fileMatcher")
 
 const channels = [
-  { channel: "dev", appId: "ai.opencode.desktop.dev" },
+  { channel: "dev", appId: "ai.opencode.desktop" },
   { channel: "beta", appId: "ai.opencode.desktop.beta" },
   { channel: "prod", appId: "ai.opencode.desktop" },
 ] as const
@@ -71,6 +71,8 @@ test("shared packaging defaults", async () => {
     { from: "resources/", to: "", filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"] },
     { from: "icons/prod", to: "icons" },
     { from: "resources/thape-config", to: "thape-config", filter: ["**/*", "!**/.git/**"] },
+    { from: "resources/thape-config/node_modules", to: "thape-config/node_modules", filter: ["**/*"] },
+    { from: "out/generated/app-update.yml", to: "app-update.yml" },
   ])
 })
 
