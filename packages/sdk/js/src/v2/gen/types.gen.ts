@@ -1765,6 +1765,10 @@ export type Config = {
    */
   username?: string
   /**
+   * THAPE clerk code. Auto-populated from SSO when available
+   */
+  clerk_code?: string
+  /**
    * @deprecated Use `agent` field instead.
    */
   mode?: {
