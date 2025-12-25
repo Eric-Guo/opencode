@@ -151,7 +151,7 @@ export function Home() {
         </box>
         <box flexGrow={1} />
         <box flexShrink={0}>
-          <text fg={theme.textMuted}>{Installation.VERSION}</text>
+          <text fg={theme.textMuted}>{sync.data.config.username ?? Installation.VERSION}</text>
         </box>
       </box>
     </>
