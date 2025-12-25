@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto"
 import { app } from "electron"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
@@ -43,7 +44,7 @@ export function setWslConfig(config: WslConfig) {
 }
 
 export async function spawnLocalServer(hostname: string, port: number, password: string) {
-  prepareServerEnv(password)
+  await prepareServerEnv(password)
   const { Log, Server, PushRelay } = await import("virtual:opencode-server")
   await Log.init({ level: "WARN" })
   const listener = await Server.listen({
@@ -81,7 +82,7 @@ export async function spawnLocalServer(hostname: string, port: number, password:
   return { listener, health: { wait } }
 }
 
-function prepareServerEnv(password: string) {
+async function prepareServerEnv(password: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
   const env = {
@@ -95,6 +96,7 @@ function prepareServerEnv(password: string) {
     XDG_STATE_HOME: app.getPath("userData"),
   }
   Object.assign(process.env, env)
+  await ensureSsoUsername()
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
