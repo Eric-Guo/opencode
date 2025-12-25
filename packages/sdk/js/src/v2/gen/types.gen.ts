@@ -1224,6 +1224,7 @@ export type Config = {
   small_model?: string
   default_agent?: string
   username?: string
+  clerk_code?: string
   mode?: {
     build?: AgentConfig
     plan?: AgentConfig
