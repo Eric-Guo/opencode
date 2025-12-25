@@ -239,7 +239,7 @@ export const settingsPersistence = Persistence.migrate(
 
 export const defaultSettings: Settings = {
   general: {
-    releaseNotes: true,
+    releaseNotes: false,
     showFileTree: true,
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: true,

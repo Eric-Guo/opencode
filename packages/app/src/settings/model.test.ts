@@ -68,10 +68,10 @@ describe("settings schema", () => {
   test("supplies the existing defaults for an empty document", () => {
     expect(decode({})).toEqual({
       general: {
-        releaseNotes: true,
-        showFileTree: false,
+        releaseNotes: false,
+        showFileTree: true,
         timelineDetail: timelinePresets[2].value,
-        showCustomAgents: false,
+        showCustomAgents: true,
         mobileTitlebarPosition: "top",
         mobileDiffWrap: true,
         terminalPlacement: "side",
@@ -118,7 +118,7 @@ describe("settings schema", () => {
     expect(settings.general).toMatchObject({
       showTerminal: true,
       autoSave: false,
-      releaseNotes: true,
+      releaseNotes: false,
       timelineDetail: timelinePresets[2].value,
       followUpBehavior: "steer",
     })
