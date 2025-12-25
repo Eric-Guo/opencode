@@ -395,54 +395,6 @@ export const SettingsGeneral: Component = () => {
           }}
         </Show>
 
-        {/* Updates Section */}
-        <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
-
-          <div class="bg-surface-raised-base px-4 rounded-lg">
-            <SettingsRow
-              title={language.t("settings.updates.row.startup.title")}
-              description={language.t("settings.updates.row.startup.description")}
-            >
-              <div data-action="settings-updates-startup">
-                <Switch
-                  checked={settings.updates.startup()}
-                  disabled={!platform.checkUpdate}
-                  onChange={(checked) => settings.updates.setStartup(checked)}
-                />
-              </div>
-            </SettingsRow>
-
-            <SettingsRow
-              title={language.t("settings.general.row.releaseNotes.title")}
-              description={language.t("settings.general.row.releaseNotes.description")}
-            >
-              <div data-action="settings-release-notes">
-                <Switch
-                  checked={settings.general.releaseNotes()}
-                  onChange={(checked) => settings.general.setReleaseNotes(checked)}
-                />
-              </div>
-            </SettingsRow>
-
-            <SettingsRow
-              title={language.t("settings.updates.row.check.title")}
-              description={language.t("settings.updates.row.check.description")}
-            >
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={store.checking || !platform.checkUpdate}
-                onClick={check}
-              >
-                {store.checking
-                  ? language.t("settings.updates.action.checking")
-                  : language.t("settings.updates.action.checkNow")}
-              </Button>
-            </SettingsRow>
-          </div>
-        </div>
-
         <Show when={linux()}>
           {(_) => {
             const [valueResource, actions] = createResource(() => platform.getDisplayBackend?.())
