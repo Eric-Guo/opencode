@@ -76,7 +76,7 @@ function Plugins(props: { context: Plugin.Context }) {
 
 function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
+  const user = createMemo(() => Bun.env.THAPE_SSO_USER_NAME ?? props.context.app.version)
 
   return (
     <Show when={dimensions().height >= 12 && dimensions().width >= 44}>
@@ -94,11 +94,9 @@ function View(props: { context: Plugin.Context }) {
         <Plugins context={props.context} />
         <Slot path="home.footer.status" />
         <box flexGrow={1} />
-        <Show when={visibility().version}>
-          <box flexShrink={0}>
-            <text fg={props.context.theme.text.muted}>{props.context.app.version}</text>
-          </box>
-        </Show>
+        <box flexShrink={0}>
+          <text fg={props.context.theme.text.muted}>{user()}</text>
+        </box>
       </box>
     </Show>
   )
