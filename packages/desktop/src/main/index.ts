@@ -5,6 +5,7 @@ import * as http from "node:http"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import type { Event } from "electron"
 import { app, BrowserWindow } from "electron"
 import contextMenu from "electron-context-menu"
@@ -292,6 +293,7 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   setupAutoUpdater()
+  await ensureSsoUsername()
 
   const needsMigration = !sqliteFileExists() && process.env.OPENCODE_DB !== ":memory:"
   let overlay: BrowserWindow | null = null
