@@ -19704,6 +19704,10 @@
           "username": {
             "type": "string"
           },
+          "clerk_code": {
+            "description": "THAPE clerk code. Auto-populated from SSO when available",
+            "type": "string"
+          },
           "mode": {
             "type": "object",
             "properties": {
