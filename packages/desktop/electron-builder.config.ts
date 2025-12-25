@@ -36,7 +36,7 @@ const channel = (() => {
 })()
 
 const APP_IDS = {
-  dev: "ai.opencode.desktop.dev",
+  dev: "ai.opencode.desktop",
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 } as const
@@ -46,7 +46,7 @@ const iconDir = `icons/${iconChannel}`
 const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: "SigmaAgents-${os}-${arch}-${version}.${ext}",
   beforePack: async () => {
     await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
     await mkdir(generatedDir, { recursive: true })
@@ -153,8 +153,9 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Dev",
-        rpm: { packageName: "opencode-dev" },
+        productName: "SigmaAgents",
+        publish: { provider: "generic", url: updateUrl, channel: "latest" },
+        rpm: { packageName: "sigma-agents" },
       }
     }
     case "beta": {
@@ -163,7 +164,7 @@ function getConfig() {
         appId,
         productName: "OpenCode Beta",
         protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        publish: { provider: "generic", url: updateUrl, channel: "latest" },
         rpm: { packageName: "opencode-beta" },
       }
     }
@@ -173,7 +174,7 @@ function getConfig() {
         appId,
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        publish: { provider: "generic", url: updateUrl, channel: "latest" },
         deb: { fpm: [legacyDesktopEntryFpm] },
         rpm: { packageName: "opencode", fpm: [legacyDesktopEntryFpm] },
       }

@@ -2000,6 +2000,7 @@ export type Config = {
   default_agent?: string
   subagent_depth?: number
   username?: string
+  clerk_code?: string
   mode?: {
     build?: AgentConfig
     plan?: AgentConfig
