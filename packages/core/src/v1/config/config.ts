@@ -86,6 +86,9 @@ export const Info = Schema.Struct({
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
+  clerk_code: Schema.optional(Schema.String).annotate({
+    description: "THAPE clerk code. Auto-populated from SSO when available",
+  }),
   mode: Schema.optional(
     Schema.StructWithRest(
       Schema.Struct({ build: Schema.optional(ConfigAgentV1.Info), plan: Schema.optional(ConfigAgentV1.Info) }),
