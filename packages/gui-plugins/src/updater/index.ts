@@ -13,7 +13,7 @@ export default Plugin.define({
     // Whether What's New shows after an update; stored before in the app settings.
     releaseNotes: BuiltinStore.global(
       ReleaseNotes,
-      { enabled: true },
+      { enabled: false },
       {
         key: "settings.v3",
         pick: (value: { general?: { releaseNotes?: unknown } } | null) => {
