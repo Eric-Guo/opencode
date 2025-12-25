@@ -6,6 +6,7 @@ import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import type { Event } from "electron"
 import { app, BrowserWindow } from "electron"
 
@@ -245,7 +246,8 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   setupAutoUpdater()
-
+  await ensureSsoUsername()
+  
   const needsMigration = ((): boolean => {
     if (process.env.OPENCODE_DB === ":memory:") return false
 
