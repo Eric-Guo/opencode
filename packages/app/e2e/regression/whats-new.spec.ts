@@ -63,7 +63,10 @@ const changelog = {
 const cliOnly = [{ tag: current, highlights: [{ source: "cli", title: "Terminal only", description: "Not here." }] }]
 
 // A user who last saw 1.9.1, stored where the app kept it before the updater extension owned What's New.
-const upgraded = { storage: { "highlights.v1": { version: "1.9.1" } } }
+const upgraded = {
+  storage: { "highlights.v1": { version: "1.9.1" } },
+  settings: { general: { releaseNotes: true } },
+}
 
 test("What's New shows the highlights since the version seen, pages to Get started, and is seen once shown", async ({
   page,
@@ -175,6 +178,11 @@ test("a failed changelog request leaves What's New for the next start", async ({
 // Each start ends with the current version seen and no dialog; only a release in range is worth a changelog request.
 for (const row of [
   { name: "the first run only remembers the version", seed: {}, requests: 0 },
+  {
+    name: "release notes default to off after an upgrade without a saved preference",
+    seed: { storage: upgraded.storage },
+    requests: 0,
+  },
   {
     name: "a version seen before, stored as highlights.v1, shows nothing",
     seed: { storage: { "highlights.v1": { version: current } } },
