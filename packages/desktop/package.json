@@ -4,10 +4,11 @@
   "version": "1.18.8",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://plm.thape.com.cn/projects/opencode",
+  "description": "超级智能体伙伴",
   "author": {
-    "name": "OpenCode",
-    "email": "hello@opencode.ai"
+    "name": "天华集团运营与信息化部",
+    "email": "guochunzhong@thape.com.cn"
   },
   "scripts": {
     "typecheck": "tsgo -b",
