@@ -13,9 +13,9 @@ import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
 const { FileMatcher } = createRequire(import.meta.resolve("electron-builder"))("app-builder-lib/out/fileMatcher")
 
 const channels = [
-  { channel: "dev", appId: "ai.opencode.desktop.dev", feed: "dev" },
-  { channel: "beta", appId: "ai.opencode.desktop.beta", feed: "beta" },
-  { channel: "prod", appId: "ai.opencode.desktop", feed: "latest" },
+  { channel: "dev", appId: "ai.opencode.desktop" },
+  { channel: "beta", appId: "ai.opencode.desktop.beta" },
+  { channel: "prod", appId: "ai.opencode.desktop" },
 ] as const
 
 function load(channel: string, target?: string): Configuration {
@@ -47,13 +47,13 @@ function trimFilter(dir: string, config: Configuration) {
   ]).createFilter()
 }
 
-test.each(channels)("channel identity for $channel", ({ channel, appId, feed }) => {
+test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
   const config = load(channel)
   expect(config.appId).toBe(appId)
   // Every published channel updates from its own feed on the update service.
   expect(config.publish).toEqual({
     provider: "generic",
-    url: `https://opencode.ai/update/api/${feed}/desktop/opencode/`,
+    url: `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`,
     channel: "latest",
   })
   expect(config.extraMetadata?.desktopName).toBe(`${appId}.desktop`)
@@ -152,6 +152,8 @@ test("shared packaging defaults", async () => {
     { from: "resources/", to: "", filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"] },
     { from: "icons/prod", to: "icons" },
     { from: "resources/thape-config", to: "thape-config", filter: ["**/*", "!**/.git/**"] },
+    { from: "resources/thape-config/node_modules", to: "thape-config/node_modules", filter: ["**/*"] },
+    { from: "out/generated/app-update.yml", to: "app-update.yml" },
   ])
 })
 
