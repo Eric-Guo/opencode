@@ -60,10 +60,6 @@ function runtimeEnv(key: string) {
   return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
 }
 
-function runtimeEnv(key: string) {
-  return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
-}
-
 function normalizeLoadedConfig(data: unknown) {
   if (!isRecord(data)) return data
   const copy = { ...data }

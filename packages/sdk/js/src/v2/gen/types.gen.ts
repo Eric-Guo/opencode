@@ -2000,6 +2000,7 @@ export type Config = {
   default_agent?: string
   subagent_depth?: number
   username?: string
+  clerk_code?: string
   mode?: {
     build?: AgentConfig
     plan?: AgentConfig
@@ -2089,6 +2090,7 @@ export type Config = {
     batch_tool?: boolean
     openTelemetry?: boolean
     primary_tools?: Array<string>
+    subagent_depth?: number
     continue_loop_on_deny?: boolean
     mcp_timeout?: number
   }
