@@ -3,6 +3,7 @@ import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { Log } from "./util/log"
+import { ensureSsoUsername } from "./util/thape_sso"
 import { AuthCommand } from "./cli/cmd/auth"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
@@ -76,6 +77,7 @@ const cli_init = yargs(hideBin(process.argv))
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
+    await ensureSsoUsername()
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,
