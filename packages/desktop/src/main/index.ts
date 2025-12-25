@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import type { Event } from "electron"
 import { app, session } from "electron"
 
@@ -323,6 +324,7 @@ const main = Effect.gen(function* () {
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
   updateTimer.unref()
   app.once("will-quit", () => clearInterval(updateTimer))
+  yield* Effect.promise(() => ensureSsoUsername())
   yield* Effect.promise(() => startNetLog()).pipe(
     Effect.catch((error) =>
       Effect.sync(() => {
