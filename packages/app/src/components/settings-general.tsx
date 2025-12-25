@@ -458,8 +458,6 @@ export const SettingsGeneral: Component = () => {
           }}
         </Show>
 
-        <UpdatesSection />
-
         <Show when={linux()}>
           {(_) => {
             const [valueResource, actions] = createResource(() => platform.getDisplayBackend?.())
