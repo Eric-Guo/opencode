@@ -8,6 +8,7 @@ import type { Configuration } from "electron-builder"
 const execFileAsync = promisify(execFile)
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(packageDir, "../..")
+const thapeConfigDir = path.join(packageDir, "resources", "thape-config")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
 // "opencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
@@ -38,8 +39,13 @@ const APP_IDS = {
   prod: "ai.opencode.desktop",
 } as const
 
+const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
+
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: "SigmaAgents-${os}-${arch}-${buildVersion}.${ext}",
+  beforePack: async () => {
+    await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
+  },
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -115,8 +121,9 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Dev",
-        rpm: { packageName: "opencode-dev" },
+        productName: "SigmaAgents",
+        publish: { provider: "generic", url: updateUrl, channel: "latest" },
+        rpm: { packageName: "sigma-agents" },
       }
     }
     case "beta": {
@@ -125,7 +132,7 @@ function getConfig() {
         appId,
         productName: "OpenCode Beta",
         protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        publish: { provider: "generic", url: updateUrl, channel: "latest" },
         rpm: { packageName: "opencode-beta" },
       }
     }
@@ -135,7 +142,7 @@ function getConfig() {
         appId,
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        publish: { provider: "generic", url: updateUrl, channel: "latest" },
         deb: { fpm: [legacyDesktopEntryFpm] },
         rpm: { packageName: "opencode", fpm: [legacyDesktopEntryFpm] },
       }
