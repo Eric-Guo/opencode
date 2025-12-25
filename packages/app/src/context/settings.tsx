@@ -92,7 +92,7 @@ export function sansFontFamily(font: string | undefined) {
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
-    releaseNotes: true,
+    releaseNotes: false,
     followup: "steer",
     showFileTree: false,
     showNavigation: false,
@@ -104,7 +104,7 @@ const defaultSettings: Settings = {
     editToolPartsExpanded: false,
   },
   updates: {
-    startup: true,
+    startup: false,
   },
   appearance: {
     fontSize: 14,
