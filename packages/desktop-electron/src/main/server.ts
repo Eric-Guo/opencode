@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
 import { app } from "electron"
 import { DEFAULT_SERVER_URL_KEY } from "./constants"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs } from "./wsl"
@@ -46,7 +47,7 @@ export async function allocatePort() {
 }
 
 export async function spawnLocalServer(hostname: string, port: number, password: string) {
-  prepareServerEnv(password)
+  await prepareServerEnv(password)
   const { Log, Server } = await import("virtual:opencode-server")
   await Log.init({ level: "WARN" })
   const listener = await Server.listen({
@@ -200,7 +201,7 @@ export async function spawnWslSidecar(
   }
 }
 
-function prepareServerEnv(password: string) {
+async function prepareServerEnv(password: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
   const env = {
@@ -214,6 +215,7 @@ function prepareServerEnv(password: string) {
     XDG_STATE_HOME: app.getPath("userData"),
   }
   Object.assign(process.env, env)
+  await ensureSsoUsername()
 }
 
 function forwardLines(
