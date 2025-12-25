@@ -106,7 +106,7 @@ export function terminalFontFamily(font: string | undefined) {
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
-    releaseNotes: true,
+    releaseNotes: false,
     followup: "steer",
     showFileTree: false,
     showNavigation: false,
