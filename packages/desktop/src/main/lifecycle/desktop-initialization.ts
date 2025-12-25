@@ -2,6 +2,7 @@ export * as DesktopInitialization from "./desktop-initialization"
 
 import { app, session } from "electron"
 import { Context, Effect, Layer } from "effect"
+import { ensureSsoUsername } from "@opencode/core/thape-sso"
 import { DesktopLogging } from "../native/logging"
 import { configureProxyCommandLine, configureSessionProxy } from "../proxy"
 import { marks } from "./marks"
@@ -46,6 +47,7 @@ export const layer = Layer.effect(
       }),
     )
     yield* Effect.promise(() => app.whenReady())
+    yield* Effect.promise(() => ensureSsoUsername())
     yield* prepareDesktop
     marks.init = Date.now()
 
