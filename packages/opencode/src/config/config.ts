@@ -144,6 +144,9 @@ const InfoSchema = Schema.Struct({
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
+  clerk_code: Schema.optional(Schema.String).annotate({
+    description: "THAPE clerk code. Auto-populated from SSO when available",
+  }),
   mode: Schema.optional(
     Schema.StructWithRest(
       Schema.Struct({
@@ -641,6 +644,18 @@ export const layer = Layer.effect(
               source: managed.source,
             }),
           )
+        }
+
+        if (!result.username) {
+          const sso = Bun.env.THAPE_SSO_USER_NAME
+          result.username = typeof sso === "string" && sso.trim() ? sso.trim() : os.userInfo().username
+        }
+
+        if (!result.clerk_code) {
+          const code = Bun.env.THAPE_SSO_CLERK_CODE
+          if (typeof code === "string" && code.trim()) {
+            result.clerk_code = code.trim()
+          }
         }
 
         for (const [name, mode] of Object.entries(result.mode ?? {})) {
