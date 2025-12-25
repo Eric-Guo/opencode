@@ -2,6 +2,7 @@ export * as DesktopInitialization from "./desktop-initialization"
 
 import { app, session } from "electron"
 import { Context, Effect, Layer } from "effect"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import { ensureKimiWebBridgeDaemon } from "../kimi-webbridge"
 import { DesktopLogging } from "../native/logging"
 import { configureProxyCommandLine, configureSessionProxy } from "../proxy"
@@ -56,6 +57,7 @@ export const layer = Layer.effect(
         },
       })
     })
+    yield* Effect.promise(() => ensureSsoUsername())
     yield* prepareDesktop
     marks.init = Date.now()
     return Service.of({
