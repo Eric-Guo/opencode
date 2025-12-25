@@ -10459,6 +10459,10 @@
             "description": "Custom username to display in conversations instead of system username",
             "type": "string"
           },
+          "clerk_code": {
+            "description": "THAPE clerk code. Auto-populated from SSO when available",
+            "type": "string"
+          },
           "mode": {
             "description": "@deprecated Use `agent` field instead.",
             "type": "object",
