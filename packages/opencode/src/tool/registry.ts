@@ -65,17 +65,61 @@ export namespace ToolRegistry {
                 parameters: z.object(def.args),
                 description: def.description,
                 execute: async (args, toolCtx) => {
+                  let title = ""
+                  let metadata: Record<string, unknown> = {}
+
                   const pluginCtx = {
                     ...toolCtx,
+                    metadata: async (input: { title?: string; metadata?: Record<string, unknown> }) => {
+                      if (typeof input.title === "string") title = input.title
+                      if (input.metadata !== undefined) metadata = input.metadata
+                      await toolCtx.metadata(input)
+                    },
                     directory: ctx.directory,
                     worktree: ctx.worktree,
                   } as unknown as PluginToolContext
-                  const result = await def.execute(args as any, pluginCtx)
-                  const out = await Truncate.output(result, {}, initCtx?.agent)
+
+                  const result = (await def.execute(args as any, pluginCtx)) as
+                    | string
+                    | {
+                        output?: unknown
+                        title?: string
+                        metadata?: Record<string, unknown>
+                        attachments?: unknown
+                      }
+
+                  if (typeof result === "string") {
+                    const out = await Truncate.output(result, {}, initCtx?.agent)
+                    return {
+                      title,
+                      output: out.truncated ? out.content : result,
+                      metadata: {
+                        ...metadata,
+                        truncated: out.truncated,
+                        outputPath: out.truncated ? out.outputPath : undefined,
+                      },
+                    }
+                  }
+
+                  if (result && typeof result === "object" && "output" in result) {
+                    const output = typeof result.output === "string" ? result.output : String(result.output ?? "")
+                    const out = await Truncate.output(output, {}, initCtx?.agent)
+                    return {
+                      title: typeof result.title === "string" && result.title.length > 0 ? result.title : title,
+                      output: out.truncated ? out.content : output,
+                      metadata: {
+                        ...(result.metadata ?? metadata),
+                        truncated: out.truncated,
+                        outputPath: out.truncated ? out.outputPath : undefined,
+                      },
+                      attachments: Array.isArray(result.attachments) ? result.attachments : undefined,
+                    }
+                  }
+
                   return {
-                    title: "",
-                    output: out.truncated ? out.content : result,
-                    metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+                    title,
+                    output: String(result ?? ""),
+                    metadata,
                   }
                 },
               }),
