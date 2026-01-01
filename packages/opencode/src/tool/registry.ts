@@ -66,17 +66,66 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
+          let cachedTitle = ""
+          let cachedMetadata: Record<string, any> = {}
+
+          const wrappedCtx = {
+            ...ctx,
+            metadata: async (value: { title?: string; metadata?: Record<string, any> }) => {
+              if (typeof value.title === "string") {
+                cachedTitle = value.title
+              }
+              if (value.metadata !== undefined) {
+                cachedMetadata = value.metadata
+              }
+              await ctx.metadata(value)
+            },
+          }
+
           const pluginCtx = {
             ...ctx,
             directory: Instance.directory,
             worktree: Instance.worktree,
           } as unknown as PluginToolContext
-          const result = await def.execute(args as any, pluginCtx)
-          const out = await Truncate.output(result, {}, initCtx?.agent)
+          const result = await def.execute(args as any, pluginCtx) as string | { output?: unknown; title?: string; metadata?: Record<string, any>; attachments?: unknown }
+
+          if (typeof result === "string") {
+            const out = await Truncate.output(result, {}, initCtx?.agent)
+            return {
+              title: cachedTitle,
+              output: out.truncated ? out.content : result,
+              metadata: {
+                ...cachedMetadata,
+                truncated: out.truncated,
+                outputPath: out.truncated ? out.outputPath : undefined,
+              },
+            }
+          }
+
+          if (result && typeof result === "object" && "output" in result) {
+            const output = typeof result.output === "string" ? result.output : String(result.output ?? "")
+            const out = await Truncate.output(output, {}, initCtx?.agent)
+            const title =
+              typeof result.title === "string" && result.title.length > 0 ? result.title : cachedTitle
+            const metadata = result.metadata ?? cachedMetadata
+            const attachments = Array.isArray(result.attachments) ? result.attachments : undefined
+
+            return {
+              title: title ?? "",
+              output: out.truncated ? out.content : output,
+              metadata: {
+                ...(metadata ?? {}),
+                truncated: out.truncated,
+                outputPath: out.truncated ? out.outputPath : undefined,
+              },
+              attachments,
+            }
+          }
+
           return {
-            title: "",
-            output: out.truncated ? out.content : result,
-            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+            title: cachedTitle,
+            output: String(result ?? ""),
+            metadata: cachedMetadata,
           }
         },
       }),
