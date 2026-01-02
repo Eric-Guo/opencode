@@ -181,7 +181,7 @@ function HomeDesign() {
         selectProject={selectProject}
         chooseProject={() => void chooseProject()}
         openSettings={openSettings}
-        openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+        openHelp={() => platform.openLink("https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming")}
         language={language}
       />
 
