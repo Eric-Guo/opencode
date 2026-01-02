@@ -2378,7 +2378,7 @@ export default function Layout(props: ParentProps) {
                 icon="help"
                 variant="ghost"
                 size="large"
-                onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                onClick={() => platform.openLink("https://plm.thape.com.cn/projects/opencode/wiki/xiaotian-user-guide")}
                 aria-label={language.t("sidebar.help")}
               />
             </Tooltip>
