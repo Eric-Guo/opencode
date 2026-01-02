@@ -6,8 +6,8 @@ import { Session } from "../../../session"
 import type { MessageV2 } from "../../../session/message-v2"
 import { Identifier } from "../../../id/id"
 import { ToolRegistry } from "../../../tool/registry"
-import { Wildcard } from "../../../util/wildcard"
 import { Instance } from "../../../project/instance"
+import { PermissionNext } from "../../../permission/next"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 
@@ -62,7 +62,6 @@ export const AgentCommand = cmd({
       const output = {
         ...agent,
         tools: resolvedTools,
-        toolOverrides: agent.tools,
       }
       process.stdout.write(JSON.stringify(output, null, 2) + EOL)
     })
@@ -75,13 +74,13 @@ async function getAvailableTools(agent: Agent.Info) {
 }
 
 async function resolveTools(agent: Agent.Info, availableTools: Awaited<ReturnType<typeof getAvailableTools>>) {
-  const toolOverrides = {
-    ...agent.tools,
-    ...(await ToolRegistry.enabled(agent)),
-  }
+  const disabled = PermissionNext.disabled(
+    availableTools.map((tool) => tool.id),
+    agent.permission,
+  )
   const resolved: Record<string, boolean> = {}
   for (const tool of availableTools) {
-    resolved[tool.id] = Wildcard.all(tool.id, toolOverrides) !== false
+    resolved[tool.id] = !disabled.has(tool.id)
   }
   return resolved
 }
@@ -144,6 +143,8 @@ async function createToolContext(agent: Agent.Info) {
   }
   await Session.updateMessage(message)
 
+  const ruleset = PermissionNext.merge(agent.permission, session.permission ?? [])
+
   return {
     sessionID: session.id,
     messageID,
@@ -151,5 +152,13 @@ async function createToolContext(agent: Agent.Info) {
     agent: agent.name,
     abort: new AbortController().signal,
     metadata: () => {},
+    async ask(req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) {
+      for (const pattern of req.patterns) {
+        const rule = PermissionNext.evaluate(req.permission, pattern, ruleset)
+        if (rule.action === "deny") {
+          throw new PermissionNext.AutoRejectedError(ruleset)
+        }
+      }
+    },
   }
 }
