@@ -121,7 +121,7 @@ export function createHomeProjectsController(home: HomeController) {
     },
     utility: {
       settings: openSettings,
-      help: () => platform.openLink("https://opencode.ai/desktop-feedback"),
+      help: () => platform.openLink("https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"),
     },
   }
 }
