@@ -436,7 +436,7 @@ export function NewHome() {
           clearNotifications={clearNotifications}
           unseenCount={unseenCount}
           openSettings={openSettings}
-          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+          openHelp={() => platform.openLink("https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming")}
           language={language}
         />
 
