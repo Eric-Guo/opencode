@@ -2108,7 +2108,7 @@ export default function Layout(props: ParentProps) {
               settingsKeybind={() => command.keybind("settings.open")}
               onOpenSettings={openSettings}
               helpLabel={() => language.t("sidebar.help")}
-              onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+              onOpenHelp={() => platform.openLink("https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming")}
               renderPanel={() => (
                 <Show when={currentProject()} keyed>
                   {(project) => <SidebarPanel project={project} />}
@@ -2177,7 +2177,7 @@ export default function Layout(props: ParentProps) {
               settingsKeybind={() => command.keybind("settings.open")}
               onOpenSettings={openSettings}
               helpLabel={() => language.t("sidebar.help")}
-              onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+              onOpenHelp={() => platform.openLink("https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming")}
               renderPanel={() => <SidebarPanel project={currentProject()} mobile />}
             />
           </nav>
