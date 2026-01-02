@@ -53,7 +53,7 @@ export function createHomeProjectsController(home: HomeController, options?: { a
 
   const utility: HomeProjectsUtility = {
     settings: openSettings,
-    help: () => platform.openExternal("https://opencode.ai/desktop-feedback"),
+    help: () => platform.openExternal("https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"),
   }
 
   if (options?.automations) utility.automations = options.automations
