@@ -127,9 +127,9 @@ const getBase = (appId: string): Configuration => {
       if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
 
       // With an Icon Composer mac.icon, electron-builder bundles the ICNS that actool generates as the pre-macOS 26
-      // fallback. That one tops out at 256px and draws a light ring around the squircle, so ship ours instead.
+      // fallback. That one tops out at 256px and draws a light ring around the squircle, so ship the channel's ICNS.
       if (context.electronPlatformName === "darwin")
-        await copyFile(path.join(packageDir, "resources/icons/icon.icns"), path.join(resources, "icon.icns"))
+        await copyFile(path.join(packageDir, iconDir, "icon.icns"), path.join(resources, "icon.icns"))
 
       if (context.electronPlatformName !== "win32") return
 
