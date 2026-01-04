@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test"
 import { statSync } from "node:fs"
-import { cp, mkdtemp, rm } from "node:fs/promises"
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises"
 import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import type { Configuration } from "electron-builder"
+import { Arch, type Configuration } from "electron-builder"
 import { getConfig } from "./electron-builder.config"
 import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
 
@@ -95,6 +95,38 @@ test.each(channels)("macOS icon format for $channel", ({ channel }) => {
   // The prod override must keep the rest of the shared macOS settings.
   expect(config.mac?.target).toEqual(["dmg", "zip"])
   expect(config.mac?.extendInfo?.NSMicrophoneUsageDescription).toBeTruthy()
+})
+
+test.each(channels)("macOS afterPack uses the selected channel icon for $channel", async ({ channel }) => {
+  const config = load(channel)
+  const dir = await mkdtemp(path.join(os.tmpdir(), "opencode-mac-icon-"))
+  const resources = path.join(dir, "Contents", "Resources")
+
+  try {
+    await mkdir(resources, { recursive: true })
+    await Bun.write(path.join(resources, "icon.icns"), "stale")
+
+    if (channel === "dev") await cp(process.execPath, path.join(resources, "opencode-cli"))
+
+    if (!config.afterPack) throw new Error("Missing afterPack hook")
+
+    // SAFETY: The macOS afterPack path only reads these context fields.
+    const context = {
+      appOutDir: dir,
+      arch: process.arch === "arm64" ? Arch.arm64 : Arch.x64,
+      electronPlatformName: "darwin",
+      packager: { getResourcesDir: () => resources },
+    } as Parameters<NonNullable<Configuration["afterPack"]>>[0]
+
+    await config.afterPack(context)
+
+    const channelDir = channel === "dev" ? "prod" : channel
+    const expected = path.join(import.meta.dirname, "icons", channelDir, "icon.icns")
+    const actual = path.join(resources, "icon.icns")
+    expect(Bun.hash(await Bun.file(actual).arrayBuffer())).toBe(Bun.hash(await Bun.file(expected).arrayBuffer()))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 
 test("the production Icon Composer package references its bundled artwork", async () => {
