@@ -9,8 +9,22 @@ export const Mark = (props: { class?: string }) => {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path data-slot="logo-logo-mark-shadow" d="M12 16H4V8H12V16Z" fill="var(--icon-weak-base)" />
-      <path data-slot="logo-logo-mark-o" d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z" fill="var(--icon-strong-base)" />
+      {/* Robot head */}
+      <rect x="2" y="2" width="12" height="10" rx="2" fill="var(--icon-strong-base)" />
+      {/* Robot eyes */}
+      <circle cx="5" cy="6" r="1.5" fill="var(--icon-weak-base)" />
+      <circle cx="11" cy="6" r="1.5" fill="var(--icon-weak-base)" />
+      {/* Robot mouth */}
+      <rect x="6" y="8" width="4" height="1" rx="0.5" fill="var(--icon-weak-base)" />
+      {/* Robot antenna */}
+      <line x1="8" y1="2" x2="8" y2="0" stroke="var(--icon-strong-base)" stroke-width="1" />
+      <circle cx="8" cy="0" r="0.5" fill="var(--icon-strong-base)" />
+      {/* Robot body */}
+      <rect x="4" y="13" width="8" height="5" rx="1" fill="var(--icon-strong-base)" />
+      {/* Robot body details */}
+      <circle cx="6" cy="15" r="0.5" fill="var(--icon-weak-base)" />
+      <circle cx="8" cy="15" r="0.5" fill="var(--icon-weak-base)" />
+      <circle cx="10" cy="15" r="0.5" fill="var(--icon-weak-base)" />
     </svg>
   )
 }
