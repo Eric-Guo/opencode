@@ -1485,6 +1485,14 @@ export type Config = {
      */
     batch_tool?: boolean
     /**
+     * Enable hashline-backed edit/read tool behavior (default true, set false to disable)
+     */
+    hashline_edit?: boolean
+    /**
+     * Enable hashline autocorrect cleanup for copied prefixes and formatting artifacts (default true)
+     */
+    hashline_autocorrect?: boolean
+    /**
      * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
      */
     openTelemetry?: boolean
