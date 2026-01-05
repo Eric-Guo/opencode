@@ -39,6 +39,7 @@ import { useWorkspacesPrefetch } from "./workspaces/queries"
 import { SettingsProjects } from "./workspaces/projects"
 import { SettingsExtensions } from "./providers/extensions"
 import { SettingsAbout } from "./about/about"
+import { useSettingsDialogTitle } from "./title"
 import { SettingsServerDataScope } from "./server-scope"
 import { SettingsNavigation, type SettingsNavGroup } from "./navigation"
 import { SettingsProjectGeneral } from "./workspaces/project"
@@ -284,6 +285,9 @@ function RootSettings() {
     if (view.tab === "gui-extensions" && !guiExtensions) surface.open("general")
   })
 
+  const serverCtx = useServerCtx(sourceServer)
+  const title = useSettingsDialogTitle(() => serverCtx()?.sync)
+
   const addServer = () =>
     void dialog.push(() => (
       <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
@@ -291,6 +295,7 @@ function RootSettings() {
 
   const groups = createMemo<SettingsNavGroup[]>(() => [
     {
+      label: title(),
       items: [
         ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
         ...surface.extensions.pages().map((item) => ({
