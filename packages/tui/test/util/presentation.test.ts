@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test"
+import { logo } from "../../src/logo"
 import { epilogue } from "../../src/util/presentation"
 
 const rows = (text: string | undefined) =>
   Bun.stripANSI(text ?? "")
     .split("\n")
-    .filter((line) => line.trim() && !/[▀▄█]/.test(line))
+    .slice(logo.left.length)
+    .filter((line) => line.trim())
 
 test("prints nothing without a session or update", () => {
   expect(epilogue({})).toBeUndefined()
