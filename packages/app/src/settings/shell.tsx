@@ -27,6 +27,7 @@ import { useWorkspacesPrefetch } from "./workspaces/queries"
 import { SettingsProjects } from "./workspaces/projects"
 import { SettingsExtensions } from "./providers/extensions"
 import { SettingsAbout } from "./about/about"
+import { useSettingsDialogTitle } from "./title"
 import { SettingsServerDataScope } from "./server-scope"
 import { SettingsNavigation, type SettingsNavGroup } from "./navigation"
 import { SettingsProjectGeneral } from "./workspaces/project"
@@ -211,12 +212,14 @@ function RootSettings() {
     return connectionFor(list(), layout.home.selection().server)
   })
   const sourceDirectory = useSettingsDirectory(sourceServer)
+  const serverCtx = useServerCtx(sourceServer)
+  const title = useSettingsDialogTitle(() => serverCtx()?.sync)
   const addServer = () =>
     void dialog.push(() => (
       <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
     ))
   const groups = createMemo<SettingsNavGroup[]>(() => [
-    { items: rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })) },
+    { label: title(), items: rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })) },
     ...(multiple()
       ? [
           {
