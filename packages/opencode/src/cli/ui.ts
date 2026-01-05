@@ -70,7 +70,6 @@ export namespace UI {
       shadow: "\x1b[38;5;238m",
       bg: "\x1b[48;5;238m",
     }
-    const gap = " "
     const draw = (line: string, fg: string, shadow: string, bg: string) => {
       const parts: string[] = []
       for (const char of line) {
@@ -97,7 +96,7 @@ export namespace UI {
     glyphs.left.forEach((row, index) => {
       if (pad) result.push(pad)
       result.push(draw(row, left.fg, left.shadow, left.bg))
-      result.push(gap)
+      result.push(index === glyphs.left.length - 1 ? "" : " ")
       const other = glyphs.right[index] ?? ""
       result.push(draw(other, right.fg, right.shadow, right.bg))
       result.push(EOL)
