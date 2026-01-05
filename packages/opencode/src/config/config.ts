@@ -89,6 +89,12 @@ export namespace Config {
     waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
   }
 
+  function resolveConfigDir() {
+    const raw = Flag.OPENCODE_CONFIG_DIR
+    if (typeof raw === "string" && raw.trim()) return raw.trim()
+    return path.join(path.dirname(process.execPath), "thape-config")
+  }
+
   export async function installDependencies(dir: string, input?: InstallInput) {
     if (!(await needsInstall(dir))) return
 
@@ -105,7 +111,6 @@ export namespace Config {
 
     input?.signal?.throwIfAborted()
     if (!(await needsInstall(dir))) return
-
     const pkg = path.join(dir, "package.json")
     const target = Installation.isLocal() ? "*" : Installation.VERSION
 
@@ -1333,16 +1338,18 @@ export namespace Config {
           result.mode = result.mode || {}
           result.plugin = result.plugin || []
 
+          const configDir = resolveConfigDir()
           const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
 
-          if (Flag.OPENCODE_CONFIG_DIR) {
-            log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+          if (configDir) {
+            directories.push(configDir)
+            log.debug("loading config from OPENCODE_CONFIG_DIR", { path: configDir })
           }
 
           const deps: Promise<void>[] = []
 
           for (const dir of unique(directories)) {
-            if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+            if (dir.endsWith(".opencode") || dir === configDir) {
               for (const file of ["opencode.jsonc", "opencode.json"]) {
                 log.debug(`loading config from ${path.join(dir, file)}`)
                 result = mergeConfigConcatArrays(result, yield* loadFile(path.join(dir, file)))
