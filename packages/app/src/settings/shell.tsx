@@ -17,6 +17,7 @@ import { SettingsProjects } from "./workspaces/projects"
 import { SettingsExtensions } from "./providers/extensions"
 import { SettingsAbout } from "./about/about"
 import { SettingsServerScope } from "./server-scope"
+import { useSettingsDialogTitle } from "./title"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
@@ -74,6 +75,7 @@ export const SettingsScreen: Component = () => {
     }
   })
   const serverCtx = useServerCtx(server)
+  const title = useSettingsDialogTitle(() => serverCtx()?.sync)
 
   createEffect(() => {
     const current = server()
@@ -168,8 +170,11 @@ export const SettingsScreen: Component = () => {
             </button>
             <div class="flex flex-col gap-4 w-full">
               <For each={sections}>
-                {(group) => (
+                {(group, index) => (
                   <div class="flex flex-col gap-1 w-full">
+                    <Show when={index() === 0}>
+                      <Tabs.SectionTitle>{title()}</Tabs.SectionTitle>
+                    </Show>
                     <For each={group}>
                       {(section) => (
                         <Tabs.Trigger value={section.value}>
