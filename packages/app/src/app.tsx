@@ -205,7 +205,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; onRea
       when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
       fallback={
         <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <Splash class="w-80 h-80 opacity-50 animate-pulse" />
         </div>
       }
     >
