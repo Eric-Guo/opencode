@@ -140,6 +140,12 @@ export namespace Config {
     waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
   }
 
+  function resolveConfigDir() {
+    const raw = Flag.OPENCODE_CONFIG_DIR
+    if (typeof raw === "string" && raw.trim()) return raw.trim()
+    return path.join(path.dirname(process.execPath), "thape-config")
+  }
+
   type Package = {
     dependencies?: Record<string, string>
   }
@@ -1435,16 +1441,18 @@ export namespace Config {
         result.mode = result.mode || {}
         result.plugin = result.plugin || []
 
+        const configDir = resolveConfigDir()
         const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
 
-        if (Flag.OPENCODE_CONFIG_DIR) {
-          log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+        if (configDir) {
+          directories.push(configDir)
+          log.debug("loading config from OPENCODE_CONFIG_DIR", { path: configDir })
         }
 
         const deps: Fiber.Fiber<void, never>[] = []
 
         for (const dir of unique(directories)) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+          if (dir.endsWith(".opencode") || dir === configDir) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               log.debug(`loading config from ${source}`)
