@@ -425,6 +425,12 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["avatar-text-purple"] = isDark ? "#9d5bd2" : "#8445bc"
   tokens["avatar-text-cyan"] = isDark ? "#369eff" : "#0894b3"
   tokens["avatar-text-lime"] = isDark ? "#c4f042" : "#5d770d"
+  tokens["logo-splash-accent"] = isDark ? "#ab00e0" : "#38ade0"
+  tokens["logo-splash-accent-2"] = "#234fa0"
+  tokens["logo-splash-accent-3"] = "#192281"
+  tokens["logo-splash-gradient-1"] = isDark ? "#ffffff" : "#05b5f3"
+  tokens["logo-splash-gradient-2"] = isDark ? "#ffffff" : "#8f63e6"
+  tokens["logo-splash-gradient-3"] = isDark ? "#ffffff" : "#eb5ff4"
 
   for (const [key, value] of Object.entries(overrides)) {
     tokens[key] = value
