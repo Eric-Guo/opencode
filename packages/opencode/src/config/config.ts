@@ -46,6 +46,12 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
   return merged
 }
 
+function resolveConfigDir() {
+  const raw = Flag.OPENCODE_CONFIG_DIR
+  if (typeof raw === "string" && raw.trim()) return raw.trim()
+  return path.join(path.dirname(process.execPath), "thape-config")
+}
+
 function normalizeLoadedConfig(data: unknown) {
   if (!isRecord(data)) return data
   const copy = { ...data }
@@ -309,16 +315,18 @@ export const layer = Layer.effect(
         result.mode = result.mode || {}
         result.plugin = result.plugin || []
 
+        const configDir = resolveConfigDir()
         const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
-
-        if (Flag.OPENCODE_CONFIG_DIR) {
-          yield* Effect.logDebug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+        directories.push(configDir)
+        
+        if (configDir) {
+          yield* Effect.logDebug("loading config from OPENCODE_CONFIG_DIR", { path: configDir })
         }
 
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+          if (dir.endsWith(".opencode") || dir === configDir) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
