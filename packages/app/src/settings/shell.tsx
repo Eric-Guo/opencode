@@ -26,6 +26,7 @@ import { useWorkspacesPrefetch } from "./workspaces/queries"
 import { SettingsProjects } from "./workspaces/projects"
 import { SettingsExtensions } from "./providers/extensions"
 import { SettingsAbout } from "./about/about"
+import { useSettingsDialogTitle } from "./title"
 import { SettingsServerDataScope } from "./server-scope"
 import { SettingsNavigation, type SettingsNavGroup } from "./navigation"
 import { SettingsProjectGeneral } from "./workspaces/project"
@@ -194,6 +195,9 @@ function RootSettings() {
     if (view.tab === "experimental" && !experimentalSettingsAvailable) surface.open("general")
   })
 
+  const serverCtx = useServerCtx(reachable)
+  const title = useSettingsDialogTitle(() => serverCtx()?.sync)
+
   const selectServer = (server: ServerConnection.Any) => surface.selectServer(ServerConnection.key(server))
 
   const addServer = () => void dialog.push(() => <DialogServer mode="add" onSave={selectServer} />)
@@ -213,6 +217,7 @@ function RootSettings() {
       })),
     },
     {
+      label: title(),
       items: [
         ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
         ...pluginTabs(),
