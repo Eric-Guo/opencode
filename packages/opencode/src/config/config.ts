@@ -66,6 +66,12 @@ export namespace Config {
     return merged
   }
 
+  function resolveConfigDir() {
+    const raw = Flag.OPENCODE_CONFIG_DIR
+    if (typeof raw === "string" && raw.trim()) return raw.trim()
+    return path.join(path.dirname(process.execPath), "thape-config")
+  }
+
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
 
@@ -128,6 +134,7 @@ export namespace Config {
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
 
+    const configDir = resolveConfigDir()
     const directories = [
       Global.Path.config,
       // Only scan project .opencode/ directories when project discovery is enabled
@@ -151,15 +158,15 @@ export namespace Config {
     ]
 
     // .opencode directory config overrides (project and global) config sources.
-    if (Flag.OPENCODE_CONFIG_DIR) {
-      directories.push(Flag.OPENCODE_CONFIG_DIR)
-      log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+    if (configDir) {
+      directories.push(configDir)
+      log.debug("loading config from OPENCODE_CONFIG_DIR", { path: configDir })
     }
 
     const deps = []
 
     for (const dir of unique(directories)) {
-      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+      if (dir.endsWith(".opencode") || dir === configDir) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = merge(result, await loadFile(path.join(dir, file)))
