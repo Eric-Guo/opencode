@@ -10,6 +10,7 @@ import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsNotificationsV2 } from "./notifications"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
+import { useSettingsDialogTitle } from "../settings-dialog-title"
 import { SettingsServersV2 } from "./servers"
 import { SettingsWorkspacesV2 } from "./workspaces"
 import { SettingsProjectsV2 } from "./projects"
@@ -48,6 +49,7 @@ export const DialogSettings: Component<{
     }
   })
   const serverCtx = useServerCtx(server)
+  const title = useSettingsDialogTitle(() => serverCtx()?.sync)
 
   createEffect(() => {
     const current = server()
@@ -85,6 +87,7 @@ export const DialogSettings: Component<{
             <div class="flex flex-col gap-4 w-full">
               {/* Group 1: Preferences */}
               <div class="flex flex-col gap-1 w-full">
+                <TabsV2.SectionTitle>{title()}</TabsV2.SectionTitle>
                 <TabsV2.Trigger value="general">
                   <Icon name="sliders" />
                   {language.t("settings.tab.preferences")}
