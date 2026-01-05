@@ -511,7 +511,7 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
         when={serverData.state !== "pending" && serverData()}
         fallback={
           <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-            <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+            <Splash class="w-80 h-80 opacity-50 animate-pulse" />
             <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
           </div>
         }
