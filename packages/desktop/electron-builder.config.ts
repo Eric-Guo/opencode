@@ -32,8 +32,13 @@ const getBase = (): Configuration => ({
     output: "dist",
     buildResources: "resources",
   },
-  files: ["out/**/*", "resources/**/*"],
+  files: ["out/**/*", "resources/**/*", "!resources/thape-config/**"],
   extraResources: [
+    {
+      from: "resources/thape-config",
+      to: "thape-config",
+      filter: ["**/*", "!**/.git/**"],
+    },
     {
       from: "native/",
       to: "native/",
