@@ -1,3 +1,6 @@
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { app } from "electron"
 import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
@@ -19,15 +22,23 @@ export function setDefaultServerUrl(url: string | null) {
 
 export function preferAppEnv(userDataPath: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? loadShellEnv(shell, getLogger()) : null
+  const shellEnv = shell ? (loadShellEnv(shell, getLogger()) ?? {}) : {}
+  const configDir = (shellEnv.OPENCODE_CONFIG_DIR ?? process.env.OPENCODE_CONFIG_DIR)?.trim()
   Object.assign(process.env, {
     ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
+    OPENCODE_CONFIG_DIR: app.isPackaged || !configDir ? packagedConfigDir() : configDir,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
   return shellEnv
+}
+
+function packagedConfigDir() {
+  if (app.isPackaged && process.platform === "darwin") return join(dirname(app.getPath("exe")), "../Resources/thape-config")
+  if (app.isPackaged) return join(process.resourcesPath, "thape-config")
+  return join(dirname(fileURLToPath(import.meta.url)), "../../resources/thape-config")
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
