@@ -53,7 +53,7 @@ impl MainWindow {
             app,
             decorations,
         )
-        .title("OpenCode")
+        .title("天华 Σ Agents")
         .disable_drag_drop_handler()
         .zoom_hotkeys_enabled(false)
         .visible(true)
