@@ -82,6 +82,12 @@ export function preferAppEnv(userDataPath: string) {
   })
 }
 
+function packagedConfigDir() {
+  if (app.isPackaged && process.platform === "darwin") return join(dirname(app.getPath("exe")), "../Resources/thape-config")
+  if (app.isPackaged) return join(process.resourcesPath, "thape-config")
+  return join(dirname(fileURLToPath(import.meta.url)), "../../resources/thape-config")
+}
+
 export async function spawnLocalServer(
   hostname: string,
   port: number,
@@ -371,6 +377,8 @@ function createSidecarEnv(): Record<string, string> {
   const env = Object.fromEntries(
     Object.entries(process.env).flatMap(([key, value]) => (value === undefined ? [] : [[key, String(value)]])),
   )
+  env.OPENCODE_CONFIG_DIR =
+    app.isPackaged || !env.OPENCODE_CONFIG_DIR?.trim() ? packagedConfigDir() : env.OPENCODE_CONFIG_DIR  
   delete env.DEBUG
   if (process.platform === "linux") delete env.LD_PRELOAD
   return env
