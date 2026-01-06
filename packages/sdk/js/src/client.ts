@@ -5,6 +5,8 @@ import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
 export { type Config as OpencodeClientConfig, OpencodeClient }
 
+const OPENCODE_DIRECTORY_HEADER_PREFIX = "opencode-uri:"
+
 export function createOpencodeClient(config?: Config & { directory?: string }) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
@@ -19,9 +21,22 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
   }
 
   if (config?.directory) {
-    config.headers = {
-      ...config.headers,
-      "x-opencode-directory": config.directory,
+    const directoryHeader = OPENCODE_DIRECTORY_HEADER_PREFIX + encodeURIComponent(config.directory)
+    if (config.headers instanceof Headers || Array.isArray(config.headers)) {
+      const headers = new Headers(config.headers)
+      headers.set("x-opencode-directory", directoryHeader)
+      config = {
+        ...config,
+        headers,
+      }
+    } else {
+      config = {
+        ...config,
+        headers: {
+          ...(config.headers ?? {}),
+          "x-opencode-directory": directoryHeader,
+        },
+      }
     }
   }
 
