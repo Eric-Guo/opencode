@@ -5,7 +5,7 @@
   "mainBinaryName": "OpenCode",
   "version": "../package.json",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "bun run prepare-resources && bun run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
@@ -33,7 +33,7 @@
     ],
     "active": true,
     "category": "DeveloperTool",
-    "targets": ["deb", "rpm", "dmg", "nsis", "app"],
+    "targets": ["deb", "rpm", "nsis", "app"],
     "externalBin": ["sidecars/opencode-cli"],
     "linux": {
       "rpm": {
@@ -55,6 +55,9 @@
         "headerImage": "assets/nsis-header.bmp",
         "sidebarImage": "assets/nsis-sidebar.bmp"
       }
+    },
+    "resources": {
+      "resources-dist/": ""
     }
   },
   "plugins": {
