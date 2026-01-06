@@ -6,9 +6,10 @@
   "license": "MIT",
   "scripts": {
     "typecheck": "tsgo -b",
+    "prepare-resources": "bun ./scripts/prepare-resources.ts",
     "predev": "bun ./scripts/predev.ts",
     "dev": "vite",
-    "build": "bun run typecheck && vite build",
+    "build": "bun run prepare-resources && bun run typecheck && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
