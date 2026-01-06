@@ -252,8 +252,12 @@ export namespace Server {
           if (!rawDirectory.startsWith(prefix)) return rawDirectory
           try {
             return decodeURIComponent(rawDirectory.slice(prefix.length))
-          } catch {
-            return rawDirectory.slice(prefix.length)
+          } catch (error) {
+            Log.warn("Failed to decode opencode-uri directory, falling back to process.cwd()", {
+              rawDirectory,
+              error,
+            })
+            return process.cwd()
           }
         })()
         return Instance.provide({
