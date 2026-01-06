@@ -43,6 +43,9 @@
           "/usr/share/metainfo/ai.opencode.opencode.metainfo.xml": "release/appstream.metainfo.xml"
         }
       }
+    },
+    "resources": {
+      "resources-dist/": ""
     }
   },
   "plugins": {
