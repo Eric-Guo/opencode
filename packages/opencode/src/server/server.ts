@@ -253,7 +253,7 @@ export namespace Server {
           try {
             return decodeURIComponent(rawDirectory.slice(prefix.length))
           } catch (error) {
-            Log.warn("Failed to decode opencode-uri directory, falling back to process.cwd()", {
+            log.warn("Failed to decode opencode-uri directory, falling back to process.cwd()", {
               rawDirectory,
               error,
             })
