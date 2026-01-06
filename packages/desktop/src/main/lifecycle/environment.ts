@@ -9,6 +9,7 @@ import contextMenu from "electron-context-menu"
 import { Effect } from "effect"
 import { CHANNEL, VERSION } from "../constants"
 import { initCrashReporter, initLogging, type DesktopLogger } from "../native/logging"
+import { developmentResourcesRoot } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { cleanupStoreFiles } from "../storage/cleanup"
 import { registerRendererProtocol, setDockIcon } from "../windows"
@@ -70,11 +71,16 @@ export function preferApplicationEnvironment(logger: DesktopLogger) {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? loadShellEnv(shell, logger) : null
   if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
+  const configDir = (shellEnv?.OPENCODE_CONFIG_DIR ?? process.env.OPENCODE_CONFIG_DIR)?.trim()
   Object.assign(process.env, {
     ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
+    OPENCODE_CONFIG_DIR:
+      app.isPackaged || !configDir
+        ? join(app.isPackaged ? process.resourcesPath : developmentResourcesRoot, "thape-config")
+        : configDir,
   })
 }
 
