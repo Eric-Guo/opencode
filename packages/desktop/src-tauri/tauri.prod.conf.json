@@ -27,7 +27,16 @@
           "type": "none"
         }
       }
-    }
+    },
+    "resources": {
+      "resources-dist/": ""
+    },
+    "externalBin": ["sidecars/opencode"]
+  },
+  "build": {
+    "beforeBuildCommand": "bun run build",
+    "beforeBundleCommand": "bun run generate-wix-resources --config src-tauri/tauri.prod.conf.json",
+    "frontendDist": "../dist"
   },
   "plugins": {
     "updater": {
