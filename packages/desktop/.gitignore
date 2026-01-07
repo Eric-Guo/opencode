@@ -25,5 +25,6 @@ dist-ssr
 out/
 
 resources/opencode-cli*
+resources/thape-config*
 resources/icons
 resources/*.metainfo.xml
