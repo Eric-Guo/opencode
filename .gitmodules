@@ -1,3 +1,7 @@
 [submodule "packages/desktop/resources/thape-config"]
   path = packages/desktop/resources/thape-config
   url = https://git.thape.com.cn/ai/opencode-thape.git
+
+[submodule "packages/7777"]
+  path = packages/7777
+  url = https://git.thape.com.cn/ai/opencode-agent-7777.git
