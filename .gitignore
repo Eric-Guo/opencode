@@ -28,6 +28,10 @@ target
 .scripts
 .cache
 .direnv/
+packages/7777/
+packages/plm-meeting/
+packages/nexus-ui/
+packages/desktop-tab/
 
 # Local dev files
 opencode-dev
