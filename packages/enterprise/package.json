@@ -16,7 +16,7 @@
     "@opencode/client": "workspace:*",
     "@opencode/core": "workspace:*",
     "@opencode/schema": "workspace:*",
-    "@opencode-ai/sdk": "1.18.21",
+    "@opencode/sdk": "2.0.2",
     "@opencode/session-ui": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@opencode/util": "workspace:*",
