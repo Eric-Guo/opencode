@@ -1,8 +1,9 @@
-import { Component } from "solid-js"
+import { Component, createMemo } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
+import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -17,6 +18,14 @@ export const DialogSettings: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
+  const globalSync = useGlobalSync()
+  const username = createMemo(() => globalSync.data.config.username!)
+  const clerkCode = createMemo(() => globalSync.data.config.clerk_code)
+  const title = createMemo(() => {
+    const name = username()
+    const clerk = clerkCode()
+    return clerk ? `${name} (${clerk})` : name
+  })
 
   function handleShowChangelog() {
     dialog.show(() => <DialogChangelog />)
@@ -30,7 +39,7 @@ export const DialogSettings: Component = () => {
             <div class="flex flex-col gap-3 w-full pt-3">
               <div class="flex flex-col gap-3">
                 <div class="flex flex-col gap-1.5">
-                  <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
+                  <Tabs.SectionTitle>{title()}</Tabs.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
                     <Tabs.Trigger value="general">
                       <Icon name="sliders" />
