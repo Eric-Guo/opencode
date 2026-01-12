@@ -10,6 +10,7 @@ import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsNotificationsV2 } from "./notifications"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
+import { useSettingsDialogTitle } from "../settings-dialog-title"
 import { SettingsServersV2 } from "./servers"
 import { SettingsProjectsV2 } from "./projects"
 import { SettingsExtensionsV2 } from "./extensions"
@@ -35,6 +36,7 @@ export const DialogSettings: Component<{
   const global = useGlobal()
   const currentServer = global.servers.list().find((server) => global.ensureServerCtx(server).sync === serverSync())
   if (currentServer) global.settings.server.set(ServerConnection.key(currentServer))
+  const title = useSettingsDialogTitle()
   const [tab, setTab] = createSignal(props.defaultValue ?? "general")
   const directory = createMemo(() => {
     const server = global.settings.server.selected()
@@ -67,6 +69,7 @@ export const DialogSettings: Component<{
             <div class="flex flex-col gap-4 w-full">
               {/* Group 1: Preferences */}
               <div class="flex flex-col gap-1 w-full">
+                <TabsV2.SectionTitle>{title()}</TabsV2.SectionTitle>
                 <TabsV2.Trigger value="general">
                   <Icon name="sliders" />
                   {language.t("settings.tab.preferences")}
