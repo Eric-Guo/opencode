@@ -9,10 +9,12 @@ import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
 import { SettingsServers } from "./settings-servers"
+import { useSettingsDialogTitle } from "./settings-dialog-title"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
+  const title = useSettingsDialogTitle()
 
   return (
     <Dialog size="x-large" transition>
@@ -22,7 +24,7 @@ export const DialogSettings: Component = () => {
             <div class="flex flex-col gap-3 w-full pt-3">
               <div class="flex flex-col gap-3">
                 <div class="flex flex-col gap-1.5">
-                  <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
+                  <Tabs.SectionTitle>{title()}</Tabs.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
                     <Tabs.Trigger value="general">
                       <Icon name="sliders" />
