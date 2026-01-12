@@ -8,6 +8,7 @@ import { Identifier } from "../../../id/id"
 import { ToolRegistry } from "../../../tool/registry"
 import { Instance } from "../../../project/instance"
 import { PermissionNext } from "../../../permission/next"
+import { iife } from "../../../util/iife"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 
@@ -90,18 +91,19 @@ function parseToolParams(input?: string) {
   const trimmed = input.trim()
   if (trimmed.length === 0) return {}
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(trimmed)
-  } catch (jsonError) {
+  const parsed = iife(() => {
     try {
-      parsed = new Function(`return (${trimmed})`)()
-    } catch (evalError) {
-      throw new Error(
-        `Failed to parse --params. Use JSON or a JS object literal. JSON error: ${jsonError}. Eval error: ${evalError}.`,
-      )
+      return JSON.parse(trimmed)
+    } catch (jsonError) {
+      try {
+        return new Function(`return (${trimmed})`)()
+      } catch (evalError) {
+        throw new Error(
+          `Failed to parse --params. Use JSON or a JS object literal. JSON error: ${jsonError}. Eval error: ${evalError}.`,
+        )
+      }
     }
-  }
+  })
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Tool params must be an object.")
