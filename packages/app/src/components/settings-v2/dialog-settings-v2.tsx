@@ -8,6 +8,7 @@ import { SettingsGeneralV2 } from "./general"
 import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
+import { useSettingsDialogTitle } from "../settings-dialog-title"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -19,6 +20,7 @@ export const DialogSettings: Component<{
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
+  const title = useSettingsDialogTitle()
   const [tab, setTab] = createSignal(props.defaultValue ?? "general")
 
   const showProviders = () => {
@@ -39,7 +41,7 @@ export const DialogSettings: Component<{
             <div class="flex flex-col gap-3 w-full">
               <div class="flex flex-col gap-3">
                 <div class="flex flex-col gap-1.5">
-                  <TabsV2.SectionTitle>{language.t("settings.section.desktop")}</TabsV2.SectionTitle>
+                  <TabsV2.SectionTitle>{title()}</TabsV2.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
                     <TabsV2.Trigger value="general">
                       <Icon name="sliders" />
