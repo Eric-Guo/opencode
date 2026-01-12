@@ -281,6 +281,18 @@ const layer = Layer.effect(
         )
       }
 
+      if (!result.username) {
+        const name = runtimeEnv("THAPE_SSO_USER_NAME")
+        result.username = typeof name === "string" && name.trim() ? name.trim() : os.userInfo().username
+      }
+
+      if (!result.clerk_code) {
+        const code = runtimeEnv("THAPE_SSO_CLERK_CODE")
+        if (typeof code === "string" && code.trim()) {
+          result.clerk_code = code.trim()
+        }
+      }
+      
       return result
     })
 
