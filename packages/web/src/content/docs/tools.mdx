@@ -303,6 +303,17 @@ MCP (Model Context Protocol) servers allow you to integrate external tools and s
 
 [Learn more](/docs/mcp-servers) about configuring MCP servers.
 
+
+---
+
+## Debug
+
+Using below command to calling tools directly without let LLM model use it.
+
+```bash
+opencode debug agent build --tool glob --params '{pattern: "export*", include: "*.ts"}'
+```
+
 ---
 
 ## Internals
