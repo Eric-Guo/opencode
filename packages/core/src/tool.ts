@@ -53,6 +53,8 @@ export interface Snapshot {
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
+    /** Execute a registered Code Mode tool by its effective name for trusted debug callers. */
+    readonly allowUnadvertised?: boolean
   }) => Effect.Effect<Tool.Result & { readonly content: ReadonlyArray<Tool.Content> }, Tool.Error>
 }
 
@@ -268,6 +270,8 @@ const layer = Layer.effect(
                 return yield* executeTool(toolSearch, name, event.input, context)
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
+              const unadvertised = input.allowUnadvertised ? codeModeTools.get(name) : undefined
+              if (unadvertised) return yield* executeTool(unadvertised, name, event.input, context)
               if (codeModeTool && (name.startsWith("tools.") || name.startsWith("tools[")))
                 return yield* new Tool.Error({
                   message: `Unknown tool: ${name}. Code Mode catalog expressions are JavaScript-only, not standalone tool names. Call execute with the expression inside its code input.`,
