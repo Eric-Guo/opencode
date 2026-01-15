@@ -2016,6 +2016,12 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type AgentToolResult = {
+  output?: JsonValue | undefined
+  content: Array<ToolContent1>
+  metadata?: { [x: string]: any } | undefined
+}
+
 export type FormField =
   | FormStringField
   | FormNumberField
@@ -4355,6 +4361,22 @@ export type DebugLocationListOutput = Array<LocationPublicRef>
 export type DebugLocationEvictInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type DebugLocationEvictOutput = void
+
+export type DebugAgentToolsInput = {
+  readonly agentID: { readonly agentID: string }["agentID"]
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+}
+
+export type DebugAgentToolsOutput = { location: LocationPublicRef; data: { [x: string]: boolean } }
+
+export type DebugAgentExecuteToolInput = {
+  readonly agentID: { readonly agentID: string; readonly toolID: string }["agentID"]
+  readonly toolID: { readonly agentID: string; readonly toolID: string }["toolID"]
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+  readonly payload: { readonly [x: string]: JsonValue }
+}
+
+export type DebugAgentExecuteToolOutput = { location: LocationPublicRef; data: AgentToolResult }
 
 export type MigrationV1StatusOutput =
   | { status: "required" | "completed" }
