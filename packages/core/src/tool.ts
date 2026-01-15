@@ -58,6 +58,8 @@ export interface Snapshot {
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
+    /** Execute a registered Code Mode tool by its effective name for trusted debug callers. */
+    readonly allowUnadvertised?: boolean
   }) => Effect.Effect<NormalizedResult, Tool.Error>
 }
 
@@ -264,6 +266,8 @@ const layer = Layer.effect(
                 return yield* executeTool(codeModeTool, name, event.input, context)
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
+              const unadvertised = input.allowUnadvertised ? codeModeTools.get(name) : undefined
+              if (unadvertised) return yield* executeTool(unadvertised, name, event.input, context)
               return yield* new Tool.Error({ message: `Unknown tool: ${name}` })
             }),
           }
