@@ -4,6 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { basename } from "path"
 import { Cause, Effect } from "effect"
 import { Agent } from "../../../agent/agent"
+import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
 import type { MessageV2 } from "../../../session/message-v2"
@@ -14,6 +15,7 @@ import { iife } from "../../../util/iife"
 import { fail } from "../../effect-cmd"
 import { InstanceRef } from "@/effect/instance-ref"
 import type { InstanceContext } from "@/project/instance-context"
+import { MCP } from "../../../mcp"
 
 export const debugAgent = Effect.fn("Cli.debug.agent")(function* (args: {
   name: string
@@ -37,8 +39,16 @@ const run = Effect.fn("Cli.debug.agent.body")(function* (
     )
     return yield* fail("", 1)
   }
-  const availableTools = yield* getAvailableTools(agent)
-  const resolvedTools = resolveTools(agent, availableTools)
+  const cfg = yield* Config.Service.use((svc) => svc.get())
+  const mcpConfig = cfg.mcp ?? {}
+  const toolConfig = {
+    global: cfg.tools ?? {},
+    agent: cfg.agent?.[agentName]?.tools ?? {},
+  }
+  const [availableTools, mcpToolIDs] = yield* Effect.all([getAvailableTools(agent), getAvailableMcpToolIDs(mcpConfig)], {
+    concurrency: "unbounded",
+  })
+  const resolvedTools = resolveTools(agent, [...availableTools.map((tool) => tool.id), ...mcpToolIDs])
   const toolID = args.tool
   if (toolID) {
     const tool = availableTools.find((item) => item.id === toolID)
@@ -60,6 +70,8 @@ const run = Effect.fn("Cli.debug.agent.body")(function* (
   const output = {
     ...agent,
     tools: resolvedTools,
+    mcpConfig,
+    toolConfig,
   }
   process.stdout.write(JSON.stringify(output, null, 2) + EOL)
 })
@@ -85,14 +97,21 @@ const getAvailableTools = Effect.fn("Cli.debug.agent.getAvailableTools")(functio
   return yield* registry.tools({ ...model, agent })
 })
 
-function resolveTools(agent: Agent.Info, availableTools: { id: string }[]) {
-  const disabled = Permission.disabled(
-    availableTools.map((tool) => tool.id),
-    agent.permission,
-  )
+const getAvailableMcpToolIDs = Effect.fn("Cli.debug.agent.getAvailableMcpToolIDs")(function* (
+  mcpConfig: Config.Info["mcp"] | undefined,
+) {
+  if (!mcpConfig || Object.keys(mcpConfig).length === 0) return []
+  // MCP.tools() only returns tools from connected clients, so configured but disconnected
+  // servers may not appear in the resolved tool list.
+  const tools = yield* MCP.Service.use((svc) => svc.tools())
+  return Object.keys(tools)
+})
+
+function resolveTools(agent: Agent.Info, toolIDs: string[]) {
+  const disabled = Permission.disabled(toolIDs, agent.permission)
   const resolved: Record<string, boolean> = {}
-  for (const tool of availableTools) {
-    resolved[tool.id] = !disabled.has(tool.id)
+  for (const toolID of toolIDs) {
+    resolved[toolID] = !disabled.has(toolID)
   }
   return resolved
 }
