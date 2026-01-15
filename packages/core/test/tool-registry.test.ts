@@ -1606,6 +1606,23 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("uses the direct tool context for explicit debug calls to Code Mode tools", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, {
+        echo: {
+          ...make(),
+          execute: (_, context) => Effect.succeed({ output: { text: context.codemode ? "code mode" : "direct" } }),
+        },
+      })
+
+      const request = yield* service.snapshot()
+
+      expect((yield* request.execute(call("echo"))).output).toEqual({ text: "code mode" })
+      expect((yield* request.execute({ ...call("echo"), allowUnadvertised: true })).output).toEqual({ text: "direct" })
+    }),
+  )
+
   it.effect("executes and reports progress for codemode tools advertised in a model request", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
