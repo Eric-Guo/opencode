@@ -2107,6 +2107,12 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type AgentToolResult = {
+  output?: JsonValue | undefined
+  content: Array<ToolContent1>
+  metadata?: { [x: string]: any } | undefined
+}
+
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
   | GenerateChoiceAnswer
@@ -4591,6 +4597,22 @@ export type DebugLocationListOutput = Array<LocationPublicRef>
 export type DebugLocationEvictInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type DebugLocationEvictOutput = void
+
+export type DebugAgentToolsInput = {
+  readonly agentID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type DebugAgentToolsOutput = { location: LocationPublicRef; data: { [x: string]: boolean } }
+
+export type DebugAgentExecuteToolInput = {
+  readonly agentID: string
+  readonly toolID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly payload: { readonly [x: string]: JsonValue }
+}
+
+export type DebugAgentExecuteToolOutput = { location: LocationPublicRef; data: AgentToolResult }
 
 export type ExperimentalMigrationV1StatusOutput =
   | { status: "required" | "completed" }
