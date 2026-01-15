@@ -115,6 +115,8 @@ export interface Snapshot {
     readonly cancel?: Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
+    /** Execute a registered Code Mode tool by its effective name for trusted debug callers. */
+    readonly allowUnadvertised?: boolean
   }) => Effect.Effect<NormalizedResult, Tool.Error>
 }
 
@@ -398,6 +400,7 @@ const layer = Layer.effect(
               // a plugin, runs as a Code Mode call when the request offered execute.
               const found =
                 codemode &&
+                !input.allowUnadvertised &&
                 name !== "execute" &&
                 !direct.has(name) &&
                 (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
@@ -416,6 +419,8 @@ const layer = Layer.effect(
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
+              const unadvertised = input.allowUnadvertised ? codeModeTools.get(name) : undefined
+              if (unadvertised) return yield* executeTool(unadvertised, name, event.input, context)
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
               })
