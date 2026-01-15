@@ -273,6 +273,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Retrieve currently registered agents.",
@@ -381,6 +391,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
                 }
               }
             }
@@ -4331,6 +4351,9 @@
                         },
                         {
                           "$ref": "#/components/schemas/Session.Message.Assistant.Reasoning"
+                        },
+                        {
+                          "$ref": "#/components/schemas/Session.Message.Assistant.File"
                         },
                         {
                           "$ref": "#/components/schemas/Session.Message.Assistant.Tool"
@@ -13014,6 +13037,286 @@
         "summary": "Evict a loaded location"
       }
     },
+    "/api/debug/agent/{agentID}/tool": {
+      "get": {
+        "tags": ["debug"],
+        "operationId": "v2.debug.agent.tools",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AgentNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List registered tools and whether each tool is enabled for the agent.",
+        "summary": "List agent tools"
+      }
+    },
+    "/api/debug/agent/{agentID}/tool/{toolID}": {
+      "post": {
+        "tags": ["debug"],
+        "operationId": "v2.debug.agent.executeTool",
+        "parameters": [
+          {
+            "name": "agentID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "toolID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AgentToolResult"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AgentNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Execute a registered tool in a debug session using the agent's permissions.",
+        "summary": "Execute an agent tool",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentToolParams"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/experimental/migration/v1": {
       "get": {
         "tags": ["migration"],
@@ -13446,6 +13749,48 @@
         "description": "Return configuration documents and discovery sources for the requested location, from lowest to highest priority.",
         "summary": "Get configuration"
       }
+    },
+    "/global/config": {
+      "get": {
+        "tags": ["config"],
+        "operationId": "v2.config.global",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GlobalConfig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve global configuration required by desktop clients during migration to the current API.",
+        "summary": "Get global configuration"
+      }
     }
   },
   "components": {
@@ -13512,6 +13857,40 @@
         "required": ["_tag", "agentID", "message"],
         "additionalProperties": false
       },
+      "AgentToolParams": {
+        "type": "object"
+      },
+      "AgentToolResult": {
+        "type": "object",
+        "properties": {
+          "output": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.Content"
+            }
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["content"],
+        "additionalProperties": false
+      },
       "Command.Info": {
         "type": "object",
         "properties": {
@@ -13562,6 +13941,9 @@
       "Config.AgentEncoded": {
         "type": "object",
         "properties": {
+          "name": {
+            "type": "string"
+          },
           "model": {
             "anyOf": [
               {
@@ -13846,6 +14228,9 @@
             "additionalProperties": false
           },
           "username": {
+            "type": "string"
+          },
+          "clerk_code": {
             "type": "string"
           },
           "permissions": {
@@ -15127,6 +15512,9 @@
         },
         "required": ["data"],
         "additionalProperties": false
+      },
+      "GlobalConfig": {
+        "type": "object"
       },
       "InstructionEntry.Info": {
         "type": "object",
@@ -17043,15 +17431,15 @@
         "required": ["name"],
         "additionalProperties": false
       },
-      "Prompt.Base64": {
+      "Prompt.Base64Encoded": {
         "type": "string",
-        "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+        "pattern": "^[A-Za-z0-9+/]*={0,2}$"
       },
       "Prompt.FileAttachment": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Prompt.Base64"
+            "$ref": "#/components/schemas/Prompt.Base64Encoded"
           },
           "mime": {
             "type": "string"
@@ -17496,6 +17884,37 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "Session.Error.ConnectionFallbackRecovery": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["connection-fallback"]
+          },
+          "integrationID": {
+            "type": "string"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/Connection.Info"
+          },
+          "promoted": {
+            "$ref": "#/components/schemas/Connection.Info"
+          },
+          "unavailableUntil": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["type", "integrationID", "previous", "promoted", "unavailableUntil"],
+        "additionalProperties": false
+      },
+      "Session.Error.Recovery": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Session.Error.ConnectionFallbackRecovery"
+          }
+        ]
+      },
       "Session.ForkBoundary": {
         "anyOf": [
           {
@@ -17931,6 +18350,9 @@
                   "$ref": "#/components/schemas/Session.Message.Assistant.Reasoning"
                 },
                 {
+                  "$ref": "#/components/schemas/Session.Message.Assistant.File"
+                },
+                {
                   "$ref": "#/components/schemas/Session.Message.Assistant.Tool"
                 }
               ]
@@ -17962,7 +18384,7 @@
             "type": "string"
           },
           "providerState": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState_4"
+            "$ref": "#/components/schemas/Session.Message.ProviderState_5"
           },
           "cost": {
             "$ref": "#/components/schemas/Money.USD"
@@ -17978,6 +18400,32 @@
           }
         },
         "required": ["id", "time", "type", "agent", "model", "content"],
+        "additionalProperties": false
+      },
+      "Session.Message.Assistant.File": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["file"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Session.Message.ProviderState_2"
+          }
+        },
+        "required": ["type", "id", "mime", "url"],
         "additionalProperties": false
       },
       "Session.Message.Assistant.Reasoning": {
@@ -18061,10 +18509,10 @@
             "type": "boolean"
           },
           "providerState": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState_2"
+            "$ref": "#/components/schemas/Session.Message.ProviderState_3"
           },
           "providerResultState": {
-            "$ref": "#/components/schemas/Session.Message.ProviderState_3"
+            "$ref": "#/components/schemas/Session.Message.ProviderState_4"
           },
           "state": {
             "anyOf": [
@@ -18372,6 +18820,9 @@
         "type": "object"
       },
       "Session.Message.ProviderState_4": {
+        "type": "object"
+      },
+      "Session.Message.ProviderState_5": {
         "type": "object"
       },
       "Session.Message.Shell": {
@@ -18733,6 +19184,9 @@
             "type": "integer",
             "minimum": 100,
             "maximum": 599
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/Session.Error.Recovery"
           }
         },
         "required": ["type", "message"],
@@ -19677,7 +20131,7 @@
     },
     {
       "name": "config",
-      "description": "Location-scoped configuration routes."
+      "description": "Configuration routes."
     }
   ]
 }
