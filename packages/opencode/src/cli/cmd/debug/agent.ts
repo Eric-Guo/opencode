@@ -2,6 +2,7 @@ import { EOL } from "os"
 import { basename } from "path"
 import { Effect } from "effect"
 import { Agent } from "../../../agent/agent"
+import { Config } from "../../../config"
 import { Provider } from "../../../provider"
 import { Session } from "../../../session"
 import type { MessageV2 } from "../../../session/message-v2"
@@ -13,6 +14,7 @@ import { iife } from "../../../util/iife"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 import { AppRuntime } from "@/effect/app-runtime"
+import { MCP } from "../../../mcp"
 
 export const AgentCommand = cmd({
   command: "agent <name>",
@@ -42,8 +44,20 @@ export const AgentCommand = cmd({
         )
         process.exit(1)
       }
-      const availableTools = await getAvailableTools(agent)
-      const resolvedTools = await resolveTools(agent, availableTools)
+      const cfg = await AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
+      const mcpConfig = cfg.mcp ?? {}
+      const toolConfig = {
+        global: cfg.tools ?? {},
+        agent: cfg.agent?.[agentName]?.tools ?? {},
+      }
+      const [availableTools, mcpToolIDs] = await Promise.all([
+        getAvailableTools(agent),
+        getAvailableMcpToolIDs(mcpConfig),
+      ])
+      const resolvedTools = await resolveTools(agent, [
+        ...availableTools.map((tool) => tool.id),
+        ...mcpToolIDs,
+      ])
       const toolID = args.tool as string | undefined
       if (toolID) {
         const tool = availableTools.find((item) => item.id === toolID)
@@ -65,6 +79,8 @@ export const AgentCommand = cmd({
       const output = {
         ...agent,
         tools: resolvedTools,
+        mcpConfig,
+        toolConfig,
       }
       process.stdout.write(JSON.stringify(output, null, 2) + EOL)
     })
@@ -85,14 +101,20 @@ async function getAvailableTools(agent: Agent.Info) {
   )
 }
 
-async function resolveTools(agent: Agent.Info, availableTools: Awaited<ReturnType<typeof getAvailableTools>>) {
-  const disabled = Permission.disabled(
-    availableTools.map((tool) => tool.id),
-    agent.permission,
-  )
+async function getAvailableMcpToolIDs(mcpConfig: Config.Info["mcp"] | undefined) {
+  if (!mcpConfig || Object.keys(mcpConfig).length === 0) return []
+  // Note: MCP.tools() only returns tools from *connected* MCP clients. This means that
+  // even if mcpConfig contains configured MCP servers, this may return an empty set
+  // when none of those servers are currently connected.
+  const tools = await AppRuntime.runPromise(MCP.Service.use((svc) => svc.tools()))
+  return Object.keys(tools)
+}
+
+async function resolveTools(agent: Agent.Info, toolIDs: string[]) {
+  const disabled = Permission.disabled(toolIDs, agent.permission)
   const resolved: Record<string, boolean> = {}
-  for (const tool of availableTools) {
-    resolved[tool.id] = !disabled.has(tool.id)
+  for (const toolID of toolIDs) {
+    resolved[toolID] = !disabled.has(toolID)
   }
   return resolved
 }
