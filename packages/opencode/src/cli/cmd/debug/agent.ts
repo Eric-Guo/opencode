@@ -25,3 +25,7 @@ export const AgentCommand = effectCmd({
       return yield* debugAgent(args)
     }),
 })
+
+export function executeToolEffect<A, E>(effect: Effect.Effect<A, E, never>) {
+  return Effect.runPromise(effect)
+}
