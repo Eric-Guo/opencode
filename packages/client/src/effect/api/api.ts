@@ -2049,8 +2049,45 @@ export type DebugLocationEvictOperation<E = never> = (
   input?: DebugLocationEvictInput,
 ) => Effect.Effect<DebugLocationEvictOutput, E>
 
+export type DebugAgentToolsInput = {
+  readonly agentID: Agent.ID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type DebugAgentToolsOutput = {
+  readonly location: Location.Info
+  readonly data: { readonly [x: string]: boolean }
+}
+export type DebugAgentToolsOperation<E = never> = (
+  input: DebugAgentToolsInput,
+) => Effect.Effect<DebugAgentToolsOutput, E>
+
+export type DebugAgentExecuteToolInput = {
+  readonly agentID: Agent.ID
+  readonly toolID: string
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly payload: { readonly [x: string]: Schema.Json }
+}
+export type DebugAgentExecuteToolOutput = {
+  readonly location: Location.Info
+  readonly data: {
+    readonly output?: Schema.Json | undefined
+    readonly content: ReadonlyArray<
+      | { readonly type: "text"; readonly text: string }
+      | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string | undefined }
+    >
+    readonly metadata?: { readonly [x: string]: unknown } | undefined
+  }
+}
+export type DebugAgentExecuteToolOperation<E = never> = (
+  input: DebugAgentExecuteToolInput,
+) => Effect.Effect<DebugAgentExecuteToolOutput, E>
+
 export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
+  readonly agent: {
+    readonly tools: DebugAgentToolsOperation<E>
+    readonly executeTool: DebugAgentExecuteToolOperation<E>
+  }
 }
 
 export type MigrationV1StatusOutput =
