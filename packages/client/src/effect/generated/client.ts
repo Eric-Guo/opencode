@@ -259,6 +259,10 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  DebugAgentToolsInput,
+  DebugAgentToolsOutput,
+  DebugAgentExecuteToolInput,
+  DebugAgentExecuteToolOutput,
   MigrationV1StatusOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
@@ -1536,8 +1540,26 @@ const EndpointDebugLocationEvict = (raw: RawClient["server.debug"]) => (input?: 
     raw["debug.location.evict"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointDebugAgentTools = (raw: RawClient["server.debug"]) => (input: DebugAgentToolsInput) =>
+  preserveEffect<DebugAgentToolsOutput>()(
+    raw["debug.agent.tools"]({ params: { agentID: input["agentID"] }, query: { location: input["location"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+type DebugAgentExecuteToolRequest = Parameters<RawClient["server.debug"]["debug.agent.executeTool"]>[0]
+const EndpointDebugAgentExecuteTool = (raw: RawClient["server.debug"]) => (input: DebugAgentExecuteToolInput) =>
+  preserveEffect<DebugAgentExecuteToolOutput>()(
+    raw["debug.agent.executeTool"]({
+      params: { agentID: input["agentID"], toolID: input["toolID"] },
+      query: { location: input["location"] },
+      payload: input["payload"],
+    } as DebugAgentExecuteToolRequest).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroupDebug = (raw: RawClient["server.debug"]) => ({
   location: { list: EndpointDebugLocationList(raw), evict: EndpointDebugLocationEvict(raw) },
+  agent: { tools: EndpointDebugAgentTools(raw), executeTool: EndpointDebugAgentExecuteTool(raw) },
 })
 
 const EndpointMigrationV1Status = (raw: RawClient["server.migration"]) => () =>
