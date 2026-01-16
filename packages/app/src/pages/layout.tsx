@@ -74,9 +74,6 @@ export default function Layout(props: ParentProps) {
     }),
   )
 
-  const pageReady = createMemo(() => ready())
-  const layoutReady = createMemo(() => layout.ready())
-
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
   const [isLargeViewport, setIsLargeViewport] = createSignal(xlQuery.matches)
@@ -88,6 +85,8 @@ export default function Layout(props: ParentProps) {
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
+  const pageReady = createMemo(() => ready())
+  const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
   const server = useServer()
   const notification = useNotification()
