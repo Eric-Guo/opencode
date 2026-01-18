@@ -2,14 +2,16 @@ export * as ConfigMarkdown from "./markdown.js"
 
 import matter from "gray-matter"
 export function parse(content: string) {
+  const template = substituteEnv(content)
+
   // Passing options bypasses gray-matter's module-global content cache, which
   // it populates before parsing: a failed YAML parse poisons the entry and
   // every later parse of the same content replays it without throwing, so the
   // sanitize fallback below never runs. Upstream: jonschlinkert/gray-matter#166.
   try {
-    return matter(content, {})
+    return matter(template, {})
   } catch {
-    return matter(sanitize(content), {})
+    return matter(sanitize(template), {})
   }
 }
 
@@ -19,6 +21,10 @@ export function parseOption(content: string) {
   } catch {
     return undefined
   }
+}
+
+export function substituteEnv(content: string) {
+  return content.replace(/\{env:([^}]+)\}/g, (_, name: string) => process.env[name] ?? "")
 }
 
 // Other coding agents accept unquoted colons in frontmatter values. Retry
