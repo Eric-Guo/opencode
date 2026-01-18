@@ -60,6 +60,23 @@ We are adding project-specific instructions here and this will be shared across 
 
 ---
 
+## Variables
+
+Use environment and project placeholders in `AGENTS.md` to include environment values and the PLM project selected in the app:
+
+```markdown title="AGENTS.md"
+Organization: {env:ORGANIZATION}
+Project ID: {project:project_id}
+Project name: {project:project_name}
+Work package ID: {project:work_package_id}
+```
+
+`{env:VAR_NAME}` uses the named environment variable. Project placeholders use the saved `project_id`, `project_name`, and `work_package_id` columns in the current project's `project` table row. Missing values expand to empty strings. Other project placeholders are left unchanged.
+
+Substitution applies to global, project, configured, and nested instruction files. The original files stay unchanged, and saved selection changes are reflected the next time instructions load.
+
+---
+
 ## Types
 
 opencode also supports reading the `AGENTS.md` file from multiple locations. And this serves different purposes.
