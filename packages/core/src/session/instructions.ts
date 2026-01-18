@@ -4,7 +4,9 @@ import { relative } from "path"
 import { Context, Effect, Layer, Option, Ref, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
+import { Database } from "../database/database.js"
 import { FSUtil } from "@opencode/util/fs-util"
+import { InstructionVariable } from "../instruction-variable.js"
 import { Location } from "../location.js"
 import { SessionEvent } from "./event.js"
 import { MessageDecodeError } from "./error.js"
@@ -29,6 +31,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const database = yield* Database.Service
     const fs = yield* FSUtil.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
@@ -67,13 +70,16 @@ const layer = Layer.effect(
         )
         const readable = files.filter((file): file is { path: string; content: string } => file !== undefined)
         if (readable.length === 0) return
+
+        const substitute = yield* InstructionVariable.load(database.db, location.project.id)
+
         // Publish directly rather than through Session.synthetic: a Location-scoped layer
         // cannot depend on Session (it routes through LocationServiceMap, forming a type
         // cycle with this node). The durable publish commits the synthetic and its metadata
         // ledger atomically, so releasing the claim afterwards cannot readmit the paths.
         yield* bus.publish(SessionEvent.Synthetic, {
           sessionID: input.sessionID,
-          text: readable.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n"),
+          text: readable.map((file) => `Instructions from: ${file.path}\n${substitute(file.content)}`).join("\n\n"),
           description: `Loaded ${readable.map((file) => describePath(root, file.path)).join(", ")}`,
           metadata: { instruction: { paths: readable.map((file) => file.path) } },
         })
@@ -121,5 +127,5 @@ function describePath(root: string, path: string) {
 export const node = makeLocationNode({
   name: "session-instructions",
   layer,
-  deps: [Bus.node, FSUtil.node, Location.node, SessionStore.node],
+  deps: [Bus.node, Database.node, FSUtil.node, Location.node, SessionStore.node],
 })
