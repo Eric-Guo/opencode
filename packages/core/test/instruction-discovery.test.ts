@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { eq } from "drizzle-orm"
 import { Deferred, Effect, Fiber, Layer, PubSub, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import fs from "fs/promises"
@@ -7,9 +8,12 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigInstructionPlugin } from "@opencode/core/config/plugin/instruction"
+import { Database } from "@opencode/core/database/database"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Location } from "@opencode/core/location"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Document, Info } from "@opencode/schema/config"
 import { Event } from "@opencode/schema/event"
@@ -17,13 +21,18 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { tempGlobalLayer } from "./fixture/global"
-import { location } from "./fixture/location"
+import { withEnv } from "./fixture/env"
+import { location, tempLocationLayer } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { readInitial, readUpdate, state } from "./lib/instructions"
 import { testEffect } from "./lib/effect"
 import { host } from "./plugin/host"
 
 const it = testEffect(Layer.empty)
+
+const discoveryLayer = AppNodeBuilder.build(LayerNode.group([InstructionDiscovery.node, Bus.node]), [
+  Location.node.replace(tempLocationLayer),
+])
 
 const instructionLayer = (input: {
   config?: string
@@ -42,6 +51,7 @@ const instructionLayer = (input: {
         InstructionDiscovery.node,
         Bus.node,
         Config.node,
+        Database.node,
         FSUtil.node,
         Global.node,
         Location.node,
@@ -124,7 +134,7 @@ describe("InstructionDiscovery", () => {
         file("/repo/AGENTS.md", "last"),
         file("/repo/packages/AGENTS.md", "updated"),
       ])
-    }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([InstructionDiscovery.node, Bus.node])))),
+    }).pipe(Effect.provide(discoveryLayer)),
   )
 
   it.effect("preserves admitted values while the source is unavailable", () =>
@@ -137,7 +147,7 @@ describe("InstructionDiscovery", () => {
           state({ "core/instructions": [{ path: "/repo/AGENTS.md", content: "old" }] }),
         )).changed,
       ).toBe(false)
-    }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([InstructionDiscovery.node, Bus.node])))),
+    }).pipe(Effect.provide(discoveryLayer)),
   )
 
   it.effect("renders granular instruction updates", () =>
@@ -181,11 +191,76 @@ describe("InstructionDiscovery", () => {
       expect(structural).toContain("The instructions from /global/AGENTS.md no longer apply.")
       expect(structural).toContain("New instructions apply from:\nInstructions from: /repo/packages/AGENTS.md\npackage")
       expect(structural).not.toContain("Instructions from: /global/AGENTS.md\nglobal")
-    }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([InstructionDiscovery.node, Bus.node])))),
+    }).pipe(Effect.provide(discoveryLayer)),
   )
 })
 
 describe("ConfigInstructionPlugin.Plugin", () => {
+  it.live("substitutes saved project fields and observes selection changes without reloading files", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const location = yield* Location.Service
+      const template =
+        "{env:OPENCODE_TEST_INSTRUCTION_ENV}: Project {project:project_id}: {project:project_name}; package {project:work_package_id}. Repeat {project:project_id}; unknown {project:name}."
+      const agents = path.join(location.directory, "AGENTS.md")
+      yield* Effect.promise(() => Bun.write(agents, template))
+      yield* database.db
+        .insert(ProjectTable)
+        .values({
+          id: Project.ID.make("other"),
+          worktree: AbsolutePath.make("/other"),
+          sandboxes: [],
+          project_id: 999,
+          project_name: "Other project",
+          work_package_id: 888,
+        })
+        .run()
+
+      const discovery = yield* start()
+      const missing = yield* readInitial(yield* discovery.load())
+      expect(missing.text).toBe(
+        `Instructions from: ${agents}\nOrganization: Project : ; package . Repeat ; unknown {project:name}.`,
+      )
+
+      yield* database.db
+        .insert(ProjectTable)
+        .values({
+          id: location.project.id,
+          worktree: location.project.directory,
+          sandboxes: [],
+          project_id: 12,
+        })
+        .run()
+      expect((yield* readInitial(yield* discovery.load())).text).toBe(
+        `Instructions from: ${agents}\nOrganization: Project 12: ; package . Repeat 12; unknown {project:name}.`,
+      )
+
+      yield* database.db
+        .update(ProjectTable)
+        .set({ project_id: 42, project_name: "设计 $&", work_package_id: 123 })
+        .where(eq(ProjectTable.id, location.project.id))
+        .run()
+      const selected = yield* readInitial(yield* discovery.load())
+      expect(selected.text).toBe(
+        `Instructions from: ${agents}\nOrganization: Project 42: 设计 $&; package 123. Repeat 42; unknown {project:name}.`,
+      )
+      expect((yield* readUpdate(yield* discovery.load(), missing)).changed).toBe(true)
+
+      yield* database.db
+        .update(ProjectTable)
+        .set({ project_id: 43, project_name: "Next project", work_package_id: 456 })
+        .where(eq(ProjectTable.id, location.project.id))
+        .run()
+      expect((yield* readUpdate(yield* discovery.load(), selected)).text).toContain(
+        "Organization: Project 43: Next project; package 456. Repeat 43; unknown {project:name}.",
+      )
+      expect(yield* discovery.list()).toEqual([file(agents, template)])
+      expect(yield* Effect.promise(() => Bun.file(agents).text())).toBe(template)
+    }).pipe(Effect.provide(instructionLayer({ locationServiceLayer: tempLocationLayer })), (effect) =>
+      withEnv({ OPENCODE_TEST_INSTRUCTION_ENV: "Organization" }, () => effect),
+    ),
+  )
+
   it.live("loads global and upward project files and rescans them on change", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
