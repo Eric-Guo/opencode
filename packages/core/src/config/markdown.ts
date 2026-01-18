@@ -2,10 +2,11 @@ export * as ConfigMarkdown from "./markdown.js"
 
 import matter from "gray-matter"
 export function parse(content: string) {
+  const template = substituteEnv(content)
   try {
-    return matter(content)
+    return matter(template)
   } catch {
-    return matter(sanitize(content))
+    return matter(sanitize(template))
   }
 }
 
@@ -15,6 +16,10 @@ export function parseOption(content: string) {
   } catch {
     return undefined
   }
+}
+
+export function substituteEnv(content: string) {
+  return content.replace(/\{env:([^}]+)\}/g, (_, name: string) => process.env[name] ?? "")
 }
 
 // Other coding agents accept unquoted colons in frontmatter values. Retry
