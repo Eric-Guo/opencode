@@ -4,6 +4,7 @@ import os from "os"
 import path from "path"
 import { Effect } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { InstructionVariable } from "../instruction-variable.js"
 import { InvalidError } from "../v1/config/error.js"
 
 type ParseSource =
@@ -24,10 +25,7 @@ type SubstituteInput = ParseSource & {
 
 /** Apply {env:VAR} and {file:path} substitutions to config text. */
 export const substitute = Effect.fn("ConfigVariable.substitute")(function* (input: SubstituteInput) {
-  const text = input.text.replace(
-    /\{env:([^}]+)\}/g,
-    (_, varName: string) => (input.env?.[varName] ?? process.env[varName]) || "",
-  )
+  const text = InstructionVariable.substitute(input.text, { env: input.env })
   if (!text.includes("{file:")) return text
   return yield* substituteFiles(input, text)
 })
