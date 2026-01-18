@@ -5,6 +5,10 @@ import { ConfigMarkdown as ConfigMarkdownCore } from "@opencode-ai/core/config/m
 export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 export const SHELL_REGEX = /!`([^`]+)`/g
 
+export function substituteEnv(content: string) {
+  return content.replace(/\{env:([^}]+)\}/g, (_, varName) => process.env[varName] || "")
+}
+
 export function files(template: string) {
   return Array.from(template.matchAll(FILE_REGEX))
 }
@@ -18,7 +22,8 @@ export function shell(template: string) {
 export const fallbackSanitization = ConfigMarkdownCore.sanitize
 
 export async function parse(filePath: string) {
-  const template = await Filesystem.readText(filePath)
+  const raw = await Filesystem.readText(filePath)
+  const template = substituteEnv(raw)
 
   try {
     return ConfigMarkdownCore.parse(template)
