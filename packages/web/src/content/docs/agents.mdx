@@ -215,6 +215,38 @@ Provide constructive feedback without making direct changes.
 
 The markdown file name becomes the agent name. For example, `review.md` creates a `review` agent.
 
+#### Variables
+
+You can substitute environment variables in markdown agent files using `{env:VAR_NAME}`. This works in both frontmatter and the prompt body.
+
+```markdown title="~/.config/opencode/agents/mcdonalds.md"
+---
+name: "McDonalds"
+description: Agent to help you ordering McDonalds
+mode: primary
+model: "{env:OPENCODE_SMALL_MODEL}"
+tools:
+  question: true
+  bash: false
+  read: false
+  glob: false
+  grep: false
+  write: false
+  edit: false
+  task: false
+  todowrite: false
+  todoread: false
+  skill: false
+  "mcdonalds-mcp_*": true
+---
+
+You are a McDonalds clerk who can help user make ordering, save user money as much as possible, unless user say no.
+
+If MCP_TOKEN:`{env:MCDONALDS_MCP_TOKEN}` is empty, tell the user to apply for a token at https://open.mcd.cn/mcp/doc
+
+If MCP_TOKEN not set, it will be replaced with an empty string. Avoid echoing secrets back to the user.
+```
+
 ---
 
 ## Options
