@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { eq } from "drizzle-orm"
 import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer } from "effect"
@@ -16,6 +17,7 @@ import { FileAccess } from "@opencode/core/file-access"
 import { Model } from "@opencode/core/model"
 import { Permission } from "@opencode/core/permission"
 import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
@@ -30,6 +32,7 @@ import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Tool } from "@opencode/core/tool"
 import { tempLocationLayer } from "./fixture/location"
+import { withEnv } from "./fixture/env"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -123,6 +126,37 @@ const seedSynthetic = (sessionID: Session.ID, paths: string[]) =>
   })
 
 describe("SessionInstructions", () => {
+  it.live("substitutes environment and selected project fields in nested AGENTS.md files", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const location = yield* Location.Service
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const agents = path.resolve(location.directory, "sub", "AGENTS.md")
+      yield* mkdir(path.dirname(agents))
+      yield* writeAgents(
+        agents,
+        "{env:OPENCODE_TEST_NESTED_INSTRUCTION_ENV}: Project {project:project_id}: {project:project_name}; package {project:work_package_id}.",
+      )
+      yield* Effect.promise(() => Bun.write(path.resolve(location.directory, "sub", "file.txt"), "content"))
+
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: location.directory }) })).id
+      yield* database.db
+        .update(ProjectTable)
+        .set({ project_id: 42, project_name: "Selected project", work_package_id: 123 })
+        .where(eq(ProjectTable.id, location.project.id))
+        .run()
+      yield* executeTool(registry, readCall(sessionID, "call-project", "sub/file.txt"))
+
+      const injected = yield* synthetics(sessionID)
+      expect(injected).toHaveLength(1)
+      expect(injected[0]!.text).toBe(
+        `Instructions from: ${agents}\nOrganization: Project 42: Selected project; package 123.`,
+      )
+      expect(injected[0]!.metadata).toEqual({ instruction: { paths: [agents] } })
+    }).pipe((effect) => withEnv({ OPENCODE_TEST_NESTED_INSTRUCTION_ENV: "Organization" }, () => effect)),
+  )
+
   it.live("injects AGENTS.md files above a read, excludes the Location root, and dedups across reads", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
