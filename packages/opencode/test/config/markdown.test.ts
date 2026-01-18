@@ -1,4 +1,4 @@
-import { expect, test, describe } from "bun:test"
+import { expect, test, describe, beforeAll, afterAll } from "bun:test"
 import { ConfigMarkdown } from "../../src/config/markdown"
 
 describe("ConfigMarkdown: normal template", () => {
@@ -188,5 +188,39 @@ describe("ConfigMarkdown: frontmatter parsing w/ no frontmatter", async () => {
     expect(result).toBeDefined()
     expect(result.data).toEqual({})
     expect(result.content.trim()).toBe("Content")
+  })
+})
+
+describe("ConfigMarkdown: env substitution", () => {
+  const tokenKey = "TEST_MCP_TOKEN"
+  const emptyKey = "EMPTY_ENV_VAR"
+  const prevToken = process.env[tokenKey]
+  const prevEmpty = process.env[emptyKey]
+  let parsed: Awaited<ReturnType<typeof ConfigMarkdown.parse>>
+
+  beforeAll(async () => {
+    process.env[tokenKey] = "abc123"
+    delete process.env[emptyKey]
+    parsed = await ConfigMarkdown.parse(import.meta.dir + "/fixtures/env-frontmatter.md")
+  })
+
+  afterAll(() => {
+    if (prevToken === undefined) delete process.env[tokenKey]
+    else process.env[tokenKey] = prevToken
+    if (prevEmpty === undefined) delete process.env[emptyKey]
+    else process.env[emptyKey] = prevEmpty
+  })
+
+  test("should substitute env vars in frontmatter", () => {
+    expect(parsed.data.description).toBe("Token is abc123")
+  })
+
+  test("should substitute missing env vars with empty string in frontmatter", () => {
+    expect(parsed.data.note).toBe("")
+  })
+
+  test("should substitute env vars in content", () => {
+    expect(parsed.content).toContain("Token: abc123")
+    expect(parsed.content).toContain("Missing: ")
   })
 })
