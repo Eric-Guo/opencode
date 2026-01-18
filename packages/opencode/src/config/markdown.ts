@@ -6,6 +6,10 @@ import { Filesystem } from "../util"
 export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 export const SHELL_REGEX = /!`([^`]+)`/g
 
+export function substituteEnv(content: string) {
+  return content.replace(/\{env:([^}]+)\}/g, (_, varName) => process.env[varName] || "")
+}
+
 export function files(template: string) {
   return Array.from(template.matchAll(FILE_REGEX))
 }
@@ -68,7 +72,8 @@ export function fallbackSanitization(content: string): string {
 }
 
 export async function parse(filePath: string) {
-  const template = await Filesystem.readText(filePath)
+  const raw = await Filesystem.readText(filePath)
+  const template = substituteEnv(raw)
 
   try {
     const md = matter(template)
