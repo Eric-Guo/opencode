@@ -4,7 +4,10 @@ import { Context, Effect, Layer, Schema, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { createPatch } from "diff"
 import { Bus } from "./bus.js"
+import { Database } from "./database/database.js"
+import { InstructionVariable } from "./instruction-variable.js"
 import { Instructions } from "./instructions/index.js"
+import { Location } from "./location.js"
 import { State } from "./state.js"
 
 export class File extends Schema.Class<File>("InstructionDiscovery.File")({
@@ -57,6 +60,8 @@ export const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const database = yield* Database.Service
+      const location = yield* Location.Service
       const state = State.create<Data, Editor>({
         name: "instruction-discovery",
         initial: () => ({ files: new Map(), available: true }),
@@ -104,7 +109,11 @@ export const layer = (options?: Options) =>
         load: Effect.fn("InstructionDiscovery.load")(function* () {
           const files = yield* list()
           if (!Array.isArray(files)) return source(files)
-          return source(files.length === 0 ? Instructions.removed : files)
+          if (files.length === 0) return source(Instructions.removed)
+
+          // Keep templates in discovery state so a new selection is reflected on the next load.
+          const substitute = yield* InstructionVariable.load(database.db, location.project.id)
+          return source(files.map((file) => new File({ path: file.path, content: substitute(file.content) })))
         }),
       })
     }),
@@ -114,7 +123,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Bus.node],
+    deps: [Bus.node, Database.node, Location.node],
   })
 }
 
