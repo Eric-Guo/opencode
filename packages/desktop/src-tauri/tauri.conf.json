@@ -8,6 +8,7 @@
     "beforeDevCommand": "bun run prepare-resources && bun run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
+    "beforeBundleCommand": "bun run generate-silent-install",
     "frontendDist": "../dist"
   },
   "app": {
