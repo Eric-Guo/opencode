@@ -11,7 +11,8 @@
     "dev": "vite",
     "build": "bun run prepare-resources && bun run typecheck && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "generate-silent-install": "bun ./scripts/generate-silent-install.js"
   },
   "dependencies": {
     "@opencode-ai/app": "workspace:*",
