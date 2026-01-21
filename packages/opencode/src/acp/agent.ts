@@ -1279,6 +1279,7 @@ export namespace ACP {
     switch (tool) {
       case "bash":
         return "execute"
+      case "doc_convert":
       case "webfetch":
         return "fetch"
 
@@ -1289,6 +1290,11 @@ export namespace ACP {
 
       case "grep":
       case "glob":
+      case "internal_search_for_company":
+      case "internal_dds_search_for_company":
+      case "websearch_for_china_net":
+      case "websearch":
+      case "codesearch":
       case "context7_resolve_library_id":
       case "context7_get_library_docs":
         return "search"
