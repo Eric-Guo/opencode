@@ -45,7 +45,7 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-const cli = yargs(hideBin(process.argv))
+const cli_init = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
@@ -129,8 +129,6 @@ const cli = yargs(hideBin(process.argv))
   .command(DebugCommand)
   .command(AuthCommand)
   .command(AgentCommand)
-  .command(UpgradeCommand)
-  .command(UninstallCommand)
   .command(ServeCommand)
   .command(WebCommand)
   .command(ModelsCommand)
@@ -141,6 +139,13 @@ const cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
   .command(DbCommand)
+
+const cli =
+  Installation.isLocal() || Installation.isPreview()
+    ? cli_init
+    : cli_init.command(UpgradeCommand).command(UninstallCommand)
+
+cli
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
