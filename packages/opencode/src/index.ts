@@ -63,7 +63,7 @@ function show(out: string) {
   process.stderr.write(out)
 }
 
-const cli = yargs(args)
+const cli_init = yargs(args)
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
@@ -159,8 +159,6 @@ const cli = yargs(args)
   .command(ConsoleCommand)
   .command(ProvidersCommand)
   .command(AgentCommand)
-  .command(UpgradeCommand)
-  .command(UninstallCommand)
   .command(ServeCommand)
   .command(WebCommand)
   .command(ModelsCommand)
@@ -172,6 +170,13 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
+
+const cli =
+  Installation.isLocal() || Installation.isPreview()
+    ? cli_init
+    : cli_init.command(UpgradeCommand).command(UninstallCommand)
+
+cli
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
