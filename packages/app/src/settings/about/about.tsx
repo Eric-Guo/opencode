@@ -40,6 +40,7 @@ export function SettingsAbout(props: { active: boolean }) {
     <div class="settings-about-content">
       <div class="settings-about-intro">
         <p>{language.t("settings.about.version", { version: platform.version ?? language.t("settings.about.devVersion") })}</p>
+        <p>Sigma Agents 天华集团运营与信息化部</p>
         <p>{language.t("settings.about.license")}</p>
       </div>
 
