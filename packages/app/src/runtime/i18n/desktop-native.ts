@@ -233,7 +233,7 @@ const normalizeScript = (script?: string) => (script === "Aran" ? "Arab" : scrip
 
 export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.microphoneUsage": "OpenCode uses your microphone for voice calls.",
-  "desktop.menu.app": "OpenCode",
+  "desktop.menu.app": "Sigma Agents",
   "desktop.menu.file": "File",
   "desktop.menu.edit": "Edit",
   "desktop.menu.view": "View",
