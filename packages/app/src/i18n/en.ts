@@ -806,9 +806,11 @@ export const dict = {
   "sidebar.help": "Help",
   "sidebar.workspaces.enable": "Enable workspaces",
   "sidebar.workspaces.disable": "Disable workspaces",
-  "sidebar.gettingStarted.title": "Getting started",
-  "sidebar.gettingStarted.line1": "OpenCode includes free models so you can start immediately.",
-  "sidebar.gettingStarted.line2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc.",
+  "sidebar.gettingStarted.title": "Tianhua SSO required",
+  "sidebar.gettingStarted.line1":
+    "Create a global environment variable THAPE_SSO_BEARER_API_KEY on your Windows system.",
+  "sidebar.gettingStarted.line2":
+    "This authorizes the XiaoTian agent to access tools on the Tianhua intranet on your behalf.",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
   "sidebar.project.clearNotifications": "Clear notifications",
@@ -839,7 +841,7 @@ export const dict = {
   "debugBar.mem.tipUnavailable": "Used JS heap vs heap limit. Chromium only.",
   "debugBar.mem.tip": "Used JS heap vs heap limit. {{used}} of {{limit}}.",
 
-  "app.name.desktop": "OpenCode Desktop",
+  "app.name.desktop": "Σ Agents on OpenCode",
 
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
