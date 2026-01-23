@@ -454,9 +454,10 @@ export const dict = {
   "sidebar.help": "說明",
   "sidebar.workspaces.enable": "啟用工作區",
   "sidebar.workspaces.disable": "停用工作區",
-  "sidebar.gettingStarted.title": "開始使用",
-  "sidebar.gettingStarted.line1": "OpenCode 提供免費模型，你可以立即開始使用。",
-  "sidebar.gettingStarted.line2": "連線任意提供者即可使用更多模型，如 Claude、GPT、Gemini 等。",
+  "sidebar.gettingStarted.title": "需要天華 SSO 授權",
+  "sidebar.gettingStarted.line1":
+    "請在您的 Windows 系統中建立 THAPE_SSO_BEARER_API_KEY 的全域環境變數。",
+  "sidebar.gettingStarted.line2": "授權 XiaoTian 智能體以您的身分存取天華內網中的工具。",
   "sidebar.project.recentSessions": "最近工作階段",
   "sidebar.project.viewAllSessions": "查看全部工作階段",
 

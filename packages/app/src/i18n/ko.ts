@@ -458,9 +458,10 @@ export const dict = {
   "sidebar.help": "도움말",
   "sidebar.workspaces.enable": "작업 공간 활성화",
   "sidebar.workspaces.disable": "작업 공간 비활성화",
-  "sidebar.gettingStarted.title": "시작하기",
-  "sidebar.gettingStarted.line1": "OpenCode에는 무료 모델이 포함되어 있어 즉시 시작할 수 있습니다.",
-  "sidebar.gettingStarted.line2": "Claude, GPT, Gemini 등을 포함한 모델을 사용하려면 공급자를 연결하세요.",
+  "sidebar.gettingStarted.title": "Tianhua SSO 권한이 필요합니다",
+  "sidebar.gettingStarted.line1": "Windows 시스템에 전역 환경 변수 THAPE_SSO_BEARER_API_KEY를 생성하세요.",
+  "sidebar.gettingStarted.line2":
+    "이렇게 하면 XiaoTian 에이전트가 사용자를 대신해 Tianhua 내부망의 도구에 접근할 수 있습니다.",
   "sidebar.project.recentSessions": "최근 세션",
   "sidebar.project.viewAllSessions": "모든 세션 보기",
 

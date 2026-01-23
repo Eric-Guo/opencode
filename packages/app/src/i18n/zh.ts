@@ -452,9 +452,9 @@ export const dict = {
   "sidebar.help": "帮助",
   "sidebar.workspaces.enable": "启用工作区",
   "sidebar.workspaces.disable": "禁用工作区",
-  "sidebar.gettingStarted.title": "入门",
-  "sidebar.gettingStarted.line1": "OpenCode 提供免费模型，你可以立即开始使用。",
-  "sidebar.gettingStarted.line2": "连接任意提供商即可使用更多模型，如 Claude、GPT、Gemini 等。",
+  "sidebar.gettingStarted.title": "需要天华SSO授权",
+  "sidebar.gettingStarted.line1": "通过在您的Windows系统中创建THAPE_SSO_BEARER_API_KEY的全局环境变量",
+  "sidebar.gettingStarted.line2": "授权XiaoTian智能体以您的身份访问天华内网中的工具。",
   "sidebar.project.recentSessions": "最近会话",
   "sidebar.project.viewAllSessions": "查看全部会话",
 

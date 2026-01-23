@@ -456,9 +456,11 @@ export const dict = {
   "sidebar.help": "ヘルプ",
   "sidebar.workspaces.enable": "ワークスペースを有効化",
   "sidebar.workspaces.disable": "ワークスペースを無効化",
-  "sidebar.gettingStarted.title": "はじめに",
-  "sidebar.gettingStarted.line1": "OpenCodeには無料モデルが含まれているため、すぐに開始できます。",
-  "sidebar.gettingStarted.line2": "プロバイダーを接続して、Claude、GPT、Geminiなどのモデルを使用できます。",
+  "sidebar.gettingStarted.title": "Tianhua SSO の認可が必要です",
+  "sidebar.gettingStarted.line1":
+    "Windows システムにグローバル環境変数 THAPE_SSO_BEARER_API_KEY を作成してください。",
+  "sidebar.gettingStarted.line2":
+    "これにより、XiaoTian エージェントがあなたの代わりに Tianhua 社内ネットワーク上のツールへアクセスできます。",
   "sidebar.project.recentSessions": "最近のセッション",
   "sidebar.project.viewAllSessions": "すべてのセッションを表示",
 

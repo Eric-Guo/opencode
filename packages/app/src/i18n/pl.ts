@@ -482,9 +482,11 @@ export const dict = {
   "sidebar.help": "Pomoc",
   "sidebar.workspaces.enable": "Włącz przestrzenie robocze",
   "sidebar.workspaces.disable": "Wyłącz przestrzenie robocze",
-  "sidebar.gettingStarted.title": "Pierwsze kroki",
-  "sidebar.gettingStarted.line1": "OpenCode zawiera darmowe modele, więc możesz zacząć od razu.",
-  "sidebar.gettingStarted.line2": "Połącz dowolnego dostawcę, aby używać modeli, w tym Claude, GPT, Gemini itp.",
+  "sidebar.gettingStarted.title": "Wymagana autoryzacja SSO Tianhua",
+  "sidebar.gettingStarted.line1":
+    "Utwórz w systemie Windows globalną zmienną środowiskową THAPE_SSO_BEARER_API_KEY.",
+  "sidebar.gettingStarted.line2":
+    "Dzięki temu agent XiaoTian uzyska, w Twoim imieniu, dostęp do narzędzi w intranecie Tianhua.",
   "sidebar.project.recentSessions": "Ostatnie sesje",
   "sidebar.project.viewAllSessions": "Zobacz wszystkie sesje",
 

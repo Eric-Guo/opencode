@@ -477,9 +477,11 @@ export const dict = {
   "sidebar.help": "مساعدة",
   "sidebar.workspaces.enable": "تمكين مساحات العمل",
   "sidebar.workspaces.disable": "تعطيل مساحات العمل",
-  "sidebar.gettingStarted.title": "البدء",
-  "sidebar.gettingStarted.line1": "يتضمن OpenCode نماذج مجانية حتى تتمكن من البدء فورًا.",
-  "sidebar.gettingStarted.line2": "قم بتوصيل أي موفر لاستخدام النماذج، بما في ذلك Claude و GPT و Gemini وما إلى ذلك.",
+  "sidebar.gettingStarted.title": "مطلوب تفويض SSO من Tianhua",
+  "sidebar.gettingStarted.line1":
+    "أنشئ متغير البيئة العام THAPE_SSO_BEARER_API_KEY على نظام Windows لديك.",
+  "sidebar.gettingStarted.line2":
+    "سيتيح ذلك لوكيل XiaoTian الوصول، نيابةً عنك، إلى أدوات الشبكة الداخلية لـ Tianhua.",
   "sidebar.project.recentSessions": "الجلسات الحديثة",
   "sidebar.project.viewAllSessions": "عرض جميع الجلسات",
 
