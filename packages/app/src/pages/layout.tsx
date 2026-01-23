@@ -2220,8 +2220,8 @@ export default function LegacyLayout(props: ParentProps) {
                 </div>
               </div>
               <div data-component="getting-started-actions">
-                <Button size="large" icon="plus-small" onClick={connectProvider}>
-                  {language.t("command.provider.connect")}
+                <Button size="large" icon="plus-small" onClick={() => platform.openLink("https://sso.thape.com.cn/jwts?audience=opencode&exp_hours=36000")}>
+                  {language.t("notification.permission.title")}
                 </Button>
                 <Button size="large" variant="ghost" onClick={() => setStore("gettingStartedDismissed", true)}>
                   {language.t("toast.update.action.notYet")}
