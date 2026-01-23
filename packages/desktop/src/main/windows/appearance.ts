@@ -26,7 +26,7 @@ let backgroundColor: string | undefined
 export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
   const mode = tone()
   return {
-    title: "OpenCode",
+    title: "SigmaAgents",
     icon: iconPath(path, paths),
     backgroundColor: getBackgroundColor() ?? oc2Background[mode],
     ...(process.platform === "darwin"
