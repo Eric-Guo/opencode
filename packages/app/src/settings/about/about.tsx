@@ -126,6 +126,7 @@ export function SettingsAbout(props: { active: boolean }) {
             </button>
           </Tooltip>
         </div>
+        <p>Sigma Agents 天华集团运营与信息化部</p>
         <p>{language.t("settings.about.license")}</p>
       </div>
 
