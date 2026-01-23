@@ -1,4 +1,5 @@
 use tauri::{AppHandle, Manager, path::BaseDirectory};
+use std::path::{Path, PathBuf};
 use tauri_plugin_shell::{
     ShellExt,
     process::{Command, CommandChild, CommandEvent, TerminatedPayload},
@@ -20,6 +21,143 @@ pub struct ServerConfig {
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub server: Option<ServerConfig>,
+}
+
+fn path_has_segment_sequence(path: &Path, sequence: &[&str]) -> bool {
+    let components: Vec<String> = path
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().into_owned())
+        .collect();
+
+    components
+        .windows(sequence.len())
+        .any(|window| window.iter().zip(sequence).all(|(a, b)| a == b))
+}
+
+fn copy_dir_filtered(
+    source: &Path,
+    dest: &Path,
+    skip_node_modules: bool,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(dest)?;
+
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+
+        if name == ".git" || name == ".DS_Store" || name.starts_with(".lock-") {
+            continue;
+        }
+
+        if skip_node_modules && name == "node_modules" {
+            continue;
+        }
+
+        let source_path = entry.path();
+        let dest_path = dest.join(&file_name);
+        let file_type = entry.file_type()?;
+
+        if file_type.is_dir() {
+            copy_dir_filtered(&source_path, &dest_path, skip_node_modules)?;
+            continue;
+        }
+
+        if file_type.is_symlink() {
+            let target = std::fs::read_link(&source_path)?;
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&target, &dest_path)?;
+            #[cfg(windows)]
+            {
+                if target.is_dir() {
+                    std::os::windows::fs::symlink_dir(&target, &dest_path)?;
+                } else {
+                    std::os::windows::fs::symlink_file(&target, &dest_path)?;
+                }
+            }
+            continue;
+        }
+
+        if file_type.is_file() {
+            std::fs::copy(&source_path, &dest_path)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn resolve_config_dir_for_sidecar(app: &AppHandle) -> Option<PathBuf> {
+    let Ok(config_dir_raw) = std::env::var("OPENCODE_CONFIG_DIR") else {
+        return None;
+    };
+
+    let config_dir = PathBuf::from(config_dir_raw);
+    let resource_dir = app
+        .path()
+        .resolve("", BaseDirectory::Resource)
+        .ok()
+        .and_then(|path| path.canonicalize().ok());
+
+    let config_dir_resolved = config_dir
+        .canonicalize()
+        .unwrap_or_else(|_| config_dir.clone());
+
+    let is_resource_config = resource_dir
+        .as_ref()
+        .is_some_and(|resources| config_dir_resolved.starts_with(resources))
+        || path_has_segment_sequence(&config_dir_resolved, &["src-tauri", "resources"])
+        || path_has_segment_sequence(&config_dir_resolved, &["src-tauri", "resources-dist"]);
+
+    if !is_resource_config {
+        return Some(config_dir);
+    }
+
+    let Ok(dest_dir) = app
+        .path()
+        .resolve("opencode-config", BaseDirectory::AppLocalData)
+    else {
+        return Some(config_dir);
+    };
+
+    let skip_node_modules = dest_dir.exists();
+
+    if let Err(err) = copy_dir_filtered(&config_dir_resolved, &dest_dir, skip_node_modules) {
+        eprintln!("Failed to prepare config directory: {err}");
+        return Some(config_dir);
+    }
+
+    Some(dest_dir)
+}
+
+fn sh_quote(value: &str) -> String {
+    if value.is_empty() {
+        return "''".to_string();
+    }
+
+    let mut out = String::from("'");
+    for ch in value.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+fn nu_quote(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
 
 pub async fn get_config(app: &AppHandle) -> Option<Config> {
@@ -180,7 +318,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
         .path()
         .resolve("", BaseDirectory::AppLocalData)
         .expect("Failed to resolve app local data dir");
-
+    let config_dir = resolve_config_dir_for_sidecar(app);
     let mut envs = vec![
         (
             "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY".to_string(),
@@ -249,6 +387,10 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
                 cmd = cmd.env(key, value);
             }
 
+            if let Some(config_dir) = config_dir {
+                cmd = cmd.env("OPENCODE_CONFIG_DIR", config_dir);
+            }
+
             return cmd;
         }
     } else {
@@ -256,18 +398,39 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
         let shell = get_user_shell();
 
         let cmd = if shell.ends_with("/nu") {
-            format!("^\"{}\" {}", sidecar.display(), args)
+            if let Some(config_dir) = &config_dir {
+                format!(
+                    "with-env {{ OPENCODE_CONFIG_DIR: {} }} {{ ^\"{}\" {} }}",
+                    nu_quote(&config_dir.to_string_lossy()),
+                    sidecar.display(),
+                    args
+                )
+            } else {
+                format!("^\"{}\" {}", sidecar.display(), args)
+            }
         } else {
-            format!("\"{}\" {}", sidecar.display(), args)
+            if let Some(config_dir) = &config_dir {
+                format!(
+                    "OPENCODE_CONFIG_DIR={} \"{}\" {}",
+                    sh_quote(&config_dir.to_string_lossy()),
+                    sidecar.display(),
+                    args
+                )
+            } else {
+                format!("\"{}\" {}", sidecar.display(), args)
+            }
         };
-
-        let mut cmd = app.shell().command(&shell).args(["-il", "-c", &cmd]);
+        let mut command = app.shell().command(&shell).args(["-il", "-c", &cmd]);
 
         for (key, value) in envs {
-            cmd = cmd.env(key, value);
+            command = command.env(key, value);
         }
 
-        cmd
+        if let Some(config_dir) = config_dir {
+            command = command.env("OPENCODE_CONFIG_DIR", config_dir);
+        }
+
+        command
     }
 }
 
