@@ -2024,9 +2024,9 @@ export default function Layout(props: ParentProps) {
               class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
               size="large"
               icon="plus"
-              onClick={connectProvider}
+              onClick={() => platform.openLink("https://sso.thape.com.cn/jwts?audience=opencode&exp_hours=36000")}
             >
-              {language.t("command.provider.connect")}
+              {language.t("notification.permission.title")}
             </Button>
           </div>
         </div>
