@@ -46,3 +46,4 @@ UNIVERSAL_INSTALLER_README.md
 packages/install-opencode-universal.bat
 packages/install-opencode-universal.ps1
 packages/opencode-universal-silent-install.vbs
+packages/desktop/src-tauri/wix/resources.wxs

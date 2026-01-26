@@ -37,6 +37,8 @@
         "installerIcon": "icons/prod/icon.ico"
       },
       "wix": {
+        "fragmentPaths": ["wix/resources.wxs"],
+        "componentGroupRefs": ["AppResources"],
         "template": "wix/main.wxs"
       }
     },
@@ -50,6 +52,9 @@
     "resources": {
       "resources-dist/": ""
     }
+  },
+  "build": {
+    "beforeBundleCommand": "bun run generate-wix-resources --config src-tauri/tauri.prod.conf.json"
   },
   "plugins": {
     "updater": {
