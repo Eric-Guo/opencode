@@ -8,7 +8,7 @@
     "beforeDevCommand": "bun run prepare-resources && bun run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
-    "beforeBundleCommand": "bun run generate-silent-install",
+    "beforeBundleCommand": "bun run generate-silent-install && bun run generate-wix-resources --config src-tauri/tauri.conf.json",
     "frontendDist": "../dist"
   },
   "app": {
@@ -34,7 +34,7 @@
     ],
     "active": true,
     "category": "DeveloperTool",
-    "targets": ["deb", "rpm", "nsis", "app"],
+    "targets": ["deb", "rpm", "nsis", "msi", "app"],
     "externalBin": ["sidecars/opencode-cli"],
     "linux": {
       "rpm": {
@@ -55,6 +55,12 @@
         "installerIcon": "icons/dev/icon.ico",
         "headerImage": "assets/nsis-header.bmp",
         "sidebarImage": "assets/nsis-sidebar.bmp"
+      },
+      "wix": {
+        "fragmentPaths": ["wix/resources.wxs"],
+        "componentGroupRefs": ["AppResources"],
+        "template": "wix/main.wxs",
+        "upgradeCode": "12345678-1234-1234-1234-123456789012"
       }
     },
     "resources": {
