@@ -12,7 +12,8 @@
     "build": "bun run prepare-resources && bun run typecheck && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "generate-silent-install": "bun ./scripts/generate-silent-install.js"
+    "generate-silent-install": "bun ./scripts/generate-silent-install.js",
+    "generate-wix-resources": "bun ./scripts/generate-wix-resources.ts"
   },
   "dependencies": {
     "@opencode-ai/app": "workspace:*",
