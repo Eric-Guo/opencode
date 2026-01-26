@@ -35,6 +35,9 @@
     "windows": {
       "nsis": {
         "installerIcon": "icons/prod/icon.ico"
+      },
+      "wix": {
+        "template": "wix/main.wxs"
       }
     },
     "linux": {
