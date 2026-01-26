@@ -101,6 +101,7 @@ const cleanup = (dirId, key, rel) => {
   const gid = guid(`dir:${rel}`)
   const xml = [
     `<Component Id="${cid}" Guid="${gid}">`,
+    `  <RemoveFile Id="RFF${cid}" Directory="${dirId}" Name="*" On="uninstall" />`,
     `  <RemoveFolder Id="RF${cid}" Directory="${dirId}" On="uninstall" />`,
     `  <RegistryValue Root="HKCU" Key="${esc(key)}" Name="${cid}" Type="integer" Value="1" KeyPath="yes" />`,
     `</Component>`
