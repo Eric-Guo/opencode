@@ -29,6 +29,10 @@
                  InstallPrivileges="limited"
                  SummaryCodepage="!(loc.TauriCodepage)"/>
 
+        <!-- Force per-user install semantics -->
+        <Property Id="ALLUSERS" Value="2" />
+        <Property Id="MSIINSTALLPERUSER" Value="1" />
+
         <!-- https://docs.microsoft.com/en-us/windows/win32/msi/reinstallmode -->
         <!-- reinstall all files; rewrite all registry entries; reinstall all shortcuts -->
         <Property Id="REINSTALLMODE" Value="amus" />
