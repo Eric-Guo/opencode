@@ -52,6 +52,7 @@ export async function ensureSsoUsername() {
         moonshot_api_key: string
         exa_api_key: string
         deepseek_api_key: string
+        cerebras_api_key: string
       }
     | undefined
   try {
@@ -65,6 +66,7 @@ export async function ensureSsoUsername() {
       moonshot_api_key: string
       exa_api_key: string
       deepseek_api_key: string
+      cerebras_api_key: string
     }
   } catch (error) {
     Log.Default.warn("SSO username response JSON parse failed", { error })
@@ -88,6 +90,7 @@ export async function ensureSsoUsername() {
   Bun.env.DOC_MOONSHOT_API_KEY = payload.moonshot_api_key
   Bun.env.EXA_API_KEY = payload.exa_api_key
   Bun.env.DEEPSEEK_API_KEY = payload.deepseek_api_key
+  Bun.env.CEREBRAS_API_KEY = payload.cerebras_api_key
   Bun.env.OPENCODE_ENABLE_EXA = "true"
   Bun.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "true"
 }
