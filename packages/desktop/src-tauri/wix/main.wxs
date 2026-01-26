@@ -128,9 +128,9 @@
                 <RegistryKey Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}">
                     <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLDIR]" KeyPath="yes" />
                 </RegistryKey>
-                <!-- Change the Root to HKCU for perUser installations -->
+                <!-- Use HKCU for per-user installs -->
                 {{#each deep_link_protocols as |protocol| ~}}
-                <RegistryKey Root="HKLM" Key="Software\Classes\\{{protocol}}">
+                <RegistryKey Root="HKCU" Key="Software\Classes\\{{protocol}}">
                     <RegistryValue Type="string" Name="URL Protocol" Value=""/>
                     <RegistryValue Type="string" Value="URL:{{bundle_id}} protocol"/>
                     <RegistryKey Key="DefaultIcon">
