@@ -152,8 +152,7 @@ const pad = (text, spaces) => {
 
 const main = async () => {
   const cfg = await pick()
-  const name = cfg.productName || cfg.product_name || "OpenCode"
-  const key = `Software\\${name}\\Components`
+  const key = "Software\\OpenCode\\Components"
 
   if (!existsSync(base)) {
     const empty = `<?xml version="1.0" encoding="UTF-8"?>\n<Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\">\n  <Fragment>\n    <DirectoryRef Id=\"INSTALLDIR\" />\n  </Fragment>\n  <Fragment>\n    <ComponentGroup Id=\"AppResources\" />\n  </Fragment>\n</Wix>\n`
