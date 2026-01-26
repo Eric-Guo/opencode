@@ -35,6 +35,16 @@ const hash = (text) => {
   return out.toString(16)
 }
 
+const hex = (text) => hash(text).padStart(8, "0")
+
+const guid = (text) => {
+  const a = hex(`${text}|0`)
+  const b = hex(`${text}|1`)
+  const c = hex(`${text}|2`)
+  const d = hex(`${text}|3`)
+  return `${a}-${b.slice(0, 4)}-${b.slice(4)}-${c.slice(0, 4)}-${c.slice(4)}${d}`
+}
+
 const esc = (text) =>
   text
     .replace(/&/g, "&amp;")
@@ -74,9 +84,10 @@ const comp = (file, key) => {
   const rel = path.relative(base, file).replace(/\\/g, "/")
   const cid = id("C", rel)
   const fid = id("F", rel)
+  const gid = guid(rel)
   const src = esc(win(file))
   const xml = [
-    `<Component Id="${cid}" Guid="*">`,
+    `<Component Id="${cid}" Guid="${gid}">`,
     `  <File Id="${fid}" Source="${src}" />`,
     `  <RegistryValue Root="HKCU" Key="${esc(key)}" Name="${cid}" Type="integer" Value="1" KeyPath="yes" />`,
     `</Component>`
