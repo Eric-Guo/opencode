@@ -23,7 +23,7 @@ const pick = async () => {
     return read(alt)
   }
 
-  return { identifier: "ai.opencode.desktop" }
+  return { identifier: "ai.opencode.desktop", productName: "OpenCode" }
 }
 
 const hash = (text) => {
@@ -59,8 +59,8 @@ const id = (prefix, text) => `${prefix}${hash(text)}`
 
 const tree = (dir, name) => {
   const list = readdirSync(dir, { withFileTypes: true })
-  const files: string[] = []
-  const dirs: Node[] = []
+  const files = []
+  const dirs = []
 
   for (const entry of list) {
     const full = path.join(dir, entry.name)
@@ -80,7 +80,7 @@ const tree = (dir, name) => {
   return { name, dir, files, dirs }
 }
 
-const comp = (file, key) => {
+const comp = (file, key, dirId) => {
   const rel = path.relative(base, file).replace(/\\/g, "/")
   const cid = id("C", rel)
   const fid = id("F", rel)
@@ -89,21 +89,39 @@ const comp = (file, key) => {
   const xml = [
     `<Component Id="${cid}" Guid="${gid}">`,
     `  <File Id="${fid}" Source="${src}" />`,
+    `  <RemoveFolder Id="RF${cid}" Directory="${dirId}" On="uninstall" />`,
     `  <RegistryValue Root="HKCU" Key="${esc(key)}" Name="${cid}" Type="integer" Value="1" KeyPath="yes" />`,
     `</Component>`
   ].join("\n")
   return { xml, id: cid }
 }
 
-const emit = (node, key) => {
-  const files = node.files.map((file) => comp(file, key))
-  const kids = node.dirs.map((dir) => emit(dir, key))
+const cleanup = (dirId, key, rel) => {
+  const cid = id("R", rel)
+  const gid = guid(`dir:${rel}`)
+  const xml = [
+    `<Component Id="${cid}" Guid="${gid}">`,
+    `  <RemoveFolder Id="RF${cid}" Directory="${dirId}" On="uninstall" />`,
+    `  <RegistryValue Root="HKCU" Key="${esc(key)}" Name="${cid}" Type="integer" Value="1" KeyPath="yes" />`,
+    `</Component>`
+  ].join("\n")
+  return { xml, id: cid }
+}
+
+const emit = (node, key, parentId) => {
+  const rel = path.relative(base, node.dir).replace(/\\/g, "/")
+  const dirId = node.name.length > 0 ? id("D", rel) : parentId
+  const files = node.files.map((file) => comp(file, key, dirId))
+  const kids = node.dirs.map((dir) => emit(dir, key, dirId))
+  const clean = node.name.length > 0 ? cleanup(dirId, key, rel) : null
   const body = [
+    clean ? clean.xml : "",
     ...files.map((item) => item.xml),
     ...kids.map((item) => item.xml)
   ].filter((item) => item.length > 0)
 
   const ids = [
+    ...(clean ? [clean.id] : []),
     ...files.map((item) => item.id),
     ...kids.flatMap((item) => item.ids)
   ]
@@ -112,9 +130,8 @@ const emit = (node, key) => {
     return { xml: body.join("\n"), ids }
   }
 
-  const did = id("D", path.relative(base, node.dir).replace(/\\/g, "/"))
   const xml = [
-    `<Directory Id="${did}" Name="${esc(node.name)}">`,
+    `<Directory Id="${dirId}" Name="${esc(node.name)}">`,
     body.length > 0 ? body.map((line) => `  ${line}`).join("\n") : "",
     `</Directory>`
   ]
@@ -134,7 +151,8 @@ const pad = (text, spaces) => {
 
 const main = async () => {
   const cfg = await pick()
-  const key = `Software\\${cfg.identifier || "ai.opencode.desktop"}\\Components`
+  const name = cfg.productName || cfg.product_name || "OpenCode"
+  const key = `Software\\${name}\\Components`
 
   if (!existsSync(base)) {
     const empty = `<?xml version="1.0" encoding="UTF-8"?>\n<Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\">\n  <Fragment>\n    <DirectoryRef Id=\"INSTALLDIR\" />\n  </Fragment>\n  <Fragment>\n    <ComponentGroup Id=\"AppResources\" />\n  </Fragment>\n</Wix>\n`
@@ -143,7 +161,7 @@ const main = async () => {
   }
 
   const root = tree(base, "")
-  const data = emit(root, key)
+  const data = emit(root, key, "INSTALLDIR")
 
   const body = pad(data.xml, 6)
   const refs = data.ids
