@@ -39,6 +39,8 @@ export async function bootstrapGlobal(input: {
   unknownError: string
   invalidConfigurationError: string
   formatMoreCount: (count: number) => string
+  refresh: () => void
+  notice: { health: boolean; config: boolean }
   setGlobalStore: SetStoreFunction<GlobalStore>
 }) {
   const health = await input.globalSDK.global
@@ -46,15 +48,20 @@ export async function bootstrapGlobal(input: {
     .then((x) => x.data)
     .catch(() => undefined)
   if (!health?.healthy) {
-    showToast({
-      variant: "error",
-      title: input.connectErrorTitle,
-      description: input.connectErrorDescription,
-    })
-    input.setGlobalStore("ready", true)
+    if (!input.notice.health) {
+      showToast({
+        variant: "error",
+        title: input.connectErrorTitle,
+        description: input.connectErrorDescription,
+      })
+      input.notice.health = true
+    }
+    setTimeout(() => input.refresh(), 1000)
     return
   }
+  input.notice.health = false
 
+  const status = { config: false }
   const tasks = [
     retry(() =>
       input.globalSDK.path.get().then((x) => {
@@ -64,6 +71,8 @@ export async function bootstrapGlobal(input: {
     retry(() =>
       input.globalSDK.global.config.get().then((x) => {
         input.setGlobalStore("config", x.data!)
+        status.config = true
+        input.notice.config = false
       }),
     ),
     retry(() =>
@@ -96,11 +105,19 @@ export async function bootstrapGlobal(input: {
       invalidConfiguration: input.invalidConfigurationError,
     })
     const more = errors.length > 1 ? input.formatMoreCount(errors.length - 1) : ""
-    showToast({
-      variant: "error",
-      title: input.requestFailedTitle,
-      description: message + more,
-    })
+    if (status.config || !input.notice.config) {
+      showToast({
+        variant: "error",
+        title: input.requestFailedTitle,
+        description: message + more,
+      })
+      if (!status.config) input.notice.config = true
+    }
+  }
+
+  if (!status.config) {
+    setTimeout(() => input.refresh(), 1000)
+    return
   }
   input.setGlobalStore("ready", true)
 }

@@ -56,6 +56,7 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
+  const notice = { health: false, config: false }
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
@@ -334,6 +335,8 @@ function createGlobalSync() {
       unknownError: language.t("error.chain.unknown"),
       invalidConfigurationError: language.t("error.server.invalidConfiguration"),
       formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+      refresh: queue.refresh,
+      notice,
       setGlobalStore: setBootStore,
     })
   }
