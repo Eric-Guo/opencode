@@ -64,6 +64,7 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
+  const notice = { health: false, config: false }
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
@@ -312,6 +313,8 @@ function createGlobalSync() {
         url: globalSDK.url,
       }),
       requestFailedTitle: language.t("common.requestFailed"),
+      refresh: queue.refresh,
+      notice,
       setGlobalStore,
     })
   }
