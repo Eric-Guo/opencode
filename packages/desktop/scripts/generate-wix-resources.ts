@@ -23,7 +23,7 @@ const pick = async () => {
     return read(alt)
   }
 
-  return { identifier: "ai.opencode.desktop", productName: "OpenCode" }
+  return { identifier: "ai.opencode.desktop", productName: "SigmaAgents" }
 }
 
 const hash = (text) => {
@@ -152,6 +152,7 @@ const pad = (text, spaces) => {
 
 const main = async () => {
   const cfg = await pick()
+  // Keep legacy component key to preserve MSI upgrade component key paths.
   const key = "Software\\OpenCode\\Components"
 
   if (!existsSync(base)) {
