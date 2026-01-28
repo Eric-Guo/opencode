@@ -27,7 +27,7 @@ async function generateSilentInstallScripts() {
 
     // Find all NSIS installers (.exe) and sort by version (newest first)
     const nsisInstallerFiles = files
-      .filter((f) => f.includes("x64-setup.exe") && f.includes("OpenCode"))
+      .filter((f) => f.includes("x64-setup.exe") && f.includes("SigmaAgents"))
       .sort((a, b) => {
         // Extract version numbers
         const versionA = a.match(/(\d+\.\d+\.\d+)/)?.[1] || "0.0.0"
@@ -39,7 +39,7 @@ async function generateSilentInstallScripts() {
 
     // Find all MSI installers and sort by version (newest first)
     const msiInstallerFiles = files
-      .filter((f) => f.includes(".msi") && f.includes("OpenCode"))
+      .filter((f) => f.includes(".msi") && f.includes("SigmaAgents"))
       .sort((a, b) => {
         // Extract version numbers
         const versionA = a.match(/(\d+\.\d+\.\d+)/)?.[1] || "0.0.0"
@@ -75,17 +75,17 @@ async function generateSilentInstallScripts() {
       .replace(/_zh-CN$/, "")
 
     // Determine silent install arguments based on installer type
-    const silentArgs = installerType === "nsis" ? `/S /D="%%LOCALAPPDATA%%\OpenCode"` : `/quiet /norestart`
+    const silentArgs = installerType === "nsis" ? `/S /D="%%LOCALAPPDATA%%\SigmaAgents"` : `/quiet /norestart`
 
     // Batch script - silent with minimal output
     const batchScript = `@echo off
-title OpenCode Silent Installer
-echo Installing ${baseName} silently to %%LOCALAPPDATA%%\OpenCode...
+title SigmaAgents Silent Installer
+echo Installing ${baseName} silently to %%LOCALAPPDATA%%\SigmaAgents...
 "%~dp0${installerFile}" ${silentArgs}
 exit /b %errorlevel%`
 
     // VBScript - completely silent, no UI
-    const vbScript = `' OpenCode Silent Installer (Auto-generated) - No UI
+    const vbScript = `' SigmaAgents Silent Installer (Auto-generated) - No UI
 ' Usage: cscript //nologo silent-install-${baseName}.vbs
 
 On Error Resume Next
@@ -114,7 +114,7 @@ installArgs = "/quiet /norestart"
     : `
 ' NSIS installer arguments
 Dim installArgs, installPath
-installPath = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%\\OpenCode")
+installPath = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%\\SigmaAgents")
 installArgs = "/S /D=""" & installPath & """"
 `
 }
@@ -126,9 +126,9 @@ result = shell.Run("""" & installerPath & """ " & installArgs, 0, True)
 WScript.Quit result`
 
     // PowerShell script - silent
-    const powerShellScript = `# OpenCode Silent Installer (Auto-generated)
+    const powerShellScript = `# SigmaAgents Silent Installer (Auto-generated)
 param(
-    [string]$InstallPath = "$env:LOCALAPPDATA\OpenCode",
+    [string]$InstallPath = "$env:LOCALAPPDATA\SigmaAgents",
     [switch]$Silent
 )
 
@@ -194,17 +194,17 @@ function generateUniversalScripts(bundleDir) {
 
   // Universal Batch script
   const universalBatchScript = `@echo off
-:: OpenCode Universal Silent Installation Batch Script
-:: This script automatically detects and installs any version of OpenCode
+:: SigmaAgents Universal Silent Installation Batch Script
+:: This script automatically detects and installs any version of SigmaAgents
 :: No manual version updates required!
 
-title OpenCode Universal Silent Installation
+title SigmaAgents Universal Silent Installation
 
 :: Check for administrator privileges (recommended but not required)
 net session >nul 2>&1
 if %errorLevel% neq 0 (
     echo =================================================================
-    echo    OpenCode Universal Silent Installer
+    echo    SigmaAgents Universal Silent Installer
     echo =================================================================
     echo.
     echo WARNING: Administrator privileges not detected.
@@ -223,36 +223,36 @@ if %errorLevel% neq 0 (
 cls
 echo.
 echo =================================================================
-echo    OpenCode Universal Silent Installer
+echo    SigmaAgents Universal Silent Installer
 echo    自动检测版本 - 无需手动更新
 echo =================================================================
 echo.
 
 :: Check if the universal VBS script exists
-if not exist "opencode-universal-silent-install.vbs" (
-    echo ERROR: opencode-universal-silent-install.vbs not found in current directory
+if not exist "sigmaagents-universal-silent-install.vbs" (
+    echo ERROR: sigmaagents-universal-silent-install.vbs not found in current directory
     echo.
     echo Please ensure this script is in the same folder as:
-    echo   - opencode-universal-silent-install.vbs
-    echo   - Any OpenCode installer (e.g., OpenCode_1.1.33_x64-setup.exe)
+    echo   - sigmaagents-universal-silent-install.vbs
+    echo   - Any SigmaAgents installer (e.g., SigmaAgents_1.1.33_x64-setup.exe)
     echo.
     pause
     exit /b 1
 )
 
-:: Look for any OpenCode installer in the current directory
-echo Searching for OpenCode installer files...
+:: Look for any SigmaAgents installer in the current directory
+echo Searching for SigmaAgents installer files...
 echo.
 
 set "INSTALLER_FOUND="
-for %%f in (*OpenCode*_setup.exe *OpenCode*-*setup.exe) do (
+for %%f in (*SigmaAgents*_setup.exe *SigmaAgents*-*setup.exe) do (
     if exist "%%f" (
         echo Found installer: %%f
         set "INSTALLER_FOUND=%%f"
     )
 )
 
-for %%f in (*OpenCode*.exe) do (
+for %%f in (*SigmaAgents*.exe) do (
     if exist "%%f" (
         echo Found potential installer: %%f
         if not defined INSTALLER_FOUND (
@@ -262,20 +262,20 @@ for %%f in (*OpenCode*.exe) do (
 )
 
 if not defined INSTALLER_FOUND (
-    echo WARNING: No OpenCode installer found in current directory
+    echo WARNING: No SigmaAgents installer found in current directory
     echo.
     echo The universal installer will search for any installer file,
-    echo but you should verify that an OpenCode installer is present.
+    echo but you should verify that a SigmaAgents installer is present.
     echo.
     echo Expected installer names:
-    echo   - OpenCode_1.1.33_x64-setup.exe
-    echo   - OpenCode_1.1.34_x64-setup.exe
-    echo   - OpenCode-1.1.35-setup.exe
+    echo   - SigmaAgents_1.1.33_x64-setup.exe
+    echo   - SigmaAgents_1.1.34_x64-setup.exe
+    echo   - SigmaAgents-1.1.35-setup.exe
     echo   - etc.
     echo.
     choice /C YN /M "Do you want to continue anyway"
     if errorlevel 2 (
-        echo Please place an OpenCode installer in this directory and try again.
+        echo Please place a SigmaAgents installer in this directory and try again.
         pause
         exit /b 1
     )
@@ -290,7 +290,7 @@ echo Starting universal silent installation process...
 echo This will automatically detect the version and install if newer...
 echo.
 
-cscript //nologo opencode-universal-silent-install.vbs
+cscript //nologo sigmaagents-universal-silent-install.vbs
 set INSTALL_RESULT=%errorlevel%
 
 :: Check the result
@@ -300,36 +300,36 @@ if %INSTALL_RESULT% equ 0 (
     echo    Installation completed successfully!
     echo =================================================================
     echo.
-    echo OpenCode has been installed/updated successfully.
+    echo SigmaAgents has been installed/updated successfully.
     echo The installer automatically detected the version and performed
     echo the update only if a newer version was available.
     echo.
     echo You can find the detailed debug log at:
-    echo   %TEMP%\opencode_install.log
+    echo   %TEMP%\sigmaagents_install.log
 ) else if %INSTALL_RESULT% equ 1 (
     echo =================================================================
     echo    Installation skipped - already up to date
     echo =================================================================
     echo.
-    echo Your current OpenCode installation is already up to date
+    echo Your current SigmaAgents installation is already up to date
     echo or newer than the installer version.
     echo.
     echo No changes were made to your system.
-    echo You can find the debug log at: %TEMP%\opencode_install.log
+    echo You can find the debug log at: %TEMP%\sigmaagents_install.log
 ) else (
     echo =================================================================
     echo    Installation failed with error code: %INSTALL_RESULT%
     echo =================================================================
     echo.
     echo Please check the debug log at:
-    echo   %TEMP%\opencode_install.log
+    echo   %TEMP%\sigmaagents_install.log
     echo.
     echo for more details about the failure.
     echo.
     echo Common issues:
     echo   - Installer file corrupted
     echo   - Insufficient permissions
-    echo   - OpenCode still running (will be automatically terminated)
+    echo   - SigmaAgents still running (will be automatically terminated)
     echo   - Disk space issues
 )
 
@@ -339,7 +339,7 @@ pause >nul
 exit /b %INSTALL_RESULT%`
 
   // Universal VBScript with version auto-detection
-  const universalVBScript = `' OpenCode Universal Silent Installer
+  const universalVBScript = `' SigmaAgents Universal Silent Installer
 ' Auto-detects version from installer filename - No manual updates needed!
 
 Option Explicit
@@ -352,7 +352,7 @@ Dim boolShouldInstall, boolIsRunning, intResult
 ' === CONFIGURATION ===
 ' The installer path - can be any NSIS installer with version in filename
 strInstallerPath = ""  ' Will be auto-detected
-strInstallDir = "%LOCALAPPDATA%\OpenCode"  ' Installation directory
+strInstallDir = "%LOCALAPPDATA%\SigmaAgents"  ' Installation directory
 ' === END CONFIGURATION ===
 
 Set objShell = CreateObject("WScript.Shell")
@@ -360,7 +360,7 @@ Set objFSO = CreateObject("Scripting.FileSystemObject")
 Set objShellApp = CreateObject("Shell.Application")
 
 ' Create log file for debugging
-strLogFile = objShell.ExpandEnvironmentStrings("%TEMP%\\opencode_install.log")
+strLogFile = objShell.ExpandEnvironmentStrings("%TEMP%\\sigmaagents_install.log")
 Dim objLogFile
 Set objLogFile = objFSO.CreateTextFile(strLogFile, True)
 
@@ -390,7 +390,7 @@ Function FindInstallerFile()
         fileName = objFSO.GetFileName(filePath)
         
         ' Look for NSIS installers (usually end with _x64-setup.exe or -setup.exe)
-        If InStr(LCase(fileName), "setup.exe") > 0 And InStr(LCase(fileName), "opencode") > 0 Then
+        If InStr(LCase(fileName), "setup.exe") > 0 And InStr(LCase(fileName), "sigmaagents") > 0 Then
             ' Extract version from filename
             Set patternMatches = CreateObject("VBScript.RegExp")
             patternMatches.Pattern = versionPattern
@@ -466,7 +466,7 @@ End Function
 ' Function to get current installed version
 Function GetCurrentVersion()
     Dim strVersion, strExePath
-    strExePath = objShell.ExpandEnvironmentStrings(strInstallDir & "\OpenCode.exe")
+    strExePath = objShell.ExpandEnvironmentStrings(strInstallDir & "\SigmaAgents.exe")
     
     LogMessage "Looking for current installation at: " & strExePath
     
@@ -483,52 +483,52 @@ Function GetCurrentVersion()
             GetCurrentVersion = "0.0.0"
         End If
     Else
-        LogMessage "OpenCode.exe not found at expected location"
+        LogMessage "SigmaAgents.exe not found at expected location"
         GetCurrentVersion = "0.0.0"
     End If
 End Function
 
-' Function to check if OpenCode is currently running
-Function IsOpenCodeRunning()
+' Function to check if SigmaAgents is currently running
+Function IsSigmaAgentsRunning()
     Dim strComputer, strQuery
     strComputer = "."
     Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
-    strQuery = "SELECT * FROM Win32_Process WHERE Name = 'OpenCode.exe'"
+    strQuery = "SELECT * FROM Win32_Process WHERE Name = 'SigmaAgents.exe'"
     Set colProcesses = objWMIService.ExecQuery(strQuery)
     
-    IsOpenCodeRunning = (colProcesses.Count > 0)
+    IsSigmaAgentsRunning = (colProcesses.Count > 0)
     
-    If IsOpenCodeRunning Then
-        LogMessage "OpenCode is currently running"
+    If IsSigmaAgentsRunning Then
+        LogMessage "SigmaAgents is currently running"
     Else
-        LogMessage "OpenCode is not running"
+        LogMessage "SigmaAgents is not running"
     End If
 End Function
 
-' Function to terminate OpenCode processes
-Sub TerminateOpenCode()
+' Function to terminate SigmaAgents processes
+Sub TerminateSigmaAgents()
     Dim strComputer, strQuery, colProcesses, objProcess
     strComputer = "."
     Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
-    strQuery = "SELECT * FROM Win32_Process WHERE Name = 'OpenCode.exe'"
+    strQuery = "SELECT * FROM Win32_Process WHERE Name = 'SigmaAgents.exe'"
     Set colProcesses = objWMIService.ExecQuery(strQuery)
     
     For Each objProcess in colProcesses
-        LogMessage "Terminating OpenCode process (PID: " & objProcess.ProcessId & ")"
+        LogMessage "Terminating SigmaAgents process (PID: " & objProcess.ProcessId & ")"
         objProcess.Terminate()
     Next
 End Sub
 
 ' Main installation logic
 Sub Main()
-    LogMessage "=== OpenCode Universal Silent Installation Started ==="
+    LogMessage "=== SigmaAgents Universal Silent Installation Started ==="
     
     ' Auto-find the installer file
     strInstallerPath = FindInstallerFile()
     
     If strInstallerPath = "" Then
-        LogMessage "ERROR: No suitable OpenCode installer found in current directory"
-        LogMessage "Please ensure you have an OpenCode installer (e.g., OpenCode_1.1.33_x64-setup.exe)"
+        LogMessage "ERROR: No suitable SigmaAgents installer found in current directory"
+        LogMessage "Please ensure you have a SigmaAgents installer (e.g., SigmaAgents_1.1.33_x64-setup.exe)"
         objLogFile.Close
         WScript.Quit 1
     End If
@@ -578,12 +578,12 @@ Sub Main()
             WScript.Quit 1
         End If
         
-        ' Check if OpenCode is running
-        boolIsRunning = IsOpenCodeRunning()
+        ' Check if SigmaAgents is running
+        boolIsRunning = IsSigmaAgentsRunning()
         
         If boolIsRunning Then
-            LogMessage "OpenCode is running - will terminate before installation"
-            Call TerminateOpenCode()
+            LogMessage "SigmaAgents is running - will terminate before installation"
+            Call TerminateSigmaAgents()
             WScript.Sleep 2000  ' Wait for processes to terminate
         End If
         
@@ -622,13 +622,13 @@ Set objFSO = Nothing
 Set objShellApp = Nothing`
 
   // Universal PowerShell script
-  const universalPowerShellScript = `# OpenCode Universal Silent Installer (PowerShell)
-# This script automatically detects and installs any version of OpenCode
+  const universalPowerShellScript = `# SigmaAgents Universal Silent Installer (PowerShell)
+# This script automatically detects and installs any version of SigmaAgents
 # No manual version updates required!
 
 param(
     [string]$InstallerPath = "",
-    [string]$InstallPath = "$env:LOCALAPPDATA\OpenCode",
+    [string]$InstallPath = "$env:LOCALAPPDATA\SigmaAgents",
     [switch]$Force,
     [switch]$Silent,
     [switch]$WhatIf
@@ -652,22 +652,22 @@ function Write-Log {
     }
     
     # Also log to file
-    $logFile = "$env:TEMP\opencode_install.log"
+    $logFile = "$env:TEMP\sigmaagents_install.log"
     Add-Content -Path $logFile -Value $logMessage -ErrorAction SilentlyContinue
 }
 
-function Find-OpenCodeInstaller {
-    Write-Log "Searching for OpenCode installer files..."
+function Find-SigmaAgentsInstaller {
+    Write-Log "Searching for SigmaAgents installer files..."
     
     $currentDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     $installers = @()
     
     # Look for common installer patterns
     $patterns = @(
-        "*OpenCode*_x64-setup.exe",
-        "*OpenCode*-*setup.exe", 
-        "*OpenCode*_setup.exe",
-        "*OpenCode*.exe"
+        "*SigmaAgents*_x64-setup.exe",
+        "*SigmaAgents*-*setup.exe", 
+        "*SigmaAgents*_setup.exe",
+        "*SigmaAgents*.exe"
     )
     
     foreach ($pattern in $patterns) {
@@ -689,7 +689,7 @@ function Find-OpenCodeInstaller {
     }
     
     if ($installers.Count -eq 0) {
-        Write-Log "No OpenCode installers found in current directory" "WARNING"
+        Write-Log "No SigmaAgents installers found in current directory" "WARNING"
         return $null
     }
     
@@ -713,14 +713,14 @@ function Extract-VersionFromFilename {
     return $null
 }
 
-function Get-CurrentOpenCodeVersion {
-    $exePath = Join-Path $InstallPath "OpenCode.exe"
+function Get-CurrentSigmaAgentsVersion {
+    $exePath = Join-Path $InstallPath "SigmaAgents.exe"
     
     if (Test-Path $exePath) {
         try {
             $versionInfo = (Get-Item $exePath).VersionInfo
             if ($versionInfo.FileVersion) {
-                Write-Log "Current OpenCode version: $($versionInfo.FileVersion)"
+                Write-Log "Current SigmaAgents version: $($versionInfo.FileVersion)"
                 return $versionInfo.FileVersion
             }
         }
@@ -729,25 +729,25 @@ function Get-CurrentOpenCodeVersion {
         }
     }
     
-    Write-Log "OpenCode not found at $InstallPath or version could not be determined"
+    Write-Log "SigmaAgents not found at $InstallPath or version could not be determined"
     return "0.0.0"
 }
 
-function Test-OpenCodeRunning {
-    $processes = Get-Process -Name "OpenCode" -ErrorAction SilentlyContinue
+function Test-SigmaAgentsRunning {
+    $processes = Get-Process -Name "SigmaAgents" -ErrorAction SilentlyContinue
     if ($processes) {
-        Write-Log "OpenCode is currently running (PID: $($processes.Id -join ', '))"
+        Write-Log "SigmaAgents is currently running (PID: $($processes.Id -join ', '))"
         return $true
     }
-    Write-Log "OpenCode is not running"
+    Write-Log "SigmaAgents is not running"
     return $false
 }
 
-function Stop-OpenCodeProcesses {
-    $processes = Get-Process -Name "OpenCode" -ErrorAction SilentlyContinue
+function Stop-SigmaAgentsProcesses {
+    $processes = Get-Process -Name "SigmaAgents" -ErrorAction SilentlyContinue
     if ($processes) {
         foreach ($process in $processes) {
-            Write-Log "Terminating OpenCode process (PID: $($process.Id))"
+            Write-Log "Terminating SigmaAgents process (PID: $($process.Id))"
             try {
                 $process | Stop-Process -Force
                 Write-Log "Successfully terminated process $($process.Id)"
@@ -778,14 +778,14 @@ function Compare-Versions {
 }
 
 # Main installation logic
-function Install-OpenCode {
-    Write-Log "=== OpenCode Universal Silent Installation Started ==="
+function Install-SigmaAgents {
+    Write-Log "=== SigmaAgents Universal Silent Installation Started ==="
     
     # Find installer if not specified
     if (-not $InstallerPath) {
-        $installer = Find-OpenCodeInstaller
+        $installer = Find-SigmaAgentsInstaller
         if (-not $installer) {
-            Write-Log "No OpenCode installer found. Please place an OpenCode installer in the same directory as this script." "ERROR"
+            Write-Log "No SigmaAgents installer found. Please place a SigmaAgents installer in the same directory as this script." "ERROR"
             return 1
         }
         $InstallerPath = $installer.Path
@@ -807,7 +807,7 @@ function Install-OpenCode {
     Write-Log "Installer version: $installerVersion"
     
     # Get current version
-    $currentVersion = Get-CurrentOpenCodeVersion
+    $currentVersion = Get-CurrentSigmaAgentsVersion
     
     # Compare versions
     $versionComparison = Compare-Versions $installerVersion $currentVersion
@@ -823,14 +823,14 @@ function Install-OpenCode {
     }
     
     if ($WhatIf) {
-        Write-Log "WhatIf: Would install OpenCode version $installerVersion to $InstallPath"
+        Write-Log "WhatIf: Would install SigmaAgents version $installerVersion to $InstallPath"
         return 0
     }
     
-    # Check if OpenCode is running
-    if (Test-OpenCodeRunning) {
-        Write-Log "OpenCode is running - will terminate before installation"
-        Stop-OpenCodeProcesses
+    # Check if SigmaAgents is running
+    if (Test-SigmaAgentsRunning) {
+        Write-Log "SigmaAgents is running - will terminate before installation"
+        Stop-SigmaAgentsProcesses
     }
     
     # Execute installer
@@ -842,7 +842,7 @@ function Install-OpenCode {
         
         if ($process.ExitCode -eq 0) {
             Write-Log "Installation completed successfully!" "SUCCESS"
-            Write-Log "OpenCode version $installerVersion has been installed to $InstallPath"
+            Write-Log "SigmaAgents version $installerVersion has been installed to $InstallPath"
             return 0
         }
         else {
@@ -857,7 +857,7 @@ function Install-OpenCode {
 }
 
 # Run the installation
-$result = Install-OpenCode
+$result = Install-SigmaAgents
 
 if (-not $Silent) {
     Write-Log ""
@@ -867,15 +867,15 @@ if (-not $Silent) {
     else {
         Write-Log "Installation process failed with error code: $result" "ERROR"
     }
-    Write-Log "Check the log file at: $env:TEMP\opencode_install.log"
+    Write-Log "Check the log file at: $env:TEMP\sigmaagents_install.log"
 }
 
 exit $result`
 
   // Write universal files
-  const universalBatchPath = join(bundleDir, "install-opencode-universal.bat")
-  const universalVbsPath = join(bundleDir, "opencode-universal-silent-install.vbs")
-  const universalPs1Path = join(bundleDir, "install-opencode-universal.ps1")
+  const universalBatchPath = join(bundleDir, "install-sigmaagents-universal.bat")
+  const universalVbsPath = join(bundleDir, "sigmaagents-universal-silent-install.vbs")
+  const universalPs1Path = join(bundleDir, "install-sigmaagents-universal.ps1")
 
   writeFileSync(universalBatchPath, universalBatchScript)
   writeFileSync(universalVbsPath, universalVBScript)
