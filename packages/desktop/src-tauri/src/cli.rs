@@ -57,7 +57,7 @@ pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         .expect("Failed to get current binary")
         .parent()
         .expect("Failed to get parent dir")
-        .join("opencode-cli")
+        .join("opencode")
 }
 
 fn is_cli_installed() -> bool {
@@ -255,7 +255,7 @@ pub fn spawn_command(
         } else {
             let mut cmd = app
                 .shell()
-                .sidecar("opencode-cli")
+                .sidecar("opencode")
                 .unwrap()
                 .args(args.split_whitespace());
 
