@@ -35,7 +35,7 @@
     "active": true,
     "category": "DeveloperTool",
     "targets": ["deb", "rpm", "nsis", "msi", "app"],
-    "externalBin": ["sidecars/opencode-cli"],
+    "externalBin": ["sidecars/opencode"],
     "linux": {
       "rpm": {
         "compression": {
