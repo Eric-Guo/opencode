@@ -72,6 +72,7 @@ function createGlobalSync() {
     evictions: 0,
     loadSessionsFallback: 0,
   }
+  const notice = { health: false, config: false }
 
   const sdkCache = new Map<string, ReturnType<typeof createOpencodeClient>>()
   const booting = new Map<string, Promise<void>>()
@@ -308,6 +309,8 @@ function createGlobalSync() {
       connectErrorTitle: language.t("dialog.server.add.error"),
       connectErrorDescription: language.t("error.globalSync.connectFailed", { url: globalSDK.url }),
       requestFailedTitle: language.t("common.requestFailed"),
+      refresh: queue.refresh,
+      notice,
       setGlobalStore,
     })
   }
