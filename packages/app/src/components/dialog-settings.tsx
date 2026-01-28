@@ -1,10 +1,12 @@
 import { Component, createMemo } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { decode64 } from "@/utils/base64"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
@@ -15,11 +17,15 @@ export const DialogSettings: Component<{ defaultTab?: string }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const globalSync = useGlobalSync()
-  const username = createMemo(() => globalSync.data.config.username!)
-  const clerkCode = createMemo(() => globalSync.data.config.clerk_code)
+  const params = useParams()
+  const config = createMemo(() => {
+    const directory = decode64(params.dir) ?? globalSync.data.path.directory
+    if (!directory) return globalSync.data.config
+    return globalSync.child(directory, { bootstrap: false })[0].config
+  })
   const title = createMemo(() => {
-    const name = username()
-    const clerk = clerkCode()
+    const name = config().username ?? globalSync.data.config.username ?? ""
+    const clerk = config().clerk_code ?? globalSync.data.config.clerk_code
     return clerk ? `${name} (${clerk})` : name
   })
 

@@ -51,6 +51,7 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
+  const notice = { health: false, config: false }
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
@@ -79,6 +80,7 @@ function createGlobalSync() {
   let bootingRoot = false
   let eventFrame: number | undefined
   let eventTimer: ReturnType<typeof setTimeout> | undefined
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
 
   onCleanup(() => {
     active = false
@@ -86,7 +88,22 @@ function createGlobalSync() {
   onCleanup(() => {
     if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
     if (eventTimer !== undefined) clearTimeout(eventTimer)
+    if (retryTimer !== undefined) clearTimeout(retryTimer)
   })
+
+  const cancelRetry = () => {
+    if (retryTimer === undefined) return
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+  }
+
+  const scheduleRetry = () => {
+    if (retryTimer !== undefined) return
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined
+      queue.refresh()
+    }, 1000)
+  }
 
   const cacheProjects = () => {
     setProjectCache(
@@ -348,13 +365,20 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
+    cancelRetry()
     bootingRoot = true
     try {
       await bootstrapGlobal({
         globalSDK: globalSDK.client,
+        connectErrorTitle: language.t("dialog.server.add.error"),
+        connectErrorDescription: language.t("error.globalSync.connectFailed", {
+          url: globalSDK.url,
+        }),
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,
         formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+        scheduleRetry,
+        notice,
         setGlobalStore: setBootStore,
         queryClient,
       })
