@@ -66,24 +66,62 @@ function runAll(list: Array<() => Promise<unknown>>) {
   return Promise.allSettled(list.map((item) => item()))
 }
 
+function showErrors(input: {
+  errors: unknown[]
+  title: string
+  translate: (key: string, vars?: Record<string, string | number>) => string
+  formatMoreCount: (count: number) => string
+}) {
+  if (input.errors.length === 0) return
+  const message = formatServerError(input.errors[0], input.translate)
+  const more = input.errors.length > 1 ? input.formatMoreCount(input.errors.length - 1) : ""
+  showToast({
+    variant: "error",
+    title: input.title,
+    description: message + more,
+  })
+}
+
 export async function bootstrapGlobal(input: {
   globalSDK: OpencodeClient
+  connectErrorTitle: string
+  connectErrorDescription: string
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
   formatMoreCount: (count: number) => string
+  refresh: () => void
+  notice: { health: boolean; config: boolean }
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
 }) {
+  const health = await input.globalSDK.global
+    .health()
+    .then((x) => x.data)
+    .catch(() => undefined)
+  if (!health?.healthy) {
+    if (!input.notice.health) {
+      showToast({
+        variant: "error",
+        title: input.connectErrorTitle,
+        description: input.connectErrorDescription,
+      })
+      input.notice.health = true
+    }
+    setTimeout(() => input.refresh(), 1000)
+    return
+  }
+  input.notice.health = false
+
+  const status = { config: false }
   const fast = [
     () =>
       retry(() =>
         input.globalSDK.global.config.get().then((x) => {
           input.setGlobalStore("config", x.data!)
+          status.config = true
+          input.notice.config = false
         }),
       ),
-  ]
-
-  const slow = [
     () =>
       input.queryClient.fetchQuery({
         ...loadProvidersQuery(null),
@@ -95,6 +133,15 @@ export async function bootstrapGlobal(input: {
             }),
           ),
       }),
+    () =>
+      retry(() =>
+        input.globalSDK.provider.auth().then((x) => {
+          input.setGlobalStore("provider_auth", x.data ?? {})
+        }),
+      ),
+  ]
+
+  const slow = [
     () =>
       retry(() =>
         input.globalSDK.path.get().then((x) => {
@@ -113,21 +160,28 @@ export async function bootstrapGlobal(input: {
         }),
       ),
   ]
-  await runAll(fast)
-  // showErrors({
-  //   errors: errors(await runAll(fast)),
-  //   title: input.requestFailedTitle,
-  //   translate: input.translate,
-  //   formatMoreCount: input.formatMoreCount,
-  // })
+
+  const errs = errors(await runAll(fast))
+  if (errs.length > 0 && (status.config || !input.notice.config)) {
+    showErrors({
+      errors: errs,
+      title: input.requestFailedTitle,
+      translate: input.translate,
+      formatMoreCount: input.formatMoreCount,
+    })
+    if (!status.config) input.notice.config = true
+  }
+  if (!status.config) {
+    setTimeout(() => input.refresh(), 1000)
+    return
+  }
   await waitForPaint()
-  await runAll(slow)
-  // showErrors({
-  //   errors: errors(),
-  //   title: input.requestFailedTitle,
-  //   translate: input.translate,
-  //   formatMoreCount: input.formatMoreCount,
-  // })
+  showErrors({
+    errors: errors(await runAll(slow)),
+    title: input.requestFailedTitle,
+    translate: input.translate,
+    formatMoreCount: input.formatMoreCount,
+  })
   input.setGlobalStore("ready", true)
 }
 
