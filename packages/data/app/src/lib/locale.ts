@@ -1,83 +1,30 @@
-import { fix, fromPathname, LOCALE_HEADER, parseLocale, strip, type Locale } from "@opencode/locale"
+import { fix, LOCALE_HEADER } from "@opencode/locale"
+
+export const LOCALES = ["en", "zh"] as const
+
+export type Locale = (typeof LOCALES)[number]
 
 export {
-  LOCALES,
   LOCALE_COOKIE,
-  LOCALE_HEADER,
   clearCookie,
   cookie,
   dir,
-  fromPathname,
   label,
-  parseLocale,
-  strip,
   tag,
 } from "@opencode/locale"
 
-export type { Locale } from "@opencode/locale"
+export { LOCALE_HEADER }
 
 const DOCS = {
   en: "root",
   zh: "zh-cn",
-  zht: "zh-tw",
-  ko: "ko",
-  de: "de",
-  es: "es",
-  fr: "fr",
-  it: "it",
-  da: "da",
-  ja: "ja",
-  pl: "pl",
-  ru: "ru",
-  // There are no Ukrainian docs, so Ukrainian visitors read the English docs.
-  uk: "root",
-  ar: "ar",
-  no: "nb",
-  br: "pt-br",
-  th: "th",
-  tr: "tr",
 } satisfies Record<Locale, string>
 
-const DOCS_SEGMENT = new Set([
-  "ar",
-  "bs",
-  "da",
-  "de",
-  "es",
-  "fr",
-  "it",
-  "ja",
-  "ko",
-  "nb",
-  "pl",
-  "pt-br",
-  "ru",
-  "th",
-  "tr",
-  "uk",
-  "zh-cn",
-  "zh-tw",
-])
+const DOCS_SEGMENT = new Set(["zh-cn"])
 
 const DOCS_LOCALE = {
-  ar: "ar",
-  da: "da",
-  de: "de",
   en: "en",
-  es: "es",
-  fr: "fr",
-  it: "it",
-  ja: "ja",
-  ko: "ko",
-  nb: "no",
-  "pt-br": "br",
-  root: "en",
-  ru: "ru",
-  th: "th",
-  tr: "tr",
-  uk: "uk",
   "zh-cn": "zh",
-  "zh-tw": "zht",
 } as const satisfies Record<string, Locale>
 
 function suffix(pathname: string) {
@@ -121,6 +68,16 @@ function docs(locale: Locale, pathname: string) {
   return `/docs/${value}${next.path.slice("/docs".length)}${next.suffix}`
 }
 
+export function parseLocale(value: unknown): Locale | null {
+  if (typeof value !== "string") return null
+  if (value === "en" || value === "zh") return value
+  return null
+}
+
+export function fromPathname(pathname: string) {
+  return parseLocale(fix(pathname).split("/")[1])
+}
+
 function fromDocsPathname(pathname: string) {
   const next = fix(pathname)
   const value = next.split("/")[2]?.toLowerCase()
@@ -128,6 +85,16 @@ function fromDocsPathname(pathname: string) {
   if (!next.startsWith("/docs/")) return null
   if (!(value in DOCS_LOCALE)) return null
   return DOCS_LOCALE[value as keyof typeof DOCS_LOCALE]
+}
+
+export function strip(pathname: string) {
+  const locale = fromPathname(pathname)
+  if (!locale) return fix(pathname)
+
+  const next = fix(pathname).slice(locale.length + 1)
+  if (!next) return "/"
+  if (next.startsWith("/")) return next
+  return `/${next}`
 }
 
 export function route(locale: Locale, pathname: string) {
