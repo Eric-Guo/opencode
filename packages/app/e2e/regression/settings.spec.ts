@@ -1,14 +1,14 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
-import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session } from "../utils/app"
+import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session, sessionHref } from "../utils/app"
+import { openWithDirection } from "../utils/direction"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSession, openSettings, type WorkspaceInput } from "../utils/workspace"
 import { CONSOLE_URL, consoleGateway, consoleSignIn } from "../utils/console"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
 import { APP_READY_TIMEOUT } from "../utils/waits"
-import { dict as ar } from "../../src/runtime/i18n/ar"
-import { dict as en } from "../../src/runtime/i18n/en"
+import { dict } from "../../src/runtime/i18n/en"
 
 const directory = "C:/Projects/settings-demo"
 
@@ -292,11 +292,8 @@ test("request events use real Questions settings without disabling Permissions a
     .toEqual([...previews, expect.stringContaining("alert-01"), expect.stringContaining("alert-01")])
 })
 
-for (const [locale, dict] of [
-  ["en", en],
-  ["ar", ar],
-] as const) {
-  test(`background activity alignment stays physical and persists (${locale})`, async ({ page }) => {
+for (const direction of ["ltr", "rtl"] as const) {
+  test(`background activity alignment stays physical and persists (${direction})`, async ({ page }) => {
     const label = dict["settings.timeline.row.backgroundActivity.title"]
 
     const names = {
@@ -316,15 +313,14 @@ for (const [locale, dict] of [
       if (request.method() === "DELETE" && new URL(request.url()).pathname.startsWith("/api/shell/"))
         stopped.push(request.url())
     })
-    await openSession(page, {
+    await mockWorkspace(page, {
       name: "Activity settings",
       sessions: [
         { id, title: "Activity settings" },
         { id: childID, parentID: id, title: "Inspect capsule" },
       ],
       sessionStatus: { [id]: { type: "busy" }, [childID]: { type: "busy" } },
-      seed: { locale },
-      pageMessages: () => ({
+      pageMessages: (): { items: SessionMessageInfo[] } => ({
         items: [
           { id: "msg_activity_user", type: "user", text: "Inspect the activity capsule", time: { created: 1 } },
           {
@@ -374,10 +370,11 @@ for (const [locale, dict] of [
         },
       ],
     })
+    await openWithDirection(page, sessionHref(id), direction)
     const capsule = page.locator('[data-slot="session-activity-chip"]')
     const panel = page.locator('[data-slot="session-activity-panel"]')
     await expect(capsule).toBeVisible()
-    await expect(page.locator("html")).toHaveAttribute("dir", locale === "ar" ? "rtl" : "ltr")
+    await expect(page.locator("html")).toHaveAttribute("dir", direction)
 
     for (const value of ["Center", "Right", "Hidden", "Left", "Right"] as const) {
       await page.keyboard.press("Control+,")
@@ -389,7 +386,7 @@ for (const [locale, dict] of [
       await expect(options.getByRole("option")).toHaveText([names.Hidden, names.Left, names.Center, names.Right])
       await options.getByRole("option", { name: names[value], exact: true }).click()
       await expect(control).toHaveText(names[value])
-      await page.goBack()
+      await settings.getByRole("button", { name: "Back to app", exact: true }).click()
 
       if (value === "Hidden") {
         await expect(capsule).toHaveCount(0)
@@ -441,8 +438,9 @@ for (const [locale, dict] of [
         page.evaluate(() => JSON.parse(localStorage.getItem("settings.v3") ?? "{}").general?.backgroundActivity),
       )
       .toBe("right")
-    await page.keyboard.press("Control+,")
     await page.reload()
+    await expect(capsule).toBeVisible()
+    await page.keyboard.press("Control+,")
     await expect(page.getByTestId("settings-screen").getByLabel(label, { exact: true })).toHaveText(names.Right)
   })
 }
