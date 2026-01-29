@@ -1,21 +1,6 @@
 export const LOCALES = [
   "en",
   "zh",
-  "zht",
-  "ko",
-  "de",
-  "es",
-  "fr",
-  "it",
-  "da",
-  "ja",
-  "pl",
-  "ru",
-  "ar",
-  "no",
-  "br",
-  "th",
-  "tr",
 ] as const
 
 export type Locale = (typeof LOCALES)[number]
@@ -31,81 +16,20 @@ function fix(pathname: string) {
 const LABEL = {
   en: "English",
   zh: "简体中文",
-  zht: "繁體中文",
-  ko: "한국어",
-  de: "Deutsch",
-  es: "Español",
-  fr: "Français",
-  it: "Italiano",
-  da: "Dansk",
-  ja: "日本語",
-  pl: "Polski",
-  ru: "Русский",
-  ar: "العربية",
-  no: "Norsk",
-  br: "Português (Brasil)",
-  th: "ไทย",
-  tr: "Türkçe",
 } satisfies Record<Locale, string>
 
 const TAG = {
   en: "en",
   zh: "zh-Hans",
-  zht: "zh-Hant",
-  ko: "ko",
-  de: "de",
-  es: "es",
-  fr: "fr",
-  it: "it",
-  da: "da",
-  ja: "ja",
-  pl: "pl",
-  ru: "ru",
-  ar: "ar",
-  no: "no",
-  br: "pt-BR",
-  th: "th",
-  tr: "tr",
 } satisfies Record<Locale, string>
 
 const DOCS = {
   en: "root",
   zh: "zh-cn",
-  zht: "zh-tw",
-  ko: "ko",
-  de: "de",
-  es: "es",
-  fr: "fr",
-  it: "it",
-  da: "da",
-  ja: "ja",
-  pl: "pl",
-  ru: "ru",
-  ar: "ar",
-  no: "nb",
-  br: "pt-br",
-  th: "th",
-  tr: "tr",
 } satisfies Record<Locale, string>
 
 const DOCS_SEGMENT = new Set([
-  "ar",
-  "bs",
-  "da",
-  "de",
-  "es",
-  "fr",
-  "it",
-  "ja",
-  "ko",
-  "nb",
-  "pl",
-  "pt-br",
-  "ru",
-  "th",
-  "tr",
   "zh-cn",
-  "zh-tw",
 ])
 
 function suffix(pathname: string) {
@@ -182,8 +106,7 @@ export function tag(locale: Locale) {
   return TAG[locale]
 }
 
-export function dir(locale: Locale) {
-  if (locale === "ar") return "rtl"
+export function dir(locale: Locale): "ltr" {
   return "ltr"
 }
 
@@ -191,25 +114,7 @@ function match(input: string): Locale | null {
   const value = input.trim().toLowerCase()
   if (!value) return null
 
-  if (value.startsWith("zh")) {
-    if (value.includes("hant") || value.includes("-tw") || value.includes("-hk") || value.includes("-mo")) return "zht"
-    return "zh"
-  }
-
-  if (value.startsWith("ko")) return "ko"
-  if (value.startsWith("de")) return "de"
-  if (value.startsWith("es")) return "es"
-  if (value.startsWith("fr")) return "fr"
-  if (value.startsWith("it")) return "it"
-  if (value.startsWith("da")) return "da"
-  if (value.startsWith("ja")) return "ja"
-  if (value.startsWith("pl")) return "pl"
-  if (value.startsWith("ru")) return "ru"
-  if (value.startsWith("ar")) return "ar"
-  if (value.startsWith("tr")) return "tr"
-  if (value.startsWith("th")) return "th"
-  if (value.startsWith("pt")) return "br"
-  if (value.startsWith("no") || value.startsWith("nb") || value.startsWith("nn")) return "no"
+  if (value.startsWith("zh")) return "zh"
   if (value.startsWith("en")) return "en"
   return null
 }
