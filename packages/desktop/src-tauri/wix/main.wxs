@@ -258,6 +258,7 @@
                 Level="1"
                 Absent="allow">
             <ComponentRef Id="Path"/>
+            <ComponentRef Id="PathEnv"/>
             {{#each binaries as |bin| ~}}
             <ComponentRef Id="{{ bin.id }}"/>
             {{/each~}}
