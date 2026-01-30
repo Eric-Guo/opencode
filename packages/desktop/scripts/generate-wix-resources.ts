@@ -109,6 +109,18 @@ const cleanup = (dirId, key, rel) => {
   return { xml, id: cid }
 }
 
+const pathenv = (key, seed) => {
+  const cid = "PathEnv"
+  const gid = guid(`${seed}|path-env`)
+  const xml = [
+    `<Component Id="${cid}" Guid="${gid}">`,
+    `  <Environment Id="${cid}" Name="PATH" Value="[INSTALLDIR]" Action="set" Part="first" System="no" />`,
+    `  <RegistryValue Root="HKCU" Key="${esc(key)}" Name="${cid}" Type="integer" Value="1" KeyPath="yes" />`,
+    `</Component>`
+  ].join("\n")
+  return { xml, id: cid }
+}
+
 const emit = (node, key, parentId) => {
   const rel = path.relative(base, node.dir).replace(/\\/g, "/")
   const dirId = node.name.length > 0 ? id("D", rel) : parentId
@@ -154,17 +166,14 @@ const main = async () => {
   const cfg = await pick()
   // Keep legacy component key to preserve MSI upgrade component key paths.
   const key = "Software\\OpenCode\\Components"
+  const seed = cfg.identifier ?? cfg.productName ?? "opencode"
+  const env = pathenv(key, seed)
 
-  if (!existsSync(base)) {
-    const empty = `<?xml version="1.0" encoding="UTF-8"?>\n<Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\">\n  <Fragment>\n    <DirectoryRef Id=\"INSTALLDIR\" />\n  </Fragment>\n  <Fragment>\n    <ComponentGroup Id=\"AppResources\" />\n  </Fragment>\n</Wix>\n`
-    await Bun.write(out, empty)
-    return
-  }
+  const data = existsSync(base)
+    ? emit(tree(base, ""), key, "INSTALLDIR")
+    : { xml: "", ids: [] }
 
-  const root = tree(base, "")
-  const data = emit(root, key, "INSTALLDIR")
-
-  const body = pad(data.xml, 6)
+  const body = pad([env.xml, data.xml].filter((item) => item.length > 0).join("\n"), 6)
   const refs = data.ids
     .map((cid) => `      <ComponentRef Id=\"${cid}\" />`)
     .join("\n")
