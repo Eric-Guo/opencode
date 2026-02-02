@@ -17,6 +17,8 @@ import { makeRunPromise } from "@/effect/run-service"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
+  type PluginConfig = Parameters<NonNullable<Hooks["config"]>>[0]
+  type McpEntry = NonNullable<Config.Info["mcp"]>[string]
 
   type State = {
     hooks: Hooks[]
@@ -46,7 +48,11 @@ export namespace Plugin {
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
 
-  // Old npm package names for plugins that are now built-in — skip if users still have them in config
+  function isMcp(entry: McpEntry): entry is Config.Mcp {
+    return typeof entry === "object" && entry !== null && "type" in entry
+  }
+
+  // Old npm package names for plugins that are now built-in - skip if users still have them in config
   const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
 
   export const layer = Layer.effect(
@@ -134,9 +140,47 @@ export namespace Plugin {
                 })
             }
 
+            const pluginConfig: PluginConfig = {
+              ...cfg,
+              provider: cfg.provider
+                ? Object.fromEntries(
+                    Object.entries(cfg.provider).map(([key, value]) => [
+                      key,
+                      {
+                        ...value,
+                        models: value.models
+                          ? Object.fromEntries(
+                              Object.entries(value.models).map(([id, model]) => {
+                                if (!model.provider?.npm) {
+                                  const { provider, ...rest } = model
+                                  return [id, rest]
+                                }
+                                return [
+                                  id,
+                                  {
+                                    ...model,
+                                    provider: {
+                                      npm: model.provider.npm,
+                                    },
+                                  },
+                                ]
+                              }),
+                            )
+                          : undefined,
+                      },
+                    ]),
+                  )
+                : undefined,
+              mcp: cfg.mcp
+                ? Object.fromEntries(
+                    Object.entries(cfg.mcp).flatMap(([key, value]) => (isMcp(value) ? [[key, value]] : [])),
+                  )
+                : undefined,
+            }
+
             // Notify plugins of current config
             for (const hook of hooks) {
-              await (hook as any).config?.(cfg)
+              await hook.config?.(pluginConfig)
             }
           })
 
