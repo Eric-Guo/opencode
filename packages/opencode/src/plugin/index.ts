@@ -15,11 +15,17 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-au
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
+  type PluginConfig = Parameters<NonNullable<Hooks["config"]>>[0]
+  type McpEntry = NonNullable<Config.Info["mcp"]>[string]
 
   const BUILTIN = ["opencode-anthropic-auth@0.0.13"]
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
+
+  function isMcp(entry: McpEntry): entry is Config.Mcp {
+    return typeof entry === "object" && entry !== null && "type" in entry
+  }
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
@@ -122,9 +128,45 @@ export namespace Plugin {
   export async function init() {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
+    const pluginConfig: PluginConfig = {
+      ...config,
+      provider: config.provider
+        ? Object.fromEntries(
+            Object.entries(config.provider).map(([key, value]) => [
+              key,
+              {
+                ...value,
+                models: value.models
+                  ? Object.fromEntries(
+                      Object.entries(value.models).map(([id, model]) => {
+                        if (!model.provider?.npm) {
+                          const { provider, ...rest } = model
+                          return [id, rest]
+                        }
+                        return [
+                          id,
+                          {
+                            ...model,
+                            provider: {
+                              npm: model.provider.npm,
+                            },
+                          },
+                        ]
+                      }),
+                    )
+                  : undefined,
+              },
+            ]),
+          )
+        : undefined,
+      mcp: config.mcp
+        ? Object.fromEntries(
+            Object.entries(config.mcp).flatMap(([key, value]) => (isMcp(value) ? [[key, value]] : [])),
+          )
+        : undefined,
+    }
     for (const hook of hooks) {
-      // @ts-expect-error this is because we haven't moved plugin to sdk v2
-      await hook.config?.(config)
+      await hook.config?.(pluginConfig)
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
