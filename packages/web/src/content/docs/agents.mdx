@@ -190,6 +190,7 @@ description: Reviews code for quality and best practices
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
+session_cwd: "{env:OPENCODE_CONFIG_DIR}/knowledge/review"
 tools:
   write: false
   edit: false
@@ -310,6 +311,24 @@ Temperature values typically range from 0.0 to 1.0:
 ```
 
 If no temperature is specified, OpenCode uses model-specific defaults; typically 0 for most models, 0.55 for Qwen models.
+
+---
+
+### Session cwd
+
+Use `session_cwd` to override the working directory for new ACP sessions started with this agent.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "7777": {
+      "session_cwd": "{env:OPENCODE_CONFIG_DIR}/knowledge/7777"
+    }
+  }
+}
+```
+
+This is useful for company/support agents that should always run against a fixed knowledge directory instead of the user-selected project folder.
 
 ---
 

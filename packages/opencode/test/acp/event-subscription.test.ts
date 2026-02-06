@@ -65,6 +65,7 @@ function createEventStream() {
 function createFakeAgent() {
   const updates = new Map<string, string[]>()
   const chunks = new Map<string, string>()
+  const createDirs: string[] = []
   const record = (sessionId: string, type: string) => {
     const list = updates.get(sessionId) ?? []
     list.push(type)
@@ -102,8 +103,9 @@ function createFakeAgent() {
       },
     },
     session: {
-      create: async (_params?: any) => {
+      create: async (params?: any) => {
         calls.sessionCreate++
+        createDirs.push(params?.directory)
         return {
           data: {
             id: `ses_${calls.sessionCreate}`,
@@ -197,10 +199,32 @@ function createFakeAgent() {
     ;(agent as any).eventAbort.abort()
   }
 
-  return { agent, controller, calls, updates, chunks, stop, sdk, connection }
+  return { agent, controller, calls, updates, chunks, createDirs, stop, sdk, connection }
 }
 
 describe("acp.agent event subscription", () => {
+  test("uses agent session_cwd for new session directory", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        agent: {
+          build: {
+            session_cwd: "/tmp/opencode-knowledge/7777",
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, createDirs, stop } = createFakeAgent()
+        await agent.newSession({ cwd: "/tmp/opencode-acp-test", mcpServers: [] } as any)
+        expect(createDirs[0]).toBe("/tmp/opencode-knowledge/7777")
+        stop()
+      },
+    })
+  })
+
   test("routes message.part.delta by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
