@@ -31,6 +31,7 @@ import { Account } from "@/account"
 import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import type { ConsoleState } from "./console-state"
+import pkg from "../../package.json" with { type: "json" }
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
@@ -149,6 +150,12 @@ function resolveConfigDir() {
   return path.join(path.dirname(process.execPath), "thape-config")
 }
 
+function pluginVersion() {
+  if (Installation.isLocal()) return "*"
+  if (Installation.VERSION.startsWith("0.0.0-")) return pkg.version
+  return Installation.VERSION
+}
+  
 function rel(item: string, patterns: string[]) {
   const normalizedItem = item.replaceAll("\\", "/")
   for (const pattern of patterns) {
@@ -1297,7 +1304,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Auth.Ser
         const pkg = path.join(dir, "package.json")
         const gitignore = path.join(dir, ".gitignore")
         const plugin = path.join(dir, "node_modules", "@opencode-ai", "plugin", "package.json")
-        const target = Installation.isLocal() ? "*" : Installation.VERSION
+        const target = pluginVersion()
         const json = yield* fs.readJson(pkg).pipe(
           Effect.catch(() => Effect.succeed({} satisfies Package)),
           Effect.map((x): Package => (isRecord(x) ? (x as Package) : {})),
