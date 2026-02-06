@@ -40,6 +40,7 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { GlobalBus } from "@/bus/global"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -502,20 +503,28 @@ export namespace Server {
           async (c) => {
             log.info("event connected")
             return streamSSE(c, async (stream) => {
+              const directory = Instance.directory
               stream.writeSSE({
                 data: JSON.stringify({
                   type: "server.connected",
                   properties: {},
                 }),
               })
-              const unsub = Bus.subscribeAll(async (event) => {
+              const handler = async (event: { directory?: string; payload: unknown }) => {
+                if (event.directory && event.directory !== directory) return
                 await stream.writeSSE({
-                  data: JSON.stringify(event),
+                  data: JSON.stringify(event.payload),
                 })
-                if (event.type === Bus.InstanceDisposed.type) {
+                if (
+                  typeof event.payload === "object" &&
+                  event.payload !== null &&
+                  "type" in event.payload &&
+                  event.payload.type === Bus.InstanceDisposed.type
+                ) {
                   stream.close()
                 }
-              })
+              }
+              GlobalBus.on("event", handler)
 
               // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
               const heartbeat = setInterval(() => {
@@ -530,7 +539,7 @@ export namespace Server {
               await new Promise<void>((resolve) => {
                 stream.onAbort(() => {
                   clearInterval(heartbeat)
-                  unsub()
+                  GlobalBus.off("event", handler)
                   resolve()
                   log.info("event disconnected")
                 })
