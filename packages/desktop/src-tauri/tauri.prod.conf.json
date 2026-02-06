@@ -23,7 +23,12 @@
       "wix": {
         "fragmentPaths": ["wix/resources.wxs"],
         "componentGroupRefs": ["AppResources"],
-        "template": "wix/main.wxs"
+        "template": "wix/main.wxs",
+        "language": {
+          "en-US": {
+            "localePath": "locales/en-US.wxl"
+          }
+        }
       }
     },
     "linux": {
