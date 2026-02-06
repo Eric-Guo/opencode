@@ -33,6 +33,7 @@ import { Account } from "@/account"
 import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
+import pkg from "../../package.json" with { type: "json" }
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -149,6 +150,12 @@ export namespace Config {
     return path.join(path.dirname(process.execPath), "thape-config")
   }
 
+  function pluginVersion() {
+    if (Installation.isLocal()) return "*"
+    if (Installation.VERSION.startsWith("0.0.0-")) return pkg.version
+    return Installation.VERSION
+  }
+
   export async function installDependencies(dir: string, input?: InstallInput) {
     if (!(await isWritable(dir))) return
     await using _ = await Flock.acquire(`config-install:${Filesystem.resolve(dir)}`, {
@@ -164,7 +171,8 @@ export namespace Config {
     input?.signal?.throwIfAborted()
 
     const pkg = path.join(dir, "package.json")
-    const target = Installation.isLocal() ? "*" : Installation.VERSION
+    const target = pluginVersion()
+
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
     }))
