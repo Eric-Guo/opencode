@@ -33,6 +33,7 @@ import { PackageRegistry } from "@/bun/registry"
 import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
 import { Control } from "@/control"
+import pkg from "../../package.json" with { type: "json" }
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -282,9 +283,15 @@ export namespace Config {
     await Promise.all(deps)
   }
 
+  function pluginVersion() {
+    if (Installation.isLocal()) return "*"
+    if (Installation.VERSION.startsWith("0.0.0-")) return pkg.version
+    return Installation.VERSION
+  }
+
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
-    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
+    const targetVersion = pluginVersion()
 
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
@@ -343,8 +350,7 @@ export namespace Config {
     const depVersion = dependencies["@opencode-ai/plugin"]
     if (!depVersion) return true
 
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") {
+    if (Installation.isLocal()) {
       const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
       if (!isOutdated) return false
       log.info("Cached version is outdated, proceeding with install", {
@@ -353,6 +359,8 @@ export namespace Config {
       })
       return true
     }
+
+    const targetVersion = pluginVersion()
     if (depVersion === targetVersion) return false
     return true
   }
