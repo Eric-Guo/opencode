@@ -37,6 +37,7 @@ import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
+import pkg from "../../package.json" with { type: "json" }
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -96,6 +97,12 @@ export namespace Config {
     return path.join(path.dirname(process.execPath), "thape-config")
   }
 
+  function pluginVersion() {
+    if (Installation.isLocal()) return "*"
+    if (Installation.VERSION.startsWith("0.0.0-")) return pkg.version
+    return Installation.VERSION
+  }
+
   export async function installDependencies(dir: string, input?: InstallInput) {
     if (!(await needsInstall(dir))) return
 
@@ -113,7 +120,7 @@ export namespace Config {
     input?.signal?.throwIfAborted()
     if (!(await needsInstall(dir))) return
     const pkg = path.join(dir, "package.json")
-    const target = Installation.isLocal() ? "*" : Installation.VERSION
+    const target = pluginVersion()
 
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
@@ -204,8 +211,7 @@ export namespace Config {
     const depVersion = dependencies["@opencode-ai/plugin"]
     if (!depVersion) return true
 
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") {
+    if (Installation.isLocal()) {
       if (!online()) return false
       const stale = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
       if (!stale) return false
@@ -215,6 +221,8 @@ export namespace Config {
       })
       return true
     }
+
+    const targetVersion = pluginVersion()
     if (depVersion === targetVersion) return false
     return true
   }
