@@ -30,6 +30,7 @@ export namespace Agent {
       hidden: z.boolean().optional(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
+      session_cwd: z.string().optional(),
       color: z.string().optional(),
       permission: PermissionNext.Ruleset,
       model: z
@@ -223,6 +224,7 @@ export namespace Agent {
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
       item.topP = value.top_p ?? item.topP
+      item.session_cwd = value.session_cwd ?? item.session_cwd
       item.mode = value.mode ?? item.mode
       item.color = value.color ?? item.color
       item.hidden = value.hidden ?? item.hidden

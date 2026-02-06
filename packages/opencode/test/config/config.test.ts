@@ -299,6 +299,7 @@ test("handles agent configuration", async () => {
             model: "test/model",
             temperature: 0.7,
             description: "test agent",
+            session_cwd: "/tmp/opencode-test-agent",
           },
         },
       })
@@ -313,6 +314,7 @@ test("handles agent configuration", async () => {
           model: "test/model",
           temperature: 0.7,
           description: "test agent",
+          session_cwd: "/tmp/opencode-test-agent",
         }),
       )
     },
@@ -513,6 +515,40 @@ Nested agent prompt`,
       })
     },
   })
+})
+
+test("loads markdown agent session_cwd with env substitution", async () => {
+  const key = "OPENCODE_TEST_SESSION_CWD"
+  const prev = process.env[key]
+  process.env[key] = "/tmp/opencode-support"
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode", "agents")
+        await fs.mkdir(opencodeDir, { recursive: true })
+        await Bun.write(
+          path.join(opencodeDir, "support.md"),
+          `---
+mode: primary
+session_cwd: "{env:OPENCODE_TEST_SESSION_CWD}/knowledge/7777"
+---
+Support agent prompt`,
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.agent?.["support"]?.session_cwd).toBe("/tmp/opencode-support/knowledge/7777")
+      },
+    })
+  } finally {
+    if (prev === undefined) delete process.env[key]
+    else process.env[key] = prev
+  }
 })
 
 test("loads commands from .opencode/command (singular)", async () => {
