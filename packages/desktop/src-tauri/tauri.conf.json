@@ -59,6 +59,11 @@
         "fragmentPaths": ["wix/resources.wxs"],
         "componentGroupRefs": ["AppResources"],
         "template": "wix/main.wxs",
+        "language": {
+          "en-US": {
+            "localePath": "locales/en-US.wxl"
+          }
+        },
         "upgradeCode": "12345678-1234-1234-1234-123456789012"
       }
     },
