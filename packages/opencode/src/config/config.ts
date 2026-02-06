@@ -31,6 +31,8 @@ import { Event } from "../server/event"
 import { PackageRegistry } from "@/bun/registry"
 import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
+import { resolveConfigDir } from "./dir"
+import { substituteEnv } from "./env"
 import pkg from "../../package.json" with { type: "json" }
 
 export namespace Config {
@@ -63,12 +65,6 @@ export namespace Config {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
     return merged
-  }
-
-  function resolveConfigDir() {
-    const raw = Flag.OPENCODE_CONFIG_DIR
-    if (typeof raw === "string" && raw.trim()) return raw.trim()
-    return path.join(path.dirname(process.execPath), "thape-config")
   }
 
   export const state = Instance.state(async () => {
@@ -1289,9 +1285,7 @@ export namespace Config {
 
   async function load(text: string, configFilepath: string) {
     const original = text
-    text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-      return process.env[varName] || ""
-    })
+    text = substituteEnv(text)
 
     const fileMatches = text.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
