@@ -114,6 +114,7 @@ test("custom agent from config creates new agent", async () => {
           description: "My custom agent",
           temperature: 0.5,
           top_p: 0.9,
+          session_cwd: "/tmp/opencode-custom-agent",
         },
       },
     },
@@ -128,6 +129,7 @@ test("custom agent from config creates new agent", async () => {
       expect(custom?.description).toBe("My custom agent")
       expect(custom?.temperature).toBe(0.5)
       expect(custom?.topP).toBe(0.9)
+      expect(custom?.session_cwd).toBe("/tmp/opencode-custom-agent")
       expect(custom?.native).toBe(false)
       expect(custom?.mode).toBe("all")
     },
