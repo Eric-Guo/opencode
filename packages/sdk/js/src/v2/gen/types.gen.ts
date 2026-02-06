@@ -1420,6 +1420,10 @@ export type AgentConfig = {
   variant?: string
   temperature?: number
   top_p?: number
+  /**
+   * Override the working directory for new ACP sessions
+   */
+  session_cwd?: string
   prompt?: string
   /**
    * @deprecated Use 'permission' field instead
@@ -2196,6 +2200,7 @@ export type Agent = {
   hidden?: boolean
   topP?: number
   temperature?: number
+  session_cwd?: string
   color?: string
   permission: PermissionRuleset
   model?: {

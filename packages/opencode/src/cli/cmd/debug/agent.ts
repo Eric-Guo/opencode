@@ -13,6 +13,7 @@ import { iife } from "../../../util/iife"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 import { MCP } from "../../../mcp"
+import { InstanceBootstrap } from "../../../project/bootstrap"
 
 export const AgentCommand = cmd({
   command: "agent <name>",
@@ -68,8 +69,11 @@ export const AgentCommand = cmd({
           process.exit(1)
         }
         const params = parseToolParams(args.params as string | undefined)
-        const ctx = await createToolContext(agent)
-        const result = await tool.execute(params, ctx)
+        const result = await executeDebugTool({
+          agent,
+          tool,
+          params,
+        })
         process.stdout.write(JSON.stringify({ tool: toolID, input: params, result }, null, 2) + EOL)
         return
       }
@@ -131,6 +135,23 @@ function parseToolParams(input?: string) {
     throw new Error("Tool params must be an object.")
   }
   return parsed as Record<string, unknown>
+}
+
+async function withAgentDirectory<T>(agent: Agent.Info, fn: () => Promise<T>) {
+  if (!agent.session_cwd || agent.session_cwd === Instance.directory) return fn()
+  return Instance.provide({
+    directory: agent.session_cwd,
+    init: InstanceBootstrap,
+    fn,
+  })
+}
+
+type Tool = Awaited<ReturnType<typeof getAvailableTools>>[number]
+export async function executeDebugTool(input: { agent: Agent.Info; tool: Tool; params: Record<string, unknown> }) {
+  return withAgentDirectory(input.agent, async () => {
+    const ctx = await createToolContext(input.agent)
+    return input.tool.execute(input.params, ctx)
+  })
 }
 
 async function createToolContext(agent: Agent.Info) {
