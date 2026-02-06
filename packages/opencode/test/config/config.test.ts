@@ -507,6 +507,42 @@ Support agent prompt`,
   }
 })
 
+test("loads markdown agent session_cwd with OPENCODE_CONFIG_DIR fallback", async () => {
+  const key = "OPENCODE_CONFIG_DIR"
+  const prev = process.env[key]
+  delete process.env[key]
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode", "agents")
+        await fs.mkdir(opencodeDir, { recursive: true })
+        await Bun.write(
+          path.join(opencodeDir, "support.md"),
+          `---
+mode: primary
+session_cwd: "{env:OPENCODE_CONFIG_DIR}/knowledge/7777"
+---
+Support agent prompt`,
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.agent?.["support"]?.session_cwd).toBe(
+          path.join(path.dirname(process.execPath), "thape-config", "knowledge/7777"),
+        )
+      },
+    })
+  } finally {
+    if (prev === undefined) delete process.env[key]
+    else process.env[key] = prev
+  }
+})
+
 test("loads commands from .opencode/command (singular)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
