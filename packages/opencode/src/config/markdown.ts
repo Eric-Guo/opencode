@@ -2,14 +2,11 @@ import { NamedError } from "@opencode-ai/util/error"
 import matter from "gray-matter"
 import { z } from "zod"
 import { Filesystem } from "../util/filesystem"
+import { substituteEnv } from "./env"
 
 export namespace ConfigMarkdown {
   export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
   export const SHELL_REGEX = /!`([^`]+)`/g
-
-  export function substituteEnv(content: string) {
-    return content.replace(/\{env:([^}]+)\}/g, (_, varName) => process.env[varName] || "")
-  }
 
   export function files(template: string) {
     return Array.from(template.matchAll(FILE_REGEX))
