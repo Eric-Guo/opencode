@@ -554,12 +554,12 @@ export namespace ACP {
     }
 
     async newSession(params: NewSessionRequest) {
-      const directory = params.cwd
       try {
+        const directory = await this.resolveSessionCwd(params.cwd)
         const model = await defaultModel(this.config, directory)
 
         // Store ACP session state
-        const state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+        const state = await this.sessionManager.create(directory, params.mcpServers, model)
         const sessionId = state.id
 
         log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length })
@@ -1080,6 +1080,15 @@ export namespace ACP {
           name: agent.name,
           description: agent.description,
         }))
+    }
+
+    private async resolveSessionCwd(cwd: string): Promise<string> {
+      const modes = await this.loadAvailableModes(cwd)
+      if (!modes.length) return cwd
+      const defaultAgent = await AgentModule.defaultAgent()
+      const mode = modes.find((item) => item.name === defaultAgent)?.id ?? modes[0].id
+      const agent = await AgentModule.get(mode)
+      return agent?.session_cwd ?? cwd
     }
 
     private async resolveModeState(

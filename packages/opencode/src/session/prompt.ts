@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { InstanceBootstrap } from "../project/bootstrap"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -155,33 +156,64 @@ export namespace SessionPrompt {
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
-  export const prompt = fn(PromptInput, async (input) => {
+  async function withDirectory<T>(directory: string, cb: () => Promise<T>) {
+    if (directory === Instance.directory) return cb()
+    return Instance.provide({
+      directory,
+      init: InstanceBootstrap,
+      fn: cb,
+    })
+  }
+
+  async function resolveAgentDirectory(input: { sessionID: string; agent?: string }) {
     const session = await Session.get(input.sessionID)
-    await SessionRevert.cleanup(session)
+    const agentName = input.agent ?? (await Agent.defaultAgent())
+    const agent = await Agent.get(agentName)
+    if (!agent?.session_cwd) return session.directory
+    return agent.session_cwd
+  }
 
-    const message = await createUserMessage(input)
-    await Session.touch(input.sessionID)
-
-    // this is backwards compatibility for allowing `tools` to be specified when
-    // prompting
-    const permissions: PermissionNext.Ruleset = []
-    for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
-      permissions.push({
-        permission: tool,
-        action: enabled ? "allow" : "deny",
-        pattern: "*",
-      })
+  async function resolveLoopDirectory(sessionID: string) {
+    const session = await Session.get(sessionID)
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role !== "user") continue
+      const agent = await Agent.get(item.info.agent)
+      if (agent?.session_cwd) return agent.session_cwd
+      return session.directory
     }
-    if (permissions.length > 0) {
-      session.permission = permissions
-      await Session.setPermission({ sessionID: session.id, permission: permissions })
-    }
+    return session.directory
+  }
 
-    if (input.noReply === true) {
-      return message
-    }
+  export const prompt = fn(PromptInput, async (input) => {
+    const directory = await resolveAgentDirectory(input)
+    return withDirectory(directory, async () => {
+      const session = await Session.get(input.sessionID)
+      await SessionRevert.cleanup(session)
 
-    return loop({ sessionID: input.sessionID })
+      const message = await createUserMessage(input)
+      await Session.touch(input.sessionID)
+
+      // this is backwards compatibility for allowing `tools` to be specified when
+      // prompting
+      const permissions: PermissionNext.Ruleset = []
+      for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
+        permissions.push({
+          permission: tool,
+          action: enabled ? "allow" : "deny",
+          pattern: "*",
+        })
+      }
+      if (permissions.length > 0) {
+        session.permission = permissions
+        await Session.setPermission({ sessionID: session.id, permission: permissions })
+      }
+
+      if (input.noReply === true) {
+        return message
+      }
+
+      return loop({ sessionID: input.sessionID })
+    })
   })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
@@ -273,79 +305,80 @@ export namespace SessionPrompt {
   })
   export const loop = fn(LoopInput, async (input) => {
     const { sessionID, resume_existing } = input
-
-    const abort = resume_existing ? resume(sessionID) : start(sessionID)
-    if (!abort) {
-      return new Promise<MessageV2.WithParts>((resolve, reject) => {
-        const callbacks = state()[sessionID].callbacks
-        callbacks.push({ resolve, reject })
-      })
-    }
-
-    using _ = defer(() => cancel(sessionID))
-
-    // Structured output state
-    // Note: On session resumption, state is reset but outputFormat is preserved
-    // on the user message and will be retrieved from lastUser below
-    let structuredOutput: unknown | undefined
-
-    let step = 0
-    const session = await Session.get(sessionID)
-    while (true) {
-      SessionStatus.set(sessionID, { type: "busy" })
-      log.info("loop", { step, sessionID })
-      if (abort.aborted) break
-      let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
-
-      let lastUser: MessageV2.User | undefined
-      let lastAssistant: MessageV2.Assistant | undefined
-      let lastFinished: MessageV2.Assistant | undefined
-      let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        const msg = msgs[i]
-        if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
-        if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
-        if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
-          lastFinished = msg.info as MessageV2.Assistant
-        if (lastUser && lastFinished) break
-        const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
-        if (task && !lastFinished) {
-          tasks.push(...task)
-        }
-      }
-
-      if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (
-        lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
-      ) {
-        log.info("exiting loop", { sessionID })
-        break
-      }
-
-      step++
-      if (step === 1)
-        ensureTitle({
-          session,
-          modelID: lastUser.model.modelID,
-          providerID: lastUser.model.providerID,
-          history: msgs,
+    const directory = await resolveLoopDirectory(sessionID)
+    return withDirectory(directory, async () => {
+      const abort = resume_existing ? resume(sessionID) : start(sessionID)
+      if (!abort) {
+        return new Promise<MessageV2.WithParts>((resolve, reject) => {
+          const callbacks = state()[sessionID].callbacks
+          callbacks.push({ resolve, reject })
         })
+      }
 
-      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
-        if (Provider.ModelNotFoundError.isInstance(e)) {
-          const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
-          Bus.publish(Session.Event.Error, {
-            sessionID,
-            error: new NamedError.Unknown({
-              message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}`,
-            }).toObject(),
-          })
+      using _ = defer(() => cancel(sessionID))
+
+      // Structured output state
+      // Note: On session resumption, state is reset but outputFormat is preserved
+      // on the user message and will be retrieved from lastUser below
+      let structuredOutput: unknown | undefined
+
+      let step = 0
+      const session = await Session.get(sessionID)
+      while (true) {
+        SessionStatus.set(sessionID, { type: "busy" })
+        log.info("loop", { step, sessionID })
+        if (abort.aborted) break
+        let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+
+        let lastUser: MessageV2.User | undefined
+        let lastAssistant: MessageV2.Assistant | undefined
+        let lastFinished: MessageV2.Assistant | undefined
+        let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const msg = msgs[i]
+          if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
+          if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
+          if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
+            lastFinished = msg.info as MessageV2.Assistant
+          if (lastUser && lastFinished) break
+          const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
+          if (task && !lastFinished) {
+            tasks.push(...task)
+          }
         }
-        throw e
-      })
-      const task = tasks.pop()
+
+        if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+        if (
+          lastAssistant?.finish &&
+          !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
+          lastUser.id < lastAssistant.id
+        ) {
+          log.info("exiting loop", { sessionID })
+          break
+        }
+
+        step++
+        if (step === 1)
+          ensureTitle({
+            session,
+            modelID: lastUser.model.modelID,
+            providerID: lastUser.model.providerID,
+            history: msgs,
+          })
+
+        const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
+          if (Provider.ModelNotFoundError.isInstance(e)) {
+            const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
+            Bus.publish(Session.Event.Error, {
+              sessionID,
+              error: new NamedError.Unknown({
+                message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}`,
+              }).toObject(),
+            })
+          }
+          throw e
+        })
+        const task = tasks.pop()
 
       // pending subtask
       // TODO: centralize "invoke tool" logic
@@ -721,6 +754,7 @@ export namespace SessionPrompt {
       return item
     }
     throw new Error("Impossible")
+    })
   })
 
   async function lastModel(sessionID: string) {
