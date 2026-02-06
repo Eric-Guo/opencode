@@ -17,6 +17,7 @@
             Name="{{product_name}}"
             UpgradeCode="{{upgrade_code}}"
             Language="!(loc.TauriLanguage)"
+            Codepage="936"
             Manufacturer="天华集团运营与信息化部"
             Version="{{version}}">
 
