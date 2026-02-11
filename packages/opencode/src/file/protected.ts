@@ -35,7 +35,7 @@ const DARWIN_LIBRARY = [
 
 const DARWIN_ROOT = ["/.DocumentRevisions-V100", "/.Spotlight-V100", "/.Trashes", "/.fseventsd"]
 
-const WIN32_HOME = ["AppData", "Downloads", "Desktop", "Documents", "Pictures", "Music", "Videos", "OneDrive"]
+const WIN32_HOME = ["AppData", "Downloads", "Pictures", "Music", "Videos", "OneDrive"]
 
 /** Directory basenames to skip when scanning the home directory. */
 export function names(): ReadonlySet<string> {
