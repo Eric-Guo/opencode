@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, beforeEach } from "bun:test"
 import { Project } from "../../src/project/project"
 import { Log } from "../../src/util/log"
 import { $ } from "bun"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
+import { GlobalBus } from "../../src/bus/global"
 
 Log.init({ print: false })
 
@@ -130,5 +131,117 @@ describe("Project.discover", () => {
     const updated = Project.get(project.id)
     expect(updated).toBeDefined()
     expect(updated!.icon).toBeUndefined()
+  })
+})
+
+describe("Project.update", () => {
+  test("should update name", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const updated = await Project.update({
+      projectID: project.id,
+      name: "New Project Name",
+    })
+
+    expect(updated.name).toBe("New Project Name")
+
+    const fromDb = Project.get(project.id)
+    expect(fromDb?.name).toBe("New Project Name")
+  })
+
+  test("should update icon url", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const updated = await Project.update({
+      projectID: project.id,
+      icon: { url: "https://example.com/icon.png" },
+    })
+
+    expect(updated.icon?.url).toBe("https://example.com/icon.png")
+
+    const fromDb = Project.get(project.id)
+    expect(fromDb?.icon?.url).toBe("https://example.com/icon.png")
+  })
+
+  test("should update icon color", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const updated = await Project.update({
+      projectID: project.id,
+      icon: { color: "#ff0000" },
+    })
+
+    expect(updated.icon?.color).toBe("#ff0000")
+
+    const fromDb = Project.get(project.id)
+    expect(fromDb?.icon?.color).toBe("#ff0000")
+  })
+
+  test("should update commands", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const updated = await Project.update({
+      projectID: project.id,
+      commands: { start: "npm run dev" },
+    })
+
+    expect(updated.commands?.start).toBe("npm run dev")
+
+    const fromDb = Project.get(project.id)
+    expect(fromDb?.commands?.start).toBe("npm run dev")
+  })
+
+  test("should throw error when project not found", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await expect(
+      Project.update({
+        projectID: "nonexistent-project-id",
+        name: "Should Fail",
+      }),
+    ).rejects.toThrow("Project not found: nonexistent-project-id")
+  })
+
+  test("should emit GlobalBus event on update", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    let eventFired = false
+    let eventPayload: any = null
+
+    GlobalBus.on("event", (data) => {
+      eventFired = true
+      eventPayload = data
+    })
+
+    await Project.update({
+      projectID: project.id,
+      name: "Updated Name",
+    })
+
+    expect(eventFired).toBe(true)
+    expect(eventPayload.payload.type).toBe("project.updated")
+    expect(eventPayload.payload.properties.name).toBe("Updated Name")
+  })
+
+  test("should update multiple fields at once", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const updated = await Project.update({
+      projectID: project.id,
+      name: "Multi Update",
+      icon: { url: "https://example.com/favicon.ico", color: "#00ff00" },
+      commands: { start: "make start" },
+    })
+
+    expect(updated.name).toBe("Multi Update")
+    expect(updated.icon?.url).toBe("https://example.com/favicon.ico")
+    expect(updated.icon?.color).toBe("#00ff00")
+    expect(updated.commands?.start).toBe("make start")
   })
 })
