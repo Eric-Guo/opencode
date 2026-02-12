@@ -452,6 +452,7 @@ export namespace SessionPrompt {
             tool: "task",
             sessionID,
             callID: part.id,
+            args: taskArgs,
           },
           result,
         )
@@ -803,6 +804,7 @@ export namespace SessionPrompt {
               tool: item.id,
               sessionID: ctx.sessionID,
               callID: ctx.callID,
+              args,
             },
             result,
           )
@@ -848,6 +850,7 @@ export namespace SessionPrompt {
             tool: key,
             sessionID: ctx.sessionID,
             callID: opts.toolCallId,
+            args,
           },
           result,
         )
