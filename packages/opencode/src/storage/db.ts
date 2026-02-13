@@ -13,6 +13,7 @@ import path from "path"
 import { readFileSync, readdirSync } from "fs"
 import fs from "fs/promises"
 import { Instance } from "@/project/instance"
+import * as schema from "./schema"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
 
@@ -26,9 +27,10 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export type Transaction = SQLiteTransaction<"sync", void, Record<string, never>, Record<string, never>>
+  type Schema = typeof schema
+  export type Transaction = SQLiteTransaction<"sync", void, Schema, Schema>
 
-  type Client = SQLiteBunDatabase
+  type Client = SQLiteBunDatabase<Schema>
 
   type Journal = { sql: string; timestamp: number }[]
 
@@ -75,7 +77,7 @@ export namespace Database {
     sqlite.run("PRAGMA cache_size = -64000")
     sqlite.run("PRAGMA foreign_keys = ON")
 
-    const db = drizzle({ client: sqlite })
+    const db = drizzle({ client: sqlite, schema })
 
     // Apply schema migrations
     const entries =
