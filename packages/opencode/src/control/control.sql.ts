@@ -17,6 +17,6 @@ export const ControlAccountTable = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.email, table.url] }),
-    uniqueIndex("control_account_active_idx").on(table.email).where(eq(table.active, true)),
+    // uniqueIndex("control_account_active_idx").on(table.email).where(eq(table.active, true)),
   ],
 )

@@ -9,5 +9,3 @@ CREATE TABLE `control_account` (
 	`time_updated` integer NOT NULL,
 	CONSTRAINT `control_account_pk` PRIMARY KEY(`email`, `url`)
 );
---> statement-breakpoint
-CREATE UNIQUE INDEX `control_account_active_idx` ON `control_account` (`email`) WHERE "control_account"."active" = ?;

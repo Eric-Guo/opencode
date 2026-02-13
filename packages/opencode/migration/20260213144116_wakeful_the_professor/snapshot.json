@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4441b97d-33e2-43b9-b324-182cd801ecc6",
+  "id": "d2736e43-700f-4e9e-8151-9f2f0d967bc8",
   "prevIds": [
     "8bc2d11d-97fa-4ba8-8bfa-6c5956c49aeb"
   ],
@@ -851,20 +851,6 @@
       "name": "session_share_pk",
       "table": "session_share",
       "entityType": "pks"
-    },
-    {
-      "columns": [
-        {
-          "value": "email",
-          "isExpression": false
-        }
-      ],
-      "isUnique": true,
-      "where": "\"control_account\".\"active\" = ?",
-      "origin": "manual",
-      "name": "control_account_active_idx",
-      "entityType": "indexes",
-      "table": "control_account"
     },
     {
       "columns": [
