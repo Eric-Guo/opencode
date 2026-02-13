@@ -11,8 +11,6 @@ import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync } from "fs"
-import fs from "fs/promises"
-import { Instance } from "@/project/instance"
 import * as schema from "./schema"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
@@ -28,7 +26,7 @@ const log = Log.create({ service: "db" })
 
 export namespace Database {
   type Schema = typeof schema
-  export type Transaction = SQLiteTransaction<"sync", void, Schema, Schema>
+  export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
   type Client = SQLiteBunDatabase<Schema>
 
