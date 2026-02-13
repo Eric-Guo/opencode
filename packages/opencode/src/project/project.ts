@@ -1,7 +1,6 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { $ } from "bun"
 import { Database, eq } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
@@ -12,6 +11,8 @@ import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
+import { existsSync } from "fs"
+import { git } from "../util/git"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -77,56 +78,57 @@ export namespace Project {
 
     const data = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
-      const git = await matches.next().then((x) => x.value)
+      const dotgit = await matches.next().then((x) => x.value)
       await matches.return()
-      if (git) {
-        const sandbox = path.dirname(git)
-        const bin = Bun.which("git")
+      if (dotgit) {
+        let sandbox = path.dirname(dotgit)
 
-        const cached = await Bun.file(path.join(git, "opencode"))
+        const gitBinary = Bun.which("git")
+
+        // cached id calculation
+        let id = await Bun.file(path.join(dotgit, "opencode"))
           .text()
           .then((x) => x.trim())
           .catch(() => undefined)
 
-        if (!bin) {
+        if (!gitBinary) {
           return {
-            id: cached ?? "global",
+            id: id ?? "global",
             worktree: sandbox,
             sandbox: sandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
 
-        const roots = cached
-          ? undefined
-          : await $`git rev-list --max-parents=0 --all`
-              .quiet()
-              .nothrow()
-              .cwd(sandbox)
-              .text()
-              .then((x) =>
-                x
-                  .split("\n")
-                  .filter(Boolean)
-                  .map((x) => x.trim())
-                  .toSorted(),
-              )
-              .catch(() => undefined)
-
-        if (!cached && !roots) {
-          return {
-            id: "global",
-            worktree: sandbox,
-            sandbox: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-          }
-        }
-
-        const id = cached ?? roots?.[0]
-        if (!cached && id) {
-          void Bun.file(path.join(git, "opencode"))
-            .write(id)
+        // generate id from root commit
+        if (!id) {
+          const roots = await git(["rev-list", "--max-parents=0", "--all"], {
+            cwd: sandbox,
+          })
+            .then(async (result) =>
+              (await result.text())
+                .split("\n")
+                .filter(Boolean)
+                .map((x) => x.trim())
+                .toSorted(),
+            )
             .catch(() => undefined)
+
+          if (!roots) {
+            return {
+              id: "global",
+              worktree: sandbox,
+              sandbox: sandbox,
+              vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+            }
+          }
+
+          id = roots[0]
+          if (id) {
+            void Bun.file(path.join(dotgit, "opencode"))
+              .write(id)
+              .catch(() => undefined)
+          }
         }
 
         if (!id) {
@@ -138,12 +140,10 @@ export namespace Project {
           }
         }
 
-        const top = await $`git rev-parse --show-toplevel`
-          .quiet()
-          .nothrow()
-          .cwd(sandbox)
-          .text()
-          .then((x) => path.resolve(sandbox, x.trim()))
+        const top = await git(["rev-parse", "--show-toplevel"], {
+          cwd: sandbox,
+        })
+          .then(async (result) => path.resolve(sandbox, (await result.text()).trim()))
           .catch(() => undefined)
 
         if (!top) {
@@ -155,31 +155,31 @@ export namespace Project {
           }
         }
 
-        const tree = await $`git rev-parse --git-common-dir`
-          .quiet()
-          .nothrow()
-          .cwd(top)
-          .text()
-          .then((x) => {
-            const dirname = path.dirname(x.trim())
-            if (dirname === ".") return top
+        sandbox = top
+
+        const worktree = await git(["rev-parse", "--git-common-dir"], {
+          cwd: sandbox,
+        })
+          .then(async (result) => {
+            const dirname = path.dirname((await result.text()).trim())
+            if (dirname === ".") return sandbox
             return dirname
           })
           .catch(() => undefined)
 
-        if (!tree) {
+        if (!worktree) {
           return {
             id,
-            sandbox: top,
-            worktree: top,
+            sandbox,
+            worktree: sandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
 
         return {
           id,
-          sandbox: top,
-          worktree: tree,
+          sandbox,
+          worktree,
           vcs: "git",
         }
       }
@@ -224,14 +224,7 @@ export namespace Project {
     }
     if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
       result.sandboxes.push(data.sandbox)
-    const sandboxes: string[] = []
-    for (const x of result.sandboxes) {
-      const stat = await Bun.file(x)
-        .stat()
-        .catch(() => undefined)
-      if (stat) sandboxes.push(x)
-    }
-    result.sandboxes = sandboxes
+    result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
     const insert = {
       id: result.id,
       worktree: result.worktree,
