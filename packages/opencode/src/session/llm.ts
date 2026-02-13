@@ -207,10 +207,9 @@ export namespace LLM {
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
-      toolChoice: input.toolChoice,
+      toolChoice: input.output === "tool" ? "required" : input.toolChoice,
       maxOutputTokens,
       abortSignal: input.abort,
-      toolChoice: input.output === "tool" ? "required" : undefined,
       headers: {
         ...(input.model.providerID.startsWith("opencode")
           ? {
