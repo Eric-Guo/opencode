@@ -92,20 +92,26 @@ const cli = yargs(hideBin(process.argv))
       try {
         await JsonMigration.run(Database.Client().$client, {
           progress: (event) => {
-            if (!tty) return
             const percent = Math.floor((event.current / event.total) * 100)
             if (percent === last && event.current !== event.total) return
             last = percent
-            const fill = Math.round((percent / 100) * width)
-            const bar = `${"■".repeat(fill)}${"･".repeat(width - fill)}`
-            process.stdout.write(
-              `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.label.padEnd(12)} ${event.current}/${event.total}${reset}`,
-            )
-            if (event.current === event.total) process.stdout.write("\n")
+            if (tty) {
+              const fill = Math.round((percent / 100) * width)
+              const bar = `${"■".repeat(fill)}${"･".repeat(width - fill)}`
+              process.stdout.write(
+                `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.label.padEnd(12)} ${event.current}/${event.total}${reset}`,
+              )
+              if (event.current === event.total) process.stdout.write("\n")
+            } else {
+              console.log(`sqlite-migration:${percent}`)
+            }
           },
         })
       } finally {
         if (tty) process.stdout.write("\x1b[?25h")
+        else {
+          console.log(`sqlite-migration:done`)
+        }
       }
       console.log("Database migration complete.")
     }
