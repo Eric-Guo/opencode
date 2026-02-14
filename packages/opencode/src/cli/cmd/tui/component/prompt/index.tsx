@@ -120,7 +120,7 @@ export function Prompt(props: PromptProps) {
 
   const [store, setStore] = createStore<{
     prompt: PromptInfo
-    mode: "normal" | "shell"
+    mode: "normal" | "shell" | "handoff"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
@@ -349,6 +349,20 @@ export function Prompt(props: PromptProps) {
           ))
         },
       },
+      {
+        title: "Handoff",
+        value: "prompt.handoff",
+        disabled: props.sessionID === undefined,
+        category: "Prompt",
+        slash: {
+          name: "handoff",
+        },
+        onSelect: () => {
+          input.clear()
+          setStore("mode", "handoff")
+          setStore("prompt", { input: "", parts: [] })
+        },
+      },
     ]
   })
 
@@ -526,15 +540,43 @@ export function Prompt(props: PromptProps) {
   async function submit() {
     if (props.disabled) return
     if (autocomplete?.visible) return
+    const selectedModel = local.model.current()
+    if (!selectedModel) {
+      promptModelWarning()
+      return
+    }
+
+    if (store.mode === "handoff") {
+      const result = await sdk.client.session.handoff({
+        sessionID: props.sessionID!,
+        goal: store.prompt.input,
+        model: {
+          providerID: selectedModel.providerID,
+          modelID: selectedModel.modelID,
+        },
+      })
+      if (result.data) {
+        route.navigate({
+          type: "home",
+          initialPrompt: {
+            input: result.data.text,
+            parts:
+              result.data.files.map((file) => ({
+                type: "file",
+                url: file,
+                filename: file,
+                mime: "text/plain",
+              })) ?? [],
+          },
+        })
+      }
+      return
+    }
+
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
-      return
-    }
-    const selectedModel = local.model.current()
-    if (!selectedModel) {
-      promptModelWarning()
       return
     }
     const sessionID = props.sessionID
@@ -737,6 +779,7 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
+    if (store.mode === "handoff") return theme.warning
     return local.agent.color(local.agent.current().name)
   })
 
@@ -748,6 +791,7 @@ export function Prompt(props: PromptProps) {
   })
 
   const placeholderText = createMemo(() => {
+    if (store.mode === "handoff") return "Goal for the new session"
     if (props.sessionID) return undefined
     if (store.mode === "shell") {
       const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
@@ -875,7 +919,7 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                if (store.mode === "shell") {
+                if (store.mode === "shell" || store.mode === "handoff") {
                   if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
                     setStore("mode", "normal")
                     e.preventDefault()
@@ -996,7 +1040,11 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                <Switch>
+                  <Match when={store.mode === "normal"}>{Locale.titlecase(local.agent.current().name)}</Match>
+                  <Match when={store.mode === "shell"}>Shell</Match>
+                  <Match when={store.mode === "handoff"}>Handoff</Match>
+                </Switch>
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
@@ -1141,6 +1189,11 @@ export function Prompt(props: PromptProps) {
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
                     esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                  </text>
+                </Match>
+                <Match when={store.mode === "handoff"}>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>exit handoff mode</span>
                   </text>
                 </Match>
               </Switch>
