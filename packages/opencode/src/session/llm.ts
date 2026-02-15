@@ -38,6 +38,7 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
+    output?: "tool"
     toolChoice?: "auto" | "required" | "none"
   }
 
@@ -209,6 +210,7 @@ export namespace LLM {
       toolChoice: input.toolChoice,
       maxOutputTokens,
       abortSignal: input.abort,
+      toolChoice: input.output === "tool" ? "required" : undefined,
       headers: {
         ...(input.model.providerID.startsWith("opencode")
           ? {
