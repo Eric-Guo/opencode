@@ -46,9 +46,10 @@ export function getCurrentSidecar(target = RUST_TARGET ?? nativeTarget()) {
 }
 
 export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET) {
-  await $`mkdir -p resources/sidecars`
-  const dest = windowsify("resources/sidecars/opencode-cli")
+  await $`mkdir -p node_modules/.bin`
+  const dest = windowsify("node_modules/.bin/opencode-cli")
   await $`cp ${source} ${dest}`
+  if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
 
   console.log(`Copied ${source} to ${dest}`)
 }

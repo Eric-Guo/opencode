@@ -22,6 +22,7 @@
     "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
+    "@solidjs/router": "0.15.4",
     "electron-log": "^5",
     "electron-store": "^10",
     "electron-updater": "^6",

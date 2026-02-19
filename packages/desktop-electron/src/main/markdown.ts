@@ -7,7 +7,7 @@ renderer.link = ({ href, title, text }: Tokens.Link) => {
   return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
 }
 
-export function parseMarkdown(input: string): string {
+export function parseMarkdown(input: string) {
   return marked(input, {
     renderer,
     breaks: false,

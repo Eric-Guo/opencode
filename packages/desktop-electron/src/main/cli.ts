@@ -41,9 +41,9 @@ export type CommandChild = {
 const root = dirname(fileURLToPath(import.meta.url))
 
 export function getSidecarPath() {
-  const base = app.isPackaged ? process.resourcesPath : join(root, "../../resources")
   const suffix = process.platform === "win32" ? ".exe" : ""
-  return join(base, "sidecars", `opencode-cli${suffix}`)
+  if (app.isPackaged) return join(process.resourcesPath, "sidecars", `opencode-cli${suffix}`)
+  return join(root, "../../node_modules/.bin", `opencode-cli${suffix}`)
 }
 
 export async function getConfig(): Promise<Config | null> {
@@ -79,9 +79,7 @@ export async function installCli(): Promise<string> {
   const tempScript = join(tmpdir(), "opencode-install.sh")
 
   writeFileSync(tempScript, script, "utf8")
-  if (process.platform !== "win32") {
-    chmodSync(tempScript, 0o755)
-  }
+  chmodSync(tempScript, 0o755)
 
   const cmd = spawn(tempScript, ["--binary", sidecar], { stdio: "pipe" })
   return await new Promise<string>((resolve, reject) => {

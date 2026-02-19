@@ -13,6 +13,7 @@ import { Splash } from "@opencode-ai/ui/logo"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { type Accessor, createResource, type JSX, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
+import { MemoryRouter } from "@solidjs/router"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { UPDATER_ENABLED } from "./updater"
@@ -279,7 +280,7 @@ render(() => {
             }
 
             return (
-              <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]}>
+              <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]} router={MemoryRouter}>
                 <Inner />
               </AppInterface>
             )

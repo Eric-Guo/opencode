@@ -79,7 +79,7 @@ export function registerIpcHandlers(deps: Deps) {
     "open-directory-picker",
     async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
       const result = await dialog.showOpenDialog({
-        properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections"] : [])],
+        properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections" as const] : [])],
         title: opts?.title ?? "Choose a folder",
         defaultPath: opts?.defaultPath,
       })
@@ -92,7 +92,7 @@ export function registerIpcHandlers(deps: Deps) {
     "open-file-picker",
     async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
       const result = await dialog.showOpenDialog({
-        properties: ["openFile", ...(opts?.multiple ? ["multiSelections"] : [])],
+        properties: ["openFile", ...(opts?.multiple ? ["multiSelections" as const] : [])],
         title: opts?.title ?? "Choose a file",
         defaultPath: opts?.defaultPath,
       })
