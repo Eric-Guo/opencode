@@ -1,0 +1,44 @@
+{
+  "name": "@opencode-ai/desktop-electron",
+  "private": true,
+  "version": "1.2.6",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsgo -b",
+    "predev": "bun ./scripts/predev.ts",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-builder --config electron-builder.yml",
+    "package:mac": "electron-builder --mac --config electron-builder.yml",
+    "package:win": "electron-builder --win --config electron-builder.yml",
+    "package:linux": "electron-builder --linux --config electron-builder.yml"
+  },
+  "main": "./out/main/index.js",
+  "dependencies": {
+    "@opencode-ai/app": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
+    "@solid-primitives/i18n": "2.2.1",
+    "@solid-primitives/storage": "catalog:",
+    "@solidjs/meta": "catalog:",
+    "electron-log": "^5",
+    "electron-store": "^10",
+    "electron-updater": "^6",
+    "electron-window-state": "^5.0.3",
+    "marked": "^15",
+    "solid-js": "catalog:",
+    "tree-kill": "^1.2.2"
+  },
+  "devDependencies": {
+    "@actions/artifact": "4.0.0",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "electron": "40.4.1",
+    "electron-builder": "^26",
+    "electron-vite": "^5",
+    "typescript": "~5.6.2",
+    "vite": "catalog:"
+  }
+}
