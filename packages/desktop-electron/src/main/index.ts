@@ -1,4 +1,6 @@
 import { app, BrowserWindow, dialog } from "electron"
+
+app.setName(app.isPackaged ? "OpenCode" : "OpenCode Dev")
 import type { Event } from "electron"
 import pkg from "electron-updater"
 const { autoUpdater } = pkg
@@ -26,7 +28,7 @@ import {
   setWslConfig,
   spawnLocalServer,
 } from "./server"
-import { createLoadingWindow, createMainWindow } from "./windows"
+import { createLoadingWindow, createMainWindow, setDockIcon } from "./windows"
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import type { CommandChild } from "./cli"
@@ -72,6 +74,7 @@ function setupApp() {
 
   void app.whenReady().then(async () => {
     app.setAsDefaultProtocolClient("opencode")
+    setDockIcon()
     setupAutoUpdater()
     syncCli()
     await initialize()

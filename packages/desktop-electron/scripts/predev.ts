@@ -2,6 +2,8 @@ import { $ } from "bun"
 
 import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./utils"
 
+await $`bun ./scripts/copy-icons.ts dev`
+
 const RUST_TARGET = Bun.env.RUST_TARGET
 
 const sidecarConfig = getCurrentSidecar(RUST_TARGET)

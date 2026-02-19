@@ -1,5 +1,5 @@
 import windowState from "electron-window-state"
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow, nativeImage } from "electron"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -10,6 +10,20 @@ type Globals = {
 }
 
 const root = dirname(fileURLToPath(import.meta.url))
+
+function iconsDir() {
+  return app.isPackaged ? join(process.resourcesPath, "icons") : join(root, "../../resources/icons")
+}
+
+function iconPath() {
+  const ext = process.platform === "win32" ? "ico" : "png"
+  return join(iconsDir(), `icon.${ext}`)
+}
+
+export function setDockIcon() {
+  if (process.platform !== "darwin") return
+  app.dock?.setIcon(nativeImage.createFromPath(join(iconsDir(), "128x128@2x.png")))
+}
 
 export function createMainWindow(globals: Globals) {
   const state = windowState({
@@ -24,6 +38,7 @@ export function createMainWindow(globals: Globals) {
     height: state.height,
     show: true,
     title: "OpenCode",
+    icon: iconPath(),
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hiddenInset" as const,
@@ -62,6 +77,7 @@ export function createLoadingWindow(globals: Globals) {
     resizable: false,
     center: true,
     show: true,
+    icon: iconPath(),
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hiddenInset" as const,

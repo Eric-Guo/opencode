@@ -4,6 +4,8 @@ import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
 import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./utils"
 
+await $`bun ./scripts/copy-icons.ts prod`
+
 const pkg = await Bun.file("./package.json").json()
 pkg.version = Script.version
 await Bun.write("./package.json", JSON.stringify(pkg, null, 2) + "\n")
