@@ -28,6 +28,11 @@ mac:
 dmg:
   sign: false
 
+protocols:
+  name: OpenCode
+  schemes:
+    - opencode
+
 win:
   icon: resources/icons/icon.ico
   target:

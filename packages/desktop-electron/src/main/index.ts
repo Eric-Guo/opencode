@@ -1,9 +1,6 @@
 import { app, BrowserWindow, dialog } from "electron"
-
-app.setName(app.isPackaged ? "OpenCode" : "OpenCode Dev")
 import type { Event } from "electron"
 import pkg from "electron-updater"
-const { autoUpdater } = pkg
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync } from "node:fs"
@@ -11,11 +8,18 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { createServer } from "node:net"
 
+app.setName(app.isPackaged ? "OpenCode" : "OpenCode Dev")
+app.setPath(
+  "userData",
+  join(app.getPath("appData"), app.isPackaged ? "ai.opencode.desktop" : "ai.opencode.desktop.dev"),
+)
+const { autoUpdater } = pkg
+
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
-import { getConfig, installCli, syncCli } from "./cli"
+import { installCli, syncCli } from "./cli"
 import { UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
-import { initLogging, tail } from "./logging"
+import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import {
@@ -33,6 +37,18 @@ import { createLoadingWindow, createMainWindow, setDockIcon } from "./windows"
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import type { CommandChild } from "./cli"
 
+type ServerConnection =
+  | { variant: "existing"; url: string }
+  | {
+      variant: "cli"
+      url: string
+      password: null | string
+      health: {
+        wait: Promise<void>
+      }
+      events: any
+    }
+
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
@@ -45,6 +61,8 @@ const pendingDeepLinks: string[] = []
 
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
+
+logger.log("app starting", { version: app.getVersion(), packaged: app.isPackaged })
 
 setupApp()
 
@@ -59,12 +77,16 @@ function setupApp() {
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
-    if (urls.length) emitDeepLinks(urls)
+    if (urls.length) {
+      logger.log("deep link received via second-instance", { urls })
+      emitDeepLinks(urls)
+    }
     focusMainWindow()
   })
 
   app.on("open-url", (event: Event, url: string) => {
     event.preventDefault()
+    logger.log("deep link received via open-url", { url })
     emitDeepLinks([url])
   })
 
@@ -73,6 +95,7 @@ function setupApp() {
   })
 
   void app.whenReady().then(async () => {
+    // migrate()
     app.setAsDefaultProtocolClient("opencode")
     setDockIcon()
     setupAutoUpdater()
@@ -95,76 +118,98 @@ function focusMainWindow() {
 
 function setInitStep(step: InitStep) {
   initStep = step
+  logger.log("init step", { step })
   initEmitter.emit("step", step)
 }
 
+async function setupServerConnection(): Promise<ServerConnection> {
+  const customUrl = await getSavedServerUrl()
+
+  if (customUrl && (await checkHealthOrAskRetry(customUrl))) {
+    serverReady.resolve({ url: customUrl, password: null })
+    return { variant: "existing", url: customUrl }
+  }
+
+  const port = await getSidecarPort()
+  const hostname = "127.0.0.1"
+  const localUrl = `http://${hostname}:${port}`
+
+  if (await checkHealth(localUrl)) {
+    serverReady.resolve({ url: localUrl, password: null })
+    return { variant: "existing", url: localUrl }
+  }
+
+  const password = randomUUID()
+  const { child, health, events } = spawnLocalServer(hostname, port, password)
+  sidecar = child
+
+  return {
+    variant: "cli",
+    url: localUrl,
+    password,
+    health,
+    events,
+  }
+}
+
 async function initialize() {
-  const config = await getConfig().catch(() => null)
-  const customUrl = await getSavedServerUrl(config)
+  const needsMigration = !sqliteFileExists()
+  const sqliteDone = needsMigration ? defer<void>() : undefined
 
-  const init = (async () => {
-    if (customUrl && (await checkHealthOrAskRetry(customUrl))) {
-      serverReady.resolve({ url: customUrl, password: null })
-      return
-    }
+  const loadingTask = (async () => {
+    logger.log("setting up server connection")
+    const serverConnection = await setupServerConnection()
+    logger.log("server connection ready", { variant: serverConnection.variant, url: serverConnection.url })
 
-    const port = await getSidecarPort()
-    const hostname = "127.0.0.1"
-    const localUrl = `http://${hostname}:${port}`
-
-    if (await checkHealth(localUrl)) {
-      serverReady.resolve({ url: localUrl, password: null })
-      return
-    }
-
-    const password = randomUUID()
-    const { child, health, events } = spawnLocalServer(hostname, port, password)
-    sidecar = child
-
-    const needsMigration = !sqliteFileExists()
-    const sqliteDone = defer<void>()
-
-    events.on("sqlite", (progress: SqliteMigrationProgress) => {
-      setInitStep({ phase: "sqlite_waiting" })
-      if (loadingWindow) sendSqliteMigrationProgress(loadingWindow, progress)
-      if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
-      if (progress.type === "Done") sqliteDone.resolve()
-    })
-
-    const healthTask = (async () => {
-      if (needsMigration) await sqliteDone.promise
-      await health.wait
+    const cliHealthCheck = (() => {
+      if (serverConnection.variant == "cli") {
+        return async () => {
+          const { events, health } = serverConnection
+          events.on("sqlite", (progress: SqliteMigrationProgress) => {
+            setInitStep({ phase: "sqlite_waiting" })
+            if (loadingWindow) sendSqliteMigrationProgress(loadingWindow, progress)
+            if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
+            if (progress.type === "Done") sqliteDone?.resolve()
+          })
+          await health.wait
+          serverReady.resolve({ url: serverConnection.url, password: serverConnection.password })
+        }
+      } else {
+        serverReady.resolve({ url: serverConnection.url, password: null })
+        return null
+      }
     })()
 
-    try {
-      await healthTask
-    } catch (error) {
-      serverReady.reject(new Error(`Failed to spawn OpenCode Server (${String(error)}). Logs:\n${tail()}`))
-      return
+    logger.log("server connection started")
+
+    if (cliHealthCheck) {
+      if (needsMigration) await sqliteDone?.promise
+      cliHealthCheck?.()
     }
 
-    serverReady.resolve({ url: localUrl, password })
+    logger.log("loading task finished")
   })()
-
-  let showLoading = false
-  if (!sqliteFileExists()) {
-    showLoading = await Promise.race([init.then(() => false).catch(() => false), delay(1000).then(() => true)])
-  }
 
   const globals = {
     updaterEnabled: UPDATER_ENABLED,
     wsl: getWslConfig().enabled,
-    deepLinks: pendingDeepLinks.splice(0),
+    deepLinks: pendingDeepLinks,
   }
 
-  if (showLoading) {
-    loadingWindow = createLoadingWindow(globals)
-  } else {
-    mainWindow = createMainWindow(globals)
-    wireMenu()
-  }
+  const loadingWindow = await (async () => {
+    if (needsMigration /** TOOD: 1 second timeout */) {
+      // showLoading = await Promise.race([init.then(() => false).catch(() => false), delay(1000).then(() => true)])
+      const loadingWindow = createLoadingWindow(globals)
+      await delay(1000)
+      return loadingWindow
+    } else {
+      logger.log("showing main window without loading window")
+      mainWindow = createMainWindow(globals)
+      wireMenu()
+    }
+  })()
 
-  await init
+  await loadingTask
   setInitStep({ phase: "done" })
 
   if (loadingWindow) {
@@ -176,10 +221,7 @@ async function initialize() {
     wireMenu()
   }
 
-  if (loadingWindow) {
-    loadingWindow.close()
-    loadingWindow = null
-  }
+  loadingWindow?.close()
 }
 
 function wireMenu() {
@@ -209,7 +251,10 @@ registerIpcHandlers({
     const listener = (step: InitStep) => sendStep(step)
     initEmitter.on("step", listener)
     try {
-      return await serverReady.promise
+      logger.log("awaiting server ready")
+      const res = await serverReady.promise
+      logger.log("server ready", { url: res.url })
+      return res
     } finally {
       initEmitter.off("step", listener)
     }

@@ -120,10 +120,11 @@ function loadWindow(win: BrowserWindow, html: string) {
 
 function injectGlobals(win: BrowserWindow, globals: Globals) {
   win.webContents.on("dom-ready", () => {
+    const deepLinks = globals.deepLinks ?? []
     const data = {
       updaterEnabled: globals.updaterEnabled,
       wsl: globals.wsl,
-      deepLinks: globals.deepLinks ?? [],
+      deepLinks: Array.isArray(deepLinks) ? deepLinks.splice(0) : deepLinks,
     }
     void win.webContents.executeJavaScript(
       `window.__OPENCODE__ = Object.assign(window.__OPENCODE__ ?? {}, ${JSON.stringify(data)})`,

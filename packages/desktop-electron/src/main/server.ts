@@ -1,6 +1,6 @@
 import { dialog } from "electron"
 
-import { serve, type CommandChild, type Config } from "./cli"
+import { getConfig, serve, type CommandChild, type Config } from "./cli"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
 import { store } from "./store"
 
@@ -31,10 +31,11 @@ export function setWslConfig(config: WslConfig) {
   store.set(WSL_ENABLED_KEY, config.enabled)
 }
 
-export async function getSavedServerUrl(config: Config | null): Promise<string | null> {
+export async function getSavedServerUrl(): Promise<string | null> {
   const direct = getDefaultServerUrl()
   if (direct) return direct
 
+  const config = await getConfig().catch(() => null)
   if (!config) return null
   return getServerUrlFromConfig(config)
 }

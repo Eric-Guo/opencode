@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 
@@ -117,8 +118,13 @@ export function registerIpcHandlers(deps: Deps) {
     void shell.openExternal(url)
   })
 
-  ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, _app?: string) => {
-    await shell.openPath(path)
+  ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
+    if (!app) return shell.openPath(path)
+    await new Promise<void>((resolve, reject) => {
+      const [cmd, args] =
+        process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
+      execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
+    })
   })
 
   ipcMain.handle("read-clipboard-image", () => {
