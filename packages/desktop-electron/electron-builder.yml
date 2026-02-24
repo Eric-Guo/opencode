@@ -1,5 +1,6 @@
 appId: ai.opencode.desktop
 productName: OpenCode
+artifactName: opencode-electron-${os}-${arch}.${ext}
 directories:
   output: dist
   buildResources: resources
@@ -21,6 +22,7 @@ mac:
   gatekeeperAssess: false
   entitlements: resources/entitlements.plist
   entitlementsInherit: resources/entitlements.plist
+  notarize: true
   target:
     - dmg
     - zip

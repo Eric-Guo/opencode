@@ -335,11 +335,6 @@ function setupAutoUpdater() {
   autoUpdater.logger = logger
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.setFeedURL({
-    provider: "github",
-    owner: "anomalyco",
-    repo: "opencode",
-  })
 }
 
 let updateReady = false
