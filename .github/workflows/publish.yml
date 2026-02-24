@@ -69,7 +69,7 @@ jobs:
 
   build-cli:
     needs: version
-    runs-on: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || "ubuntu-latest" }}
+    runs-on: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-latest' }}
     if:
     steps:
       - uses: actions/checkout@v3
