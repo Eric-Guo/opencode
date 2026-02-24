@@ -17,22 +17,30 @@ import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 
 interface AddRowProps {
   value: string
+  username: string
+  password: string
   placeholder: string
   adding: boolean
   error: string
   status: boolean | undefined
   onChange: (value: string) => void
+  onUsernameChange: (value: string) => void
+  onPasswordChange: (value: string) => void
   onKeyDown: (event: KeyboardEvent) => void
   onBlur: () => void
 }
 
 interface EditRowProps {
   value: string
+  username: string
+  password: string
   placeholder: string
   busy: boolean
   error: string
   status: boolean | undefined
   onChange: (value: string) => void
+  onUsernameChange: (value: string) => void
+  onPasswordChange: (value: string) => void
   onKeyDown: (event: KeyboardEvent) => void
   onBlur: () => void
 }
@@ -83,12 +91,20 @@ function useServerPreview(fetcher: typeof fetch) {
     return host.includes(".") || host.includes(":")
   }
 
-  const previewStatus = async (value: string, setStatus: (value: boolean | undefined) => void) => {
+  const previewStatus = async (
+    value: string,
+    username: string,
+    password: string,
+    setStatus: (value: boolean | undefined) => void,
+  ) => {
     setStatus(undefined)
     if (!looksComplete(value)) return
     const normalized = normalizeServerUrl(value)
     if (!normalized) return
-    const result = await checkServerHealth({ url: normalized }, fetcher)
+    const http: ServerConnection.HttpBase = { url: normalized }
+    if (username) http.username = username
+    if (password) http.password = password
+    const result = await checkServerHealth(http, fetcher)
     setStatus(result.healthy)
   }
 
@@ -97,7 +113,7 @@ function useServerPreview(fetcher: typeof fetch) {
 
 function AddRow(props: AddRowProps) {
   return (
-    <div class="flex items-center px-4 min-h-14 py-3 min-w-0 flex-1">
+    <div class="flex flex-col px-4 min-h-14 py-3 min-w-0 flex-1 gap-2">
       <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
         <div
           classList={{
@@ -131,34 +147,76 @@ function AddRow(props: AddRowProps) {
           class="pl-7"
         />
       </div>
+      <div class="flex gap-2 min-w-0">
+        <TextField
+          type="text"
+          hideLabel
+          placeholder="Username (optional)"
+          value={props.username}
+          disabled={props.adding}
+          onChange={props.onUsernameChange}
+          onKeyDown={props.onKeyDown}
+        />
+        <TextField
+          type="password"
+          hideLabel
+          placeholder="Password (optional)"
+          value={props.password}
+          disabled={props.adding}
+          onChange={props.onPasswordChange}
+          onKeyDown={props.onKeyDown}
+        />
+      </div>
     </div>
   )
 }
 
 function EditRow(props: EditRowProps) {
   return (
-    <div class="flex items-center gap-3 px-4 min-w-0 flex-1" onClick={(event) => event.stopPropagation()}>
-      <div
-        classList={{
-          "size-1.5 rounded-full shrink-0": true,
-          "bg-icon-success-base": props.status === true,
-          "bg-icon-critical-base": props.status === false,
-          "bg-border-weak-base": props.status === undefined,
-        }}
-      />
-      <div class="flex-1 min-w-0">
+    <div class="flex flex-col gap-2 px-4 min-w-0 flex-1" onClick={(event) => event.stopPropagation()}>
+      <div class="flex items-center gap-3 min-w-0">
+        <div
+          classList={{
+            "size-1.5 rounded-full shrink-0": true,
+            "bg-icon-success-base": props.status === true,
+            "bg-icon-critical-base": props.status === false,
+            "bg-border-weak-base": props.status === undefined,
+          }}
+        />
+        <div class="flex-1 min-w-0">
+          <TextField
+            type="text"
+            hideLabel
+            placeholder={props.placeholder}
+            value={props.value}
+            autofocus
+            validationState={props.error ? "invalid" : "valid"}
+            error={props.error}
+            disabled={props.busy}
+            onChange={props.onChange}
+            onKeyDown={props.onKeyDown}
+            onBlur={props.onBlur}
+          />
+        </div>
+      </div>
+      <div class="flex gap-2 min-w-0 pl-[calc(0.375rem+0.75rem)]">
         <TextField
           type="text"
           hideLabel
-          placeholder={props.placeholder}
-          value={props.value}
-          autofocus
-          validationState={props.error ? "invalid" : "valid"}
-          error={props.error}
+          placeholder="Username (optional)"
+          value={props.username}
           disabled={props.busy}
-          onChange={props.onChange}
+          onChange={props.onUsernameChange}
           onKeyDown={props.onKeyDown}
-          onBlur={props.onBlur}
+        />
+        <TextField
+          type="password"
+          hideLabel
+          placeholder="Password (optional)"
+          value={props.password}
+          disabled={props.busy}
+          onChange={props.onPasswordChange}
+          onKeyDown={props.onKeyDown}
         />
       </div>
     </div>
@@ -179,6 +237,8 @@ export function DialogSelectServer() {
     status: {} as Record<ServerConnection.Key, ServerHealth | undefined>,
     addServer: {
       url: "",
+      username: "",
+      password: "",
       adding: false,
       error: "",
       showForm: false,
@@ -187,6 +247,8 @@ export function DialogSelectServer() {
     editServer: {
       id: undefined as string | undefined,
       value: "",
+      username: "",
+      password: "",
       error: "",
       busy: false,
       status: undefined as boolean | undefined,
@@ -196,27 +258,29 @@ export function DialogSelectServer() {
   const resetAdd = () => {
     setStore("addServer", {
       url: "",
+      username: "",
+      password: "",
       error: "",
       showForm: false,
       status: undefined,
     })
   }
-
   const resetEdit = () => {
     setStore("editServer", {
       id: undefined,
       value: "",
+      username: "",
+      password: "",
       error: "",
       status: undefined,
       busy: false,
     })
   }
 
-  const replaceServer = (original: ServerConnection.Http, next: string) => {
+  const replaceServer = (original: ServerConnection.Http, next: ServerConnection.HttpBase) => {
     const active = server.key
     const newConn = server.add(next)
     if (!newConn) return
-
     const nextActive = active === ServerConnection.key(original) ? ServerConnection.key(newConn) : active
     if (nextActive) server.setActive(nextActive)
     server.remove(ServerConnection.key(original))
@@ -272,7 +336,7 @@ export function DialogSelectServer() {
     if (!persist && store.status[ServerConnection.key(conn)]?.healthy === false) return
     dialog.close()
     if (persist) {
-      server.add(conn.http.url)
+      server.add(conn.http)
       navigate("/")
       return
     }
@@ -283,7 +347,25 @@ export function DialogSelectServer() {
   const handleAddChange = (value: string) => {
     if (store.addServer.adding) return
     setStore("addServer", { url: value, error: "" })
-    void previewStatus(value, (next) => setStore("addServer", { status: next }))
+    void previewStatus(value, store.addServer.username, store.addServer.password, (next) =>
+      setStore("addServer", { status: next }),
+    )
+  }
+
+  const handleAddUsernameChange = (value: string) => {
+    if (store.addServer.adding) return
+    setStore("addServer", { username: value, error: "" })
+    void previewStatus(store.addServer.url, value, store.addServer.password, (next) =>
+      setStore("addServer", { status: next }),
+    )
+  }
+
+  const handleAddPasswordChange = (value: string) => {
+    if (store.addServer.adding) return
+    setStore("addServer", { password: value, error: "" })
+    void previewStatus(store.addServer.url, store.addServer.username, value, (next) =>
+      setStore("addServer", { status: next }),
+    )
   }
 
   const scrollListToBottom = () => {
@@ -297,7 +379,25 @@ export function DialogSelectServer() {
   const handleEditChange = (value: string) => {
     if (store.editServer.busy) return
     setStore("editServer", { value, error: "" })
-    void previewStatus(value, (next) => setStore("editServer", { status: next }))
+    void previewStatus(value, store.editServer.username, store.editServer.password, (next) =>
+      setStore("editServer", { status: next }),
+    )
+  }
+
+  const handleEditUsernameChange = (value: string) => {
+    if (store.editServer.busy) return
+    setStore("editServer", { username: value, error: "" })
+    void previewStatus(store.editServer.value, value, store.editServer.password, (next) =>
+      setStore("editServer", { status: next }),
+    )
+  }
+
+  const handleEditPasswordChange = (value: string) => {
+    if (store.editServer.busy) return
+    setStore("editServer", { password: value, error: "" })
+    void previewStatus(store.editServer.value, store.editServer.username, value, (next) =>
+      setStore("editServer", { status: next }),
+    )
   }
 
   async function handleAdd(value: string) {
@@ -310,16 +410,18 @@ export function DialogSelectServer() {
 
     setStore("addServer", { adding: true, error: "" })
 
-    const result = await checkServerHealth({ url: normalized }, fetcher)
+    const http: ServerConnection.HttpBase = { url: normalized }
+    if (store.addServer.username) http.username = store.addServer.username
+    if (store.addServer.password) http.password = store.addServer.password
+    const result = await checkServerHealth(http, fetcher)
     setStore("addServer", { adding: false })
-
     if (!result.healthy) {
       setStore("addServer", { error: language.t("dialog.server.add.error") })
       return
     }
 
     resetAdd()
-    await select({ type: "http", http: { url: normalized } }, true)
+    await select({ type: "http", http }, true)
   }
 
   async function handleEdit(original: ServerConnection.Any, value: string) {
@@ -330,22 +432,33 @@ export function DialogSelectServer() {
       return
     }
 
-    if (normalized === original.http.url) {
+    const username = store.editServer.username || undefined
+    const password = store.editServer.password || undefined
+    if (
+      normalized === original.http.url &&
+      username === original.http.username &&
+      password === original.http.password
+    ) {
       resetEdit()
       return
     }
 
     setStore("editServer", { busy: true, error: "" })
 
-    const result = await checkServerHealth({ url: normalized }, fetcher)
+    const http: ServerConnection.HttpBase = { url: normalized }
+    if (username) http.username = username
+    if (password) http.password = password
+    const result = await checkServerHealth(http, fetcher)
     setStore("editServer", { busy: false })
-
     if (!result.healthy) {
       setStore("editServer", { error: language.t("dialog.server.add.error") })
       return
     }
-
-    replaceServer(original, normalized)
+    if (normalized === original.http.url) {
+      server.add(http)
+    } else {
+      replaceServer(original, http)
+    }
 
     resetEdit()
   }
@@ -413,11 +526,15 @@ export function DialogSelectServer() {
                     render: () => (
                       <AddRow
                         value={store.addServer.url}
+                        username={store.addServer.username}
+                        password={store.addServer.password}
                         placeholder={language.t("dialog.server.add.placeholder")}
                         adding={store.addServer.adding}
                         error={store.addServer.error}
                         status={store.addServer.status}
                         onChange={handleAddChange}
+                        onUsernameChange={handleAddUsernameChange}
+                        onPasswordChange={handleAddPasswordChange}
                         onKeyDown={handleAddKey}
                         onBlur={blurAdd}
                       />
@@ -435,11 +552,15 @@ export function DialogSelectServer() {
                     fallback={
                       <EditRow
                         value={store.editServer.value}
+                        username={store.editServer.username}
+                        password={store.editServer.password}
                         placeholder={language.t("dialog.server.add.placeholder")}
                         busy={store.editServer.busy}
                         error={store.editServer.error}
                         status={store.editServer.status}
                         onChange={handleEditChange}
+                        onUsernameChange={handleEditUsernameChange}
+                        onPasswordChange={handleEditPasswordChange}
                         onKeyDown={(event) => handleEditKey(event, i)}
                         onBlur={() => handleEdit(i, store.editServer.value)}
                       />
@@ -482,6 +603,8 @@ export function DialogSelectServer() {
                                   setStore("editServer", {
                                     id: i.http.url,
                                     value: i.http.url,
+                                    username: i.http.username ?? "",
+                                    password: i.http.password ?? "",
                                     error: "",
                                     status: store.status[ServerConnection.key(i)]?.healthy,
                                   })
