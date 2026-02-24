@@ -253,13 +253,13 @@ jobs:
           - host: macos-latest
             target: aarch64-apple-darwin
             platform_flag: --mac --arm64
-          - host: blacksmith-4vcpu-windows-2025
+          - host: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-windows-2025') || 'windows-latest' }}
             target: x86_64-pc-windows-msvc
             platform_flag: --win
-          - host: blacksmith-4vcpu-ubuntu-2404
+          - host: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-24.04' }}
             target: x86_64-unknown-linux-gnu
             platform_flag: --linux
-          - host: blacksmith-8vcpu-ubuntu-2404-arm
+          - host: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-24.04-arm' }}
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux
     runs-on: ${{ matrix.settings.host }}
