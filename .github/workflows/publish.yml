@@ -266,16 +266,16 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: apple-actions/import-codesign-certs@v2
-        if: runner.os == 'macOS'
-        with:
-          keychain: build
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      # - uses: apple-actions/import-codesign-certs@v2
+      #   if: runner.os == 'macOS'
+      #   with:
+      #     keychain: build
+      #     p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+      #     p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
-      - name: Setup Apple API Key
-        if: runner.os == 'macOS'
-        run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
+      # - name: Setup Apple API Key
+      #   if: runner.os == 'macOS'
+      #   run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
 
       - uses: ./.github/actions/setup-bun
 
@@ -320,11 +320,11 @@ jobs:
         timeout-minutes: 60
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
+          # CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
+          # APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          # APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Package (no publish)
         if: ${{ !needs.version.outputs.release }}
