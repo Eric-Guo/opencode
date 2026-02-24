@@ -7,5 +7,5 @@ const src = `../desktop/src-tauri/icons/${mode}`
 const dest = "resources/icons"
 
 await $`rm -rf ${dest}`
-await $`cp -r ${src} ${dest}`
+await $`cp -R ${src} ${dest}`
 console.log(`Copied ${mode} icons from ${src} to ${dest}`)
