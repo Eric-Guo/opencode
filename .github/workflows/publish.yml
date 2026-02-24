@@ -33,7 +33,6 @@ permissions:
 jobs:
   version:
     runs-on: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-latest' }}
-    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -70,7 +69,6 @@ jobs:
   build-cli:
     needs: version
     runs-on: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-latest' }}
-    if:
     steps:
       - uses: actions/checkout@v3
         with:
