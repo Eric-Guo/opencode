@@ -4,6 +4,11 @@
   "version": "1.2.6",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://opencode.ai",
+  "author": {
+    "name": "OpenCode",
+    "email": "hello@opencode.ai"
+  },
   "scripts": {
     "typecheck": "tsgo -b",
     "predev": "bun ./scripts/predev.ts",
