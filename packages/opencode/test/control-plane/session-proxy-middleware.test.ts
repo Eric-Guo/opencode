@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
+import { Identifier } from "../../src/id/id"
 import { Hono } from "hono"
 import { tmpdir } from "../fixture/fixture"
 import { Project } from "../../src/project/project"
@@ -13,7 +14,7 @@ afterEach(async () => {
 })
 
 type State = {
-  workspaceID: string
+  workspace?: "first" | "second"
   calls: Array<{ method: string; url: string; body?: string }>
 }
 
@@ -33,21 +34,21 @@ async function setup(state: State) {
   await using tmp = await tmpdir({ git: true })
   const { project } = await Project.fromDirectory(tmp.path)
 
-  Database.use((db) => {
-    db.delete(WorkspaceTable).run()
-  })
+  const id1 = Identifier.descending("workspace")
+  const id2 = Identifier.descending("workspace")
+
   Database.use((db) =>
     db
       .insert(WorkspaceTable)
       .values([
         {
-          id: "wrk_1",
+          id: id1,
           branch: "main",
           project_id: project.id,
           config: remote,
         },
         {
-          id: "wrk_2",
+          id: id2,
           branch: "main",
           project_id: project.id,
           config: { type: "worktree", directory: tmp.path },
@@ -60,10 +61,12 @@ async function setup(state: State) {
   const app = new Hono().use(SessionProxyMiddleware)
 
   return {
+    id1,
+    id2,
     app,
     async request(input: RequestInfo | URL, init?: RequestInit) {
       return Instance.provide({
-        directory: state.workspaceID,
+        directory: state.workspace === "first" ? id1 : id2,
         fn: async () => app.request(input, init),
       })
     },
@@ -73,7 +76,7 @@ async function setup(state: State) {
 describe("control-plane/session-proxy-middleware", () => {
   test("forwards non-GET session requests for remote workspaces", async () => {
     const state: State = {
-      workspaceID: "wrk_1",
+      workspace: "first",
       calls: [],
     }
 
@@ -101,7 +104,7 @@ describe("control-plane/session-proxy-middleware", () => {
 
   test("does not forward GET requests", async () => {
     const state: State = {
-      workspaceID: "wrk_1",
+      workspace: "first",
       calls: [],
     }
 
@@ -117,7 +120,7 @@ describe("control-plane/session-proxy-middleware", () => {
 
   test("does not forward GET or POST requests for worktree workspaces", async () => {
     const state: State = {
-      workspaceID: "wrk_2",
+      workspace: "second",
       calls: [],
     }
 

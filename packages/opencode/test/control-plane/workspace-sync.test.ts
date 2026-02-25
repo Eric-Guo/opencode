@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
+import { Identifier } from "../../src/id/id"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Project } from "../../src/project/project"
@@ -50,18 +51,21 @@ describe("control-plane/workspace.startSyncing", () => {
     await using tmp = await tmpdir({ git: true })
     const { project } = await Project.fromDirectory(tmp.path)
 
+    const id1 = Identifier.descending("workspace")
+    const id2 = Identifier.descending("workspace")
+
     Database.use((db) =>
       db
         .insert(WorkspaceTable)
         .values([
           {
-            id: "wrk_1",
+            id: id1,
             branch: "main",
             project_id: project.id,
             config: remote,
           },
           {
-            id: "wrk_2",
+            id: id2,
             branch: "main",
             project_id: project.id,
             config: { type: "worktree", directory: tmp.path },
@@ -72,7 +76,7 @@ describe("control-plane/workspace.startSyncing", () => {
 
     const done = new Promise<void>((resolve) => {
       const listener = (event: { directory?: string; payload: { type: string } }) => {
-        if (event.directory !== "wrk_1") return
+        if (event.directory !== id1) return
         if (event.payload.type !== "remote.ready") return
         GlobalBus.off("event", listener)
         resolve()
