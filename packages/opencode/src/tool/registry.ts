@@ -135,6 +135,7 @@ export namespace ToolRegistry {
     },
     agent?: Agent.Info,
   ) {
+    const config = await Config.get()
     const tools = await all()
     const result = await Promise.all(
       tools
@@ -142,6 +143,11 @@ export namespace ToolRegistry {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
             return model.providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+          }
+
+          if (config.experimental?.hashline_edit !== false) {
+            if (t.id === "apply_patch") return false
+            return true
           }
 
           // use apply tool in same format as codex
