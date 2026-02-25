@@ -887,6 +887,35 @@ export type EventVcsBranchUpdated = {
   }
 }
 
+export type EventWorktreeReady = {
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type EventWorkspaceReady = {
+  type: "workspace.ready"
+  properties: {
+    name: string
+  }
+}
+
+export type EventWorkspaceFailed = {
+  type: "workspace.failed"
+  properties: {
+    message: string
+  }
+}
+
 export type Pty = {
   id: string
   title: string
@@ -923,21 +952,6 @@ export type EventPtyDeleted = {
   type: "pty.deleted"
   properties: {
     id: string
-  }
-}
-
-export type EventWorktreeReady = {
-  type: "worktree.ready"
-  properties: {
-    name: string
-    branch: string
-  }
-}
-
-export type EventWorktreeFailed = {
-  type: "worktree.failed"
-  properties: {
-    message: string
   }
 }
 
@@ -979,12 +993,14 @@ export type Event =
   | EventSessionDiff
   | EventSessionError
   | EventVcsBranchUpdated
+  | EventWorktreeReady
+  | EventWorktreeFailed
+  | EventWorkspaceReady
+  | EventWorkspaceFailed
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventWorktreeReady
-  | EventWorktreeFailed
 
 export type GlobalEvent = {
   directory: string
@@ -1478,6 +1494,33 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * Agent configuration, see https://opencode.ai/docs/agents
+     */
+    workspace?: {
+      local?: {
+        model?: string
+        [key: string]: unknown | string | undefined
+      }
+      worktree?: {
+        model?: string
+        [key: string]: unknown | string | undefined
+      }
+      [key: string]:
+        | {
+            model?: string
+            [key: string]: unknown | string | undefined
+          }
+        | {
+            model?: string
+            [key: string]: unknown | string | undefined
+          }
+        | {
+            model?: string
+            [key: string]: unknown | string | undefined
+          }
+        | undefined
+    }
   }
 }
 
@@ -1625,6 +1668,21 @@ export type WorktreeCreateInput = {
    * Additional startup script to run after the project's start command
    */
   startCommand?: string
+}
+
+export type Workspace = {
+  id: string
+  branch: string
+  projectId: string
+  config:
+    | {
+        directory: string
+        type: "worktree"
+      }
+    | {
+        name: string
+        type: "daytona"
+      }
 }
 
 export type WorktreeRemoveInput = {
@@ -2472,6 +2530,98 @@ export type WorktreeCreateResponses = {
 }
 
 export type WorktreeCreateResponse = WorktreeCreateResponses[keyof WorktreeCreateResponses]
+
+export type ExperimentalWorkspaceRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/workspace/{id}"
+}
+
+export type ExperimentalWorkspaceRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalWorkspaceRemoveError =
+  ExperimentalWorkspaceRemoveErrors[keyof ExperimentalWorkspaceRemoveErrors]
+
+export type ExperimentalWorkspaceRemoveResponses = {
+  /**
+   * Workspace removed
+   */
+  200: Workspace
+}
+
+export type ExperimentalWorkspaceRemoveResponse =
+  ExperimentalWorkspaceRemoveResponses[keyof ExperimentalWorkspaceRemoveResponses]
+
+export type ExperimentalWorkspaceCreateData = {
+  body?: {
+    branch: string
+    config:
+      | {
+          directory: string
+          type: "worktree"
+        }
+      | {
+          name: string
+          type: "daytona"
+        }
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/workspace/{id}"
+}
+
+export type ExperimentalWorkspaceCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalWorkspaceCreateError =
+  ExperimentalWorkspaceCreateErrors[keyof ExperimentalWorkspaceCreateErrors]
+
+export type ExperimentalWorkspaceCreateResponses = {
+  /**
+   * Workspace created
+   */
+  200: Workspace
+}
+
+export type ExperimentalWorkspaceCreateResponse =
+  ExperimentalWorkspaceCreateResponses[keyof ExperimentalWorkspaceCreateResponses]
+
+export type ExperimentalWorkspaceListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/workspace"
+}
+
+export type ExperimentalWorkspaceListResponses = {
+  /**
+   * Workspaces
+   */
+  200: Array<Workspace>
+}
+
+export type ExperimentalWorkspaceListResponse =
+  ExperimentalWorkspaceListResponses[keyof ExperimentalWorkspaceListResponses]
 
 export type WorktreeResetData = {
   body?: WorktreeResetInput
