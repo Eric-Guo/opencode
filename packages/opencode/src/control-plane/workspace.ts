@@ -7,7 +7,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "@/util/log"
 import { WorkspaceTable } from "./workspace.sql"
-import { Config, toConfig } from "./schema"
+import { Config } from "./config"
 import { getAdaptor } from "./adaptors"
 import { parseSSE } from "./sse"
 
@@ -30,7 +30,7 @@ export namespace Workspace {
   export const Info = z
     .object({
       id: Identifier.schema("workspace"),
-      branch: z.string(),
+      branch: z.string().nullable(),
       projectId: z.string(),
       config: Config,
     })
@@ -44,7 +44,7 @@ export namespace Workspace {
       id: row.id,
       branch: row.branch,
       projectId: row.project_id,
-      config: toConfig(row.config.type, row.config),
+      config: row.config,
     }
   }
 

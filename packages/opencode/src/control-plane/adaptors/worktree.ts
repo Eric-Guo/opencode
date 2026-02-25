@@ -1,5 +1,5 @@
 import { Worktree } from "@/worktree"
-import type { Config } from "../schema"
+import type { Config } from "../config"
 import type { Adaptor } from "./types"
 
 type WorktreeConfig = Extract<Config, { type: "worktree" }>
