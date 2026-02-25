@@ -1,5 +1,6 @@
 import { Instance } from "@/project/instance"
 import type { MiddlewareHandler } from "hono"
+import { Installation } from "../installation"
 import { getAdaptor } from "./adaptors"
 import { Workspace } from "./workspace"
 
@@ -32,7 +33,14 @@ async function proxySessionRequest(req: Request) {
 }
 
 export const SessionProxyMiddleware: MiddlewareHandler = async (c, next) => {
+  // Only available in development for now
+  if (!Installation.isLocal()) {
+    return next()
+  }
+
   const response = await proxySessionRequest(c.req.raw)
-  if (response) return response
-  await next()
+  if (response) {
+    return response
+  }
+  return next()
 }

@@ -950,7 +950,7 @@ export class Workspace extends HeyApiClient {
     parameters: {
       id: string
       directory?: string
-      branch?: string
+      branch?: string | null
       config?: {
         directory: string
         type: "worktree"

@@ -1645,7 +1645,7 @@ export type WorktreeCreateInput = {
 
 export type Workspace = {
   id: string
-  branch: string
+  branch: string | null
   projectId: string
   config: {
     directory: string
@@ -2532,7 +2532,7 @@ export type ExperimentalWorkspaceRemoveResponse =
 
 export type ExperimentalWorkspaceCreateData = {
   body?: {
-    branch: string
+    branch: string | null
     config: {
       directory: string
       type: "worktree"
