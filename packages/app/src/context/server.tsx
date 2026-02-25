@@ -6,6 +6,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { checkServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
+type StoredServer = string | ServerConnection.HttpBase
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
 export function normalizeServerUrl(input: string) {
@@ -100,11 +101,13 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
-        list: [] as string[],
+        list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
     )
+
+    const url = (x: StoredServer) => (typeof x === "string" ? x : x.url)
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       const servers = [
@@ -156,13 +159,16 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (state.active !== input) setState("active", input)
     }
 
-    function add(input: string) {
-      const url = normalizeServerUrl(input)
-      if (!url) return
+    function add(input: ServerConnection.HttpBase) {
+      const url_ = normalizeServerUrl(input.url)
+      if (!url_) return
       return batch(() => {
-        const http: ServerConnection.HttpBase = { url }
-        if (!store.list.includes(url)) {
-          setStore("list", store.list.length, url)
+        const http: ServerConnection.HttpBase = { ...input, url: url_ }
+        const existing = store.list.findIndex((x) => url(x) === url_)
+        if (existing !== -1) {
+          setStore("list", existing, http)
+        } else {
+          setStore("list", store.list.length, http)
         }
         const conn: ServerConnection.Http = { type: "http", http }
         setState("active", ServerConnection.key(conn))
@@ -171,12 +177,12 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function remove(key: ServerConnection.Key) {
-      const list = store.list.filter((x) => x !== key)
+      const list = store.list.filter((x) => url(x) !== key)
       batch(() => {
         setStore("list", list)
         if (state.active === key) {
           const next = list[0]
-          setState("active", next ? ServerConnection.key({ type: "http", http: { url: next } }) : props.defaultServer)
+          setState("active", next ? ServerConnection.Key.make(url(next)) : props.defaultServer)
         }
       })
     }
