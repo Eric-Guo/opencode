@@ -1494,33 +1494,6 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
-    /**
-     * Agent configuration, see https://opencode.ai/docs/agents
-     */
-    workspace?: {
-      local?: {
-        model?: string
-        [key: string]: unknown | string | undefined
-      }
-      worktree?: {
-        model?: string
-        [key: string]: unknown | string | undefined
-      }
-      [key: string]:
-        | {
-            model?: string
-            [key: string]: unknown | string | undefined
-          }
-        | {
-            model?: string
-            [key: string]: unknown | string | undefined
-          }
-        | {
-            model?: string
-            [key: string]: unknown | string | undefined
-          }
-        | undefined
-    }
   }
 }
 
@@ -1674,15 +1647,10 @@ export type Workspace = {
   id: string
   branch: string
   projectId: string
-  config:
-    | {
-        directory: string
-        type: "worktree"
-      }
-    | {
-        name: string
-        type: "daytona"
-      }
+  config: {
+    directory: string
+    type: "worktree"
+  }
 }
 
 export type WorktreeRemoveInput = {
@@ -2565,15 +2533,10 @@ export type ExperimentalWorkspaceRemoveResponse =
 export type ExperimentalWorkspaceCreateData = {
   body?: {
     branch: string
-    config:
-      | {
-          directory: string
-          type: "worktree"
-        }
-      | {
-          name: string
-          type: "daytona"
-        }
+    config: {
+      directory: string
+      type: "worktree"
+    }
   }
   path: {
     id: string

@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "fbffd1f1-3b87-4f52-924b-ffe98ccc1197",
+  "id": "0ee7f91a-afd8-42aa-92ca-787e63afe4b4",
   "prevIds": [
     "d2736e43-700f-4e9e-8151-9f2f0d967bc8"
   ],
@@ -49,6 +49,16 @@
       "default": null,
       "generated": null,
       "name": "id",
+      "entityType": "columns",
+      "table": "workspace"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "branch",
       "entityType": "columns",
       "table": "workspace"
     },
@@ -909,20 +919,6 @@
       "name": "session_share_pk",
       "table": "session_share",
       "entityType": "pks"
-    },
-    {
-      "columns": [
-        {
-          "value": "project_id",
-          "isExpression": false
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "origin": "manual",
-      "name": "workspace_project_idx",
-      "entityType": "indexes",
-      "table": "workspace"
     },
     {
       "columns": [

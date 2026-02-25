@@ -951,15 +951,10 @@ export class Workspace extends HeyApiClient {
       id: string
       directory?: string
       branch?: string
-      config?:
-        | {
-            directory: string
-            type: "worktree"
-          }
-        | {
-            name: string
-            type: "daytona"
-          }
+      config?: {
+        directory: string
+        type: "worktree"
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
