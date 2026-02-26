@@ -31,7 +31,7 @@ export namespace Workspace {
     .object({
       id: Identifier.schema("workspace"),
       branch: z.string().nullable(),
-      projectId: z.string(),
+      projectID: z.string(),
       config: Config,
     })
     .meta({
@@ -43,7 +43,7 @@ export namespace Workspace {
     return {
       id: row.id,
       branch: row.branch,
-      projectId: row.project_id,
+      projectID: row.project_id,
       config: row.config,
     }
   }
@@ -51,7 +51,7 @@ export namespace Workspace {
   export const create = fn(
     z.object({
       id: Identifier.schema("workspace").optional(),
-      projectId: Info.shape.projectId,
+      projectID: Info.shape.projectID,
       branch: Info.shape.branch,
       config: Info.shape.config,
     }),
@@ -62,7 +62,7 @@ export namespace Workspace {
 
       const info: Info = {
         id,
-        projectId: input.projectId,
+        projectID: input.projectID,
         branch: input.branch,
         config,
       }
@@ -75,7 +75,7 @@ export namespace Workspace {
             .values({
               id: info.id,
               branch: info.branch,
-              project_id: info.projectId,
+              project_id: info.projectID,
               config: info.config,
             })
             .run()

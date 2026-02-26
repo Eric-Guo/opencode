@@ -44,7 +44,7 @@ export const WorkspaceRoutes = lazy(() =>
         const body = c.req.valid("json")
         const workspace = await Workspace.create({
           id,
-          projectId: Instance.project.id,
+          projectID: Instance.project.id,
           branch: body.branch,
           config: body.config,
         })

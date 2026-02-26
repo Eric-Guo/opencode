@@ -1646,7 +1646,7 @@ export type WorktreeCreateInput = {
 export type Workspace = {
   id: string
   branch: string | null
-  projectId: string
+  projectID: string
   config: {
     directory: string
     type: "worktree"
