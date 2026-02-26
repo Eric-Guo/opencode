@@ -1,5 +1,6 @@
 import { useMarked } from "../context/marked"
 import { useI18n } from "../context/i18n"
+import { useData } from "../context/data"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
@@ -49,6 +50,11 @@ type CopyLabels = {
   copied: string
 }
 
+type FileRef = {
+  path: string
+  line?: number
+}
+
 const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
 
 function codeUrl(text: string) {
@@ -60,6 +66,53 @@ function codeUrl(text: string) {
   } catch {
     return
   }
+}
+
+function looksLikePath(path: string) {
+  if (!path) return false
+  if (path.startsWith("./") || path.startsWith("../") || path.startsWith("/")) return true
+  if (/^[a-zA-Z]:[\\/]/.test(path)) return true
+  return path.includes("/") || path.includes("\\")
+}
+
+function normalizeProjectPath(path: string, directory: string) {
+  if (!path) return path
+  const file = path.replace(/\\/g, "/")
+  const root = directory.replace(/\\/g, "/")
+  if (file.startsWith(root + "/")) return file.slice(root.length + 1)
+  if (file === root) return ""
+  if (file.startsWith("./")) return file.slice(2)
+  return file
+}
+
+function codeFileRef(text: string, directory: string): FileRef | undefined {
+  let value = text.trim().replace(/[),.;!?]+$/, "")
+  if (!value) return
+
+  if (value.startsWith("file://")) {
+    try {
+      const url = new URL(value)
+      value = decodeURIComponent(url.pathname)
+    } catch {
+      return
+    }
+  }
+
+  const hash = value.match(/#L(\d+)$/)
+  const lineFromHash = hash ? Number(hash[1]) : undefined
+  if (hash) value = value.slice(0, -hash[0].length)
+
+  const line = value.match(/:(\d+)(?::\d+)?$/)
+  const lineFromSuffix = line ? Number(line[1]) : undefined
+  if (line) {
+    const maybePath = value.slice(0, -line[0].length)
+    if (looksLikePath(maybePath)) value = maybePath
+  }
+
+  if (!looksLikePath(value)) return
+  const path = normalizeProjectPath(value, directory)
+  if (!path) return
+  return { path, line: lineFromHash ?? lineFromSuffix }
 }
 
 function createIcon(path: string, slot: string) {
@@ -130,7 +183,7 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   }
 }
 
-function markCodeLinks(root: HTMLDivElement) {
+function markCodeLinks(root: HTMLDivElement, directory: string, openable: boolean) {
   const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
   for (const code of codeNodes) {
     const href = codeUrl(code.textContent ?? "")
@@ -139,35 +192,46 @@ function markCodeLinks(root: HTMLDivElement) {
         ? code.parentElement
         : null
 
-    if (!href) {
-      if (parentLink) parentLink.replaceWith(code)
+    if (href) {
+      if (parentLink) {
+        parentLink.href = href
+      } else {
+        const link = document.createElement("a")
+        link.href = href
+        link.className = "external-link"
+        link.target = "_blank"
+        link.rel = "noopener noreferrer"
+        code.parentNode?.replaceChild(link, code)
+        link.appendChild(code)
+      }
       continue
     }
 
-    if (parentLink) {
-      parentLink.href = href
-      continue
-    }
+    if (parentLink) parentLink.replaceWith(code)
+    if (!openable) continue
 
-    const link = document.createElement("a")
-    link.href = href
-    link.className = "external-link"
-    link.target = "_blank"
-    link.rel = "noopener noreferrer"
-    code.parentNode?.replaceChild(link, code)
-    link.appendChild(code)
+    const file = codeFileRef(code.textContent ?? "", directory)
+    if (!file) continue
+
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = "file-link"
+    button.setAttribute("data-file-path", file.path)
+    if (file.line) button.setAttribute("data-file-line", String(file.line))
+    code.parentNode?.replaceChild(button, code)
+    button.appendChild(code)
   }
 }
 
-function decorate(root: HTMLDivElement, labels: CopyLabels) {
+function decorate(root: HTMLDivElement, labels: CopyLabels, directory: string, openable: boolean) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
-  markCodeLinks(root)
+  markCodeLinks(root, directory, openable)
 }
 
-function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
+function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels, onFileOpen?: (input: FileRef) => void) {
   const timeouts = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 
   const updateLabel = (button: HTMLButtonElement) => {
@@ -178,6 +242,18 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
   const handleClick = async (event: MouseEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
+
+    const file = target.closest("button.file-link")
+    if (file instanceof HTMLButtonElement) {
+      const path = file.getAttribute("data-file-path")
+      if (!path || !onFileOpen) return
+      event.preventDefault()
+      event.stopPropagation()
+      const raw = file.getAttribute("data-file-line")
+      const line = raw ? Number(raw) : undefined
+      onFileOpen({ path, line })
+      return
+    }
 
     const button = target.closest('[data-slot="markdown-copy-button"]')
     if (!(button instanceof HTMLButtonElement)) return
@@ -193,8 +269,6 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     const timeout = setTimeout(() => setCopyState(button, labels, false), 2000)
     timeouts.set(button, timeout)
   }
-
-  decorate(root, labels)
 
   const buttons = Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]'))
   for (const button of buttons) {
@@ -232,6 +306,7 @@ export function Markdown(
 ) {
   const [local, others] = splitProps(props, ["text", "cacheKey", "class", "classList"])
   const marked = useMarked()
+  const data = useData()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const [html] = createResource(
@@ -274,10 +349,15 @@ export function Markdown(
 
     const temp = document.createElement("div")
     temp.innerHTML = content
-    decorate(temp, {
-      copy: i18n.t("ui.message.copy"),
-      copied: i18n.t("ui.message.copied"),
-    })
+    decorate(
+      temp,
+      {
+        copy: i18n.t("ui.message.copy"),
+        copied: i18n.t("ui.message.copied"),
+      },
+      data.directory,
+      !!data.openFilePath,
+    )
 
     morphdom(container, temp, {
       childrenOnly: true,
@@ -290,10 +370,14 @@ export function Markdown(
     if (copySetupTimer) clearTimeout(copySetupTimer)
     copySetupTimer = setTimeout(() => {
       if (copyCleanup) copyCleanup()
-      copyCleanup = setupCodeCopy(container, {
-        copy: i18n.t("ui.message.copy"),
-        copied: i18n.t("ui.message.copied"),
-      })
+      copyCleanup = setupCodeCopy(
+        container,
+        {
+          copy: i18n.t("ui.message.copy"),
+          copied: i18n.t("ui.message.copied"),
+        },
+        data.openFilePath,
+      )
     }, 150)
   })
 

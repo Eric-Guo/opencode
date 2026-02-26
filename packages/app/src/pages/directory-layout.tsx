@@ -21,6 +21,13 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
       directory={props.directory}
       onNavigateToSession={(sessionID: string) => navigate(`/${params.dir}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${params.dir}/session/${sessionID}`}
+      onOpenFilePath={(input) => {
+        window.dispatchEvent(
+          new CustomEvent("opencode:open-file-path", {
+            detail: input,
+          }),
+        )
+      }}
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>

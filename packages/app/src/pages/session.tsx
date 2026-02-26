@@ -504,6 +504,18 @@ export default function Page() {
     loadFile: file.load,
   })
 
+  onMount(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string }>).detail
+      const path = detail?.path
+      if (!path) return
+      openReviewFile(path)
+    }
+
+    window.addEventListener("opencode:open-file-path", open)
+    onCleanup(() => window.removeEventListener("opencode:open-file-path", open))
+  })
+
   const changesOptions = ["session", "turn"] as const
   const changesOptionsList = [...changesOptions]
 
