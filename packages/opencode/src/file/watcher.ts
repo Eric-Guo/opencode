@@ -74,6 +74,11 @@ export namespace FileWatcher {
       const subs: ParcelWatcher.AsyncSubscription[] = []
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
+      if (Instance.directory === path.parse(Instance.directory).root) {
+        log.warn("skipping watcher for filesystem root", { directory: Instance.directory })
+        return { subs }
+      }
+
       if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
         const pending = w.subscribe(Instance.directory, subscribe, {
           ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
