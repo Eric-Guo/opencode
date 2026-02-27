@@ -126,9 +126,7 @@ const alias = (key: string, source: string) => {
 }
 
 alias("linux-x86_64", "linux-x86_64-deb")
-alias("linux-x86_64", "linux-x86_64-rpm")
 alias("linux-aarch64", "linux-aarch64-deb")
-alias("linux-aarch64", "linux-aarch64-rpm")
 alias("windows-x86_64", "windows-x86_64-nsis")
 alias("darwin-x86_64", "darwin-x86_64-app")
 alias("darwin-aarch64", "darwin-aarch64-app")
