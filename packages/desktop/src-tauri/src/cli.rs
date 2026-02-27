@@ -461,6 +461,11 @@ pub fn spawn_command(
         cmd
     };
 
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    if let Some(home) = home {
+        cmd.current_dir(home);
+    }
+
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     cmd.stdin(Stdio::null());
