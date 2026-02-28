@@ -72,7 +72,12 @@ export function ToolStatusTitle(props: {
     })
   }
 
-  createEffect(on([() => props.active, activeTail, doneTail, suffix], () => schedule()))
+  createEffect(
+    on(
+      [() => props.active, activeTail, doneTail, suffix],
+      () => schedule(),
+    ),
+  )
 
   onMount(() => {
     measure()
