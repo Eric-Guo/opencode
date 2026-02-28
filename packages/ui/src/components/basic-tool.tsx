@@ -132,7 +132,9 @@ export function BasicTool(props: BasicToolProps) {
                             [trigger().titleClass ?? ""]: !!trigger().titleClass,
                           }}
                         >
-                          <TextShimmer text={trigger().title} active={pending()} />
+                          <Show when={pending()} fallback={trigger().title}>
+                            <TextShimmer text={trigger().title} active />
+                          </Show>
                         </span>
                         <Show when={!pending()}>
                           <Show when={trigger().subtitle}>

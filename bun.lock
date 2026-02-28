@@ -428,7 +428,6 @@
         "@storybook/addon-links": "^10.2.13",
         "@storybook/addon-onboarding": "^10.2.13",
         "@storybook/addon-vitest": "^10.2.13",
-        "@tailwindcss/vite": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/node": "catalog:",
         "@types/react": "18.0.25",
