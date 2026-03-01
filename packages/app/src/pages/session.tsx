@@ -503,15 +503,16 @@ export default function Page() {
     tabForPath: file.tab,
     openTab: tabs().open,
     setActive: tabs().setActive,
+    setSelectedLines: file.setSelectedLines,
     loadFile: file.load,
   })
 
   onMount(() => {
     const open = (event: Event) => {
-      const detail = (event as CustomEvent<{ path?: string }>).detail
+      const detail = (event as CustomEvent<{ path?: string; line?: number }>).detail
       const path = detail?.path
       if (!path) return
-      openReviewFile(path)
+      openReviewFile(path, detail?.line)
     }
 
     window.addEventListener("opencode:open-file-path", open)
