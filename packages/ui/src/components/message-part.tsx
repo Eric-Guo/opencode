@@ -963,17 +963,21 @@ function ToolFileAccordion(props: {
                   <Show when={props.path.includes("/")}>
                     <span data-slot="apply-patch-directory">{`\u202A${getDirectory(props.path)}\u202C`}</span>
                   </Show>
-                  <span
-                    data-slot="apply-patch-filename"
-                    classList={{ clickable: !!props.onPathClick }}
-                    onClick={(event) => {
-                      if (!props.onPathClick) return
-                      event.stopPropagation()
-                      props.onPathClick()
-                    }}
+                  <Show
+                    when={props.onPathClick}
+                    fallback={<span data-slot="apply-patch-filename">{getFilename(props.path)}</span>}
                   >
-                    {getFilename(props.path)}
-                  </span>
+                    <button
+                      type="button"
+                      data-slot="apply-patch-filename"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        props.onPathClick?.()
+                      }}
+                    >
+                      {getFilename(props.path)}
+                    </button>
+                  </Show>
                 </div>
               </div>
               <div data-slot="apply-patch-trigger-actions">
@@ -1717,16 +1721,16 @@ ToolRegistry.register({
                                     <Show when={file.relativePath.includes("/")}>
                                       <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
                                     </Show>
-                                    <span
+                                    <button
+                                      type="button"
                                       data-slot="apply-patch-filename"
-                                      class="clickable"
                                       onClick={(event) => {
                                         event.stopPropagation()
                                         openProjectFile(file.relativePath, data.directory, data.openFilePath)
                                       }}
                                     >
                                       {getFilename(file.relativePath)}
-                                    </span>
+                                    </button>
                                   </div>
                                 </div>
                                 <div data-slot="apply-patch-trigger-actions">
