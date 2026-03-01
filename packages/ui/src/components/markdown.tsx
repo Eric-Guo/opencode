@@ -195,11 +195,11 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels, onFileOpen?: (i
     const file = target.closest("button.file-link")
     if (file instanceof HTMLButtonElement) {
       const path = file.getAttribute("data-file-path")
+      const raw = file.getAttribute("data-file-line")
+      const line = raw ? Number(raw) : undefined
       if (!path || !onFileOpen) return
       event.preventDefault()
       event.stopPropagation()
-      const raw = file.getAttribute("data-file-line")
-      const line = raw ? Number(raw) : undefined
       onFileOpen({ path, line })
       return
     }
