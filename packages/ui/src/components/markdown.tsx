@@ -1,6 +1,7 @@
 import { useMarked } from "../context/marked"
 import { useI18n } from "../context/i18n"
 import { useData } from "../context/data"
+import { parseCodeFileRef, type FileRef } from "./markdown-file-ref"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
@@ -50,11 +51,6 @@ type CopyLabels = {
   copied: string
 }
 
-type FileRef = {
-  path: string
-  line?: number
-}
-
 const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
 
 function codeUrl(text: string) {
@@ -66,53 +62,6 @@ function codeUrl(text: string) {
   } catch {
     return
   }
-}
-
-function looksLikePath(path: string) {
-  if (!path) return false
-  if (path.startsWith("./") || path.startsWith("../") || path.startsWith("/")) return true
-  if (/^[a-zA-Z]:[\\/]/.test(path)) return true
-  return path.includes("/") || path.includes("\\")
-}
-
-function normalizeProjectPath(path: string, directory: string) {
-  if (!path) return path
-  const file = path.replace(/\\/g, "/")
-  const root = directory.replace(/\\/g, "/")
-  if (file.startsWith(root + "/")) return file.slice(root.length + 1)
-  if (file === root) return ""
-  if (file.startsWith("./")) return file.slice(2)
-  return file
-}
-
-function codeFileRef(text: string, directory: string): FileRef | undefined {
-  let value = text.trim().replace(/[),.;!?]+$/, "")
-  if (!value) return
-
-  if (value.startsWith("file://")) {
-    try {
-      const url = new URL(value)
-      value = decodeURIComponent(url.pathname)
-    } catch {
-      return
-    }
-  }
-
-  const hash = value.match(/#L(\d+)$/)
-  const lineFromHash = hash ? Number(hash[1]) : undefined
-  if (hash) value = value.slice(0, -hash[0].length)
-
-  const line = value.match(/:(\d+)(?::\d+)?$/)
-  const lineFromSuffix = line ? Number(line[1]) : undefined
-  if (line) {
-    const maybePath = value.slice(0, -line[0].length)
-    if (looksLikePath(maybePath)) value = maybePath
-  }
-
-  if (!looksLikePath(value)) return
-  const path = normalizeProjectPath(value, directory)
-  if (!path) return
-  return { path, line: lineFromHash ?? lineFromSuffix }
 }
 
 function createIcon(path: string, slot: string) {
@@ -210,7 +159,7 @@ function markCodeLinks(root: HTMLDivElement, directory: string, openable: boolea
     if (parentLink) parentLink.replaceWith(code)
     if (!openable) continue
 
-    const file = codeFileRef(code.textContent ?? "", directory)
+    const file = parseCodeFileRef(code.textContent ?? "", directory)
     if (!file) continue
 
     const button = document.createElement("button")
