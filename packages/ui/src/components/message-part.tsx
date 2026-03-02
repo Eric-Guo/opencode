@@ -52,6 +52,22 @@ import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 
+function ShellSubmessage(props: { text: string }) {
+  let ref: HTMLSpanElement | undefined
+  onMount(() => {
+    requestAnimationFrame(() => ref?.setAttribute("data-visible", ""))
+  })
+  return (
+    <span ref={ref} data-component="shell-submessage">
+      <span data-slot="shell-submessage-width">
+        <span data-slot="basic-tool-tool-subtitle">
+          <span data-slot="shell-submessage-value">{props.text}</span>
+        </span>
+      </span>
+    </span>
+  )
+}
+
 interface Diagnostic {
   range: {
     start: { line: number; character: number }
@@ -1523,7 +1539,6 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const pending = () => props.status === "pending" || props.status === "running"
-    const sawPending = pending()
     const text = createMemo(() => {
       const cmd = props.input.command ?? props.metadata.command ?? ""
       const out = stripAnsi(props.output || props.metadata.output || "")
@@ -1547,10 +1562,12 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
+                <Show when={pending()} fallback={i18n.t("ui.tool.shell")}>
+                  <TextShimmer text={i18n.t("ui.tool.shell")} active />
+                </Show>
               </span>
               <Show when={!pending() && props.input.description}>
-                <ShellSubmessage text={props.input.description} animate={sawPending} />
+                <ShellSubmessage text={props.input.description} />
               </Show>
             </div>
           </div>

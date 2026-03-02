@@ -12,19 +12,15 @@ const ms = (value: number | string | undefined, fallback: number) => {
   return `${fallback}ms`
 }
 
-const pct = (value: number | undefined, fallback: number) => {
-  const v = value ?? fallback
-  return `${v}%`
-}
-
-export function TextReveal(props: {
+export function TextOdometer(props: {
   text?: string
   class?: string
   duration?: number | string
-  /** Gradient edge softness as a percentage of the mask (0 = hard wipe, 17 = soft). */
-  edge?: number
-  /** Optional small vertical travel for entering text (px). Default 0. */
   travel?: number | string
+  mask?: number | string
+  pad?: number | string
+  height?: number | string
+  line?: number | string
   spring?: string
   springSoft?: string
   growOnly?: boolean
@@ -34,6 +30,13 @@ export function TextReveal(props: {
   const [width, setWidth] = createSignal("auto")
   const [ready, setReady] = createSignal(false)
   const [swapping, setSwapping] = createSignal(false)
+  const [fit, setFit] = createSignal({
+    line: 20,
+    travel: 4,
+    mask: 12,
+    pad: 9,
+    height: 0,
+  })
   let inRef: HTMLSpanElement | undefined
   let outRef: HTMLSpanElement | undefined
   let rootRef: HTMLSpanElement | undefined
@@ -49,6 +52,21 @@ export function TextReveal(props: {
       if (Number.isFinite(prev) && next <= prev) return
     }
     setWidth(`${next}px`)
+  }
+
+  const refine = () => {
+    const el = rootRef
+    if (!el || typeof window === "undefined") return
+    const style = window.getComputedStyle(el)
+    const font = Number.parseFloat(style.fontSize)
+    const line = Number.parseFloat(style.lineHeight)
+    const unit = Number.isFinite(font) ? font : 14
+    const high = Number.isFinite(line) ? line : unit * 1.43
+    const travel = Math.max(2, Math.round(high * 0.2))
+    const mask = Math.max(2, Math.round(high * 0.6))
+    const pad = Math.max(4, Math.round(high * 0.45))
+    const height = Math.max(0, Math.round((high - 20) * 0.25))
+    setFit({ line: high, travel, mask, pad, height })
   }
 
   createEffect(
@@ -79,6 +97,13 @@ export function TextReveal(props: {
 
   onMount(() => {
     widen(win())
+    refine()
+    const el = rootRef
+    if (el && typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(refine)
+      observer.observe(el)
+      onCleanup(() => observer.disconnect())
+    }
     const fonts = typeof document !== "undefined" ? document.fonts : undefined
     if (typeof requestAnimationFrame !== "function") {
       setReady(true)
@@ -90,6 +115,7 @@ export function TextReveal(props: {
     }
     fonts.ready.finally(() => {
       widen(win())
+      refine()
       requestAnimationFrame(() => setReady(true))
     })
   })
@@ -102,24 +128,27 @@ export function TextReveal(props: {
   return (
     <span
       ref={rootRef}
-      data-component="text-reveal"
+      data-component="text-odometer"
       data-ready={ready() ? "true" : "false"}
       data-swapping={swapping() ? "true" : "false"}
       class={props.class}
       aria-label={props.text ?? ""}
       style={{
-        "--text-reveal-duration": ms(props.duration, 450),
-        "--text-reveal-edge": pct(props.edge, 17),
-        "--text-reveal-travel": px(props.travel, 0),
-        "--text-reveal-spring": props.spring ?? "cubic-bezier(0.34, 1.08, 0.64, 1)",
-        "--text-reveal-spring-soft": props.springSoft ?? "cubic-bezier(0.34, 1, 0.64, 1)",
+        "--text-odometer-duration": ms(props.duration, 550),
+        "--text-odometer-travel": px(props.travel, fit().travel),
+        "--text-odometer-mask-size": px(props.mask, fit().mask),
+        "--text-odometer-mask-pad": px(props.pad, fit().pad),
+        "--text-odometer-mask-height": px(props.height, fit().height),
+        "--text-odometer-line": props.line === undefined ? undefined : px(props.line, fit().line),
+        "--text-odometer-spring": props.spring ?? "cubic-bezier(0.34, 1.35, 0.64, 1)",
+        "--text-odometer-spring-soft": props.springSoft ?? "cubic-bezier(0.34, 1, 0.64, 1)",
       }}
     >
-      <span data-slot="text-reveal-track" style={{ width: width() }}>
-        <span data-slot="text-reveal-entering" ref={inRef}>
+      <span data-slot="text-odometer-track" style={{ width: width() }}>
+        <span data-slot="text-odometer-entering" ref={inRef}>
           {cur() ?? "\u00A0"}
         </span>
-        <span data-slot="text-reveal-leaving" ref={outRef}>
+        <span data-slot="text-odometer-leaving" ref={outRef}>
           {old() ?? "\u00A0"}
         </span>
       </span>
