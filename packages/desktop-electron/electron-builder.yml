@@ -28,7 +28,7 @@ mac:
     - zip
 
 dmg:
-  sign: false
+  sign: true
 
 protocols:
   name: OpenCode
