@@ -35,9 +35,6 @@ export function SessionComposerRegion(props: {
   subtitleTravel?: number
   subtitleEdge?: number
   countDuration?: number
-  countMask?: number
-  countMaskHeight?: number
-  countWidthDuration?: number
 }) {
   const params = useParams()
   const prompt = usePrompt()
@@ -112,7 +109,10 @@ export function SessionComposerRegion(props: {
           bounce: props.dockCloseBounce ?? props.bounce ?? 0,
         },
   )
-  const progress = useSpring(() => (open() ? 1 : 0), config)
+  const progress = useSpring(
+    () => (open() ? 1 : 0),
+    config,
+  )
   const value = createMemo(() => Math.max(0, Math.min(1, progress())))
   const [height, setHeight] = createSignal(320)
   const dock = createMemo(() => (gate.ready && props.state.dock()) || value() > 0.001)
@@ -202,9 +202,6 @@ export function SessionComposerRegion(props: {
                     subtitleTravel={props.subtitleTravel}
                     subtitleEdge={props.subtitleEdge}
                     countDuration={props.countDuration}
-                    countMask={props.countMask}
-                    countMaskHeight={props.countMaskHeight}
-                    countWidthDuration={props.countWidthDuration}
                   />
                 </div>
               </div>
