@@ -373,12 +373,12 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+      # - name: Setup git committer
+      #   id: committer
+      #   uses: ./.github/actions/setup-git-committer
+      #   with:
+      #     opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+      #     opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - uses: actions/download-artifact@v4
         with:
@@ -415,7 +415,7 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
+          GITHUB_TOKEN: ${{ github.tokne }} # ${{ steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
           LATEST_YML_DIR: /tmp/latest-yml
