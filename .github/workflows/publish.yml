@@ -97,7 +97,6 @@ jobs:
         with:
           name: opencode-cli
           path: packages/opencode/dist
-
     outputs:
       version: ${{ needs.version.outputs.version }}
 
@@ -204,12 +203,12 @@ jobs:
   #       if: contains(matrix.settings.host, 'ubuntu')
   #       run: cargo tauri --version
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+  # - name: Setup git committer
+  #   id: committer
+  #   uses: ./.github/actions/setup-git-committer
+  #   with:
+  #     opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+  #     opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
   #     - name: Build and upload artifacts
   #       uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
