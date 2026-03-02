@@ -225,6 +225,8 @@ jobs:
           tagName: ${{ needs.version.outputs.tag }}
           releaseDraft: true
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
+          repo: ${{ (github.ref_name == 'beta' && 'opencode-beta') || '' }}
+          releaseCommitish: ${{ github.sha }}
         env:
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
@@ -299,6 +301,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" rpm
           sudo chmod -R a+rw ~/apt-cache
 
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
       - name: Prepare
         run: bun ./scripts/prepare.ts
         working-directory: packages/desktop-electron
@@ -318,7 +327,7 @@ jobs:
         working-directory: packages/desktop-electron
         timeout-minutes: 60
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
