@@ -56,5 +56,5 @@ linux:
 
 publish:
   provider: github
-  owner: anomalyco
+  owner: brendonovich
   repo: opencode
