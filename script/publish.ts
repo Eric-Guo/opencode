@@ -67,7 +67,8 @@ if (Script.release) {
     await new Promise((resolve) => setTimeout(resolve, 5_000))
   }
 
-  await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
+  // await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
+  await import(`../packages/desktop-electron/scripts/finalize-latest-yml.ts`)
 
   await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
 }

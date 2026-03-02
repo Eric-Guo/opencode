@@ -337,6 +337,12 @@ jobs:
           name: opencode-electron-${{ matrix.settings.target }}
           path: packages/desktop-electron/dist/*
 
+      - uses: actions/upload-artifact@v4
+        if: needs.version.outputs.release
+        with:
+          name: latest-yml-${{ matrix.settings.target }}
+          path: packages/desktop-electron/dist/latest*.yml
+
   publish:
     needs:
       - version
@@ -379,6 +385,12 @@ jobs:
           name: opencode-cli
           path: packages/opencode/dist
 
+      - uses: actions/download-artifact@v4
+        if: needs.version.outputs.release
+        with:
+          pattern: latest-yml-*
+          path: /tmp/latest-yml
+
       - name: Cache apt packages (AUR)
         uses: actions/cache@v4
         with:
@@ -406,3 +418,4 @@ jobs:
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
+          LATEST_YML_DIR: /tmp/latest-yml

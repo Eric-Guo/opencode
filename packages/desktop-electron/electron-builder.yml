@@ -58,3 +58,4 @@ publish:
   provider: github
   owner: brendonovich
   repo: opencode
+  publishAutoUpdate: false
