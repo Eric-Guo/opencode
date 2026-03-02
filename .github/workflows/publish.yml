@@ -349,7 +349,7 @@ jobs:
       - build-cli
       # - build-tauri
       - build-electron
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ (github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v3
 
