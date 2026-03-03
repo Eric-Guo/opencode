@@ -690,7 +690,13 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message message={msg()} parts={parts()} interrupted={interrupted()} animate={props.animate} />
+                  <Message
+                    message={msg()}
+                    parts={parts()}
+                    interrupted={interrupted()}
+                    animate={props.animate}
+                    working={working()}
+                  />
                 </div>
                 <Show when={compaction()}>
                   {(part) => (

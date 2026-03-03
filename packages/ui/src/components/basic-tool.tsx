@@ -1,16 +1,4 @@
-import {
-  createEffect,
-  createSignal,
-  For,
-  Match,
-  on,
-  onCleanup,
-  onMount,
-  Show,
-  splitProps,
-  Switch,
-  type JSX,
-} from "solid-js"
+import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import {
   animate,
   type AnimationPlaybackControls,
@@ -321,52 +309,45 @@ export interface ToolCallRowProps {
   status?: string
   animate?: boolean
   onSubtitleClick?: () => void
+  open?: boolean
+  showArrow?: boolean
+  onOpenChange?: (value: boolean) => void
 }
-
-// `group` currently shares the same behavior as `panel`; the separate variant is semantic so grouped call sites can stay explicit.
 export interface ToolCallPanelProps extends Omit<ToolCallPanelBaseProps, "hideDetails"> {
-  variant: "panel" | "group"
+  variant: "panel"
 }
-
 export type ToolCallProps = ToolCallRowProps | ToolCallPanelProps
 function ToolCallRoot(props: ToolCallProps) {
-  const [local, rest] = splitProps(props, ["variant", "trigger", "status", "onSubtitleClick"])
-  const pending = () => local.status === "pending" || local.status === "running"
-  if (local.variant === "row") {
+  const pending = () => props.status === "pending" || props.status === "running"
+  if (props.variant === "row") {
+    if (props.showArrow && props.onOpenChange) {
+      return (
+        <Collapsible open={props.open ?? true} onOpenChange={props.onOpenChange} class="tool-collapsible">
+          <Collapsible.Trigger>
+            <ToolCallTriggerBody
+              trigger={props.trigger}
+              pending={pending()}
+              onSubtitleClick={props.onSubtitleClick}
+              arrow
+            />
+          </Collapsible.Trigger>
+        </Collapsible>
+      )
+    }
+
     return (
       <div data-component="collapsible" data-variant="normal" class="tool-collapsible">
         <div data-slot="collapsible-trigger">
-          <ToolCallTriggerBody trigger={local.trigger} pending={pending()} onSubtitleClick={local.onSubtitleClick} />
+          <ToolCallTriggerBody trigger={props.trigger} pending={pending()} onSubtitleClick={props.onSubtitleClick} />
         </div>
       </div>
     )
   }
 
-  return (
-    <ToolCallPanel {...rest} trigger={local.trigger} status={local.status} onSubtitleClick={local.onSubtitleClick} />
-  )
+  const { variant: _, ...rest } = props
+  return <ToolCallPanel {...rest} />
 }
-
-function ToolCallList(props: { children?: JSX.Element }) {
-  return <div data-component="tool-call-list">{props.children}</div>
-}
-
-function ToolCallRow(props: { children: JSX.Element }) {
-  return (
-    <div data-slot="tool-call-item">
-      <div data-component="tool-trigger">
-        <div data-slot="basic-tool-tool-trigger-content">
-          <div data-slot="basic-tool-tool-info">{props.children}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export const ToolCall = Object.assign(ToolCallRoot, {
-  List: ToolCallList,
-  Row: ToolCallRow,
-})
+export const ToolCall = ToolCallRoot
 
 export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
   return (
