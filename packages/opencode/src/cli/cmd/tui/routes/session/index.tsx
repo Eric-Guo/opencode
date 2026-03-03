@@ -1463,10 +1463,6 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               streaming={streaming()}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
-              tableOptions={{
-                widthMode: "full",
-                columnFitter: "balanced",
-              }}
             />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
