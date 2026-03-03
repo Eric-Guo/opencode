@@ -275,7 +275,6 @@ export default function Page() {
       bottom: true,
     },
   })
-
   const composer = createSessionComposerState()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
