@@ -1474,13 +1474,11 @@ const TOOL_WIPE_MASK =
   "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 60%, rgba(0,0,0,0) 100%)"
 
 function useToolReveal(pending: () => boolean, animate?: () => boolean) {
-  const [live, setLive] = createSignal(pending())
-
+  const enabled = () => animate?.() ?? true
+  const [live, setLive] = createSignal(pending() || enabled())
   createEffect(() => {
     if (pending()) setLive(true)
   })
-
-  const enabled = () => animate?.() ?? true
   return () => enabled() && live()
 }
 
@@ -1643,7 +1641,9 @@ function ToolTriggerRow(props: {
   )
   const detail = createMemo(() => [props.subtitle, ...(props.args ?? [])].filter((x): x is string => !!x).join(" "))
   const detailAnimate = createMemo(() => {
-    if (props.revealOnMount) return props.animate !== false
+    if (props.animate === false) return false
+    if (props.revealOnMount) return true
+    if (!props.pending && !reveal()) return true
     return reveal()
   })
 
