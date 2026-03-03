@@ -400,6 +400,7 @@
       overflow: visible;
     }
   }
+}
 
 [data-component="bash-output"] {
   width: 100%;
@@ -648,8 +649,6 @@
   min-width: 0;
   padding-left: 12px;
 }
-
-
 
 [data-component="diagnostics"] {
   display: flex;
