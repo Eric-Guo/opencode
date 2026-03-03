@@ -37,8 +37,9 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
-import { TaskTool } from "@/tool/task"
+import { NotFoundError } from "@/storage/db"
 import { Tool } from "@/tool/tool"
+import { TaskTool } from "@/tool/task"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
@@ -1955,7 +1956,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (!cleaned) return
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-      return Session.setTitle({ sessionID: input.session.id, title })
+      try {
+        return Session.setTitle({ sessionID: input.session.id, title })
+      } catch (error) {
+        if (NotFoundError.isInstance(error)) return
+        throw error
+      }
     }
   }
 }
