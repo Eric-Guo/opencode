@@ -32,7 +32,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const active = () => options.working() || settling
 
   const distanceFromBottom = (el: HTMLElement) => {
-    return el.scrollHeight - el.clientHeight - el.scrollTop
+    // With column-reverse, scrollTop=0 is at the bottom, negative = scrolled up
+    return Math.abs(el.scrollTop)
   }
 
   const canScroll = (el: HTMLElement) => {
@@ -54,13 +55,13 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (scrollAnim) cancelSmooth()
     if (!force && store.userScrolled) return
 
-    const next = Math.max(0, el.scrollHeight - el.clientHeight)
-    if (Math.abs(el.scrollTop - next) <= AUTO_SCROLL_EPSILON) {
+    // With column-reverse, scrollTop=0 is at the bottom
+    if (Math.abs(el.scrollTop) <= AUTO_SCROLL_EPSILON) {
       markProgrammatic()
       return
     }
 
-    el.scrollTop = next
+    el.scrollTop = 0
     markProgrammatic()
   }
 
@@ -78,13 +79,13 @@ export function createAutoScroll(options: AutoScrollOptions) {
     cancelSmooth()
     if (store.userScrolled) setStore("userScrolled", false)
 
-    const next = Math.max(0, el.scrollHeight - el.clientHeight)
-    if (Math.abs(el.scrollTop - next) <= AUTO_SCROLL_EPSILON) {
+    // With column-reverse, scrollTop=0 is at the bottom
+    if (Math.abs(el.scrollTop) <= AUTO_SCROLL_EPSILON) {
       markProgrammatic()
       return
     }
 
-    scrollAnim = animate(el.scrollTop, next, {
+    scrollAnim = animate(el.scrollTop, 0, {
       type: "spring",
       visualDuration: 0.35,
       bounce: 0,
@@ -248,7 +249,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
       const el = scroll
       if (!el) return
       if (store.userScrolled) setStore("userScrolled", false)
-      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight)
+      // With column-reverse, scrollTop=0 is at the bottom
+      el.scrollTop = 0
       markProgrammatic()
     },
     userScrolled: () => store.userScrolled,
