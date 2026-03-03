@@ -84,10 +84,7 @@ export function SessionTodoDock(props: {
           bounce: props.expandBounce ?? props.bounce ?? 0,
         },
   )
-  const collapse = useSpring(
-    () => (store.collapsed ? 1 : 0),
-    config,
-  )
+  const collapse = useSpring(() => (store.collapsed ? 1 : 0), config)
   const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress ?? 1)))
   const shut = createMemo(() => 1 - dock())
   const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
@@ -198,6 +195,7 @@ export function SessionTodoDock(props: {
           style={{
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
             filter: `blur(${Math.max(0, Math.min(1, hide())) * 2}px)`,
+            visibility: hide() > 0.98 ? "hidden" : "visible",
           }}
         >
           <TodoList todos={props.todos} open={!store.collapsed} />
