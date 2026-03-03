@@ -47,6 +47,34 @@ export function GrowBox(props: GrowBoxProps) {
   const open = () => props.open !== false
   const animateToggle = () => props.animateToggle !== false
 
+  const hideBody = () => {
+    body!.style.opacity = "0"
+    body!.style.filter = "blur(2px)"
+  }
+
+  const clearBody = () => {
+    body!.style.opacity = ""
+    body!.style.filter = ""
+  }
+
+  const fadeBodyIn = () => {
+    if (props.fade === false || !body) return
+    hideBody()
+    fadeAnim?.stop()
+    fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
+    fadeAnim.finished.then(() => {
+      if (!body || !open()) return
+      clearBody()
+    })
+  }
+
+  const setInstant = (visible: boolean) => {
+    root!.style.height = visible ? "" : "0px"
+    root!.style.overflow = visible ? "" : "hidden"
+    if (visible || props.fade === false) clearBody()
+    else hideBody()
+  }
+
   const currentHeight = () => {
     if (!root) return 0
     const v = root.style.height
@@ -118,20 +146,15 @@ export function GrowBox(props: GrowBoxProps) {
     })
 
     if (!props.animate) {
-      root.style.height = open() ? "" : "0px"
-      root.style.overflow = open() ? "" : "hidden"
-      body.style.opacity = open() || props.fade === false ? "" : "0"
-      body.style.filter = open() || props.fade === false ? "" : "blur(2px)"
+      setInstant(open())
       return
     }
+
+    if (props.fade !== false) hideBody()
 
     if (!open()) {
       root.style.height = "0px"
       root.style.overflow = "hidden"
-      if (props.fade !== false) {
-        body.style.opacity = "0"
-        body.style.filter = "blur(2px)"
-      }
     } else {
       if (grow()) {
         root.style.height = "0px"
@@ -140,21 +163,9 @@ export function GrowBox(props: GrowBoxProps) {
         root.style.height = "auto"
         root.style.overflow = "visible"
       }
-      if (props.fade !== false) {
-        body.style.opacity = "0"
-        body.style.filter = "blur(2px)"
-      }
       mountFrame = requestAnimationFrame(() => {
         mountFrame = undefined
-        if (props.fade !== false && body) {
-          fadeAnim?.stop()
-          fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
-          fadeAnim.finished.then(() => {
-            if (!body) return
-            body.style.opacity = ""
-            body.style.filter = ""
-          })
-        }
+        fadeBodyIn()
         if (grow()) setHeight()
       })
     }
@@ -178,10 +189,7 @@ export function GrowBox(props: GrowBoxProps) {
         if (value === undefined) return
         if (!root || !body) return
         if (!animateToggle()) {
-          root.style.height = value ? "" : "0px"
-          root.style.overflow = value ? "" : "hidden"
-          body.style.opacity = value || props.fade === false ? "" : "0"
-          body.style.filter = value || props.fade === false ? "" : "blur(2px)"
+          setInstant(value)
           return
         }
         fadeAnim?.stop()
@@ -200,16 +208,7 @@ export function GrowBox(props: GrowBoxProps) {
           height.set(0)
           return
         }
-        if (props.fade !== false) {
-          body.style.opacity = "0"
-          body.style.filter = "blur(2px)"
-          fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
-          fadeAnim.finished.then(() => {
-            if (!body || !open()) return
-            body.style.opacity = ""
-            body.style.filter = ""
-          })
-        }
+        fadeBodyIn()
         setHeight()
       },
       { defer: true },
