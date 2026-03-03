@@ -406,8 +406,8 @@ export function SessionTurn(
     if (!thinkingRef || !thinkingBodyRef) return
     thinkingAnim?.stop()
     thinkingHeightAnim?.stop()
-    const next = Math.max(1, Math.ceil(thinkingBodyRef.getBoundingClientRect().height))
-    const prev = Math.max(0, Math.ceil(thinkingRef.getBoundingClientRect().height))
+    const next = Math.max(1, thinkingBodyRef.getBoundingClientRect().height)
+    const prev = Math.max(0, thinkingRef.getBoundingClientRect().height)
     if (!entry()) {
       thinkingRef.style.overflow = "visible"
       thinkingRef.style.height = "auto"
@@ -418,6 +418,8 @@ export function SessionTurn(
       return
     }
     thinkingRef.style.overflow = "hidden"
+    thinkingRef.style.willChange = "height"
+    thinkingRef.style.contain = "layout style"
     thinkingRef.style.height = `${prev}px`
     thinkingRef.style.marginTop = prev > 0 ? gap() : "0px"
     thinkingHeightAnim = animate(
@@ -430,6 +432,8 @@ export function SessionTurn(
     )
     thinkingHeightAnim.finished.then(() => {
       if (!thinkingRef || !thinking()) return
+      thinkingRef.style.willChange = ""
+      thinkingRef.style.contain = ""
       thinkingRef.style.height = "auto"
       thinkingRef.style.marginTop = gap()
       thinkingRef.style.overflow = "visible"
@@ -461,7 +465,9 @@ export function SessionTurn(
       return
     }
     thinkingRef.style.overflow = "hidden"
-    const h = Math.max(1, Math.ceil(thinkingRef.getBoundingClientRect().height))
+    thinkingRef.style.willChange = "height"
+    thinkingRef.style.contain = "layout style"
+    const h = Math.max(1, thinkingRef.getBoundingClientRect().height)
     thinkingRef.style.height = `${h}px`
     thinkingHeightAnim = animate(
       thinkingRef,
@@ -481,6 +487,8 @@ export function SessionTurn(
     )
     thinkingHeightAnim.finished.then(() => {
       if (!thinkingRef || thinking()) return
+      thinkingRef.style.willChange = ""
+      thinkingRef.style.contain = ""
       thinkingRef.style.height = "0px"
       thinkingRef.style.marginTop = "0px"
       thinkingRef.style.overflow = "hidden"
