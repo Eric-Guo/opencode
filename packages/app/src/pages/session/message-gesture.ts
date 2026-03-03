@@ -9,14 +9,22 @@ export const shouldMarkBoundaryGesture = (input: {
   scrollTop: number
   scrollHeight: number
   clientHeight: number
+  mode?: "reversed" | "normal"
 }) => {
   const max = input.scrollHeight - input.clientHeight
   if (max <= 1) return true
   if (!input.delta) return false
 
-  // With column-reverse: scrollTop=0 at bottom, -max at top
-  if (input.delta < 0) return input.scrollTop + input.delta <= -max
+  const mode = input.mode ?? "reversed"
+  if (mode === "normal") {
+    const top = Math.max(0, Math.min(max, input.scrollTop))
+    if (input.delta < 0) return -input.delta > top
+    const bottom = max - top
+    return input.delta > bottom
+  }
 
-  const remaining = -input.scrollTop // distance from bottom
-  return input.delta > remaining
+  const top = max + Math.max(-max, Math.min(0, input.scrollTop))
+  if (input.delta < 0) return -input.delta > top
+  const bottom = -Math.max(-max, Math.min(0, input.scrollTop))
+  return input.delta > bottom
 }
