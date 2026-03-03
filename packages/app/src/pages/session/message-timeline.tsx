@@ -44,7 +44,6 @@ type MessageComment = {
 }
 
 const emptyMessages: MessageType[] = []
-const idle = { type: "idle" as const }
 
 const messageComments = (parts: Part[]): MessageComment[] =>
   parts.flatMap((part) => {
@@ -276,28 +275,20 @@ export function MessageTimeline(props: {
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
     ),
   )
-  const sessionStatus = createMemo(() => {
-    const id = sessionID()
-    if (!id) return idle
-    return sync.data.session_status[id] ?? idle
-  })
+  const sessionStatus = createMemo(() => sync.data.session_status[sessionID() ?? ""]?.type ?? "idle")
   const activeMessageID = createMemo(() => {
-    const parentID = pending()?.parentID
-    if (parentID) {
-      const messages = sessionMessages()
-      const result = Binary.search(messages, parentID, (message) => message.id)
-      const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
-      if (message && message.role === "user") return message.id
+    const messages = sessionMessages()
+    const message = pending()
+    if (message?.parentID) {
+      const result = Binary.search(messages, message.parentID, (item) => item.id)
+      const parent = result.found ? messages[result.index] : messages.find((item) => item.id === message.parentID)
+      if (parent?.role === "user") return parent.id
     }
 
-    const status = sessionStatus()
-    if (status.type !== "idle") {
-      const messages = sessionMessages()
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user") return messages[i].id
-      }
+    if (sessionStatus() === "idle") return undefined
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") return messages[i].id
     }
-
     return undefined
   })
   const info = createMemo(() => {

@@ -230,7 +230,6 @@
     pointer-events: none;
     transition: opacity 0.15s ease;
     will-change: opacity;
-
     [data-component="tooltip-trigger"] {
       display: inline-flex;
       width: fit-content;

@@ -8,6 +8,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { animate, type AnimationPlaybackControls, FADE_SPRING, HEIGHT_SPRING } from "./motion"
+import { GrowBox } from "./grow-box"
 import { AssistantParts, Message, Part, PART_MAPPING } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
@@ -20,8 +21,7 @@ import { TextReveal } from "./text-reveal"
 import { SessionRetry } from "./session-retry"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
-const THINKING_GAP_PX = 12
-const THINKING_HIDE_DELAY_MS = 220
+const THINKING_GAP_PX = 0
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -333,11 +333,7 @@ export function SessionTurn(
   })
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
   const showDiffSummary = createMemo(() => edited() > 0 && !working())
-
-  const assistantCopyPartID = createMemo(() => {
-    if (working()) return null
-    return showAssistantCopyPartID() ?? null
-  })
+  const assistantCopyPartID = createMemo(() => showAssistantCopyPartID() ?? null)
   const turnDurationMs = createMemo(() => {
     const start = message()?.time.created
     if (typeof start !== "number") return undefined
@@ -385,15 +381,14 @@ export function SessionTurn(
     return true
   })
   const hasAssistant = createMemo(() => assistantMessages().length > 0)
-  const [shown, setShown] = createSignal(showThinking())
-  let hideTimer: ReturnType<typeof setTimeout> | undefined
-  const thinking = createMemo(() => shown())
+  const thinking = createMemo(() => showThinking())
   const lane = createMemo(() => hasAssistant() || thinking())
   const animateEnabled = createMemo(() => props.animate !== false)
   const [live, setLive] = createSignal(false)
+
   let liveFrame: number | undefined
   const entry = createMemo(() => live())
-  const initialThinking = thinking()
+  const initialThinking = thinking() && !animateEnabled()
   let thinkingRef: HTMLDivElement | undefined
   let thinkingBodyRef: HTMLDivElement | undefined
   let thinkingAnim: AnimationPlaybackControls | undefined
@@ -409,11 +404,7 @@ export function SessionTurn(
           cancelAnimationFrame(liveFrame)
           liveFrame = undefined
         }
-        if (!enabled) {
-          setLive(false)
-          return
-        }
-        if (!isWorking || live()) return
+        if (!enabled || !isWorking || live()) return
         liveFrame = requestAnimationFrame(() => {
           liveFrame = undefined
           setLive(true)
@@ -421,12 +412,6 @@ export function SessionTurn(
       },
     ),
   )
-
-  const stopHide = () => {
-    if (!hideTimer) return
-    clearTimeout(hideTimer)
-    hideTimer = undefined
-  }
 
   const showBox = () => {
     if (!thinkingRef || !thinkingBodyRef) return
@@ -523,36 +508,17 @@ export function SessionTurn(
 
   createEffect(
     on(
-      showThinking,
-      (value) => {
-        stopHide()
-        if (value) {
-          if (!shown()) setShown(true)
-          return
-        }
-        hideTimer = setTimeout(() => {
-          hideTimer = undefined
-          if (showThinking()) return
-          if (!shown()) return
-          setShown(false)
-        }, THINKING_HIDE_DELAY_MS)
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      thinking,
-      (value) => {
+      () => [thinking(), entry()] as const,
+      ([value, entered]) => {
         if (thinkingToggleFrame !== undefined) {
           cancelAnimationFrame(thinkingToggleFrame)
           thinkingToggleFrame = undefined
         }
         if (value) {
+          if (!entered) return
           thinkingToggleFrame = requestAnimationFrame(() => {
             thinkingToggleFrame = undefined
-            if (!thinking()) return
+            if (!thinking() || !entry()) return
             showBox()
           })
           return
@@ -570,7 +536,6 @@ export function SessionTurn(
   })
 
   onCleanup(() => {
-    stopHide()
     if (liveFrame !== undefined) cancelAnimationFrame(liveFrame)
     if (thinkingToggleFrame !== undefined) cancelAnimationFrame(thinkingToggleFrame)
     thinkingAnim?.stop()
@@ -672,6 +637,18 @@ export function SessionTurn(
     </div>
   )
 
+  const divider = (label: string) => (
+    <div data-component="compaction-part">
+      <div data-slot="compaction-part-divider">
+        <span data-slot="compaction-part-line" />
+        <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
+          {label}
+        </span>
+        <span data-slot="compaction-part-line" />
+      </div>
+    </div>
+  )
+
   return (
     <div data-component="session-turn" class={props.classes?.root}>
       <div
@@ -700,9 +677,11 @@ export function SessionTurn(
                 </div>
                 <Show when={compaction()}>
                   {(part) => (
-                    <div data-slot="session-turn-compaction">
-                      <Part part={part()} message={msg()} hideDetails />
-                    </div>
+                    <GrowBox animate={props.animate !== false} fade gap={8} class="w-full min-w-0">
+                      <div data-slot="session-turn-compaction">
+                        <Part part={part()} message={msg()} hideDetails />
+                      </div>
+                    </GrowBox>
                   )}
                 </Show>
                 <div data-slot="session-turn-assistant-lane" aria-hidden={!lane()}>
@@ -750,8 +729,18 @@ export function SessionTurn(
                     </div>
                   </div>
                 </div>
+                <GrowBox animate={props.animate !== false} fade gap={0} open={interrupted()} class="w-full min-w-0">
+                  {divider(i18n.t("ui.message.interrupted"))}
+                </GrowBox>
                 <SessionRetry status={status()} show={active()} />
-                <Show when={showDiffSummary() && !assistantCopyPartID()}>{turnDiffSummary()}</Show>
+                <GrowBox
+                  animate={props.animate !== false}
+                  fade
+                  gap={0}
+                  open={showDiffSummary() && !assistantCopyPartID()}
+                >
+                  {turnDiffSummary()}
+                </GrowBox>
                 <Show when={error()}>
                   <Card variant="error" class="error-card">
                     {errorText()}
