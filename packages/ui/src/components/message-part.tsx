@@ -749,7 +749,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
     <BasicTool
       icon="magnifying-glass-menu"
       animated
-      animate={props.animate}
+      animate
       trigger={
         <div data-component="context-tool-group-trigger">
           <span
@@ -801,6 +801,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
           {(part) => {
             const trigger = contextToolTrigger(part, i18n)
             const running = createMemo(() => part.state.status === "pending" || part.state.status === "running")
+            const reveal = useToolReveal(running, () => props.animate !== false)
             return (
               <div data-slot="context-tool-group-item">
                 <div data-component="tool-trigger">
@@ -811,12 +812,12 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
                           <span data-slot="basic-tool-tool-title">
                             <TextShimmer text={trigger.title} active={running()} />
                           </span>
-                          <Show when={trigger.subtitle}>
-                            {(text) => <ToolText text={text()} pending={running()} />}
+                          <Show when={!running() && trigger.subtitle}>
+                            {(text) => <ToolText text={text()} animate={reveal()} />}
                           </Show>
-                          <Show when={trigger.args?.length}>
+                          <Show when={!running() && trigger.args?.length}>
                             <For each={trigger.args}>
-                              {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} pending={running()} />}
+                              {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} animate={reveal()} />}
                             </For>
                           </Show>
                         </div>
@@ -1068,6 +1069,7 @@ export interface ToolProps {
   forceOpen?: boolean
   locked?: boolean
   animate?: boolean
+  reveal?: boolean
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -1198,7 +1200,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               status={part().state.status}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
-              animate={props.animate}
+              animate
+              reveal={props.animate}
             />
           </Match>
         </Switch>
@@ -1317,7 +1320,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const text = () => part().text.trim()
   const throttledText = createThrottledValue(text)
   let ref: HTMLDivElement | undefined
-  useToolFade(() => ref)
+  useToolFade(() => ref, { animate: props.animate })
 
   return (
     <Show when={throttledText()}>
@@ -1354,6 +1357,7 @@ ToolRegistry.register({
               pending={pending()}
               subtitle={props.input.filePath ? getFilename(props.input.filePath) : ""}
               args={args}
+              animate={props.reveal}
             />
           }
         />
@@ -1386,6 +1390,7 @@ ToolRegistry.register({
             title={i18n.t("ui.tool.list")}
             pending={pending()}
             subtitle={getDirectory(props.input.path || "/")}
+            animate={props.reveal}
           />
         }
       >
@@ -1416,6 +1421,7 @@ ToolRegistry.register({
             pending={pending()}
             subtitle={getDirectory(props.input.path || "/")}
             args={props.input.pattern ? ["pattern=" + props.input.pattern] : []}
+            animate={props.reveal}
           />
         }
       >
@@ -1449,6 +1455,7 @@ ToolRegistry.register({
             pending={pending()}
             subtitle={getDirectory(props.input.path || "/")}
             args={args}
+            animate={props.reveal}
           />
         }
       >
@@ -1467,15 +1474,26 @@ ToolRegistry.register({
 const TOOL_WIPE_MASK =
   "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 60%, rgba(0,0,0,0) 100%)"
 
+function useToolReveal(pending: () => boolean, animate?: () => boolean) {
+  const [live, setLive] = createSignal(pending())
+
+  createEffect(() => {
+    if (pending()) setLive(true)
+  })
+
+  const enabled = () => animate?.() ?? true
+  return () => enabled() && live()
+}
+
 function useToolFade(
   ref: () => HTMLElement | undefined,
-  options?: { delay?: number; wipe?: boolean; hidden?: () => boolean },
+  options?: { delay?: number; wipe?: boolean; animate?: boolean },
 ) {
   let anim: AnimationPlaybackControls | undefined
   let frame: number | undefined
   const delay = options?.delay ?? 0
   const wipe = options?.wipe ?? false
-  const hidden = () => options?.hidden?.() ?? false
+  const active = options?.animate !== false
 
   const clearMask = (el: HTMLElement) => {
     el.style.maskImage = ""
@@ -1488,17 +1506,12 @@ function useToolFade(
     el.style.webkitMaskPosition = ""
   }
 
-  const play = () => {
+  onMount(() => {
+    if (!active) return
+
     const el = ref()
     if (!el || typeof window === "undefined") return
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    if (hidden()) return
-
-    anim?.stop()
-    if (frame !== undefined) {
-      cancelAnimationFrame(frame)
-      frame = undefined
-    }
 
     const mask =
       wipe &&
@@ -1524,7 +1537,7 @@ function useToolFade(
     frame = requestAnimationFrame(() => {
       frame = undefined
       const node = ref()
-      if (!node || hidden()) return
+      if (!node) return
 
       anim = wipe
         ? mask
@@ -1545,32 +1558,7 @@ function useToolFade(
         if (mask) clearMask(value)
       })
     })
-  }
-
-  onMount(play)
-
-  createEffect(
-    on(
-      hidden,
-      (next, prev) => {
-        if (prev === undefined) return
-        if (next) {
-          anim?.stop()
-          if (frame !== undefined) {
-            cancelAnimationFrame(frame)
-            frame = undefined
-          }
-          const el = ref()
-          if (!el) return
-          el.style.maskImage = ""
-          el.style.webkitMaskImage = ""
-          return
-        }
-        play()
-      },
-      { defer: true },
-    ),
-  )
+  })
 
   onCleanup(() => {
     if (frame !== undefined) cancelAnimationFrame(frame)
@@ -1578,12 +1566,12 @@ function useToolFade(
   })
 }
 
-function WebfetchMeta(props: { url: string; pending?: boolean }) {
+function WebfetchMeta(props: { url: string; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { wipe: true, hidden: () => !!props.pending })
+  useToolFade(() => ref, { wipe: true, animate: props.animate })
 
   return (
-    <span ref={ref} data-slot="webfetch-meta" data-pending={props.pending ? "" : undefined}>
+    <span ref={ref} data-slot="webfetch-meta">
       <a
         data-slot="basic-tool-tool-subtitle"
         class="clickable subagent-link"
@@ -1601,9 +1589,9 @@ function WebfetchMeta(props: { url: string; pending?: boolean }) {
   )
 }
 
-function TaskLink(props: { href: string; text: string; onClick: (e: MouseEvent) => void }) {
+function TaskLink(props: { href: string; text: string; onClick: (e: MouseEvent) => void; animate?: boolean }) {
   let ref: HTMLAnchorElement | undefined
-  useToolFade(() => ref, { wipe: true })
+  useToolFade(() => ref, { wipe: true, animate: props.animate })
 
   return (
     <a
@@ -1618,23 +1606,23 @@ function TaskLink(props: { href: string; text: string; onClick: (e: MouseEvent) 
   )
 }
 
-function ToolText(props: { text: string; delay?: number; pending?: boolean }) {
+function ToolText(props: { text: string; delay?: number; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { delay: props.delay, wipe: true, hidden: () => !!props.pending })
+  useToolFade(() => ref, { delay: props.delay, wipe: true, animate: props.animate })
 
   return (
-    <span ref={ref} data-slot="basic-tool-tool-subtitle" data-pending={props.pending ? "" : undefined}>
+    <span ref={ref} data-slot="basic-tool-tool-subtitle">
       {props.text}
     </span>
   )
 }
 
-function ToolArg(props: { text: string; delay?: number; pending?: boolean }) {
+function ToolArg(props: { text: string; delay?: number; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { delay: props.delay, wipe: true, hidden: () => !!props.pending })
+  useToolFade(() => ref, { delay: props.delay, wipe: true, animate: props.animate })
 
   return (
-    <span ref={ref} data-slot="basic-tool-tool-arg" data-pending={props.pending ? "" : undefined}>
+    <span ref={ref} data-slot="basic-tool-tool-arg">
       {props.text}
     </span>
   )
@@ -1646,16 +1634,24 @@ function ToolTriggerRow(props: {
   subtitle?: string
   args?: string[]
   action?: JSX.Element
+  animate?: boolean
 }) {
+  const reveal = useToolReveal(
+    () => props.pending,
+    () => props.animate !== false,
+  )
+
   return (
     <div data-slot="basic-tool-tool-info-structured">
       <div data-slot="basic-tool-tool-info-main">
         <span data-slot="basic-tool-tool-title">
           <TextShimmer text={props.title} active={props.pending} />
         </span>
-        <Show when={!props.pending && props.subtitle}>{(text) => <ToolText text={text()} />}</Show>
+        <Show when={!props.pending && props.subtitle}>{(text) => <ToolText text={text()} animate={reveal()} />}</Show>
         <Show when={!props.pending && props.args?.length}>
-          <For each={props.args}>{(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} />}</For>
+          <For each={props.args}>
+            {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} animate={reveal()} />}
+          </For>
         </Show>
       </div>
       <Show when={!props.pending && props.action}>{props.action}</Show>
@@ -1665,9 +1661,15 @@ function ToolTriggerRow(props: {
 
 type DiffValue = { additions: number; deletions: number } | { additions: number; deletions: number }[]
 
-function ToolMetaLine(props: { filename: string; path?: string; changes?: DiffValue; delay?: number }) {
+function ToolMetaLine(props: {
+  filename: string
+  path?: string
+  changes?: DiffValue
+  delay?: number
+  animate?: boolean
+}) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { delay: props.delay ?? 0.02, wipe: true })
+  useToolFade(() => ref, { delay: props.delay ?? 0.02, wipe: true, animate: props.animate })
 
   return (
     <span ref={ref} data-slot="message-part-meta-line">
@@ -1680,9 +1682,9 @@ function ToolMetaLine(props: { filename: string; path?: string; changes?: DiffVa
   )
 }
 
-function ToolChanges(props: { changes: DiffValue }) {
+function ToolChanges(props: { changes: DiffValue; animate?: boolean }) {
   let ref: HTMLDivElement | undefined
-  useToolFade(() => ref, { delay: 0.04 })
+  useToolFade(() => ref, { delay: 0.04, animate: props.animate })
 
   return (
     <div ref={ref}>
@@ -1691,9 +1693,9 @@ function ToolChanges(props: { changes: DiffValue }) {
   )
 }
 
-function ShellText(props: { text: string }) {
+function ShellText(props: { text: string; animate?: boolean }) {
   let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { wipe: true })
+  useToolFade(() => ref, { wipe: true, animate: props.animate })
 
   return (
     <span data-component="shell-submessage">
@@ -1711,6 +1713,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const reveal = useToolReveal(pending, () => props.reveal !== false)
     const url = createMemo(() => {
       const value = props.input.url
       if (typeof value !== "string") return ""
@@ -1727,7 +1730,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
               </span>
-              <Show when={!pending() && url()}>{(value) => <WebfetchMeta url={value()} />}</Show>
+              <Show when={!pending() && url()}>{(value) => <WebfetchMeta url={value()} animate={reveal()} />}</Show>
             </div>
           </div>
         }
@@ -1749,6 +1752,7 @@ ToolRegistry.register({
       return undefined
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const reveal = useToolReveal(running, () => props.reveal !== false)
 
     const href = createMemo(() => {
       const sessionId = childSessionId()
@@ -1796,10 +1800,12 @@ ToolRegistry.register({
           <Show when={description()}>
             <Switch>
               <Match when={href()}>
-                {(url) => <TaskLink href={url()} text={description() ?? ""} onClick={handleLinkClick} />}
+                {(url) => (
+                  <TaskLink href={url()} text={description() ?? ""} onClick={handleLinkClick} animate={reveal()} />
+                )}
               </Match>
               <Match when={true}>
-                <ToolText text={description() ?? ""} />
+                <ToolText text={description() ?? ""} animate={reveal()} />
               </Match>
             </Switch>
           </Show>
@@ -1807,7 +1813,7 @@ ToolRegistry.register({
       </div>
     )
 
-    return <BasicTool icon="task" status={props.status} trigger={trigger()} hideDetails animate={props.animate} />
+    return <BasicTool icon="task" status={props.status} trigger={trigger()} hideDetails animate />
   },
 })
 
@@ -1816,6 +1822,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const pending = () => props.status === "pending" || props.status === "running"
+    const reveal = useToolReveal(pending, () => props.reveal !== false)
     const subtitle = () => props.input.description ?? props.metadata.description
     const output = createMemo(() => {
       if (typeof props.output === "string") return props.output
@@ -1846,7 +1853,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
-        animate={props.animate}
+        animate
         animated
         defaultOpen={false}
         debugID={`bash:${props.callID ?? props.partID ?? "unknown"}`}
@@ -1856,7 +1863,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
-              <Show when={subtitle()}>{(text) => <ShellText text={text()} />}</Show>
+              <Show when={subtitle()}>{(text) => <ShellText text={text()} animate={reveal()} />}</Show>
             </div>
           </div>
         }
@@ -1898,12 +1905,14 @@ ToolRegistry.register({
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
+    const reveal = useToolReveal(pending, () => props.reveal !== false)
     return (
       <div data-component="edit-tool">
         <BasicTool
           {...props}
           icon="code-lines"
           defer
+          animated
           trigger={
             <div data-component="edit-trigger">
               <div data-slot="message-part-title-area">
@@ -1916,6 +1925,7 @@ ToolRegistry.register({
                       filename={filename()}
                       path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
                       changes={props.metadata.filediff}
+                      animate={reveal()}
                     />
                   </Show>
                 </div>
@@ -1927,7 +1937,9 @@ ToolRegistry.register({
             <ToolFileAccordion
               path={path()}
               actions={
-                <Show when={!pending() && props.metadata.filediff}>{(diff) => <ToolChanges changes={diff()} />}</Show>
+                <Show when={!pending() && props.metadata.filediff}>
+                  {(diff) => <ToolChanges changes={diff()} animate={reveal()} />}
+                </Show>
               }
             >
               <div data-component="edit-content">
@@ -1962,12 +1974,14 @@ ToolRegistry.register({
     const path = createMemo(() => props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
+    const reveal = useToolReveal(pending, () => props.reveal !== false)
     return (
       <div data-component="write-tool">
         <BasicTool
           {...props}
           icon="code-lines"
           defer
+          animated
           trigger={
             <div data-component="write-trigger">
               <div data-slot="message-part-title-area">
@@ -1979,6 +1993,7 @@ ToolRegistry.register({
                     <ToolMetaLine
                       filename={filename()}
                       path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
+                      animate={reveal()}
                     />
                   </Show>
                 </div>
@@ -2028,6 +2043,7 @@ ToolRegistry.register({
     const fileComponent = useFileComponent()
     const files = createMemo(() => (props.metadata.files ?? []) as ApplyPatchFile[])
     const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const reveal = useToolReveal(pending, () => props.reveal !== false)
     const single = createMemo(() => {
       const list = files()
       if (list.length !== 1) return
@@ -2059,6 +2075,7 @@ ToolRegistry.register({
               {...props}
               icon="code-lines"
               defer
+              animated
               trigger={
                 <div data-component="write-trigger">
                   <div data-slot="message-part-title-area">
@@ -2066,7 +2083,9 @@ ToolRegistry.register({
                       <span data-slot="message-part-title-text">
                         <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
                       </span>
-                      <Show when={!pending() && subtitle()}>{(text) => <ToolText text={text()} />}</Show>
+                      <Show when={!pending() && subtitle()}>
+                        {(text) => <ToolText text={text()} animate={reveal()} />}
+                      </Show>
                     </div>
                   </div>
                 </div>
@@ -2165,6 +2184,7 @@ ToolRegistry.register({
               {...props}
               icon="code-lines"
               defer
+              animated
               trigger={
                 <div data-component="edit-trigger">
                   <div data-slot="message-part-title-area">
@@ -2177,6 +2197,7 @@ ToolRegistry.register({
                           filename={getFilename(file().relativePath)}
                           path={file().relativePath.includes("/") ? getDirectory(file().relativePath) : undefined}
                           changes={{ additions: file().additions, deletions: file().deletions }}
+                          animate={reveal()}
                         />
                       </Show>
                     </div>
@@ -2204,7 +2225,10 @@ ToolRegistry.register({
                       </span>
                     </Match>
                     <Match when={true}>
-                      <ToolChanges changes={{ additions: file().additions, deletions: file().deletions }} />
+                      <ToolChanges
+                        changes={{ additions: file().additions, deletions: file().deletions }}
+                        animate={reveal()}
+                      />
                     </Match>
                   </Switch>
                 }
@@ -2252,7 +2276,14 @@ ToolRegistry.register({
         {...props}
         defaultOpen
         icon="checklist"
-        trigger={<ToolTriggerRow title={i18n.t("ui.tool.todos")} pending={pending()} subtitle={subtitle()} />}
+        trigger={
+          <ToolTriggerRow
+            title={i18n.t("ui.tool.todos")}
+            pending={pending()}
+            subtitle={subtitle()}
+            animate={props.reveal}
+          />
+        }
       >
         <Show when={todos().length}>
           <div data-component="todos">
@@ -2296,7 +2327,14 @@ ToolRegistry.register({
         {...props}
         defaultOpen={false}
         icon="bubble-5"
-        trigger={<ToolTriggerRow title={i18n.t("ui.tool.questions")} pending={pending()} subtitle={subtitle()} />}
+        trigger={
+          <ToolTriggerRow
+            title={i18n.t("ui.tool.questions")}
+            pending={pending()}
+            subtitle={subtitle()}
+            animate={props.reveal}
+          />
+        }
       >
         <Show when={completed()}>
           <div data-component="question-answers">
@@ -2336,6 +2374,6 @@ ToolRegistry.register({
       </div>
     )
 
-    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails animate={props.animate} />
+    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails animate />
   },
 })
