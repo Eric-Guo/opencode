@@ -53,8 +53,8 @@ export function getCurrentSidecar(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
-export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET) {
-  const dir = `resources/sidecars/${target}`
+export async function copyBinaryToSidecarFolder(source: string) {
+  const dir = `resources`
   await $`mkdir -p ${dir}`
   const dest = windowsify(`${dir}/opencode-cli`)
   await $`cp ${source} ${dest}`

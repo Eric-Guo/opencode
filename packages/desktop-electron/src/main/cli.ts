@@ -42,8 +42,11 @@ const root = dirname(fileURLToPath(import.meta.url))
 
 export function getSidecarPath() {
   const suffix = process.platform === "win32" ? ".exe" : ""
-  if (app.isPackaged) return join(process.resourcesPath, "sidecars", `opencode-cli${suffix}`)
-  return join(root, "../../node_modules/.bin", `opencode-cli${suffix}`)
+  const path = app.isPackaged
+    ? join(process.resourcesPath, `opencode-cli${suffix}`)
+    : join(root, "../../resources", `opencode-cli${suffix}`)
+  console.log(`[cli] Sidecar path resolved: ${path} (isPackaged: ${app.isPackaged})`)
+  return path
 }
 
 export async function getConfig(): Promise<Config | null> {
@@ -127,6 +130,7 @@ export function serve(hostname: string, port: number, password: string) {
 }
 
 export function spawnCommand(args: string, extraEnv: Record<string, string>) {
+  console.log(`[cli] Spawning command with args: ${args}`)
   const base = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   )
@@ -140,19 +144,23 @@ export function spawnCommand(args: string, extraEnv: Record<string, string>) {
   }
 
   const { cmd, cmdArgs } = buildCommand(args, envs)
+  console.log(`[cli] Executing: ${cmd} ${cmdArgs.join(" ")}`)
   const child = spawn(cmd, cmdArgs, {
     env: envs,
     detached: true,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   })
+  console.log(`[cli] Spawned process with PID: ${child.pid}`)
 
   const events = new EventEmitter()
   const exit = new Promise<TerminatedPayload>((resolve) => {
-    child.on("exit", (code: number | null, _signal: NodeJS.Signals | null) => {
+    child.on("exit", (code: number | null, signal: NodeJS.Signals | null) => {
+      console.log(`[cli] Process exited with code: ${code}, signal: ${signal}`)
       resolve({ code: code ?? null, signal: null })
     })
     child.on("error", (error: Error) => {
+      console.error(`[cli] Process error: ${error.message}`)
       events.emit("error", error.message)
     })
   })
@@ -203,6 +211,7 @@ function handleSqliteProgress(events: EventEmitter, line: string) {
 
 function buildCommand(args: string, env: Record<string, string>) {
   if (process.platform === "win32" && isWslEnabled()) {
+    console.log(`[cli] Using WSL mode`)
     const version = app.getVersion()
     const script = [
       "set -e",
@@ -210,7 +219,7 @@ function buildCommand(args: string, env: Record<string, string>) {
       'if [ ! -x "$BIN" ]; then',
       `  curl -fsSL https://opencode.ai/install | bash -s -- --version ${shellEscape(version)} --no-modify-path`,
       "fi",
-      `${envPrefix(env)} exec \"$BIN\" ${args}`,
+      `${envPrefix(env)} exec "$BIN" ${args}`,
     ].join("\n")
 
     return { cmd: "wsl", cmdArgs: ["-e", "bash", "-lc", script] }
@@ -218,12 +227,14 @@ function buildCommand(args: string, env: Record<string, string>) {
 
   if (process.platform === "win32") {
     const sidecar = getSidecarPath()
+    console.log(`[cli] Windows direct mode, sidecar: ${sidecar}`)
     return { cmd: sidecar, cmdArgs: args.split(" ") }
   }
 
   const sidecar = getSidecarPath()
   const shell = process.env.SHELL || "/bin/sh"
   const line = shell.endsWith("/nu") ? `^\"${sidecar}\" ${args}` : `\"${sidecar}\" ${args}`
+  console.log(`[cli] Unix mode, shell: ${shell}, command: ${line}`)
   return { cmd: shell, cmdArgs: ["-l", "-c", line] }
 }
 

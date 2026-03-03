@@ -15,9 +15,9 @@ const getBase = (): Configuration => ({
   files: ["out/**/*", "resources/**/*"],
   extraResources: [
     {
-      from: "resources/sidecars/",
-      to: "sidecars/",
-      filter: ["**/*"],
+      from: "resources/",
+      to: "",
+      filter: ["opencode-cli*"],
     },
     {
       from: "native/",
