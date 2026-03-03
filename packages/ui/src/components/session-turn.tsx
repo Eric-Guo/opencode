@@ -388,10 +388,6 @@ export function SessionTurn(
   const thinking = createMemo(() => shown())
   const lane = createMemo(() => hasAssistant() || thinking())
   const entry = createMemo(() => props.animate !== false)
-  const log = (...args: unknown[]) => {
-    if (typeof window === "undefined") return
-    console.debug("[ui:thinking]", ...args)
-  }
   const initialThinking = thinking()
   let thinkingRef: HTMLDivElement | undefined
   let thinkingBodyRef: HTMLDivElement | undefined
@@ -419,7 +415,6 @@ export function SessionTurn(
       thinkingBodyRef.style.opacity = "1"
       thinkingBodyRef.style.filter = "blur(0px)"
       thinkingBodyRef.style.transform = ""
-      log("open-done")
       return
     }
     thinkingRef.style.overflow = "hidden"
@@ -438,7 +433,6 @@ export function SessionTurn(
       thinkingRef.style.height = "auto"
       thinkingRef.style.marginTop = gap()
       thinkingRef.style.overflow = "visible"
-      log("open-done")
     })
     thinkingBodyRef.style.opacity = "0"
     thinkingBodyRef.style.filter = "blur(2px)"
@@ -464,7 +458,6 @@ export function SessionTurn(
       thinkingBodyRef.style.opacity = "0"
       thinkingBodyRef.style.filter = "blur(2px)"
       thinkingBodyRef.style.transform = ""
-      log("close-done")
       return
     }
     thinkingRef.style.overflow = "hidden"
@@ -491,7 +484,6 @@ export function SessionTurn(
       thinkingRef.style.height = "0px"
       thinkingRef.style.marginTop = "0px"
       thinkingRef.style.overflow = "hidden"
-      log("close-done")
     })
   }
 
@@ -499,13 +491,6 @@ export function SessionTurn(
     on(
       showThinking,
       (value) => {
-        log("source", {
-          value,
-          working: working(),
-          status: status().type,
-          visible: assistantVisible(),
-          tail: assistantTailVisible(),
-        })
         stopHide()
         if (value) {
           if (!shown()) setShown(true)
@@ -526,7 +511,6 @@ export function SessionTurn(
     on(
       thinking,
       (value) => {
-        log("toggle", { value })
         if (thinkingToggleFrame !== undefined) {
           cancelAnimationFrame(thinkingToggleFrame)
           thinkingToggleFrame = undefined
@@ -619,7 +603,7 @@ export function SessionTurn(
                         text={!showReasoningSummaries() ? (reasoningHeading() ?? "") : ""}
                         class="session-turn-thinking-heading"
                         travel={25}
-                        duration={700}
+                        duration={900}
                       />
                     </div>
                   </div>
