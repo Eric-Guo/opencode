@@ -292,6 +292,7 @@ export namespace SessionPrompt {
 
     let step = 0
     const session = await Session.get(sessionID)
+    let reply: MessageV2.Assistant | undefined
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -595,6 +596,7 @@ export namespace SessionPrompt {
         model,
         abort,
       })
+      reply = processor.message
       using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 
       // Check if user explicitly invoked an agent via @ in this turn
@@ -722,6 +724,12 @@ export namespace SessionPrompt {
         q.resolve(item)
       }
       return item
+    }
+    if (reply) {
+      return {
+        info: reply,
+        parts: await MessageV2.parts(reply.id).catch(() => []),
+      }
     }
     throw new Error("Impossible")
   })
@@ -1957,7 +1965,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       try {
-        return Session.setTitle({ sessionID: input.session.id, title })
+        return await Session.setTitle({ sessionID: input.session.id, title })
       } catch (error) {
         if (NotFoundError.isInstance(error)) return
         throw error

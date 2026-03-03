@@ -197,6 +197,7 @@ export function SessionTodoDock(props: {
             visibility: off() ? "hidden" : "visible",
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
             filter: `blur(${Math.max(0, Math.min(1, hide())) * 2}px)`,
+            visibility: hide() > 0.98 ? "hidden" : "visible",
           }}
         >
           <TodoList todos={props.todos} open={!store.collapsed} />
