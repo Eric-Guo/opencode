@@ -63,8 +63,8 @@
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
-    line-height: 20px;
-    min-height: 20px;
+    line-height: var(--line-height-large);
+    height: 36px;
 
     [data-component="spinner"] {
       width: 16px;
@@ -146,7 +146,7 @@
 
   [data-component="session-turn-diffs-trigger"] {
     width: 100%;
-    min-height: 24px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: flex-start;

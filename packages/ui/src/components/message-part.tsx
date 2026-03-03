@@ -112,6 +112,7 @@ export interface MessagePartProps {
   turnDiffSummary?: () => JSX.Element
   turnDurationMs?: number
   animate?: boolean
+  working?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -527,7 +528,7 @@ export function AssistantParts(props: {
           <PartGrow
             animate={props.animate}
             debugID={key}
-            gap={idx() === 0 ? 0 : context() ? 2 : 6}
+            gap={0}
             fade={fade()}
             grow
             watch={!context() && !tool() && tail() && !turnSummary()}
@@ -557,6 +558,7 @@ export function AssistantParts(props: {
                     defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                     hideDetails={entry().context}
                     animate={props.animate}
+                    working={props.working}
                   />
                 </div>
               )}
@@ -733,6 +735,7 @@ export function AssistantMessageDisplay(props: {
                       showTurnDiffSummary={props.showTurnDiffSummary}
                       turnDiffSummary={props.turnDiffSummary}
                       hideDetails={entry().context}
+                      working={props.working}
                     />
                   </div>
                 </Show>
@@ -892,7 +895,7 @@ export function UserMessageDisplay(props: {
   }
 
   return (
-    <GrowBox animate={!!props.animate} fade gap={8} class="w-full min-w-0 self-stretch max-w-full">
+    <GrowBox animate={!!props.animate} fade class="w-full min-w-0 self-stretch max-w-full">
       <div data-component="user-message" data-interrupted={props.interrupted ? "" : undefined}>
         <div data-slot="user-message-inner">
           <Show when={attachments().length > 0}>
@@ -1034,6 +1037,7 @@ export function Part(props: MessagePartProps) {
         turnDiffSummary={props.turnDiffSummary}
         turnDurationMs={props.turnDurationMs}
         animate={props.animate}
+        working={props.working}
       />
     </Show>
   )
@@ -1262,6 +1266,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return props.turnDiffSummary
   })
 
+  const showCopy = createMemo(() => {
+    if (props.message.role !== "assistant") return true
+    if (props.working) return false
+    return props.showAssistantCopyPartID === part().id
+  })
+
   const handleCopy = async () => {
     const content = displayText()
     if (!content) return
@@ -1283,27 +1293,29 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             </GrowBox>
           )}
         </Show>
-        <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-          <Tooltip
-            value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-            placement="top"
-            gutter={4}
-          >
-            <IconButton
-              icon={copied() ? "check" : "copy"}
-              size="normal"
-              variant="ghost"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={handleCopy}
-              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-            />
-          </Tooltip>
-          <Show when={meta()}>
-            <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
-              {meta()}
-            </span>
-          </Show>
-        </div>
+        <GrowBox animate={!!props.animate} fade gap={summary() ? 4 : 0} open={showCopy()} class="w-full min-w-0">
+          <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+              placement="top"
+              gutter={4}
+            >
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                size="normal"
+                variant="ghost"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+              />
+            </Tooltip>
+            <Show when={meta()}>
+              <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
+                {meta()}
+              </span>
+            </Show>
+          </div>
+        </GrowBox>
       </div>
     </Show>
   )
