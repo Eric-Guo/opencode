@@ -1,4 +1,4 @@
-import { type JSX, onMount, onCleanup } from "solid-js"
+import { createEffect, on, type JSX, onMount, onCleanup } from "solid-js"
 import { animate, springValue, type AnimationPlaybackControls, FADE_SPRING, HEIGHT_SPRING } from "./motion"
 
 export interface GrowBoxProps {
@@ -15,6 +15,10 @@ export interface GrowBoxProps {
   gap?: number
   /** Reset to height:auto after grow completes, or stay at fixed px. Default: true. */
   autoHeight?: boolean
+  /** Controlled visibility for animating open/close without unmounting children. */
+  open?: boolean
+  /** Animate controlled open/close changes after mount. Default: true. */
+  animateToggle?: boolean
   /** data-slot attribute on the root div. */
   slot?: string
   /** CSS class on the root div. */
@@ -40,6 +44,8 @@ export function GrowBox(props: GrowBoxProps) {
   const gap = () => Math.max(0, props.gap ?? 0)
   const grow = () => props.grow !== false
   const watch = () => props.watch === true
+  const open = () => props.open !== false
+  const animateToggle = () => props.animateToggle !== false
 
   const currentHeight = () => {
     if (!root) return 0
@@ -54,7 +60,7 @@ export function GrowBox(props: GrowBoxProps) {
   const targetHeight = () => Math.max(0, Math.ceil(body?.getBoundingClientRect().height ?? 0))
 
   const setHeight = () => {
-    if (!root) return
+    if (!root || !open()) return
     const next = targetHeight()
     if (next === springTarget) return
     const prev = currentHeight()
@@ -88,6 +94,12 @@ export function GrowBox(props: GrowBoxProps) {
       if (!root) return
       root.style.willChange = ""
       root.style.contain = ""
+      if (!open()) {
+        springTarget = 0
+        root.style.height = "0px"
+        root.style.overflow = "hidden"
+        return
+      }
       const next = targetHeight()
       springTarget = next
       if (props.autoHeight === false || watch()) {
@@ -106,41 +118,49 @@ export function GrowBox(props: GrowBoxProps) {
     })
 
     if (!props.animate) {
-      root.style.height = ""
-      root.style.overflow = ""
-      body.style.opacity = ""
-      body.style.filter = ""
+      root.style.height = open() ? "" : "0px"
+      root.style.overflow = open() ? "" : "hidden"
+      body.style.opacity = open() || props.fade === false ? "" : "0"
+      body.style.filter = open() || props.fade === false ? "" : "blur(2px)"
       return
     }
 
-    if (grow()) {
+    if (!open()) {
       root.style.height = "0px"
       root.style.overflow = "hidden"
-    } else {
-      root.style.height = "auto"
-      root.style.overflow = "visible"
-    }
-
-    if (props.fade !== false) {
-      body.style.opacity = "0"
-      body.style.filter = "blur(2px)"
-    }
-
-    mountFrame = requestAnimationFrame(() => {
-      mountFrame = undefined
-      if (props.fade !== false && body) {
-        fadeAnim?.stop()
-        fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
-        fadeAnim.finished.then(() => {
-          if (!body) return
-          body.style.opacity = ""
-          body.style.filter = ""
-        })
+      if (props.fade !== false) {
+        body.style.opacity = "0"
+        body.style.filter = "blur(2px)"
       }
-      if (grow()) setHeight()
-    })
+    } else {
+      if (grow()) {
+        root.style.height = "0px"
+        root.style.overflow = "hidden"
+      } else {
+        root.style.height = "auto"
+        root.style.overflow = "visible"
+      }
+      if (props.fade !== false) {
+        body.style.opacity = "0"
+        body.style.filter = "blur(2px)"
+      }
+      mountFrame = requestAnimationFrame(() => {
+        mountFrame = undefined
+        if (props.fade !== false && body) {
+          fadeAnim?.stop()
+          fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
+          fadeAnim.finished.then(() => {
+            if (!body) return
+            body.style.opacity = ""
+            body.style.filter = ""
+          })
+        }
+        if (grow()) setHeight()
+      })
+    }
     if (watch()) {
       observer = new ResizeObserver(() => {
+        if (!open()) return
         if (resizeFrame !== undefined) return
         resizeFrame = requestAnimationFrame(() => {
           resizeFrame = undefined
@@ -150,6 +170,51 @@ export function GrowBox(props: GrowBoxProps) {
       observer.observe(body)
     }
   })
+
+  createEffect(
+    on(
+      () => props.open,
+      (value) => {
+        if (value === undefined) return
+        if (!root || !body) return
+        if (!animateToggle()) {
+          root.style.height = value ? "" : "0px"
+          root.style.overflow = value ? "" : "hidden"
+          body.style.opacity = value || props.fade === false ? "" : "0"
+          body.style.filter = value || props.fade === false ? "" : "blur(2px)"
+          return
+        }
+        fadeAnim?.stop()
+        if (!value) {
+          const next = currentHeight()
+          if (Math.abs(next - height.get()) >= 1) {
+            springTarget = next
+            height.jump(next)
+            root.style.height = `${next}px`
+          }
+          if (props.fade !== false) {
+            fadeAnim = animate(body, { opacity: 0, filter: "blur(2px)" }, FADE_SPRING)
+          }
+          root.style.overflow = "hidden"
+          springTarget = 0
+          height.set(0)
+          return
+        }
+        if (props.fade !== false) {
+          body.style.opacity = "0"
+          body.style.filter = "blur(2px)"
+          fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
+          fadeAnim.finished.then(() => {
+            if (!body || !open()) return
+            body.style.opacity = ""
+            body.style.filter = ""
+          })
+        }
+        setHeight()
+      },
+      { defer: true },
+    ),
+  )
 
   onCleanup(() => {
     if (mountFrame !== undefined) cancelAnimationFrame(mountFrame)

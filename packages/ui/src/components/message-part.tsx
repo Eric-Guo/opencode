@@ -98,6 +98,7 @@ export interface MessageProps {
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
   animate?: boolean
+  working?: boolean
   showReasoningSummaries?: boolean
 }
 
@@ -262,7 +263,8 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
     case "skill":
       return {
         icon: "brain",
-        title: input.name || "skill",
+        title: i18n.t("ui.tool.skill"),
+        subtitle: typeof input.name === "string" ? input.name : undefined,
       }
     default:
       return {
@@ -282,6 +284,42 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 
 function busy(status: string | undefined) {
   return status === "pending" || status === "running"
+}
+
+const pageVisible = /* @__PURE__ */ (() => {
+  const [visible, setVisible] = createSignal(true)
+  if (typeof document !== "undefined") {
+    const sync = () => setVisible(document.visibilityState !== "hidden")
+    sync()
+    document.addEventListener("visibilitychange", sync)
+  }
+  return visible
+})()
+
+function createGroupOpenState() {
+  const [state, setState] = createSignal<Record<string, boolean>>({})
+  const read = (key?: string, collapse?: boolean) => {
+    if (!key) return true
+    const value = state()[key]
+    if (value !== undefined) return value
+    return !collapse
+  }
+  const write = (key: string, value: boolean) => {
+    setState((prev) => ({ ...prev, [key]: value }))
+  }
+  return { read, write }
+}
+
+function shouldCollapseGroup(
+  statuses: (string | undefined)[],
+  opts: { afterTool?: boolean; groupTail?: boolean; working?: boolean },
+) {
+  if (opts.afterTool) return true
+  if (opts.groupTail === false) return true
+  if (!pageVisible()) return false
+  if (opts.working) return false
+  if (!statuses.length) return false
+  return !statuses.some((s) => busy(s))
 }
 
 function renderable(part: PartType, showReasoningSummaries = true) {
@@ -309,19 +347,23 @@ function partDefaultOpen(part: PartType, shell = false, edit = false) {
 function PartGrow(props: {
   children: JSX.Element
   animate?: boolean
+  animateToggle?: boolean
   debugID?: string
   gap?: number
   fade?: boolean
   grow?: boolean
   watch?: boolean
+  open?: boolean
 }) {
   return (
     <GrowBox
       animate={props.animate !== false}
+      animateToggle={props.animateToggle}
       fade={props.fade}
       gap={props.gap}
       grow={props.grow}
       watch={props.watch}
+      open={props.open}
       slot="assistant-part-grow"
     >
       {props.children}
@@ -343,17 +385,30 @@ export function AssistantParts(props: {
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
-
+  const groupState = createGroupOpenState()
   const grouped = createMemo(() => {
     const keys: string[] = []
     const items: Record<
       string,
-      { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] }
+      | {
+          type: "part"
+          part: PartType
+          message: AssistantMessage
+          context?: boolean
+          groupKey?: string
+          afterTool?: boolean
+          groupTail?: boolean
+          groupParts?: { part: ToolPart; message: AssistantMessage }[]
+        }
+      | {
+          type: "context"
+          groupKey: string
+          parts: { part: ToolPart; message: AssistantMessage }[]
+          tail: boolean
+          afterTool: boolean
+        }
     > = {}
-    const push = (
-      key: string,
-      item: { type: "part"; part: PartType; message: AssistantMessage } | { type: "context"; parts: ToolPart[] },
-    ) => {
+    const push = (key: string, item: (typeof items)[string]) => {
       keys.push(key)
       items[key] = item
     }
@@ -361,7 +416,6 @@ export function AssistantParts(props: {
       if (part.type === "tool") return part.callID || part.id
       return part.id
     }
-
     const parts = props.messages.flatMap((message) =>
       list(data.store.part?.[message.id], emptyParts)
         .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
@@ -370,35 +424,48 @@ export function AssistantParts(props: {
 
     let start = -1
 
-    const flush = (end: number) => {
+    const flush = (end: number, tail: boolean, afterTool: boolean) => {
       if (start < 0) return
-      const first = parts[start]
-      if (!first || !parts[end]) {
+      const group = parts
+        .slice(start, end + 1)
+        .filter((entry): entry is { part: ToolPart; message: AssistantMessage } => isContextGroupTool(entry.part))
+      if (!group.length) {
         start = -1
         return
       }
-      push(`context:${first.message.id}:${id(first.part)}`, {
+      const groupKey = `context:${group[0].message.id}:${id(group[0].part)}`
+      push(groupKey, {
         type: "context",
-        parts: parts
-          .slice(start, end + 1)
-          .map((x) => x.part)
-          .filter((part): part is ToolPart => isContextGroupTool(part)),
+        groupKey,
+        parts: group,
+        tail,
+        afterTool,
+      })
+      group.forEach((entry) => {
+        push(`part:${entry.message.id}:${id(entry.part)}`, {
+          type: "part",
+          part: entry.part,
+          message: entry.message,
+          context: true,
+          groupKey,
+          afterTool,
+          groupTail: tail,
+          groupParts: group,
+        })
       })
       start = -1
     }
-
     parts.forEach((item, index) => {
       if (isContextGroupTool(item.part)) {
         if (start < 0) start = index
         return
       }
 
-      flush(index - 1)
+      flush(index - 1, false, (item as { part: PartType }).part.type === "tool")
       push(`part:${item.message.id}:${id(item.part)}`, { type: "part", part: item.part, message: item.message })
     })
 
-    flush(parts.length - 1)
-
+    flush(parts.length - 1, true, false)
     return { keys, items }
   })
 
@@ -426,6 +493,25 @@ export function AssistantParts(props: {
           if (!value) return false
           return value.part.type === "tool"
         })
+        const context = createMemo(() => !!part()?.context)
+        const contextOpen = createMemo(() => {
+          const collapse = (
+            afterTool?: boolean,
+            groupTail?: boolean,
+            group?: { part: ToolPart; message: AssistantMessage }[],
+          ) =>
+            shouldCollapseGroup(group?.map((item) => item.part.state.status) ?? [], {
+              afterTool,
+              groupTail,
+              working: props.working,
+            })
+          const value = ctx()
+          if (value) return groupState.read(value.groupKey, collapse(value.afterTool, value.tail, value.parts))
+          const entry = part()
+          return groupState.read(entry?.groupKey, collapse(entry?.afterTool, entry?.groupTail, entry?.groupParts))
+        })
+        const visible = createMemo(() => !context() || contextOpen())
+
         const turnSummary = createMemo(() => {
           const value = part()
           if (!value) return false
@@ -441,28 +527,38 @@ export function AssistantParts(props: {
           <PartGrow
             animate={props.animate}
             debugID={key}
-            gap={idx() === 0 ? 0 : 6}
+            gap={idx() === 0 ? 0 : context() ? 2 : 6}
             fade={fade()}
             grow
-            watch={!tool() && tail() && !turnSummary()}
+            watch={!context() && !tool() && tail() && !turnSummary()}
+            animateToggle
+            open={visible()}
           >
             <Show when={ctx()}>
               {(entry) => (
-                <ContextToolGroup parts={entry().parts} busy={props.working && tail()} animate={props.animate} />
+                <ContextToolGroup
+                  parts={entry().parts.map((item) => item.part)}
+                  busy={props.working && entry().tail}
+                  open={contextOpen()}
+                  onOpenChange={(value: boolean) => groupState.write(entry().groupKey, value)}
+                />
               )}
             </Show>
             <Show when={part()}>
               {(entry) => (
-                <Part
-                  part={entry().part}
-                  message={entry().message}
-                  showAssistantCopyPartID={props.showAssistantCopyPartID}
-                  showTurnDiffSummary={props.showTurnDiffSummary}
-                  turnDiffSummary={props.turnDiffSummary}
-                  turnDurationMs={props.turnDurationMs}
-                  defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                  animate={props.animate}
-                />
+                <div data-component={entry().context ? "context-tool-step" : undefined}>
+                  <Part
+                    part={entry().part}
+                    message={entry().message}
+                    showAssistantCopyPartID={props.showAssistantCopyPartID}
+                    showTurnDiffSummary={props.showTurnDiffSummary}
+                    turnDiffSummary={props.turnDiffSummary}
+                    turnDurationMs={props.turnDurationMs}
+                    defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                    hideDetails={entry().context}
+                    animate={props.animate}
+                  />
+                </div>
               )}
             </Show>
           </PartGrow>
@@ -474,69 +570,6 @@ export function AssistantParts(props: {
 
 function isContextGroupTool(part: PartType): part is ToolPart {
   return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
-}
-
-function contextToolDetail(part: ToolPart): string | undefined {
-  const info = getToolInfo(part.tool, part.state.input ?? {})
-  if (info.subtitle) return info.subtitle
-  if (part.state.status === "error") return part.state.error
-  if ((part.state.status === "running" || part.state.status === "completed") && part.state.title)
-    return part.state.title
-  const description = part.state.input?.description
-  if (typeof description === "string") return description
-  return undefined
-}
-
-function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
-  const input = (part.state.input ?? {}) as Record<string, unknown>
-  const path = typeof input.path === "string" ? input.path : "/"
-  const filePath = typeof input.filePath === "string" ? input.filePath : undefined
-  const pattern = typeof input.pattern === "string" ? input.pattern : undefined
-  const include = typeof input.include === "string" ? input.include : undefined
-  const offset = typeof input.offset === "number" ? input.offset : undefined
-  const limit = typeof input.limit === "number" ? input.limit : undefined
-
-  switch (part.tool) {
-    case "read": {
-      const args: string[] = []
-      if (offset !== undefined) args.push("offset=" + offset)
-      if (limit !== undefined) args.push("limit=" + limit)
-      return {
-        title: i18n.t("ui.tool.read"),
-        subtitle: filePath ? getFilename(filePath) : "",
-        args,
-      }
-    }
-    case "list":
-      return {
-        title: i18n.t("ui.tool.list"),
-        subtitle: getDirectory(path),
-      }
-    case "glob":
-      return {
-        title: i18n.t("ui.tool.glob"),
-        subtitle: getDirectory(path),
-        args: pattern ? ["pattern=" + pattern] : [],
-      }
-    case "grep": {
-      const args: string[] = []
-      if (pattern) args.push("pattern=" + pattern)
-      if (include) args.push("include=" + include)
-      return {
-        title: i18n.t("ui.tool.grep"),
-        subtitle: getDirectory(path),
-        args,
-      }
-    }
-    default: {
-      const info = getToolInfo(part.tool, input)
-      return {
-        title: info.title,
-        subtitle: info.subtitle || contextToolDetail(part),
-        args: [],
-      }
-    }
-  }
 }
 
 function contextToolSummary(parts: ToolPart[]) {
@@ -569,6 +602,7 @@ export function Message(props: MessageProps) {
             message={assistantMessage() as AssistantMessage}
             parts={props.parts}
             showAssistantCopyPartID={props.showAssistantCopyPartID}
+            working={props.working}
             showReasoningSummaries={props.showReasoningSummaries}
           />
         )}
@@ -583,48 +617,64 @@ export function AssistantMessageDisplay(props: {
   showAssistantCopyPartID?: string | null
   showTurnDiffSummary?: boolean
   turnDiffSummary?: () => JSX.Element
+  working?: boolean
   showReasoningSummaries?: boolean
 }) {
+  const groupState = createGroupOpenState()
   const grouped = createMemo(() => {
     const keys: string[] = []
-    const items: Record<string, { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }> = {}
-    const push = (key: string, item: { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }) => {
+    const items: Record<
+      string,
+      | {
+          type: "part"
+          part: PartType
+          context?: boolean
+          groupKey?: string
+          afterTool?: boolean
+          groupTail?: boolean
+          groupParts?: ToolPart[]
+        }
+      | { type: "context"; groupKey: string; parts: ToolPart[]; tail: boolean; afterTool: boolean }
+    > = {}
+    const push = (key: string, item: (typeof items)[string]) => {
       keys.push(key)
       items[key] = item
     }
-
-    const parts = props.parts
+    const parts = props.parts.filter((part) => renderable(part, props.showReasoningSummaries ?? true))
     let start = -1
-
-    const flush = (end: number) => {
+    const flush = (end: number, tail: boolean, afterTool: boolean) => {
       if (start < 0) return
-      const first = parts[start]
-      const last = parts[end]
-      if (!first || !last) {
+      const group = parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part))
+      if (!group.length) {
         start = -1
         return
       }
-      push(`context:${first.id}`, {
-        type: "context",
-        parts: parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part)),
-      })
+      const groupKey = `context:${group[0].id}`
+      push(groupKey, { type: "context", groupKey, parts: group, tail, afterTool })
+      group.forEach((part) =>
+        push(`part:${part.id}`, {
+          type: "part",
+          part,
+          context: true,
+          groupKey,
+          afterTool,
+          groupTail: tail,
+          groupParts: group,
+        }),
+      )
       start = -1
     }
 
     parts.forEach((part, index) => {
-      if (!renderable(part, props.showReasoningSummaries ?? true)) return
-
       if (isContextGroupTool(part)) {
         if (start < 0) start = index
         return
       }
-
-      flush(index - 1)
+      flush(index - 1, false, (part as PartType).type === "tool")
       push(`part:${part.id}`, { type: "part", part })
     })
 
-    flush(parts.length - 1)
-
+    flush(parts.length - 1, true, false)
     return { keys, items }
   })
 
@@ -644,18 +694,43 @@ export function AssistantMessageDisplay(props: {
           if (value.type !== "part") return
           return value
         })
+        const contextOpen = createMemo(() => {
+          const collapse = (afterTool?: boolean, groupTail?: boolean, group?: ToolPart[]) =>
+            shouldCollapseGroup(group?.map((part) => part.state.status) ?? [], {
+              afterTool,
+              groupTail,
+              working: props.working,
+            })
+          const value = ctx()
+          if (value) return groupState.read(value.groupKey, collapse(value.afterTool, value.tail, value.parts))
+          const entry = part()
+          return groupState.read(entry?.groupKey, collapse(entry?.afterTool, entry?.groupTail, entry?.groupParts))
+        })
         return (
           <>
-            <Show when={ctx()}>{(entry) => <ContextToolGroup parts={entry().parts} />}</Show>
+            <Show when={ctx()}>
+              {(entry) => (
+                <ContextToolGroup
+                  parts={entry().parts}
+                  open={contextOpen()}
+                  onOpenChange={(value: boolean) => groupState.write(entry().groupKey, value)}
+                />
+              )}
+            </Show>
             <Show when={part()}>
               {(entry) => (
-                <Part
-                  part={entry().part}
-                  message={props.message}
-                  showAssistantCopyPartID={props.showAssistantCopyPartID}
-                  showTurnDiffSummary={props.showTurnDiffSummary}
-                  turnDiffSummary={props.turnDiffSummary}
-                />
+                <Show when={!entry().context || contextOpen()}>
+                  <div data-component={entry().context ? "context-tool-step" : undefined}>
+                    <Part
+                      part={entry().part}
+                      message={props.message}
+                      showAssistantCopyPartID={props.showAssistantCopyPartID}
+                      showTurnDiffSummary={props.showTurnDiffSummary}
+                      turnDiffSummary={props.turnDiffSummary}
+                      hideDetails={entry().context}
+                    />
+                  </div>
+                </Show>
               )}
             </Show>
           </>
@@ -665,24 +740,27 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
-function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: boolean }) {
+function ContextToolGroup(props: {
+  parts: ToolPart[]
+  busy?: boolean
+  open: boolean
+  onOpenChange: (value: boolean) => void
+}) {
   const i18n = useI18n()
   const anyRunning = createMemo(() => props.parts.some((part) => busy(part.state.status)))
-  // Once all parts are done and the group is no longer busy, latch into
-  // "explored" permanently so brief status flickers can't jump it back.
   const [settled, setSettled] = createSignal(false)
   createEffect(() => {
     if (!anyRunning() && !props.busy) setSettled(true)
   })
   const pending = createMemo(() => !settled() && (!!props.busy || anyRunning()))
   const summary = createMemo(() => contextToolSummary(props.parts))
-
   return (
     <ToolCall
-      variant="group"
+      variant="row"
       icon="magnifying-glass-menu"
-      animated
-      animate
+      open={props.open}
+      showArrow
+      onOpenChange={props.onOpenChange}
       trigger={
         <div data-component="context-tool-group-trigger">
           <span
@@ -728,34 +806,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
           </span>
         </div>
       }
-    >
-      <ToolCall.List>
-        <For each={props.parts}>
-          {(part) => {
-            const trigger = contextToolTrigger(part, i18n)
-            const running = createMemo(() => busy(part.state.status))
-            const reveal = useToolReveal(running, () => props.animate !== false)
-            return (
-              <ToolCall.Row>
-                <div data-slot="basic-tool-tool-info-structured">
-                  <div data-slot="basic-tool-tool-info-main">
-                    <span data-slot="basic-tool-tool-title">
-                      <TextShimmer text={trigger.title} active={running()} />
-                    </span>
-                    <Show when={trigger.subtitle}>{(text) => <ToolText text={text()} animate={reveal()} />}</Show>
-                    <Show when={trigger.args?.length}>
-                      <For each={trigger.args}>
-                        {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} animate={reveal()} />}
-                      </For>
-                    </Show>
-                  </div>
-                </div>
-              </ToolCall.Row>
-            )
-          }}
-        </For>
-      </ToolCall.List>
-    </ToolCall>
+    />
   )
 }
 
@@ -1278,7 +1329,6 @@ ToolRegistry.register({
     if (props.input.offset) args.push("offset=" + props.input.offset)
     if (props.input.limit) args.push("limit=" + props.input.limit)
     const loaded = createMemo(() => {
-      if (props.status !== "completed") return []
       const value = props.metadata.loaded
       if (!value || !Array.isArray(value)) return []
       return value.filter((p): p is string => typeof p === "string")
@@ -1302,12 +1352,10 @@ ToolRegistry.register({
         />
         <For each={loaded()}>
           {(filepath) => (
-            <div data-component="tool-loaded-file">
-              <Icon name="enter" size="small" />
-              <span>
-                {i18n.t("ui.tool.loaded")} {relativizeProjectPath(filepath, data.directory)}
-              </span>
-            </div>
+            <ToolLoadedFile
+              text={`${i18n.t("ui.tool.loaded")} ${relativizeProjectPath(filepath, data.directory)}`}
+              animate={props.reveal}
+            />
           )}
         </For>
       </>
@@ -1329,7 +1377,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.list")}
             pending={pending()}
-            subtitle={getDirectory(props.input.path || "/")}
+            subtitle={props.input.path ? getDirectory(props.input.path) : ""}
             animate={props.reveal}
           />
         }
@@ -1360,7 +1408,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.glob")}
             pending={pending()}
-            subtitle={getDirectory(props.input.path || "/")}
+            subtitle={props.input.path ? getDirectory(props.input.path) : ""}
             args={props.input.pattern ? ["pattern=" + props.input.pattern] : []}
             animate={props.reveal}
           />
@@ -1395,7 +1443,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.grep")}
             pending={pending()}
-            subtitle={getDirectory(props.input.path || "/")}
+            subtitle={props.input.path ? getDirectory(props.input.path) : ""}
             args={args}
             animate={props.reveal}
           />
@@ -1559,14 +1607,15 @@ function ToolText(props: { text: string; delay?: number; animate?: boolean }) {
   )
 }
 
-function ToolArg(props: { text: string; delay?: number; animate?: boolean }) {
-  let ref: HTMLSpanElement | undefined
-  useToolFade(() => ref, { delay: props.delay, wipe: true, animate: props.animate })
+function ToolLoadedFile(props: { text: string; animate?: boolean }) {
+  let ref: HTMLDivElement | undefined
+  useToolFade(() => ref, { delay: 0.02, wipe: true, animate: props.animate })
 
   return (
-    <span ref={ref} data-slot="basic-tool-tool-arg">
-      {props.text}
-    </span>
+    <div ref={ref} data-component="tool-loaded-file">
+      <Icon name="enter" size="small" />
+      <span>{props.text}</span>
+    </div>
   )
 }
 
@@ -1577,11 +1626,17 @@ function ToolTriggerRow(props: {
   args?: string[]
   action?: JSX.Element
   animate?: boolean
+  revealOnMount?: boolean
 }) {
   const reveal = useToolReveal(
     () => props.pending,
     () => props.animate !== false,
   )
+  const detail = createMemo(() => [props.subtitle, ...(props.args ?? [])].filter((x): x is string => !!x).join(" "))
+  const detailAnimate = createMemo(() => {
+    if (props.revealOnMount) return props.animate !== false
+    return reveal()
+  })
 
   return (
     <div data-slot="basic-tool-tool-info-structured">
@@ -1589,14 +1644,9 @@ function ToolTriggerRow(props: {
         <span data-slot="basic-tool-tool-title">
           <TextShimmer text={props.title} active={props.pending} />
         </span>
-        <Show when={!props.pending && props.subtitle}>{(text) => <ToolText text={text()} animate={reveal()} />}</Show>
-        <Show when={!props.pending && props.args?.length}>
-          <For each={props.args}>
-            {(arg, idx) => <ToolArg text={arg} delay={0.02 * (idx() + 1)} animate={reveal()} />}
-          </For>
-        </Show>
+        <Show when={detail()}>{(text) => <ToolText text={text()} animate={detailAnimate()} />}</Show>
       </div>
-      <Show when={!props.pending && props.action}>{props.action}</Show>
+      <Show when={props.action}>{props.action}</Show>
     </div>
   )
 }
@@ -1672,7 +1722,7 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
               </span>
-              <Show when={!pending() && url()}>{(value) => <WebfetchMeta url={value()} animate={reveal()} />}</Show>
+              <Show when={url()}>{(value) => <WebfetchMeta url={value()} animate={reveal()} />}</Show>
             </div>
           </div>
         }
@@ -1863,13 +1913,15 @@ ToolRegistry.register({
                   <span data-slot="message-part-title-text">
                     <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
                   </span>
-                  <Show when={!pending()}>
-                    <ToolMetaLine
-                      filename={filename()}
-                      path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
-                      changes={props.metadata.filediff}
-                      animate={reveal()}
-                    />
+                  <Show when={filename()}>
+                    {(name) => (
+                      <ToolMetaLine
+                        filename={name()}
+                        path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
+                        changes={props.metadata.filediff}
+                        animate={reveal()}
+                      />
+                    )}
                   </Show>
                 </div>
               </div>
@@ -1932,12 +1984,14 @@ ToolRegistry.register({
                   <span data-slot="message-part-title-text">
                     <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
                   </span>
-                  <Show when={!pending()}>
-                    <ToolMetaLine
-                      filename={filename()}
-                      path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
-                      animate={reveal()}
-                    />
+                  <Show when={filename()}>
+                    {(name) => (
+                      <ToolMetaLine
+                        filename={name()}
+                        path={props.input.filePath?.includes("/") ? getDirectory(props.input.filePath!) : undefined}
+                        animate={reveal()}
+                      />
+                    )}
                   </Show>
                 </div>
               </div>
@@ -2021,7 +2075,7 @@ ToolRegistry.register({
                   <span data-slot="message-part-title-text">
                     <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
                   </span>
-                  <Show when={!pending() && single()}>
+                  <Show when={single()}>
                     {(file) => (
                       <ToolMetaLine
                         filename={getFilename(file().relativePath)}
@@ -2031,9 +2085,7 @@ ToolRegistry.register({
                       />
                     )}
                   </Show>
-                  <Show when={!pending() && !single() && subtitle()}>
-                    {(text) => <ToolText text={text()} animate={reveal()} />}
-                  </Show>
+                  <Show when={!single() && subtitle()}>{(text) => <ToolText text={text()} animate={reveal()} />}</Show>
                 </div>
               </div>
             </div>
@@ -2282,21 +2334,28 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "skill",
   render(props) {
-    const title = createMemo(() => props.input.name || "skill")
-    const running = createMemo(() => busy(props.status))
-
-    const titleContent = () => <TextShimmer text={title()} active={running()} />
-
-    const trigger = () => (
-      <div data-slot="basic-tool-tool-info-structured">
-        <div data-slot="basic-tool-tool-info-main">
-          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
-            {titleContent()}
-          </span>
-        </div>
-      </div>
+    const i18n = useI18n()
+    const pending = createMemo(() => busy(props.status))
+    const name = createMemo(() => {
+      const value = props.input.name || props.metadata.name
+      if (typeof value === "string") return value
+    })
+    return (
+      <ToolCall
+        variant="row"
+        icon="brain"
+        status={props.status}
+        trigger={
+          <ToolTriggerRow
+            title={i18n.t("ui.tool.skill")}
+            pending={pending()}
+            subtitle={name()}
+            animate={props.reveal}
+            revealOnMount
+          />
+        }
+        animate
+      />
     )
-
-    return <ToolCall variant="row" icon="brain" status={props.status} trigger={trigger()} animate />
   },
 })

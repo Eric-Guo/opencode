@@ -754,11 +754,6 @@ export function MessageTimeline(props: {
                         "min-w-0 w-full max-w-full": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                       }}
-                      style={
-                        staging.ready()
-                          ? undefined
-                          : { "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }
-                      }
                     >
                       <Show when={commentCount() > 0}>
                         <div class="w-full px-4 md:px-5 pb-2">
@@ -799,7 +794,7 @@ export function MessageTimeline(props: {
                       <SessionTurn
                         sessionID={sessionID() ?? ""}
                         messageID={messageID}
-                        animate={staging.ready()}
+                        animate={messageID === activeMessageID()}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}
