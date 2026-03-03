@@ -17,6 +17,7 @@ import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { TextReveal } from "./text-reveal"
+import { SessionRetry } from "./session-retry"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 const THINKING_GAP_PX = 12

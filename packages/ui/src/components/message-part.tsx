@@ -468,7 +468,7 @@ export function AssistantParts(props: {
           </PartGrow>
         )
       }}
-    </Index>
+    </For>
   )
 }
 
@@ -585,26 +585,65 @@ export function AssistantMessageDisplay(props: {
   turnDiffSummary?: () => JSX.Element
   showReasoningSummaries?: boolean
 }) {
-  const emptyTools: ToolPart[] = []
-  const grouped = createMemo(
-    () =>
-      groupParts(
-        props.parts
-          .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
-          .map((part) => ({
-            messageID: props.message.id,
-            part,
-          })),
-      ),
-    [] as PartGroup[],
-    { equals: sameGroups },
-  )
+  const grouped = createMemo(() => {
+    const keys: string[] = []
+    const items: Record<string, { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }> = {}
+    const push = (key: string, item: { type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] }) => {
+      keys.push(key)
+      items[key] = item
+    }
+
+    const parts = props.parts
+    let start = -1
+
+    const flush = (end: number) => {
+      if (start < 0) return
+      const first = parts[start]
+      const last = parts[end]
+      if (!first || !last) {
+        start = -1
+        return
+      }
+      push(`context:${first.id}`, {
+        type: "context",
+        parts: parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part)),
+      })
+      start = -1
+    }
+
+    parts.forEach((part, index) => {
+      if (!renderable(part, props.showReasoningSummaries ?? true)) return
+
+      if (isContextGroupTool(part)) {
+        if (start < 0) start = index
+        return
+      }
+
+      flush(index - 1)
+      push(`part:${part.id}`, { type: "part", part })
+    })
+
+    flush(parts.length - 1)
+
+    return { keys, items }
+  })
 
   return (
-    <Index each={grouped()}>
-      {(entryAccessor) => {
-        const entryType = createMemo(() => entryAccessor().type)
-
+    <For each={grouped().keys}>
+      {(key) => {
+        const item = createMemo(() => grouped().items[key])
+        const ctx = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "context") return
+          return value
+        })
+        const part = createMemo(() => {
+          const value = item()
+          if (!value) return
+          if (value.type !== "part") return
+          return value
+        })
         return (
           <>
             <Show when={ctx()}>{(entry) => <ContextToolGroup parts={entry().parts} />}</Show>
@@ -622,7 +661,7 @@ export function AssistantMessageDisplay(props: {
           </>
         )
       }}
-    </Index>
+    </For>
   )
 }
 
@@ -1030,20 +1069,20 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const emptyInput: Record<string, any> = {}
   const emptyMetadata: Record<string, any> = {}
 
-  const input = () => part().state?.input ?? emptyInput
+  const input = () => part.state?.input ?? emptyInput
   // @ts-expect-error
-  const partMetadata = () => part().state?.metadata ?? emptyMetadata
+  const partMetadata = () => part.state?.metadata ?? emptyMetadata
 
-  const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
+  const render = createMemo(() => ToolRegistry.render(part.tool) ?? GenericTool)
 
   return (
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-tool={part.tool}>
         <Switch>
-          <Match when={part().state.status === "error" && (part().state as any).error}>
+          <Match when={part.state.status === "error" && part.state.error}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
-              if (part().tool === "question" && cleaned.includes("dismissed this question")) {
+              if (part.tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
                     <span class="text-13-regular text-text-weak cursor-default">
@@ -1082,8 +1121,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               callID={part.callID}
               metadata={partMetadata()}
               // @ts-expect-error
-              output={part().state.output}
-              status={part().state.status}
+              output={part.state.output}
+              status={part.state.status}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
               animate
@@ -1163,7 +1202,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const summary = createMemo(() => {
     if (props.message.role !== "assistant") return
     if (!props.showTurnDiffSummary) return
-    if (props.showAssistantCopyPartID !== part.id) return
+    if (props.showAssistantCopyPartID !== part().id) return
     return props.turnDiffSummary
   })
 
@@ -1224,7 +1263,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div ref={ref} data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part.id} />
+        <Markdown text={throttledText()} cacheKey={part().id} />
       </div>
     </Show>
   )
