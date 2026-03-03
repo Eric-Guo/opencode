@@ -58,3 +58,4 @@ publish:
   provider: github
   owner: anomalyco
   repo: opencode-beta
+  channel: latest
