@@ -1,4 +1,16 @@
-import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, splitProps, Switch, type JSX } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  splitProps,
+  Switch,
+  type JSX,
+} from "solid-js"
 import {
   animate,
   type AnimationPlaybackControls,
