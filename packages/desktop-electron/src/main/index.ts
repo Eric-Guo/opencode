@@ -8,16 +8,19 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { createServer } from "node:net"
 
-app.setName(app.isPackaged ? "OpenCode" : "OpenCode Dev")
-app.setPath(
-  "userData",
-  join(app.getPath("appData"), app.isPackaged ? "ai.opencode.desktop" : "ai.opencode.desktop.dev"),
-)
+const APP_NAMES: Record<string, string> = { dev: "OpenCode Dev", beta: "OpenCode Beta", prod: "OpenCode" }
+const APP_IDS: Record<string, string> = {
+  dev: "ai.opencode.desktop.dev",
+  beta: "ai.opencode.desktop.beta",
+  prod: "ai.opencode.desktop",
+}
+app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
+app.setPath("userData", join(app.getPath("appData"), app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"))
 const { autoUpdater } = pkg
 
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { installCli, syncCli } from "./cli"
-import { UPDATER_ENABLED } from "./constants"
+import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"

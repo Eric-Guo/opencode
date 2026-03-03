@@ -2,9 +2,10 @@
 import { $ } from "bun"
 
 import { Script } from "@opencode-ai/script"
-import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./utils"
+import { copyBinaryToSidecarFolder, getCurrentSidecar, resolveChannel, windowsify } from "./utils"
 
-await $`bun ./scripts/copy-icons.ts prod`
+const channel = resolveChannel()
+await $`bun ./scripts/copy-icons.ts ${channel}`
 
 const pkg = await Bun.file("./package.json").json()
 pkg.version = Script.version

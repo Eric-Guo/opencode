@@ -1,5 +1,13 @@
 import { $ } from "bun"
 
+export type Channel = "dev" | "beta" | "prod"
+
+export function resolveChannel(): Channel {
+  const raw = Bun.env.OPENCODE_CHANNEL
+  if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+  return "dev"
+}
+
 export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; assetExt: string }> = [
   {
     rustTarget: "aarch64-apple-darwin",

@@ -2,7 +2,7 @@ import { $ } from "bun"
 
 import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./utils"
 
-await $`bun ./scripts/copy-icons.ts dev`
+await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
 
 const RUST_TARGET = Bun.env.RUST_TARGET
 

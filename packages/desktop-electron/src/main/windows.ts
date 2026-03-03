@@ -41,8 +41,8 @@ export function createMainWindow(globals: Globals) {
     icon: iconPath(),
     ...(process.platform === "darwin"
       ? {
-          titleBarStyle: "hiddenInset" as const,
-          trafficLightPosition: { x: 12, y: 18 },
+          titleBarStyle: "hidden" as const,
+          trafficLightPosition: { x: 12, y: 14 },
         }
       : {}),
     ...(process.platform === "win32"
@@ -78,12 +78,7 @@ export function createLoadingWindow(globals: Globals) {
     center: true,
     show: true,
     icon: iconPath(),
-    ...(process.platform === "darwin"
-      ? {
-          titleBarStyle: "hiddenInset" as const,
-          trafficLightPosition: { x: 12, y: 18 },
-        }
-      : {}),
+    ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
     ...(process.platform === "win32"
       ? {
           frame: false,
