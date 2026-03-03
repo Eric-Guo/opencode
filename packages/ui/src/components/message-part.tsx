@@ -573,9 +573,14 @@ function isContextGroupTool(part: PartType): part is ToolPart {
 }
 
 function contextToolSummary(parts: ToolPart[]) {
-  const read = parts.filter((part) => part.tool === "read").length
-  const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
-  const list = parts.filter((part) => part.tool === "list").length
+  let read = 0
+  let search = 0
+  let list = 0
+  for (const part of parts) {
+    if (part.tool === "read") read++
+    else if (part.tool === "glob" || part.tool === "grep") search++
+    else if (part.tool === "list") list++
+  }
   return { read, search, list }
 }
 
@@ -1377,7 +1382,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.list")}
             pending={pending()}
-            subtitle={props.input.path ? getDirectory(props.input.path) : ""}
+            subtitle={getDirectory(props.input.path)}
             animate={props.reveal}
           />
         }
@@ -1408,7 +1413,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.glob")}
             pending={pending()}
-            subtitle={props.input.path ? getDirectory(props.input.path) : ""}
+            subtitle={getDirectory(props.input.path)}
             args={props.input.pattern ? ["pattern=" + props.input.pattern] : []}
             animate={props.reveal}
           />
@@ -1443,7 +1448,7 @@ ToolRegistry.register({
           <ToolTriggerRow
             title={i18n.t("ui.tool.grep")}
             pending={pending()}
-            subtitle={props.input.path ? getDirectory(props.input.path) : ""}
+            subtitle={getDirectory(props.input.path)}
             args={args}
             animate={props.reveal}
           />
