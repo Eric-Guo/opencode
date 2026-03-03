@@ -105,10 +105,6 @@ type TimelineStageInput = {
  * new messages render immediately.
  */
 function createTimelineStaging(input: TimelineStageInput) {
-  const log = (...args: unknown[]) => {
-    if (typeof window === "undefined") return
-    console.debug("[ui:staging]", ...args)
-  }
   const [state, setState] = createStore({
     activeSession: "",
     completedSession: "",
@@ -144,34 +140,21 @@ function createTimelineStaging(input: TimelineStageInput) {
     if (input.sessionKey() !== sessionKey) return
     if (readySession() === sessionKey) return
     setReadySession(sessionKey)
-    log("ready-set", { sessionKey })
   }
 
   createEffect(
     on(
       () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
       ([sessionKey, isWindowed, total]) => {
-        log("source", {
-          sessionKey,
-          isWindowed,
-          total,
-          active: state.activeSession,
-          completed: state.completedSession,
-          readySession: readySession(),
-        })
         cancel()
         const switched = active !== sessionKey
         if (switched) {
           active = sessionKey
           setReadySession("")
-          log("switch", { sessionKey })
         }
         const staging = state.activeSession === sessionKey && state.completedSession !== sessionKey
         if (staging && !switched) return
-        const shouldStage =
-          isWindowed &&
-          total > input.config.init &&
-          state.completedSession !== sessionKey
+        const shouldStage = isWindowed && total > input.config.init && state.completedSession !== sessionKey
         if (shouldStage) setReadySession("")
         if (!shouldStage) {
           setState({
@@ -181,7 +164,6 @@ function createTimelineStaging(input: TimelineStageInput) {
           })
           if (total <= 0) {
             setReadySession("")
-            log("ready-clear-empty", { sessionKey })
             return
           }
           if (readySession() !== sessionKey) scheduleReady(sessionKey)
@@ -748,7 +730,9 @@ export function MessageTimeline(props: {
                       "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                     }}
                     style={
-                      staging.ready() ? undefined : { "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }
+                      staging.ready()
+                        ? undefined
+                        : { "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }
                     }
                   >
                     <Show when={commentCount() > 0}>
