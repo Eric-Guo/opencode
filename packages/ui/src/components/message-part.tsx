@@ -279,100 +279,8 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
-}
-
-type PartRef = {
-  messageID: string
-  partID: string
-}
-
-type PartGroup =
-  | {
-      key: string
-      type: "part"
-      ref: PartRef
-    }
-  | {
-      key: string
-      type: "context"
-      refs: PartRef[]
-    }
-
-function sameRef(a: PartRef, b: PartRef) {
-  return a.messageID === b.messageID && a.partID === b.partID
-}
-
-function sameGroup(a: PartGroup, b: PartGroup) {
-  if (a === b) return true
-  if (a.key !== b.key) return false
-  if (a.type !== b.type) return false
-  if (a.type === "part") {
-    if (b.type !== "part") return false
-    return sameRef(a.ref, b.ref)
-  }
-  if (b.type !== "context") return false
-  if (a.refs.length !== b.refs.length) return false
-  return a.refs.every((ref, i) => sameRef(ref, b.refs[i]!))
-}
-
-function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((item, i) => sameGroup(item, b[i]!))
-}
-
-function groupParts(parts: { messageID: string; part: PartType }[]) {
-  const result: PartGroup[] = []
-  let start = -1
-
-  const flush = (end: number) => {
-    if (start < 0) return
-    const first = parts[start]
-    const last = parts[end]
-    if (!first || !last) {
-      start = -1
-      return
-    }
-    result.push({
-      key: `context:${first.part.id}`,
-      type: "context",
-      refs: parts.slice(start, end + 1).map((item) => ({
-        messageID: item.messageID,
-        partID: item.part.id,
-      })),
-    })
-    start = -1
-  }
-
-  parts.forEach((item, index) => {
-    if (isContextGroupTool(item.part)) {
-      if (start < 0) start = index
-      return
-    }
-
-    flush(index - 1)
-    result.push({
-      key: `part:${item.messageID}:${item.part.id}`,
-      type: "part",
-      ref: {
-        messageID: item.messageID,
-        partID: item.part.id,
-      },
-    })
-  })
-
-  flush(parts.length - 1)
-  return result
-}
-
-function partByID(parts: readonly PartType[], partID: string) {
-  return parts.find((part) => part.id === partID)
+function busy(status: string | undefined) {
+  return status === "pending" || status === "running"
 }
 
 function renderable(part: PartType, showReasoningSummaries = true) {
@@ -734,9 +642,7 @@ export function AssistantMessageDisplay(props: {
 
 function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: boolean }) {
   const i18n = useI18n()
-  const anyRunning = createMemo(() =>
-    props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
-  )
+  const anyRunning = createMemo(() => props.parts.some((part) => busy(part.state.status)))
   // Once all parts are done and the group is no longer busy, latch into
   // "explored" permanently so brief status flickers can't jump it back.
   const [settled, setSettled] = createSignal(false)
@@ -801,7 +707,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; animate?: 
         <For each={props.parts}>
           {(part) => {
             const trigger = contextToolTrigger(part, i18n)
-            const running = createMemo(() => part.state.status === "pending" || part.state.status === "running")
+            const running = createMemo(() => busy(part.state.status))
             const reveal = useToolReveal(running, () => props.animate !== false)
             return (
               <div data-slot="context-tool-group-item">
@@ -1138,9 +1044,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const part = props.part as ToolPart
   if (part.tool === "todowrite" || part.tool === "todoread") return null
 
-  const hideQuestion = createMemo(
-    () => part().tool === "question" && (part().state.status === "pending" || part().state.status === "running"),
-  )
+  const hideQuestion = createMemo(() => part.tool === "question" && busy(part.state.status))
 
   const emptyInput: Record<string, any> = {}
   const emptyMetadata: Record<string, any> = {}
@@ -1346,7 +1250,7 @@ ToolRegistry.register({
       if (!value || !Array.isArray(value)) return []
       return value.filter((p): p is string => typeof p === "string")
     })
-    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const pending = createMemo(() => busy(props.status))
     return (
       <>
         <BasicTool
@@ -1381,7 +1285,7 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     const i18n = useI18n()
-    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const pending = createMemo(() => busy(props.status))
     return (
       <BasicTool
         {...props}
@@ -1411,7 +1315,7 @@ ToolRegistry.register({
   name: "glob",
   render(props) {
     const i18n = useI18n()
-    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const pending = createMemo(() => busy(props.status))
     return (
       <BasicTool
         {...props}
@@ -1445,7 +1349,7 @@ ToolRegistry.register({
     const args: string[] = []
     if (props.input.pattern) args.push("pattern=" + props.input.pattern)
     if (props.input.include) args.push("include=" + props.input.include)
-    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const pending = createMemo(() => busy(props.status))
     return (
       <BasicTool
         {...props}
@@ -1713,7 +1617,7 @@ ToolRegistry.register({
   name: "webfetch",
   render(props) {
     const i18n = useI18n()
-    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const pending = createMemo(() => busy(props.status))
     const reveal = useToolReveal(pending, () => props.reveal !== false)
     const url = createMemo(() => {
       const value = props.input.url
@@ -1752,7 +1656,7 @@ ToolRegistry.register({
       if (typeof value === "string") return value
       return undefined
     })
-    const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const running = createMemo(() => busy(props.status))
     const reveal = useToolReveal(running, () => props.reveal !== false)
 
     const href = createMemo(() => {
@@ -1822,7 +1726,7 @@ ToolRegistry.register({
   name: "bash",
   render(props) {
     const i18n = useI18n()
-    const pending = () => props.status === "pending" || props.status === "running"
+    const pending = () => busy(props.status)
     const reveal = useToolReveal(pending, () => props.reveal !== false)
     const subtitle = () => props.input.description ?? props.metadata.description
     const output = createMemo(() => {
@@ -1905,14 +1809,13 @@ ToolRegistry.register({
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
-    const pending = () => props.status === "pending" || props.status === "running"
+    const pending = () => busy(props.status)
     const reveal = useToolReveal(pending, () => props.reveal !== false)
     return (
       <div data-component="edit-tool">
         <BasicTool
           {...props}
           icon="code-lines"
-          defer
           animated
           trigger={
             <div data-component="edit-trigger">
@@ -1974,14 +1877,13 @@ ToolRegistry.register({
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const path = createMemo(() => props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
-    const pending = () => props.status === "pending" || props.status === "running"
+    const pending = () => busy(props.status)
     const reveal = useToolReveal(pending, () => props.reveal !== false)
     return (
       <div data-component="write-tool">
         <BasicTool
           {...props}
           icon="code-lines"
-          defer
           animated
           trigger={
             <div data-component="write-trigger">
@@ -2043,7 +1945,7 @@ ToolRegistry.register({
     const i18n = useI18n()
     const fileComponent = useFileComponent()
     const files = createMemo(() => (props.metadata.files ?? []) as ApplyPatchFile[])
-    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const pending = createMemo(() => busy(props.status))
     const reveal = useToolReveal(pending, () => props.reveal !== false)
     const single = createMemo(() => {
       const list = files()
@@ -2241,7 +2143,7 @@ ToolRegistry.register({
 
       return []
     })
-    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const pending = createMemo(() => busy(props.status))
 
     const subtitle = createMemo(() => {
       const list = todos()
@@ -2291,7 +2193,7 @@ ToolRegistry.register({
     const questions = createMemo(() => (props.input.questions ?? []) as QuestionInfo[])
     const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
     const completed = createMemo(() => answers().length > 0)
-    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const pending = createMemo(() => busy(props.status))
 
     const subtitle = createMemo(() => {
       const count = questions().length
@@ -2338,7 +2240,7 @@ ToolRegistry.register({
   name: "skill",
   render(props) {
     const title = createMemo(() => props.input.name || "skill")
-    const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const running = createMemo(() => busy(props.status))
 
     const titleContent = () => <TextShimmer text={title()} active={running()} />
 
