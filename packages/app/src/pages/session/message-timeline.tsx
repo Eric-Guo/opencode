@@ -73,6 +73,12 @@ const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   return nested
 }
 
+const boundaryMode = (root: HTMLDivElement, target: HTMLElement) => {
+  if (target === root) return "reversed" as const
+  if (target.dataset.scrollDirection === "reversed") return "reversed" as const
+  return "normal" as const
+}
+
 const markBoundaryGesture = (input: {
   root: HTMLDivElement
   target: EventTarget | null
@@ -90,6 +96,7 @@ const markBoundaryGesture = (input: {
       scrollTop: target.scrollTop,
       scrollHeight: target.scrollHeight,
       clientHeight: target.clientHeight,
+      mode: boundaryMode(input.root, target),
     })
   ) {
     input.onMarkScrollGesture(input.root)
@@ -157,15 +164,19 @@ function createTimelineStaging(input: TimelineStageInput) {
     on(
       () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
       ([sessionKey, isWindowed, total]) => {
-        cancel()
         const switched = active !== sessionKey
         if (switched) {
           active = sessionKey
           setReadySession("")
         }
+
         const staging = state.activeSession === sessionKey && state.completedSession !== sessionKey
-        if (staging && !switched) return
         const shouldStage = isWindowed && total > input.config.init && state.completedSession !== sessionKey
+
+        if (staging && !switched && shouldStage && frame !== undefined) return
+
+        cancel()
+
         if (shouldStage) setReadySession("")
         if (!shouldStage) {
           setState({
@@ -182,6 +193,7 @@ function createTimelineStaging(input: TimelineStageInput) {
         }
 
         let count = Math.min(total, input.config.init)
+        if (staging) count = Math.min(total, Math.max(count, state.count))
         setState({ activeSession: sessionKey, count })
 
         const step = () => {
@@ -252,7 +264,6 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const language = useLanguage()
 
-  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
@@ -304,6 +315,7 @@ export function MessageTimeline(props: {
     messages: () => props.renderedUserMessages,
     config: stageCfg,
   })
+  const rendered = createMemo(() => staging.messages().map((message) => message.id))
 
   const [title, setTitle] = createStore({
     draft: "",
