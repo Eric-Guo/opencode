@@ -68,6 +68,7 @@ function getConfig() {
         ...base,
         appId: "ai.opencode.desktop.dev",
         productName: "OpenCode Dev",
+        rpm: { packageName: "opencode-dev" },
       }
     }
     case "beta": {
@@ -77,6 +78,7 @@ function getConfig() {
         productName: "OpenCode Beta",
         protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
         publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        rpm: { packageName: "opencode-beta" },
       }
     }
     case "prod": {
@@ -86,6 +88,7 @@ function getConfig() {
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
         publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        rpm: { packageName: "opencode" },
       }
     }
   }
