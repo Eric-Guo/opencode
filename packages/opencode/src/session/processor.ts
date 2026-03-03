@@ -15,10 +15,16 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
-
+import { NotFoundError } from "@/storage/db"
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
+
+  const stale = (error: unknown) => {
+    if (NotFoundError.isInstance(error)) return true
+    if (error instanceof Error && error.message.includes("FOREIGN KEY constraint failed")) return true
+    return false
+  }
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
@@ -351,6 +357,10 @@ export namespace SessionProcessor {
               if (needsCompaction) break
             }
           } catch (e: any) {
+            if (stale(e)) {
+              SessionStatus.set(input.sessionID, { type: "idle" })
+              return "stop"
+            }
             log.error("process", {
               error: e,
               stack: JSON.stringify(e.stack),
