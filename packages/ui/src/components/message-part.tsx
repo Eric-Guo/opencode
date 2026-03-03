@@ -528,7 +528,7 @@ export function AssistantParts(props: {
           <PartGrow
             animate={props.animate}
             debugID={key}
-            gap={0}
+            gap={idx() === 0 || fade() ? 0 : 8}
             fade={fade()}
             grow
             watch={!context() && !tool() && tail() && !turnSummary()}
@@ -878,7 +878,7 @@ export function UserMessageDisplay(props: {
   })
 
   const metaTail = createMemo(() => {
-    const items = [stamp(), props.interrupted ? i18n.t("ui.message.interrupted") : ""]
+    const items = [stamp()]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
@@ -1247,13 +1247,8 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const meta = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const agent = (props.message as AssistantMessage).agent
-    const items = [
-      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      model(),
-      duration(),
-      interrupted() ? i18n.t("ui.message.interrupted") : "",
-    ]
-    return items.filter((x) => !!x).join(" \u00B7 ")
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model(), duration()]
+    return items.filter((x) => !!x).join(" · ")
   })
 
   const displayText = () => (part().text ?? "").trim()
