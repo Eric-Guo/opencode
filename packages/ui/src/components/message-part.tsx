@@ -877,10 +877,7 @@ export function UserMessageDisplay(props: {
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
-  const metaTail = createMemo(() => {
-    const items = [stamp()]
-    return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
-  })
+  const metaTail = createMemo(() => stamp())
 
   const openImagePreview = (url: string, alt?: string) => {
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
