@@ -86,6 +86,10 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 }
 
 const hidden = new Set(["todowrite", "todoread"])
+const emptyMessages: MessageType[] = []
+const emptyAssistant: AssistantMessage[] = []
+const emptyDiffs: FileDiff[] = []
+const idle: SessionStatus = { type: "idle" as const }
 
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
@@ -161,11 +165,7 @@ export function SessionTurn(
   const i18n = useI18n()
   const fileComponent = useFileComponent()
 
-  const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
-  const emptyAssistant: AssistantMessage[] = []
-  const emptyDiffs: FileDiff[] = []
-  const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
 
@@ -257,7 +257,7 @@ export function SessionTurn(
   const error = createMemo(
     () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
   )
-  const showAssistantCopyPartID = createMemo(() => {
+  const assistantCopyPartID = createMemo(() => {
     const messages = assistantMessages()
 
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -272,7 +272,7 @@ export function SessionTurn(
       }
     }
 
-    return undefined
+    return null
   })
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
@@ -289,7 +289,6 @@ export function SessionTurn(
   })
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
   const showDiffSummary = createMemo(() => edited() > 0 && !working())
-  const assistantCopyPartID = createMemo(() => showAssistantCopyPartID() ?? null)
   const turnDurationMs = createMemo(() => {
     const start = message()?.time.created
     if (typeof start !== "number") return undefined
@@ -329,7 +328,7 @@ export function SessionTurn(
       .filter((text): text is string => !!text)
       .at(-1),
   )
-  const showThinking = createMemo(() => {
+  const thinking = createMemo(() => {
     if (!working() || !!error()) return false
     if (queued()) return false
     if (status().type === "retry") return false
@@ -337,20 +336,17 @@ export function SessionTurn(
     return true
   })
   const hasAssistant = createMemo(() => assistantMessages().length > 0)
-  const thinking = createMemo(() => showThinking())
   const lane = createMemo(() => hasAssistant() || thinking())
   const animateEnabled = createMemo(() => props.animate !== false)
   const [live, setLive] = createSignal(false)
 
   let liveFrame: number | undefined
-  const entry = createMemo(() => live())
   const initialThinking = thinking() && !animateEnabled()
   let thinkingRef: HTMLDivElement | undefined
   let thinkingBodyRef: HTMLDivElement | undefined
   let thinkingAnim: AnimationPlaybackControls | undefined
   let thinkingHeightAnim: AnimationPlaybackControls | undefined
   let thinkingToggleFrame: number | undefined
-  const gap = () => "0px"
 
   createEffect(
     on(
@@ -375,10 +371,10 @@ export function SessionTurn(
     thinkingHeightAnim?.stop()
     const next = Math.max(1, thinkingBodyRef.getBoundingClientRect().height)
     const prev = Math.max(0, thinkingRef.getBoundingClientRect().height)
-    if (!entry()) {
+    if (!live()) {
       thinkingRef.style.overflow = "visible"
       thinkingRef.style.height = "auto"
-      thinkingRef.style.marginTop = gap()
+      thinkingRef.style.marginTop = "0px"
       thinkingBodyRef.style.opacity = "1"
       thinkingBodyRef.style.filter = "blur(0px)"
       thinkingBodyRef.style.transform = ""
@@ -388,12 +384,12 @@ export function SessionTurn(
     thinkingRef.style.willChange = "height"
     thinkingRef.style.contain = "layout style"
     thinkingRef.style.height = `${prev}px`
-    thinkingRef.style.marginTop = prev > 0 ? gap() : "0px"
+    thinkingRef.style.marginTop = "0px"
     thinkingHeightAnim = animate(
       thinkingRef,
       {
         height: `${next}px`,
-        marginTop: gap(),
+        marginTop: "0px",
       },
       HEIGHT_SPRING,
     )
@@ -402,7 +398,7 @@ export function SessionTurn(
       thinkingRef.style.willChange = ""
       thinkingRef.style.contain = ""
       thinkingRef.style.height = "auto"
-      thinkingRef.style.marginTop = gap()
+      thinkingRef.style.marginTop = "0px"
       thinkingRef.style.overflow = "visible"
     })
     thinkingBodyRef.style.opacity = "0"
@@ -422,7 +418,7 @@ export function SessionTurn(
     if (!thinkingRef || !thinkingBodyRef) return
     thinkingAnim?.stop()
     thinkingHeightAnim?.stop()
-    if (!entry()) {
+    if (!live()) {
       thinkingRef.style.height = "0px"
       thinkingRef.style.marginTop = "0px"
       thinkingRef.style.overflow = "hidden"
@@ -464,7 +460,7 @@ export function SessionTurn(
 
   createEffect(
     on(
-      () => [thinking(), entry()] as const,
+      () => [thinking(), live()] as const,
       ([value, entered]) => {
         if (thinkingToggleFrame !== undefined) {
           cancelAnimationFrame(thinkingToggleFrame)
@@ -474,7 +470,7 @@ export function SessionTurn(
           if (!entered) return
           thinkingToggleFrame = requestAnimationFrame(() => {
             thinkingToggleFrame = undefined
-            if (!thinking() || !entry()) return
+            if (!thinking() || !live()) return
             showBox()
           })
           return
