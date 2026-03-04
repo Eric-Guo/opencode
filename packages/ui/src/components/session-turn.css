@@ -76,15 +76,83 @@
     }
   }
 
-  [data-slot="session-turn-thinking-wrap"] {
+  [data-slot="session-turn-handoff-wrap"] {
     width: 100%;
     min-width: 0;
     overflow: visible;
   }
 
-  [data-slot="session-turn-thinking"] {
+  [data-slot="session-turn-handoff"] {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
     position: relative;
+  }
+
+  [data-slot="session-turn-thinking"] {
+    position: absolute;
+    inset: 0;
     will-change: opacity, filter;
+    transition:
+      opacity 180ms ease-out,
+      filter 180ms ease-out,
+      transform 180ms ease-out;
+  }
+
+  [data-slot="session-turn-thinking"][data-visible="false"] {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(1px);
+    pointer-events: none;
+  }
+
+  [data-slot="session-turn-thinking"][data-visible="true"] {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0px);
+  }
+
+  [data-slot="session-turn-meta"] {
+    position: absolute;
+    inset: 0;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(-1px);
+    pointer-events: none;
+    transition:
+      opacity 180ms ease-out,
+      filter 180ms ease-out,
+      transform 180ms ease-out;
+  }
+
+  [data-slot="session-turn-meta"][data-interrupted] {
+    gap: 12px;
+  }
+
+  [data-slot="session-turn-meta"] [data-component="tooltip-trigger"] {
+    display: inline-flex;
+    width: fit-content;
+  }
+
+  [data-slot="session-turn-message-container"]:hover [data-slot="session-turn-meta"][data-visible="true"],
+  [data-slot="session-turn-message-container"]:focus-within [data-slot="session-turn-meta"][data-visible="true"] {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0px);
+    pointer-events: auto;
+  }
+
+  [data-slot="session-turn-meta-label"] {
+    user-select: none;
+    min-width: 0;
+    overflow: clip;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   [data-component="text-reveal"].session-turn-thinking-heading {

@@ -99,17 +99,6 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
   )
 }
 
-export interface MessageProps {
-  message: MessageType
-  parts: PartType[]
-  showAssistantCopyPartID?: string | null
-  interrupted?: boolean
-  animate?: boolean
-  queued?: boolean
-  working?: boolean
-  showReasoningSummaries?: boolean
-}
-
 export interface MessagePartProps {
   part: PartType
   message: MessageType
@@ -118,7 +107,6 @@ export interface MessagePartProps {
   showAssistantCopyPartID?: string | null
   showTurnDiffSummary?: boolean
   turnDiffSummary?: () => JSX.Element
-  turnDurationMs?: number
   animate?: boolean
   working?: boolean
 }
@@ -395,7 +383,6 @@ export function AssistantParts(props: {
   showAssistantCopyPartID?: string | null
   showTurnDiffSummary?: boolean
   turnDiffSummary?: () => JSX.Element
-  turnDurationMs?: number
   working?: boolean
   showReasoningSummaries?: boolean
   shellToolDefaultOpen?: boolean
@@ -578,7 +565,6 @@ export function AssistantParts(props: {
                     showAssistantCopyPartID={props.showAssistantCopyPartID}
                     showTurnDiffSummary={props.showTurnDiffSummary}
                     turnDiffSummary={props.turnDiffSummary}
-                    turnDurationMs={props.turnDurationMs}
                     defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                     hideDetails={entry().context}
                     animate={props.animate}
@@ -614,162 +600,22 @@ export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
 
-export function Message(props: MessageProps) {
-  return (
-    <Switch>
-      <Match when={props.message.role === "user" && props.message}>
-        {(userMessage) => (
-          <UserMessageDisplay
-            message={userMessage() as UserMessage}
-            parts={props.parts}
-            interrupted={props.interrupted}
-            animate={props.animate}
-            queued={props.queued}
-          />
-        )}
-      </Match>
-      <Match when={props.message.role === "assistant" && props.message}>
-        {(assistantMessage) => (
-          <AssistantMessageDisplay
-            message={assistantMessage() as AssistantMessage}
-            parts={props.parts}
-            showAssistantCopyPartID={props.showAssistantCopyPartID}
-            working={props.working}
-            showReasoningSummaries={props.showReasoningSummaries}
-          />
-        )}
-      </Match>
-    </Switch>
-  )
-}
-
-export function AssistantMessageDisplay(props: {
-  message: AssistantMessage
+/** @deprecated Only renders user messages — assistant branch was dead code. Caller can use UserMessageDisplay directly. */
+export function Message(props: {
+  message: MessageType
   parts: PartType[]
-  showAssistantCopyPartID?: string | null
-  showTurnDiffSummary?: boolean
-  turnDiffSummary?: () => JSX.Element
-  working?: boolean
-  showReasoningSummaries?: boolean
+  interrupted?: boolean
+  animate?: boolean
+  queued?: boolean
 }) {
-  const groupState = createGroupOpenState()
-  const grouped = createMemo(() => {
-    const keys: string[] = []
-    const items: Record<
-      string,
-      | {
-          type: "part"
-          part: PartType
-          context?: boolean
-          groupKey?: string
-          afterTool?: boolean
-          groupTail?: boolean
-          groupParts?: ToolPart[]
-        }
-      | { type: "context"; groupKey: string; parts: ToolPart[]; tail: boolean; afterTool: boolean }
-    > = {}
-    const push = (key: string, item: (typeof items)[string]) => {
-      keys.push(key)
-      items[key] = item
-    }
-    const parts = props.parts.filter((part) => renderable(part, props.showReasoningSummaries ?? true))
-    let start = -1
-    const flush = (end: number, tail: boolean, afterTool: boolean) => {
-      if (start < 0) return
-      const group = parts.slice(start, end + 1).filter((part): part is ToolPart => isContextGroupTool(part))
-      if (!group.length) {
-        start = -1
-        return
-      }
-      const groupKey = `context:${group[0].id}`
-      push(groupKey, { type: "context", groupKey, parts: group, tail, afterTool })
-      group.forEach((part) =>
-        push(`part:${part.id}`, {
-          type: "part",
-          part,
-          context: true,
-          groupKey,
-          afterTool,
-          groupTail: tail,
-          groupParts: group,
-        }),
-      )
-      start = -1
-    }
-
-    parts.forEach((part, index) => {
-      if (isContextGroupTool(part)) {
-        if (start < 0) start = index
-        return
-      }
-      flush(index - 1, false, (part as PartType).type === "tool")
-      push(`part:${part.id}`, { type: "part", part })
-    })
-
-    flush(parts.length - 1, true, false)
-    return { keys, items }
-  })
-
   return (
-    <For each={grouped().keys}>
-      {(key) => {
-        const item = createMemo(() => grouped().items[key])
-        const ctx = createMemo(() => {
-          const value = item()
-          if (!value) return
-          if (value.type !== "context") return
-          return value
-        })
-        const part = createMemo(() => {
-          const value = item()
-          if (!value) return
-          if (value.type !== "part") return
-          return value
-        })
-        const contextOpen = createMemo(() => {
-          const collapse = (afterTool?: boolean, groupTail?: boolean, group?: ToolPart[]) =>
-            shouldCollapseGroup(group?.map((part) => part.state.status) ?? [], {
-              afterTool,
-              groupTail,
-              working: props.working,
-            })
-          const value = ctx()
-          if (value) return groupState.read(value.groupKey, collapse(value.afterTool, value.tail, value.parts))
-          const entry = part()
-          return groupState.read(entry?.groupKey, collapse(entry?.afterTool, entry?.groupTail, entry?.groupParts))
-        })
-        return (
-          <>
-            <Show when={ctx()}>
-              {(entry) => (
-                <ContextToolGroup
-                  parts={entry().parts}
-                  open={contextOpen()}
-                  onOpenChange={(value: boolean) => groupState.write(entry().groupKey, value)}
-                />
-              )}
-            </Show>
-            <Show when={part()}>
-              {(entry) => (
-                <Show when={!entry().context || contextOpen()}>
-                  <div data-component={entry().context ? "context-tool-step" : undefined}>
-                    <Part
-                      part={entry().part}
-                      message={props.message}
-                      showAssistantCopyPartID={props.showAssistantCopyPartID}
-                      showTurnDiffSummary={props.showTurnDiffSummary}
-                      turnDiffSummary={props.turnDiffSummary}
-                      hideDetails={entry().context}
-                      working={props.working}
-                    />
-                  </div>
-                </Show>
-              )}
-            </Show>
-          </>
-        )
-      }}
-    </For>
+    <UserMessageDisplay
+      message={props.message as UserMessage}
+      parts={props.parts}
+      interrupted={props.interrupted}
+      animate={props.animate}
+      queued={props.queued}
+    />
   )
 }
 
@@ -1048,7 +894,6 @@ export function Part(props: MessagePartProps) {
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         showTurnDiffSummary={props.showTurnDiffSummary}
         turnDiffSummary={props.turnDiffSummary}
-        turnDurationMs={props.turnDurationMs}
         animate={props.animate}
         working={props.working}
       />

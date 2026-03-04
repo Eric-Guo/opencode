@@ -15,10 +15,12 @@ import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
+import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { TextReveal } from "./text-reveal"
 import { list } from "./text-utils"
 import { SessionRetry } from "./session-retry"
+import { Tooltip } from "./tooltip"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 function record(value: unknown): value is Record<string, unknown> {
@@ -80,12 +82,12 @@ function same<T>(a: readonly T[], b: readonly T[]) {
   return a.every((x, i) => x === b[i])
 }
 
-
 const hidden = new Set(["todowrite", "todoread"])
 const emptyMessages: MessageType[] = []
 const emptyAssistant: AssistantMessage[] = []
 const emptyDiffs: FileDiff[] = []
 const idle: SessionStatus = { type: "idle" as const }
+const handoffHoldMs = 120
 
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
@@ -253,7 +255,7 @@ export function SessionTurn(
   const error = createMemo(
     () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
   )
-  const assistantCopyPartID = createMemo(() => {
+  const assistantCopyPart = createMemo(() => {
     const messages = assistantMessages()
 
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -263,13 +265,18 @@ export function SessionTurn(
       const parts = list(data.store.part?.[message.id], emptyParts)
       for (let j = parts.length - 1; j >= 0; j--) {
         const part = parts[j]
-        if (!part || part.type !== "text" || !part.text?.trim()) continue
-        return part.id
+        if (!part || part.type !== "text") continue
+        const text = part.text?.trim()
+        if (!text) continue
+        return {
+          id: part.id,
+          text,
+          message,
+        }
       }
     }
-
-    return null
   })
+  const assistantCopyPartID = createMemo(() => assistantCopyPart()?.id ?? null)
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
@@ -332,12 +339,55 @@ export function SessionTurn(
     return true
   })
   const hasAssistant = createMemo(() => assistantMessages().length > 0)
-  const lane = createMemo(() => hasAssistant() || thinking())
   const animateEnabled = createMemo(() => props.animate !== false)
   const [live, setLive] = createSignal(false)
   const thinkingOpen = createMemo(() => thinking() && (live() || !animateEnabled()))
+  const metaOpen = createMemo(() => !working() && !!assistantCopyPart())
+  const duration = createMemo(() => {
+    const ms = turnDurationMs()
+    if (typeof ms !== "number" || ms < 0) return ""
+
+    const total = Math.round(ms / 1000)
+    if (total < 60) return `${total}s`
+
+    const minutes = Math.floor(total / 60)
+    const seconds = total % 60
+    return `${minutes}m ${seconds}s`
+  })
+  const meta = createMemo(() => {
+    const item = assistantCopyPart()
+    if (!item) return ""
+
+    const agent = item.message.agent ? item.message.agent[0]?.toUpperCase() + item.message.agent.slice(1) : ""
+    const model = item.message.modelID
+      ? (data.store.provider?.all?.find((provider) => provider.id === item.message.providerID)?.models?.[
+          item.message.modelID
+        ]?.name ?? item.message.modelID)
+      : ""
+    return [agent, model, duration()].filter((value) => !!value).join(" · ")
+  })
+  const [copied, setCopied] = createSignal(false)
+  const [handoffHold, setHandoffHold] = createSignal(false)
+  const thinkingVisible = createMemo(() => thinkingOpen() || handoffHold())
+  const handoffOpen = createMemo(() => thinkingVisible() || metaOpen())
+  const lane = createMemo(() => hasAssistant() || handoffOpen())
 
   let liveFrame: number | undefined
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined
+  let handoffTimer: ReturnType<typeof setTimeout> | undefined
+
+  const copyAssistant = async () => {
+    const text = assistantCopyPart()?.text
+    if (!text) return
+
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    if (copiedTimer !== undefined) clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => {
+      copiedTimer = undefined
+      setCopied(false)
+    }, 2000)
+  }
 
   createEffect(
     on(
@@ -356,6 +406,35 @@ export function SessionTurn(
     ),
   )
 
+  createEffect(
+    on(
+      () => [thinkingOpen(), metaOpen()] as const,
+      ([thinkingNow, metaNow]) => {
+        if (handoffTimer !== undefined) {
+          clearTimeout(handoffTimer)
+          handoffTimer = undefined
+        }
+
+        if (thinkingNow) {
+          setHandoffHold(true)
+          return
+        }
+
+        if (metaNow) {
+          setHandoffHold(false)
+          return
+        }
+
+        if (!handoffHold()) return
+        handoffTimer = setTimeout(() => {
+          handoffTimer = undefined
+          setHandoffHold(false)
+        }, handoffHoldMs)
+      },
+      { defer: true },
+    ),
+  )
+
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
@@ -364,6 +443,8 @@ export function SessionTurn(
 
   onCleanup(() => {
     if (liveFrame !== undefined) cancelAnimationFrame(liveFrame)
+    if (copiedTimer !== undefined) clearTimeout(copiedTimer)
+    if (handoffTimer !== undefined) clearTimeout(handoffTimer)
   })
 
   const turnDiffSummary = () => (
@@ -497,7 +578,6 @@ export function SessionTurn(
                     interrupted={interrupted()}
                     animate={props.animate}
                     queued={queued()}
-                    working={working()}
                   />
                 </div>
                 <Show when={compaction()}>
@@ -521,7 +601,6 @@ export function SessionTurn(
                         showAssistantCopyPartID={assistantCopyPartID()}
                         showTurnDiffSummary={showDiffSummary()}
                         turnDiffSummary={turnDiffSummary}
-                        turnDurationMs={turnDurationMs()}
                         working={working()}
                         animate={live()}
                         showReasoningSummaries={showReasoningSummaries()}
@@ -533,18 +612,50 @@ export function SessionTurn(
                   <GrowBox
                     animate={live()}
                     animateToggle={live()}
-                    open={thinkingOpen()}
+                    open={handoffOpen()}
                     fade
-                    slot="session-turn-thinking-wrap"
+                    slot="session-turn-handoff-wrap"
                   >
-                    <div data-slot="session-turn-thinking">
-                      <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                      <TextReveal
-                        text={!showReasoningSummaries() ? (reasoningHeading() ?? "") : ""}
-                        class="session-turn-thinking-heading"
-                        travel={25}
-                        duration={900}
-                      />
+                    <div data-slot="session-turn-handoff">
+                      <div data-slot="session-turn-thinking" data-visible={thinkingVisible() ? "true" : "false"}>
+                        <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                        <TextReveal
+                          text={!showReasoningSummaries() ? (reasoningHeading() ?? "") : ""}
+                          class="session-turn-thinking-heading"
+                          travel={25}
+                          duration={900}
+                        />
+                      </div>
+                      <Show when={metaOpen()}>
+                        <div
+                          data-slot="session-turn-meta"
+                          data-visible={thinkingVisible() ? "false" : "true"}
+                          data-interrupted={interrupted() ? "" : undefined}
+                        >
+                          <Tooltip
+                            value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                            placement="top"
+                            gutter={4}
+                          >
+                            <IconButton
+                              icon={copied() ? "check" : "copy"}
+                              size="normal"
+                              variant="ghost"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => void copyAssistant()}
+                              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                            />
+                          </Tooltip>
+                          <Show when={meta()}>
+                            <span
+                              data-slot="session-turn-meta-label"
+                              class="text-12-regular text-text-weak cursor-default"
+                            >
+                              {meta()}
+                            </span>
+                          </Show>
+                        </div>
+                      </Show>
                     </div>
                   </GrowBox>
                 </div>
