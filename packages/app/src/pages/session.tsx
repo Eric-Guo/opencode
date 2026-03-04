@@ -33,6 +33,7 @@ import { usePrompt } from "@/context/prompt"
 import { useComments } from "@/context/comments"
 import { SessionHeader, NewSessionView } from "@/components/session"
 import { same } from "@opencode-ai/util/array"
+import { isEditableTarget } from "@/utils/dom"
 import { createOpenReviewFile } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionReviewTab, type DiffStyle, type SessionReviewTabProps } from "@/pages/session/review-tab"
@@ -613,11 +614,6 @@ export default function Page() {
     deleteLabel: language.t("common.delete"),
     saveLabel: language.t("common.save"),
   }))
-
-  const isEditableTarget = (target: EventTarget | null | undefined) => {
-    if (!(target instanceof HTMLElement)) return false
-    return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
-  }
 
   const deepActiveElement = () => {
     let current: Element | null = document.activeElement
