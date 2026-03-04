@@ -1,5 +1,5 @@
 import { createEffect, on, type JSX, onMount, onCleanup } from "solid-js"
-import { animate, springValue, type AnimationPlaybackControls, FADE_SPRING, HEIGHT_SPRING } from "./motion"
+import { animate, tunableSpringValue, type AnimationPlaybackControls, GROW_SPRING, type SpringConfig } from "./motion"
 
 export interface GrowBoxProps {
   children: JSX.Element
@@ -23,6 +23,10 @@ export interface GrowBoxProps {
   slot?: string
   /** CSS class on the root div. */
   class?: string
+  /** Override mount and resize spring config. Default: GROW_SPRING. */
+  spring?: SpringConfig
+  /** Override controlled open/close spring config. Default: spring. */
+  toggleSpring?: SpringConfig
 }
 
 /**
@@ -32,6 +36,9 @@ export interface GrowBoxProps {
  * Used for timeline turns, assistant part groups, and user messages.
  */
 export function GrowBox(props: GrowBoxProps) {
+  const spring = () => props.spring ?? GROW_SPRING
+  const toggleSpring = () => props.toggleSpring ?? spring()
+  let mode: "mount" | "toggle" = "mount"
   let root: HTMLDivElement | undefined
   let body: HTMLDivElement | undefined
   let fadeAnim: AnimationPlaybackControls | undefined
@@ -39,7 +46,15 @@ export function GrowBox(props: GrowBoxProps) {
   let resizeFrame: number | undefined
   let observer: ResizeObserver | undefined
   let springTarget = -1
-  const height = springValue<number>(0, HEIGHT_SPRING)
+  const height = tunableSpringValue<number>(0, {
+    type: "spring",
+    get visualDuration() {
+      return (mode === "toggle" ? toggleSpring() : spring()).visualDuration
+    },
+    get bounce() {
+      return (mode === "toggle" ? toggleSpring() : spring()).bounce
+    },
+  })
 
   const gap = () => Math.max(0, props.gap ?? 0)
   const grow = () => props.grow !== false
@@ -59,11 +74,11 @@ export function GrowBox(props: GrowBoxProps) {
     body.style.filter = ""
   }
 
-  const fadeBodyIn = () => {
+  const fadeBodyIn = (nextMode: "mount" | "toggle" = "mount") => {
     if (props.fade === false || !body) return
     hideBody()
     fadeAnim?.stop()
-    fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, FADE_SPRING)
+    fadeAnim = animate(body, { opacity: 1, filter: "blur(0px)" }, nextMode === "toggle" ? toggleSpring() : spring())
     fadeAnim.finished.then(() => {
       if (!body || !open()) return
       clearBody()
@@ -89,7 +104,7 @@ export function GrowBox(props: GrowBoxProps) {
 
   const targetHeight = () => Math.max(0, Math.ceil(body?.getBoundingClientRect().height ?? 0))
 
-  const setHeight = () => {
+  const setHeight = (nextMode: "mount" | "toggle" = "mount") => {
     if (!root || !open()) return
     const next = targetHeight()
     if (next === springTarget) return
@@ -104,6 +119,7 @@ export function GrowBox(props: GrowBoxProps) {
     }
     root.style.overflow = "clip"
     springTarget = next
+    mode = nextMode
     height.set(next)
   }
 
@@ -167,8 +183,8 @@ export function GrowBox(props: GrowBoxProps) {
       }
       mountFrame = requestAnimationFrame(() => {
         mountFrame = undefined
-        fadeBodyIn()
-        if (grow()) setHeight()
+        fadeBodyIn("mount")
+        if (grow()) setHeight("mount")
       })
     }
     if (watch()) {
@@ -177,7 +193,7 @@ export function GrowBox(props: GrowBoxProps) {
         if (resizeFrame !== undefined) return
         resizeFrame = requestAnimationFrame(() => {
           resizeFrame = undefined
-          setHeight()
+          setHeight("mount")
         })
       })
       observer.observe(body)
@@ -203,15 +219,16 @@ export function GrowBox(props: GrowBoxProps) {
             root.style.height = `${next}px`
           }
           if (props.fade !== false) {
-            fadeAnim = animate(body, { opacity: 0, filter: "blur(2px)" }, FADE_SPRING)
+            fadeAnim = animate(body, { opacity: 0, filter: "blur(2px)" }, toggleSpring())
           }
           root.style.overflow = "clip"
           springTarget = 0
+          mode = "toggle"
           height.set(0)
           return
         }
-        fadeBodyIn()
-        setHeight()
+        fadeBodyIn("toggle")
+        setHeight("toggle")
       },
       { defer: true },
     ),

@@ -50,7 +50,15 @@ import { list } from "./text-utils"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { GrowBox } from "./grow-box"
-import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, GROW_SPRING, WIPE_MASK } from "./motion"
+import {
+  animate,
+  type AnimationPlaybackControls,
+  clearFadeStyles,
+  clearMaskStyles,
+  COLLAPSIBLE_SPRING,
+  GROW_SPRING,
+  WIPE_MASK,
+} from "./motion"
 
 interface Diagnostic {
   range: {
@@ -278,7 +286,6 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
-
 function busy(status: string | undefined) {
   return status === "pending" || status === "running"
 }
@@ -309,10 +316,14 @@ function createGroupOpenState() {
     if (value !== undefined) return value
     return !collapse
   }
+  const controlled = (key?: string) => {
+    if (!key) return false
+    return state()[key] !== undefined
+  }
   const write = (key: string, value: boolean) => {
     setState((prev) => ({ ...prev, [key]: value }))
   }
-  return { read, write }
+  return { read, controlled, write }
 }
 
 function shouldCollapseGroup(
@@ -358,6 +369,8 @@ function PartGrow(props: {
   grow?: boolean
   watch?: boolean
   open?: boolean
+  spring?: import("./motion").SpringConfig
+  toggleSpring?: import("./motion").SpringConfig
 }) {
   return (
     <GrowBox
@@ -368,6 +381,8 @@ function PartGrow(props: {
       grow={props.grow}
       watch={props.watch}
       open={props.open}
+      spring={props.spring}
+      toggleSpring={props.toggleSpring}
       slot="assistant-part-grow"
     >
       {props.children}
@@ -498,6 +513,12 @@ export function AssistantParts(props: {
           return value.part.type === "tool"
         })
         const context = createMemo(() => !!part()?.context)
+        const contextSpring = createMemo(() => {
+          const entry = part()
+          if (!entry?.context) return undefined
+          if (!groupState.controlled(entry.groupKey)) return undefined
+          return COLLAPSIBLE_SPRING
+        })
         const contextOpen = createMemo(() => {
           const collapse = (
             afterTool?: boolean,
@@ -536,6 +557,7 @@ export function AssistantParts(props: {
             watch={!context() && !tool() && tail() && !turnSummary()}
             animateToggle
             open={visible()}
+            toggleSpring={contextSpring()}
           >
             <Show when={ctx()}>
               {(entry) => (
@@ -1478,7 +1500,6 @@ ToolRegistry.register({
   },
 })
 
-
 function useToolReveal(pending: () => boolean, animate?: () => boolean) {
   const enabled = () => animate?.() ?? true
   const [live, setLive] = createSignal(pending() || enabled())
@@ -1497,7 +1518,6 @@ function useToolFade(
   const delay = options?.delay ?? 0
   const wipe = options?.wipe ?? false
   const active = options?.animate !== false
-
 
   onMount(() => {
     if (!active) return
@@ -1613,10 +1633,12 @@ function ToolLoadedFile(props: { text: string; animate?: boolean }) {
   useToolFade(() => ref, { delay: 0.02, wipe: true, animate: props.animate })
 
   return (
-    <div ref={ref} data-component="tool-loaded-file">
-      <Icon name="enter" size="small" />
-      <span>{props.text}</span>
-    </div>
+    <GrowBox animate={props.animate !== false} fade={false} class="w-full min-w-0">
+      <div ref={ref} data-component="tool-loaded-file">
+        <Icon name="enter" size="small" />
+        <span>{props.text}</span>
+      </div>
+    </GrowBox>
   )
 }
 
