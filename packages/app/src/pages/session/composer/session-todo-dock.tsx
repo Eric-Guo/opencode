@@ -89,8 +89,6 @@ export function SessionTodoDock(props: {
   const shut = createMemo(() => 1 - dock())
   const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
   const hide = createMemo(() => Math.max(value(), shut()))
-  const off = createMemo(() => hide() > 0.98)
-  const turn = createMemo(() => Math.max(0, Math.min(1, value())))
   const [height, setHeight] = createSignal(320)
   const full = createMemo(() => Math.max(78, height()))
   let contentRef: HTMLDivElement | undefined
@@ -173,7 +171,7 @@ export function SessionTodoDock(props: {
               icon="chevron-down"
               size="normal"
               variant="ghost"
-              style={{ transform: `rotate(${turn() * 180}deg)` }}
+              style={{ transform: `rotate(${value() * 180}deg)` }}
               onMouseDown={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -189,12 +187,11 @@ export function SessionTodoDock(props: {
 
         <div
           data-slot="session-todo-list"
-          aria-hidden={store.collapsed || off()}
+          aria-hidden={store.collapsed}
           classList={{
             "pointer-events-none": hide() > 0.1,
           }}
           style={{
-            visibility: off() ? "hidden" : "visible",
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
             filter: `blur(${Math.max(0, Math.min(1, hide())) * 2}px)`,
             visibility: hide() > 0.98 ? "hidden" : "visible",
@@ -282,8 +279,10 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
               style={{
                 "--checkbox-align": "flex-start",
                 "--checkbox-offset": "1px",
-                transition: "opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                transition:
+                  "opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), filter 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
                 opacity: todo().status === "pending" ? "0.94" : "1",
+                filter: todo().status === "pending" ? "blur(0.3px)" : "blur(0px)",
               }}
             >
               <TextStrikethrough
@@ -293,12 +292,13 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
                 style={{
                   "line-height": "var(--line-height-normal)",
                   transition:
-                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), filter 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
                   color:
                     todo().status === "completed" || todo().status === "cancelled"
                       ? "var(--text-weak)"
                       : "var(--text-strong)",
                   opacity: todo().status === "pending" ? "0.92" : "1",
+                  filter: todo().status === "pending" ? "blur(0.3px)" : "blur(0px)",
                 }}
               />
             </Checkbox>
