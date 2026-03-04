@@ -1219,6 +1219,7 @@ export default function Page() {
                   onScrollSpyScroll={scrollSpy.onScroll}
                   onTurnBackfillScroll={historyWindow.onScrollerScroll}
                   onAutoScrollInteraction={autoScroll.handleInteraction}
+                  onPreserveScrollAnchor={autoScroll.preserve}
                   centered={centered()}
                   setContentRef={(el) => {
                     content = el

@@ -13,7 +13,9 @@ export interface AutoScrollOptions {
 
 const SETTLE_MS = 500
 const AUTO_SCROLL_GRACE_MS = 120
-const AUTO_SCROLL_EPSILON = 1
+const AUTO_SCROLL_EPSILON = 0.5
+const MANUAL_ANCHOR_MS = 3000
+const MANUAL_ANCHOR_QUIET_FRAMES = 24
 
 export function createAutoScroll(options: AutoScrollOptions) {
   let scroll: HTMLElement | undefined
@@ -22,6 +24,20 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let cleanup: (() => void) | undefined
   let programmaticUntil = 0
   let scrollAnim: AnimationPlaybackControls | undefined
+  let hold:
+    | {
+        el: HTMLElement
+        top: number
+        until: number
+        quiet: number
+        frame: number | undefined
+      }
+    | undefined
+
+  const debug = (...args: unknown[]) => {
+    if (!import.meta.env.DEV) return
+    console.debug("[auto-scroll]", ...args)
+  }
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -45,8 +61,95 @@ export function createAutoScroll(options: AutoScrollOptions) {
     programmaticUntil = Date.now() + AUTO_SCROLL_GRACE_MS
   }
 
+  const clearHold = (reason = "unknown") => {
+    const next = hold
+    if (!next) return
+    if (next.frame !== undefined) cancelAnimationFrame(next.frame)
+    hold = undefined
+    debug("anchor hold cleared", reason)
+  }
+
+  const tickHold = () => {
+    const next = hold
+    const el = scroll
+    if (!next || !el) return false
+    if (Date.now() > next.until) {
+      clearHold("timeout")
+      return false
+    }
+    if (!next.el.isConnected) {
+      clearHold("detached")
+      return false
+    }
+
+    const current = next.el.getBoundingClientRect().top
+    if (!Number.isFinite(current)) {
+      clearHold("invalid-top")
+      return false
+    }
+
+    const delta = current - next.top
+    if (Math.abs(delta) <= AUTO_SCROLL_EPSILON) {
+      next.quiet += 1
+      if (next.quiet > MANUAL_ANCHOR_QUIET_FRAMES) {
+        clearHold("settled")
+        return false
+      }
+      return true
+    }
+
+    next.quiet = 0
+    if (!store.userScrolled) {
+      setStore("userScrolled", true)
+      options.onUserInteracted?.()
+    }
+    el.scrollTop += delta
+    markProgrammatic()
+    return true
+  }
+
+  const scheduleHold = () => {
+    const next = hold
+    if (!next) return
+    if (next.frame !== undefined) return
+
+    next.frame = requestAnimationFrame(() => {
+      const value = hold
+      if (!value) return
+      value.frame = undefined
+      if (!tickHold()) return
+      scheduleHold()
+    })
+  }
+
+  const preserve = (target: HTMLElement) => {
+    const el = scroll
+    if (!el) return
+
+    if (!store.userScrolled) {
+      setStore("userScrolled", true)
+      options.onUserInteracted?.()
+    }
+
+    const top = target.getBoundingClientRect().top
+    if (!Number.isFinite(top)) return
+
+    clearHold("restart")
+    hold = {
+      el: target,
+      top,
+      until: Date.now() + MANUAL_ANCHOR_MS,
+      quiet: 0,
+      frame: undefined,
+    }
+    debug("anchor hold start", { top, scrollTop: el.scrollTop })
+    scheduleHold()
+  }
+
   const scrollToBottom = (force: boolean) => {
     if (!force && !active()) return
+
+    clearHold("scroll-to-bottom")
 
     if (force && store.userScrolled) setStore("userScrolled", false)
 
@@ -99,7 +202,9 @@ export function createAutoScroll(options: AutoScrollOptions) {
     })
   }
 
-  const stop = () => {
+  const stop = (input?: { hold?: boolean }) => {
+    if (input?.hold !== false) clearHold("stop")
+
     const el = scroll
     if (!el) return
     if (!canScroll(el)) {
@@ -114,6 +219,17 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const handleWheel = (e: WheelEvent) => {
+    if (e.deltaY !== 0) clearHold("wheel")
+
+    if (e.deltaY > 0) {
+      const el = scroll
+      if (!el) return
+      if (distanceFromBottom(el) >= threshold()) return
+      if (store.userScrolled) setStore("userScrolled", false)
+      markProgrammatic()
+      return
+    }
+
     if (e.deltaY >= 0) return
     cancelSmooth()
     const el = scroll
@@ -127,6 +243,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     if (!el) return
 
+    if (hold) return
+
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
       markProgrammatic()
@@ -134,6 +252,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     }
 
     if (distanceFromBottom(el) < threshold()) {
+      if (Date.now() < programmaticUntil) return
       if (store.userScrolled) setStore("userScrolled", false)
       markProgrammatic()
       return
@@ -141,7 +260,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     if (!store.userScrolled && Date.now() < programmaticUntil) return
 
-    stop()
+    stop({ hold: false })
   }
 
   const handleInteraction = () => {
@@ -153,6 +272,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const updateOverflowAnchor = (el: HTMLElement) => {
+    if (hold) {
+      el.style.overflowAnchor = "none"
+      return
+    }
+
     const mode = options.overflowAnchor ?? "dynamic"
 
     if (mode === "none") {
@@ -172,6 +296,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
     () => store.contentRef,
     () => {
       const el = scroll
+      if (hold) {
+        scheduleHold()
+        return
+      }
       if (el && !canScroll(el)) {
         if (store.userScrolled) setStore("userScrolled", false)
         markProgrammatic()
@@ -210,6 +338,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
+    clearHold("cleanup")
     cancelSmooth()
     if (cleanup) cleanup()
   })
@@ -223,7 +352,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
       scroll = el
 
-      if (!el) return
+      if (!el) {
+        clearHold("scroll-ref-detach")
+        return
+      }
 
       markProgrammatic()
       updateOverflowAnchor(el)
@@ -236,6 +368,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
     handleScroll,
     handleInteraction,
+    preserve,
     pause: stop,
     forceScrollToBottom: () => scrollToBottom(true),
     smoothScrollToBottom,

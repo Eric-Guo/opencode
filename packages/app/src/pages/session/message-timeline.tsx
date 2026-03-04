@@ -239,6 +239,7 @@ export function MessageTimeline(props: {
   onScrollSpyScroll: () => void
   onTurnBackfillScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
+  onPreserveScrollAnchor: (target: HTMLElement) => void
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   turnStart: number
@@ -259,6 +260,15 @@ export function MessageTimeline(props: {
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
+
+  const trigger = (target: EventTarget | null) => {
+    const next =
+      target instanceof Element
+        ? target.closest('[data-slot="collapsible-trigger"], [data-slot="accordion-trigger"]')
+        : undefined
+    if (!(next instanceof HTMLElement)) return
+    return next
+  }
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
@@ -861,8 +871,17 @@ export function MessageTimeline(props: {
             touchGesture = undefined
           }}
           onPointerDown={(e) => {
+            const next = trigger(e.target)
+            if (next) props.onPreserveScrollAnchor(next)
+
             if (e.target !== e.currentTarget) return
             props.onMarkScrollGesture(e.currentTarget)
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return
+            const next = trigger(e.target)
+            if (!next) return
+            props.onPreserveScrollAnchor(next)
           }}
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
@@ -872,7 +891,11 @@ export function MessageTimeline(props: {
             props.onMarkScrollGesture(e.currentTarget)
             if (props.isDesktop) props.onScrollSpyScroll()
           }}
-          onClick={props.onAutoScrollInteraction}
+          onClick={(e) => {
+            const next = trigger(e.target)
+            if (next) props.onPreserveScrollAnchor(next)
+            props.onAutoScrollInteraction(e)
+          }}
           class="relative min-w-0 w-full h-full"
           style={{
             "--session-title-height": showHeader() ? "40px" : "0px",
