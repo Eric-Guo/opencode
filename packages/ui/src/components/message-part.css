@@ -196,13 +196,6 @@
     pointer-events: auto;
   }
 
-  .text-text-strong {
-    color: var(--text-strong);
-  }
-
-  .font-medium {
-    font-weight: var(--font-weight-medium);
-  }
 }
 
 [data-component="text-part"] {
@@ -636,9 +629,6 @@
     min-width: 0;
   }
 
-  [data-slot="collapsible-arrow"] {
-    color: var(--icon-weaker);
-  }
 }
 
 [data-component="context-tool-step"] {

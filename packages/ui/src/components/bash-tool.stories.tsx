@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createSignal, createMemo, createEffect, on, onCleanup, batch, For } from "solid-js"
+import { createSignal, createMemo, createEffect, on, onCleanup, batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import type {
   Message,
@@ -187,15 +187,12 @@ function createPlayback(events: TimelineEvent[]) {
   })
 
   function applyEvent(event: TimelineEvent) {
-    console.debug("[bash-story] apply", event.type, event.type === "delay" ? event.label : "")
     switch (event.type) {
       case "status":
-        console.debug("[bash-story]   status →", event.status.type)
         setData("session_status", SESSION_ID, event.status)
         break
 
       case "message":
-        console.debug("[bash-story]   message", event.message.role, event.message.id, "completed:", !!event.message.time?.completed)
         setData(
           produce((d) => {
             if (!d.message[SESSION_ID]) d.message[SESSION_ID] = []
@@ -211,7 +208,6 @@ function createPlayback(events: TimelineEvent[]) {
         break
 
       case "part":
-        console.debug("[bash-story]   part", event.part.type, event.part.type === "tool" ? event.part.tool : "", event.part.id)
         setData(
           produce((d) => {
             const mid = event.part.messageID
@@ -225,7 +221,6 @@ function createPlayback(events: TimelineEvent[]) {
         const patch = event.patch
         const status = patch?.state?.status
         const hasOutput = !!patch?.state?.output
-        console.debug("[bash-story]   part-update", event.partID, "status:", status, "hasOutput:", hasOutput)
         setData(
           produce((d) => {
             const list = d.part[event.messageID]
@@ -241,7 +236,6 @@ function createPlayback(events: TimelineEvent[]) {
   }
 
   function resetStore() {
-    console.debug("[bash-story] resetStore")
     setData({
       session: [],
       session_status: {},
@@ -252,7 +246,6 @@ function createPlayback(events: TimelineEvent[]) {
   }
 
   function replayTo(target: number) {
-    console.debug("[bash-story] replayTo", target)
     resetStore()
     batch(() => {
       for (let i = 0; i < target && i < events.length; i++) {
@@ -265,7 +258,6 @@ function createPlayback(events: TimelineEvent[]) {
 
   createEffect(
     on(step, (target) => {
-      console.debug("[bash-story] step changed:", appliedStep, "→", target)
       if (target > appliedStep) {
         batch(() => {
           for (let i = appliedStep; i < target && i < events.length; i++) {
@@ -284,7 +276,6 @@ function createPlayback(events: TimelineEvent[]) {
     // Skip delay events when stepping manually
     while (next < totalSteps && events[next]?.type === "delay") next++
     const clamped = Math.min(next, totalSteps)
-    console.debug("[bash-story] stepForward →", clamped)
     setStep(clamped)
   }
 
@@ -292,12 +283,10 @@ function createPlayback(events: TimelineEvent[]) {
     let next = step() - 1
     while (next > 0 && events[next - 1]?.type === "delay") next--
     const clamped = Math.max(next, 0)
-    console.debug("[bash-story] stepBack →", clamped)
     setStep(clamped)
   }
 
   const reset = () => {
-    console.debug("[bash-story] reset")
     setStep(0)
     appliedStep = 0
     resetStore()
@@ -305,7 +294,6 @@ function createPlayback(events: TimelineEvent[]) {
 
   const jumpTo = (s: number) => {
     const clamped = Math.max(0, Math.min(s, totalSteps))
-    console.debug("[bash-story] jumpTo", clamped)
     setStep(clamped)
   }
 

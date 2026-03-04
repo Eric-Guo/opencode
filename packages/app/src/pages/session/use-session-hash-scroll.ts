@@ -19,7 +19,7 @@ export const useSessionHashScroll = (input: {
   setPendingMessage: (value: string | undefined) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   setTurnStart: (value: number) => void
-  autoScroll: { pause: () => void; forceScrollToBottom: () => void; snapToBottom: () => void }
+  autoScroll: { pause: () => void; snapToBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
   scheduleScrollState: (el: HTMLDivElement) => void

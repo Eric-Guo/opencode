@@ -5,12 +5,10 @@ import {
   createSignal,
   For,
   Match,
-  on,
   onMount,
   Show,
   Switch,
   onCleanup,
-  Index,
   type JSX,
 } from "solid-js"
 import stripAnsi from "strip-ansi"
@@ -98,6 +96,7 @@ export interface MessageProps {
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
   animate?: boolean
+  queued?: boolean
   working?: boolean
   showReasoningSummaries?: boolean
 }
@@ -349,7 +348,6 @@ function PartGrow(props: {
   children: JSX.Element
   animate?: boolean
   animateToggle?: boolean
-  debugID?: string
   gap?: number
   fade?: boolean
   grow?: boolean
@@ -527,7 +525,6 @@ export function AssistantParts(props: {
         return (
           <PartGrow
             animate={props.animate}
-            debugID={key}
             gap={idx() === 0 || fade() ? 0 : 8}
             fade={fade()}
             grow
@@ -600,6 +597,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             interrupted={props.interrupted}
             animate={props.animate}
+            queued={props.queued}
           />
         )}
       </Match>
@@ -823,6 +821,7 @@ export function UserMessageDisplay(props: {
   parts: PartType[]
   interrupted?: boolean
   animate?: boolean
+  queued?: boolean
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -902,6 +901,7 @@ export function UserMessageDisplay(props: {
                   <div
                     data-slot="user-message-attachment"
                     data-type={file.mime.startsWith("image/") ? "image" : "file"}
+                    data-queued={props.queued ? "" : undefined}
                     onClick={() => {
                       if (file.mime.startsWith("image/") && file.url) {
                         openImagePreview(file.url, file.filename)
@@ -930,9 +930,14 @@ export function UserMessageDisplay(props: {
           <Show when={text()}>
             <>
               <div data-slot="user-message-body">
-                <div data-slot="user-message-text">
+                <div data-slot="user-message-text" data-queued={props.queued ? "" : undefined}>
                   <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
                 </div>
+                <GrowBox animate={!!props.animate} open={!!props.queued}>
+                  <div data-slot="user-message-queued-indicator">
+                    <TextShimmer text={i18n.t("ui.message.queued")} />
+                  </div>
+                </GrowBox>
               </div>
               <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
                 <Show when={metaHead() || metaTail()}>
@@ -1119,8 +1124,6 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const i18n = useI18n()
   const part = props.part as ToolPart
-  if (part.tool === "todowrite" || part.tool === "todoread") return null
-
   const hideQuestion = createMemo(() => part.tool === "question" && busy(part.state.status))
 
   const emptyInput: Record<string, any> = {}
@@ -1858,7 +1861,6 @@ ToolRegistry.register({
         animate
         animated
         defaultOpen={false}
-        debugID={`bash:${props.callID ?? props.partID ?? "unknown"}`}
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">

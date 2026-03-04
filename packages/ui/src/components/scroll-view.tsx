@@ -1,17 +1,15 @@
-import { createSignal, onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { createSignal, onCleanup, onMount, splitProps, type ComponentProps, Show } from "solid-js"
 import { useI18n } from "../context/i18n"
 
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
-  orientation?: "vertical" | "horizontal" // currently only vertical is fully implemented for thumb
 }
 
 export function ScrollView(props: ScrollViewProps) {
   const i18n = useI18n()
-  const merged = mergeProps({ orientation: "vertical" }, props)
   const [local, events, rest] = splitProps(
-    merged,
-    ["class", "children", "viewportRef", "orientation", "style"],
+    props,
+    ["class", "children", "viewportRef", "style"],
     [
       "onScroll",
       "onWheel",

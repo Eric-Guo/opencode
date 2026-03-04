@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createSignal, createMemo, createEffect, on, onCleanup, batch, For, Show } from "solid-js"
+import { createSignal, createMemo, createEffect, on, onCleanup, batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import type {
   Message,
