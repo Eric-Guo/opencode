@@ -38,6 +38,7 @@ import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionReviewTab, type DiffStyle, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { MessageTimeline } from "@/pages/session/message-timeline"
+import { AnimationDebugPanel } from "@opencode-ai/ui/animation-debug-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { SessionComposerRegion, createSessionComposerState } from "@/pages/session/composer"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
@@ -419,16 +420,28 @@ export default function Page() {
     deferRender: false,
   })
 
+  let deferFrame: number | undefined
+  let deferTimer: ReturnType<typeof setTimeout> | undefined
   createComputed((prev) => {
     const key = sessionKey()
     if (key !== prev) {
+      if (deferFrame !== undefined) cancelAnimationFrame(deferFrame)
+      if (deferTimer !== undefined) clearTimeout(deferTimer)
       setStore("deferRender", true)
-      requestAnimationFrame(() => {
-        setTimeout(() => setStore("deferRender", false), 0)
+      deferFrame = requestAnimationFrame(() => {
+        deferFrame = undefined
+        deferTimer = setTimeout(() => {
+          deferTimer = undefined
+          setStore("deferRender", false)
+        }, 0)
       })
     }
     return key
   }, sessionKey())
+  onCleanup(() => {
+    if (deferFrame !== undefined) cancelAnimationFrame(deferFrame)
+    if (deferTimer !== undefined) clearTimeout(deferTimer)
+  })
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
@@ -1162,6 +1175,7 @@ export default function Page() {
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+      {import.meta.env.DEV && <AnimationDebugPanel />}
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs

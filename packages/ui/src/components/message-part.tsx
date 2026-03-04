@@ -50,7 +50,7 @@ import { list } from "./text-utils"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { GrowBox } from "./grow-box"
-import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, FADE_SPRING, WIPE_MASK } from "./motion"
+import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, GROW_SPRING, WIPE_MASK } from "./motion"
 
 interface Diagnostic {
   range: {
@@ -291,6 +291,14 @@ const pageVisible = /* @__PURE__ */ (() => {
     document.addEventListener("visibilitychange", sync)
   }
   return visible
+})()
+
+const prefersReducedMotion = /* @__PURE__ */ (() => {
+  if (typeof window === "undefined") return () => false
+  const mql = window.matchMedia("(prefers-reduced-motion: reduce)")
+  const [reduced, setReduced] = createSignal(mql.matches)
+  mql.addEventListener("change", () => setReduced(mql.matches))
+  return reduced
 })()
 
 function createGroupOpenState() {
@@ -1496,7 +1504,7 @@ function useToolFade(
 
     const el = ref()
     if (!el || typeof window === "undefined") return
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    if (prefersReducedMotion()) return
 
     const mask =
       wipe &&
@@ -1529,10 +1537,10 @@ function useToolFade(
           ? animate(
               node,
               { opacity: 1, filter: "blur(0px)", transform: "translateX(0)", maskPosition: "0% 0%" },
-              { ...FADE_SPRING, delay },
+              { ...GROW_SPRING, delay },
             )
-          : animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateX(0)" }, { ...FADE_SPRING, delay })
-        : animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, { ...FADE_SPRING, delay })
+          : animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateX(0)" }, { ...GROW_SPRING, delay })
+        : animate(node, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, { ...GROW_SPRING, delay })
 
       anim?.finished.then(() => {
         const value = ref()
