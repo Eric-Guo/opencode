@@ -19,7 +19,6 @@ import {
   COLLAPSIBLE_CONTENT_HEIGHT_SPRING,
 } from "./motion"
 import { Collapsible } from "./collapsible"
-import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 
 export type TriggerTitle = {
@@ -39,11 +38,10 @@ const isTriggerTitle = (val: any): val is TriggerTitle => {
 }
 
 interface ToolCallPanelBaseProps {
-  icon: IconProps["name"]
+  icon: string
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
   status?: string
-  debugID?: string
   animate?: boolean
   hideDetails?: boolean
   defaultOpen?: boolean
@@ -52,7 +50,6 @@ interface ToolCallPanelBaseProps {
   locked?: boolean
   watchDetails?: boolean
   animated?: boolean
-  animateIn?: boolean
   onSubtitleClick?: () => void
 }
 
@@ -175,7 +172,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
   let fadeAnim: AnimationPlaybackControls | undefined
   let observer: ResizeObserver | undefined
   let resizeFrame: number | undefined
-  const initialOpen = props.animateIn ? false : open()
+  const initialOpen = open()
   const heightSpring = springValue<number>(0, COLLAPSIBLE_CONTENT_HEIGHT_SPRING)
 
   const read = () => Math.max(0, Math.ceil(bodyRef?.getBoundingClientRect().height ?? 0))
@@ -316,7 +313,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
 
 export interface ToolCallRowProps {
   variant: "row"
-  icon: IconProps["name"]
+  icon: string
   trigger: TriggerTitle | JSX.Element
   status?: string
   animate?: boolean

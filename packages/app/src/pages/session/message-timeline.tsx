@@ -72,12 +72,6 @@ const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   return nested
 }
 
-const boundaryMode = (root: HTMLDivElement, target: HTMLElement) => {
-  if (target === root) return "reversed" as const
-  if (target.dataset.scrollDirection === "reversed") return "reversed" as const
-  return "normal" as const
-}
-
 const markBoundaryGesture = (input: {
   root: HTMLDivElement
   target: EventTarget | null
@@ -95,7 +89,6 @@ const markBoundaryGesture = (input: {
       scrollTop: target.scrollTop,
       scrollHeight: target.scrollHeight,
       clientHeight: target.clientHeight,
-      mode: boundaryMode(input.root, target),
     })
   ) {
     input.onMarkScrollGesture(input.root)
@@ -731,6 +724,16 @@ export function MessageTimeline(props: {
               </Show>
               <For each={rendered()}>
                 {(messageID) => {
+                  // Capture at creation time: animate only messages added after the
+                  // timeline finishes its initial backfill staging.
+                  const isNew = staging.ready()
+                  const active = createMemo(() => activeMessageID() === messageID)
+                  const queued = createMemo(() => {
+                    if (active()) return false
+                    const activeID = activeMessageID()
+                    if (activeID) return messageID > activeID
+                    return false
+                  })
                   const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []))
                   const commentCount = createMemo(() => comments().length)
                   return (
@@ -785,7 +788,9 @@ export function MessageTimeline(props: {
                       <SessionTurn
                         sessionID={sessionID() ?? ""}
                         messageID={messageID}
-                        animate={messageID === activeMessageID()}
+                        active={active()}
+                        queued={queued()}
+                        animate={isNew}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}

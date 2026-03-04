@@ -21,8 +21,6 @@ import { TextReveal } from "./text-reveal"
 import { SessionRetry } from "./session-retry"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
-const THINKING_GAP_PX = 0
-
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
@@ -327,6 +325,9 @@ export function SessionTurn(
     if (status().type === "idle") return false
     const msg = message()
     if (!msg) return false
+    // When active is explicitly provided, use it directly — the parent
+    // already computed which turn is active, so we don't need to self-detect.
+    if (typeof props.active === "boolean") return props.active
     const item = pending()
     if (item) return item.parentID === msg.id
     return latestUserID() === msg.id
@@ -394,7 +395,7 @@ export function SessionTurn(
   let thinkingAnim: AnimationPlaybackControls | undefined
   let thinkingHeightAnim: AnimationPlaybackControls | undefined
   let thinkingToggleFrame: number | undefined
-  const gap = () => (hasAssistant() ? `${THINKING_GAP_PX}px` : "0px")
+  const gap = () => "0px"
 
   createEffect(
     on(
@@ -672,6 +673,7 @@ export function SessionTurn(
                     parts={parts()}
                     interrupted={interrupted()}
                     animate={props.animate}
+                    queued={queued()}
                     working={working()}
                   />
                 </div>
@@ -710,7 +712,7 @@ export function SessionTurn(
                     data-slot="session-turn-thinking-wrap"
                     style={{
                       height: initialThinking ? "auto" : "0px",
-                      "margin-top": initialThinking && hasAssistant() ? `${THINKING_GAP_PX}px` : "0px",
+                      "margin-top": "0px",
                       overflow: initialThinking ? "visible" : "hidden",
                     }}
                   >

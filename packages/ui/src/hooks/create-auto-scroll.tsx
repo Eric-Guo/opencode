@@ -238,11 +238,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
     handleScroll,
     handleInteraction,
     pause: stop,
-    resume: () => {
-      if (store.userScrolled) setStore("userScrolled", false)
-      scrollToBottom(true)
-    },
-    scrollToBottom: () => scrollToBottom(false),
     forceScrollToBottom: () => scrollToBottom(true),
     smoothScrollToBottom,
     snapToBottom: () => {

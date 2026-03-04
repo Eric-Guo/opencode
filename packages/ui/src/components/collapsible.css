@@ -50,9 +50,6 @@
     line-height: var(--line-height-large); /* 166.667% */
     letter-spacing: var(--letter-spacing-normal);
 
-    /* &:hover { */
-    /*   background-color: var(--surface-base); */
-    /* } */
     &:focus-visible {
       outline: none;
       background-color: var(--surface-raised-base-hover);
@@ -103,9 +100,6 @@
       border: none;
       padding: 0;
 
-      /* &:hover { */
-      /*   color: var(--text-strong); */
-      /* } */
       &:focus-visible {
         outline: none;
         background-color: var(--surface-raised-base-hover);
@@ -120,23 +114,5 @@
     > [data-slot="collapsible-trigger"] {
       height: 24px;
     }
-  }
-}
-
-@keyframes slideDown {
-  from {
-    height: 0;
-  }
-  to {
-    height: var(--kb-collapsible-content-height);
-  }
-}
-
-@keyframes slideUp {
-  from {
-    height: var(--kb-collapsible-content-height);
-  }
-  to {
-    height: 0;
   }
 }
