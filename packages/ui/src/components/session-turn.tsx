@@ -193,41 +193,8 @@ export function SessionTurn(
     return msg
   })
 
-  const pending = createMemo(() => {
-    if (typeof props.active === "boolean" && typeof props.queued === "boolean") return
-    const messages = allMessages() ?? emptyMessages
-    return messages.findLast(
-      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
-    )
-  })
-
-  const pendingUser = createMemo(() => {
-    const item = pending()
-    if (!item?.parentID) return
-    const messages = allMessages() ?? emptyMessages
-    const result = Binary.search(messages, item.parentID, (m) => m.id)
-    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
-    if (!msg || msg.role !== "user") return
-    return msg
-  })
-
-  const active = createMemo(() => {
-    if (typeof props.active === "boolean") return props.active
-    const msg = message()
-    const parent = pendingUser()
-    if (!msg || !parent) return false
-    return parent.id === msg.id
-  })
-
-  const queued = createMemo(() => {
-    if (typeof props.queued === "boolean") return props.queued
-    const id = message()?.id
-    if (!id) return false
-    if (!pendingUser()) return false
-    const item = pending()
-    if (!item) return false
-    return id > item.id
-  })
+  const active = createMemo(() => props.active ?? false)
+  const queued = createMemo(() => props.queued ?? false)
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
@@ -315,22 +282,10 @@ export function SessionTurn(
   })
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
-  const latestUserID = createMemo(() => {
-    const messages = allMessages() ?? emptyMessages
-    const latest = messages.findLast((item) => item.role === "user")
-    if (!latest || latest.role !== "user") return undefined
-    return latest.id
-  })
   const working = createMemo(() => {
     if (status().type === "idle") return false
-    const msg = message()
-    if (!msg) return false
-    // When active is explicitly provided, use it directly — the parent
-    // already computed which turn is active, so we don't need to self-detect.
-    if (typeof props.active === "boolean") return props.active
-    const item = pending()
-    if (item) return item.parentID === msg.id
-    return latestUserID() === msg.id
+    if (!message()) return false
+    return active()
   })
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
   const showDiffSummary = createMemo(() => edited() > 0 && !working())
