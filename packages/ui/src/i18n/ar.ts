@@ -100,7 +100,7 @@ export const dict = {
   "ui.tool.todos.read": "قراءة المهام",
   "ui.tool.questions": "أسئلة",
   "ui.tool.skill": "مهارة",
-  "ui.tool.agent": "وكيل {{type}}",
+  "ui.tool.agent": "وكيل",
 
   "ui.common.file.one": "ملف",
   "ui.common.file.other": "ملفات",

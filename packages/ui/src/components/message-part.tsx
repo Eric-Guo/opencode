@@ -213,7 +213,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
     case "task":
       return {
         icon: "task",
-        title: i18n.t("ui.tool.agent", { type: input.subagent_type || "task" }),
+        title: i18n.t("ui.tool.agent"),
         subtitle: input.description,
       }
     case "bash":
@@ -1515,7 +1515,11 @@ ToolRegistry.register({
     const data = useData()
     const i18n = useI18n()
     const childSessionId = () => props.metadata.sessionId as string | undefined
-    const title = createMemo(() => i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }))
+    const agentType = createMemo(() => {
+      const raw = props.input.subagent_type
+      if (typeof raw !== "string" || !raw) return undefined
+      return raw[0]!.toUpperCase() + raw.slice(1)
+    })
     const description = createMemo(() => {
       const value = props.input.description
       if (typeof value === "string") return value
@@ -1559,14 +1563,15 @@ ToolRegistry.register({
       }, 50)
     }
 
-    const titleContent = () => <TextShimmer text={title()} active={running()} />
-
     const trigger = () => (
       <div data-slot="basic-tool-tool-info-structured">
         <div data-slot="basic-tool-tool-info-main">
-          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
-            {titleContent()}
+          <span data-slot="basic-tool-tool-title">
+            <TextShimmer text={i18n.t("ui.tool.agent")} active={running()} />
           </span>
+          <Show when={agentType()}>
+            {(type) => <ToolText text={type()} animate={reveal()} />}
+          </Show>
           <Show when={description()}>
             <Switch>
               <Match when={href()}>
@@ -1575,7 +1580,7 @@ ToolRegistry.register({
                 )}
               </Match>
               <Match when={true}>
-                <ToolText text={description() ?? ""} animate={reveal()} />
+                <ToolText text={description() ?? ""} delay={0.02} animate={reveal()} />
               </Match>
             </Switch>
           </Show>
