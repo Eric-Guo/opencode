@@ -354,6 +354,12 @@ function PartGrow(props: {
   animateToggle?: boolean
   gap?: number
   fade?: boolean
+  edge?: boolean
+  edgeHeight?: number
+  edgeOpacity?: number
+  edgeIdle?: number
+  edgeFade?: number
+  edgeRise?: number
   grow?: boolean
   watch?: boolean
   open?: boolean
@@ -365,6 +371,12 @@ function PartGrow(props: {
       animate={props.animate !== false}
       animateToggle={props.animateToggle}
       fade={props.fade}
+      edge={props.edge}
+      edgeHeight={props.edgeHeight}
+      edgeOpacity={props.edgeOpacity}
+      edgeIdle={props.edgeIdle}
+      edgeFade={props.edgeFade}
+      edgeRise={props.edgeRise}
       gap={props.gap}
       grow={props.grow}
       watch={props.watch}
@@ -535,13 +547,27 @@ export function AssistantParts(props: {
           if (ctx()) return true
           return tool()
         })
+        const edge = createMemo(() => {
+          const entry = part()
+          if (!entry) return false
+          if (entry.part.type !== "text") return false
+          if (!props.working) return false
+          return tail()
+        })
+        const watch = createMemo(() => !context() && !tool() && tail() && !turnSummary())
         return (
           <PartGrow
             animate={props.animate}
             gap={idx() === 0 || fade() ? 0 : 8}
             fade={fade()}
+            edge={edge()}
+            edgeHeight={20}
+            edgeOpacity={0.95}
+            edgeIdle={100}
+            edgeFade={0.6}
+            edgeRise={0.1}
             grow
-            watch={!context() && !tool() && tail() && !turnSummary()}
+            watch={watch()}
             animateToggle
             open={visible()}
             toggleSpring={contextSpring()}
@@ -1550,9 +1576,7 @@ ToolRegistry.register({
           <span data-slot="basic-tool-tool-title">
             <TextShimmer text={i18n.t("ui.tool.agent")} active={running()} />
           </span>
-          <Show when={agentType()}>
-            {(type) => <ToolText text={type()} animate={reveal()} />}
-          </Show>
+          <Show when={agentType()}>{(type) => <ToolText text={type()} animate={reveal()} />}</Show>
           <Show when={description()}>
             <Switch>
               <Match when={href()}>

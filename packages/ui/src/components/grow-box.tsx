@@ -27,6 +27,18 @@ export interface GrowBoxProps {
   spring?: SpringConfig
   /** Override controlled open/close spring config. Default: spring. */
   toggleSpring?: SpringConfig
+  /** Show a temporary bottom edge fade while height animation is running. */
+  edge?: boolean
+  /** Edge fade height in px. Default: 20. */
+  edgeHeight?: number
+  /** Edge fade opacity (0-1). Default: 1. */
+  edgeOpacity?: number
+  /** Delay before edge fades out after height settles. Default: 320. */
+  edgeIdle?: number
+  /** Edge fade-out duration in seconds. Default: 0.24. */
+  edgeFade?: number
+  /** Edge fade-in duration in seconds. Default: 0.2. */
+  edgeRise?: number
 }
 
 /**
@@ -42,6 +54,10 @@ export function GrowBox(props: GrowBoxProps) {
   let root: HTMLDivElement | undefined
   let body: HTMLDivElement | undefined
   let fadeAnim: AnimationPlaybackControls | undefined
+  let edgeRef: HTMLDivElement | undefined
+  let edgeAnim: AnimationPlaybackControls | undefined
+  let edgeTimer: ReturnType<typeof setTimeout> | undefined
+  let edgeOn = false
   let mountFrame: number | undefined
   let resizeFrame: number | undefined
   let observer: ResizeObserver | undefined
@@ -61,6 +77,89 @@ export function GrowBox(props: GrowBoxProps) {
   const watch = () => props.watch === true
   const open = () => props.open !== false
   const animateToggle = () => props.animateToggle !== false
+  const edge = () => props.edge === true
+  const edgeHeight = () => Math.max(0, props.edgeHeight ?? 20)
+  const edgeOpacity = () => Math.min(1, Math.max(0, props.edgeOpacity ?? 1))
+  const edgeIdle = () => Math.max(0, props.edgeIdle ?? 320)
+  const edgeFade = () => Math.max(0.05, props.edgeFade ?? 0.24)
+  const edgeRise = () => Math.max(0.05, props.edgeRise ?? 0.2)
+  const edgeReady = () => props.animate !== false && open() && edge() && edgeHeight() > 0
+
+  const stopEdgeTimer = () => {
+    if (edgeTimer === undefined) return
+    clearTimeout(edgeTimer)
+    edgeTimer = undefined
+  }
+
+  const hideEdge = (instant = false) => {
+    stopEdgeTimer()
+    if (!edgeRef) {
+      edgeOn = false
+      return
+    }
+    edgeAnim?.stop()
+    edgeAnim = undefined
+    if (instant) {
+      edgeRef.style.opacity = "0"
+      edgeOn = false
+      return
+    }
+    if (!edgeOn) {
+      edgeRef.style.opacity = "0"
+      return
+    }
+    const current = animate(edgeRef, { opacity: 0 }, { type: "spring", visualDuration: edgeFade(), bounce: 0 })
+    edgeAnim = current
+    current.finished
+      .catch(() => {})
+      .finally(() => {
+        if (edgeAnim !== current) return
+        edgeAnim = undefined
+        if (!edgeRef) return
+        edgeRef.style.opacity = "0"
+        edgeOn = false
+      })
+  }
+
+  const showEdge = () => {
+    stopEdgeTimer()
+    if (!edgeRef) return
+    if (edgeOn && edgeAnim === undefined) {
+      edgeRef.style.opacity = `${edgeOpacity()}`
+      return
+    }
+    edgeAnim?.stop()
+    edgeAnim = undefined
+    if (!edgeOn) edgeRef.style.opacity = "0"
+    const current = animate(
+      edgeRef,
+      { opacity: edgeOpacity() },
+      { type: "spring", visualDuration: edgeRise(), bounce: 0 },
+    )
+    edgeAnim = current
+    edgeOn = true
+    current.finished
+      .catch(() => {})
+      .finally(() => {
+        if (edgeAnim !== current) return
+        edgeAnim = undefined
+        if (!edgeRef) return
+        edgeRef.style.opacity = `${edgeOpacity()}`
+      })
+  }
+
+  const queueEdgeHide = () => {
+    stopEdgeTimer()
+    if (!edgeOn) return
+    if (edgeIdle() <= 0) {
+      hideEdge()
+      return
+    }
+    edgeTimer = setTimeout(() => {
+      edgeTimer = undefined
+      hideEdge()
+    }, edgeIdle())
+  }
 
   const hideBody = () => {
     if (!body) return
@@ -88,6 +187,7 @@ export function GrowBox(props: GrowBoxProps) {
   const setInstant = (visible: boolean) => {
     root!.style.height = visible ? "" : "0px"
     root!.style.overflow = visible ? "" : "clip"
+    hideEdge(true)
     if (visible || props.fade === false) clearBody()
     else hideBody()
   }
@@ -135,6 +235,7 @@ export function GrowBox(props: GrowBoxProps) {
       root.style.overflow = "clip"
       root.style.willChange = "height"
       root.style.contain = "layout style"
+      if (edgeReady()) showEdge()
     })
     const offComplete = height.on("animationComplete", () => {
       if (!root) return
@@ -151,10 +252,12 @@ export function GrowBox(props: GrowBoxProps) {
       if (props.autoHeight === false || watch()) {
         root.style.height = `${next}px`
         root.style.overflow = next > 0 ? "visible" : "clip"
+        if (edgeReady()) queueEdgeHide()
         return
       }
       root.style.height = "auto"
       root.style.overflow = "visible"
+      if (edgeReady()) queueEdgeHide()
     })
 
     onCleanup(() => {
@@ -169,6 +272,7 @@ export function GrowBox(props: GrowBoxProps) {
     }
 
     if (props.fade !== false) hideBody()
+    hideEdge(true)
 
     if (!open()) {
       root.style.height = "0px"
@@ -211,6 +315,7 @@ export function GrowBox(props: GrowBoxProps) {
           return
         }
         fadeAnim?.stop()
+        if (!value) hideEdge(true)
         if (!value) {
           const next = currentHeight()
           if (Math.abs(next - height.get()) >= 1) {
@@ -234,19 +339,53 @@ export function GrowBox(props: GrowBoxProps) {
     ),
   )
 
+  createEffect(() => {
+    if (!edgeRef) return
+    edgeRef.style.height = `${edgeHeight()}px`
+    if (props.animate === false || !open() || edgeHeight() <= 0) {
+      hideEdge(true)
+      return
+    }
+    if (edge()) return
+    hideEdge()
+  })
+
   onCleanup(() => {
+    stopEdgeTimer()
     if (mountFrame !== undefined) cancelAnimationFrame(mountFrame)
     if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
     observer?.disconnect()
     height.destroy()
     fadeAnim?.stop()
+    edgeAnim?.stop()
+    edgeAnim = undefined
+    edgeOn = false
   })
 
   return (
-    <div ref={root} data-slot={props.slot} class={props.class} style={{ transform: "translateZ(0)" }}>
+    <div
+      ref={root}
+      data-slot={props.slot}
+      class={props.class}
+      style={{ transform: "translateZ(0)", position: "relative" }}
+    >
       <div ref={body} style={{ "padding-top": gap() > 0 ? `${gap()}px` : undefined }}>
         {props.children}
       </div>
+      <div
+        ref={edgeRef}
+        data-slot="grow-box-edge"
+        style={{
+          position: "absolute",
+          left: "0",
+          right: "0",
+          bottom: "0",
+          height: `${edgeHeight()}px`,
+          opacity: 0,
+          "pointer-events": "none",
+          background: "linear-gradient(to bottom, transparent 0%, var(--background-stronger) 100%)",
+        }}
+      />
     </div>
   )
 }
