@@ -12,7 +12,7 @@
     justify-content: flex-end;
     line-height: inherit;
     width: var(--animated-number-width, 1ch);
-    overflow: hidden;
+    overflow: clip;
     transition: width var(--tool-motion-spring-ms, 800ms) var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
 
@@ -21,7 +21,7 @@
     width: 1ch;
     height: 1em;
     line-height: 1em;
-    overflow: hidden;
+    overflow: clip;
     vertical-align: baseline;
     -webkit-mask-image: linear-gradient(
       to bottom,

@@ -84,14 +84,13 @@
 
   [data-slot="session-turn-thinking"] {
     position: relative;
-    will-change: opacity, filter, transform;
+    will-change: opacity, filter;
   }
 
   [data-component="text-reveal"].session-turn-thinking-heading {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: clip;
     white-space: nowrap;
     line-height: inherit;
     color: var(--text-weaker);
@@ -210,7 +209,7 @@
     display: flex;
     min-width: 0;
     align-items: baseline;
-    overflow: hidden;
+    overflow: clip;
     white-space: nowrap;
 
     font-family: var(--font-family-sans);
@@ -222,8 +221,7 @@
     flex: 1 1 auto;
     color: var(--text-weak);
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: clip;
     white-space: nowrap;
     direction: rtl;
     unicode-bidi: plaintext;
@@ -234,8 +232,7 @@
     flex-shrink: 0;
     max-width: 100%;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: clip;
     white-space: nowrap;
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);

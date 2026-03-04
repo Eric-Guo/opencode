@@ -70,7 +70,7 @@ export function GrowBox(props: GrowBoxProps) {
 
   const setInstant = (visible: boolean) => {
     root!.style.height = visible ? "" : "0px"
-    root!.style.overflow = visible ? "" : "hidden"
+    root!.style.overflow = visible ? "" : "clip"
     if (visible || props.fade === false) clearBody()
     else hideBody()
   }
@@ -96,11 +96,11 @@ export function GrowBox(props: GrowBoxProps) {
       springTarget = next
       if (props.autoHeight === false || watch()) {
         root.style.height = `${next}px`
-        root.style.overflow = next > 0 ? "visible" : "hidden"
+        root.style.overflow = next > 0 ? "visible" : "clip"
       }
       return
     }
-    root.style.overflow = "hidden"
+    root.style.overflow = "clip"
     springTarget = next
     height.set(next)
   }
@@ -114,7 +114,7 @@ export function GrowBox(props: GrowBoxProps) {
     })
     const offStart = height.on("animationStart", () => {
       if (!root) return
-      root.style.overflow = "hidden"
+      root.style.overflow = "clip"
       root.style.willChange = "height"
       root.style.contain = "layout style"
     })
@@ -125,14 +125,14 @@ export function GrowBox(props: GrowBoxProps) {
       if (!open()) {
         springTarget = 0
         root.style.height = "0px"
-        root.style.overflow = "hidden"
+        root.style.overflow = "clip"
         return
       }
       const next = targetHeight()
       springTarget = next
       if (props.autoHeight === false || watch()) {
         root.style.height = `${next}px`
-        root.style.overflow = next > 0 ? "visible" : "hidden"
+        root.style.overflow = next > 0 ? "visible" : "clip"
         return
       }
       root.style.height = "auto"
@@ -154,11 +154,11 @@ export function GrowBox(props: GrowBoxProps) {
 
     if (!open()) {
       root.style.height = "0px"
-      root.style.overflow = "hidden"
+      root.style.overflow = "clip"
     } else {
       if (grow()) {
         root.style.height = "0px"
-        root.style.overflow = "hidden"
+        root.style.overflow = "clip"
       } else {
         root.style.height = "auto"
         root.style.overflow = "visible"
@@ -203,7 +203,7 @@ export function GrowBox(props: GrowBoxProps) {
           if (props.fade !== false) {
             fadeAnim = animate(body, { opacity: 0, filter: "blur(2px)" }, FADE_SPRING)
           }
-          root.style.overflow = "hidden"
+          root.style.overflow = "clip"
           springTarget = 0
           height.set(0)
           return
