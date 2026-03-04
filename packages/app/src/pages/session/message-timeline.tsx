@@ -322,21 +322,38 @@ export function MessageTimeline(props: {
     menuOpen: false,
     pendingRename: false,
   })
-  const [headerLive, setHeaderLive] = createSignal(false)
   const [headerText, setHeaderText] = createStore({
     session: sessionKey(),
-    value: placeholderTitle() ? undefined : headerTitle(),
+    value: headerTitle(),
     prev: undefined as string | undefined,
-    muted: false,
+    muted: placeholderTitle(),
     prevMuted: false,
   })
-  let headerFrame: number | undefined
   let titleFrame: number | undefined
+  let headerAnim: AnimationPlaybackControls | undefined
   let enterAnim: AnimationPlaybackControls | undefined
   let leaveAnim: AnimationPlaybackControls | undefined
   let titleRef: HTMLInputElement | undefined
+  let headerRef: HTMLDivElement | undefined
   let enterRef: HTMLSpanElement | undefined
   let leaveRef: HTMLSpanElement | undefined
+
+  const clearHeaderAnim = () => {
+    headerAnim?.stop()
+    headerAnim = undefined
+  }
+
+  const animateHeader = () => {
+    const el = headerRef
+    if (!el) return
+
+    clearHeaderAnim()
+    headerAnim = animate(el, { opacity: [0, 1] }, FAST_SPRING)
+    headerAnim.finished.then(() => {
+      if (headerRef !== el) return
+      clearFadeStyles(el)
+    })
+  }
 
   const clearTitleAnims = () => {
     if (titleFrame !== undefined) {
@@ -362,15 +379,12 @@ export function MessageTimeline(props: {
 
   const animateEnterSpan = () => {
     if (!enterRef) return
-    enterRef.style.opacity = "0"
-    enterRef.style.filter = "blur(2px)"
-    enterRef.style.transform = "translateY(-2px)"
-    titleFrame = requestAnimationFrame(() => {
-      titleFrame = undefined
-      if (!enterRef) return
-      enterAnim = animate(enterRef, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, FAST_SPRING)
-      enterAnim.finished.then(() => settleTitleEnter())
-    })
+    enterAnim = animate(
+      enterRef,
+      { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"], transform: ["translateY(-2px)", "translateY(0)"] },
+      FAST_SPRING,
+    )
+    enterAnim.finished.then(() => settleTitleEnter())
   }
 
   const crossfadeTitle = (nextTitle: string, nextMuted: boolean) => {
@@ -379,13 +393,6 @@ export function MessageTimeline(props: {
     // snapshot old text into leave span before updating store
     setHeaderText({ prev: headerText.value, prevMuted: headerText.muted })
 
-    // show leave span with old text
-    if (leaveRef) {
-      leaveRef.style.opacity = "1"
-      leaveRef.style.filter = "blur(0px)"
-      leaveRef.style.transform = "translateY(0)"
-    }
-
     // update to new text
     setHeaderText({ value: nextTitle, muted: nextMuted })
 
@@ -393,7 +400,7 @@ export function MessageTimeline(props: {
     if (leaveRef) {
       leaveAnim = animate(
         leaveRef,
-        { opacity: 0, filter: "blur(2px)", transform: "translateY(2px)" },
+        { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"], transform: ["translateY(0)", "translateY(2px)"] },
         FAST_SPRING,
       )
       leaveAnim.finished.then(() => {
@@ -419,20 +426,13 @@ export function MessageTimeline(props: {
 
   createEffect(
     on(showHeader, (show, prev) => {
-      if (headerFrame !== undefined) cancelAnimationFrame(headerFrame)
       if (!show) {
-        setHeaderLive(false)
+        clearHeaderAnim()
         return
       }
-      if (prev) {
-        setHeaderLive(true)
-        return
-      }
-      setHeaderLive(false)
-      headerFrame = requestAnimationFrame(() => {
-        headerFrame = undefined
-        setHeaderLive(true)
-      })
+
+      if (show === prev) return
+      animateHeader()
     }),
   )
 
@@ -450,7 +450,9 @@ export function MessageTimeline(props: {
           }
           return
         }
-        if (nextTitle === headerText.value && nextMuted === headerText.muted) return
+        if (nextTitle === headerText.value && nextMuted === headerText.muted) {
+          return
+        }
         if (!nextTitle) {
           snapTitle(undefined, false)
           return
@@ -471,16 +473,9 @@ export function MessageTimeline(props: {
     ),
   )
   onCleanup(() => {
-    if (headerFrame !== undefined) cancelAnimationFrame(headerFrame)
+    clearHeaderAnim()
     clearTitleAnims()
   })
-  const headerStyle = createMemo(() => ({
-    opacity: headerLive() ? "1" : "0",
-    filter: headerLive() ? "blur(0px)" : "blur(3px)",
-    transform: headerLive() ? "translateY(0)" : "translateY(-3px)",
-    transition:
-      "opacity 450ms cubic-bezier(0.34, 1, 0.64, 1), filter 450ms cubic-bezier(0.34, 1, 0.64, 1), transform 450ms cubic-bezier(0.34, 1, 0.64, 1)",
-  }))
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
@@ -702,7 +697,14 @@ export function MessageTimeline(props: {
           </button>
         </div>
         <Show when={showHeader()}>
-          <div data-session-title class="pointer-events-none absolute inset-x-0 top-0 z-30">
+          <div
+            data-session-title
+            ref={(el) => {
+              headerRef = el
+              el.style.opacity = "0"
+            }}
+            class="pointer-events-none absolute inset-x-0 top-0 z-30"
+          >
             <div
               classList={{
                 "bg-[linear-gradient(to_bottom,var(--background-stronger)_38px,transparent)]": true,
@@ -715,7 +717,7 @@ export function MessageTimeline(props: {
               <div class="pointer-events-auto h-12 w-full flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
                   <Show when={parentID()}>
-                    <div style={headerStyle()}>
+                    <div>
                       <IconButton
                         tabIndex={-1}
                         icon="arrow-left"
@@ -773,7 +775,7 @@ export function MessageTimeline(props: {
                 </div>
                 <Show when={sessionID()}>
                   {(id) => (
-                    <div class="shrink-0 flex items-center gap-3" style={headerStyle()}>
+                    <div class="shrink-0 flex items-center gap-3">
                       <SessionContextUsage placement="bottom" />
                       <DropdownMenu
                         gutter={4}

@@ -453,11 +453,6 @@ export default function Page() {
     return "main"
   })
 
-  const activeMessage = createMemo(() => {
-    if (!store.messageId) return lastUserMessage()
-    const found = visibleUserMessages()?.find((m) => m.id === store.messageId)
-    return found ?? lastUserMessage()
-  })
   const setActiveMessage = (message: UserMessage | undefined) => {
     setStore("messageId", message?.id)
   }
@@ -1201,50 +1196,48 @@ export default function Page() {
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
-                <Show when={activeMessage()}>
-                  <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    isDesktop={isDesktop()}
-                    onScrollSpyScroll={scrollSpy.onScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+                <MessageTimeline
+                  mobileChanges={mobileChanges()}
+                  mobileFallback={reviewContent({
+                    diffStyle: "unified",
+                    classes: {
+                      root: "pb-8",
+                      header: "px-4",
+                      container: "px-4",
+                    },
+                    loadingClass: "px-4 py-4 text-text-weak",
+                    emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
+                  })}
+                  scroll={ui.scroll}
+                  onResumeScroll={resumeScroll}
+                  setScrollRef={setScrollRef}
+                  onScheduleScrollState={scheduleScrollState}
+                  onAutoScrollHandleScroll={autoScroll.handleScroll}
+                  onMarkScrollGesture={markScrollGesture}
+                  hasScrollGesture={hasScrollGesture}
+                  isDesktop={isDesktop()}
+                  onScrollSpyScroll={scrollSpy.onScroll}
+                  onTurnBackfillScroll={historyWindow.onScrollerScroll}
+                  onAutoScrollInteraction={autoScroll.handleInteraction}
+                  centered={centered()}
+                  setContentRef={(el) => {
+                    content = el
+                    autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    turnStart={historyWindow.turnStart()}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      void historyWindow.loadAndReveal()
-                    }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
-                    anchor={anchor}
-                    onRegisterMessage={scrollSpy.register}
-                    onUnregisterMessage={scrollSpy.unregister}
-                  />
-                </Show>
+                    const root = scroller
+                    if (root) scheduleScrollState(root)
+                  }}
+                  turnStart={historyWindow.turnStart()}
+                  historyMore={historyMore()}
+                  historyLoading={historyLoading()}
+                  onLoadEarlier={() => {
+                    void historyWindow.loadAndReveal()
+                  }}
+                  renderedUserMessages={historyWindow.renderedUserMessages()}
+                  anchor={anchor}
+                  onRegisterMessage={scrollSpy.register}
+                  onUnregisterMessage={scrollSpy.unregister}
+                />
               </Match>
               <Match when={true}>
                 <NewSessionView
