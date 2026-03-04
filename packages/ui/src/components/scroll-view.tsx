@@ -23,7 +23,6 @@ export function ScrollView(props: ScrollViewProps) {
     ],
   )
 
-  let rootRef!: HTMLDivElement
   let viewportRef!: HTMLDivElement
   let thumbRef!: HTMLDivElement
 
@@ -169,7 +168,6 @@ export function ScrollView(props: ScrollViewProps) {
 
   return (
     <div
-      ref={rootRef}
       class={`scroll-view ${local.class || ""}`}
       style={local.style}
       onPointerEnter={() => setIsHovered(true)}
