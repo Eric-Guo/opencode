@@ -14,8 +14,8 @@
     transform-origin: left center;
     transition-property: grid-template-columns, opacity, filter, transform;
     transition-duration:
-      var(--tool-motion-spring-ms, 480ms), var(--tool-motion-fade-ms, 240ms), var(--tool-motion-fade-ms, 280ms),
-      var(--tool-motion-spring-ms, 480ms);
+      var(--tool-motion-spring-ms, 800ms), var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms),
+      var(--tool-motion-spring-ms, 800ms);
     transition-timing-function:
       var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), ease-out, ease-out,
       var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
@@ -39,8 +39,8 @@
     transform-origin: left center;
     transition-property: grid-template-columns, opacity, filter, transform;
     transition-duration:
-      var(--tool-motion-spring-ms, 480ms), var(--tool-motion-fade-ms, 280ms), var(--tool-motion-fade-ms, 320ms),
-      var(--tool-motion-spring-ms, 480ms);
+      var(--tool-motion-spring-ms, 800ms), var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms),
+      var(--tool-motion-spring-ms, 800ms);
     transition-timing-function:
       var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), ease-out, ease-out,
       var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
@@ -79,8 +79,8 @@
     transform: translateX(-0.08em);
     transition-property: opacity, filter, transform;
     transition-duration:
-      calc(var(--tool-motion-fade-ms, 200ms) * 0.75), calc(var(--tool-motion-fade-ms, 220ms) * 0.75),
-      calc(var(--tool-motion-fade-ms, 220ms) * 0.6);
+      var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms),
+      var(--tool-motion-fade-ms, 400ms);
     transition-timing-function: ease-out, ease-out, ease-out;
   }
 
