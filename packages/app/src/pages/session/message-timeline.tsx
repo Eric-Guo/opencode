@@ -27,6 +27,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/util/binary"
 import { getFilename } from "@opencode-ai/util/path"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
+import { errorMessage } from "@/pages/layout/helpers"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
@@ -487,14 +488,7 @@ export function MessageTimeline(props: {
     clearTitleAnims()
   })
 
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { message?: string } }).data
-      if (data?.message) return data.message
-    }
-    if (err instanceof Error) return err.message
-    return language.t("common.requestFailed")
-  }
+  const toastError = (err: unknown) => errorMessage(err, language.t("common.requestFailed"))
 
   createEffect(
     on(
@@ -545,7 +539,7 @@ export function MessageTimeline(props: {
         setTitle("saving", false)
         showToast({
           title: language.t("common.requestFailed"),
-          description: errorMessage(err),
+          description: toastError(err),
         })
       })
   }
@@ -585,7 +579,7 @@ export function MessageTimeline(props: {
       .catch((err) => {
         showToast({
           title: language.t("common.requestFailed"),
-          description: errorMessage(err),
+          description: toastError(err),
         })
       })
   }
@@ -604,7 +598,7 @@ export function MessageTimeline(props: {
       .catch((err) => {
         showToast({
           title: language.t("session.delete.failed.title"),
-          description: errorMessage(err),
+          description: toastError(err),
         })
         return false
       })
