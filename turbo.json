@@ -3,7 +3,15 @@
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
-    "typecheck": {},
+<<<<<<< HEAD
+    "typecheck": {
+      "dependsOn": []
+    },
+=======
+    "typecheck": {
+      "dependsOn": []
+    },
+>>>>>>> pr/15487
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
