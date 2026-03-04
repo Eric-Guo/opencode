@@ -22,10 +22,6 @@ export const DialogSettings: Component = () => {
     return clerk ? `${name} (${clerk})` : name
   })
 
-  function handleShowChangelog() {
-    dialog.show(() => <DialogChangelog />)
-  }
-
   return (
     <Dialog size="x-large" transition>
       <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
