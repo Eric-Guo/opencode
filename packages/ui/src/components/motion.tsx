@@ -1,34 +1,48 @@
+import { followValue } from "motion"
+import type { MotionValue } from "motion"
+
 export { animate, springValue } from "motion"
 export type { AnimationPlaybackControls } from "motion"
 
-const HEIGHT_DURATION = 0.5
-const FADE_DURATION = 0.5
-const COLLAPSIBLE_CONTENT_HEIGHT_DURATION = 0.3
-const COLLAPSIBLE_CONTENT_FADE_DURATION = COLLAPSIBLE_CONTENT_HEIGHT_DURATION
+/**
+ * Like `springValue` but preserves getters on the config object.
+ * `springValue` spreads config at creation, snapshotting getter values.
+ * This passes the config through to `followValue` intact, so getters
+ * on `visualDuration` etc. fire on every `.set()` call.
+ */
+export function tunableSpringValue<T extends string | number>(initial: T, config: SpringConfig): MotionValue<T> {
+  return followValue(initial, config as any)
+}
 
-export const HEIGHT_SPRING = {
+let _growDuration = 0.5
+let _collapsibleDuration = 0.3
+
+export const GROW_SPRING = {
   type: "spring" as const,
-  visualDuration: HEIGHT_DURATION,
+  get visualDuration() {
+    return _growDuration
+  },
   bounce: 0,
 }
 
-export const COLLAPSIBLE_CONTENT_HEIGHT_SPRING = {
+export const COLLAPSIBLE_SPRING = {
   type: "spring" as const,
-  visualDuration: COLLAPSIBLE_CONTENT_HEIGHT_DURATION,
+  get visualDuration() {
+    return _collapsibleDuration
+  },
   bounce: 0,
 }
 
-export const FADE_SPRING = {
-  type: "spring" as const,
-  visualDuration: FADE_DURATION,
-  bounce: 0,
+export const setGrowDuration = (v: number) => {
+  _growDuration = v
 }
+export const setCollapsibleDuration = (v: number) => {
+  _collapsibleDuration = v
+}
+export const getGrowDuration = () => _growDuration
+export const getCollapsibleDuration = () => _collapsibleDuration
 
-export const COLLAPSIBLE_CONTENT_FADE_SPRING = {
-  type: "spring" as const,
-  visualDuration: COLLAPSIBLE_CONTENT_FADE_DURATION,
-  bounce: 0,
-}
+export type SpringConfig = { type: "spring"; visualDuration: number; bounce: number }
 
 export const FAST_SPRING = {
   type: "spring" as const,

@@ -897,13 +897,11 @@ export function UserMessageDisplay(props: {
     return `${hour12}:${minute} ${hours < 12 ? "AM" : "PM"}`
   })
 
-  const metaHead = createMemo(() => {
+  const userMeta = createMemo(() => {
     const agent = props.message.agent
-    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model(), stamp()]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
-
-  const metaTail = createMemo(() => stamp())
 
   const openImagePreview = (url: string, alt?: string) => {
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
@@ -967,23 +965,9 @@ export function UserMessageDisplay(props: {
                 </GrowBox>
               </div>
               <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
-                <Show when={metaHead() || metaTail()}>
-                  <span data-slot="user-message-meta-wrap">
-                    <Show when={metaHead()}>
-                      <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
-                        {metaHead()}
-                      </span>
-                    </Show>
-                    <Show when={metaHead() && metaTail()}>
-                      <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
-                        {"\u00A0\u00B7\u00A0"}
-                      </span>
-                    </Show>
-                    <Show when={metaTail()}>
-                      <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
-                        {metaTail()}
-                      </span>
-                    </Show>
+                <Show when={userMeta()}>
+                  <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                    {userMeta()}
                   </span>
                 </Show>
                 <Tooltip

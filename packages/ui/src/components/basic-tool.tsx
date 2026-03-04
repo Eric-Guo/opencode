@@ -14,9 +14,8 @@ import {
 import {
   animate,
   type AnimationPlaybackControls,
-  springValue,
-  COLLAPSIBLE_CONTENT_FADE_SPRING,
-  COLLAPSIBLE_CONTENT_HEIGHT_SPRING,
+  tunableSpringValue,
+  COLLAPSIBLE_SPRING,
 } from "./motion"
 import { Collapsible } from "./collapsible"
 import { TextShimmer } from "./text-shimmer"
@@ -173,7 +172,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
   let observer: ResizeObserver | undefined
   let resizeFrame: number | undefined
   const initialOpen = open()
-  const heightSpring = springValue<number>(0, COLLAPSIBLE_CONTENT_HEIGHT_SPRING)
+  const heightSpring = tunableSpringValue<number>(0, COLLAPSIBLE_SPRING)
 
   const read = () => Math.max(0, Math.ceil(bodyRef?.getBoundingClientRect().height ?? 0))
 
@@ -187,7 +186,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
     }
     const next = read()
     fadeAnim?.stop()
-    fadeAnim = animate(bodyRef, { opacity: 1, filter: "blur(0px)" }, COLLAPSIBLE_CONTENT_FADE_SPRING)
+    fadeAnim = animate(bodyRef, { opacity: 1, filter: "blur(0px)" }, COLLAPSIBLE_SPRING)
     fadeAnim.finished.then(() => {
       if (!bodyRef) return
       bodyRef.style.opacity = ""
@@ -199,7 +198,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
   const doClose = () => {
     if (!contentRef || !bodyRef) return
     fadeAnim?.stop()
-    fadeAnim = animate(bodyRef, { opacity: 0, filter: "blur(2px)" }, COLLAPSIBLE_CONTENT_FADE_SPRING)
+    fadeAnim = animate(bodyRef, { opacity: 0, filter: "blur(2px)" }, COLLAPSIBLE_SPRING)
     fadeAnim.finished.then(() => {
       if (!contentRef || open()) return
       contentRef.style.display = "none"

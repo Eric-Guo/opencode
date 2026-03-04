@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
-import { animate, type AnimationPlaybackControls, HEIGHT_SPRING } from "./motion"
+import { animate, type AnimationPlaybackControls, GROW_SPRING } from "./motion"
 import { TextShimmer } from "./text-shimmer"
 import { commonPrefix } from "./text-utils"
 
@@ -66,7 +66,7 @@ export function ToolStatusTitle(props: {
 
     ref.style.width = `${prev}px`
     widthAnim?.stop()
-    widthAnim = animate(ref, { width: `${next}px` }, HEIGHT_SPRING)
+    widthAnim = animate(ref, { width: `${next}px` }, GROW_SPRING)
     widthAnim.finished.then(() => {
       const el = node()
       if (!el) return

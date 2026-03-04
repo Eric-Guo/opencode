@@ -1,5 +1,5 @@
 import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
-import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, FADE_SPRING, WIPE_MASK } from "./motion"
+import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, GROW_SPRING, WIPE_MASK } from "./motion"
 
 const px = (value: number | string | undefined, fallback: number) => {
   if (typeof value === "number") return `${value}px`
@@ -181,12 +181,12 @@ export function TextWipe(props: { text?: string; class?: string; delay?: number;
         ? animate(
             node,
             { opacity: 1, filter: "blur(0px)", transform: "translateX(0)", maskPosition: "0% 0%" },
-            { ...FADE_SPRING, delay: props.delay ?? 0 },
+            { ...GROW_SPRING, delay: props.delay ?? 0 },
           )
         : animate(
             node,
             { opacity: 1, filter: "blur(0px)", transform: "translateX(0)" },
-            { ...FADE_SPRING, delay: props.delay ?? 0 },
+            { ...GROW_SPRING, delay: props.delay ?? 0 },
           )
 
       anim?.finished.then(() => {
