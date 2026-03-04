@@ -49,7 +49,7 @@ interface ToolCallPanelBaseProps {
   defer?: boolean
   locked?: boolean
   watchDetails?: boolean
-  animated?: boolean
+  springContent?: boolean
   onSubtitleClick?: () => void
 }
 
@@ -148,7 +148,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
     on(
       open,
       (value) => {
-        if (!props.defer || props.animated) return
+        if (!props.defer || props.springContent) return
         if (!value) {
           cancel()
           setReady(false)
@@ -215,7 +215,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
   }
 
   onMount(() => {
-    if (!props.animated || props.animate === false || !contentRef || !bodyRef) return
+    if (!props.springContent || props.animate === false || !contentRef || !bodyRef) return
 
     const offChange = heightSpring.on("change", (v) => {
       if (!contentRef) return
@@ -253,7 +253,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
     on(
       open,
       (isOpen) => {
-        if (!props.animated || props.animate === false || !contentRef) return
+        if (!props.springContent || props.animate === false || !contentRef) return
         if (isOpen) doOpen()
         else doClose()
       },
@@ -284,11 +284,11 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
           arrow={!!props.children && !props.hideDetails && !props.locked && !pending()}
         />
       </Collapsible.Trigger>
-      <Show when={props.animated && props.animate !== false && props.children && !props.hideDetails}>
+      <Show when={props.springContent && props.animate !== false && props.children && !props.hideDetails}>
         <div
           ref={contentRef}
           data-slot="collapsible-content"
-          data-animated
+          data-spring-content
           style={{
             height: initialOpen ? "auto" : "0px",
             overflow: "hidden",
@@ -300,7 +300,7 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
           </div>
         </div>
       </Show>
-      <Show when={(!props.animated || props.animate === false) && props.children && !props.hideDetails}>
+      <Show when={(!props.springContent || props.animate === false) && props.children && !props.hideDetails}>
         <Collapsible.Content>
           <Show when={!props.defer || ready()}>
             <div data-slot="basic-tool-content-inner">{props.children}</div>

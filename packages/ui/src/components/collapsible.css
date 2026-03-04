@@ -86,7 +86,7 @@
     }
 
     /* JS-animated content: overflow managed by animate() */
-    &[data-animated] {
+    &[data-spring-content] {
       overflow: hidden;
     }
   }

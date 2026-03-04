@@ -1859,7 +1859,7 @@ ToolRegistry.register({
         {...props}
         icon="console"
         animate
-        animated
+        springContent
         defaultOpen={false}
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
@@ -1916,7 +1916,7 @@ ToolRegistry.register({
           variant="panel"
           {...props}
           icon="code-lines"
-          animated
+          springContent
           trigger={
             <div data-component="edit-trigger">
               <div data-slot="message-part-title-area">
@@ -1987,7 +1987,7 @@ ToolRegistry.register({
           variant="panel"
           {...props}
           icon="code-lines"
-          animated
+          springContent
           trigger={
             <div data-component="write-trigger">
               <div data-slot="message-part-title-area">
