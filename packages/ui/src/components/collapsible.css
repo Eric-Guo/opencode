@@ -79,7 +79,7 @@
   }
 
   [data-slot="collapsible-content"] {
-    overflow: hidden;
+    overflow: clip;
 
     &[data-expanded] {
       overflow: visible;
@@ -87,7 +87,7 @@
 
     /* JS-animated content: overflow managed by animate() */
     &[data-spring-content] {
-      overflow: hidden;
+      overflow: clip;
     }
   }
 

@@ -18,7 +18,7 @@
   [data-slot="tool-status-swap"],
   [data-slot="tool-status-tail"] {
     display: inline-grid;
-    overflow: hidden;
+    overflow: clip;
     justify-items: start;
   }
 
