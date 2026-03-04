@@ -600,25 +600,6 @@ export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
 
-/** @deprecated Only renders user messages — assistant branch was dead code. Caller can use UserMessageDisplay directly. */
-export function Message(props: {
-  message: MessageType
-  parts: PartType[]
-  interrupted?: boolean
-  animate?: boolean
-  queued?: boolean
-}) {
-  return (
-    <UserMessageDisplay
-      message={props.message as UserMessage}
-      parts={props.parts}
-      interrupted={props.interrupted}
-      animate={props.animate}
-      queued={props.queued}
-    />
-  )
-}
-
 function ContextToolGroup(props: {
   parts: ToolPart[]
   busy?: boolean

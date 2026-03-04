@@ -55,14 +55,6 @@
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-strong);
 
-    &.capitalize {
-      text-transform: capitalize;
-    }
-
-    &.agent-title {
-      color: var(--text-strong);
-      font-weight: var(--font-weight-medium);
-    }
   }
 
   [data-slot="basic-tool-tool-subtitle"] {

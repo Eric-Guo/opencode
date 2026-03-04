@@ -8,7 +8,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { GrowBox } from "./grow-box"
-import { AssistantParts, Message, Part, PART_MAPPING } from "./message-part"
+import { AssistantParts, UserMessageDisplay, Part, PART_MAPPING } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -364,7 +364,7 @@ export function SessionTurn(
           item.message.modelID
         ]?.name ?? item.message.modelID)
       : ""
-    return [agent, model, duration()].filter((value) => !!value).join(" · ")
+    return [agent, model, duration()].filter((value) => !!value).join("\u00A0\u00B7\u00A0")
   })
   const [copied, setCopied] = createSignal(false)
   const [handoffHold, setHandoffHold] = createSignal(false)
@@ -572,7 +572,7 @@ export function SessionTurn(
                 class={props.classes?.container}
               >
                 <div data-slot="session-turn-message-content" aria-live="off">
-                  <Message
+                  <UserMessageDisplay
                     message={msg()}
                     parts={parts()}
                     interrupted={interrupted()}
