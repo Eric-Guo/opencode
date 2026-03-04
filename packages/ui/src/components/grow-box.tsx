@@ -48,13 +48,15 @@ export function GrowBox(props: GrowBoxProps) {
   const animateToggle = () => props.animateToggle !== false
 
   const hideBody = () => {
-    body!.style.opacity = "0"
-    body!.style.filter = "blur(2px)"
+    if (!body) return
+    body.style.opacity = "0"
+    body.style.filter = "blur(2px)"
   }
 
   const clearBody = () => {
-    body!.style.opacity = ""
-    body!.style.filter = ""
+    if (!body) return
+    body.style.opacity = ""
+    body.style.filter = ""
   }
 
   const fadeBodyIn = () => {

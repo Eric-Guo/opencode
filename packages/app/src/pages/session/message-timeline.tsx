@@ -21,7 +21,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { TextReveal } from "@opencode-ai/ui/text-reveal"
+import { animate, type AnimationPlaybackControls, clearFadeStyles, FAST_SPRING } from "@opencode-ai/ui/motion"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/util/binary"
@@ -323,24 +323,156 @@ export function MessageTimeline(props: {
     pendingRename: false,
   })
   const [headerLive, setHeaderLive] = createSignal(false)
+  const [headerText, setHeaderText] = createStore({
+    session: sessionKey(),
+    value: placeholderTitle() ? undefined : headerTitle(),
+    prev: undefined as string | undefined,
+    muted: false,
+    prevMuted: false,
+  })
   let headerFrame: number | undefined
+  let titleFrame: number | undefined
+  let enterAnim: AnimationPlaybackControls | undefined
+  let leaveAnim: AnimationPlaybackControls | undefined
   let titleRef: HTMLInputElement | undefined
+  let enterRef: HTMLSpanElement | undefined
+  let leaveRef: HTMLSpanElement | undefined
+
+  const clearTitleAnims = () => {
+    if (titleFrame !== undefined) {
+      cancelAnimationFrame(titleFrame)
+      titleFrame = undefined
+    }
+    enterAnim?.stop()
+    enterAnim = undefined
+    leaveAnim?.stop()
+    leaveAnim = undefined
+  }
+
+  const settleTitleEnter = () => {
+    if (enterRef) clearFadeStyles(enterRef)
+  }
+
+  const hideLeave = () => {
+    if (!leaveRef) return
+    leaveRef.style.opacity = "0"
+    leaveRef.style.filter = ""
+    leaveRef.style.transform = ""
+  }
+
+  const animateEnterSpan = () => {
+    if (!enterRef) return
+    enterRef.style.opacity = "0"
+    enterRef.style.filter = "blur(2px)"
+    enterRef.style.transform = "translateY(-2px)"
+    titleFrame = requestAnimationFrame(() => {
+      titleFrame = undefined
+      if (!enterRef) return
+      enterAnim = animate(enterRef, { opacity: 1, filter: "blur(0px)", transform: "translateY(0)" }, FAST_SPRING)
+      enterAnim.finished.then(() => settleTitleEnter())
+    })
+  }
+
+  const crossfadeTitle = (nextTitle: string, nextMuted: boolean) => {
+    clearTitleAnims()
+
+    // snapshot old text into leave span before updating store
+    setHeaderText({ prev: headerText.value, prevMuted: headerText.muted })
+
+    // show leave span with old text
+    if (leaveRef) {
+      leaveRef.style.opacity = "1"
+      leaveRef.style.filter = "blur(0px)"
+      leaveRef.style.transform = "translateY(0)"
+    }
+
+    // update to new text
+    setHeaderText({ value: nextTitle, muted: nextMuted })
+
+    // fade out leave span
+    if (leaveRef) {
+      leaveAnim = animate(
+        leaveRef,
+        { opacity: 0, filter: "blur(2px)", transform: "translateY(2px)" },
+        FAST_SPRING,
+      )
+      leaveAnim.finished.then(() => {
+        setHeaderText({ prev: undefined, prevMuted: false })
+        hideLeave()
+      })
+    }
+
+    animateEnterSpan()
+  }
+
+  const fadeInTitle = (nextTitle: string, nextMuted: boolean) => {
+    clearTitleAnims()
+    setHeaderText({ value: nextTitle, muted: nextMuted, prev: undefined, prevMuted: false })
+    animateEnterSpan()
+  }
+
+  const snapTitle = (nextTitle: string | undefined, nextMuted: boolean) => {
+    clearTitleAnims()
+    setHeaderText({ value: nextTitle, muted: nextMuted, prev: undefined, prevMuted: false })
+    settleTitleEnter()
+  }
+
+  createEffect(
+    on(showHeader, (show, prev) => {
+      if (headerFrame !== undefined) cancelAnimationFrame(headerFrame)
+      if (!show) {
+        setHeaderLive(false)
+        return
+      }
+      if (prev) {
+        setHeaderLive(true)
+        return
+      }
+      setHeaderLive(false)
+      headerFrame = requestAnimationFrame(() => {
+        headerFrame = undefined
+        setHeaderLive(true)
+      })
+    }),
+  )
+
   createEffect(
     on(
-      () => [sessionKey(), showHeader()] as const,
-      ([, show]) => {
-        if (headerFrame !== undefined) cancelAnimationFrame(headerFrame)
-        setHeaderLive(false)
-        if (!show) return
-        headerFrame = requestAnimationFrame(() => {
-          headerFrame = undefined
-          setHeaderLive(true)
-        })
+      () => [sessionKey(), headerTitle(), placeholderTitle()] as const,
+      ([nextSession, nextTitle, nextMuted]) => {
+        // new session — snap immediately
+        if (nextSession !== headerText.session) {
+          setHeaderText("session", nextSession)
+          if (nextTitle && nextMuted) {
+            fadeInTitle(nextTitle, nextMuted)
+          } else {
+            snapTitle(nextTitle, nextMuted)
+          }
+          return
+        }
+        if (nextTitle === headerText.value && nextMuted === headerText.muted) return
+        if (!nextTitle) {
+          snapTitle(undefined, false)
+          return
+        }
+        // first title appearing
+        if (!headerText.value) {
+          fadeInTitle(nextTitle, nextMuted)
+          return
+        }
+        // manual rename — snap
+        if (title.saving || title.editing) {
+          snapTitle(nextTitle, nextMuted)
+          return
+        }
+        // normal swap — crossfade
+        crossfadeTitle(nextTitle, nextMuted)
       },
     ),
   )
   onCleanup(() => {
     if (headerFrame !== undefined) cancelAnimationFrame(headerFrame)
+    clearTitleAnims()
   })
   const headerStyle = createMemo(() => ({
     opacity: headerLive() ? "1" : "0",
@@ -348,10 +480,6 @@ export function MessageTimeline(props: {
     transform: headerLive() ? "translateY(0)" : "translateY(-3px)",
     transition:
       "opacity 450ms cubic-bezier(0.34, 1, 0.64, 1), filter 450ms cubic-bezier(0.34, 1, 0.64, 1), transform 450ms cubic-bezier(0.34, 1, 0.64, 1)",
-  }))
-  const headerTitleStyle = createMemo(() => ({
-    opacity: headerLive() ? "1" : "0",
-    transition: "opacity 220ms cubic-bezier(0.34, 1, 0.64, 1)",
   }))
 
   const errorMessage = (err: unknown) => {
@@ -577,9 +705,9 @@ export function MessageTimeline(props: {
           <div data-session-title class="pointer-events-none absolute inset-x-0 top-0 z-30">
             <div
               classList={{
-                "bg-[linear-gradient(to_bottom,var(--background-stronger)_0px,var(--background-stronger)_56px,transparent_112px)]": true,
+                "bg-[linear-gradient(to_bottom,var(--background-stronger)_38px,transparent)]": true,
                 "w-full": true,
-                "pb-4": true,
+                "pb-10": true,
                 "pl-2 pr-3 md:pl-4 md:pr-3": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
               }}
@@ -597,25 +725,23 @@ export function MessageTimeline(props: {
                       />
                     </div>
                   </Show>
-                  <Show when={!!headerTitle() || title.editing}>
+                  <Show when={!!headerText.value || title.editing}>
                     <Show
                       when={title.editing}
                       fallback={
-                        <h1
-                          class="text-14-medium text-text-strong grow-1 min-w-0 pl-2"
-                          style={headerTitleStyle()}
-                          onDblClick={openTitleEditor}
-                        >
-                          <TextReveal
-                            class={placeholderTitle() ? "block min-w-0 truncate opacity-60" : "block min-w-0 truncate"}
-                            text={headerTitle()}
-                            duration={520}
-                            travel={10}
-                            spring="cubic-bezier(0.34, 1, 0.64, 1)"
-                            springSoft="cubic-bezier(0.34, 1, 0.64, 1)"
-                            animateInitial={false}
-                            truncate
-                          />
+                        <h1 class="text-14-medium text-text-strong grow-1 min-w-0 pl-2" onDblClick={openTitleEditor}>
+                          <span class="grid min-w-0" style={{ overflow: "clip" }}>
+                            <span ref={enterRef} class="col-start-1 row-start-1 min-w-0 truncate">
+                              <span classList={{ "opacity-60": headerText.muted }}>{headerText.value}</span>
+                            </span>
+                            <span
+                              ref={leaveRef}
+                              class="col-start-1 row-start-1 min-w-0 truncate pointer-events-none"
+                              style={{ opacity: "0" }}
+                            >
+                              <span classList={{ "opacity-60": headerText.prevMuted }}>{headerText.prev}</span>
+                            </span>
+                          </span>
                         </h1>
                       }
                     >

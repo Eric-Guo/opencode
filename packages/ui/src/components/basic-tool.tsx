@@ -243,9 +243,13 @@ function ToolCallPanel(props: ToolCallPanelBaseProps) {
       contentRef.style.height = `${next}px`
       return
     }
-    requestAnimationFrame(() => {
+    let mountFrame: number | undefined = requestAnimationFrame(() => {
+      mountFrame = undefined
       if (!open()) return
       doOpen()
+    })
+    onCleanup(() => {
+      if (mountFrame !== undefined) cancelAnimationFrame(mountFrame)
     })
   })
 

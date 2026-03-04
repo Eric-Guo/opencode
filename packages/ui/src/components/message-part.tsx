@@ -46,10 +46,11 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
+import { list } from "./text-utils"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { GrowBox } from "./grow-box"
-import { animate, type AnimationPlaybackControls, FADE_SPRING } from "./motion"
+import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, FADE_SPRING, WIPE_MASK } from "./motion"
 
 interface Diagnostic {
   range: {
@@ -277,10 +278,6 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
-function list<T>(value: T[] | undefined | null, fallback: T[]) {
-  if (Array.isArray(value)) return value
-  return fallback
-}
 
 function busy(status: string | undefined) {
   return status === "pending" || status === "running"
@@ -1473,8 +1470,6 @@ ToolRegistry.register({
   },
 })
 
-const TOOL_WIPE_MASK =
-  "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 60%, rgba(0,0,0,0) 100%)"
 
 function useToolReveal(pending: () => boolean, animate?: () => boolean) {
   const enabled = () => animate?.() ?? true
@@ -1495,16 +1490,6 @@ function useToolFade(
   const wipe = options?.wipe ?? false
   const active = options?.animate !== false
 
-  const clearMask = (el: HTMLElement) => {
-    el.style.maskImage = ""
-    el.style.webkitMaskImage = ""
-    el.style.maskSize = ""
-    el.style.webkitMaskSize = ""
-    el.style.maskRepeat = ""
-    el.style.webkitMaskRepeat = ""
-    el.style.maskPosition = ""
-    el.style.webkitMaskPosition = ""
-  }
 
   onMount(() => {
     if (!active) return
@@ -1524,8 +1509,8 @@ function useToolFade(
     el.style.transform = wipe ? "translateX(-0.06em)" : "translateY(0.04em)"
 
     if (mask) {
-      el.style.maskImage = TOOL_WIPE_MASK
-      el.style.webkitMaskImage = TOOL_WIPE_MASK
+      el.style.maskImage = WIPE_MASK
+      el.style.webkitMaskImage = WIPE_MASK
       el.style.maskSize = "240% 100%"
       el.style.webkitMaskSize = "240% 100%"
       el.style.maskRepeat = "no-repeat"
@@ -1552,10 +1537,8 @@ function useToolFade(
       anim?.finished.then(() => {
         const value = ref()
         if (!value) return
-        value.style.opacity = ""
-        value.style.filter = ""
-        value.style.transform = ""
-        if (mask) clearMask(value)
+        clearFadeStyles(value)
+        if (mask) clearMaskStyles(value)
       })
     })
   })

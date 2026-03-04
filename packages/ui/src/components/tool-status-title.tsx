@@ -1,18 +1,7 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import { animate, type AnimationPlaybackControls, HEIGHT_SPRING } from "./motion"
 import { TextShimmer } from "./text-shimmer"
-
-function common(active: string, done: string) {
-  const a = Array.from(active)
-  const b = Array.from(done)
-  let i = 0
-  while (i < a.length && i < b.length && a[i] === b[i]) i++
-  return {
-    prefix: a.slice(0, i).join(""),
-    active: a.slice(i).join(""),
-    done: b.slice(i).join(""),
-  }
-}
+import { commonPrefix } from "./text-utils"
 
 function contentWidth(el: HTMLSpanElement | undefined) {
   if (!el) return 0
@@ -28,13 +17,13 @@ export function ToolStatusTitle(props: {
   class?: string
   split?: boolean
 }) {
-  const split = createMemo(() => common(props.activeText, props.doneText))
+  const split = createMemo(() => commonPrefix(props.activeText, props.doneText))
   const suffix = createMemo(
-    () => (props.split ?? true) && split().prefix.length >= 2 && split().active.length > 0 && split().done.length > 0,
+    () => (props.split ?? true) && split().prefix.length >= 2 && split().aSuffix.length > 0 && split().bSuffix.length > 0,
   )
   const prefixLen = createMemo(() => Array.from(split().prefix).length)
-  const activeTail = createMemo(() => (suffix() ? split().active : props.activeText))
-  const doneTail = createMemo(() => (suffix() ? split().done : props.doneText))
+  const activeTail = createMemo(() => (suffix() ? split().aSuffix : props.activeText))
+  const doneTail = createMemo(() => (suffix() ? split().bSuffix : props.doneText))
 
   const [ready, setReady] = createSignal(false)
   let activeRef: HTMLSpanElement | undefined

@@ -2,6 +2,7 @@ import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { animate, type AnimationPlaybackControls } from "motion"
+import { FAST_SPRING } from "../components/motion"
 
 export interface AutoScrollOptions {
   working: () => boolean
@@ -86,9 +87,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     }
 
     scrollAnim = animate(el.scrollTop, 0, {
-      type: "spring",
-      visualDuration: 0.35,
-      bounce: 0,
+      ...FAST_SPRING,
       onUpdate: (v) => {
         markProgrammatic()
         el.scrollTop = v

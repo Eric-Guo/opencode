@@ -30,8 +30,34 @@ export const COLLAPSIBLE_CONTENT_FADE_SPRING = {
   bounce: 0,
 }
 
+export const FAST_SPRING = {
+  type: "spring" as const,
+  visualDuration: 0.35,
+  bounce: 0,
+}
+
 export const GLOW_SPRING = {
   type: "spring" as const,
   visualDuration: 0.4,
   bounce: 0.15,
+}
+
+export const WIPE_MASK =
+  "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 60%, rgba(0,0,0,0) 100%)"
+
+export const clearMaskStyles = (el: HTMLElement) => {
+  el.style.maskImage = ""
+  el.style.webkitMaskImage = ""
+  el.style.maskSize = ""
+  el.style.webkitMaskSize = ""
+  el.style.maskRepeat = ""
+  el.style.webkitMaskRepeat = ""
+  el.style.maskPosition = ""
+  el.style.webkitMaskPosition = ""
+}
+
+export const clearFadeStyles = (el: HTMLElement) => {
+  el.style.opacity = ""
+  el.style.filter = ""
+  el.style.transform = ""
 }
