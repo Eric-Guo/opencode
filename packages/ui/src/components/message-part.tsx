@@ -1222,69 +1222,16 @@ PART_MAPPING["compaction"] = function CompactionPartDisplay() {
 }
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {
-  const data = useData()
-  const i18n = useI18n()
   const part = () => props.part as TextPart
-  const interrupted = createMemo(
-    () =>
-      props.message.role === "assistant" && (props.message as AssistantMessage).error?.name === "MessageAbortedError",
-  )
-
-  const model = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const message = props.message as AssistantMessage
-    const match = data.store.provider?.all?.find((p) => p.id === message.providerID)
-    return match?.models?.[message.modelID]?.name ?? message.modelID
-  })
-
-  const duration = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const message = props.message as AssistantMessage
-    const completed = message.time.completed
-    const ms =
-      typeof props.turnDurationMs === "number"
-        ? props.turnDurationMs
-        : typeof completed === "number"
-          ? completed - message.time.created
-          : -1
-    if (!(ms >= 0)) return ""
-    const total = Math.round(ms / 1000)
-    if (total < 60) return `${total}s`
-    const minutes = Math.floor(total / 60)
-    const seconds = total % 60
-    return `${minutes}m ${seconds}s`
-  })
-
-  const meta = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const agent = (props.message as AssistantMessage).agent
-    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model(), duration()]
-    return items.filter((x) => !!x).join(" · ")
-  })
 
   const displayText = () => (part().text ?? "").trim()
   const throttledText = createThrottledValue(displayText)
-  const [copied, setCopied] = createSignal(false)
   const summary = createMemo(() => {
     if (props.message.role !== "assistant") return
     if (!props.showTurnDiffSummary) return
     if (props.showAssistantCopyPartID !== part().id) return
     return props.turnDiffSummary
   })
-
-  const showCopy = createMemo(() => {
-    if (props.message.role !== "assistant") return true
-    if (props.working) return false
-    return props.showAssistantCopyPartID === part().id
-  })
-
-  const handleCopy = async () => {
-    const content = displayText()
-    if (!content) return
-    await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   return (
     <Show when={throttledText()}>
@@ -1299,29 +1246,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             </GrowBox>
           )}
         </Show>
-        <GrowBox animate={!!props.animate} fade gap={summary() ? 4 : 0} open={showCopy()} class="w-full min-w-0">
-          <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="normal"
-                variant="ghost"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              />
-            </Tooltip>
-            <Show when={meta()}>
-              <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
-                {meta()}
-              </span>
-            </Show>
-          </div>
-        </GrowBox>
       </div>
     </Show>
   )
