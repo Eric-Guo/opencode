@@ -7,7 +7,6 @@ import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { animate, type AnimationPlaybackControls, FADE_SPRING, HEIGHT_SPRING } from "./motion"
 import { GrowBox } from "./grow-box"
 import { AssistantParts, Message, Part, PART_MAPPING } from "./message-part"
 import { Card } from "./card"
@@ -339,14 +338,9 @@ export function SessionTurn(
   const lane = createMemo(() => hasAssistant() || thinking())
   const animateEnabled = createMemo(() => props.animate !== false)
   const [live, setLive] = createSignal(false)
+  const thinkingOpen = createMemo(() => thinking() && (live() || !animateEnabled()))
 
   let liveFrame: number | undefined
-  const initialThinking = thinking() && !animateEnabled()
-  let thinkingRef: HTMLDivElement | undefined
-  let thinkingBodyRef: HTMLDivElement | undefined
-  let thinkingAnim: AnimationPlaybackControls | undefined
-  let thinkingHeightAnim: AnimationPlaybackControls | undefined
-  let thinkingToggleFrame: number | undefined
 
   createEffect(
     on(
@@ -365,122 +359,6 @@ export function SessionTurn(
     ),
   )
 
-  const showBox = () => {
-    if (!thinkingRef || !thinkingBodyRef) return
-    thinkingAnim?.stop()
-    thinkingHeightAnim?.stop()
-    const next = Math.max(1, thinkingBodyRef.getBoundingClientRect().height)
-    const prev = Math.max(0, thinkingRef.getBoundingClientRect().height)
-    if (!live()) {
-      thinkingRef.style.overflow = "visible"
-      thinkingRef.style.height = "auto"
-      thinkingRef.style.marginTop = "0px"
-      thinkingBodyRef.style.opacity = "1"
-      thinkingBodyRef.style.filter = "blur(0px)"
-      thinkingBodyRef.style.transform = ""
-      return
-    }
-    thinkingRef.style.overflow = "hidden"
-    thinkingRef.style.willChange = "height"
-    thinkingRef.style.contain = "layout style"
-    thinkingRef.style.height = `${prev}px`
-    thinkingRef.style.marginTop = "0px"
-    thinkingHeightAnim = animate(
-      thinkingRef,
-      {
-        height: `${next}px`,
-        marginTop: "0px",
-      },
-      HEIGHT_SPRING,
-    )
-    thinkingHeightAnim.finished.then(() => {
-      if (!thinkingRef || !thinking()) return
-      thinkingRef.style.willChange = ""
-      thinkingRef.style.contain = ""
-      thinkingRef.style.height = "auto"
-      thinkingRef.style.marginTop = "0px"
-      thinkingRef.style.overflow = "visible"
-    })
-    thinkingBodyRef.style.opacity = "0"
-    thinkingBodyRef.style.filter = "blur(2px)"
-    thinkingBodyRef.style.transform = ""
-    thinkingAnim = animate(
-      thinkingBodyRef,
-      {
-        opacity: 1,
-        filter: "blur(0px)",
-      },
-      FADE_SPRING,
-    )
-  }
-
-  const hideBox = () => {
-    if (!thinkingRef || !thinkingBodyRef) return
-    thinkingAnim?.stop()
-    thinkingHeightAnim?.stop()
-    if (!live()) {
-      thinkingRef.style.height = "0px"
-      thinkingRef.style.marginTop = "0px"
-      thinkingRef.style.overflow = "hidden"
-      thinkingBodyRef.style.opacity = "0"
-      thinkingBodyRef.style.filter = "blur(2px)"
-      thinkingBodyRef.style.transform = ""
-      return
-    }
-    thinkingRef.style.overflow = "hidden"
-    thinkingRef.style.willChange = "height"
-    thinkingRef.style.contain = "layout style"
-    const h = Math.max(1, thinkingRef.getBoundingClientRect().height)
-    thinkingRef.style.height = `${h}px`
-    thinkingHeightAnim = animate(
-      thinkingRef,
-      {
-        height: "0px",
-        marginTop: "0px",
-      },
-      HEIGHT_SPRING,
-    )
-    thinkingAnim = animate(
-      thinkingBodyRef,
-      {
-        opacity: 0,
-        filter: "blur(2px)",
-      },
-      FADE_SPRING,
-    )
-    thinkingHeightAnim.finished.then(() => {
-      if (!thinkingRef || thinking()) return
-      thinkingRef.style.willChange = ""
-      thinkingRef.style.contain = ""
-      thinkingRef.style.height = "0px"
-      thinkingRef.style.marginTop = "0px"
-      thinkingRef.style.overflow = "hidden"
-    })
-  }
-
-  createEffect(
-    on(
-      () => [thinking(), live()] as const,
-      ([value, entered]) => {
-        if (thinkingToggleFrame !== undefined) {
-          cancelAnimationFrame(thinkingToggleFrame)
-          thinkingToggleFrame = undefined
-        }
-        if (value) {
-          if (!entered) return
-          thinkingToggleFrame = requestAnimationFrame(() => {
-            thinkingToggleFrame = undefined
-            if (!thinking() || !live()) return
-            showBox()
-          })
-          return
-        }
-        hideBox()
-      },
-      { defer: true },
-    ),
-  )
-
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
@@ -489,9 +367,6 @@ export function SessionTurn(
 
   onCleanup(() => {
     if (liveFrame !== undefined) cancelAnimationFrame(liveFrame)
-    if (thinkingToggleFrame !== undefined) cancelAnimationFrame(thinkingToggleFrame)
-    thinkingAnim?.stop()
-    thinkingHeightAnim?.stop()
   })
 
   const turnDiffSummary = () => (
@@ -658,20 +533,14 @@ export function SessionTurn(
                       />
                     </div>
                   </Show>
-                  <div
-                    ref={thinkingRef}
-                    data-slot="session-turn-thinking-wrap"
-                    style={{
-                      height: initialThinking ? "auto" : "0px",
-                      "margin-top": "0px",
-                      overflow: initialThinking ? "visible" : "hidden",
-                    }}
+                  <GrowBox
+                    animate={live()}
+                    animateToggle={live()}
+                    open={thinkingOpen()}
+                    fade
+                    slot="session-turn-thinking-wrap"
                   >
-                    <div
-                      ref={thinkingBodyRef}
-                      data-slot="session-turn-thinking"
-                      style={initialThinking ? undefined : { opacity: 0, filter: "blur(2px)" }}
-                    >
+                    <div data-slot="session-turn-thinking">
                       <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
                       <TextReveal
                         text={!showReasoningSummaries() ? (reasoningHeading() ?? "") : ""}
@@ -680,7 +549,7 @@ export function SessionTurn(
                         duration={900}
                       />
                     </div>
-                  </div>
+                  </GrowBox>
                 </div>
                 <GrowBox animate={props.animate !== false} fade gap={0} open={interrupted()} class="w-full min-w-0">
                   {divider(i18n.t("ui.message.interrupted"))}
