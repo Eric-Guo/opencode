@@ -3,6 +3,7 @@ import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 
+import { same } from "@opencode-ai/util/array"
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps, Show } from "solid-js"
@@ -74,12 +75,6 @@ function unwrap(message: string) {
   if (reason) return reason
 
   return message
-}
-
-function same<T>(a: readonly T[], b: readonly T[]) {
-  if (a === b) return true
-  if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
 }
 
 const hidden = new Set(["todowrite", "todoread"])
