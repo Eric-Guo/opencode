@@ -90,10 +90,35 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
   )
   const width = createMemo(() => `${digits().length}ch`)
 
+  const [exitingDigits, setExitingDigits] = createSignal<number[]>([])
+  let exitTimer: number | undefined
+
+  createEffect(
+    on(
+      digits,
+      (current, prev) => {
+        if (prev && current.length < prev.length) {
+          setExitingDigits(prev.slice(current.length))
+          clearTimeout(exitTimer)
+          exitTimer = window.setTimeout(() => setExitingDigits([]), DURATION)
+        } else {
+          clearTimeout(exitTimer)
+          setExitingDigits([])
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  const displayDigits = createMemo(() => {
+    const exiting = exitingDigits()
+    return exiting.length ? [...digits(), ...exiting] : digits()
+  })
+
   return (
     <span data-component="animated-number" class={props.class} aria-label={label()}>
       <span data-slot="animated-number-value" style={{ "--animated-number-width": width() }}>
-        <Index each={digits()}>{(digit) => <Digit value={digit()} direction={direction()} />}</Index>
+        <Index each={displayDigits()}>{(digit) => <Digit value={digit()} direction={direction()} />}</Index>
       </span>
     </span>
   )
