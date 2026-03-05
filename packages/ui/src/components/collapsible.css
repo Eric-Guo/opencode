@@ -8,8 +8,12 @@
   border-radius: var(--radius-md);
   overflow: visible;
 
+  &.tool-collapsible [data-slot="collapsible-trigger"] {
+    height: 37px;
+  }
+
   &.tool-collapsible [data-slot="basic-tool-content-inner"] {
-    padding-top: 8px;
+    padding-top: 0;
   }
 
   [data-slot="collapsible-trigger"] {
