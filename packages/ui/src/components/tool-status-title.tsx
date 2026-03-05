@@ -2,6 +2,7 @@ import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } 
 import { animate, type AnimationPlaybackControls, GROW_SPRING } from "./motion"
 import { TextShimmer } from "./text-shimmer"
 import { commonPrefix } from "./text-utils"
+import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 function contentWidth(el: HTMLSpanElement | undefined) {
   if (!el) return 0
@@ -36,10 +37,7 @@ export function ToolStatusTitle(props: {
 
   const node = () => (suffix() ? tailRef : swapRef)
 
-  const reduce = () => {
-    if (typeof window === "undefined") return false
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  }
+  const reduce = prefersReducedMotion
 
   const setNodeWidth = (width: string) => {
     if (swapRef) swapRef.style.width = width

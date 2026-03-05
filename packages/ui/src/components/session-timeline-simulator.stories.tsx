@@ -20,8 +20,6 @@ import { SessionTurn } from "./session-turn"
 // ---------------------------------------------------------------------------
 
 const SESSION_ID = "sim-session-1"
-const USER_MSG_ID = "msg-user-1"
-const ASST_MSG_ID = "msg-asst-1"
 const T0 = Date.now()
 
 // ---------------------------------------------------------------------------
@@ -128,291 +126,9 @@ function toolCompleted(
 // Build the timeline
 // ---------------------------------------------------------------------------
 
-function buildTimeline() {
+function buildTimeline(): TimelineEvent[] {
   _pid = 0
-  const events: TimelineEvent[] = []
-  const e = (ev: TimelineEvent) => events.push(ev)
-  const delay = (ms: number, label?: string) => e({ type: "delay", ms, label })
-  const status = (s: SessionStatus) => e({ type: "status", status: s })
-  const msg = (m: Message) => e({ type: "message", message: m })
-  const part = (p: Part) => e({ type: "part", part: p })
-  const upd = (p: Part, patch: Record<string, any>) =>
-    e({ type: "part-update", messageID: p.messageID, partID: p.id, patch })
-
-  // ── User message ──────────────────────────────────────────────────────
-  const userText = mkText(USER_MSG_ID, "Quick 1 second sleep then cowsay")
-  msg(mkUser(USER_MSG_ID))
-  part(userText)
-
-  // ── Session goes busy ─────────────────────────────────────────────────
-  status({ type: "busy" })
-
-  // ── Assistant starts (incomplete — no time.completed) ─────────────────
-  msg(mkAssistant(ASST_MSG_ID, USER_MSG_ID))
-
-  delay(600, "Thinking shimmer animates in...")
-
-  // ── Context gathering: read → grep → glob → list (all grouped) ──────
-  const readPart = mkTool(ASST_MSG_ID, "read", {
-    filePath: "/Users/kit/project/packages/opencode/src/tool/bash.ts",
-  })
-  part(readPart)
-  delay(120)
-  upd(readPart, toolRunning(readPart, "bash.ts", T0 + 700))
-  delay(350)
-  upd(
-    readPart,
-    toolCompleted(readPart, "bash.ts", 'export const bash = Tool.define({ name: "bash", ... })', T0 + 700, T0 + 1050),
-  )
-
-  const grepPart = mkTool(ASST_MSG_ID, "grep", { pattern: "Tool.define", path: "/Users/kit/project" })
-  part(grepPart)
-  delay(100)
-  upd(grepPart, toolRunning(grepPart, "Searching for Tool.define", T0 + 1150))
-  delay(500)
-  upd(
-    grepPart,
-    toolCompleted(
-      grepPart,
-      "22 Tool.define matches in packages/opencode/src/tool",
-      "22 matches found",
-      T0 + 1150,
-      T0 + 1650,
-    ),
-  )
-
-  const globPart = mkTool(ASST_MSG_ID, "glob", { pattern: "**/*.test.ts", path: "/Users/kit/project" })
-  part(globPart)
-  delay(80)
-  upd(globPart, toolRunning(globPart, "Searching for **/*.test.ts", T0 + 1730))
-  delay(400)
-  upd(globPart, toolCompleted(globPart, "many **/*.test.ts files found", "47 files matched", T0 + 1730, T0 + 2130))
-
-  const listPart = mkTool(ASST_MSG_ID, "list", { path: "/Users/kit/project/packages/opencode/src/tool" })
-  part(listPart)
-  delay(80)
-  upd(listPart, toolRunning(listPart, "tool directory", T0 + 2210))
-  delay(260)
-  upd(
-    listPart,
-    toolCompleted(listPart, "tool directory", "bash.ts\nread.ts\nglob.ts\ngrep.ts\nwebfetch.ts", T0 + 2210, T0 + 2470),
-  )
-
-  delay(250, "Context group settles")
-
-  // ── Reasoning part (shows as heading next to thinking shimmer) ────────
-  const reasoning = mkReasoning(
-    ASST_MSG_ID,
-    "## Analyzing the codebase structure\n\nLooking at tool definitions and test coverage patterns.",
-  )
-  part(reasoning)
-
-  delay(300)
-
-  // ── Shell tool: bash ──────────────────────────────────────────────────
-  const shellInput = {
-    command: 'sleep 1 && cowsay "Quick demo!"',
-    description: "Quick 1 second sleep then cowsay",
-  }
-  const shellPart = mkTool(ASST_MSG_ID, "bash", shellInput)
-  part(shellPart)
-  delay(200, "Shell pending")
-  upd(shellPart, toolRunning(shellPart, 'sleep 1 && cowsay "Quick demo!"', T0 + 2800))
-  delay(1400, "Shell running...")
-
-  const cowsay = ` ______________
-< Quick demo! >
- --------------
-        \\   ^__^
-         \\  (oo)\\_______
-            (__)\\       )\\/\\
-                ||----w |
-                ||     ||`
-
-  upd(shellPart, toolCompleted(shellPart, 'sleep 1 && cowsay "Quick demo!"', cowsay, T0 + 2800, T0 + 4200))
-  delay(250)
-
-  // ── WebFetch tool ─────────────────────────────────────────────────────
-  const fetchInput = { url: "https://api.github.com/zen", prompt: "What is the zen of GitHub?" }
-  const fetchPart = mkTool(ASST_MSG_ID, "webfetch", fetchInput)
-  part(fetchPart)
-  delay(150)
-  upd(fetchPart, toolRunning(fetchPart, "https://api.github.com/zen", T0 + 4450))
-  delay(900, "WebFetch running...")
-  upd(
-    fetchPart,
-    toolCompleted(
-      fetchPart,
-      "https://api.github.com/zen",
-      '"Half measures are as bad as nothing at all."',
-      T0 + 4450,
-      T0 + 5350,
-    ),
-  )
-
-  // ── Task tool ─────────────────────────────────────────────────────────
-  const taskInput = { description: "Explore Effect docs", subagent_type: "general" }
-  const taskPart = mkTool(ASST_MSG_ID, "task", taskInput)
-  part(taskPart)
-  delay(120)
-  upd(taskPart, toolRunning(taskPart, "Exploring Effect docs", T0 + 5470))
-  delay(500)
-  upd(taskPart, {
-    state: {
-      status: "completed",
-      input: taskInput,
-      output: "Found 3 references",
-      title: "Explored Effect docs",
-      metadata: { sessionId: "sim-subagent-1" },
-      time: { start: T0 + 5470, end: T0 + 5970 },
-    },
-  })
-
-  // ── Edit tool ─────────────────────────────────────────────────────────
-  const editInput = {
-    filePath: "/Users/kit/project/packages/opencode/src/tool/bash.ts",
-    oldString: "const cmd = input.command",
-    newString: "const cmd = sanitize(input.command)",
-  }
-  const editPart = mkTool(ASST_MSG_ID, "edit", editInput)
-  part(editPart)
-  delay(120)
-  upd(editPart, toolRunning(editPart, "bash.ts", T0 + 6090))
-  delay(320)
-  upd(editPart, {
-    state: {
-      status: "completed",
-      input: editInput,
-      title: "Updated bash.ts",
-      metadata: {
-        filediff: {
-          file: editInput.filePath,
-          before: "const cmd = input.command",
-          after: "const cmd = sanitize(input.command)",
-          additions: 1,
-          deletions: 1,
-        },
-        diagnostics: {},
-      },
-      time: { start: T0 + 6090, end: T0 + 6410 },
-    },
-  })
-
-  // ── Write tool ────────────────────────────────────────────────────────
-  const writeInput = {
-    filePath: "/Users/kit/project/packages/opencode/notes/simulator.md",
-    content: "# Timeline Simulator\n\n- Added all tool-call variants for animation testing.",
-  }
-  const writePart = mkTool(ASST_MSG_ID, "write", writeInput)
-  part(writePart)
-  delay(100)
-  upd(writePart, toolRunning(writePart, "simulator.md", T0 + 6510))
-  delay(220)
-  upd(writePart, {
-    state: {
-      status: "completed",
-      input: writeInput,
-      title: "Created simulator.md",
-      metadata: { diagnostics: {} },
-      time: { start: T0 + 6510, end: T0 + 6730 },
-    },
-  })
-
-  // ── Apply Patch tool ──────────────────────────────────────────────────
-  const patchFiles = [
-    {
-      filePath: "/Users/kit/project/packages/opencode/src/tool/new-tool.ts",
-      relativePath: "packages/opencode/src/tool/new-tool.ts",
-      type: "add",
-      diff: "+export const newTool = true",
-      before: "",
-      after: "export const newTool = true\n",
-      additions: 1,
-      deletions: 0,
-    },
-  ]
-  const patchInput = { files: patchFiles.map((f) => ({ filePath: f.filePath })) }
-  const patchPart = mkTool(ASST_MSG_ID, "apply_patch", patchInput)
-  part(patchPart)
-  delay(120)
-  upd(patchPart, toolRunning(patchPart, "Applying patch", T0 + 6850))
-  delay(260)
-  upd(patchPart, {
-    state: {
-      status: "completed",
-      input: patchInput,
-      title: "Applied patch to 1 file",
-      metadata: { files: patchFiles },
-      time: { start: T0 + 6850, end: T0 + 7110 },
-    },
-  })
-
-  // ── Question tool ─────────────────────────────────────────────────────
-  const questionInput = {
-    questions: [{ question: "Proceed with the refactor?", options: ["yes", "no"] }],
-  }
-  const questionPart = mkTool(ASST_MSG_ID, "question", questionInput)
-  part(questionPart)
-  delay(180)
-  upd(questionPart, {
-    state: {
-      status: "completed",
-      input: questionInput,
-      title: "Question answered",
-      metadata: { answers: [["yes"]] },
-      time: { start: T0 + 7290, end: T0 + 7290 },
-    },
-  })
-
-  // ── Skill tool ────────────────────────────────────────────────────────
-  const skillInput = { name: "effect" }
-  const skillPart = mkTool(ASST_MSG_ID, "skill", skillInput)
-  part(skillPart)
-  delay(90)
-  upd(skillPart, toolRunning(skillPart, "effect", T0 + 7380))
-  delay(220)
-  upd(skillPart, toolCompleted(skillPart, "effect", "Loaded skill docs", T0 + 7380, T0 + 7600))
-
-  // ── Generic tools (non-registered) ───────────────────────────────────
-  const exaSearch = mkTool(ASST_MSG_ID, "exa_web_search_exa", { query: "effect schema validation" })
-  part(exaSearch)
-  delay(80)
-  upd(exaSearch, toolRunning(exaSearch, "effect schema validation", T0 + 7680))
-  delay(180)
-  upd(exaSearch, toolCompleted(exaSearch, "effect schema validation", "8 search results", T0 + 7680, T0 + 7860))
-
-  const exaCode = mkTool(ASST_MSG_ID, "exa_get_code_context_exa", { query: "Effect.gen examples" })
-  part(exaCode)
-  delay(80)
-  upd(exaCode, toolRunning(exaCode, "Effect.gen examples", T0 + 7940))
-  delay(180)
-  upd(exaCode, toolCompleted(exaCode, "Effect.gen examples", "Collected docs snippets", T0 + 7940, T0 + 8120))
-
-  const effectTool = mkTool(ASST_MSG_ID, "effect", { topic: "Layer setup" })
-  part(effectTool)
-  delay(80)
-  upd(effectTool, toolRunning(effectTool, "Layer setup", T0 + 8200))
-  delay(180)
-  upd(effectTool, toolCompleted(effectTool, "Layer setup", "Mapped Layer dependencies", T0 + 8200, T0 + 8380))
-
-  delay(200)
-
-  // ── Final text response ───────────────────────────────────────────────
-  // This is when thinking hides (tail becomes "text")
-  const finalText = mkText(
-    ASST_MSG_ID,
-    `Done! I ran all tool variants in this simulator:\n\n- Context tools: read, grep, glob, list\n- Action tools: bash, webfetch, task\n- File tools: edit, write, apply_patch\n- Decision tools: question, skill\n- Generic tools: exa_web_search_exa, exa_get_code_context_exa, effect`,
-  )
-  part(finalText)
-  delay(300, "Text arrives, thinking hides")
-
-  // ── Complete the assistant message ────────────────────────────────────
-  msg(mkAssistant(ASST_MSG_ID, USER_MSG_ID, T0 + 9200))
-
-  // ── Session idle ──────────────────────────────────────────────────────
-  status({ type: "idle" })
-
-  return events
+  return []
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +139,7 @@ function createPlayback(events: TimelineEvent[]) {
   const [step, setStep] = createSignal(0)
   const [playing, setPlaying] = createSignal(false)
   const [speed, setSpeed] = createSignal(1)
-  const totalSteps = events.length
+  const [totalSteps, setTotalSteps] = createSignal(events.length)
 
   // Reactive store shaped exactly like Data from context/data.tsx
   const [data, setData] = createStore({
@@ -535,7 +251,7 @@ function createPlayback(events: TimelineEvent[]) {
     stopTimer()
     if (!playing()) return
     const current = step()
-    if (current >= totalSteps) {
+    if (current >= totalSteps()) {
       setPlaying(false)
       return
     }
@@ -545,7 +261,7 @@ function createPlayback(events: TimelineEvent[]) {
     timer = setTimeout(() => {
       if (!playing()) return
       const next = step() + 1
-      if (next > totalSteps) {
+      if (next > totalSteps()) {
         setPlaying(false)
         return
       }
@@ -555,7 +271,7 @@ function createPlayback(events: TimelineEvent[]) {
   }
 
   const play = () => {
-    if (step() >= totalSteps) {
+    if (step() >= totalSteps()) {
       setStep(0)
       appliedStep = 0
       resetStore()
@@ -574,8 +290,8 @@ function createPlayback(events: TimelineEvent[]) {
   const stepForward = () => {
     pause()
     let next = step() + 1
-    while (next < totalSteps && events[next]?.type === "delay") next++
-    setStep(Math.min(next, totalSteps))
+    while (next < totalSteps() && events[next]?.type === "delay") next++
+    setStep(Math.min(next, totalSteps()))
   }
 
   const stepBack = () => {
@@ -594,14 +310,77 @@ function createPlayback(events: TimelineEvent[]) {
 
   const jumpTo = (s: number) => {
     pause()
-    setStep(Math.max(0, Math.min(s, totalSteps)))
+    setStep(Math.max(0, Math.min(s, totalSteps())))
+  }
+
+  // Append new events and auto-play through them.
+  // If already auto-advancing, the new events are just appended and the existing
+  // advance loop picks them up seamlessly.
+  let appendTimer: ReturnType<typeof setTimeout> | undefined
+  let advancing = false
+
+  const startAdvance = () => {
+    if (advancing) return // already running, it will pick up new events
+    advancing = true
+    const advance = () => {
+      const current = step()
+      const total = events.length
+      if (current >= total) {
+        advancing = false
+        appendTimer = undefined
+        return
+      }
+      const next = current + 1
+      const ev = events[current]
+      const d = ev?.type === "delay" ? Math.max(20, ev.ms) : 40
+      setStep(next)
+      if (next < events.length) {
+        appendTimer = setTimeout(advance, d)
+      } else {
+        advancing = false
+        appendTimer = undefined
+      }
+    }
+    advance()
+  }
+
+  const appendAndPlay = (newEvents: TimelineEvent[]) => {
+    pause()
+    // First, catch up: apply any unapplied events instantly
+    const currentTotal = events.length
+    const currentStep = step()
+    if (currentStep < currentTotal) {
+      batch(() => {
+        for (let i = currentStep; i < currentTotal; i++) {
+          applyEvent(events[i])
+        }
+      })
+      setStep(currentTotal)
+      appliedStep = currentTotal
+    }
+    // Append new events
+    events.push(...newEvents)
+    setTotalSteps(events.length)
+    // Start or continue auto-advance
+    startAdvance()
+  }
+
+  const fullReset = () => {
+    if (appendTimer !== undefined) clearTimeout(appendTimer)
+    advancing = false
+    pause()
+    events.length = 0
+    setTotalSteps(0)
+    setStep(0)
+    appliedStep = 0
+    resetStore()
   }
 
   // Event label
   const label = createMemo(() => {
     const s = step()
     if (s <= 0) return "Start"
-    if (s >= totalSteps) return "Complete"
+    if (s >= totalSteps()) return "Complete"
     const ev = events[s - 1]
     if (!ev) return ""
     switch (ev.type) {
@@ -637,7 +416,13 @@ function createPlayback(events: TimelineEvent[]) {
     stepBack,
     reset,
     jumpTo,
-    cleanup: stopTimer,
+    appendAndPlay,
+    fullReset,
+    cleanup: () => {
+      stopTimer()
+      if (appendTimer !== undefined) clearTimeout(appendTimer)
+      advancing = false
+    },
   }
 }
 
@@ -679,11 +464,11 @@ function Btn(props: { onClick: () => void; title?: string; children: any }) {
         display: "flex",
         "align-items": "center",
         "justify-content": "center",
-        "font-size": "14px",
+        "font-size": "var(--font-size-base)",
         "border-radius": "6px",
-        border: "1px solid var(--border-base, #333)",
-        background: "var(--surface-base, #1a1a1a)",
-        color: "var(--text-base, #ccc)",
+        border: "1px solid var(--border-base)",
+        background: "var(--surface-base)",
+        color: "var(--text-base)",
         cursor: "pointer",
       }}
     >
@@ -720,9 +505,417 @@ function Toggle(props: { label: string; value: boolean; onChange: (v: boolean) =
 // Simulator component
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Interactive event trigger factories
+// ---------------------------------------------------------------------------
+
+interface TurnState {
+  turnIndex: number
+  userMsgID: string
+  asstMsgID: string
+}
+
+// A running tool that can be completed later
+interface RunningTool {
+  part: ToolPart
+  turn: TurnState
+  title: string
+  startTime: number
+  completeOutput: string
+  completePatch: Record<string, any>
+}
+
+// Returns [eventsToPlay, runningTool] — the tool is left in "running" state
+const readFiles = [
+  "/Users/kit/project/packages/opencode/src/tool/bash.ts",
+  "/Users/kit/project/packages/ui/src/components/message-part.tsx",
+  "/Users/kit/project/packages/core/src/session/manager.ts",
+  "/Users/kit/project/packages/opencode/src/provider/anthropic.ts",
+  "/Users/kit/project/src/index.ts",
+]
+let readIndex = 0
+
+function buildReadEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const filePath = readFiles[readIndex++ % readFiles.length]
+  const fileName = filePath.split("/").pop()!
+  const readPart = mkTool(turn.asstMsgID, "read", { filePath })
+  const events: TimelineEvent[] = [
+    { type: "part", part: readPart },
+    { type: "delay", ms: 100 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: readPart.id, patch: toolRunning(readPart, fileName, t) },
+  ]
+  return [events, {
+    part: readPart, turn, title: fileName, startTime: t,
+    completeOutput: `// contents of ${fileName}`,
+    completePatch: toolCompleted(readPart, fileName, `// contents of ${fileName}`, t, t + 300),
+  }]
+}
+
+function buildBashEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const input = { command: 'cowsay "Hello from interactive mode!"', description: "cowsay greeting" }
+  const shellPart = mkTool(turn.asstMsgID, "bash", input)
+  const cowsay = ` ________________________________
+< Hello from interactive mode! >
+ --------------------------------
+        \\   ^__^
+         \\  (oo)\\_______
+            (__)\\       )\\/\\
+                ||----w |
+                ||     ||`
+  const events: TimelineEvent[] = [
+    { type: "part", part: shellPart },
+    { type: "delay", ms: 150 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: shellPart.id, patch: toolRunning(shellPart, input.command, t) },
+  ]
+  return [events, {
+    part: shellPart, turn, title: input.command, startTime: t,
+    completeOutput: cowsay,
+    completePatch: toolCompleted(shellPart, input.command, cowsay, t, t + 800),
+  }]
+}
+
+function buildTextEvents(turn: TurnState): TimelineEvent[] {
+  const chunks = [
+    "Here's what I found ",
+    "after analyzing the codebase. ",
+    "The main entry point is in `src/index.ts` ",
+    "and it exports several key modules:\n\n",
+    "- **Tool system**: Defines all available tools\n",
+    "- **Session**: Manages conversation state\n",
+    "- **Provider**: Handles model communication\n",
+  ]
+  const events: TimelineEvent[] = []
+  let text = ""
+  const partId = pid()
+  const textPart: TextPart = { id: partId, sessionID: SESSION_ID, messageID: turn.asstMsgID, type: "text", text: "" }
+  events.push({ type: "part", part: textPart })
+  for (const chunk of chunks) {
+    text += chunk
+    events.push({ type: "delay", ms: 80 })
+    events.push({ type: "part-update", messageID: turn.asstMsgID, partID: partId, patch: { text } })
+  }
+  return events
+}
+
+const grepPatterns = ["createSignal", "export function", "TODO|FIXME", "import.*from", "async function"]
+let grepIndex = 0
+
+function buildGrepEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const pattern = grepPatterns[grepIndex++ % grepPatterns.length]
+  const grepPart = mkTool(turn.asstMsgID, "grep", { pattern, path: "/Users/kit/project" })
+  const title = `"${pattern}"`
+  const events: TimelineEvent[] = [
+    { type: "part", part: grepPart },
+    { type: "delay", ms: 100 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: grepPart.id, patch: toolRunning(grepPart, title, t) },
+  ]
+  return [events, {
+    part: grepPart, turn, title, startTime: t,
+    completeOutput: "14 matches found",
+    completePatch: toolCompleted(grepPart, title, "14 matches found", t, t + 400),
+  }]
+}
+
+const globPatterns = ["**/*.ts", "**/*.tsx", "src/**/*.css", "packages/*/package.json", "**/*.test.ts"]
+let globIndex = 0
+
+function buildGlobEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const pattern = globPatterns[globIndex++ % globPatterns.length]
+  const globPart = mkTool(turn.asstMsgID, "glob", { pattern, path: "/Users/kit/project/src" })
+  const events: TimelineEvent[] = [
+    { type: "part", part: globPart },
+    { type: "delay", ms: 100 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: globPart.id, patch: toolRunning(globPart, pattern, t) },
+  ]
+  return [events, {
+    part: globPart, turn, title: pattern, startTime: t,
+    completeOutput: "23 files matched",
+    completePatch: toolCompleted(globPart, pattern, "23 files matched", t, t + 200),
+  }]
+}
+
+const listPaths = [
+  "/Users/kit/project/src",
+  "/Users/kit/project/packages/ui/src/components",
+  "/Users/kit/project/packages/core/src",
+  "/Users/kit/project/packages/opencode/src/tool",
+]
+let listIndex = 0
+
+function buildListEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const path = listPaths[listIndex++ % listPaths.length]
+  const dirName = path.split("/").pop()!
+  const listPart = mkTool(turn.asstMsgID, "list", { path })
+  const events: TimelineEvent[] = [
+    { type: "part", part: listPart },
+    { type: "delay", ms: 100 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: listPart.id, patch: toolRunning(listPart, dirName, t) },
+  ]
+  return [events, {
+    part: listPart, turn, title: dirName, startTime: t,
+    completeOutput: "12 entries",
+    completePatch: toolCompleted(listPart, dirName, "12 entries", t, t + 150),
+  }]
+}
+
+function buildEditEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
+  const t = Date.now()
+  const editInput = {
+    filePath: "/Users/kit/project/packages/opencode/src/tool/bash.ts",
+    oldString: "const cmd = input.command",
+    newString: "const cmd = sanitize(input.command)",
+  }
+  const editPart = mkTool(turn.asstMsgID, "edit", editInput)
+  const events: TimelineEvent[] = [
+    { type: "part", part: editPart },
+    { type: "delay", ms: 100 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: editPart.id, patch: toolRunning(editPart, "bash.ts", t) },
+  ]
+  const completePatch = {
+    state: {
+      status: "completed",
+      input: editInput,
+      title: "Updated bash.ts",
+      metadata: {
+        filediff: {
+          file: editInput.filePath,
+          before: "const cmd = input.command",
+          after: "const cmd = sanitize(input.command)",
+          additions: 1,
+          deletions: 1,
+        },
+        diagnostics: {},
+      },
+      time: { start: t, end: t + 300 },
+    },
+  }
+  return [events, {
+    part: editPart, turn, title: "bash.ts", startTime: t,
+    completeOutput: "",
+    completePatch,
+  }]
+}
+
+function buildErrorEvents(turn: TurnState): TimelineEvent[] {
+  const t = Date.now()
+  const input = { command: "rm -rf /oops", description: "This will fail" }
+  const errPart = mkTool(turn.asstMsgID, "bash", input)
+  return [
+    { type: "part", part: errPart },
+    { type: "delay", ms: 100 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: errPart.id, patch: toolRunning(errPart, input.command, t) },
+    { type: "delay", ms: 200 },
+    {
+      type: "part-update",
+      messageID: turn.asstMsgID,
+      partID: errPart.id,
+      patch: {
+        state: {
+          status: "error",
+          input,
+          error: "Permission denied: cannot remove /oops",
+          title: input.command,
+          time: { start: t, end: t + 200 },
+        },
+      },
+    },
+  ]
+}
+
+// ---------------------------------------------------------------------------
+// Trigger button component
+// ---------------------------------------------------------------------------
+
+function TriggerBtn(props: { key: string; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={props.onClick}
+      style={{
+        display: "inline-flex",
+        "align-items": "center",
+        gap: "4px",
+        padding: "4px 10px",
+        "font-size": "var(--font-size-small)",
+        "font-family": "var(--font-family-sans)",
+        "border-radius": "6px",
+        border: "1px solid var(--border-base)",
+        background: "var(--surface-base)",
+        color: "var(--text-base)",
+        cursor: "pointer",
+      }}
+    >
+      <kbd
+        style={{
+          padding: "1px 4px",
+          "font-size": "10px",
+          "font-family": "var(--font-family-mono)",
+          "border-radius": "3px",
+          background: "var(--surface-inset-base)",
+          border: "1px solid var(--border-base)",
+          color: "var(--text-weak)",
+        }}
+      >
+        {props.key}
+      </kbd>
+      {props.label}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Simulator component
+// ---------------------------------------------------------------------------
+
+interface Action {
+  key: string
+  label: string
+  handler: () => void
+}
+
+const contextToolBuilders = [buildReadEvents, buildGrepEvents, buildGlobEvents, buildListEvents]
+
 function SessionTimelineSimulator() {
   const events = buildTimeline()
   const pb = createPlayback(events)
+
+  // Multi-turn state
+  let turnCounter = 0
+  const [turns, setTurns] = createSignal<TurnState[]>([])
+  const [currentTurn, setCurrentTurn] = createSignal<TurnState | null>(null)
+  const [runningTool, setRunningTool] = createSignal<RunningTool | null>(null)
+
+  function startNewTurn() {
+    turnCounter++
+    const userMsgID = `msg-user-${turnCounter}`
+    const asstMsgID = `msg-asst-${turnCounter}`
+    const turn: TurnState = { turnIndex: turnCounter, userMsgID, asstMsgID }
+    setTurns((prev) => [...prev, turn])
+    setCurrentTurn(turn)
+    return turn
+  }
+
+  function ensureTurn(): [TurnState, TimelineEvent[]] {
+    const t = currentTurn()
+    if (t) return [t, []]
+    const turn = startNewTurn()
+    return [turn, [
+      { type: "status", status: { type: "busy" } },
+      { type: "message", message: mkUser(turn.userMsgID) },
+      { type: "part", part: mkText(turn.userMsgID, "Let's get started.") },
+      { type: "delay", ms: 80 },
+      { type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID) },
+    ]]
+  }
+
+  // Complete the current running tool, returning its completion events
+  function drainRunning(): TimelineEvent[] {
+    const tool = runningTool()
+    if (!tool) return []
+    setRunningTool(null)
+    return [
+      {
+        type: "part-update",
+        messageID: tool.turn.asstMsgID,
+        partID: tool.part.id,
+        patch: tool.completePatch,
+      },
+      { type: "delay", ms: 60 },
+    ]
+  }
+
+  // Fire a tool that stays running until the next action
+  function triggerTool(builder: (turn: TurnState) => [TimelineEvent[], RunningTool]) {
+    const drain = drainRunning()
+    const [turn, prefix] = ensureTurn()
+    const [toolEvents, running] = builder(turn)
+    setRunningTool(running)
+    pb.appendAndPlay([...drain, ...prefix, ...toolEvents])
+  }
+
+  // Fire a random context tool (read/grep/glob/list) — stays running until next action
+  function triggerExplore() {
+    const builder = contextToolBuilders[Math.floor(Math.random() * contextToolBuilders.length)]
+    triggerTool(builder)
+  }
+
+  function completeTurn() {
+    const turn = currentTurn()
+    if (!turn) return
+    const drain = drainRunning()
+    const evts: TimelineEvent[] = [
+      ...drain,
+      { type: "delay", ms: 100 },
+      { type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID, Date.now()) },
+      { type: "status", status: { type: "idle" } },
+    ]
+    pb.appendAndPlay(evts)
+  }
+
+  function fullReset() {
+    _pid = 0
+    readIndex = 0
+    grepIndex = 0
+    globIndex = 0
+    listIndex = 0
+    turnCounter = 0
+    setTurns([])
+    setCurrentTurn(null)
+    setRunningTool(null)
+    pb.fullReset()
+  }
+
+  // --- Flat action list ---
+
+  const actions: Action[] = [
+    { key: "e", label: "Explore", handler: () => triggerExplore() },
+    { key: "b", label: "Bash", handler: () => triggerTool(buildBashEvents) },
+    {
+      key: "t", label: "Text", handler: () => {
+        const drain = drainRunning()
+        const [turn, prefix] = ensureTurn()
+        pb.appendAndPlay([...drain, ...prefix, ...buildTextEvents(turn)])
+      },
+    },
+    { key: "d", label: "Edit", handler: () => triggerTool(buildEditEvents) },
+    {
+      key: "x", label: "Error", handler: () => {
+        const drain = drainRunning()
+        const [turn, prefix] = ensureTurn()
+        pb.appendAndPlay([...drain, ...prefix, ...buildErrorEvents(turn)])
+      },
+    },
+    {
+      key: "u", label: "User", handler: () => {
+        const prev = currentTurn()
+        const evts: TimelineEvent[] = [...drainRunning()]
+        if (prev) {
+          evts.push(
+            { type: "message", message: mkAssistant(prev.asstMsgID, prev.userMsgID, Date.now()) },
+            { type: "status", status: { type: "idle" } },
+            { type: "delay", ms: 150 },
+          )
+        }
+        const turn = startNewTurn()
+        evts.push(
+          { type: "message", message: mkUser(turn.userMsgID) },
+          { type: "part", part: mkText(turn.userMsgID, `User message #${turn.turnIndex}`) },
+          { type: "delay", ms: 120 },
+          { type: "status", status: { type: "busy" } },
+          { type: "message", message: mkAssistant(turn.asstMsgID, turn.userMsgID) },
+        )
+        pb.appendAndPlay(evts)
+      },
+    },
+    { key: "c", label: "Complete", handler: () => completeTurn() },
+    { key: "0", label: "Reset", handler: () => fullReset() },
+  ]
+
+  const keyMap = new Map(actions.map((a) => [a.key, a.handler]))
 
   // Controls
   const [showReasoningSummaries, setShowReasoningSummaries] = createSignal(false)
@@ -731,7 +924,7 @@ function SessionTimelineSimulator() {
 
   onCleanup(pb.cleanup)
 
-  // Keyboard: left/right arrow to step, space to play/pause
+  // Keyboard
   const onKey = (e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
     if (e.key === "ArrowRight") {
@@ -743,12 +936,21 @@ function SessionTimelineSimulator() {
     } else if (e.key === " ") {
       e.preventDefault()
       pb.togglePlay()
+    } else {
+      const handler = keyMap.get(e.key)
+      if (handler) {
+        e.preventDefault()
+        handler()
+      }
     }
   }
   window.addEventListener("keydown", onKey)
   onCleanup(() => window.removeEventListener("keydown", onKey))
 
-  const progress = createMemo(() => (pb.step() / pb.totalSteps) * 100)
+  const progress = createMemo(() => {
+    const total = pb.totalSteps()
+    return total > 0 ? (pb.step() / total) * 100 : 0
+  })
 
   return (
     <div
@@ -756,26 +958,52 @@ function SessionTimelineSimulator() {
       style={{
         display: "flex",
         "flex-direction": "column",
-        height: "calc(100vh - 48px)",
+        height: "100vh",
+        margin: "-24px",
         outline: "none",
+        "background-color": "var(--background-base)",
+        color: "var(--text-base)",
+        "font-family": "var(--font-family-sans)",
+        "font-size": "var(--font-size-base)",
       }}
     >
       {/* Main content */}
-      <div style={{ flex: "1 1 0", "min-height": "0", overflow: "hidden" }}>
+      <div style={{ flex: "1 1 0", "min-height": "0", overflow: "auto" }}>
         <DataProvider data={pb.data} directory="/Users/kit/project">
           <FileComponentProvider component={PlaceholderFile}>
-            <SessionTurn
-              sessionID={SESSION_ID}
-              messageID={USER_MSG_ID}
-              animate={animateEnabled()}
-              showReasoningSummaries={showReasoningSummaries()}
-              shellToolDefaultOpen={shellOpen()}
-              classes={{
-                root: "min-w-0 w-full relative",
-                content: "flex flex-col justify-between",
-                container: "w-full px-5",
-              }}
-            />
+            <For each={turns()}>
+              {(turn) => (
+                <SessionTurn
+                  sessionID={SESSION_ID}
+                  messageID={turn.userMsgID}
+                  active={currentTurn()?.userMsgID === turn.userMsgID}
+                  animate={animateEnabled()}
+                  showReasoningSummaries={showReasoningSummaries()}
+                  shellToolDefaultOpen={shellOpen()}
+                  classes={{
+                    root: "min-w-0 w-full relative",
+                    content: "flex flex-col justify-between",
+                    container: "w-full px-5",
+                  }}
+                />
+              )}
+            </For>
+            {/* Empty state */}
+            {turns().length === 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  "align-items": "center",
+                  "justify-content": "center",
+                  height: "100%",
+                  color: "var(--text-weak)",
+                  "font-size": "var(--font-size-base)",
+                  "font-family": "var(--font-family-sans)",
+                }}
+              >
+                Press a key or click a button below to start
+              </div>
+            )}
           </FileComponentProvider>
         </DataProvider>
       </div>
@@ -784,8 +1012,8 @@ function SessionTimelineSimulator() {
       <div
         style={{
           "flex-shrink": "0",
-          "border-top": "1px solid var(--border-base, #333)",
-          background: "var(--background-stronger, #111)",
+          "border-top": "1px solid var(--border-base)",
+          "background-color": "var(--background-stronger)",
           padding: "12px 16px",
           display: "flex",
           "flex-direction": "column",
@@ -797,14 +1025,14 @@ function SessionTimelineSimulator() {
           style={{
             width: "100%",
             height: "6px",
-            background: "var(--surface-inset-base, #222)",
+            background: "var(--surface-inset-base)",
             "border-radius": "3px",
             cursor: "pointer",
           }}
           onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-            pb.jumpTo(Math.round(ratio * pb.totalSteps))
+            pb.jumpTo(Math.round(ratio * pb.totalSteps()))
           }}
         >
           <div
@@ -821,7 +1049,7 @@ function SessionTimelineSimulator() {
         {/* Transport + info */}
         <div style={{ display: "flex", "align-items": "center", gap: "12px" }}>
           <div style={{ display: "flex", gap: "4px" }}>
-            <Btn onClick={pb.reset} title="Reset">
+            <Btn onClick={pb.reset} title="Reset playback">
               ⏮
             </Btn>
             <Btn onClick={pb.stepBack} title="Step back">
@@ -837,20 +1065,20 @@ function SessionTimelineSimulator() {
 
           <span
             style={{
-              "font-size": "12px",
-              "font-family": "monospace",
-              color: "var(--text-weak, #888)",
+              "font-size": "var(--font-size-small)",
+              "font-family": "var(--font-family-mono)",
+              color: "var(--text-weak)",
               "min-width": "80px",
             }}
           >
-            {pb.step()}/{pb.totalSteps}
+            {pb.step()}/{pb.totalSteps()}
           </span>
 
           <span
             style={{
-              "font-size": "12px",
-              "font-family": "var(--font-family-sans, sans-serif)",
-              color: "var(--text-base, #ccc)",
+              "font-size": "var(--font-size-small)",
+              "font-family": "var(--font-family-sans)",
+              color: "var(--text-base)",
               flex: "1",
               overflow: "hidden",
               "text-overflow": "ellipsis",
@@ -862,20 +1090,20 @@ function SessionTimelineSimulator() {
 
           {/* Speed */}
           <div style={{ display: "flex", "align-items": "center", gap: "4px", "flex-shrink": "0" }}>
-            <span style={{ "font-size": "11px", color: "var(--text-weak, #888)", "margin-right": "2px" }}>Speed</span>
+            <span style={{ "font-size": "var(--font-size-small)", color: "var(--text-weak)", "margin-right": "2px" }}>Speed</span>
             <For each={[0.25, 0.5, 1, 2, 4]}>
               {(s) => (
                 <button
                   onClick={() => pb.setSpeed(s)}
                   style={{
                     padding: "2px 6px",
-                    "font-size": "11px",
-                    "font-family": "monospace",
+                    "font-size": "var(--font-size-small)",
+                    "font-family": "var(--font-family-mono)",
                     "border-radius": "4px",
                     border:
-                      "1px solid " + (pb.speed() === s ? "var(--color-blue, #3b82f6)" : "var(--border-base, #333)"),
+                      "1px solid " + (pb.speed() === s ? "var(--color-blue, #3b82f6)" : "var(--border-base)"),
                     background: pb.speed() === s ? "var(--color-blue, #3b82f6)" : "transparent",
-                    color: pb.speed() === s ? "white" : "var(--text-base, #ccc)",
+                    color: pb.speed() === s ? "white" : "var(--text-base)",
                     cursor: "pointer",
                   }}
                 >
@@ -884,6 +1112,15 @@ function SessionTimelineSimulator() {
               )}
             </For>
           </div>
+        </div>
+
+        {/* Trigger buttons */}
+        <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
+          <For each={actions}>
+            {(action) => (
+              <TriggerBtn key={action.key} label={action.label} onClick={action.handler} />
+            )}
+          </For>
         </div>
 
         {/* Toggles */}
@@ -913,25 +1150,22 @@ export default {
     layout: "fullscreen",
     docs: {
       description: {
-        component: `### Session Timeline Simulator
+        component: `### Session Timeline Simulator (Interactive)
 
-Replays a mock session timeline step-by-step to test height animations,
-GrowBox transitions, thinking shimmer persistence, and part rendering.
+Flat control panel — each action auto-completes the previous running tool.
 
-**Key behavior to observe:**
-- With \`showReasoningSummaries=false\` (default): thinking shimmer stays at the bottom throughout tool execution
-- With \`showReasoningSummaries=true\`: thinking hides as soon as the first tool part appears
-- Context tools (read/grep/glob/list) group into a "Gathering context" section
-- Includes all visible tool renderers: bash, webfetch, task, edit, write, apply_patch, question, skill
-- Also includes generic unknown tools (exa_web_search_exa, exa_get_code_context_exa, effect)
-- Each row animates in via GrowBox (height spring + fade)
-- The thinking shimmer shows a reasoning heading via TextReveal
+| Key | Action |
+|-----|--------|
+| e | Explore (random read/grep/glob/list, stays running) |
+| b | Bash tool (stays running) |
+| t | Stream text |
+| d | Edit tool (stays running) |
+| x | Error tool |
+| u | New user turn |
+| c | Complete assistant turn |
+| 0 | Reset everything |
 
-**Controls:**
-- Transport: reset / step back / play-pause / step forward
-- Click the scrubber bar to jump to any point
-- Speed buttons: 0.25x to 4x
-- Toggles: showReasoningSummaries, animate, shellToolDefaultOpen
+**Transport:** Space = play/pause, Arrow keys = step, scrubber bar to jump.
 `,
       },
     },

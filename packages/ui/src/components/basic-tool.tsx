@@ -332,27 +332,30 @@ export type ToolCallProps = ToolCallRowProps | ToolCallPanelProps
 function ToolCallRoot(props: ToolCallProps) {
   const pending = () => props.status === "pending" || props.status === "running"
   if (props.variant === "row") {
-    if (props.showArrow && props.onOpenChange) {
-      return (
-        <Collapsible open={props.open ?? true} onOpenChange={props.onOpenChange} class="tool-collapsible">
-          <Collapsible.Trigger>
-            <ToolCallTriggerBody
-              trigger={props.trigger}
-              pending={pending()}
-              onSubtitleClick={props.onSubtitleClick}
-              arrow
-            />
-          </Collapsible.Trigger>
-        </Collapsible>
-      )
-    }
-
     return (
-      <div data-component="collapsible" data-variant="normal" class="tool-collapsible">
-        <div data-slot="collapsible-trigger">
-          <ToolCallTriggerBody trigger={props.trigger} pending={pending()} onSubtitleClick={props.onSubtitleClick} />
-        </div>
-      </div>
+      <Show
+        when={props.onOpenChange}
+        fallback={
+          <div data-component="collapsible" data-variant="normal" class="tool-collapsible">
+            <div data-slot="collapsible-trigger">
+              <ToolCallTriggerBody trigger={props.trigger} pending={pending()} onSubtitleClick={props.onSubtitleClick} />
+            </div>
+          </div>
+        }
+      >
+        {(onOpenChange) => (
+          <Collapsible open={props.open ?? true} onOpenChange={onOpenChange()} class="tool-collapsible">
+            <Collapsible.Trigger>
+              <ToolCallTriggerBody
+                trigger={props.trigger}
+                pending={pending()}
+                onSubtitleClick={props.onSubtitleClick}
+                arrow={!!props.showArrow}
+              />
+            </Collapsible.Trigger>
+          </Collapsible>
+        )}
+      </Show>
     )
   }
 

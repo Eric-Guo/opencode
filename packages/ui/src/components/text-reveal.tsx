@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
 import { animate, type AnimationPlaybackControls, clearFadeStyles, clearMaskStyles, GROW_SPRING, WIPE_MASK } from "./motion"
+import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 const px = (value: number | string | undefined, fallback: number) => {
   if (typeof value === "number") return `${value}px`
@@ -140,7 +141,7 @@ export function TextWipe(props: { text?: string; class?: string; delay?: number;
     if (props.animate === false) return
     const el = ref
     if (!el || !props.text || typeof window === "undefined") return
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    if (prefersReducedMotion()) return
 
     const mask =
       typeof CSS !== "undefined" &&

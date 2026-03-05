@@ -5,6 +5,7 @@ import {
   createSignal,
   For,
   Match,
+  on,
   onMount,
   Show,
   Switch,
@@ -50,6 +51,7 @@ import { list } from "./text-utils"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { GrowBox } from "./grow-box"
+import { RollingResults } from "./rolling-results"
 import {
   animate,
   type AnimationPlaybackControls,
@@ -59,6 +61,7 @@ import {
   GROW_SPRING,
   WIPE_MASK,
 } from "./motion"
+import { useSpring } from "./motion-spring"
 
 interface Diagnostic {
   range: {
@@ -278,23 +281,8 @@ function busy(status: string | undefined) {
   return status === "pending" || status === "running"
 }
 
-const pageVisible = /* @__PURE__ */ (() => {
-  const [visible, setVisible] = createSignal(true)
-  if (typeof document !== "undefined") {
-    const sync = () => setVisible(document.visibilityState !== "hidden")
-    sync()
-    document.addEventListener("visibilitychange", sync)
-  }
-  return visible
-})()
-
-const prefersReducedMotion = /* @__PURE__ */ (() => {
-  if (typeof window === "undefined") return () => false
-  const mql = window.matchMedia("(prefers-reduced-motion: reduce)")
-  const [reduced, setReduced] = createSignal(mql.matches)
-  mql.addEventListener("change", () => setReduced(mql.matches))
-  return reduced
-})()
+import { pageVisible } from "../hooks/use-page-visible"
+import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 function createGroupOpenState() {
   const [state, setState] = createSignal<Record<string, boolean>>({})
@@ -534,7 +522,14 @@ export function AssistantParts(props: {
           const entry = part()
           return groupState.read(entry?.groupKey, collapse(entry?.afterTool, entry?.groupTail, entry?.groupParts))
         })
-        const visible = createMemo(() => !context() || contextOpen())
+        const visible = createMemo(() => {
+          if (!context()) return true
+          // The context group header is always visible (it has its own expand arrow).
+          if (ctx()) return true
+          // Individual context parts are rendered inside the header's collapsible content,
+          // so they're always hidden at this level.
+          return false
+        })
 
         const turnSummary = createMemo(() => {
           const value = part()
@@ -555,51 +550,72 @@ export function AssistantParts(props: {
           return tail()
         })
         const watch = createMemo(() => !context() && !tool() && tail() && !turnSummary())
+        const ctxParts = createMemo(() => ctx()?.parts.map((item) => item.part) ?? [])
+        const ctxPending = useContextToolPending(
+          ctxParts,
+          () => !!(props.working && ctx()?.tail),
+        )
         return (
-          <PartGrow
-            animate={props.animate}
-            gap={idx() === 0 || fade() ? 0 : 8}
-            fade={fade()}
-            edge={edge()}
-            edgeHeight={20}
-            edgeOpacity={0.95}
-            edgeIdle={100}
-            edgeFade={0.6}
-            edgeRise={0.1}
-            grow
-            watch={watch()}
-            animateToggle
-            open={visible()}
-            toggleSpring={contextSpring()}
-          >
+          <>
+            <PartGrow
+              animate={props.animate}
+              gap={idx() === 0 || fade() ? 0 : 8}
+              fade={fade()}
+              edge={edge()}
+              edgeHeight={20}
+              edgeOpacity={0.95}
+              edgeIdle={100}
+              edgeFade={0.6}
+              edgeRise={0.1}
+              grow
+              watch={watch()}
+              animateToggle
+              open={visible()}
+              toggleSpring={contextSpring()}
+            >
+              <Show when={ctx()}>
+                {(entry) => (
+                  <ContextToolGroupHeader
+                    parts={ctxParts()}
+                    pending={ctxPending()}
+                    open={contextOpen()}
+                    onOpenChange={(value: boolean) => groupState.write(entry().groupKey, value)}
+                  />
+                )}
+              </Show>
+              <Show when={part()}>
+                {(entry) => (
+                  <div data-component={entry().context ? "context-tool-step" : undefined}>
+                    <Part
+                      part={entry().part}
+                      message={entry().message}
+                      showAssistantCopyPartID={props.showAssistantCopyPartID}
+                      showTurnDiffSummary={props.showTurnDiffSummary}
+                      turnDiffSummary={props.turnDiffSummary}
+                      defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                      hideDetails={entry().context}
+                      animate={props.animate}
+                      working={props.working}
+                    />
+                  </div>
+                )}
+              </Show>
+            </PartGrow>
             <Show when={ctx()}>
               {(entry) => (
-                <ContextToolGroup
-                  parts={entry().parts.map((item) => item.part)}
-                  busy={props.working && entry().tail}
-                  open={contextOpen()}
-                  onOpenChange={(value: boolean) => groupState.write(entry().groupKey, value)}
+                <ContextToolExpandedList
+                  parts={ctxParts()}
+                  expanded={!ctxPending() && contextOpen()}
                 />
               )}
             </Show>
-            <Show when={part()}>
-              {(entry) => (
-                <div data-component={entry().context ? "context-tool-step" : undefined}>
-                  <Part
-                    part={entry().part}
-                    message={entry().message}
-                    showAssistantCopyPartID={props.showAssistantCopyPartID}
-                    showTurnDiffSummary={props.showTurnDiffSummary}
-                    turnDiffSummary={props.turnDiffSummary}
-                    defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                    hideDetails={entry().context}
-                    animate={props.animate}
-                    working={props.working}
-                  />
-                </div>
-              )}
+            <Show when={ctx()}>
+              <ContextToolRollingResults
+                parts={ctxParts()}
+                pending={ctxPending()}
+              />
             </Show>
-          </PartGrow>
+          </>
         )
       }}
     </For>
@@ -626,36 +642,62 @@ export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
 
-function ContextToolGroup(props: {
+function contextToolLabel(part: ToolPart): { action: string; detail: string } {
+  const state = part.state
+  const title = "title" in state ? (state.title as string | undefined) : undefined
+  const input = state.input
+  if (part.tool === "read") {
+    const path = input?.filePath as string | undefined
+    return { action: "Read", detail: title || (path ? getFilename(path) : "") }
+  }
+  if (part.tool === "grep") {
+    const pattern = input?.pattern as string | undefined
+    return { action: "Search", detail: title || (pattern ? `"${pattern}"` : "") }
+  }
+  if (part.tool === "glob") {
+    const pattern = input?.pattern as string | undefined
+    return { action: "Find", detail: title || (pattern ?? "") }
+  }
+  if (part.tool === "list") {
+    const path = input?.path as string | undefined
+    return { action: "List", detail: title || (path ? getFilename(path) : "") }
+  }
+  return { action: part.tool, detail: title || "" }
+}
+
+function useContextToolPending(parts: () => ToolPart[], working?: () => boolean) {
+  const anyRunning = createMemo(() => parts().some((part) => busy(part.state.status)))
+  const [settled, setSettled] = createSignal(false)
+  createEffect(() => {
+    if (!anyRunning() && !working?.()) setSettled(true)
+  })
+  return createMemo(() => !settled() && (!!working?.() || anyRunning()))
+}
+
+function ContextToolGroupHeader(props: {
   parts: ToolPart[]
-  busy?: boolean
+  pending: boolean
   open: boolean
   onOpenChange: (value: boolean) => void
 }) {
   const i18n = useI18n()
-  const anyRunning = createMemo(() => props.parts.some((part) => busy(part.state.status)))
-  const [settled, setSettled] = createSignal(false)
-  createEffect(() => {
-    if (!anyRunning() && !props.busy) setSettled(true)
-  })
-  const pending = createMemo(() => !settled() && (!!props.busy || anyRunning()))
   const summary = createMemo(() => contextToolSummary(props.parts))
   return (
     <ToolCall
       variant="row"
       icon="magnifying-glass-menu"
-      open={props.open}
-      showArrow
-      onOpenChange={props.onOpenChange}
+      open={!props.pending && props.open}
+      showArrow={!props.pending}
+      onOpenChange={(v) => { if (!props.pending) props.onOpenChange(v) }}
       trigger={
-        <div data-component="context-tool-group-trigger">
+        <div data-component="context-tool-group-trigger" data-pending={props.pending || undefined}>
           <span
             data-slot="context-tool-group-title"
             class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
           >
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
-                active={pending()}
+                active={props.pending}
                 activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
                 doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
                 split={false}
@@ -693,6 +735,132 @@ function ContextToolGroup(props: {
         </div>
       }
     />
+  )
+}
+
+function ContextToolExpandedList(props: {
+  parts: ToolPart[]
+  expanded: boolean
+}) {
+  let contentRef: HTMLDivElement | undefined
+  let bodyRef: HTMLDivElement | undefined
+  let scrollRef: HTMLDivElement | undefined
+  let heightAnim: AnimationPlaybackControls | undefined
+  let fadeAnim: AnimationPlaybackControls | undefined
+
+  const FADE = 12
+
+  const updateMask = () => {
+    if (!scrollRef) return
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef
+    const overflow = scrollHeight - clientHeight
+    if (overflow <= 1) {
+      scrollRef.style.maskImage = ""
+      scrollRef.style.webkitMaskImage = ""
+      return
+    }
+    const top = scrollTop > 1
+    const bottom = scrollTop < overflow - 1
+    const mask = top && bottom
+      ? `linear-gradient(to bottom, transparent 0, black ${FADE}px, black calc(100% - ${FADE}px), transparent 100%)`
+      : top
+        ? `linear-gradient(to bottom, transparent 0, black ${FADE}px)`
+        : bottom
+          ? `linear-gradient(to bottom, black calc(100% - ${FADE}px), transparent 100%)`
+          : ""
+    scrollRef.style.maskImage = mask
+    scrollRef.style.webkitMaskImage = mask
+  }
+
+  createEffect(
+    on(() => props.expanded, (isOpen) => {
+      if (!contentRef || !bodyRef) return
+      heightAnim?.stop()
+      fadeAnim?.stop()
+      if (isOpen) {
+        contentRef.style.display = ""
+        bodyRef.style.opacity = "0"
+        bodyRef.style.filter = "blur(2px)"
+        const h = bodyRef.getBoundingClientRect().height
+        heightAnim = animate(contentRef, { height: ["0px", `${h}px`] }, COLLAPSIBLE_SPRING)
+        fadeAnim = animate(bodyRef, { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"] }, COLLAPSIBLE_SPRING)
+        heightAnim.finished.catch(() => {}).then(() => {
+          if (!contentRef || !props.expanded) return
+          contentRef.style.height = "auto"
+          updateMask()
+        })
+      } else {
+        const h = contentRef.getBoundingClientRect().height
+        heightAnim = animate(contentRef, { height: [`${h}px`, "0px"] }, COLLAPSIBLE_SPRING)
+        fadeAnim = animate(bodyRef, { opacity: [1, 0], filter: ["blur(0px)", "blur(2px)"] }, COLLAPSIBLE_SPRING)
+        heightAnim.finished.catch(() => {}).then(() => {
+          if (!contentRef || props.expanded) return
+          contentRef.style.display = "none"
+        })
+      }
+    }, { defer: true }),
+  )
+
+  onCleanup(() => {
+    heightAnim?.stop()
+    fadeAnim?.stop()
+  })
+
+  return (
+    <div ref={contentRef} style={{ overflow: "clip", height: "0px", display: "none" }}>
+      <div ref={bodyRef}>
+        <div
+          ref={scrollRef}
+          data-component="context-tool-expanded-list"
+          onScroll={updateMask}
+        >
+          <For each={props.parts}>
+            {(part) => {
+              const label = contextToolLabel(part)
+              return (
+                <div data-component="context-tool-expanded-row">
+                  <span data-slot="context-tool-expanded-action">{label.action}</span>
+                  <span data-slot="context-tool-expanded-detail">{label.detail}</span>
+                </div>
+              )
+            }}
+          </For>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ContextToolRollingResults(props: {
+  parts: ToolPart[]
+  pending: boolean
+}) {
+  const [mounted, setMounted] = createSignal(false)
+  onMount(() => setMounted(true))
+  const show = () => mounted() && props.pending
+  const opacity = useSpring(() => (show() ? 1 : 0), GROW_SPRING)
+  const blur = useSpring(() => (show() ? 0 : 2), GROW_SPRING)
+  return (
+    <div style={{ opacity: opacity(), filter: `blur(${blur()}px)` }}>
+      <RollingResults
+        items={props.parts}
+        rows={5}
+        rowHeight={22}
+        rowGap={0}
+        open={props.pending}
+        animate
+        getKey={(part) => part.callID || part.id}
+        render={(part) => {
+          const label = contextToolLabel(part)
+          return (
+            <div data-component="context-tool-rolling-row">
+              <span data-slot="context-tool-rolling-action">{label.action}</span>
+              <span data-slot="context-tool-rolling-detail">{label.detail}</span>
+            </div>
+          )
+        }}
+      />
+    </div>
   )
 }
 

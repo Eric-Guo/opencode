@@ -584,7 +584,6 @@
 }
 
 [data-component="context-tool-group-trigger"] {
-  width: 100%;
   min-height: 24px;
   display: flex;
   align-items: center;
@@ -592,9 +591,23 @@
   gap: 0px;
   cursor: pointer;
 
+  &[data-pending] {
+    cursor: default;
+  }
+
   [data-slot="context-tool-group-title"] {
     flex-shrink: 1;
     min-width: 0;
+  }
+}
+
+/* Prevent the trigger content from stretching full-width so the arrow sits after the text */
+[data-slot="basic-tool-tool-trigger-content"]:has([data-component="context-tool-group-trigger"]) {
+  width: auto;
+  flex: 0 1 auto;
+
+  [data-slot="basic-tool-tool-info"] {
+    flex: 0 1 auto;
   }
 }
 
@@ -602,6 +615,79 @@
   width: 100%;
   min-width: 0;
   padding-left: 12px;
+}
+
+[data-component="context-tool-expanded-list"] {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0 4px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+[data-component="context-tool-expanded-row"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 22px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+
+  [data-slot="context-tool-expanded-action"] {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-base);
+  }
+
+  [data-slot="context-tool-expanded-detail"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    color: var(--text-base);
+    opacity: 0.75;
+  }
+}
+
+[data-component="context-tool-rolling-row"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  padding-left: 12px;
+
+  [data-slot="context-tool-rolling-action"] {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-base);
+  }
+
+  [data-slot="context-tool-rolling-detail"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    color: var(--text-base);
+    opacity: 0.75;
+  }
 }
 
 [data-component="diagnostics"] {

@@ -359,11 +359,16 @@ export function MessageTimeline(props: {
     if (!el) return
 
     clearHeaderAnim()
-    headerAnim = animate(el, { opacity: [0, 1] }, FAST_SPRING)
-    headerAnim.finished.then(() => {
-      if (headerRef !== el) return
-      clearFadeStyles(el)
-    })
+    // Only animate for new sessions (placeholder title); snap for existing sessions
+    if (headerText.muted) {
+      headerAnim = animate(el, { opacity: [0, 1] }, { type: "spring", visualDuration: 1.0, bounce: 0 })
+      headerAnim.finished.then(() => {
+        if (headerRef !== el) return
+        clearFadeStyles(el)
+      })
+    } else {
+      el.style.opacity = "1"
+    }
   }
 
   const clearTitleAnims = () => {
@@ -941,7 +946,12 @@ export function MessageTimeline(props: {
                     if (activeID) return messageID > activeID
                     return false
                   })
-                  const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []))
+                  const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
+                    equals: (a, b) => {
+                      if (a.length !== b.length) return false
+                      return a.every((x, i) => x.path === b[i].path && x.comment === b[i].comment)
+                    },
+                  })
                   const commentCount = createMemo(() => comments().length)
                   return (
                     <div
