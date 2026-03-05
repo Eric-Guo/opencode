@@ -550,7 +550,26 @@ export function AssistantParts(props: {
           return tail()
         })
         const watch = createMemo(() => !context() && !tool() && tail() && !turnSummary())
-        const ctxParts = createMemo(() => ctx()?.parts.map((item) => item.part) ?? [])
+        const ctxPartsCache = new Map<string, ToolPart>()
+        let ctxPartsPrev: ToolPart[] = []
+        const ctxParts = createMemo(() => {
+          const parts = ctx()?.parts ?? []
+          // Guard against transient empty flash during store recomputation
+          if (parts.length === 0 && ctxPartsPrev.length > 0) return ctxPartsPrev
+          const result: ToolPart[] = []
+          for (const item of parts) {
+            const k = item.part.callID || item.part.id
+            const cached = ctxPartsCache.get(k)
+            if (cached) {
+              result.push(cached)
+            } else {
+              ctxPartsCache.set(k, item.part)
+              result.push(item.part)
+            }
+          }
+          ctxPartsPrev = result
+          return result
+        })
         const ctxPending = useContextToolPending(
           ctxParts,
           () => !!(props.working && ctx()?.tail),
@@ -609,12 +628,10 @@ export function AssistantParts(props: {
                 />
               )}
             </Show>
-            <Show when={ctx()}>
-              <ContextToolRollingResults
-                parts={ctxParts()}
-                pending={ctxPending()}
-              />
-            </Show>
+            <ContextToolRollingResults
+              parts={ctxParts()}
+              pending={ctxPending()}
+            />
           </>
         )
       }}
@@ -816,11 +833,11 @@ function ContextToolExpandedList(props: {
         >
           <For each={props.parts}>
             {(part) => {
-              const label = contextToolLabel(part)
+              const label = createMemo(() => contextToolLabel(part))
               return (
                 <div data-component="context-tool-expanded-row">
-                  <span data-slot="context-tool-expanded-action">{label.action}</span>
-                  <span data-slot="context-tool-expanded-detail">{label.detail}</span>
+                  <span data-slot="context-tool-expanded-action">{label().action}</span>
+                  <span data-slot="context-tool-expanded-detail">{label().detail}</span>
                 </div>
               )
             }}
@@ -835,6 +852,7 @@ function ContextToolRollingResults(props: {
   parts: ToolPart[]
   pending: boolean
 }) {
+  const wiped = new Set<string>()
   const [mounted, setMounted] = createSignal(false)
   onMount(() => setMounted(true))
   const show = () => mounted() && props.pending
@@ -851,11 +869,47 @@ function ContextToolRollingResults(props: {
         animate
         getKey={(part) => part.callID || part.id}
         render={(part) => {
-          const label = contextToolLabel(part)
+          const label = () => contextToolLabel(part)
+          const k = part.callID || part.id
           return (
             <div data-component="context-tool-rolling-row">
-              <span data-slot="context-tool-rolling-action">{label.action}</span>
-              <span data-slot="context-tool-rolling-detail">{label.detail}</span>
+              <span data-slot="context-tool-rolling-action">{label().action}</span>
+              {(() => {
+                const [detailRef, setDetailRef] = createSignal<HTMLSpanElement>()
+                createEffect(() => {
+                  const el = detailRef()
+                  const d = label().detail
+                  if (!el || !d) return
+                  if (wiped.has(k)) return
+                  wiped.add(k)
+                  el.style.maskImage = WIPE_MASK
+                  el.style.webkitMaskImage = WIPE_MASK
+                  el.style.maskSize = "240% 100%"
+                  el.style.webkitMaskSize = "240% 100%"
+                  el.style.maskRepeat = "no-repeat"
+                  el.style.webkitMaskRepeat = "no-repeat"
+                  el.style.maskPosition = "100% 0%"
+                  el.style.webkitMaskPosition = "100% 0%"
+                  animate(
+                    el,
+                    { opacity: [0, 1], filter: ["blur(2px)", "blur(0px)"], transform: ["translateX(-0.06em)", "translateX(0)"], maskPosition: "0% 0%" },
+                    GROW_SPRING,
+                  ).finished.then(() => {
+                    if (!el) return
+                    clearFadeStyles(el)
+                    clearMaskStyles(el)
+                  })
+                })
+                return (
+                  <span
+                    ref={setDetailRef}
+                    data-slot="context-tool-rolling-detail"
+                    style={{ display: label().detail ? undefined : "none" }}
+                  >
+                    {label().detail}
+                  </span>
+                )
+              })()}
             </div>
           )
         }}
@@ -1123,7 +1177,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
     <Accordion
       multiple
       data-scope="apply-patch"
-      style={{ "--sticky-accordion-offset": "40px" }}
+      style={{ "--sticky-accordion-offset": "37px" }}
       defaultValue={[value()]}
     >
       <Accordion.Item value={value()}>
@@ -2053,7 +2107,7 @@ ToolRegistry.register({
                 <Accordion
                   multiple
                   data-scope="apply-patch"
-                  style={{ "--sticky-accordion-offset": "40px" }}
+                  style={{ "--sticky-accordion-offset": "37px" }}
                   value={expanded()}
                   onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
                 >

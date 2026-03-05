@@ -539,10 +539,12 @@ function buildReadEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const t = Date.now()
   const filePath = readFiles[readIndex++ % readFiles.length]
   const fileName = filePath.split("/").pop()!
-  const readPart = mkTool(turn.asstMsgID, "read", { filePath })
+  const readPart = mkTool(turn.asstMsgID, "read", {})
   const events: TimelineEvent[] = [
     { type: "part", part: readPart },
-    { type: "delay", ms: 100 },
+    { type: "delay", ms: 60 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: readPart.id, patch: { state: { status: "pending", input: { filePath }, raw: JSON.stringify({ filePath }) } } },
+    { type: "delay", ms: 60 },
     { type: "part-update", messageID: turn.asstMsgID, partID: readPart.id, patch: toolRunning(readPart, fileName, t) },
   ]
   return [events, {
@@ -605,11 +607,14 @@ let grepIndex = 0
 function buildGrepEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const t = Date.now()
   const pattern = grepPatterns[grepIndex++ % grepPatterns.length]
-  const grepPart = mkTool(turn.asstMsgID, "grep", { pattern, path: "/Users/kit/project" })
+  const input = { pattern, path: "/Users/kit/project" }
+  const grepPart = mkTool(turn.asstMsgID, "grep", {})
   const title = `"${pattern}"`
   const events: TimelineEvent[] = [
     { type: "part", part: grepPart },
-    { type: "delay", ms: 100 },
+    { type: "delay", ms: 60 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: grepPart.id, patch: { state: { status: "pending", input, raw: JSON.stringify(input) } } },
+    { type: "delay", ms: 60 },
     { type: "part-update", messageID: turn.asstMsgID, partID: grepPart.id, patch: toolRunning(grepPart, title, t) },
   ]
   return [events, {
@@ -625,10 +630,13 @@ let globIndex = 0
 function buildGlobEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const t = Date.now()
   const pattern = globPatterns[globIndex++ % globPatterns.length]
-  const globPart = mkTool(turn.asstMsgID, "glob", { pattern, path: "/Users/kit/project/src" })
+  const input = { pattern, path: "/Users/kit/project/src" }
+  const globPart = mkTool(turn.asstMsgID, "glob", {})
   const events: TimelineEvent[] = [
     { type: "part", part: globPart },
-    { type: "delay", ms: 100 },
+    { type: "delay", ms: 60 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: globPart.id, patch: { state: { status: "pending", input, raw: JSON.stringify(input) } } },
+    { type: "delay", ms: 60 },
     { type: "part-update", messageID: turn.asstMsgID, partID: globPart.id, patch: toolRunning(globPart, pattern, t) },
   ]
   return [events, {
@@ -650,10 +658,13 @@ function buildListEvents(turn: TurnState): [TimelineEvent[], RunningTool] {
   const t = Date.now()
   const path = listPaths[listIndex++ % listPaths.length]
   const dirName = path.split("/").pop()!
-  const listPart = mkTool(turn.asstMsgID, "list", { path })
+  const input = { path }
+  const listPart = mkTool(turn.asstMsgID, "list", {})
   const events: TimelineEvent[] = [
     { type: "part", part: listPart },
-    { type: "delay", ms: 100 },
+    { type: "delay", ms: 60 },
+    { type: "part-update", messageID: turn.asstMsgID, partID: listPart.id, patch: { state: { status: "pending", input, raw: JSON.stringify(input) } } },
+    { type: "delay", ms: 60 },
     { type: "part-update", messageID: turn.asstMsgID, partID: listPart.id, patch: toolRunning(listPart, dirName, t) },
   ]
   return [events, {

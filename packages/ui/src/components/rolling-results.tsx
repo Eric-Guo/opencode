@@ -1,5 +1,5 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js"
-import { animate, COLLAPSIBLE_SPRING, GROW_SPRING, type AnimationPlaybackControls } from "./motion"
+import { For, Show, createEffect, createMemo, on, onCleanup, onMount, type JSX } from "solid-js"
+import { animate, GROW_SPRING, type AnimationPlaybackControls } from "./motion"
 import { prefersReducedMotion } from "../hooks/use-reduced-motion"
 
 export type RollingResultsProps<T> = {
@@ -41,14 +41,10 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
   const shown = createMemo(() => Math.min(rows(), count()))
   const step = createMemo(() => rowHeight() + rowGap())
   const offset = createMemo(() => Math.max(0, count() - shown()) * step())
-  const fade = createMemo(() => Math.round(rowHeight() * 0.6))
   const height = createMemo(() => {
     if (!open()) return 0
     if (shown() > 0) {
-      const content = shown() * rowHeight() + Math.max(0, shown() - 1) * rowGap()
-      // Extend viewport by half the fade so the bottom row only partially
-      // enters the mask zone — visible but less aggressive than full overlap.
-      return overflowing() ? content + Math.round(fade() * 0.5) : content
+      return shown() * rowHeight() + Math.max(0, shown() - 1) * rowGap()
     }
     if (props.empty === undefined) return 0
     return rowHeight()
@@ -110,7 +106,7 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
         return
       }
       resize?.stop()
-      const anim = animate(view, { height: `${next}px` }, COLLAPSIBLE_SPRING)
+      const anim = animate(view, { height: `${next}px` }, GROW_SPRING)
       resize = anim
       anim.finished
         .catch(() => {})
@@ -121,14 +117,6 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
         })
     }),
   )
-
-  let mounted = false
-  onMount(() => { mounted = true })
-
-  const dimRow = (node: HTMLDivElement) => {
-    if (!mounted || !active()) return
-    animate(node, { opacity: [1, 0.5] }, { duration: 4, easing: "linear" })
-  }
 
   onCleanup(() => {
     shift?.stop()
@@ -150,24 +138,18 @@ export function RollingResults<T>(props: RollingResultsProps<T>) {
       }}
     >
       <div ref={view} data-slot="rolling-results-viewport" aria-live="polite">
-        <Show
-          when={list().length > 0}
-          fallback={
-            <Show when={props.empty !== undefined}>
-              <div data-slot="rolling-results-empty">{props.empty}</div>
-            </Show>
-          }
-        >
-          <div ref={track} data-slot="rolling-results-track" style={{ "padding-top": `${skipped() * step()}px` }}>
-            <For each={rendered()}>
-              {(item, index) => (
-                <div ref={dimRow} data-slot="rolling-results-row" data-key={key(item, index())}>
-                  {props.render(item, index())}
-                </div>
-              )}
-            </For>
-          </div>
+        <Show when={list().length === 0 && props.empty !== undefined}>
+          <div data-slot="rolling-results-empty">{props.empty}</div>
         </Show>
+        <div ref={track} data-slot="rolling-results-track" style={{ "padding-top": `${skipped() * step()}px` }}>
+          <For each={rendered()}>
+            {(item, index) => (
+              <div data-slot="rolling-results-row" data-key={key(item, index())}>
+                {props.render(item, index())}
+              </div>
+            )}
+          </For>
+        </div>
       </div>
     </div>
   )

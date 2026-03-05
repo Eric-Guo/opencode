@@ -200,6 +200,7 @@
 [data-component="text-part"] {
   width: 100%;
   margin-top: 0;
+  padding-bottom: 8px;
   position: relative;
 
   [data-slot="text-part-body"] {
@@ -685,8 +686,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 13px;
-    color: var(--text-base);
-    opacity: 0.75;
+    color: var(--text-weak);
   }
 }
 
@@ -1227,8 +1227,7 @@
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;
-    height: 40px;
-    padding-bottom: 8px;
+    height: 37px;
     background-color: var(--background-stronger);
   }
 }
