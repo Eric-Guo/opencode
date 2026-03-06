@@ -33,23 +33,8 @@ const DOCS_SEGMENT = new Set([
 ])
 
 const DOCS_LOCALE = {
-  ar: "ar",
-  da: "da",
-  de: "de",
   en: "en",
-  es: "es",
-  fr: "fr",
-  it: "it",
-  ja: "ja",
-  ko: "ko",
-  nb: "no",
-  "pt-br": "br",
-  root: "en",
-  ru: "ru",
-  th: "th",
-  tr: "tr",
   "zh-cn": "zh",
-  "zh-tw": "zht",
 } as const satisfies Record<string, Locale>
 
 function suffix(pathname: string) {

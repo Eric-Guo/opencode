@@ -27,21 +27,6 @@ const LOCALES: readonly Locale[] = [
 const INTL: Record<Locale, string> = {
   en: "en",
   zh: "zh-Hans",
-  zht: "zh-Hant",
-  ko: "ko",
-  de: "de",
-  es: "es",
-  fr: "fr",
-  da: "da",
-  ja: "ja",
-  pl: "pl",
-  ru: "ru",
-  ar: "ar",
-  no: "nb-NO",
-  br: "pt-BR",
-  th: "th",
-  bs: "bs",
-  tr: "tr",
 }
 
 const LABEL_KEY: Record<Locale, keyof Dictionary> = {
