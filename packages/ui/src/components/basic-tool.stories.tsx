@@ -30,7 +30,9 @@ Use structured triggers for consistent layout; custom triggers allowed.
 const story = create({
   title: "UI/Basic Tool",
   mod,
+  name: "ToolCall",
   args: {
+    variant: "panel",
     icon: "mcp",
     defaultOpen: true,
     trigger: {
@@ -120,13 +122,14 @@ export const SubtitleAction = {
     return (
       <div style={{ display: "grid", gap: "8px" }}>
         <div style={{ "font-size": "12px", color: "var(--text-weak)" }}>{message()}</div>
-        <mod.BasicTool
+        <mod.ToolCall
+          variant="panel"
           icon="mcp"
           trigger={{ title: "Clickable subtitle", subtitle: "Click me" }}
           onSubtitleClick={() => setMessage("Subtitle clicked")}
         >
           Subtitle action details
-        </mod.BasicTool>
+        </mod.ToolCall>
       </div>
     )
   },
