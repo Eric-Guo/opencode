@@ -5,6 +5,7 @@ import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
+import { CybrosTrace } from "./cybros"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
@@ -46,7 +47,7 @@ export namespace Plugin {
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Plugin") {}
 
   // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin, PoeAuthPlugin]
+  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin, PoeAuthPlugin, CybrosTrace]
 
   function isServerPlugin(value: unknown): value is PluginInstance {
     return typeof value === "function"
