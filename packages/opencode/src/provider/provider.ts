@@ -160,6 +160,16 @@ export namespace Provider {
         },
       }
     },
+    async "kimi-for-coding"() {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "User-Agent": `opencode/${Installation.VERSION}`,
+          },
+        },
+      }
+    },
     async opencode(input) {
       const hasKey = await (async () => {
         const env = Env.all()
