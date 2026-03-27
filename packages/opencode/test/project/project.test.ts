@@ -488,6 +488,7 @@ describe("Project.fromDirectory with bare repos", () => {
       const { project } = await run((svc) => svc.fromDirectory(worktreePath))
 
       expect(project.id).not.toBe(ProjectID.global)
+      expect(project.worktree).toBe(barePath)
 
       const correctCache = path.join(barePath, "opencode")
       const wrongCache = path.join(parentDir, ".git", "opencode")
@@ -529,6 +530,29 @@ describe("Project.fromDirectory with bare repos", () => {
       expect(await Bun.file(wrongCache).exists()).toBe(false)
     } finally {
       await $`rm -rf ${bareA} ${bareB} ${worktreeA} ${worktreeB}`.quiet().nothrow()
+    }
+  })
+
+  test("bare repo without .git suffix is still detected via core.bare", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const parentDir = path.dirname(tmp.path)
+    const barePath = path.join(parentDir, `bare-no-suffix-${Date.now()}`)
+    const worktreePath = path.join(parentDir, `worktree-${Date.now()}`)
+
+    try {
+      await $`git clone --bare ${tmp.path} ${barePath}`.quiet()
+      await $`git worktree add ${worktreePath} HEAD`.cwd(barePath).quiet()
+
+      const { project } = await run((svc) => svc.fromDirectory(worktreePath))
+
+      expect(project.id).not.toBe(ProjectID.global)
+      expect(project.worktree).toBe(barePath)
+
+      const correctCache = path.join(barePath, "opencode")
+      expect(await Bun.file(correctCache).exists()).toBe(true)
+    } finally {
+      await $`rm -rf ${barePath} ${worktreePath}`.quiet().nothrow()
     }
   })
 })

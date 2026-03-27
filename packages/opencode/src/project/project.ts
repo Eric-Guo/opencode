@@ -208,7 +208,9 @@ export const layer: Layer.Layer<
           }
         }
         const common = resolveGitPath(sandbox, commonDir.text.trim())
-        const worktree = common === sandbox ? sandbox : pathSvc.dirname(common)
+        const bareCheck = yield* git(["config", "--bool", "core.bare"], { cwd: sandbox })
+        const isBareRepo = bareCheck.code === 0 && bareCheck.text.trim() === "true"
+        const worktree = common === sandbox ? sandbox : isBareRepo ? common : pathSvc.dirname(common)
 
         if (id == null) {
           id = yield* readCachedProjectId(common)
