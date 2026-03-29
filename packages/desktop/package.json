@@ -11,7 +11,7 @@
     "dev": "vite",
     "build": "bun run prepare-resources && bun run typecheck && vite build",
     "preview": "vite preview",
-    "tauri": "tauri",
+    "tauri": "node ./node_modules/@tauri-apps/cli/tauri.js",
     "generate-silent-install": "bun ./scripts/generate-silent-install.js",
     "generate-wix-resources": "bun ./scripts/generate-wix-resources.ts"
   },
