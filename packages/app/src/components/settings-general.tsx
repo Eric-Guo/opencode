@@ -147,8 +147,9 @@ export const SettingsGeneral: Component = () => {
     const getShortName = (p: string) => {
       const parts = p.split(/[/\\]/)
       let name = parts[parts.length - 1]
-      if (name.toLowerCase().endsWith(".exe")) {
-        name = name.slice(0, -4)
+      const dotIndex = name.lastIndexOf(".")
+      if (dotIndex > 0) {
+        name = name.slice(0, dotIndex)
       }
       return name
     }
