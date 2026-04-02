@@ -7,9 +7,31 @@ import { PtyID } from "@/pty/schema"
 import { NotFoundError } from "../../storage/db"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Shell } from "@/shell/shell"
 
 export const PtyRoutes = lazy(() =>
   new Hono()
+    .get(
+      "/shells",
+      describeRoute({
+        summary: "List available shells",
+        description: "Get a list of available shells on the system.",
+        operationId: "pty.shells",
+        responses: {
+          200: {
+            description: "List of shells",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(z.string())),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await Shell.available())
+      },
+    )
     .get(
       "/",
       describeRoute({

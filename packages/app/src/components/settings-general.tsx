@@ -10,6 +10,8 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useGlobalSync } from "@/context/global-sync"
+import { useGlobalSDK } from "@/context/global-sdk"
 import {
   monoDefault,
   monoFontFamily,
@@ -133,6 +135,21 @@ export const SettingsGeneral: Component = () => {
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
+  const globalSync = useGlobalSync()
+  const globalSdk = useGlobalSDK()
+
+  const [shells] = createResource(() => globalSdk.client.pty.shells().then((res) => res.data || []))
+
+  const shellOptions = createMemo(() => {
+    const list = shells() || []
+    const current = globalSync.data.config.shell
+    const options = list.map((s) => ({ value: s, label: s }))
+    if (current && !list.includes(current)) {
+      options.unshift({ value: current, label: current })
+    }
+    return options
+  })
+
   const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
     { value: "system", label: language.t("theme.scheme.system") },
     { value: "light", label: language.t("theme.scheme.light") },
@@ -203,6 +220,32 @@ export const SettingsGeneral: Component = () => {
             variant="secondary"
             size="small"
             triggerVariant="settings"
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.shell.title")}
+          description={language.t("settings.general.row.shell.description")}
+        >
+          <Select
+            data-action="settings-shell"
+            options={shellOptions()}
+            current={
+              shellOptions().find((o) => o.value === globalSync.data.config.shell) ?? {
+                value: "auto",
+                label: "Auto (Default)",
+              }
+            }
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => {
+              const value = option?.value === "auto" ? undefined : option?.value
+              globalSync.updateConfig({ shell: value })
+            }}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "min-width": "180px" }}
           />
         </SettingsRow>
 
@@ -301,23 +344,24 @@ export const SettingsGeneral: Component = () => {
           }
         >
           <Select
-            data-action="settings-theme"
-            options={themeOptions()}
-            current={themeOptions().find((o) => o.id === theme.themeId())}
-            value={(o) => o.id}
-            label={(o) => o.name}
+            data-action="settings-shell"
+            options={shellOptions()}
+            current={
+              shellOptions().find((o) => o.value === globalSync.data.config.shell) ?? {
+                value: "auto",
+                label: "Auto (Default)",
+              }
+            }
+            value={(o) => o.value}
+            label={(o) => o.label}
             onSelect={(option) => {
-              if (!option) return
-              theme.setTheme(option.id)
-            }}
-            onHighlight={(option) => {
-              if (!option) return
-              theme.previewTheme(option.id)
-              return () => theme.cancelPreview()
+              const value = option?.value === "auto" ? undefined : option?.value
+              globalSync.updateConfig({ shell: value })
             }}
             variant="secondary"
             size="small"
             triggerVariant="settings"
+            triggerStyle={{ "min-width": "180px" }}
           />
         </SettingsRow>
 

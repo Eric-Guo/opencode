@@ -104,7 +104,33 @@ export namespace Shell {
     return POSIX.has(name(file))
   }
 
-  export const preferred = lazy(() => select(process.env.SHELL))
+  const defaultPreferred = lazy(() => select(process.env.SHELL))
+  const defaultAcceptable = lazy(() => select(process.env.SHELL, { acceptable: true }))
 
-  export const acceptable = lazy(() => select(process.env.SHELL, { acceptable: true }))
+  export function preferred(configShell?: string) {
+    if (configShell) return select(configShell)
+    return defaultPreferred()
+  }
+  preferred.reset = () => defaultPreferred.reset()
+
+  export function acceptable(configShell?: string) {
+    if (configShell) return select(configShell, { acceptable: true })
+    return defaultAcceptable()
+  }
+  acceptable.reset = () => defaultAcceptable.reset()
+
+  export async function available(): Promise<string[]> {
+    if (process.platform === "win32") {
+      return [gitbash(), Bun.which("pwsh"), Bun.which("powershell"), process.env.COMSPEC || "cmd.exe"].filter(
+        Boolean,
+      ) as string[]
+    } else {
+      try {
+        const text = await import("fs/promises").then((fs) => fs.readFile("/etc/shells", "utf-8"))
+        return text.split("\n").filter((line) => line.trim() && !line.startsWith("#"))
+      } catch {
+        return ["/bin/bash", "/bin/zsh", "/bin/sh"]
+      }
+    }
+  }
 }

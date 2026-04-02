@@ -11,6 +11,7 @@ import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
 import { Effect, Layer, ServiceMap } from "effect"
+import { Config } from "../config/config"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -172,9 +173,10 @@ export namespace Pty {
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
         const s = yield* InstanceState.get(state)
+        const config = yield* Effect.promise(() => Config.get())
         return yield* Effect.promise(async () => {
           const id = PtyID.ascending()
-          const command = input.command || Shell.preferred()
+          const command = input.command || Shell.preferred(config.shell)
           const args = input.args || []
           if (Shell.login(command)) {
             args.push("-l")

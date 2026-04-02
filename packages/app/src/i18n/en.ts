@@ -723,6 +723,9 @@ export const dict = {
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",
+  "settings.general.row.shell.title": "Terminal Shell",
+  "settings.general.row.shell.description":
+    "Choose the default shell used for your terminal and the agent's background processes.",
   "settings.general.row.appearance.title": "Appearance",
   "settings.general.row.appearance.description": "Customise how OpenCode looks on your device",
   "settings.general.row.colorScheme.title": "Color scheme",
