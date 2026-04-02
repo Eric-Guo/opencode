@@ -143,8 +143,31 @@ export const SettingsGeneral: Component = () => {
   const shellOptions = createMemo(() => {
     const list = shells() || []
     const current = globalSync.data.config.shell
-    const options = list.map((s) => ({ value: s, label: s }))
-    if (current && !list.includes(current)) {
+
+    const getShortName = (p: string) => {
+      const parts = p.split(/[/\\]/)
+      let name = parts[parts.length - 1]
+      if (name.toLowerCase().endsWith(".exe")) {
+        name = name.slice(0, -4)
+      }
+      return name
+    }
+
+    const nameCounts = new Map<string, number>()
+    for (const s of list) {
+      const name = getShortName(s)
+      nameCounts.set(name, (nameCounts.get(name) || 0) + 1)
+    }
+
+    const options = list.map((s) => {
+      const name = getShortName(s)
+      const isDuplicate = (nameCounts.get(name) || 0) > 1
+      const label = isDuplicate ? s : name
+      const value = isDuplicate ? s : name
+      return { value, label }
+    })
+
+    if (current && !options.some((o) => o.value === current)) {
       options.unshift({ value: current, label: current })
     }
     return options
@@ -344,24 +367,23 @@ export const SettingsGeneral: Component = () => {
           }
         >
           <Select
-            data-action="settings-shell"
-            options={shellOptions()}
-            current={
-              shellOptions().find((o) => o.value === globalSync.data.config.shell) ?? {
-                value: "auto",
-                label: "Auto (Default)",
-              }
-            }
-            value={(o) => o.value}
-            label={(o) => o.label}
+            data-action="settings-theme"
+            options={themeOptions()}
+            current={themeOptions().find((o) => o.id === theme.themeId())}
+            value={(o) => o.id}
+            label={(o) => o.name}
             onSelect={(option) => {
-              const value = option?.value === "auto" ? undefined : option?.value
-              globalSync.updateConfig({ shell: value })
+              if (!option) return
+              theme.setTheme(option.id)
+            }}
+            onHighlight={(option) => {
+              if (!option) return
+              theme.previewTheme(option.id)
+              return () => theme.cancelPreview()
             }}
             variant="secondary"
             size="small"
             triggerVariant="settings"
-            triggerStyle={{ "min-width": "180px" }}
           />
         </SettingsRow>
 
