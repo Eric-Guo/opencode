@@ -126,7 +126,7 @@ export namespace Shell {
       ) as string[]
     } else {
       try {
-        const text = await import("fs/promises").then((fs) => fs.readFile("/etc/shells", "utf-8"))
+        const text = await Bun.file("/etc/shells").text()
         return text.split("\n").filter((line) => line.trim() && !line.startsWith("#"))
       } catch {
         return ["/bin/bash", "/bin/zsh", "/bin/sh"]
