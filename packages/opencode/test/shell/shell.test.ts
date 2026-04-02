@@ -39,6 +39,15 @@ describe("shell", () => {
     expect(Shell.posix("C:/tools/pwsh.exe")).toBe(false)
   })
 
+  test("falls back when configured shell cannot be resolved", async () => {
+    await withShell(undefined, async () => {
+      const preferred = Shell.preferred()
+      const acceptable = Shell.acceptable()
+      expect(Shell.preferred("opencode-missing-shell")).toBe(preferred)
+      expect(Shell.acceptable("opencode-missing-shell")).toBe(acceptable)
+    })
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {

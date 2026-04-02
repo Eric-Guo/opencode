@@ -7,11 +7,24 @@ import { spawn, type ChildProcess } from "child_process"
 import { setTimeout as sleep } from "node:timers/promises"
 
 const SIGKILL_TIMEOUT_MS = 200
+const META: Record<string, { deny?: boolean; login?: boolean; posix?: boolean; ps?: boolean }> = {
+  bash: { login: true, posix: true },
+  dash: { login: true, posix: true },
+  fish: { deny: true, login: true },
+  ksh: { login: true, posix: true },
+  nu: { deny: true },
+  powershell: { ps: true },
+  pwsh: { ps: true },
+  sh: { login: true, posix: true },
+  zsh: { login: true, posix: true },
+}
 
 export namespace Shell {
-  const BLACKLIST = new Set(["fish", "nu"])
-  const LOGIN = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"])
-  const POSIX = new Set(["bash", "dash", "ksh", "sh", "zsh"])
+  export type Item = {
+    path: string
+    name: string
+    acceptable: boolean
+  }
 
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
@@ -54,17 +67,52 @@ export namespace Shell {
     return Bun.which(shell) || shell
   }
 
-  function pick() {
-    const pwsh = Bun.which("pwsh")
-    if (pwsh) return pwsh
-    const powershell = Bun.which("powershell")
-    if (powershell) return powershell
+  function meta(file: string) {
+    return META[name(file)]
+  }
+
+  function ok(file: string) {
+    return meta(file)?.deny !== true
+  }
+
+  function rooted(file: string) {
+    return path.isAbsolute(Filesystem.windowsPath(file))
+  }
+
+  function resolve(file: string) {
+    const shell = full(file)
+    if (rooted(shell)) {
+      if (Filesystem.stat(shell)?.isFile()) return shell
+      return
+    }
+    return which(shell) ?? undefined
+  }
+
+  function win() {
+    return Array.from(
+      new Set(
+        [Bun.which("pwsh"), Bun.which("powershell"), gitbash(), process.env.COMSPEC || "cmd.exe"]
+          .filter((item): item is string => Boolean(item))
+          .map(full),
+      ),
+    )
+  }
+
+  async function unix() {
+    const file = Bun.file("/etc/shells")
+    if (await file.exists()) {
+      return Array.from(new Set((await file.text()).split("\n").filter((line) => line.trim() && !line.startsWith("#"))))
+    }
+    return ["/bin/bash", "/bin/zsh", "/bin/sh"]
   }
 
   function select(file: string | undefined, opts?: { acceptable?: boolean }) {
-    if (file && (!opts?.acceptable || !BLACKLIST.has(name(file)))) return full(file)
+    if (file && (!opts?.acceptable || ok(file))) {
+      const shell = resolve(file)
+      if (shell) return shell
+    }
     if (process.platform === "win32") {
-      const shell = pick()
+      const shell = win()[0]
       if (shell) return shell
     }
     return fallback()
@@ -81,7 +129,7 @@ export namespace Shell {
 
   function fallback() {
     if (process.platform === "win32") {
-      const file = gitbash()
+      const file = win()[0]
       if (file) return file
       return process.env.COMSPEC || "cmd.exe"
     }
@@ -97,11 +145,57 @@ export namespace Shell {
   }
 
   export function login(file: string) {
-    return LOGIN.has(name(file))
+    return meta(file)?.login === true
   }
 
   export function posix(file: string) {
-    return POSIX.has(name(file))
+    return meta(file)?.posix === true
+  }
+
+  export function ps(file: string) {
+    return meta(file)?.ps === true
+  }
+
+  export function info(file: string): Item {
+    return {
+      path: full(file),
+      name: name(file),
+      acceptable: ok(file),
+    }
+  }
+
+  export function args(file: string, command: string) {
+    const n = name(file)
+    if (n === "nu" || n === "fish") return ["-c", command]
+    if (n === "zsh") {
+      return [
+        "-l",
+        "-c",
+        `
+          __oc_cwd=$PWD
+          [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+          [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+          cd "$__oc_cwd"
+          eval ${JSON.stringify(command)}
+        `,
+      ]
+    }
+    if (n === "bash") {
+      return [
+        "-l",
+        "-c",
+        `
+          __oc_cwd=$PWD
+          shopt -s expand_aliases
+          [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+          cd "$__oc_cwd"
+          eval ${JSON.stringify(command)}
+        `,
+      ]
+    }
+    if (n === "cmd") return ["/c", command]
+    if (ps(file)) return ["-NoProfile", "-Command", command]
+    return ["-c", command]
   }
 
   const defaultPreferred = lazy(() => select(process.env.SHELL))
@@ -119,17 +213,8 @@ export namespace Shell {
   }
   acceptable.reset = () => defaultAcceptable.reset()
 
-  export async function available(): Promise<string[]> {
-    if (process.platform === "win32") {
-      return [gitbash(), Bun.which("pwsh"), Bun.which("powershell"), process.env.COMSPEC || "cmd.exe"].filter(
-        Boolean,
-      ) as string[]
-    }
-    const file = Bun.file("/etc/shells")
-    if (await file.exists()) {
-      const text = await file.text()
-      return text.split("\n").filter((line) => line.trim() && !line.startsWith("#"))
-    }
-    return ["/bin/bash", "/bin/zsh", "/bin/sh"]
+  export async function list(): Promise<Item[]> {
+    const list = process.platform === "win32" ? win() : await unix()
+    return list.map(info)
   }
 }

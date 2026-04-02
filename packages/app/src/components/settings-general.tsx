@@ -36,6 +36,12 @@ type ThemeOption = {
   name: string
 }
 
+type ShellOption = {
+  path: string
+  name: string
+  acceptable: boolean
+}
+
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
 const stopDemoSound = () => {
@@ -138,41 +144,33 @@ export const SettingsGeneral: Component = () => {
   const globalSync = useGlobalSync()
   const globalSdk = useGlobalSDK()
 
-  const [shells] = createResource(() => globalSdk.client.pty.shells().then((res) => res.data || []))
+  const [shells] = createResource<ShellOption[]>(() => globalSdk.client.pty.shells().then((res) => res.data || []))
+  const auto = { value: "", label: "Auto (Default)" }
 
   const shellOptions = createMemo(() => {
     const list = shells() || []
     const current = globalSync.data.config.shell
 
-    const getShortName = (p: string) => {
-      const parts = p.split(/[/\\]/)
-      let name = parts[parts.length - 1]
-      const dotIndex = name.lastIndexOf(".")
-      if (dotIndex > 0) {
-        name = name.slice(0, dotIndex)
-      }
-      return name
-    }
-
     const nameCounts = new Map<string, number>()
     for (const s of list) {
-      const name = getShortName(s)
-      nameCounts.set(name, (nameCounts.get(name) || 0) + 1)
+      nameCounts.set(s.name, (nameCounts.get(s.name) || 0) + 1)
     }
 
-    const options = list.map((s) => {
-      const name = getShortName(s)
-      const isDuplicate = (nameCounts.get(name) || 0) > 1
-      const label = isDuplicate ? s : name
-      const value = isDuplicate ? s : name
-      return { value, label }
-    })
-
-    options.unshift({ value: "auto", label: "Auto (Default)" })
+    const options = [
+      auto,
+      ...list.map((s) => {
+        const dup = (nameCounts.get(s.name) || 0) > 1
+        const text = dup ? s.path : s.name
+        const label = s.acceptable ? text : `${text} (${language.t("settings.general.row.shell.terminalOnly")})`
+        const value = dup ? s.path : s.name
+        return { value, label }
+      }),
+    ]
 
     if (current && !options.some((o) => o.value === current)) {
       options.push({ value: current, label: current })
     }
+
     return options
   })
 
@@ -256,12 +254,12 @@ export const SettingsGeneral: Component = () => {
           <Select
             data-action="settings-shell"
             options={shellOptions()}
-            current={shellOptions().find((o) => o.value === globalSync.data.config.shell) ?? shellOptions()[0]}
+            current={shellOptions().find((o) => o.value === globalSync.data.config.shell) ?? auto}
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => {
-              const value = option?.value === "auto" ? "" : option?.value
-              globalSync.updateConfig({ shell: value })
+              if (!option) return
+              globalSync.updateConfig({ shell: option.value })
             }}
             variant="secondary"
             size="small"

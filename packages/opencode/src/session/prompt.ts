@@ -50,6 +50,7 @@ import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { Config } from "@/config/config"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -803,46 +804,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
         yield* sessions.updatePart(part)
 
-        const sh = Shell.preferred()
-        const shellName = (
-          process.platform === "win32" ? path.win32.basename(sh, ".exe") : path.basename(sh)
-        ).toLowerCase()
-        const invocations: Record<string, { args: string[] }> = {
-          nu: { args: ["-c", input.command] },
-          fish: { args: ["-c", input.command] },
-          zsh: {
-            args: [
-              "-l",
-              "-c",
-              `
-                __oc_cwd=$PWD
-                [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-                [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-                cd "$__oc_cwd"
-                eval ${JSON.stringify(input.command)}
-              `,
-            ],
-          },
-          bash: {
-            args: [
-              "-l",
-              "-c",
-              `
-                __oc_cwd=$PWD
-                shopt -s expand_aliases
-                [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-                cd "$__oc_cwd"
-                eval ${JSON.stringify(input.command)}
-              `,
-            ],
-          },
-          cmd: { args: ["/c", input.command] },
-          powershell: { args: ["-NoProfile", "-Command", input.command] },
-          pwsh: { args: ["-NoProfile", "-Command", input.command] },
-          "": { args: ["-c", input.command] },
-        }
-
-        const args = (invocations[shellName] ?? invocations[""]).args
+        const cfg = yield* Effect.promise(() => Config.get())
+        const sh = Shell.preferred(cfg.shell)
+        const args = Shell.args(sh, input.command)
         const cwd = ctx.directory
         const shellEnv = yield* plugin.trigger(
           "shell.env",
@@ -1609,7 +1573,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         const shellMatches = ConfigMarkdown.shell(template)
         if (shellMatches.length > 0) {
-          const sh = Shell.preferred()
+          const cfg = yield* Effect.promise(() => Config.get())
+          const sh = Shell.preferred(cfg.shell)
           const results = yield* Effect.promise(() =>
             Promise.all(
               shellMatches.map(async ([, cmd]) => (await Process.text([cmd], { shell: sh, nothrow: true })).text),

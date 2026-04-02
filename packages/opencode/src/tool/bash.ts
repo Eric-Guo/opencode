@@ -22,7 +22,6 @@ import { Config } from "../config/config"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
-const PS = new Set(["powershell", "pwsh"])
 const CWD = new Set(["cd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -294,8 +293,8 @@ async function shellEnv(ctx: Tool.Context, cwd: string) {
   }
 }
 
-function launch(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
-  if (process.platform === "win32" && PS.has(name)) {
+function launch(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+  if (process.platform === "win32" && Shell.ps(shell)) {
     return spawn(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
       env,
@@ -318,7 +317,6 @@ function launch(shell: string, name: string, command: string, cwd: string, env: 
 async function run(
   input: {
     shell: string
-    name: string
     command: string
     cwd: string
     env: NodeJS.ProcessEnv
@@ -327,7 +325,7 @@ async function run(
   },
   ctx: Tool.Context,
 ) {
-  const proc = launch(input.shell, input.name, input.command, input.cwd, input.env)
+  const proc = launch(input.shell, input.command, input.cwd, input.env)
   let output = ""
 
   ctx.metadata({
@@ -479,7 +477,7 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
-      const ps = PS.has(name)
+      const ps = Shell.ps(shell)
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
@@ -488,7 +486,6 @@ export const BashTool = Tool.define("bash", async () => {
       return run(
         {
           shell,
-          name,
           command: params.command,
           cwd,
           env: await shellEnv(ctx, cwd),

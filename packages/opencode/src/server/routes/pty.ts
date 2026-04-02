@@ -9,6 +9,12 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Shell } from "@/shell/shell"
 
+const ShellItem = z.object({
+  path: z.string(),
+  name: z.string(),
+  acceptable: z.boolean(),
+})
+
 export const PtyRoutes = lazy(() =>
   new Hono()
     .get(
@@ -22,14 +28,14 @@ export const PtyRoutes = lazy(() =>
             description: "List of shells",
             content: {
               "application/json": {
-                schema: resolver(z.array(z.string())),
+                schema: resolver(z.array(ShellItem)),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json(await Shell.available())
+        return c.json(await Shell.list())
       },
     )
     .get(

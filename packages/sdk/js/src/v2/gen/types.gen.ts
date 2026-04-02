@@ -2418,7 +2418,11 @@ export type PtyShellsResponses = {
   /**
    * List of shells
    */
-  200: Array<string>
+  200: Array<{
+    path: string
+    name: string
+    acceptable: boolean
+  }>
 }
 
 export type PtyShellsResponse = PtyShellsResponses[keyof PtyShellsResponses]
