@@ -260,7 +260,7 @@ export const SettingsGeneral: Component = () => {
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => {
-              const value = option?.value === "auto" ? undefined : option?.value
+              const value = option?.value === "auto" ? "" : option?.value
               globalSync.updateConfig({ shell: value })
             }}
             variant="secondary"
