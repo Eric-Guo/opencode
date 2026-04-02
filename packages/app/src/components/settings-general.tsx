@@ -168,8 +168,10 @@ export const SettingsGeneral: Component = () => {
       return { value, label }
     })
 
+    options.unshift({ value: "auto", label: "Auto (Default)" })
+
     if (current && !options.some((o) => o.value === current)) {
-      options.unshift({ value: current, label: current })
+      options.push({ value: current, label: current })
     }
     return options
   })
@@ -254,12 +256,7 @@ export const SettingsGeneral: Component = () => {
           <Select
             data-action="settings-shell"
             options={shellOptions()}
-            current={
-              shellOptions().find((o) => o.value === globalSync.data.config.shell) ?? {
-                value: "auto",
-                label: "Auto (Default)",
-              }
-            }
+            current={shellOptions().find((o) => o.value === globalSync.data.config.shell) ?? shellOptions()[0]}
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => {
