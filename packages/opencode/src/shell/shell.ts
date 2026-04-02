@@ -124,13 +124,12 @@ export namespace Shell {
       return [gitbash(), Bun.which("pwsh"), Bun.which("powershell"), process.env.COMSPEC || "cmd.exe"].filter(
         Boolean,
       ) as string[]
-    } else {
-      try {
-        const text = await Bun.file("/etc/shells").text()
-        return text.split("\n").filter((line) => line.trim() && !line.startsWith("#"))
-      } catch {
-        return ["/bin/bash", "/bin/zsh", "/bin/sh"]
-      }
     }
+    const file = Bun.file("/etc/shells")
+    if (await file.exists()) {
+      const text = await file.text()
+      return text.split("\n").filter((line) => line.trim() && !line.startsWith("#"))
+    }
+    return ["/bin/bash", "/bin/zsh", "/bin/sh"]
   }
 }
