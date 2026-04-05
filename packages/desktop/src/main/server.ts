@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
 import type { SqliteMigrationProgress } from "../preload/types"
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import { DEFAULT_SERVER_URL_KEY } from "./constants"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
@@ -240,6 +241,8 @@ export async function spawnWslSidecar(
 ): Promise<WslSidecar> {
   const opencode = await resolveWslOpencode(distro)
   if (!opencode) throw new Error(`OpenCode is not installed in ${distro}`)
+
+  await ensureSsoUsername()
 
   const port = await allocatePort()
   const password = randomUUID()
