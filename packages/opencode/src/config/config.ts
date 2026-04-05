@@ -56,6 +56,14 @@ function resolveConfigDir() {
   return path.join(path.dirname(process.execPath), "thape-config")
 }
 
+function runtimeEnv(key: string) {
+  return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
+}
+
+function runtimeEnv(key: string) {
+  return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
+}
+
 function normalizeLoadedConfig(data: unknown) {
   if (!isRecord(data)) return data
   const copy = { ...data }
@@ -551,6 +559,18 @@ const layer = Layer.effect(
               source: managed.source,
             }),
           )
+        }
+
+        if (!result.username) {
+          const sso = runtimeEnv("THAPE_SSO_USER_NAME")
+          result.username = typeof sso === "string" && sso.trim() ? sso.trim() : os.userInfo().username
+        }
+
+        if (!result.clerk_code) {
+          const code = runtimeEnv("THAPE_SSO_CLERK_CODE")
+          if (typeof code === "string" && code.trim()) {
+            result.clerk_code = code.trim()
+          }
         }
 
         for (const [name, mode] of Object.entries(result.mode ?? {})) {
