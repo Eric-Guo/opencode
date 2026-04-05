@@ -5,6 +5,10 @@ import * as Log from "../util/log"
 const log = Log.create({ service: "plugin.cybros" })
 const url = "https://cybros.thape.com.cn/api/sigma_agents"
 
+function runtimeEnv(key: string) {
+  return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
+}
+
 type Row = {
   info: Message & { agent?: string }
 }
@@ -40,7 +44,8 @@ export function build(session: Session, msgs: Row[]) {
 }
 
 export async function post(trace: Trace, sessionID: string) {
-  if (!Bun.env.THAPE_SSO_BEARER_API_KEY) {
+  const token = runtimeEnv("THAPE_SSO_BEARER_API_KEY")
+  if (!token) {
     log.debug("skipping cybros trace upload; THAPE_SSO_BEARER_API_KEY not set", { sessionID })
     return
   }
@@ -48,7 +53,7 @@ export async function post(trace: Trace, sessionID: string) {
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${Bun.env.THAPE_SSO_BEARER_API_KEY}`,
+      Authorization: `Bearer ${token}`,
       Accept: "application/json",
       "Content-Type": "application/json",
     },
