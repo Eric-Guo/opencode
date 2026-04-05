@@ -348,7 +348,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   "pl-4": !mac(),
                 }}
               >
-                <ChannelIndicator />
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} variant="v2" />
                 </Show>
@@ -537,7 +536,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       </div>
                     </Show>
                     <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-                    <ChannelIndicator />
                   </div>
                 </div>
               </div>
@@ -682,17 +680,5 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
         />
       </div>
     </div>
-  )
-}
-
-function ChannelIndicator() {
-  return (
-    <>
-      {["beta", "dev"].includes(import.meta.env.VITE_OPENCODE_CHANNEL) && (
-        <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-          {import.meta.env.VITE_OPENCODE_CHANNEL.toUpperCase()}
-        </div>
-      )}
-    </>
   )
 }
