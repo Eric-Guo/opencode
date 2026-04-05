@@ -2339,7 +2339,7 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?:
+    error:
       | ProviderAuthError
       | UnknownError
       | MessageOutputLengthError
