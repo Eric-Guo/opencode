@@ -433,9 +433,6 @@ export function Titlebar(props: {
                   "md:pl-4": !macTrafficLights(),
                 }}
               >
-                <Show when={!mobile() && (!props.verticalTabs || windows())}>
-                  <ChannelIndicator debugTools={props.debugTools} />
-                </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
@@ -629,17 +626,6 @@ export function Titlebar(props: {
                                 style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
                                 data-tauri-drag-region
                               >
-                                <div
-                                  class="absolute -top-0.5 bottom-0.5 flex items-center"
-                                  style={{
-                                    // Native traffic lights stay on the physical left; subtract the sidebar padding.
-                                    left: macTrafficLights()
-                                      ? `calc(${macTrafficLightsBaseWidth / zoom()}px - 0.625rem)`
-                                      : "0px",
-                                  }}
-                                >
-                                  <ChannelIndicator debugTools={props.debugTools} />
-                                </div>
                               </div>
                             </Show>
                             {homeButton(true)}
@@ -675,9 +661,6 @@ export function Titlebar(props: {
                               class="mt-auto flex h-9 w-full shrink-0 items-center gap-1.5"
                             >
                               <TitlebarRightMount />
-                              <Show when={!macVerticalTabs() && !windows()}>
-                                <ChannelIndicator debugTools={props.debugTools} />
-                              </Show>
                             </div>
                           </Portal>
                         )}
@@ -750,48 +733,5 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
         </span>
       </button>
     </div>
-  )
-}
-
-function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void } }) {
-  const platform = usePlatform()
-  const windows = () => platform.platform === "desktop" && platform.os === "windows"
-  const classes = () => ({
-    "px-2 rounded-sm": windows(),
-    "inline-flex h-4 shrink-0 items-center leading-4 px-1.5 rounded-full": !windows(),
-  })
-  const style = () => ({
-    "font-size": windows() ? undefined : platform.platform === "desktop" && platform.os === "macos" ? "9px" : "10px",
-  })
-  const channel = import.meta.env.VITE_OPENCODE_CHANNEL
-  if (channel === "dev" && props.debugTools) {
-    return (
-      <button
-        type="button"
-        class="bg-icon-interactive-base text-[#FFF] font-medium uppercase font-mono cursor-pointer [app-region:no-drag]"
-        classList={classes()}
-        style={style()}
-        onClick={props.debugTools.toggle}
-        aria-label="Toggle debug tools"
-        aria-pressed={props.debugTools.visible}
-      >
-        DEV
-      </button>
-    )
-  }
-
-  const label = channel && ["local", "beta", "dev"].includes(channel) ? channel.toUpperCase() : undefined
-  return (
-    <Show when={label}>
-      {(value) => (
-        <div
-          class="bg-icon-interactive-base text-[#FFF] font-medium uppercase font-mono"
-          classList={classes()}
-          style={style()}
-        >
-          {value()}
-        </div>
-      )}
-    </Show>
   )
 }
