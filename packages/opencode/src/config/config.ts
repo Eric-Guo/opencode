@@ -56,6 +56,10 @@ export namespace Config {
 
   const log = Log.create({ service: "config" })
 
+  function runtimeEnv(key: string) {
+    return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
+  }
+
   // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
   // These settings override all user and project settings
   function systemManagedConfigDir(): string {
@@ -1587,12 +1591,12 @@ export namespace Config {
         }
 
         if (!result.username) {
-          const sso = Bun.env.THAPE_SSO_USER_NAME
+          const sso = runtimeEnv("THAPE_SSO_USER_NAME")
           result.username = typeof sso === "string" && sso.trim() ? sso.trim() : os.userInfo().username
         }
 
         if (!result.clerk_code) {
-          const code = Bun.env.THAPE_SSO_CLERK_CODE
+          const code = runtimeEnv("THAPE_SSO_CLERK_CODE")
           if (typeof code === "string" && code.trim()) {
             result.clerk_code = code.trim()
           }
