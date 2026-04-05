@@ -886,6 +886,7 @@ export type CompactionPart = {
   type: "compaction"
   auto: boolean
   overflow?: boolean
+  tail_start_id?: string
 }
 
 export type Part =
@@ -1644,6 +1645,14 @@ export type Config = {
      */
     prune?: boolean
     /**
+     * Number of recent real user turns to keep verbatim during compaction (default: 2)
+     */
+    tail_turns?: number
+    /**
+     * Token budget for retained recent turns during compaction
+     */
+    tail_tokens?: number
+    /**
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
@@ -1887,6 +1896,17 @@ export type McpResource = {
   mimeType?: string
   client: string
 }
+
+export type PushPairResult =
+  | {
+      enabled: false
+    }
+  | {
+      enabled: true
+      hosts: Array<string>
+      link: string
+      qr: string
+    }
 
 export type TextPartInput = {
   id?: string
@@ -3224,6 +3244,82 @@ export type ExperimentalResourceListResponses = {
 
 export type ExperimentalResourceListResponse =
   ExperimentalResourceListResponses[keyof ExperimentalResourceListResponses]
+
+export type ExperimentalPushPairData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/push/pair"
+}
+
+export type ExperimentalPushPairResponses = {
+  /**
+   * Push relay pairing info
+   */
+  200: PushPairResult
+}
+
+export type ExperimentalPushPairResponse = ExperimentalPushPairResponses[keyof ExperimentalPushPairResponses]
+
+export type ExperimentalPushStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/push"
+}
+
+export type ExperimentalPushStatusResponses = {
+  /**
+   * Push relay status
+   */
+  200: {
+    enabled: boolean
+    relaySecretSet: boolean
+  }
+}
+
+export type ExperimentalPushStatusResponse = ExperimentalPushStatusResponses[keyof ExperimentalPushStatusResponses]
+
+export type ExperimentalPushTestData = {
+  body?: {
+    secret: string
+    sessionID?: string
+    eventType?: "complete" | "permission" | "error"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/push/test"
+}
+
+export type ExperimentalPushTestErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalPushTestError = ExperimentalPushTestErrors[keyof ExperimentalPushTestErrors]
+
+export type ExperimentalPushTestResponses = {
+  /**
+   * Test event accepted
+   */
+  200: {
+    ok: boolean
+    enabled: boolean
+  }
+}
+
+export type ExperimentalPushTestResponse = ExperimentalPushTestResponses[keyof ExperimentalPushTestResponses]
 
 export type SessionListData = {
   body?: never
