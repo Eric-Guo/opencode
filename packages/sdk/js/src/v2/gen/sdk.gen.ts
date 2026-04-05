@@ -27,6 +27,10 @@ import type {
   ExperimentalConsoleGetResponses,
   ExperimentalConsoleListOrgsResponses,
   ExperimentalConsoleSwitchOrgResponses,
+  ExperimentalPushPairResponses,
+  ExperimentalPushStatusResponses,
+  ExperimentalPushTestErrors,
+  ExperimentalPushTestResponses,
   ExperimentalResourceListResponses,
   ExperimentalSessionListResponses,
   ExperimentalWorkspaceAdaptorListResponses,
@@ -914,6 +918,113 @@ export class Resource extends HeyApiClient {
   }
 }
 
+export class Push extends HeyApiClient {
+  /**
+   * Get push relay pairing QR
+   *
+   * Get the active push relay pairing payload and QR code for mobile setup.
+   */
+  public pair<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalPushPairResponses, unknown, ThrowOnError>({
+      url: "/experimental/push/pair",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get push relay status
+   *
+   * Get experimental push relay runtime status for this server.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalPushStatusResponses, unknown, ThrowOnError>({
+      url: "/experimental/push",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send test push event
+   *
+   * Send a test push event through the experimental APN relay integration.
+   */
+  public test<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      secret?: string
+      sessionID?: string
+      eventType?: "complete" | "permission" | "error"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "secret" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "eventType" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalPushTestResponses,
+      ExperimentalPushTestErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/push/test",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Experimental extends HeyApiClient {
   private _workspace?: Workspace
   get workspace(): Workspace {
@@ -933,6 +1044,11 @@ export class Experimental extends HeyApiClient {
   private _resource?: Resource
   get resource(): Resource {
     return (this._resource ??= new Resource({ client: this.client }))
+  }
+
+  private _push?: Push
+  get push(): Push {
+    return (this._push ??= new Push({ client: this.client }))
   }
 }
 
