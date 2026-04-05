@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, Match, Show, Switch, untrack } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
-import { Dynamic, Portal } from "solid-js/web"
+import { Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
@@ -30,11 +30,7 @@ import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { useSettingsDialog } from "@/settings/command"
 import { rootSession } from "@/shell/routes/session"
-import { Status } from "@opencode/gui-extensions/sdk"
-import { useExtensionHost } from "@/runtime/extension/host"
 import { TitlebarStatusItems, useTitlebarStatus } from "@/runtime/extension/status"
-import devIcon from "../../../../desktop/icons/dev/64x64.png"
-import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
 const titlebarHeight = 36
 const windowsTitlebarHeight = 44 // Includes the content inset; matches the native Windows overlay.
@@ -445,9 +441,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   "ps-3.5": windows(),
                 }}
               >
-                <Show when={!mobile() && (!props.verticalTabs || windows())}>
-                  <ChannelIndicator horizontal />
-                </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
@@ -641,9 +634,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 data-tauri-drag-region
                               />
                             </Show>
-                            <Show when={!windows()}>
-                              <ChannelIndicator sidebar />
-                            </Show>
                             {homeButton(true)}
                             <button
                               type="button"
@@ -705,51 +695,5 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
         </Match>
       </Switch>
     </header>
-  )
-}
-
-function ChannelIndicator(props: { horizontal?: boolean; sidebar?: boolean }) {
-  const language = useLanguage()
-  const platform = usePlatform()
-  const host = useExtensionHost()
-  const channel = import.meta.env.VITE_OPENCODE_CHANNEL
-  if (!channel || channel === "prod") return null
-
-  const label = () => language.t(`titlebar.channel.${channel}`)
-  // An extension may turn the dev badge into a toggle (the debug bar does).
-  const debug = () =>
-    channel === "dev" || channel === "local"
-      ? host.list(Status).find((item) => item.placement === "channel")
-      : undefined
-  return (
-    <Tooltip
-      placement={props.sidebar ? "right" : "bottom"}
-      value={label()}
-      class={`shrink-0 [app-region:no-drag] ${props.sidebar ? "mb-4 ms-0.5 self-start" : ""} ${props.horizontal ? "me-1.5" : ""} ${props.horizontal && platform.platform === "web" ? "ps-2.5" : ""}`}
-    >
-      <Dynamic
-        component={debug() ? "button" : "div"}
-        type={debug() ? "button" : undefined}
-        data-slot="channel-indicator"
-        class="flex h-7 shrink-0 items-center rounded-[6px] [app-region:no-drag]"
-        classList={{
-          "w-6": props.sidebar,
-          "w-5": !props.sidebar,
-          "cursor-pointer hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02":
-            !!debug(),
-        }}
-        onClick={() => debug()?.run()}
-        aria-label={debug()?.label}
-        aria-pressed={debug()?.pressed}
-      >
-        <img
-          src={channel === "beta" ? betaIcon : devIcon}
-          alt={debug() ? "" : label()}
-          class="shrink-0 rounded-[4px] shadow-[var(--v2-elevation-raised)]"
-          classList={{ "size-6": props.sidebar, "size-5": !props.sidebar }}
-          draggable={false}
-        />
-      </Dynamic>
-    </Tooltip>
   )
 }
