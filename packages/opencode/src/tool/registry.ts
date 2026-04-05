@@ -55,8 +55,12 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 
+function runtimeEnv(key: string) {
+  return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
+}
+
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
-  return providerID === ProviderV2.ID.opencode || Bun.env.OPENCODE_ENABLE_EXA == "true" || flags.parallel
+  return providerID === ProviderV2.ID.opencode || runtimeEnv("OPENCODE_ENABLE_EXA") == "true" || flags.parallel
 }
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
