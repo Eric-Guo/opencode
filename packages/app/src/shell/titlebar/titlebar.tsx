@@ -432,9 +432,6 @@ export function Titlebar(props: {
                   "md:pl-4": !macTrafficLights(),
                 }}
               >
-                <Show when={!mobile() && !props.verticalTabs}>
-                  <ChannelIndicator debugTools={props.debugTools} />
-                </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
@@ -659,7 +656,6 @@ export function Titlebar(props: {
                             </div>
                             <div data-slot="vertical-tabs-footer" class="relative mt-auto h-9 w-full shrink-0">
                               <div class="absolute bottom-0 left-0 flex h-9 items-center">
-                                <ChannelIndicator debugTools={props.debugTools} />
                               </div>
                               <div class="absolute bottom-0 right-0 flex h-9 items-center">
                                 <TitlebarRightMount />
@@ -736,33 +732,5 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
         </span>
       </button>
     </div>
-  )
-}
-
-function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void } }) {
-  const channel = import.meta.env.VITE_OPENCODE_CHANNEL
-  if (channel === "dev" && props.debugTools) {
-    return (
-      <button
-        type="button"
-        class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono cursor-pointer"
-        onClick={props.debugTools.toggle}
-        aria-label="Toggle debug tools"
-        aria-pressed={props.debugTools.visible}
-      >
-        DEV
-      </button>
-    )
-  }
-
-  const label = channel && ["local", "beta", "dev"].includes(channel) ? channel.toUpperCase() : undefined
-  return (
-    <Show when={label}>
-      {(value) => (
-        <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-          {value()}
-        </div>
-      )}
-    </Show>
   )
 }
