@@ -16,13 +16,13 @@ import { registerRendererProtocol, setDockIcon } from "../windows"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 
 const appNames: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
+  dev: "SigmaAgents",
+  beta: "SigmaAgents",
+  prod: "SigmaAgents",
 }
 const appIDs: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
+  dev: "ai.opencode.desktop",
+  beta: "ai.opencode.desktop",
   prod: "ai.opencode.desktop",
 }
 const testOnboarding = process.env.OPENCODE_TEST_ONBOARDING === "1"
@@ -35,9 +35,9 @@ export function configureApplication() {
   } catch {}
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const appID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop.dev"
+  const appID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop"
   const onboardingRoot = createOnboardingTestRoot()
-  app.setName(app.isPackaged ? appNames[CHANNEL] : "OpenCode Dev")
+  app.setName(app.isPackaged ? appNames[CHANNEL] : "SigmaAgents")
   app.setAppUserModelId(appID)
   app.setPath("userData", onboardingRoot ? join(onboardingRoot, "desktop") : join(app.getPath("appData"), appID))
   if (onboardingRoot) app.setPath("sessionData", join(onboardingRoot, "session"))
