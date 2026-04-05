@@ -65,6 +65,10 @@ type State = {
   read: ReadDef
 }
 
+function runtimeEnv(key: string) {
+  return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
+}
+
 export interface Interface {
   readonly ids: () => Effect.Effect<string[]>
   readonly all: () => Effect.Effect<Tool.Def[]>
@@ -295,7 +299,7 @@ export const layer: Layer.Layer<
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
-          return input.providerID === ProviderID.opencode || Bun.env.OPENCODE_ENABLE_EXA == "true"
+          return input.providerID === ProviderID.opencode || runtimeEnv("OPENCODE_ENABLE_EXA") == "true"
         }
 
         const usePatch =
