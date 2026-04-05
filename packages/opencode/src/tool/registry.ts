@@ -58,7 +58,7 @@ const log = Log.create({ service: "tool.registry" })
 
 export function webSearchEnabled(
   providerID: ProviderID,
-  flags = { exa: Bun.env.OPENCODE_ENABLE_EXA == "true", parallel: Flag.OPENCODE_ENABLE_PARALLEL },
+  flags = { exa: runtimeEnv("OPENCODE_ENABLE_EXA") == "true", parallel: Flag.OPENCODE_ENABLE_PARALLEL },
 ) {
   return providerID === ProviderID.opencode || flags.exa || flags.parallel
 }
@@ -71,6 +71,10 @@ type State = {
   builtin: Tool.Def[]
   task: TaskDef
   read: ReadDef
+}
+
+function runtimeEnv(key: string) {
+  return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
 }
 
 export interface Interface {
