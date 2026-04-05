@@ -254,6 +254,8 @@ function body(ast: SchemaAST.AST): z.ZodTypeAny {
       return object(ast)
     case "Arrays":
       return array(ast)
+    case "Suspend":
+      return suspend(ast)
     case "Declaration":
       return decl(ast)
     case "Suspend":
@@ -359,6 +361,10 @@ function array(ast: SchemaAST.Arrays): z.ZodTypeAny {
   if (ast.rest.length > 0) return fail(ast)
   const items = ast.elements.map(walk)
   return z.tuple(items as [z.ZodTypeAny, ...Array<z.ZodTypeAny>])
+}
+
+function suspend(ast: Extract<SchemaAST.AST, { _tag: "Suspend" }>): z.ZodTypeAny {
+  return z.lazy(() => walk(ast.thunk()))
 }
 
 function decl(ast: SchemaAST.Declaration): z.ZodTypeAny {
