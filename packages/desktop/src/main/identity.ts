@@ -2,20 +2,6 @@ import path from "node:path"
 
 export type Channel = "local" | "dev" | "beta" | "prod"
 
-const appNames: Record<Channel, string> = {
-  local: "OpenCode Dev",
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
-}
-
-const appIDs: Record<Channel, string> = {
-  local: "ai.opencode.desktop.dev",
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
-}
-
 // Unpackaged dev runs keep the dev profile directory (`appID`), but use a separate Windows
 // AppUserModelID: Electron writes a Start Menu `Electron.lnk` with the active AUMID on the first
 // toast, which would otherwise shadow the installed OpenCode Dev shortcut and route its toast
@@ -23,10 +9,12 @@ const appIDs: Record<Channel, string> = {
 const LOCAL_APP_USER_MODEL_ID = "ai.opencode.desktop.local"
 
 export function resolveIdentity(channel: Channel, packaged: boolean) {
+  const installedID = channel === "beta" ? "ai.opencode.desktop.beta" : "ai.opencode.desktop"
+
   return {
-    appName: packaged ? appNames[channel] : "OpenCode Dev",
-    appID: packaged ? appIDs[channel] : "ai.opencode.desktop.dev",
-    appUserModelID: packaged ? appIDs[channel] : LOCAL_APP_USER_MODEL_ID,
+    appName: "SigmaAgents",
+    appID: packaged ? "ai.opencode.desktop" : "ai.opencode.desktop.dev",
+    appUserModelID: packaged ? installedID : LOCAL_APP_USER_MODEL_ID,
   }
 }
 
