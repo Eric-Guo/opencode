@@ -5,7 +5,6 @@ import * as http from "node:http"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
-import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import type { Event } from "electron"
 import { app, BrowserWindow } from "electron"
 
@@ -40,13 +39,13 @@ import { createWslServersController } from "./wsl-servers"
 import { Deferred, Effect, Fiber } from "effect"
 
 const APP_NAMES: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
+  dev: "SigmaAgents",
+  beta: "SigmaAgents",
+  prod: "SigmaAgents",
 }
 const APP_IDS: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
+  dev: "ai.opencode.desktop",
+  beta: "ai.opencode.desktop",
   prod: "ai.opencode.desktop",
 }
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
@@ -134,7 +133,7 @@ const main = Effect.gen(function* () {
     process.env.XDG_STATE_HOME = join(root, "state")
     return root
   })()
-  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
+  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "SigmaAgents")
   app.setAppUserModelId(appId)
   app.setPath(
     "userData",
