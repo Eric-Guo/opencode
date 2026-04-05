@@ -53,6 +53,10 @@ export namespace ToolRegistry {
   type TaskDef = Tool.InferDef<typeof TaskTool>
   type ReadDef = Tool.InferDef<typeof ReadTool>
 
+  function runtimeEnv(key: string) {
+    return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
+  }
+
   type State = {
     custom: Tool.Def[]
     builtin: Tool.Def[]
@@ -273,7 +277,7 @@ export namespace ToolRegistry {
       const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
         const filtered = (yield* all()).filter((tool) => {
           if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
-            return input.providerID === ProviderID.opencode || Bun.env.OPENCODE_ENABLE_EXA == "true"
+            return input.providerID === ProviderID.opencode || runtimeEnv("OPENCODE_ENABLE_EXA") == "true"
           }
 
           const usePatch =
