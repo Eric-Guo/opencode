@@ -89,6 +89,10 @@ async function substituteWellKnownRemoteConfig(input: {
   return { url, headers }
 }
 
+function runtimeEnv(key: string) {
+  return typeof Bun !== "undefined" ? Bun.env[key] : process.env[key]
+}
+
 async function resolveLoadedPlugins<T extends { plugin?: ConfigPluginV1.Spec[] }>(config: T, filepath: string) {
   if (!config.plugin) return config
   for (let i = 0; i < config.plugin.length; i++) {
@@ -546,12 +550,12 @@ export const layer = Layer.effect(
         }
 
         if (!result.username) {
-          const sso = Bun.env.THAPE_SSO_USER_NAME
+          const sso = runtimeEnv("THAPE_SSO_USER_NAME")
           result.username = typeof sso === "string" && sso.trim() ? sso.trim() : os.userInfo().username
         }
 
         if (!result.clerk_code) {
-          const code = Bun.env.THAPE_SSO_CLERK_CODE
+          const code = runtimeEnv("THAPE_SSO_CLERK_CODE")
           if (typeof code === "string" && code.trim()) {
             result.clerk_code = code.trim()
           }
