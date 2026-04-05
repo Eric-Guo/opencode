@@ -12,13 +12,13 @@ import { cleanupStoreFiles } from "../storage/cleanup"
 import { registerRendererProtocol, setDockIcon } from "../windows"
 
 const appNames: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
+  dev: "SigmaAgents",
+  beta: "SigmaAgents",
+  prod: "SigmaAgents",
 }
 const appIDs: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
+  dev: "ai.opencode.desktop",
+  beta: "ai.opencode.desktop",
   prod: "ai.opencode.desktop",
 }
 const testOnboarding = process.env.OPENCODE_TEST_ONBOARDING === "1"
@@ -32,8 +32,8 @@ export const configureApplication = Effect.fn("Application.configure")(function*
   } catch {}
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const appID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop.dev"
-  app.setName(app.isPackaged ? appNames[CHANNEL] : "OpenCode Dev")
+  const appID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop"
+  app.setName(app.isPackaged ? appNames[CHANNEL] : "SigmaAgents")
   app.setAppUserModelId(appID)
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
