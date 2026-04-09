@@ -1,8 +1,9 @@
 export * as DesktopInitialization from "./desktop-initialization"
 
-import { app } from "electron"
+import { app, session } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DesktopLogging } from "../native/logging"
+import { configureProxyCommandLine, configureSessionProxy } from "../proxy"
 import { getStore } from "../storage/store"
 import {
   loadProxyEnvironment,
@@ -26,8 +27,18 @@ export const layer = Layer.effect(
     yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
     yield* prepareApplicationEnvironment
     yield* preferApplicationEnvironment
+    const commandLineProxy = configureProxyCommandLine(app.commandLine)
+    if (commandLineProxy)
+      yield* Effect.logInfo("electron proxy configured from environment", {
+        hasBypassRules: Boolean(commandLineProxy.proxyBypassRules),
+      })
     yield* loadProxyEnvironment
     yield* Effect.promise(() => app.whenReady())
+    const sessionProxy = yield* Effect.promise(() => configureSessionProxy(session.defaultSession))
+    if (sessionProxy)
+      yield* Effect.logInfo("electron session proxy applied", {
+        hasBypassRules: Boolean(sessionProxy.proxyBypassRules),
+      })
     yield* logging.startNetwork
     yield* prepareDesktop
     return Service.of({
