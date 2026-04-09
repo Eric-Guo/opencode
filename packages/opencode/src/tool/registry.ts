@@ -52,6 +52,38 @@ export namespace ToolRegistry {
     read: ReadDef
   }
 
+  type PluginResult =
+    | string
+    | {
+        title?: string
+        output: string
+        metadata?: Record<string, unknown>
+      }
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null
+  }
+
+  function normalizePluginResult(result: unknown) {
+    if (typeof result === "string") {
+      return {
+        title: "",
+        output: result,
+        metadata: {},
+      }
+    }
+
+    if (isRecord(result) && typeof result.output === "string") {
+      return {
+        title: typeof result.title === "string" ? result.title : "",
+        output: result.output,
+        metadata: isRecord(result.metadata) ? result.metadata : {},
+      }
+    }
+
+    throw new Error("Plugin tool must return a string or an object with a string output field.")
+  }
+
   export interface Interface {
     readonly ids: () => Effect.Effect<string[]>
     readonly all: () => Effect.Effect<Tool.Def[]>
@@ -103,12 +135,13 @@ export namespace ToolRegistry {
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
-                const result = await def.execute(args as any, pluginCtx)
-                const out = await Truncate.output(result, {}, await Agent.get(toolCtx.agent))
+                const result = normalizePluginResult((await def.execute(args as any, pluginCtx)) as PluginResult)
+                const out = await Truncate.output(result.output, {}, await Agent.get(toolCtx.agent))
                 return {
-                  title: "",
-                  output: out.truncated ? out.content : result,
+                  title: result.title,
+                  output: out.truncated ? out.content : result.output,
                   metadata: {
+                    ...result.metadata,
                     truncated: out.truncated,
                     outputPath: out.truncated ? out.outputPath : undefined,
                   },
