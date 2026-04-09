@@ -4,7 +4,7 @@ import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Event } from "electron"
-import { app, BrowserWindow, dialog } from "electron"
+import { app, BrowserWindow, dialog, session } from "electron"
 import pkg from "electron-updater"
 import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import type { Server } from "virtual:opencode-server"
@@ -42,7 +42,9 @@ import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigratio
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
+import { configureProxyCommandLine, configureSessionProxy } from "./proxy"
 import { allocatePort, getDefaultServerUrl, setDefaultServerUrl, spawnLocalServer, spawnWslSidecar } from "./server"
+import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
 import { createWslServersController } from "./wsl-servers"
 import {
   createLoadingWindow,
@@ -60,6 +62,7 @@ let server: Server.Listener | null = null
 const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
+const startupEnv = getStartupEnv()
 
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
@@ -86,8 +89,9 @@ setupApp()
 
 function setupApp() {
   ensureLoopbackNoProxy()
-  app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
+  const proxy = configureProxyCommandLine(app.commandLine, startupEnv)
+  if (proxy) logger.log("electron proxy configured from environment", { hasBypassRules: Boolean(proxy.proxyBypassRules) })
 
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -128,12 +132,20 @@ function setupApp() {
   }
 
   void app.whenReady().then(async () => {
+    const proxy = await configureSessionProxy(session.defaultSession, startupEnv)
+    if (proxy) logger.log("electron session proxy applied", { hasBypassRules: Boolean(proxy.proxyBypassRules) })
     app.setAsDefaultProtocolClient("opencode")
     registerRendererProtocol()
     setDockIcon()
     setupAutoUpdater()
     await initialize()
   })
+}
+
+function getStartupEnv() {
+  if (process.platform === "win32") return process.env
+  const shell = getUserShell()
+  return mergeShellEnv(loadShellEnv(shell), process.env)
 }
 
 function emitDeepLinks(urls: string[]) {
