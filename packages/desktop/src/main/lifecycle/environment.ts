@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
 import { mkdirSync, rmSync } from "node:fs"
-import http from "node:http"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
@@ -10,6 +9,7 @@ import { Effect } from "effect"
 import { CHANNEL, VERSION } from "../constants"
 import { initCrashReporter, initLogging, type DesktopLogger } from "../native/logging"
 import { developmentResourcesRoot } from "../paths"
+import { configureNodeProxyFromEnv } from "../proxy"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { cleanupStoreFiles } from "../storage/cleanup"
 import { registerRendererProtocol, setDockIcon } from "../windows"
@@ -114,13 +114,7 @@ export function prepareDesktop(logger: DesktopLogger) {
 
 export function loadProxyEnvironment(logger: DesktopLogger) {
   ensureLoopbackNoProxy()
-  try {
-    // Electron 41.2 has a newer Node API than the current @types/node package.
-    const proxyAwareHttp = http as typeof http & { setGlobalProxyFromEnv(): void }
-    proxyAwareHttp.setGlobalProxyFromEnv()
-  } catch (error) {
-    logger.warn("failed to load proxy environment", error)
-  }
+  configureNodeProxyFromEnv((error) => logger.warn("failed to load proxy environment", error))
 }
 
 function createOnboardingTestRoot() {
