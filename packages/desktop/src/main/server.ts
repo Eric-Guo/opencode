@@ -8,6 +8,7 @@ import type { Details } from "electron"
 import type { SqliteMigrationProgress } from "../preload/types"
 import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import { DEFAULT_SERVER_URL_KEY } from "./constants"
+import { configureNodeProxyFromEnv } from "./proxy"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs } from "./wsl"
@@ -72,7 +73,8 @@ export async function allocatePort() {
 }
 
 function packagedConfigDir() {
-  if (app.isPackaged && process.platform === "darwin") return join(dirname(app.getPath("exe")), "../Resources/thape-config")
+  if (app.isPackaged && process.platform === "darwin")
+    return join(dirname(app.getPath("exe")), "../Resources/thape-config")
   if (app.isPackaged) return join(process.resourcesPath, "thape-config")
   return join(dirname(fileURLToPath(import.meta.url)), "../../resources/thape-config")
 }
@@ -242,6 +244,7 @@ export async function spawnWslSidecar(
   const opencode = await resolveWslOpencode(distro)
   if (!opencode) throw new Error(`OpenCode is not installed in ${distro}`)
 
+  configureNodeProxyFromEnv((error) => console.warn("[server] failed to load proxy environment", error))
   await ensureSsoUsername()
 
   const port = await allocatePort()
