@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync, mkdirSync, rmSync } from "node:fs"
-import * as http from "node:http"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, session } from "electron"
 
 import contextMenu from "electron-context-menu"
 
+import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import type { InitStep, ServerReadyData, SqliteMigrationProgress } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
@@ -18,6 +18,7 @@ import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { migrate } from "./migrate"
+import { configureNodeProxyFromEnv, configureProxyCommandLine, configureSessionProxy } from "./proxy"
 import {
   allocatePort,
   getDefaultServerUrl,
@@ -27,6 +28,7 @@ import {
   spawnWslSidecar,
   type SidecarListener,
 } from "./server"
+import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
 import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
 import {
   createLoadingWindow,
@@ -58,14 +60,14 @@ const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
 const pendingDeepLinks: string[] = []
-
 function useEnvProxy() {
-  try {
-    // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
-    ;(http as any).setGlobalProxyFromEnv()
-  } catch (error) {
-    logger.warn("failed to load proxy environment", error)
-  }
+  configureNodeProxyFromEnv((error) => logger.warn("failed to load proxy environment", error))
+}
+
+function getStartupEnv() {
+  if (process.platform === "win32") return process.env
+  const shell = getUserShell()
+  return mergeShellEnv(loadShellEnv(shell), process.env)
 }
 
 function emitDeepLinks(urls: string[]) {
@@ -191,10 +193,16 @@ const main = Effect.gen(function* () {
     onboardingTest: Boolean(onboardingTestRoot),
   })
 
+  const startupEnv = getStartupEnv()
   ensureLoopbackNoProxy()
   yield* Effect.promise(() => ensureSsoUsername())
   useEnvProxy()
-  app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
+  const commandLineProxy = configureProxyCommandLine(app.commandLine, startupEnv)
+  if (!commandLineProxy) app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
+  if (commandLineProxy)
+    logger.log("electron proxy configured from environment", {
+      hasBypassRules: Boolean(commandLineProxy.proxyBypassRules),
+    })
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
 
   if (!app.requestSingleInstanceLock()) {
@@ -291,6 +299,11 @@ const main = Effect.gen(function* () {
   yield* Effect.promise(() => app.whenReady())
 
   if (!TEST_ONBOARDING) migrate()
+  const sessionProxy = yield* Effect.promise(() => configureSessionProxy(session.defaultSession, startupEnv))
+  if (sessionProxy)
+    logger.log("electron session proxy applied", {
+      hasBypassRules: Boolean(sessionProxy.proxyBypassRules),
+    })
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
