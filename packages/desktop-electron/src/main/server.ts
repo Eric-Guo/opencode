@@ -4,7 +4,7 @@ import { createServer } from "node:net"
 import { app } from "electron"
 import { DEFAULT_SERVER_URL_KEY } from "./constants"
 import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
-import { getUserShell, loadShellEnv } from "./shell-env"
+import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs } from "./wsl"
 
@@ -203,10 +203,9 @@ export async function spawnWslSidecar(
 
 async function prepareServerEnv(password: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
+  const shellEnv = shell ? loadShellEnv(shell) : null
   const env = {
-    ...process.env,
-    ...shellEnv,
+    ...mergeShellEnv(shellEnv, process.env),
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
