@@ -3,6 +3,7 @@ import { userInfo } from "node:os"
 import { Effect, Path } from "effect"
 
 const TIMEOUT = 5_000
+const cache = new Map<string, Record<string, string> | null>()
 
 type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
 export function resolveUserShell(envShell: string | undefined, loginShell: string | null | undefined) {
@@ -65,32 +66,42 @@ export const isNushell = Effect.fn("ShellEnv.isNushell")(function* (shell: strin
 })
 
 export const loadShellEnv = Effect.fn("ShellEnv.load")(function* (shell: string) {
+  if (cache.has(shell)) return cache.get(shell) ?? null
+
   if (yield* isNushell(shell)) {
     yield* Effect.logInfo(`[server] Skipping shell env probe for nushell: ${shell}`)
+    cache.set(shell, null)
     return null
   }
 
   const interactive = yield* probe(shell, "-il")
   if (interactive.type === "Loaded") {
     yield* Effect.logInfo(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
+    cache.set(shell, interactive.value)
     return interactive.value
   }
   if (interactive.type === "Timeout") {
-    yield* Effect.logInfo(`[server] Interactive shell env probe timed out: ${shell}`)
+    yield* Effect.logWarning(`[server] Interactive shell env probe timed out: ${shell}`)
+    cache.set(shell, null)
     return null
   }
 
   const login = yield* probe(shell, "-l")
   if (login.type === "Loaded") {
     yield* Effect.logInfo(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
+    cache.set(shell, login.value)
     return login.value
   }
 
-  yield* Effect.logInfo(`[server] Falling back to app environment: ${shell}`)
+  yield* Effect.logWarning(`[server] Falling back to app environment: ${shell}`)
+  cache.set(shell, null)
   return null
 })
 
-export function mergeShellEnv(shell: Record<string, string> | null, env: Record<string, string>) {
+export function mergeShellEnv(
+  shell: Record<string, string> | null,
+  env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
   return {
     ...shell,
     ...env,
