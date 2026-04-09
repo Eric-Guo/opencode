@@ -2,11 +2,15 @@ import { spawnSync } from "node:child_process"
 import { userInfo } from "node:os"
 import { basename } from "node:path"
 
+import { getLogger } from "./logging"
+
 const TIMEOUT = 5_000
+const cache = new Map<string, Record<string, string> | null>()
 
 type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
 type ShellEnvLogger = {
   log: (message: string) => void
+  warn: (message: string) => void
 }
 
 export function resolveUserShell(envShell: string | undefined, loginShell: string | null | undefined) {
@@ -67,33 +71,45 @@ export function isNushell(shell: string) {
   return name === "nu" || name === "nu.exe" || raw.endsWith("\\nu.exe")
 }
 
-export function loadShellEnv(shell: string, logger: ShellEnvLogger) {
+export function loadShellEnv(shell: string, logger: ShellEnvLogger = getLogger()) {
+  if (cache.has(shell)) {
+    return cache.get(shell) ?? null
+  }
+
   if (isNushell(shell)) {
     logger.log(`[server] Skipping shell env probe for nushell: ${shell}`)
+    cache.set(shell, null)
     return null
   }
 
   const interactive = probe(shell, "-il")
   if (interactive.type === "Loaded") {
     logger.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
+    cache.set(shell, interactive.value)
     return interactive.value
   }
   if (interactive.type === "Timeout") {
-    logger.log(`[server] Interactive shell env probe timed out: ${shell}`)
+    logger.warn(`[server] Interactive shell env probe timed out: ${shell}`)
+    cache.set(shell, null)
     return null
   }
 
   const login = probe(shell, "-l")
   if (login.type === "Loaded") {
     logger.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
+    cache.set(shell, login.value)
     return login.value
   }
 
-  logger.log(`[server] Falling back to app environment: ${shell}`)
+  logger.warn(`[server] Falling back to app environment: ${shell}`)
+  cache.set(shell, null)
   return null
 }
 
-export function mergeShellEnv(shell: Record<string, string> | null, env: Record<string, string>) {
+export function mergeShellEnv(
+  shell: Record<string, string> | null,
+  env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
   return {
     ...shell,
     ...env,
