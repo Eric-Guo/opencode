@@ -554,6 +554,7 @@ export function Session() {
     {
       title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
       value: "session.sidebar.toggle",
+      search: "toggle sidebar",
       keybind: "sidebar_toggle",
       category: "Session",
       onSelect: (dialog) => {
@@ -568,6 +569,7 @@ export function Session() {
     {
       title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
+      search: "toggle code concealment",
       keybind: "messages_toggle_conceal" as any,
       category: "Session",
       onSelect: (dialog) => {
@@ -578,6 +580,7 @@ export function Session() {
     {
       title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
       value: "session.toggle.timestamps",
+      search: "toggle timestamps",
       category: "Session",
       slash: {
         name: "timestamps",
@@ -591,6 +594,7 @@ export function Session() {
     {
       title: showThinking() ? "Hide thinking" : "Show thinking",
       value: "session.toggle.thinking",
+      search: "toggle thinking",
       keybind: "display_thinking",
       category: "Session",
       slash: {
@@ -605,6 +609,7 @@ export function Session() {
     {
       title: showDetails() ? "Hide tool details" : "Show tool details",
       value: "session.toggle.actions",
+      search: "toggle tool details",
       keybind: "tool_details",
       category: "Session",
       onSelect: (dialog) => {
@@ -613,8 +618,9 @@ export function Session() {
       },
     },
     {
-      title: "Toggle session scrollbar",
+      title: showScrollbar() ? "Hide session scrollbar" : "Show session scrollbar",
       value: "session.toggle.scrollbar",
+      search: "toggle session scrollbar",
       keybind: "scrollbar_toggle",
       category: "Session",
       onSelect: (dialog) => {
