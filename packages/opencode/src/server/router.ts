@@ -59,8 +59,6 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const sessionWorkspaceID = await getSessionWorkspace(url)
     const workspaceID = sessionWorkspaceID || url.searchParams.get("workspace")
 
-    console.log("routing", url.pathname, workspaceID)
-
     // If no workspace is provided we use the project
     if (!workspaceID) {
       return Instance.provide({
