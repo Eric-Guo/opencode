@@ -1,7 +1,7 @@
 import { app } from "electron"
 import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
-import { getUserShell, loadShellEnv } from "./shell-env"
+import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
 import { store } from "./store"
 
 export type WslConfig = { enabled: boolean }
@@ -60,10 +60,9 @@ export async function spawnLocalServer(hostname: string, port: number, password:
 
 async function prepareServerEnv(password: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
+  const shellEnv = shell ? loadShellEnv(shell) : null
   const env = {
-    ...process.env,
-    ...shellEnv,
+    ...mergeShellEnv(shellEnv, process.env),
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
