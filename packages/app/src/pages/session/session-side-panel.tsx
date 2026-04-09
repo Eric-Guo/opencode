@@ -381,64 +381,63 @@ export function SessionSidePanel(props: {
                       {language.t("session.files.all")}
                     </Tabs.Trigger>
                   </Tabs.List>
-                    <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
-                      <Switch>
-                        <Match when={props.hasReview() || !props.diffsReady()}>
-                          <Show
-                            when={props.diffsReady()}
-                            fallback={
-                              <div class="px-2 py-2 text-12-regular text-text-weak">
-                                {language.t("common.loading")}
-                                {language.t("common.loading.ellipsis")}
-                              </div>
-                            }
-                          >
-                            <FileTree
-                              path=""
-                              class="pt-3"
-                              allowed={diffFiles()}
-                              kinds={kinds()}
-                              draggable={false}
-                              active={props.activeDiff}
-                              onFileClick={(node) => props.focusReviewDiff(node.path)}
-                            />
-                          </Show>
-                        </Match>
-                        <Match when={true}>{empty(props.empty())}</Match>
-                      </Switch>
-                    </Tabs.Content>
-                    <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
-                      <Switch>
-                        <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
-                        <Match when={true}>
+                  <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
+                    <Switch>
+                      <Match when={props.hasReview() || !props.diffsReady()}>
+                        <Show
+                          when={props.diffsReady()}
+                          fallback={
+                            <div class="px-2 py-2 text-12-regular text-text-weak">
+                              {language.t("common.loading")}
+                              {language.t("common.loading.ellipsis")}
+                            </div>
+                          }
+                        >
                           <FileTree
                             path=""
                             class="pt-3"
-                            modified={diffFiles()}
+                            allowed={diffFiles()}
                             kinds={kinds()}
-                            onFileClick={(node) => openTab(file.tab(node.path))}
+                            draggable={false}
+                            active={props.activeDiff}
+                            onFileClick={(node) => props.focusReviewDiff(node.path)}
                           />
-                        </Match>
-                      </Switch>
-                    </Tabs.Content>
-                  </Tabs>
-                </div>
-                <Show when={fileOpen()}>
-                  <div onPointerDown={() => props.size.start()}>
-                    <ResizeHandle
-                      direction="horizontal"
-                      edge="start"
-                      size={layout.fileTree.width()}
-                      min={200}
-                      max={480}
-                      onResize={(width) => {
-                        props.size.touch()
-                        layout.fileTree.resize(width)
-                      }}
-                    />
-                  </div>
-                </Show>
+                        </Show>
+                      </Match>
+                      <Match when={true}>{empty(props.empty())}</Match>
+                    </Switch>
+                  </Tabs.Content>
+                  <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                    <Switch>
+                      <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                      <Match when={true}>
+                        <FileTree
+                          path=""
+                          class="pt-3"
+                          modified={diffFiles()}
+                          kinds={kinds()}
+                          onFileClick={(node) => openTab(file.tab(node.path))}
+                        />
+                      </Match>
+                    </Switch>
+                  </Tabs.Content>
+                </Tabs>
               </div>
+              <Show when={fileOpen()}>
+                <div onPointerDown={() => props.size.start()}>
+                  <ResizeHandle
+                    direction="horizontal"
+                    edge="start"
+                    size={layout.fileTree.width()}
+                    min={200}
+                    max={480}
+                    onResize={(width) => {
+                      props.size.touch()
+                      layout.fileTree.resize(width)
+                    }}
+                  />
+                </div>
+              </Show>
             </div>
           </Show>
         </div>
