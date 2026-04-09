@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto"
 import { mkdirSync, rmSync } from "node:fs"
-import * as http from "node:http"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, session } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -43,6 +42,8 @@ import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
+import { configureNodeProxyFromEnv, configureProxyCommandLine, configureSessionProxy } from "./proxy"
+import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
 
 const APP_NAMES: Record<string, string> = {
   dev: "SigmaAgents",
@@ -62,12 +63,12 @@ let logger: ReturnType<typeof initLogging>
 const pendingDeepLinks: string[] = []
 
 function useEnvProxy() {
-  try {
-    // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
-    ;(http as any).setGlobalProxyFromEnv()
-  } catch (error) {
-    logger.warn("failed to load proxy environment", error)
-  }
+  configureNodeProxyFromEnv((error) => logger.warn("failed to load proxy environment", error))
+}
+
+function getStartupEnv() {
+  if (process.platform === "win32") return process.env
+  return mergeShellEnv(loadShellEnv(getUserShell()), process.env)
 }
 
 function emitDeepLinks(urls: string[]) {
@@ -184,9 +185,16 @@ const main = Effect.gen(function* () {
     onboardingTest: Boolean(onboardingTestRoot),
   })
 
+  const startupEnv = getStartupEnv()
   ensureLoopbackNoProxy()
   useEnvProxy()
-  app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
+  const commandLineProxy = configureProxyCommandLine(app.commandLine, startupEnv)
+  if (!commandLineProxy) app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
+  if (commandLineProxy) {
+    logger.log("electron proxy configured from environment", {
+      hasBypassRules: Boolean(commandLineProxy.proxyBypassRules),
+    })
+  }
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
@@ -308,6 +316,12 @@ const main = Effect.gen(function* () {
   })
   registerUpdaterIpc(updater)
   registerWslIpcHandlers(wslServers)
+  const sessionProxy = yield* Effect.promise(() => configureSessionProxy(session.defaultSession, startupEnv))
+  if (sessionProxy) {
+    logger.log("electron session proxy applied", {
+      hasBypassRules: Boolean(sessionProxy.proxyBypassRules),
+    })
+  }
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
   updateTimer.unref()
