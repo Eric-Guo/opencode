@@ -520,8 +520,8 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const hello = (
         yield* registry.tools({
-          providerID: ProviderID.opencode,
-          modelID: ModelID.make("gpt-5"),
+          providerID: ProviderV2.ID.opencode,
+          modelID: ModelV2.ID.make("gpt-5"),
           agent: { name: "build", mode: "primary", permission: [], options: {} },
         })
       ).find((item) => item.id === "hello")
