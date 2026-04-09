@@ -144,7 +144,10 @@ export namespace SessionPrompt {
         const s = yield* InstanceState.get(state)
         const runner = s.runners.get(sessionID)
         if (!runner || !runner.busy) {
-          yield* status.set(sessionID, { type: "idle" })
+          const current = yield* status.get(sessionID)
+          if (current.type !== "idle") {
+            yield* status.set(sessionID, { type: "idle" })
+          }
           return
         }
         yield* runner.cancel
