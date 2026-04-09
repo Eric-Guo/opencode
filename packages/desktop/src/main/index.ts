@@ -1,4 +1,4 @@
-import { app } from "electron"
+import { app, session } from "electron"
 import { Deferred, Effect, Fiber } from "effect"
 import type { ServerReadyData } from "../shared/ipc-contract"
 import { checkAppExists, resolveAppPath } from "./files/apps"
@@ -20,6 +20,7 @@ import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "./l
 import { exportDebugLogs, startNetworkLogging, writeLog } from "./native/logging"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { setNativeTranslations } from "./native/translations"
+import { configureProxyCommandLine, configureSessionProxy } from "./proxy"
 import { startBackgroundCli } from "./service/background-service"
 import { forwardInitializationFailure } from "./service/initialization"
 import { getDefaultServerUrl, setDefaultServerUrl } from "./service/server-settings"
@@ -32,6 +33,11 @@ const main = Effect.gen(function* () {
   if (!acquireApplicationLock()) return
   preferApplicationEnvironment(logger)
   loadProxyEnvironment(logger)
+  const commandLineProxy = configureProxyCommandLine(app.commandLine)
+  if (commandLineProxy)
+    logger.log("electron proxy configured from environment", {
+      hasBypassRules: Boolean(commandLineProxy.proxyBypassRules),
+    })
   const lifecycle = createApplicationLifecycle(logger)
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
   const wslReady = Promise.withResolvers<void>()
@@ -78,6 +84,11 @@ const main = Effect.gen(function* () {
   })
   registerUpdaterIpcHandlers(createUpdaterIpc(updater))
   registerWslInitialization(wslReady.promise)
+  const sessionProxy = yield* Effect.promise(() => configureSessionProxy(session.defaultSession))
+  if (sessionProxy)
+    logger.log("electron session proxy applied", {
+      hasBypassRules: Boolean(sessionProxy.proxyBypassRules),
+    })
   startAutoUpdater(updater)
   yield* Effect.promise(() => startNetworkLogging())
 
