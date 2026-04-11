@@ -4,7 +4,9 @@ import fs from "fs/promises"
 import { Effect, Layer } from "effect"
 import { Instance } from "../../src/project/instance"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { MessageID, SessionID } from "../../src/session/schema"
 import { ToolRegistry } from "../../src/tool"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -146,6 +148,66 @@ describe("tool.registry", () => {
         const registry = yield* ToolRegistry.Service
         const ids = yield* registry.ids()
         expect(ids).toContain("cowsay")
+      }),
+    ),
+  )
+
+  it.live("supports plugin tools that return structured output objects", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const opencode = path.join(dir, ".opencode")
+        const tool = path.join(opencode, "tool")
+        yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(tool, "hello.ts"),
+            [
+              "export default {",
+              "  description: 'hello tool',",
+              "  args: {},",
+              "  execute: async () => {",
+              "    return {",
+              "      title: 'custom title',",
+              "      output: 'hello world',",
+              "      metadata: { source: 'plugin' },",
+              "    }",
+              "  },",
+              "}",
+              "",
+            ].join("\n"),
+          ),
+        )
+
+        const registry = yield* ToolRegistry.Service
+        const hello = (
+          yield* registry.tools({
+            providerID: ProviderID.opencode,
+            modelID: ModelID.make("gpt-5"),
+            agent: { name: "build", mode: "primary", permission: [], options: {} },
+          })
+        ).find((item) => item.id === "hello")
+
+        expect(hello).toBeDefined()
+        if (!hello) throw new Error("Expected hello tool to be registered")
+
+        const result = yield* hello.execute({}, {
+          sessionID: SessionID.make("ses_test"),
+          messageID: MessageID.make("msg_test"),
+          callID: "",
+          agent: "build",
+          abort: AbortSignal.any([]),
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+
+        expect(result.title).toBe("custom title")
+        expect(result.output).toBe("hello world")
+        expect(result.metadata).toEqual({
+          source: "plugin",
+          truncated: false,
+          outputPath: undefined,
+        })
       }),
     ),
   )
