@@ -64,6 +64,38 @@ export namespace ToolRegistry {
     read: ReadDef
   }
 
+  type PluginResult =
+    | string
+    | {
+        title?: string
+        output: string
+        metadata?: Record<string, unknown>
+      }
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null
+  }
+
+  function normalizePluginResult(result: unknown) {
+    if (typeof result === "string") {
+      return {
+        title: "",
+        output: result,
+        metadata: {},
+      }
+    }
+
+    if (isRecord(result) && typeof result.output === "string") {
+      return {
+        title: typeof result.title === "string" ? result.title : "",
+        output: result.output,
+        metadata: isRecord(result.metadata) ? result.metadata : {},
+      }
+    }
+
+    throw new Error("Plugin tool must return a string or an object with a string output field.")
+  }
+
   export interface Interface {
     readonly ids: () => Effect.Effect<string[]>
     readonly all: () => Effect.Effect<Tool.Def[]>
@@ -124,7 +156,6 @@ export namespace ToolRegistry {
       const greptool = yield* GrepTool
       const patchtool = yield* ApplyPatchTool
       const skilltool = yield* SkillTool
-      const agent = yield* Agent.Service
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -143,13 +174,16 @@ export namespace ToolRegistry {
                     directory: ctx.directory,
                     worktree: ctx.worktree,
                   }
-                  const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
-                  const info = yield* agent.get(toolCtx.agent)
-                  const out = yield* truncate.output(result, {}, info)
+                  const result = normalizePluginResult(
+                    yield* Effect.promise(() => def.execute(args as any, pluginCtx)),
+                  )
+                  const info = yield* agents.get(toolCtx.agent)
+                  const out = yield* truncate.output(result.output, {}, info)
                   return {
-                    title: "",
-                    output: out.truncated ? out.content : result,
+                    title: result.title,
+                    output: out.truncated ? out.content : result.output,
                     metadata: {
+                      ...result.metadata,
                       truncated: out.truncated,
                       outputPath: out.truncated ? out.outputPath : undefined,
                     },
