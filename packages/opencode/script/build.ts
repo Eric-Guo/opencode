@@ -172,7 +172,7 @@ for (const item of targets) {
     external: ["node-gyp"],
     format: "esm",
     minify: true,
-    sourcemap: sourcemapsFlag ? "linked" : "none",
+    sourcemap: "linked",
     splitting: true,
     compile: {
       autoloadBunfig: false,
@@ -197,6 +197,12 @@ for (const item of targets) {
       ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
     },
   })
+
+  // Fix broken code signature on macOS after Bun.compile (avoids Killed: 9 on Apple Silicon)
+  if (item.os === "darwin") {
+    await $`codesign --remove-signature dist/${name}/bin/opencode`
+    await $`codesign --sign - --force dist/${name}/bin/opencode`
+  }
 
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
