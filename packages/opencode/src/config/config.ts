@@ -707,6 +707,11 @@ export const Keybinds = z
     session_parent: z.string().optional().default("up").describe("Go to parent session"),
     terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
     terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
+    permission_auto_accept_toggle: z
+      .string()
+      .optional()
+      .default("none")
+      .describe("Toggle auto-accept mode for edit permission requests"),
     tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
     plugin_manager: z.string().optional().default("none").describe("Open plugin manager dialog"),
     display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
