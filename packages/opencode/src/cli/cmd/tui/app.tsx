@@ -201,6 +201,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
+
   const dialog = useDialog()
   const local = useLocal()
   const kv = useKV()
