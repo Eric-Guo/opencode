@@ -10,7 +10,7 @@
 // All state comes from the parent RunFooter through SolidJS signals.
 // The view itself is stateless except for derived memos.
 /** @jsxImportSource @opentui/solid */
-import { useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
 import "opentui-spinner/solid"
 import { createColors, createFrames } from "../tui/ui/spinner"
@@ -74,6 +74,24 @@ type RunFooterViewProps = {
   onLayout: (input: { route: FooterPromptRoute; tabs: boolean }) => void
   onStatus: (text: string) => void
   onSubagentSelect?: (sessionID: string | undefined) => void
+}
+
+function subagentShortcut(event: {
+  name: string
+  ctrl?: boolean
+  meta?: boolean
+  shift?: boolean
+  super?: boolean
+}): number | undefined {
+  if (!event.ctrl || event.meta || event.super) {
+    return
+  }
+
+  if (!/^[1-9]$/.test(event.name)) {
+    return
+  }
+
+  return Number(event.name) - 1
 }
 
 export { TEXTAREA_MIN_ROWS, TEXTAREA_MAX_ROWS } from "./footer.prompt"
@@ -211,6 +229,23 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const menu = createMemo(() => prompt() && composer.visible())
 
+  useKeyboard((event) => {
+    if (active().type !== "prompt") {
+      return
+    }
+
+    const slot = subagentShortcut(event)
+    if (slot !== undefined) {
+      const next = tabs()[slot]
+      if (!next) {
+        return
+      }
+
+      event.preventDefault()
+      toggleTab(next.sessionID)
+    }
+  })
+
   createEffect(() => {
     const current = route()
     if (current.type === "composer") {
@@ -245,7 +280,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       <box id="run-direct-footer-top-spacer" width="100%" height={1} flexShrink={0} backgroundColor="transparent" />
 
       <Show when={showTabs()}>
-        <RunFooterSubagentTabs tabs={tabs()} selected={selected()} theme={theme()} onToggle={toggleTab} />
+        <RunFooterSubagentTabs tabs={tabs()} selected={selected()} theme={theme()} />
       </Show>
 
       <Show

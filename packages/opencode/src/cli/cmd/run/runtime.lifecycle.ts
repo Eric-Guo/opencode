@@ -154,7 +154,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   const renderer = await createCliRenderer({
     targetFps: 30,
     maxFps: 60,
-    useMouse: true,
+    useMouse: false,
     autoFocus: false,
     openConsoleOnError: false,
     exitOnCtrlC: false,

@@ -2,7 +2,7 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import "opentui-spinner/solid"
-import { For, createMemo, createSignal } from "solid-js"
+import { For, createMemo } from "solid-js"
 import { SPINNER_FRAMES } from "../tui/component/spinner"
 import { RunEntryContent, sameEntryGroup } from "./scrollback.writer"
 import type { FooterSubagentDetail, FooterSubagentTab, RunDiffStyle } from "./types"
@@ -39,10 +39,7 @@ export function RunFooterSubagentTabs(props: {
   tabs: FooterSubagentTab[]
   selected?: string
   theme: RunFooterTheme
-  onToggle: (sessionID: string) => void
 }) {
-  const [hover, setHover] = createSignal<string>()
-
   return (
     <box
       id="run-direct-footer-subagent-tabs"
@@ -55,25 +52,11 @@ export function RunFooterSubagentTabs(props: {
       flexShrink={0}
     >
       <box flexDirection="row" gap={3} flexShrink={1} flexGrow={1}>
-        {props.tabs.map((tab) => {
+        {props.tabs.map((tab, index) => {
           const active = () => props.selected === tab.sessionID
-          const hovered = () => hover() === tab.sessionID
-          const emphasized = () => active() || hovered()
+          const slot = String(index + 1)
           return (
-            <box
-              paddingRight={1}
-              onMouseOver={() => {
-                setHover(tab.sessionID)
-              }}
-              onMouseOut={() => {
-                if (hover() === tab.sessionID) {
-                  setHover(undefined)
-                }
-              }}
-              onMouseUp={() => {
-                props.onToggle(tab.sessionID)
-              }}
-            >
+            <box paddingRight={1}>
               <box flexDirection="row" gap={1} width="100%">
                 {tab.status === "running" ? (
                   <box flexShrink={0}>
@@ -84,8 +67,8 @@ export function RunFooterSubagentTabs(props: {
                     {statusIcon(tab.status)}
                   </text>
                 )}
-                <text fg={emphasized() ? props.theme.text : props.theme.muted} wrapMode="none" truncate>
-                  {tab.label}
+                <text fg={active() ? props.theme.text : props.theme.muted} wrapMode="none" truncate>
+                  {`[${slot}] ${tab.label}`}
                 </text>
               </box>
             </box>
@@ -125,9 +108,9 @@ export function RunFooterSubagentBody(props: {
       return
     }
 
-    if (event.name === "tab") {
+    if (event.name === "tab" && !event.shift) {
       event.preventDefault()
-      props.onCycle(event.shift ? -1 : 1)
+      props.onCycle(1)
       return
     }
 
