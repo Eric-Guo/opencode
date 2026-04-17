@@ -12,6 +12,7 @@
 //   3. starts the stream transport (SDK event subscription),
 //   4. runs the prompt queue until the footer closes.
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { Flag } from "@/flag/flag"
 import { createRunDemo } from "./demo"
 import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
@@ -25,7 +26,10 @@ export { pickVariant, resolveVariant } from "./variant.shared"
 /** @internal Exported for testing */
 export { runPromptQueue } from "./runtime.queue"
 
-type BootContext = Pick<RunInput, "sdk" | "directory" | "sessionID" | "sessionTitle" | "agent" | "model" | "variant">
+type BootContext = Pick<
+  RunInput,
+  "sdk" | "directory" | "sessionID" | "sessionTitle" | "resume" | "agent" | "model" | "variant"
+>
 
 type RunRuntimeInput = {
   boot: () => Promise<BootContext>
@@ -60,12 +64,20 @@ type RunLocalInput = {
 // Files only attach on the first prompt turn -- after that, includeFiles
 // flips to false so subsequent turns don't re-send attachments.
 async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
+  const start = performance.now()
   const log = trace()
   const keybindTask = resolveFooterKeybinds()
   const diffTask = resolveDiffStyle()
   const ctx = await input.boot()
   const modelTask = resolveModelInfo(ctx.sdk, ctx.model)
-  const sessionTask = resolveSessionInfo(ctx.sdk, ctx.sessionID, ctx.model)
+  const sessionTask =
+    ctx.resume === true
+      ? resolveSessionInfo(ctx.sdk, ctx.sessionID, ctx.model)
+      : Promise.resolve({
+          first: true,
+          history: [],
+          variant: undefined,
+        })
   const savedTask = resolveSavedVariant(ctx.model)
   const agentsTask = ctx.sdk.app
     .agents({ directory: ctx.directory })
@@ -80,13 +92,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
   let aborting = false
   let shown = false
   let demo: ReturnType<typeof createRunDemo> | undefined
-  const [keybinds, diffStyle, session, savedVariant, agents, resources] = await Promise.all([
+  const [keybinds, diffStyle, session, savedVariant] = await Promise.all([
     keybindTask,
     diffTask,
     sessionTask,
     savedTask,
-    agentsTask,
-    resourcesTask,
   ])
   shown = !session.first
   let activeVariant = resolveVariant(ctx.variant, session.variant, savedVariant, variants)
@@ -99,8 +109,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         .files({ query, directory: ctx.directory })
         .then((x) => x.data ?? [])
         .catch(() => []),
-    agents,
-    resources,
+    agents: [],
+    resources: [],
     sessionID: ctx.sessionID,
     sessionTitle: ctx.sessionTitle,
     first: session.first,
@@ -169,6 +179,27 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
     },
   })
   const footer = shell.footer
+
+  void Promise.all([agentsTask, resourcesTask]).then(([agents, resources]) => {
+    if (footer.isClosed) {
+      return
+    }
+
+    footer.event({
+      type: "catalog",
+      agents,
+      resources,
+    })
+  })
+
+  if (Flag.OPENCODE_SHOW_TTFD) {
+    footer.append({
+      kind: "system",
+      text: `startup ${Math.max(0, Math.round(performance.now() - start))}ms`,
+      phase: "final",
+      source: "system",
+    })
+  }
 
   if (input.demo) {
     demo = createRunDemo({
@@ -292,8 +323,7 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
     demoText: input.demoText,
     afterPaint: (ctx) => input.share(ctx.sdk, ctx.sessionID),
     boot: async () => {
-      const agent = await input.resolveAgent()
-      const session = await input.session(sdk)
+      const [agent, session] = await Promise.all([input.resolveAgent(), input.session(sdk)])
       if (!session?.id) {
         throw new Error("Session not found")
       }
@@ -303,6 +333,7 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
         directory: input.directory,
         sessionID: session.id,
         sessionTitle: session.title,
+        resume: false,
         agent,
         model: input.model,
         variant: input.variant,
@@ -324,6 +355,7 @@ export async function runInteractiveMode(input: RunInput): Promise<void> {
       directory: input.directory,
       sessionID: input.sessionID,
       sessionTitle: input.sessionTitle,
+      resume: input.resume,
       agent: input.agent,
       model: input.model,
       variant: input.variant,

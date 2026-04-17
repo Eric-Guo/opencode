@@ -700,7 +700,7 @@ export const RunCommand = cmd({
         directory: cwd,
         sessionID,
         sessionTitle: sess.title,
-        resume: Boolean(args.session) && !args.fork,
+        resume: Boolean(args.session || args.continue) && !args.fork,
         agent,
         model,
         variant: args.variant,

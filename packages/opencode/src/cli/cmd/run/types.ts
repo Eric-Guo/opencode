@@ -130,6 +130,11 @@ export type FooterOutput = {
 // internal signals directly.
 export type FooterEvent =
   | {
+      type: "catalog"
+      agents: RunAgent[]
+      resources: RunResource[]
+    }
+  | {
       type: "queue"
       queue: number
     }

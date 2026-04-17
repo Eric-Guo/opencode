@@ -106,6 +106,10 @@ export class RunFooter implements FooterApi {
   // Fixed portion of footer height above the textarea.
   private base: number
   private rows = TEXTAREA_MIN_ROWS
+  private agents: Accessor<RunAgent[]>
+  private setAgents: Setter<RunAgent[]>
+  private resources: Accessor<RunResource[]>
+  private setResources: Setter<RunResource[]>
   private state: Accessor<FooterState>
   private setState: Setter<FooterState>
   private view: Accessor<FooterView>
@@ -138,6 +142,12 @@ export class RunFooter implements FooterApi {
     const [view, setView] = createSignal<FooterView>({ type: "prompt" })
     this.view = view
     this.setView = setView
+    const [agents, setAgents] = createSignal<RunAgent[]>(options.agents)
+    this.agents = agents
+    this.setAgents = setAgents
+    const [resources, setResources] = createSignal<RunResource[]>(options.resources)
+    this.resources = resources
+    this.setResources = setResources
     const [subagent, setSubagent] = createSignal<FooterSubagentState>(createEmptySubagentState())
     this.subagent = subagent
     this.setSubagent = setSubagent
@@ -154,8 +164,8 @@ export class RunFooter implements FooterApi {
           view: this.view,
           subagent: this.subagent,
           findFiles: options.findFiles,
-          agents: () => options.agents,
-          resources: () => options.resources,
+          agents: this.agents,
+          resources: this.resources,
           theme: options.theme,
           diffStyle: options.diffStyle,
           keybinds: options.keybinds,
@@ -206,6 +216,16 @@ export class RunFooter implements FooterApi {
   }
 
   public event(next: FooterEvent): void {
+    if (next.type === "catalog") {
+      if (this.destroyed || this.renderer.isDestroyed) {
+        return
+      }
+
+      this.setAgents(next.agents)
+      this.setResources(next.resources)
+      return
+    }
+
     if (next.type === "queue") {
       this.patch({ queue: next.queue })
       return
