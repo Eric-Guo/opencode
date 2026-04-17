@@ -103,21 +103,6 @@ function entryColor(commit: StreamCommit, theme: RunTheme): ColorInput {
   return look(commit, theme.entry).fg
 }
 
-function blankWriter(): ScrollbackWriter {
-  return (ctx) => ({
-    root: new TextRenderable(ctx.renderContext, {
-      id: "run-scrollback-spacer",
-      width: Math.max(1, Math.trunc(ctx.width)),
-      height: 1,
-      content: "",
-    }),
-    width: Math.max(1, Math.trunc(ctx.width)),
-    height: 1,
-    startOnNewLine: true,
-    trailingNewline: true,
-  })
-}
-
 function todoText(item: { status: string; content: string }): string {
   if (item.status === "completed") {
     return `[x] ${item.content}`
@@ -359,5 +344,16 @@ export function entryWriter(input: {
 }
 
 export function spacerWriter(): ScrollbackWriter {
-  return blankWriter()
+  return (ctx) => ({
+    root: new TextRenderable(ctx.renderContext, {
+      id: "run-scrollback-spacer",
+      width: Math.max(1, Math.trunc(ctx.width)),
+      height: 1,
+      content: "",
+    }),
+    width: Math.max(1, Math.trunc(ctx.width)),
+    height: 1,
+    startOnNewLine: true,
+    trailingNewline: true,
+  })
 }

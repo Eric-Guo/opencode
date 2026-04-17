@@ -99,8 +99,42 @@ function fade(color: RGBA, base: RGBA, fallback: number, scale: number, limit: n
   )
 }
 
+function blend(color: RGBA, bg: RGBA): RGBA {
+  if (color.a >= 1) {
+    return color
+  }
+
+  return RGBA.fromValues(
+    bg.r + (color.r - bg.r) * color.a,
+    bg.g + (color.g - bg.g) * color.a,
+    bg.b + (color.b - bg.b) * color.a,
+    1,
+  )
+}
+
+export function opaqueSyntaxStyle(style: SyntaxStyle | undefined, bg: RGBA): SyntaxStyle | undefined {
+  if (!style) {
+    return
+  }
+
+  return SyntaxStyle.fromStyles(
+    Object.fromEntries(
+      [...style.getAllStyles()].map(([name, value]) => [
+        name,
+        {
+          ...value,
+          fg: value.fg ? blend(value.fg, bg) : value.fg,
+          bg: value.bg ? blend(value.bg, bg) : value.bg,
+        },
+      ]),
+    ),
+  )
+}
+
 function map(theme: TuiThemeCurrent, syntax?: SyntaxStyle, subtleSyntax?: SyntaxStyle): RunTheme {
   const bg = theme.background
+  const opaqueSubtleSyntax = opaqueSyntaxStyle(subtleSyntax, bg)
+  subtleSyntax?.destroy()
   const pane = theme.backgroundElement
   const shade = fade(pane, bg, 0.12, 0.56, 0.72)
   const surface = fade(pane, bg, 0.18, 0.76, 0.9)
@@ -146,7 +180,7 @@ function map(theme: TuiThemeCurrent, syntax?: SyntaxStyle, subtleSyntax?: Syntax
       text: theme.text,
       muted: theme.textMuted,
       syntax,
-      subtleSyntax,
+      subtleSyntax: opaqueSubtleSyntax,
       diffAdded: theme.diffAdded,
       diffRemoved: theme.diffRemoved,
       diffAddedBg: theme.diffAddedBg,

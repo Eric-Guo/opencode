@@ -182,37 +182,37 @@ export class RunScrollbackStream {
     const renderable =
       body.type === "text"
         ? new TextRenderable(surface.renderContext, {
-            id,
-            content: "",
-            width: "100%",
-            wrapMode: "word",
-            fg: look(commit, this.theme.entry).fg,
-            attributes: look(commit, this.theme.entry).attrs,
-          })
+          id,
+          content: "",
+          width: "100%",
+          wrapMode: "word",
+          fg: look(commit, this.theme.entry).fg,
+          attributes: look(commit, this.theme.entry).attrs,
+        })
         : body.type === "code"
           ? new CodeRenderable(surface.renderContext, {
-              id,
-              content: "",
-              filetype: body.filetype,
-              syntaxStyle: syntaxFor(commit, this.theme),
-              width: "100%",
-              wrapMode: "word",
-              drawUnstyledText: false,
-              streaming: true,
-              fg: entryColor(commit, this.theme),
-              treeSitterClient: this.treeSitterClient,
-            })
+            id,
+            content: "",
+            filetype: body.filetype,
+            syntaxStyle: syntaxFor(commit, this.theme),
+            width: "100%",
+            wrapMode: "word",
+            drawUnstyledText: false,
+            streaming: true,
+            fg: entryColor(commit, this.theme),
+            treeSitterClient: this.treeSitterClient,
+          })
           : new MarkdownRenderable(surface.renderContext, {
-              id,
-              content: "",
-              syntaxStyle: syntaxFor(commit, this.theme),
-              width: "100%",
-              streaming: true,
-              internalBlockMode: "top-level",
-              tableOptions: { widthMode: "content" },
-              fg: entryColor(commit, this.theme),
-              treeSitterClient: this.treeSitterClient,
-            })
+            id,
+            content: "",
+            syntaxStyle: syntaxFor(commit, this.theme),
+            width: "100%",
+            streaming: true,
+            internalBlockMode: "top-level",
+            tableOptions: { widthMode: "content" },
+            fg: entryColor(commit, this.theme),
+            treeSitterClient: this.treeSitterClient,
+          })
 
     surface.root.add(renderable)
 
