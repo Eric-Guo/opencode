@@ -4,10 +4,10 @@
 // and the footer is the only region that can repaint. RunFooter owns both
 // sides of that boundary:
 //
-//   Scrollback: append() queues StreamCommit entries and flush() writes them
-//   to the renderer via writeToScrollback(). Commits coalesce in a microtask
-//   queue -- consecutive progress chunks for the same part merge into one
-//   write to avoid excessive scrollback snapshots.
+//   Scrollback: append() queues StreamCommit entries and flush() drains them
+//   through retained scrollback surfaces. Commits coalesce in a microtask
+//   queue so direct-mode transcript updates still preserve ordering without
+//   rebuilding the session model.
 //
 //   Footer: event() updates the SolidJS signal-backed FooterState, which
 //   drives the reactive footer view (prompt, status, permission, question).
@@ -23,16 +23,14 @@
 //
 // Interrupt and exit use a two-press pattern: first press shows a hint,
 // second press within 5 seconds actually fires the action.
-import { CliRenderEvents, type CliRenderer } from "@opentui/core"
+import { CliRenderEvents, type CliRenderer, type TreeSitterClient } from "@opentui/core"
 import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
 import { SUBAGENT_INSPECTOR_ROWS, SUBAGENT_TAB_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
 import { printableBinding } from "./prompt.shared"
 import { RunFooterView } from "./footer.view"
-import { normalizeEntry } from "./scrollback.format"
-import { entryWriter } from "./scrollback"
-import { sameEntryGroup, spacerWriter } from "./scrollback.writer"
+import { RunScrollbackStream } from "./scrollback.surface"
 import type { RunTheme } from "./theme"
 import type {
   RunAgent,
@@ -77,6 +75,7 @@ type RunFooterOptions = {
   onInterrupt?: () => void
   onExit?: () => void
   onSubagentSelect?: (sessionID: string | undefined) => void
+  treeSitterClient?: TreeSitterClient
 }
 
 const PERMISSION_ROWS = 12
@@ -96,13 +95,10 @@ export class RunFooter implements FooterApi {
   private destroyed = false
   private prompts = new Set<(input: RunPrompt) => void>()
   private closes = new Set<() => void>()
-  // Most recent visible scrollback commit.
-  private tail: StreamCommit | undefined
-  // The entry splash is already in scrollback before footer output starts.
-  private wrote = true
   // Microtask-coalesced commit queue. Flushed on next microtask or on close/destroy.
   private queue: StreamCommit[] = []
   private pending = false
+  private flushing: Promise<void> = Promise.resolve()
   // Fixed portion of footer height above the textarea.
   private base: number
   private rows = TEXTAREA_MIN_ROWS
@@ -121,6 +117,7 @@ export class RunFooter implements FooterApi {
   private interruptTimeout: NodeJS.Timeout | undefined
   private exitTimeout: NodeJS.Timeout | undefined
   private interruptHint: string
+  private scrollback: RunScrollbackStream
 
   constructor(
     private renderer: CliRenderer,
@@ -153,6 +150,10 @@ export class RunFooter implements FooterApi {
     this.setSubagent = setSubagent
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
     this.interruptHint = printableBinding(options.keybinds.interrupt, options.keybinds.leader) || "esc"
+    this.scrollback = new RunScrollbackStream(renderer, options.theme, {
+      diffStyle: options.diffStyle,
+      treeSitterClient: options.treeSitterClient,
+    })
 
     this.renderer.on(CliRenderEvents.DESTROY, this.handleDestroy)
 
@@ -325,6 +326,7 @@ export class RunFooter implements FooterApi {
 
     if (prev.phase === "running" && state.phase === "idle") {
       this.flush()
+      this.flushing = this.flushing.then(() => this.scrollback.complete()).catch(() => {})
     }
   }
 
@@ -338,15 +340,11 @@ export class RunFooter implements FooterApi {
   }
 
   // Queues a scrollback commit. Consecutive progress chunks for the same
-  // part coalesce by appending text, reducing the number of renderer writes.
-  // Actual flush happens on the next microtask, so a burst of events from
-  // one reducer pass becomes a single scrollback write.
+  // part coalesce by appending text, reducing the number of retained-surface
+  // updates. Actual flush happens on the next microtask, so a burst of events
+  // from one reducer pass becomes a single ordered drain.
   public append(commit: StreamCommit): void {
     if (this.destroyed || this.renderer.isDestroyed) {
-      return
-    }
-
-    if (!normalizeEntry(commit)) {
       return
     }
 
@@ -381,7 +379,22 @@ export class RunFooter implements FooterApi {
       return Promise.resolve()
     }
 
-    return this.renderer.idle().catch(() => {})
+    this.flush()
+    if (this.state().phase === "idle") {
+      this.flushing = this.flushing.then(() => this.scrollback.complete()).catch(() => {})
+    }
+
+    return this.flushing.then(async () => {
+      if (this.destroyed || this.renderer.isDestroyed) {
+        return
+      }
+
+      if (this.queue.length > 0) {
+        return this.idle()
+      }
+
+      await this.renderer.idle().catch(() => {})
+    })
   }
 
   public close(): void {
@@ -410,8 +423,7 @@ export class RunFooter implements FooterApi {
     this.renderer.off(CliRenderEvents.DESTROY, this.handleDestroy)
     this.prompts.clear()
     this.closes.clear()
-    this.tail = undefined
-    this.wrote = false
+    this.scrollback.destroy()
   }
 
   private notifyClose(): void {
@@ -638,27 +650,25 @@ export class RunFooter implements FooterApi {
     this.renderer.off(CliRenderEvents.DESTROY, this.handleDestroy)
     this.prompts.clear()
     this.closes.clear()
-    this.tail = undefined
-    this.wrote = false
+    this.scrollback.destroy()
   }
 
-  // Drains the commit queue to scrollback. Visible commits start a new block
-  // whenever their block key changes, and new blocks get a single spacer.
+  // Drains the commit queue to scrollback. The surface manager owns grouping,
+  // spacing, and progressive markdown/code settling so direct mode can append
+  // immutable transcript rows without rewriting history.
   private flush(): void {
     if (this.destroyed || this.renderer.isDestroyed || this.queue.length === 0) {
       this.queue.length = 0
       return
     }
 
-    for (const item of this.queue.splice(0)) {
-      const same = sameEntryGroup(this.tail, item)
-      if (this.wrote && !same) {
-        this.renderer.writeToScrollback(spacerWriter())
-      }
-
-      this.renderer.writeToScrollback(entryWriter(item, this.options.theme, { diffStyle: this.options.diffStyle }))
-      this.wrote = true
-      this.tail = item
-    }
+    const batch = this.queue.splice(0)
+    this.flushing = this.flushing
+      .then(async () => {
+        for (const item of batch) {
+          await this.scrollback.append(item)
+        }
+      })
+      .catch(() => {})
   }
 }

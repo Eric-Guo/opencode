@@ -38,6 +38,7 @@ export type RunBlockTheme = {
   text: ColorInput
   muted: ColorInput
   syntax?: SyntaxStyle
+  subtleSyntax?: SyntaxStyle
   diffAdded: ColorInput
   diffRemoved: ColorInput
   diffAddedBg: ColorInput
@@ -98,7 +99,7 @@ function fade(color: RGBA, base: RGBA, fallback: number, scale: number, limit: n
   )
 }
 
-function map(theme: TuiThemeCurrent, syntax?: SyntaxStyle): RunTheme {
+function map(theme: TuiThemeCurrent, syntax?: SyntaxStyle, subtleSyntax?: SyntaxStyle): RunTheme {
   const bg = theme.background
   const pane = theme.backgroundElement
   const shade = fade(pane, bg, 0.12, 0.56, 0.72)
@@ -145,6 +146,7 @@ function map(theme: TuiThemeCurrent, syntax?: SyntaxStyle): RunTheme {
       text: theme.text,
       muted: theme.textMuted,
       syntax,
+      subtleSyntax,
       diffAdded: theme.diffAdded,
       diffRemoved: theme.diffRemoved,
       diffAddedBg: theme.diffAddedBg,
@@ -229,7 +231,7 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const mod = await import("../tui/context/theme")
     const theme = mod.resolveTheme(mod.generateSystem(colors, pick), pick) as TuiThemeCurrent
     try {
-      return map(theme, mod.generateSyntax(theme))
+      return map(theme, mod.generateSyntax(theme), mod.generateSubtleSyntax(theme))
     } catch {
       return map(theme)
     }

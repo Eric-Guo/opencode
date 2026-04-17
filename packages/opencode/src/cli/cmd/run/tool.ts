@@ -18,16 +18,14 @@ import os from "os"
 import path from "path"
 import stripAnsi from "strip-ansi"
 import type { ToolPart } from "@opencode-ai/sdk/v2"
-import type { Tool } from "../../../tool/tool"
+import type * as Tool from "../../../tool/tool"
 import type { ApplyPatchTool } from "../../../tool/apply_patch"
-import type { BatchTool } from "../../../tool/batch"
 import type { BashTool } from "../../../tool/bash"
 import type { CodeSearchTool } from "../../../tool/codesearch"
 import type { EditTool } from "../../../tool/edit"
 import type { GlobTool } from "../../../tool/glob"
 import type { GrepTool } from "../../../tool/grep"
 import type { InvalidTool } from "../../../tool/invalid"
-import type { ListTool } from "../../../tool/ls"
 import type { LspTool } from "../../../tool/lsp"
 import type { PlanExitTool } from "../../../tool/plan"
 import type { QuestionTool } from "../../../tool/question"
@@ -40,7 +38,7 @@ import type { WebSearchTool } from "../../../tool/websearch"
 import type { WriteTool } from "../../../tool/write"
 import { LANGUAGE_EXTENSIONS } from "../../../lsp/language"
 import * as Locale from "../../../util/locale"
-import type { RunDiffStyle, StreamCommit } from "./types"
+import type { RunDiffStyle, RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
 
 export type ToolView = {
   output: boolean
@@ -78,55 +76,6 @@ export type ToolPermissionInfo = {
   file?: string
 }
 
-export type ToolCodeSnapshot = {
-  kind: "code"
-  title: string
-  content: string
-  file?: string
-}
-
-export type ToolDiffSnapshot = {
-  kind: "diff"
-  items: Array<{
-    title: string
-    diff: string
-    file?: string
-    deletions?: number
-  }>
-}
-
-export type ToolTaskSnapshot = {
-  kind: "task"
-  title: string
-  rows: string[]
-  tail: string
-}
-
-export type ToolTodoSnapshot = {
-  kind: "todo"
-  items: Array<{
-    status: string
-    content: string
-  }>
-  tail: string
-}
-
-export type ToolQuestionSnapshot = {
-  kind: "question"
-  items: Array<{
-    question: string
-    answer: string
-  }>
-  tail: string
-}
-
-export type ToolSnapshot =
-  | ToolCodeSnapshot
-  | ToolDiffSnapshot
-  | ToolTaskSnapshot
-  | ToolTodoSnapshot
-  | ToolQuestionSnapshot
-
 export type ToolProps<T = Tool.Info> = {
   input: Partial<Tool.InferParameters<T>>
   metadata: Partial<Tool.InferMetadata<T>>
@@ -151,14 +100,14 @@ type ToolDefs = {
   write: typeof WriteTool
   edit: typeof EditTool
   apply_patch: typeof ApplyPatchTool
-  batch: typeof BatchTool
+  batch: Tool.Info
   task: typeof TaskTool
   todowrite: typeof TodoWriteTool
   question: typeof QuestionTool
   read: typeof ReadTool
   glob: typeof GlobTool
   grep: typeof GrepTool
-  list: typeof ListTool
+  list: Tool.Info
   lsp: typeof LspTool
   webfetch: typeof WebFetchTool
   codesearch: typeof CodeSearchTool
@@ -361,8 +310,8 @@ function runGrep(p: ToolProps<typeof GrepTool>): ToolInline {
   }
 }
 
-function runList(p: ToolProps<typeof ListTool>): ToolInline {
-  const dir = p.input.path ?? ""
+function runList(p: ToolProps): ToolInline {
+  const dir = text(dict(p.input).path)
   return {
     icon: "→",
     title: dir ? `List ${toolPath(dir)}` : "List",
@@ -487,8 +436,8 @@ function runInvalid(p: ToolProps<typeof InvalidTool>): ToolInline {
   }
 }
 
-function runBatch(p: ToolProps<typeof BatchTool>): ToolInline {
-  const calls = list(p.input.tool_calls).length
+function runBatch(p: ToolProps): ToolInline {
+  const calls = list(dict(p.input).tool_calls).length
   return {
     icon: "#",
     title: text(p.frame.state.title) || (calls > 0 ? `Batch ${calls} tool${calls === 1 ? "" : "s"}` : "Batch"),
@@ -600,7 +549,7 @@ function snapPatch(p: ToolProps<typeof ApplyPatchTool>): ToolSnapshot | undefine
           return
         }
 
-        const diff = typeof file.diff === "string" ? file.diff : ""
+        const diff = typeof file.patch === "string" ? file.patch : ""
         if (!diff.trim()) {
           return
         }
@@ -865,15 +814,15 @@ function scrollTodoStart(p: ToolProps<typeof TodoWriteTool>): string {
 }
 
 function scrollTodoFinal(p: ToolProps<typeof TodoWriteTool>): string {
-  const list = p.input.todos ?? []
-  if (list.length === 0) {
+  const items = list<{ status?: string }>(p.input.todos)
+  if (items.length === 0) {
     return done("todos", span(p.frame.state))
   }
 
-  const doneN = list.filter((item) => item.status === "completed").length
-  const runN = list.filter((item) => item.status === "in_progress").length
-  const left = list.length - doneN - runN
-  const tail = [`${list.length} total`]
+  const doneN = items.filter((item) => item.status === "completed").length
+  const runN = items.filter((item) => item.status === "in_progress").length
+  const left = items.length - doneN - runN
+  const tail = [`${items.length} total`]
   if (doneN > 0) {
     tail.push(`${doneN} done`)
   }
@@ -944,8 +893,8 @@ function scrollGrepStart(p: ToolProps<typeof GrepTool>): string {
   return `${head} in ${toolPath(dir)}`
 }
 
-function scrollListStart(p: ToolProps<typeof ListTool>): string {
-  const dir = p.input.path ?? ""
+function scrollListStart(p: ToolProps): string {
+  const dir = text(dict(p.input).path)
   if (!dir) {
     return "→ List"
   }
@@ -1019,8 +968,8 @@ function permGrep(p: ToolPermissionProps<typeof GrepTool>): ToolPermissionInfo {
   }
 }
 
-function permList(p: ToolPermissionProps<typeof ListTool>): ToolPermissionInfo {
-  const dir = p.input.path || p.patterns[0] || ""
+function permList(p: ToolPermissionProps): ToolPermissionInfo {
+  const dir = text(dict(p.input).path) || p.patterns[0] || ""
   return {
     icon: "→",
     title: `List ${toolPath(dir, { home: true })}`,
@@ -1369,6 +1318,16 @@ export function toolView(name?: string): ToolView {
   )
 }
 
+export function toolStructuredFinal(commit: StreamCommit): boolean {
+  const state = commit.toolState ?? commit.part?.state.status
+  return (
+    commit.kind === "tool" &&
+    commit.phase === "final" &&
+    state === "completed" &&
+    Boolean(toolView(commit.tool ?? commit.part?.tool).snap)
+  )
+}
+
 export function toolInlineInfo(part: ToolPart): ToolInline {
   const ctx = frame(part)
   const draw = rule(ctx.name)?.run
@@ -1440,6 +1399,58 @@ export function toolSnapshot(commit: StreamCommit, raw: string): ToolSnapshot | 
   } catch {
     return
   }
+}
+
+function textBody(content: string): RunEntryBody | undefined {
+  if (!content) {
+    return
+  }
+
+  return {
+    type: "text",
+    content,
+  }
+}
+
+function structuredBody(commit: StreamCommit, raw: string): RunEntryBody | undefined {
+  const snap = toolSnapshot(commit, raw)
+  if (!snap) {
+    return
+  }
+
+  return {
+    type: "structured",
+    snapshot: snap,
+  }
+}
+
+export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody | undefined {
+  const ctx = toolFrame(commit, raw)
+  const view = toolView(ctx.name)
+
+  if (commit.phase === "progress" && !view.output) {
+    return
+  }
+
+  if (commit.phase === "final") {
+    if (ctx.status === "error") {
+      return textBody(toolScroll("final", ctx))
+    }
+
+    if (!view.final) {
+      return
+    }
+
+    if (ctx.status && ctx.status !== "completed") {
+      return textBody(ctx.raw.trim())
+    }
+
+    if (toolStructuredFinal(commit)) {
+      return structuredBody(commit, raw) ?? textBody(toolScroll("final", ctx))
+    }
+  }
+
+  return textBody(toolScroll(commit.phase, ctx))
 }
 
 export function toolFiletype(input?: string): string | undefined {

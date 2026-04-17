@@ -35,13 +35,11 @@ function statusIcon(status: FooterSubagentTab["status"]) {
   return "◔"
 }
 
-function tabText(input: {
-  tab: FooterSubagentTab
-  slot: string
-  count: number
-  width: number
-}) {
-  const perTab = Math.max(1, Math.floor((input.width - 4 - Math.max(0, input.count - 1) * 3) / Math.max(1, input.count)))
+function tabText(input: { tab: FooterSubagentTab; slot: string; count: number; width: number }) {
+  const perTab = Math.max(
+    1,
+    Math.floor((input.width - 4 - Math.max(0, input.count - 1) * 3) / Math.max(1, input.count)),
+  )
   if (input.count >= 8 || perTab < 12) {
     return `[${input.slot}]`
   }

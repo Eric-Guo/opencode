@@ -1,0 +1,225 @@
+import { afterEach, expect, test } from "bun:test"
+import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
+import { RunScrollbackStream } from "../../../src/cli/cmd/run/scrollback.surface"
+import { RUN_THEME_FALLBACK } from "../../../src/cli/cmd/run/theme"
+
+type ClaimedCommit = {
+  snapshot: {
+    getRealCharBytes(addLineBreaks?: boolean): Uint8Array
+    destroy(): void
+  }
+}
+
+const decoder = new TextDecoder()
+const active: TestRenderer[] = []
+
+afterEach(() => {
+  for (const renderer of active.splice(0)) {
+    renderer.destroy()
+  }
+})
+
+function claimCommits(renderer: TestRenderer): ClaimedCommit[] {
+  return (renderer as any).externalOutputQueue.claim() as ClaimedCommit[]
+}
+
+function destroyCommits(commits: ClaimedCommit[]) {
+  for (const commit of commits) {
+    commit.snapshot.destroy()
+  }
+}
+
+test("completes finely streamed markdown tables when the turn goes idle", async () => {
+  const out = await createTestRenderer({
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+  })
+
+  const text = "| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Row 1 | Value 1 | Value 2 |\n| Row 2 | Value 3 | Value 4 |"
+
+  for (const chunk of text) {
+    await scrollback.append({
+      kind: "assistant",
+      text: chunk,
+      phase: "progress",
+      source: "assistant",
+      messageID: "msg-1",
+      partID: "part-1",
+    })
+  }
+
+  await scrollback.complete()
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits.length).toBeGreaterThan(0)
+    const rendered = commits.map((item) => decoder.decode(item.snapshot.getRealCharBytes(true))).join("\n")
+    expect(rendered).toContain("Column 1")
+    expect(rendered).toContain("Row 2")
+    expect(rendered).toContain("Value 4")
+  } finally {
+    destroyCommits(commits)
+  }
+})
+
+test("completes coalesced markdown tables after one progress append", async () => {
+  const out = await createTestRenderer({
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+  })
+
+  await scrollback.append({
+    kind: "assistant",
+    text: "| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Row 1 | Value 1 | Value 2 |\n| Row 2 | Value 3 | Value 4 |",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+
+  await scrollback.complete()
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits.length).toBeGreaterThan(0)
+    const rendered = commits.map((item) => decoder.decode(item.snapshot.getRealCharBytes(true))).join("\n")
+    expect(rendered).toContain("Column 1")
+    expect(rendered).toContain("Row 2")
+    expect(rendered).toContain("Value 4")
+  } finally {
+    destroyCommits(commits)
+  }
+})
+
+test("coalesces same-line tool progress into one snapshot", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "tool",
+    text: "abc",
+    phase: "progress",
+    source: "tool",
+    partID: "tool-1",
+    messageID: "msg-1",
+    tool: "bash",
+  })
+  await scrollback.append({
+    kind: "tool",
+    text: "def",
+    phase: "progress",
+    source: "tool",
+    partID: "tool-1",
+    messageID: "msg-1",
+    tool: "bash",
+  })
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "tool-1",
+    messageID: "msg-1",
+    tool: "bash",
+    toolState: "completed",
+  })
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits).toHaveLength(1)
+    expect(decoder.decode(commits[0]!.snapshot.getRealCharBytes(true))).toContain("abcdef")
+  } finally {
+    destroyCommits(commits)
+  }
+})
+
+test("renders structured write finals as native code blocks", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "tool-2",
+    messageID: "msg-2",
+    tool: "write",
+    toolState: "completed",
+    part: {
+      id: "tool-2",
+      sessionID: "session-1",
+      messageID: "msg-2",
+      type: "tool",
+      callID: "call-2",
+      tool: "write",
+      state: {
+        status: "completed",
+        input: {
+          filePath: "src/a.ts",
+          content: "const x = 1\nconst y = 2\n",
+        },
+        metadata: {},
+        time: {
+          start: 1,
+          end: 2,
+        },
+      },
+    } as never,
+  })
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits).toHaveLength(1)
+    const rendered = decoder.decode(commits[0]!.snapshot.getRealCharBytes(true)).replace(/ +/g, " ")
+    expect(rendered).toContain("# Wrote src/a.ts")
+    expect(rendered).toMatch(/1\s+const x = 1/)
+    expect(rendered).toMatch(/2\s+const y = 2/)
+  } finally {
+    destroyCommits(commits)
+  }
+})

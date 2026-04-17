@@ -715,7 +715,7 @@ export function generateSyntax(theme: TuiThemeCurrent) {
   return SyntaxStyle.fromTheme(getSyntaxRules(theme))
 }
 
-function generateSubtleSyntax(theme: TuiThemeCurrent) {
+export function generateSubtleSyntax(theme: TuiThemeCurrent) {
   const rules = getSyntaxRules(theme)
   return SyntaxStyle.fromTheme(
     rules.map((rule) => {

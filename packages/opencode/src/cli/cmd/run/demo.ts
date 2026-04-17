@@ -27,7 +27,21 @@ import type {
   StreamCommit,
 } from "./types"
 
-const KINDS = ["markdown", "table", "text", "reasoning", "bash", "write", "edit", "patch", "task", "todo", "question", "error", "mix"]
+const KINDS = [
+  "markdown",
+  "table",
+  "text",
+  "reasoning",
+  "bash",
+  "write",
+  "edit",
+  "patch",
+  "task",
+  "todo",
+  "question",
+  "error",
+  "mix",
+]
 const PERMISSIONS = ["edit", "bash", "read", "task", "external", "doom"] as const
 const QUESTIONS = ["multi", "single", "checklist", "custom"] as const
 

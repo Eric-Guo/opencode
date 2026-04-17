@@ -292,12 +292,7 @@ export function RunQuestionBody(props: {
         backgroundColor={props.theme.surface}
       >
         <Show when={!single()}>
-          <box id="run-direct-footer-question-tabs"
-            flexDirection="row"
-            gap={1}
-            paddingLeft={1}
-            flexShrink={0}
-          >
+          <box id="run-direct-footer-question-tabs" flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
             <For each={props.request.questions}>
               {(item, index) => {
                 const active = () => state().tab === index()

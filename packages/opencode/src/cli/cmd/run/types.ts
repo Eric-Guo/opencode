@@ -83,6 +83,62 @@ export type ScrollbackOptions = {
   diffStyle?: RunDiffStyle
 }
 
+export type ToolCodeSnapshot = {
+  kind: "code"
+  title: string
+  content: string
+  file?: string
+}
+
+export type ToolDiffSnapshot = {
+  kind: "diff"
+  items: Array<{
+    title: string
+    diff: string
+    file?: string
+    deletions?: number
+  }>
+}
+
+export type ToolTaskSnapshot = {
+  kind: "task"
+  title: string
+  rows: string[]
+  tail: string
+}
+
+export type ToolTodoSnapshot = {
+  kind: "todo"
+  items: Array<{
+    status: string
+    content: string
+  }>
+  tail: string
+}
+
+export type ToolQuestionSnapshot = {
+  kind: "question"
+  items: Array<{
+    question: string
+    answer: string
+  }>
+  tail: string
+}
+
+export type ToolSnapshot =
+  | ToolCodeSnapshot
+  | ToolDiffSnapshot
+  | ToolTaskSnapshot
+  | ToolTodoSnapshot
+  | ToolQuestionSnapshot
+
+export type RunEntryBody =
+  | { type: "none" }
+  | { type: "text"; content: string }
+  | { type: "code"; content: string; filetype?: string }
+  | { type: "markdown"; content: string }
+  | { type: "structured"; snapshot: ToolSnapshot }
+
 // Which interactive surface the footer is showing. Only one view is active at
 // a time. The reducer drives transitions: when a permission arrives the view
 // switches to "permission", and when the permission resolves it falls back to

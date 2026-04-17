@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { normalizeEntry } from "../../../src/cli/cmd/run/scrollback.format"
+import { entryBody } from "../../../src/cli/cmd/run/entry.body"
 import {
   bootstrapSubagentData,
   clearFinishedSubagents,
@@ -8,6 +8,33 @@ import {
   snapshotSelectedSubagentData,
   snapshotSubagentData,
 } from "../../../src/cli/cmd/run/subagent-data"
+
+function visible(commits: Array<Parameters<typeof entryBody>[0]>) {
+  return commits.flatMap((item) => {
+    const body = entryBody(item)
+    if (body.type === "none") {
+      return []
+    }
+
+    if (body.type === "structured") {
+      if (body.snapshot.kind === "code" || body.snapshot.kind === "task") {
+        return [body.snapshot.title]
+      }
+
+      if (body.snapshot.kind === "diff") {
+        return body.snapshot.items.map((item) => item.title)
+      }
+
+      if (body.snapshot.kind === "todo") {
+        return ["# Todos"]
+      }
+
+      return ["# Questions"]
+    }
+
+    return [body.content]
+  })
+}
 
 function taskMessage(sessionID: string, status: "running" | "completed" | "error" = "completed") {
   return {
@@ -243,9 +270,9 @@ describe("run subagent data", () => {
       sessionID: "child-1",
       commits: expect.any(Array),
     })
-    expect(snapshot.details["child-1"]?.commits.map((item) => normalizeEntry(item))).toEqual([
+    expect(visible(snapshot.details["child-1"]?.commits ?? [])).toEqual([
       "› Inspect footer tabs",
-      "Thinking: planning next steps",
+      "_Thinking:_ planning next steps",
       "# Shell\n$ git status --short",
     ])
     expect(snapshot.permissions).toEqual([
@@ -343,9 +370,9 @@ describe("run subagent data", () => {
       } as never,
     })
 
-    expect(
-      snapshotSelectedSubagentData(data, "child-1").details["child-1"]?.commits.map((item) => normalizeEntry(item)),
-    ).toEqual(["hello world"])
+    expect(visible(snapshotSelectedSubagentData(data, "child-1").details["child-1"]?.commits ?? [])).toEqual([
+      "hello world",
+    ])
   })
 
   test("clears finished tabs on the next parent prompt", () => {

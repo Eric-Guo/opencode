@@ -35,7 +35,9 @@ type BootContext = Pick<
 type RunRuntimeInput = {
   boot: () => Promise<BootContext>
   afterPaint?: (ctx: BootContext) => Promise<void> | void
-  resolveSession?: (ctx: BootContext) => Promise<{ sessionID: string; sessionTitle?: string; agent?: string | undefined }>
+  resolveSession?: (
+    ctx: BootContext,
+  ) => Promise<{ sessionID: string; sessionTitle?: string; agent?: string | undefined }>
   files: RunInput["files"]
   initialInput?: string
   thinking: boolean
@@ -384,7 +386,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
             if (signal.aborted || footer.isClosed) {
               return
             }
-            const text = stream?.mod.formatUnknownError(error) ?? (error instanceof Error ? error.message : String(error))
+            const text =
+              stream?.mod.formatUnknownError(error) ?? (error instanceof Error ? error.message : String(error))
             footer.append({ kind: "error", text, phase: "start", source: "system" })
           }
         },
@@ -393,14 +396,15 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
       await stream?.handle.close()
     }
   } finally {
-    const title = shown && hasSession
-      ? await ctx.sdk.session
-          .get({
-            sessionID,
-          })
-          .then((x) => x.data?.title)
-          .catch(() => undefined)
-      : undefined
+    const title =
+      shown && hasSession
+        ? await ctx.sdk.session
+            .get({
+              sessionID,
+            })
+            .then((x) => x.data?.title)
+            .catch(() => undefined)
+        : undefined
 
     await shell.close({
       showExit: shown && hasSession,

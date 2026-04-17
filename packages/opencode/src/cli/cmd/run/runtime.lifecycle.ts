@@ -230,6 +230,8 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     process.off("SIGINT", sigint)
 
     try {
+      await footer.idle().catch(() => {})
+
       const show = renderer.isDestroyed ? false : next.showExit
       if (!renderer.isDestroyed && show) {
         const sessionID = next.sessionID ?? input.sessionID
@@ -250,6 +252,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       }
     } finally {
       footer.close()
+      await footer.idle().catch(() => {})
       footer.destroy()
       shutdown(renderer)
     }
