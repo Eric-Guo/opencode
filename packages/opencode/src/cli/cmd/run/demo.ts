@@ -27,36 +27,59 @@ import type {
   StreamCommit,
 } from "./types"
 
-const KINDS = ["text", "reasoning", "bash", "write", "edit", "patch", "task", "todo", "question", "error", "mix"]
+const KINDS = ["markdown", "table", "text", "reasoning", "bash", "write", "edit", "patch", "task", "todo", "question", "error", "mix"]
 const PERMISSIONS = ["edit", "bash", "read", "task", "external", "doom"] as const
 const QUESTIONS = ["multi", "single", "checklist", "custom"] as const
 
 type PermissionKind = (typeof PERMISSIONS)[number]
 type QuestionKind = (typeof QUESTIONS)[number]
 
-const SAMPLE_TEXT = [
-  "# Demo markdown",
+const SAMPLE_MARKDOWN = [
+  "# Direct Mode Demo",
   "",
-  "This is sample assistant output for direct mode formatting checks.",
-  "It includes **bold**, _italic_, and `inline code`.",
+  "This is a realistic assistant response for direct-mode formatting checks.",
+  "It mixes **bold**, _italic_, `inline code`, links, code fences, and tables in one streamed reply.",
   "",
-  "- bullet: short line",
-  "- bullet: long line that should wrap cleanly in narrow terminals while keeping list indentation readable",
-  "- bullet: [link text](https://example.com)",
+  "## Summary",
   "",
-  "1. ordered item",
-  "2. second ordered item",
+  "- Restored the final markdown flush so the last block is committed on idle.",
+  "- Switched markdown scrollback commits back to top-level block boundaries.",
+  "- Added footer-level regression coverage for split-footer rendering.",
   "",
-  "> quote line for spacing and style checks",
+  "## Status",
+  "",
+  "| Area | Before | After | Notes |",
+  "| --- | --- | --- | --- |",
+  "| Direct mode | Missing final rows | Stable | Final markdown block now flushes on idle |",
+  "| Tables | Dropped in streaming mode | Visible | Block-based commits match the working OpenTUI demo |",
+  "| Tests | Partial coverage | Broader coverage | Includes a footer-level split render capture |",
+  "",
+  "> This sample intentionally includes a wide table so you can spot wrapping and commit bugs quickly.",
   "",
   "```ts",
-  "const sample = { ok: true, count: 42 }",
+  "const result = { markdown: true, tables: 2, stable: true }",
   "```",
   "",
-  "| key   | value |",
-  "| ----- | ----- |",
-  "| alpha | one   |",
-  "| beta  | two   |",
+  "## Files",
+  "",
+  "| File | Change |",
+  "| --- | --- |",
+  "| `scrollback.surface.ts` | Align markdown commit logic with the split-footer demo |",
+  "| `footer.ts` | Keep active surfaces across footer-height-only resizes |",
+  "| `footer.test.ts` | Capture real split-footer markdown payloads during idle completion |",
+  "",
+  "Next step: run `/fmt table` if you want a tighter table-only sample.",
+].join("\n")
+
+const SAMPLE_TABLE = [
+  "# Table Sample",
+  "",
+  "| Kind | Example | Notes |",
+  "| --- | --- | --- |",
+  "| Pipe | `A\\|B` | Escaped pipes should stay in one cell |",
+  "| Unicode | `漢字` | Wide characters should remain aligned |",
+  "| Wrap | `LongTokenWithoutNaturalBreaks_1234567890` | Useful for width stress |",
+  "| Status | done | Final row should still appear after idle |",
 ].join("\n")
 
 type Ref = {
@@ -972,7 +995,17 @@ function emitQuestion(state: State, kind: QuestionKind = "multi"): void {
 
 async function emitFmt(state: State, kind: string, body: string, signal?: AbortSignal): Promise<boolean> {
   if (kind === "text") {
-    await emitText(state, body || SAMPLE_TEXT, signal)
+    await emitText(state, body || SAMPLE_MARKDOWN, signal)
+    return true
+  }
+
+  if (kind === "markdown" || kind === "md") {
+    await emitText(state, body || SAMPLE_MARKDOWN, signal)
+    return true
+  }
+
+  if (kind === "table") {
+    await emitText(state, body || SAMPLE_TABLE, signal)
     return true
   }
 
@@ -1022,7 +1055,7 @@ async function emitFmt(state: State, kind: string, body: string, signal?: AbortS
   }
 
   if (kind === "mix") {
-    await emitText(state, "Demo run: assistant text block for wrap testing.", signal)
+    await emitText(state, SAMPLE_MARKDOWN, signal)
     await wait(50, signal)
     await emitReasoning(state, "Thinking through formatter edge cases [REDACTED].", signal)
     await wait(50, signal)
@@ -1051,7 +1084,8 @@ function intro(state: State): void {
       "Examples:",
       "- /permission bash",
       "- /question custom",
-      "- /fmt mix",
+      "- /fmt markdown",
+      "- /fmt table",
       "- /fmt text your custom text",
     ].join("\n"),
   )
@@ -1095,7 +1129,7 @@ export function createRunDemo(input: Input) {
     }
 
     if (input.mode === "text") {
-      await emitFmt(state, "text", input.text ?? SAMPLE_TEXT)
+      await emitFmt(state, "text", input.text ?? SAMPLE_MARKDOWN)
     }
   }
 
