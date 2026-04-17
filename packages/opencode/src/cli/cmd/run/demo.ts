@@ -17,7 +17,15 @@ import path from "path"
 import type { Event } from "@opencode-ai/sdk/v2"
 import { createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { writeSessionOutput } from "./stream"
-import type { FooterApi, PermissionReply, QuestionReject, QuestionReply, RunDemo, RunPrompt } from "./types"
+import type {
+  FooterApi,
+  PermissionReply,
+  QuestionReject,
+  QuestionReply,
+  RunDemo,
+  RunPrompt,
+  StreamCommit,
+} from "./types"
 
 const KINDS = ["text", "reasoning", "bash", "write", "edit", "patch", "task", "todo", "question", "error", "mix"]
 const PERMISSIONS = ["edit", "bash", "read", "task", "external", "doom"] as const
@@ -112,6 +120,60 @@ function note(footer: FooterApi, text: string): void {
     text,
     phase: "start",
     source: "system",
+  })
+}
+
+function clearSubagent(footer: FooterApi): void {
+  footer.event({
+    type: "stream.subagent",
+    state: {
+      tabs: [],
+      details: {},
+      permissions: [],
+      questions: [],
+    },
+  })
+}
+
+function showSubagent(
+  state: State,
+  input: {
+    sessionID: string
+    partID: string
+    callID: string
+    label: string
+    description: string
+    status: "running" | "completed" | "error"
+    title?: string
+    toolCalls?: number
+    commits: StreamCommit[]
+  },
+) {
+  state.footer.event({
+    type: "stream.subagent",
+    state: {
+      tabs: [
+        {
+          sessionID: input.sessionID,
+          partID: input.partID,
+          callID: input.callID,
+          label: input.label,
+          description: input.description,
+          status: input.status,
+          title: input.title,
+          toolCalls: input.toolCalls,
+          lastUpdatedAt: Date.now(),
+        },
+      ],
+      details: {
+        [input.sessionID]: {
+          sessionID: input.sessionID,
+          commits: input.commits,
+        },
+      },
+      permissions: [],
+      questions: [],
+    },
   })
 }
 
@@ -564,6 +626,68 @@ function emitTask(state: State): void {
       sessionId: "sub_demo_1",
     },
   })
+  showSubagent(state, {
+    sessionID: "sub_demo_1",
+    partID: ref.part,
+    callID: ref.call,
+    label: "Explore",
+    description: "Scan run/* for reducer touchpoints",
+    status: "completed",
+    title: "Reducer touchpoints found",
+    toolCalls: 4,
+    commits: [
+      {
+        kind: "user",
+        text: "Scan run/* for reducer touchpoints",
+        phase: "start",
+        source: "system",
+      },
+      {
+        kind: "reasoning",
+        text: "Thinking: tracing reducer and footer boundaries",
+        phase: "progress",
+        source: "reasoning",
+        messageID: "sub_demo_msg_reasoning",
+        partID: "sub_demo_reasoning_1",
+      },
+      {
+        kind: "tool",
+        text: "running read",
+        phase: "start",
+        source: "tool",
+        messageID: "sub_demo_msg_tool",
+        partID: "sub_demo_tool_1",
+        tool: "read",
+        part: {
+          id: "sub_demo_tool_1",
+          type: "tool",
+          sessionID: "sub_demo_1",
+          messageID: "sub_demo_msg_tool",
+          callID: "sub_demo_call_1",
+          tool: "read",
+          state: {
+            status: "running",
+            input: {
+              filePath: "packages/opencode/src/cli/cmd/run/stream.ts",
+              offset: 1,
+              limit: 200,
+            },
+            time: {
+              start: Date.now(),
+            },
+          },
+        } as never,
+      },
+      {
+        kind: "assistant",
+        text: "Footer updates flow through stream.ts into RunFooter",
+        phase: "progress",
+        source: "assistant",
+        messageID: "sub_demo_msg_text",
+        partID: "sub_demo_text_1",
+      },
+    ],
+  })
 }
 
 function emitTodo(state: State): void {
@@ -979,6 +1103,8 @@ export function createRunDemo(input: Input) {
     const text = line.text.trim()
     const list = text.split(/\s+/)
     const cmd = list[0] || ""
+
+    clearSubagent(state.footer)
 
     if (cmd === "/help") {
       intro(state)

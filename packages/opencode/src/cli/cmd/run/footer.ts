@@ -26,13 +26,13 @@
 import { CliRenderEvents, type CliRenderer } from "@opentui/core"
 import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
+import { SUBAGENT_INSPECTOR_ROWS, SUBAGENT_TAB_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
 import { printableBinding } from "./prompt.shared"
 import { RunFooterView } from "./footer.view"
 import { normalizeEntry } from "./scrollback.format"
 import { entryWriter } from "./scrollback"
-import { spacerWriter } from "./scrollback.writer"
-import { toolView } from "./tool"
+import { sameEntryGroup, spacerWriter } from "./scrollback.writer"
 import type { RunTheme } from "./theme"
 import type {
   RunAgent,
@@ -40,9 +40,11 @@ import type {
   FooterEvent,
   FooterKeybinds,
   FooterPatch,
+  FooterPromptRoute,
   RunPrompt,
   RunResource,
   FooterState,
+  FooterSubagentState,
   FooterView,
   PermissionReply,
   QuestionReject,
@@ -74,10 +76,20 @@ type RunFooterOptions = {
   onCycleVariant?: () => CycleResult | void
   onInterrupt?: () => void
   onExit?: () => void
+  onSubagentSelect?: (sessionID: string | undefined) => void
 }
 
 const PERMISSION_ROWS = 12
 const QUESTION_ROWS = 14
+
+function createEmptySubagentState(): FooterSubagentState {
+  return {
+    tabs: [],
+    details: {},
+    permissions: [],
+    questions: [],
+  }
+}
 
 export class RunFooter implements FooterApi {
   private closed = false
@@ -98,6 +110,10 @@ export class RunFooter implements FooterApi {
   private setState: Setter<FooterState>
   private view: Accessor<FooterView>
   private setView: Setter<FooterView>
+  private subagent: Accessor<FooterSubagentState>
+  private setSubagent: Setter<FooterSubagentState>
+  private promptRoute: FooterPromptRoute = { type: "composer" }
+  private tabsVisible = false
   private interruptTimeout: NodeJS.Timeout | undefined
   private exitTimeout: NodeJS.Timeout | undefined
   private interruptHint: string
@@ -122,6 +138,9 @@ export class RunFooter implements FooterApi {
     const [view, setView] = createSignal<FooterView>({ type: "prompt" })
     this.view = view
     this.setView = setView
+    const [subagent, setSubagent] = createSignal<FooterSubagentState>(createEmptySubagentState())
+    this.subagent = subagent
+    this.setSubagent = setSubagent
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
     this.interruptHint = printableBinding(options.keybinds.interrupt, options.keybinds.leader) || "esc"
 
@@ -133,11 +152,11 @@ export class RunFooter implements FooterApi {
           directory: options.directory,
           state: this.state,
           view: this.view,
+          subagent: this.subagent,
           findFiles: options.findFiles,
           agents: () => options.agents,
           resources: () => options.resources,
-          theme: options.theme.footer,
-          block: options.theme.block,
+          theme: options.theme,
           diffStyle: options.diffStyle,
           keybinds: options.keybinds,
           history: options.history,
@@ -151,7 +170,9 @@ export class RunFooter implements FooterApi {
           onExitRequest: this.handleExit,
           onExit: () => this.close(),
           onRows: this.syncRows,
+          onLayout: this.syncLayout,
           onStatus: this.setStatus,
+          onSubagentSelect: options.onSubagentSelect,
         }),
       this.renderer as unknown as Parameters<typeof render>[1],
     ).catch(() => {
@@ -238,6 +259,16 @@ export class RunFooter implements FooterApi {
       }
 
       this.patch(next.patch)
+      return
+    }
+
+    if (next.type === "stream.subagent") {
+      if (this.destroyed || this.renderer.isDestroyed) {
+        return
+      }
+
+      this.setSubagent(next.state)
+      this.applyHeight()
       return
     }
 
@@ -382,12 +413,18 @@ export class RunFooter implements FooterApi {
   // get fixed extra rows; the prompt view scales with textarea line count.
   private applyHeight(): void {
     const type = this.view().type
+    const tabs = this.tabsVisible ? SUBAGENT_TAB_ROWS : 0
     const height =
       type === "permission"
         ? this.base + PERMISSION_ROWS
         : type === "question"
           ? this.base + QUESTION_ROWS
-          : Math.max(this.base + TEXTAREA_MIN_ROWS, Math.min(this.base + PROMPT_MAX_ROWS, this.base + this.rows))
+          : this.promptRoute.type === "subagent"
+            ? this.base + tabs + SUBAGENT_INSPECTOR_ROWS
+            : Math.max(
+                this.base + TEXTAREA_MIN_ROWS,
+                Math.min(this.base + tabs + PROMPT_MAX_ROWS, this.base + tabs + this.rows),
+              )
 
     if (height !== this.renderer.footerHeight) {
       this.renderer.footerHeight = height
@@ -405,6 +442,14 @@ export class RunFooter implements FooterApi {
     }
 
     this.rows = rows
+    if (this.view().type === "prompt") {
+      this.applyHeight()
+    }
+  }
+
+  private syncLayout = (next: { route: FooterPromptRoute; tabs: boolean }): void => {
+    this.promptRoute = next.route
+    this.tabsVisible = next.tabs
     if (this.view().type === "prompt") {
       this.applyHeight()
     }
@@ -586,7 +631,7 @@ export class RunFooter implements FooterApi {
     }
 
     for (const item of this.queue.splice(0)) {
-      const same = sameGroup(this.tail, item)
+      const same = sameEntryGroup(this.tail, item)
       if (this.wrote && !same) {
         this.renderer.writeToScrollback(spacerWriter())
       }
@@ -596,41 +641,4 @@ export class RunFooter implements FooterApi {
       this.tail = item
     }
   }
-}
-
-function snap(commit: StreamCommit): boolean {
-  const tool = commit.tool ?? commit.part?.tool
-  return (
-    commit.kind === "tool" &&
-    commit.phase === "final" &&
-    (commit.toolState ?? commit.part?.state.status) === "completed" &&
-    typeof tool === "string" &&
-    Boolean(toolView(tool).snap)
-  )
-}
-
-function groupKey(commit: StreamCommit): string | undefined {
-  if (!commit.partID) {
-    return
-  }
-
-  if (snap(commit)) {
-    return `tool:${commit.partID}:final`
-  }
-
-  return `${commit.kind}:${commit.partID}`
-}
-
-function sameGroup(a: StreamCommit | undefined, b: StreamCommit): boolean {
-  if (!a) {
-    return false
-  }
-
-  const left = groupKey(a)
-  const right = groupKey(b)
-  if (left && right && left === right) {
-    return true
-  }
-
-  return a.kind === "tool" && a.phase === "start" && b.kind === "tool" && b.phase === "start"
 }

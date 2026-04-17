@@ -25,7 +25,7 @@ import {
 import { createScrollbackWriter, type JSX } from "@opentui/solid"
 import { For, Show } from "solid-js"
 import * as Filesystem from "../../../util/filesystem"
-import { toolDiffView, toolFiletype, toolFrame, toolSnapshot } from "./tool"
+import { toolDiffView, toolFiletype, toolFrame, toolSnapshot, toolView } from "./tool"
 import { clean, normalizeEntry } from "./scrollback.format"
 import { RUN_THEME_FALLBACK, type RunEntryTheme, type RunTheme } from "./theme"
 import type { ScrollbackOptions, StreamCommit } from "./types"
@@ -426,23 +426,165 @@ function QuestionTool(props: { theme: RunTheme; data: QuestionInput }) {
   )
 }
 
-function textWriter(body: string, commit: StreamCommit, theme: RunEntryTheme, flags: Flags): ScrollbackWriter {
-  const style = look(commit, theme)
-  return (ctx) =>
-    fit(
-      createScrollbackWriter(() => <TextEntry body={body} fg={style.fg} attrs={style.attrs} />, {
-        width: cols(ctx),
-        startOnNewLine: flags.startOnNewLine,
-        trailingNewline: flags.trailingNewline,
-      })(ctx),
-      ctx,
-    )
+function snapCommit(commit: StreamCommit) {
+  const state = commit.toolState ?? commit.part?.state.status
+  return (
+    commit.kind === "tool" &&
+    commit.phase === "final" &&
+    state === "completed" &&
+    Boolean(toolView(commit.tool ?? commit.part?.tool).snap)
+  )
 }
 
-function reasoningWriter(body: string, theme: RunEntryTheme, flags: Flags): ScrollbackWriter {
+export function entryGroupKey(commit: StreamCommit): string | undefined {
+  if (!commit.partID) {
+    return
+  }
+
+  if (snapCommit(commit)) {
+    return `tool:${commit.partID}:final`
+  }
+
+  return `${commit.kind}:${commit.partID}`
+}
+
+export function sameEntryGroup(left: StreamCommit | undefined, right: StreamCommit): boolean {
+  if (!left) {
+    return false
+  }
+
+  const current = entryGroupKey(left)
+  const next = entryGroupKey(right)
+  if (current && next && current === next) {
+    return true
+  }
+
+  return left.kind === "tool" && left.phase === "start" && right.kind === "tool" && right.phase === "start"
+}
+
+export function RunEntryTextContent(props: { commit: StreamCommit; theme: RunEntryTheme }) {
+  const body = normalizeEntry(props.commit)
+  if (props.commit.kind === "reasoning") {
+    return <ReasoningEntry body={body} theme={props.theme} />
+  }
+
+  const style = look(props.commit, props.theme)
+  return <TextEntry body={body} fg={style.fg} attrs={style.attrs} />
+}
+
+export function RunEntrySnapContent(props: {
+  commit: StreamCommit
+  theme: RunTheme
+  opts?: ScrollbackOptions
+  width?: number
+}) {
+  const raw = clean(props.commit.text)
+  const snap = toolSnapshot(props.commit, raw)
+  if (!snap) {
+    return <RunEntryTextContent commit={props.commit} theme={props.theme.entry} />
+  }
+
+  const info = toolFrame(props.commit, raw)
+  if (snap.kind === "code") {
+    return (
+      <CodeTool
+        theme={props.theme}
+        data={{
+          title: snap.title,
+          content: snap.content,
+          filetype: toolFiletype(snap.file),
+          diagnostics: diagnostics(info.meta, snap.file ?? ""),
+        }}
+      />
+    )
+  }
+
+  if (snap.kind === "diff") {
+    const list = snap.items
+      .map((item) => {
+        if (!item.diff.trim()) {
+          return
+        }
+
+        return {
+          title: item.title,
+          diff: item.diff,
+          filetype: toolFiletype(item.file),
+          deletions: item.deletions,
+          diagnostics: diagnostics(info.meta, item.file ?? ""),
+        }
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+
+    if (list.length === 0) {
+      return <RunEntryTextContent commit={props.commit} theme={props.theme.entry} />
+    }
+
+    return (
+      <box flexDirection="column" gap={1}>
+        <For each={list}>
+          {(item) => (
+            <DiffTool theme={props.theme} data={item} view={toolDiffView(props.width ?? 80, props.opts?.diffStyle)} />
+          )}
+        </For>
+      </box>
+    )
+  }
+
+  if (snap.kind === "task") {
+    return (
+      <TaskTool
+        theme={props.theme}
+        data={{
+          title: snap.title,
+          rows: snap.rows,
+          tail: snap.tail,
+        }}
+      />
+    )
+  }
+
+  if (snap.kind === "todo") {
+    return (
+      <TodoTool
+        theme={props.theme}
+        data={{
+          items: snap.items,
+          tail: snap.tail,
+        }}
+      />
+    )
+  }
+
+  return (
+    <QuestionTool
+      theme={props.theme}
+      data={{
+        items: snap.items,
+        tail: snap.tail,
+      }}
+    />
+  )
+}
+
+export function RunEntryContent(props: {
+  commit: StreamCommit
+  theme?: RunTheme
+  opts?: ScrollbackOptions
+  width?: number
+}) {
+  const theme = props.theme ?? RUN_THEME_FALLBACK
+  if (snapCommit(props.commit)) {
+    return <RunEntrySnapContent commit={props.commit} theme={theme} opts={props.opts} width={props.width} />
+  }
+
+  return <RunEntryTextContent commit={props.commit} theme={theme.entry} />
+}
+
+function textWriter(commit: StreamCommit, theme: RunEntryTheme, flags: Flags): ScrollbackWriter {
   return (ctx) =>
     fit(
-      createScrollbackWriter(() => <ReasoningEntry body={body} theme={theme} />, {
+      createScrollbackWriter(() => <RunEntryTextContent commit={commit} theme={theme} />, {
         width: cols(ctx),
         startOnNewLine: flags.startOnNewLine,
         trailingNewline: flags.trailingNewline,
@@ -466,35 +608,6 @@ function textBlockWriter(body: string, theme: RunEntryTheme): ScrollbackWriter {
       startOnNewLine: true,
       trailingNewline: false,
     })
-}
-
-function codeWriter(data: CodeInput, theme: RunTheme, flags: Flags): ScrollbackWriter {
-  return (ctx) => full(() => <CodeTool theme={theme} data={data} />, ctx, flags)
-}
-
-function diffWriter(list: DiffInput[], theme: RunTheme, flags: Flags, view: "unified" | "split"): ScrollbackWriter {
-  return (ctx) =>
-    full(
-      () => (
-        <box flexDirection="column" gap={1}>
-          <For each={list}>{(data) => <DiffTool theme={theme} data={data} view={view} />}</For>
-        </box>
-      ),
-      ctx,
-      flags,
-    )
-}
-
-function taskWriter(data: TaskInput, theme: RunTheme, flags: Flags): ScrollbackWriter {
-  return (ctx) => full(() => <TaskTool theme={theme} data={data} />, ctx, flags)
-}
-
-function todoWriter(data: TodoInput, theme: RunTheme, flags: Flags): ScrollbackWriter {
-  return (ctx) => full(() => <TodoTool theme={theme} data={data} />, ctx, flags)
-}
-
-function questionWriter(data: QuestionInput, theme: RunTheme, flags: Flags): ScrollbackWriter {
-  return (ctx) => full(() => <QuestionTool theme={theme} data={data} />, ctx, flags)
 }
 
 function flags(commit: StreamCommit): Flags {
@@ -540,13 +653,7 @@ function flags(commit: StreamCommit): Flags {
 }
 
 export function textEntryWriter(commit: StreamCommit, theme: RunEntryTheme): ScrollbackWriter {
-  const body = normalizeEntry(commit)
-  const snap = flags(commit)
-  if (commit.kind === "reasoning") {
-    return reasoningWriter(body, theme, snap)
-  }
-
-  return textWriter(body, commit, theme, snap)
+  return textWriter(commit, theme, flags(commit))
 }
 
 export function snapEntryWriter(commit: StreamCommit, theme: RunTheme, opts: ScrollbackOptions): ScrollbackWriter {
@@ -555,81 +662,10 @@ export function snapEntryWriter(commit: StreamCommit, theme: RunTheme, opts: Scr
     return textEntryWriter(commit, theme.entry)
   }
 
-  const info = toolFrame(commit, clean(commit.text))
   const style = flags(commit)
 
-  if (snap.kind === "code") {
-    return codeWriter(
-      {
-        title: snap.title,
-        content: snap.content,
-        filetype: toolFiletype(snap.file),
-        diagnostics: diagnostics(info.meta, snap.file ?? ""),
-      },
-      theme,
-      style,
-    )
-  }
-
-  if (snap.kind === "diff") {
-    if (snap.items.length === 0) {
-      return textEntryWriter(commit, theme.entry)
-    }
-
-    const list = snap.items
-      .map((item) => {
-        if (!item.diff.trim()) {
-          return
-        }
-
-        return {
-          title: item.title,
-          diff: item.diff,
-          filetype: toolFiletype(item.file),
-          deletions: item.deletions,
-          diagnostics: diagnostics(info.meta, item.file ?? ""),
-        }
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item))
-
-    if (list.length === 0) {
-      return textEntryWriter(commit, theme.entry)
-    }
-
-    return (ctx) => diffWriter(list, theme, style, toolDiffView(ctx.width, opts.diffStyle))(ctx)
-  }
-
-  if (snap.kind === "task") {
-    return taskWriter(
-      {
-        title: snap.title,
-        rows: snap.rows,
-        tail: snap.tail,
-      },
-      theme,
-      style,
-    )
-  }
-
-  if (snap.kind === "todo") {
-    return todoWriter(
-      {
-        items: snap.items,
-        tail: snap.tail,
-      },
-      theme,
-      style,
-    )
-  }
-
-  return questionWriter(
-    {
-      items: snap.items,
-      tail: snap.tail,
-    },
-    theme,
-    style,
-  )
+  return (ctx) =>
+    full(() => <RunEntrySnapContent commit={commit} theme={theme} opts={opts} width={cols(ctx)} />, ctx, style)
 }
 
 export function blockWriter(text: string, theme: RunEntryTheme = RUN_THEME_FALLBACK.entry): ScrollbackWriter {

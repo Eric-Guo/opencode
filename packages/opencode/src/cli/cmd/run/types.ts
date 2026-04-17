@@ -92,10 +92,37 @@ export type FooterView =
   | { type: "permission"; request: PermissionRequest }
   | { type: "question"; request: QuestionRequest }
 
+export type FooterPromptRoute = { type: "composer" } | { type: "subagent"; sessionID: string }
+
+export type FooterSubagentTab = {
+  sessionID: string
+  partID: string
+  callID: string
+  label: string
+  description: string
+  status: "running" | "completed" | "error"
+  title?: string
+  toolCalls?: number
+  lastUpdatedAt: number
+}
+
+export type FooterSubagentDetail = {
+  sessionID: string
+  commits: StreamCommit[]
+}
+
+export type FooterSubagentState = {
+  tabs: FooterSubagentTab[]
+  details: Record<string, FooterSubagentDetail>
+  permissions: PermissionRequest[]
+  questions: QuestionRequest[]
+}
+
 // The reducer emits this alongside scrollback commits so the footer can update in the same frame.
 export type FooterOutput = {
   patch?: FooterPatch
   view?: FooterView
+  subagent?: FooterSubagentState
 }
 
 // Typed messages sent to RunFooter.event(). The prompt queue and stream
@@ -136,6 +163,10 @@ export type FooterEvent =
   | {
       type: "stream.view"
       view: FooterView
+    }
+  | {
+      type: "stream.subagent"
+      state: FooterSubagentState
     }
 
 export type PermissionReply = Parameters<OpencodeClient["permission"]["reply"]>[0]

@@ -139,6 +139,13 @@ function sdk(
   opt: {
     promptAsync?: (input: unknown, opt?: { signal?: AbortSignal }) => Promise<void>
     status?: () => Promise<{ data?: Record<string, { type: string }> }>
+    messages?: (input: {
+      sessionID: string
+      limit?: number
+    }) => Promise<{ data?: Array<{ info: unknown; parts: unknown[] }> }>
+    children?: () => Promise<{ data?: Array<{ id: string }> }>
+    permissions?: () => Promise<{ data?: unknown[] }>
+    questions?: () => Promise<{ data?: unknown[] }>
   } = {},
 ) {
   return {
@@ -150,11 +157,235 @@ function sdk(
     session: {
       promptAsync: opt.promptAsync ?? (async () => {}),
       status: opt.status ?? (async () => ({ data: {} })),
+      messages: opt.messages ?? (async () => ({ data: [] })),
+      children: opt.children ?? (async () => ({ data: [] })),
+    },
+    permission: {
+      list: opt.permissions ?? (async () => ({ data: [] })),
+    },
+    question: {
+      list: opt.questions ?? (async () => ({ data: [] })),
     },
   } as unknown as OpencodeClient
 }
 
 describe("run stream transport", () => {
+  test("bootstraps subagent tabs from parent task parts", async () => {
+    const src = feed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk(src, {
+        messages: async ({ sessionID }) => {
+          if (sessionID !== "session-1") {
+            throw new Error("unexpected child bootstrap")
+          }
+
+          return {
+            data: [
+              {
+                info: {
+                  id: "msg-1",
+                  role: "assistant",
+                },
+                parts: [
+                  {
+                    id: "task-1",
+                    sessionID: "session-1",
+                    messageID: "msg-1",
+                    type: "tool",
+                    callID: "call-1",
+                    tool: "task",
+                    state: {
+                      status: "running",
+                      input: {
+                        description: "Explore run folder",
+                        subagent_type: "explore",
+                      },
+                      metadata: {
+                        sessionId: "child-1",
+                      },
+                      time: {
+                        start: 1,
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          }
+        },
+        children: async () => ({
+          data: [{ id: "child-1" }],
+        }),
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      expect(ui.events).toContainEqual({
+        type: "stream.subagent",
+        state: {
+          tabs: [
+            expect.objectContaining({
+              sessionID: "child-1",
+              label: "Explore",
+              description: "Explore run folder",
+              status: "running",
+            }),
+          ],
+          details: {},
+          permissions: [],
+          questions: [],
+        },
+      })
+
+      transport.selectSubagent("child-1")
+
+      expect(ui.events).toContainEqual({
+        type: "stream.subagent",
+        state: {
+          tabs: [
+            expect.objectContaining({
+              sessionID: "child-1",
+              label: "Explore",
+              description: "Explore run folder",
+              status: "running",
+            }),
+          ],
+          details: {
+            "child-1": {
+              sessionID: "child-1",
+              commits: [],
+            },
+          },
+          permissions: [],
+          questions: [],
+        },
+      })
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("bootstraps resumed child permission input without recent parent task parts", async () => {
+    const src = feed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk(src, {
+        messages: async ({ sessionID }) => {
+          if (sessionID === "session-1") {
+            return { data: [] }
+          }
+
+          return {
+            data: [
+              {
+                info: {
+                  id: "msg-child-1",
+                  role: "assistant",
+                },
+                parts: [
+                  {
+                    id: "edit-1",
+                    sessionID: "child-1",
+                    messageID: "msg-child-1",
+                    type: "tool",
+                    callID: "call-edit-1",
+                    tool: "edit",
+                    state: {
+                      status: "running",
+                      input: {
+                        filePath: "src/run/subagent-data.ts",
+                        diff: "@@ -1 +1 @@",
+                      },
+                      time: {
+                        start: 1,
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          }
+        },
+        children: async () => ({
+          data: [{ id: "child-1" }],
+        }),
+        permissions: async () => ({
+          data: [
+            {
+              id: "perm-1",
+              sessionID: "child-1",
+              permission: "edit",
+              patterns: ["src/run/subagent-data.ts"],
+              metadata: {},
+              always: [],
+              tool: {
+                messageID: "msg-child-1",
+                callID: "call-edit-1",
+              },
+            },
+          ],
+        }),
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      expect(ui.events).toContainEqual({
+        type: "stream.subagent",
+        state: {
+          tabs: [
+            expect.objectContaining({
+              sessionID: "child-1",
+              status: "running",
+            }),
+          ],
+          details: {},
+          permissions: [
+            expect.objectContaining({
+              id: "perm-1",
+              sessionID: "child-1",
+              metadata: {
+                input: {
+                  filePath: "src/run/subagent-data.ts",
+                  diff: "@@ -1 +1 @@",
+                },
+              },
+            }),
+          ],
+          questions: [],
+        },
+      })
+
+      expect(ui.events).toContainEqual({
+        type: "stream.view",
+        view: {
+          type: "permission",
+          request: expect.objectContaining({
+            id: "perm-1",
+            metadata: {
+              input: {
+                filePath: "src/run/subagent-data.ts",
+                diff: "@@ -1 +1 @@",
+              },
+            },
+          }),
+        },
+      })
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
   test("respects the includeFiles flag when building prompt payloads", async () => {
     const src = feed()
     const ui = footer()
@@ -491,6 +722,14 @@ describe("run stream transport", () => {
         session: {
           promptAsync: async () => {},
           status: async () => ({ data: {} }),
+          messages: async () => ({ data: [] }),
+          children: async () => ({ data: [] }),
+        },
+        permission: {
+          list: async () => ({ data: [] }),
+        },
+        question: {
+          list: async () => ({ data: [] }),
         },
       } as unknown as OpencodeClient,
       sessionID: "session-1",

@@ -24,7 +24,7 @@
 //   `data.questions`. The footer shows whichever is first. When a reply
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
-import type { Event, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
 import * as Locale from "../../../util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
@@ -44,7 +44,7 @@ type Tokens = {
   }
 }
 
-type PartKind = "assistant" | "reasoning"
+type PartKind = "assistant" | "reasoning" | "user"
 type MessageRole = "assistant" | "user"
 type Dict = Record<string, unknown>
 type SessionCommit = StreamCommit
@@ -63,6 +63,7 @@ type SessionCommit = StreamCommit
 // - end:    part IDs whose time.end has arrived (part is finished)
 // - echo:   message ID → bash outputs to strip from the next assistant chunk
 export type SessionData = {
+  includeUserText: boolean
   announced: boolean
   ids: Set<string>
   tools: Set<string>
@@ -92,8 +93,13 @@ export type SessionDataOutput = {
   footer?: FooterOutput
 }
 
-export function createSessionData(): SessionData {
+export function createSessionData(
+  input: {
+    includeUserText?: boolean
+  } = {},
+): SessionData {
   return {
+    includeUserText: input.includeUserText ?? false,
     announced: false,
     ids: new Set(),
     tools: new Set(),
@@ -143,7 +149,7 @@ function formatUsage(
   return text
 }
 
-function formatError(error: {
+export function formatError(error: {
   name?: string
   message?: string
   data?: {
@@ -255,6 +261,33 @@ function remove<T extends { id: string }>(list: T[], id: string): boolean {
   return true
 }
 
+export function bootstrapSessionData(input: {
+  data: SessionData
+  messages: Array<{
+    parts: Part[]
+  }>
+  permissions: PermissionRequest[]
+  questions: QuestionRequest[]
+}) {
+  for (const message of input.messages) {
+    for (const part of message.parts) {
+      if (part.type !== "tool") {
+        continue
+      }
+
+      input.data.call.set(key(part.messageID, part.callID), part.state.input)
+    }
+  }
+
+  for (const request of input.permissions.slice().sort((a, b) => a.id.localeCompare(b.id))) {
+    upsert(input.data.permissions, enrichPermission(input.data, request))
+  }
+
+  for (const request of input.questions.slice().sort((a, b) => a.id.localeCompare(b.id))) {
+    upsert(input.data.questions, request)
+  }
+}
+
 function key(msg: string, call: string): string {
   return `${msg}:${call}`
 }
@@ -360,7 +393,11 @@ function ready(data: SessionData, partID: string): boolean {
     return false
   }
 
-  return role === "assistant"
+  if (role === "assistant") {
+    return true
+  }
+
+  return data.includeUserText && role === "user"
 }
 
 function syncText(data: SessionData, partID: string, next: string) {
@@ -458,7 +495,7 @@ function flushPart(data: SessionData, commits: SessionCommit[], partID: string, 
       kind,
       text: chunk,
       phase: "progress",
-      source: kind,
+      source: kind === "user" ? "system" : kind,
       messageID: msg,
       partID,
     })
@@ -472,7 +509,7 @@ function flushPart(data: SessionData, commits: SessionCommit[], partID: string, 
     kind,
     text: "",
     phase: "final",
-    source: kind,
+    source: kind === "user" ? "system" : kind,
     messageID: msg,
     partID,
     interrupted: true,
@@ -496,7 +533,7 @@ function replay(data: SessionData, commits: SessionCommit[], messageID: string, 
       continue
     }
 
-    if (role === "user") {
+    if (role === "user" && !data.includeUserText) {
       data.ids.add(partID)
       drop(data, partID)
       continue
@@ -505,6 +542,10 @@ function replay(data: SessionData, commits: SessionCommit[], messageID: string, 
     const kind = data.part.get(partID)
     if (!kind) {
       continue
+    }
+
+    if (role === "user" && kind === "assistant") {
+      data.part.set(partID, "user")
     }
 
     if (kind === "reasoning" && !thinking) {
@@ -577,7 +618,7 @@ export function flushInterrupted(data: SessionData, commits: SessionCommit[]) {
     }
 
     const msg = data.msg.get(partID)
-    if (msg && data.role.get(msg) === "user") {
+    if (msg && data.role.get(msg) === "user" && !data.includeUserText) {
       data.ids.add(partID)
       drop(data, partID)
       continue
@@ -785,7 +826,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
 
     const msg = part.messageID
     const role = msg ? data.role.get(msg) : undefined
-    if (role === "user") {
+    if (role === "user" && part.type === "text" && !data.includeUserText) {
       data.ids.add(part.id)
       drop(data, part.id)
       return out(data, commits)
@@ -799,7 +840,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
-    data.part.set(part.id, kind)
+    data.part.set(part.id, role === "user" && kind === "assistant" ? "user" : kind)
     syncText(data, part.id, part.text)
 
     if (part.time?.end) {

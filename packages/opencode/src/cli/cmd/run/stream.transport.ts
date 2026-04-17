@@ -13,9 +13,41 @@
 // We also re-check live session status before resolving an idle event so a
 // delayed idle from an older turn cannot complete a newer busy turn.
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
-import { createSessionData, flushInterrupted, reduceSessionData } from "./session-data"
-import { writeSessionOutput } from "./stream"
-import type { FooterApi, RunFilePart, RunInput, RunPrompt, StreamCommit } from "./types"
+import {
+  bootstrapSessionData,
+  createSessionData,
+  flushInterrupted,
+  reduceSessionData,
+  type SessionData,
+} from "./session-data"
+import {
+  bootstrapSubagentCalls,
+  bootstrapSubagentData,
+  clearFinishedSubagents,
+  createSubagentData,
+  listSubagentPermissions,
+  listSubagentQuestions,
+  listSubagentTabs,
+  reduceSubagentData,
+  snapshotSelectedSubagentData,
+  snapshotSubagentData,
+  SUBAGENT_BOOTSTRAP_LIMIT,
+  SUBAGENT_CALL_BOOTSTRAP_LIMIT,
+  type SubagentData,
+} from "./subagent-data"
+import { traceFooterOutput, writeSessionOutput } from "./stream"
+import type {
+  FooterApi,
+  FooterOutput,
+  FooterPatch,
+  FooterSubagentState,
+  FooterSubagentTab,
+  FooterView,
+  RunFilePart,
+  RunInput,
+  RunPrompt,
+  StreamCommit,
+} from "./types"
 
 type Trace = {
   write(type: string, data?: unknown): void
@@ -52,6 +84,7 @@ export type SessionTurnInput = {
 
 export type SessionTransport = {
   runPromptTurn(input: SessionTurnInput): Promise<void>
+  selectSubagent(sessionID: string | undefined): void
   close(): Promise<void>
 }
 
@@ -162,6 +195,161 @@ export function formatUnknownError(error: unknown): string {
   return "unknown error"
 }
 
+function sameView(a: FooterView, b: FooterView) {
+  if (a.type !== b.type) {
+    return false
+  }
+
+  if (a.type === "prompt" && b.type === "prompt") {
+    return true
+  }
+
+  if (a.type === "prompt" || b.type === "prompt") {
+    return false
+  }
+
+  return a.request === b.request
+}
+
+function blockerStatus(view: FooterView) {
+  if (view.type === "permission") {
+    return "awaiting permission"
+  }
+
+  if (view.type === "question") {
+    return "awaiting answer"
+  }
+
+  return ""
+}
+
+function blockerOrder(order: Map<string, number>, id: string) {
+  return order.get(id) ?? Number.MAX_SAFE_INTEGER
+}
+
+function firstByOrder<T extends { id: string }>(left: T[], right: T[], order: Map<string, number>) {
+  return [...left, ...right].sort((a, b) => {
+    const next = blockerOrder(order, a.id) - blockerOrder(order, b.id)
+    if (next !== 0) {
+      return next
+    }
+
+    return a.id.localeCompare(b.id)
+  })[0]
+}
+
+function pickView(data: SessionData, subagent: SubagentData, order: Map<string, number>): FooterView {
+  const permission = firstByOrder(data.permissions, listSubagentPermissions(subagent), order)
+  if (permission) {
+    return { type: "permission", request: permission }
+  }
+
+  const question = firstByOrder(data.questions, listSubagentQuestions(subagent), order)
+  if (question) {
+    return { type: "question", request: question }
+  }
+
+  return { type: "prompt" }
+}
+
+function composeFooter(input: {
+  patch?: FooterPatch
+  subagent?: FooterSubagentState
+  current: FooterView
+  previous: FooterView
+}) {
+  let footer: FooterOutput | undefined
+
+  if (input.subagent) {
+    footer = {
+      ...(footer ?? {}),
+      subagent: input.subagent,
+    }
+  }
+
+  if (!sameView(input.previous, input.current)) {
+    footer = {
+      ...(footer ?? {}),
+      view: input.current,
+    }
+  }
+
+  if (input.current.type !== "prompt") {
+    footer = {
+      ...(footer ?? {}),
+      patch: {
+        ...(input.patch ?? {}),
+        status: blockerStatus(input.current),
+      },
+    }
+    return footer
+  }
+
+  if (input.patch) {
+    footer = {
+      ...(footer ?? {}),
+      patch: input.patch,
+    }
+    return footer
+  }
+
+  if (input.previous.type !== "prompt") {
+    footer = {
+      ...(footer ?? {}),
+      patch: {
+        status: "",
+      },
+    }
+  }
+
+  return footer
+}
+
+function sameTab(a: FooterSubagentTab | undefined, b: FooterSubagentTab | undefined) {
+  if (!a || !b) {
+    return false
+  }
+
+  return (
+    a.sessionID === b.sessionID &&
+    a.partID === b.partID &&
+    a.callID === b.callID &&
+    a.label === b.label &&
+    a.description === b.description &&
+    a.status === b.status &&
+    a.title === b.title &&
+    a.toolCalls === b.toolCalls &&
+    a.lastUpdatedAt === b.lastUpdatedAt
+  )
+}
+
+function traceTabs(trace: Trace | undefined, prev: FooterSubagentTab[], next: FooterSubagentTab[]) {
+  const before = new Map(prev.map((item) => [item.sessionID, item]))
+  const after = new Map(next.map((item) => [item.sessionID, item]))
+
+  for (const [sessionID, tab] of after) {
+    if (sameTab(before.get(sessionID), tab)) {
+      continue
+    }
+
+    trace?.write("subagent.tab", {
+      sessionID,
+      tab,
+    })
+  }
+
+  for (const sessionID of before.keys()) {
+    if (after.has(sessionID)) {
+      continue
+    }
+
+    trace?.write("subagent.tab", {
+      sessionID,
+      cleared: true,
+    })
+  }
+}
+
 // Opens an SDK event subscription and returns a SessionTransport.
 //
 // The background `watch` loop consumes every SDK event, runs it through the
@@ -191,10 +379,169 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   }
 
   let data = createSessionData()
+  let subagent = createSubagentData()
   let wait: Wait | undefined
   let tick = 0
   let fault: unknown
   let closed = false
+  let footerView: FooterView = { type: "prompt" }
+  let blockerTick = 0
+  let selectedSubagent: string | undefined
+  const blockers = new Map<string, number>()
+
+  const currentSubagentState = () => {
+    if (selectedSubagent && !subagent.tabs.has(selectedSubagent)) {
+      selectedSubagent = undefined
+    }
+
+    return snapshotSelectedSubagentData(subagent, selectedSubagent)
+  }
+
+  const seedBlocker = (id: string) => {
+    if (blockers.has(id)) {
+      return
+    }
+
+    blockerTick += 1
+    blockers.set(id, blockerTick)
+  }
+
+  const trackBlocker = (event: Event) => {
+    if (event.type !== "permission.asked" && event.type !== "question.asked") {
+      return
+    }
+
+    if (event.properties.sessionID !== input.sessionID && !subagent.tabs.has(event.properties.sessionID)) {
+      return
+    }
+
+    seedBlocker(event.properties.id)
+  }
+
+  const releaseBlocker = (event: Event) => {
+    if (
+      event.type !== "permission.replied" &&
+      event.type !== "question.replied" &&
+      event.type !== "question.rejected"
+    ) {
+      return
+    }
+
+    blockers.delete(event.properties.requestID)
+  }
+
+  const syncFooter = (commits: StreamCommit[], patch?: FooterPatch, nextSubagent?: FooterSubagentState) => {
+    const current = pickView(data, subagent, blockers)
+    const footer = composeFooter({
+      patch,
+      subagent: nextSubagent,
+      current,
+      previous: footerView,
+    })
+
+    if (commits.length === 0 && !footer) {
+      footerView = current
+      return
+    }
+
+    input.trace?.write("reduce.output", {
+      commits,
+      footer: traceFooterOutput(footer),
+    })
+    writeSessionOutput(
+      {
+        footer: input.footer,
+        trace: input.trace,
+      },
+      {
+        commits,
+        footer,
+      },
+    )
+    footerView = current
+  }
+
+  const bootstrap = async () => {
+    const [messages, children, permissions, questions] = await Promise.all([
+      input.sdk.session
+        .messages({
+          sessionID: input.sessionID,
+          limit: SUBAGENT_BOOTSTRAP_LIMIT,
+        })
+        .then((x) => x.data ?? [])
+        .catch(() => []),
+      input.sdk.session
+        .children({
+          sessionID: input.sessionID,
+        })
+        .then((x) => x.data ?? [])
+        .catch(() => []),
+      input.sdk.permission
+        .list()
+        .then((x) => x.data ?? [])
+        .catch(() => []),
+      input.sdk.question
+        .list()
+        .then((x) => x.data ?? [])
+        .catch(() => []),
+    ])
+
+    bootstrapSessionData({
+      data,
+      messages,
+      permissions: permissions.filter((item) => item.sessionID === input.sessionID),
+      questions: questions.filter((item) => item.sessionID === input.sessionID),
+    })
+    bootstrapSubagentData({
+      data: subagent,
+      messages,
+      children,
+      permissions,
+      questions,
+    })
+
+    const callSessions = [
+      ...new Set(
+        listSubagentPermissions(subagent)
+          .filter((item) => item.tool && item.metadata?.input === undefined)
+          .map((item) => item.sessionID),
+      ),
+    ]
+    if (callSessions.length > 0) {
+      await Promise.all(
+        callSessions.map(async (sessionID) => {
+          const messages = await input.sdk.session
+            .messages({
+              sessionID,
+              limit: SUBAGENT_CALL_BOOTSTRAP_LIMIT,
+            })
+            .then((x) => x.data ?? [])
+            .catch(() => [])
+
+          bootstrapSubagentCalls({
+            data: subagent,
+            sessionID,
+            messages,
+          })
+        }),
+      )
+    }
+
+    for (const request of [
+      ...data.permissions,
+      ...listSubagentPermissions(subagent),
+      ...data.questions,
+      ...listSubagentQuestions(subagent),
+    ].sort((a, b) => a.id.localeCompare(b.id))) {
+      seedBlocker(request.id)
+    }
+
+    const snapshot = currentSubagentState()
+    traceTabs(input.trace, [], snapshot.tabs)
+    syncFooter([], undefined, snapshot)
+  }
+
+  await bootstrap()
 
   const idle = async () => {
     try {
@@ -252,16 +599,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   const flush = (type: "turn.abort" | "turn.cancel") => {
     const commits: StreamCommit[] = []
     flushInterrupted(data, commits)
-    writeSessionOutput(
-      {
-        footer: input.footer,
-        trace: input.trace,
-      },
-      {
-        data,
-        commits,
-      },
-    )
+    syncFooter(commits)
     input.trace?.write(type, {
       sessionID: input.sessionID,
     })
@@ -276,6 +614,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
         const event = item as Event
         input.trace?.write("recv.event", event)
+        trackBlocker(event)
+        const prevTabs = event.type === "message.part.updated" ? listSubagentTabs(subagent) : undefined
         const next = reduceSessionData({
           data,
           event,
@@ -285,20 +625,19 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         })
         data = next.data
 
-        if (next.commits.length > 0 || next.footer?.patch || next.footer?.view) {
-          input.trace?.write("reduce.output", {
-            commits: next.commits,
-            footer: next.footer,
-          })
+        const subagentChanged = reduceSubagentData({
+          data: subagent,
+          event,
+          sessionID: input.sessionID,
+          thinking: input.thinking,
+          limits: input.limits(),
+        })
+        if (subagentChanged && prevTabs) {
+          traceTabs(input.trace, prevTabs, listSubagentTabs(subagent))
         }
+        releaseBlocker(event)
 
-        writeSessionOutput(
-          {
-            footer: input.footer,
-            trace: input.trace,
-          },
-          next,
-        )
+        syncFooter(next.commits, next.footer?.patch, subagentChanged ? currentSubagentState() : undefined)
 
         touch(event)
         await mark(event)
@@ -326,6 +665,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
     if (wait) {
       throw new Error("prompt already running")
+    }
+
+    const prevTabs = listSubagentTabs(subagent)
+    if (clearFinishedSubagents(subagent)) {
+      const snapshot = currentSubagentState()
+      traceTabs(input.trace, prevTabs, snapshot.tabs)
+      syncFooter([], undefined, snapshot)
     }
 
     const item = defer(tick)
@@ -425,6 +771,16 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
+  const selectSubagent = (sessionID: string | undefined): void => {
+    const next = sessionID && subagent.tabs.has(sessionID) ? sessionID : undefined
+    if (selectedSubagent === next) {
+      return
+    }
+
+    selectedSubagent = next
+    syncFooter([], undefined, currentSubagentState())
+  }
+
   const close = async () => {
     if (closed) {
       return
@@ -439,6 +795,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   return {
     runPromptTurn,
+    selectSubagent,
     close,
   }
 }

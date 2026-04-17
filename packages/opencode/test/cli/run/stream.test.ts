@@ -37,7 +37,6 @@ describe("run stream bridge", () => {
         footer: out.api,
       },
       {
-        data: {} as never,
         commits,
       },
     )
@@ -53,7 +52,6 @@ describe("run stream bridge", () => {
         footer: out.api,
       },
       {
-        data: {} as never,
         commits: [],
         footer: {
           patch: {
@@ -82,7 +80,6 @@ describe("run stream bridge", () => {
         footer: out.api,
       },
       {
-        data: {} as never,
         commits: [],
         footer: {
           view: {
@@ -97,6 +94,69 @@ describe("run stream bridge", () => {
         type: "stream.view",
         view: {
           type: "prompt",
+        },
+      },
+    ])
+  })
+
+  test("forwards subagent footer snapshots as stream.subagent events", () => {
+    const out = footer()
+
+    writeSessionOutput(
+      {
+        footer: out.api,
+      },
+      {
+        commits: [],
+        footer: {
+          subagent: {
+            tabs: [
+              {
+                sessionID: "child-1",
+                partID: "part-1",
+                callID: "call-1",
+                label: "Explore",
+                description: "Scan reducer paths",
+                status: "running",
+                lastUpdatedAt: 1,
+              },
+            ],
+            details: {
+              "child-1": {
+                sessionID: "child-1",
+                commits: [],
+              },
+            },
+            permissions: [],
+            questions: [],
+          },
+        },
+      },
+    )
+
+    expect(out.events).toEqual([
+      {
+        type: "stream.subagent",
+        state: {
+          tabs: [
+            {
+              sessionID: "child-1",
+              partID: "part-1",
+              callID: "call-1",
+              label: "Explore",
+              description: "Scan reducer paths",
+              status: "running",
+              lastUpdatedAt: 1,
+            },
+          ],
+          details: {
+            "child-1": {
+              sessionID: "child-1",
+              commits: [],
+            },
+          },
+          permissions: [],
+          questions: [],
         },
       },
     ])

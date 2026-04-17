@@ -90,6 +90,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
   ])
   shown = !session.first
   let activeVariant = resolveVariant(ctx.variant, session.variant, savedVariant, variants)
+  let selectSubagent: ((sessionID: string | undefined) => void) | undefined
 
   const shell = await createRuntimeLifecycle({
     directory: ctx.directory,
@@ -160,6 +161,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
           aborting = false
         })
     },
+    onSubagentSelect: (sessionID) => {
+      selectSubagent?.(sessionID)
+      log?.write("subagent.select", {
+        sessionID,
+      })
+    },
   })
   const footer = shell.footer
 
@@ -209,6 +216,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
       footer,
       trace: log,
     })
+    selectSubagent = stream.selectSubagent
 
     try {
       if (demo) {

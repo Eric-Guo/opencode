@@ -63,6 +63,7 @@ export type LifecycleInput = {
   onQuestionReject: (input: QuestionReject) => void | Promise<void>
   onCycleVariant?: () => CycleResult | void
   onInterrupt?: () => void
+  onSubagentSelect?: (sessionID: string | undefined) => void
 }
 
 export type Lifecycle = {
@@ -153,7 +154,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   const renderer = await createCliRenderer({
     targetFps: 30,
     maxFps: 60,
-    useMouse: false,
+    useMouse: true,
     autoFocus: false,
     openConsoleOnError: false,
     exitOnCtrlC: false,
@@ -211,6 +212,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     onQuestionReject: input.onQuestionReject,
     onCycleVariant: input.onCycleVariant,
     onInterrupt: input.onInterrupt,
+    onSubagentSelect: input.onSubagentSelect,
   })
 
   const sigint = () => {
