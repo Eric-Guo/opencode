@@ -221,7 +221,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   process.on("SIGINT", sigint)
 
   let closed = false
-  const close = async (next: { showExit: boolean; sessionTitle?: string }) => {
+  const close = async (next: { showExit: boolean; sessionTitle?: string; sessionID?: string }) => {
     if (closed) {
       return
     }

@@ -272,24 +272,65 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         handle: Awaited<ReturnType<Awaited<typeof import("./stream.transport")>["createSessionTransport"]>>
       }
     | undefined
-  const ensureStream = async () => {
+  let loading:
+    | Promise<{
+        mod: Awaited<typeof import("./stream.transport")>
+        handle: Awaited<ReturnType<Awaited<typeof import("./stream.transport")>["createSessionTransport"]>>
+      }>
+    | undefined
+  const ensureStream = () => {
     if (stream) {
-      return stream
+      return Promise.resolve(stream)
     }
 
-    await ensureSession()
-    const mod = await streamTask
-    const handle = await mod.createSessionTransport({
-      sdk: ctx.sdk,
-      sessionID,
-      thinking: input.thinking,
-      limits: () => limits,
-      footer,
-      trace: log,
-    })
-    selectSubagent = handle.selectSubagent
-    stream = { mod, handle }
-    return stream
+    if (loading) {
+      return loading
+    }
+
+    const task = (async () => {
+      await ensureSession()
+      if (footer.isClosed) {
+        throw new Error("runtime closed")
+      }
+
+      const mod = await streamTask
+      if (footer.isClosed) {
+        throw new Error("runtime closed")
+      }
+
+      const handle = await mod.createSessionTransport({
+        sdk: ctx.sdk,
+        sessionID,
+        thinking: input.thinking,
+        limits: () => limits,
+        footer,
+        trace: log,
+      })
+      if (footer.isClosed) {
+        await handle.close()
+        throw new Error("runtime closed")
+      }
+
+      selectSubagent = handle.selectSubagent
+      const next = { mod, handle }
+      stream = next
+      return next
+    })()
+
+    loading = task
+    task.then(
+      () => {
+        if (loading === task) {
+          loading = undefined
+        }
+      },
+      () => {
+        if (loading === task) {
+          loading = undefined
+        }
+      },
+    )
+    return task
   }
 
   try {
@@ -297,6 +338,16 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
     const eager = ctx.resume === true || !input.resolveSession || !!input.demo
     if (eager) {
       await ensureStream()
+    }
+
+    if (!eager && input.resolveSession) {
+      queueMicrotask(() => {
+        if (footer.isClosed) {
+          return
+        }
+
+        void ensureStream().catch(() => {})
+      })
     }
 
     try {
