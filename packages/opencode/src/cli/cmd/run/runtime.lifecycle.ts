@@ -68,7 +68,7 @@ export type LifecycleInput = {
 
 export type Lifecycle = {
   footer: FooterApi
-  close(input: { showExit: boolean; sessionTitle?: string }): Promise<void>
+  close(input: { showExit: boolean; sessionTitle?: string; sessionID?: string }): Promise<void>
 }
 
 // Gracefully tears down the renderer. Order matters: switch external output
@@ -232,6 +232,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     try {
       const show = renderer.isDestroyed ? false : next.showExit
       if (!renderer.isDestroyed && show) {
+        const sessionID = next.sessionID ?? input.sessionID
         queueSplash(
           renderer,
           state,
@@ -239,7 +240,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           exitSplash({
             ...splashMeta({
               title: splashTitle(next.sessionTitle ?? input.sessionTitle, input.history),
-              session_id: input.sessionID,
+              session_id: sessionID,
             }),
             theme: theme.entry,
             background: theme.background,

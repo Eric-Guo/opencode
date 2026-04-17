@@ -9,7 +9,8 @@
 // Both delegate to runInteractiveRuntime, which:
 //   1. resolves keybinds, diff style, model info, and session history,
 //   2. creates the split-footer lifecycle (renderer + RunFooter),
-//   3. starts the stream transport (SDK event subscription),
+//   3. starts the stream transport (SDK event subscription), lazily for fresh
+//      local sessions,
 //   4. runs the prompt queue until the footer closes.
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
@@ -34,6 +35,7 @@ type BootContext = Pick<
 type RunRuntimeInput = {
   boot: () => Promise<BootContext>
   afterPaint?: (ctx: BootContext) => Promise<void> | void
+  resolveSession?: (ctx: BootContext) => Promise<{ sessionID: string; sessionTitle?: string; agent?: string | undefined }>
   files: RunInput["files"]
   initialInput?: string
   thinking: boolean
@@ -100,6 +102,28 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
   ])
   shown = !session.first
   let activeVariant = resolveVariant(ctx.variant, session.variant, savedVariant, variants)
+  let sessionID = ctx.sessionID
+  let sessionTitle = ctx.sessionTitle
+  let agent = ctx.agent
+  let hasSession = !input.resolveSession
+  let resolving: Promise<void> | undefined
+  const ensureSession = () => {
+    if (!input.resolveSession) {
+      return Promise.resolve()
+    }
+
+    if (resolving) {
+      return resolving
+    }
+
+    resolving = input.resolveSession(ctx).then((next) => {
+      sessionID = next.sessionID
+      sessionTitle = next.sessionTitle
+      agent = next.agent
+      hasSession = true
+    })
+    return resolving
+  }
   let selectSubagent: ((sessionID: string | undefined) => void) | undefined
 
   const shell = await createRuntimeLifecycle({
@@ -111,11 +135,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
         .catch(() => []),
     agents: [],
     resources: [],
-    sessionID: ctx.sessionID,
-    sessionTitle: ctx.sessionTitle,
+    sessionID,
+    sessionTitle,
     first: session.first,
     history: session.history,
-    agent: ctx.agent,
+    agent,
     model: ctx.model,
     variant: activeVariant,
     keybinds,
@@ -157,6 +181,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
       }
     },
     onInterrupt: () => {
+      if (!hasSession) {
+        return
+      }
+
       if (aborting) {
         return
       }
@@ -164,7 +192,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
       aborting = true
       void ctx.sdk.session
         .abort({
-          sessionID: ctx.sessionID,
+          sessionID,
         })
         .catch(() => {})
         .finally(() => {
@@ -202,11 +230,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
   }
 
   if (input.demo) {
+    await ensureSession()
     demo = createRunDemo({
       mode: input.demo,
       text: input.demoText,
       footer,
-      sessionID: ctx.sessionID,
+      sessionID,
       thinking: input.thinking,
       limits: () => limits,
     })
@@ -236,18 +265,39 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
     })
   })
 
-  try {
-    const mod = await import("./stream.transport")
-    let includeFiles = true
-    const stream = await mod.createSessionTransport({
+  const streamTask = import("./stream.transport")
+  let stream:
+    | {
+        mod: Awaited<typeof import("./stream.transport")>
+        handle: Awaited<ReturnType<Awaited<typeof import("./stream.transport")>["createSessionTransport"]>>
+      }
+    | undefined
+  const ensureStream = async () => {
+    if (stream) {
+      return stream
+    }
+
+    await ensureSession()
+    const mod = await streamTask
+    const handle = await mod.createSessionTransport({
       sdk: ctx.sdk,
-      sessionID: ctx.sessionID,
+      sessionID,
       thinking: input.thinking,
       limits: () => limits,
       footer,
       trace: log,
     })
-    selectSubagent = stream.selectSubagent
+    selectSubagent = handle.selectSubagent
+    stream = { mod, handle }
+    return stream
+  }
+
+  try {
+    let includeFiles = true
+    const eager = ctx.resume === true || !input.resolveSession || !!input.demo
+    if (eager) {
+      await ensureStream()
+    }
 
     try {
       if (demo) {
@@ -268,8 +318,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
           }
 
           try {
-            await stream.runPromptTurn({
-              agent: ctx.agent,
+            const next = await ensureStream()
+            await next.handle.runPromptTurn({
+              agent,
               model: ctx.model,
               variant: activeVariant,
               prompt,
@@ -282,26 +333,28 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
             if (signal.aborted || footer.isClosed) {
               return
             }
-            footer.append({ kind: "error", text: mod.formatUnknownError(error), phase: "start", source: "system" })
+            const text = stream?.mod.formatUnknownError(error) ?? (error instanceof Error ? error.message : String(error))
+            footer.append({ kind: "error", text, phase: "start", source: "system" })
           }
         },
       })
     } finally {
-      await stream.close()
+      await stream?.handle.close()
     }
   } finally {
-    const title = shown
+    const title = shown && hasSession
       ? await ctx.sdk.session
           .get({
-            sessionID: ctx.sessionID,
+            sessionID,
           })
           .then((x) => x.data?.title)
           .catch(() => undefined)
       : undefined
 
     await shell.close({
-      showExit: shown,
+      showExit: shown && hasSession,
       sessionTitle: title,
+      sessionID,
     })
   }
 }
@@ -314,6 +367,7 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
     fetch: input.fetch,
     directory: input.directory,
   })
+  let pending: Promise<{ sessionID: string; sessionTitle?: string; agent?: string | undefined }> | undefined
 
   return runInteractiveRuntime({
     files: input.files,
@@ -321,20 +375,33 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
     thinking: input.thinking,
     demo: input.demo,
     demoText: input.demoText,
-    afterPaint: (ctx) => input.share(ctx.sdk, ctx.sessionID),
-    boot: async () => {
-      const [agent, session] = await Promise.all([input.resolveAgent(), input.session(sdk)])
-      if (!session?.id) {
-        throw new Error("Session not found")
+    resolveSession: () => {
+      if (pending) {
+        return pending
       }
 
+      pending = Promise.all([input.resolveAgent(), input.session(sdk)]).then(async ([agent, session]) => {
+        if (!session?.id) {
+          throw new Error("Session not found")
+        }
+
+        await input.share(sdk, session.id)
+        return {
+          sessionID: session.id,
+          sessionTitle: session.title,
+          agent,
+        }
+      })
+      return pending
+    },
+    boot: async () => {
       return {
         sdk,
         directory: input.directory,
-        sessionID: session.id,
-        sessionTitle: session.title,
+        sessionID: "",
+        sessionTitle: undefined,
         resume: false,
-        agent,
+        agent: input.agent,
         model: input.model,
         variant: input.variant,
       }
