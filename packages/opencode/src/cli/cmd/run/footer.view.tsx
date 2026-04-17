@@ -87,11 +87,12 @@ function subagentShortcut(event: {
     return
   }
 
-  if (!/^[1-9]$/.test(event.name)) {
+  if (!/^[0-9]$/.test(event.name)) {
     return
   }
 
-  return Number(event.name) - 1
+  const slot = Number(event.name)
+  return slot === 0 ? 9 : slot - 1
 }
 
 export { TEXTAREA_MIN_ROWS, TEXTAREA_MAX_ROWS } from "./footer.prompt"
@@ -280,7 +281,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       <box id="run-direct-footer-top-spacer" width="100%" height={1} flexShrink={0} backgroundColor="transparent" />
 
       <Show when={showTabs()}>
-        <RunFooterSubagentTabs tabs={tabs()} selected={selected()} theme={theme()} />
+        <RunFooterSubagentTabs tabs={tabs()} selected={selected()} theme={theme()} width={term().width} />
       </Show>
 
       <Show

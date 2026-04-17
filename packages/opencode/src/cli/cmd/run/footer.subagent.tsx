@@ -35,10 +35,35 @@ function statusIcon(status: FooterSubagentTab["status"]) {
   return "◔"
 }
 
+function tabText(input: {
+  tab: FooterSubagentTab
+  slot: string
+  count: number
+  width: number
+}) {
+  const perTab = Math.max(1, Math.floor((input.width - 4 - Math.max(0, input.count - 1) * 3) / Math.max(1, input.count)))
+  if (input.count >= 8 || perTab < 12) {
+    return `[${input.slot}]`
+  }
+
+  const label = `[${input.slot}] ${input.tab.label}`
+  if (input.count >= 5 || perTab < 24) {
+    return label
+  }
+
+  const detail = input.tab.description || input.tab.title
+  if (!detail) {
+    return label
+  }
+
+  return `${label} · ${detail}`
+}
+
 export function RunFooterSubagentTabs(props: {
   tabs: FooterSubagentTab[]
   selected?: string
   theme: RunFooterTheme
+  width: number
 }) {
   return (
     <box
@@ -68,7 +93,12 @@ export function RunFooterSubagentTabs(props: {
                   </text>
                 )}
                 <text fg={active() ? props.theme.text : props.theme.muted} wrapMode="none" truncate>
-                  {`[${slot}] ${tab.label}`}
+                  {tabText({
+                    tab,
+                    slot,
+                    count: props.tabs.length,
+                    width: props.width,
+                  })}
                 </text>
               </box>
             </box>
