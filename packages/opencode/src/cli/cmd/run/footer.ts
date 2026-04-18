@@ -327,8 +327,12 @@ export class RunFooter implements FooterApi {
 
     if (prev.phase === "running" && state.phase === "idle") {
       this.flush()
-      this.flushing = this.flushing.then(() => this.scrollback.complete()).catch(() => {})
+      this.completeScrollback()
     }
+  }
+
+  private completeScrollback(): void {
+    this.flushing = this.flushing.then(() => this.scrollback.complete()).catch(() => {})
   }
 
   private present(view: FooterView): void {
@@ -382,7 +386,7 @@ export class RunFooter implements FooterApi {
 
     this.flush()
     if (this.state().phase === "idle") {
-      this.flushing = this.flushing.then(() => this.scrollback.complete()).catch(() => {})
+      this.completeScrollback()
     }
 
     return this.flushing.then(async () => {

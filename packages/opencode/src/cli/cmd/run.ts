@@ -195,39 +195,37 @@ export const RunCommand = cmd({
   handler: async (args) => {
     const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
     const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
+    const die = (message: string): never => {
+      UI.error(message)
+      process.exit(1)
+    }
 
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
 
     if (args.interactive && args.command) {
-      UI.error("--interactive cannot be used with --command")
-      process.exit(1)
+      die("--interactive cannot be used with --command")
     }
 
     if (args.demo && !args.interactive) {
-      UI.error("--demo requires --interactive")
-      process.exit(1)
+      die("--demo requires --interactive")
     }
 
     if (args.demoText && args.demo !== "text") {
-      UI.error("--demo-text requires --demo text")
-      process.exit(1)
+      die("--demo-text requires --demo text")
     }
 
     if (args.interactive && args.format === "json") {
-      UI.error("--interactive cannot be used with --format json")
-      process.exit(1)
+      die("--interactive cannot be used with --format json")
     }
 
     if (args.interactive && !process.stdin.isTTY) {
-      UI.error("--interactive requires a TTY")
-      process.exit(1)
+      die("--interactive requires a TTY")
     }
 
     if (args.interactive && !process.stdout.isTTY) {
-      UI.error("--interactive requires a TTY stdout")
-      process.exit(1)
+      die("--interactive requires a TTY stdout")
     }
 
     const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
