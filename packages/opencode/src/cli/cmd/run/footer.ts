@@ -90,6 +90,51 @@ function createEmptySubagentState(): FooterSubagentState {
   }
 }
 
+function eventPatch(next: FooterEvent): FooterPatch | undefined {
+  if (next.type === "queue") {
+    return { queue: next.queue }
+  }
+
+  if (next.type === "first") {
+    return { first: next.first }
+  }
+
+  if (next.type === "model") {
+    return { model: next.model }
+  }
+
+  if (next.type === "turn.send") {
+    return {
+      phase: "running",
+      status: "sending prompt",
+      queue: next.queue,
+    }
+  }
+
+  if (next.type === "turn.wait") {
+    return {
+      phase: "running",
+      status: "waiting for assistant",
+    }
+  }
+
+  if (next.type === "turn.idle") {
+    return {
+      phase: "idle",
+      status: "",
+      queue: next.queue,
+    }
+  }
+
+  if (next.type === "turn.duration") {
+    return { duration: next.duration }
+  }
+
+  if (next.type === "stream.patch") {
+    return next.patch
+  }
+}
+
 export class RunFooter implements FooterApi {
   private closed = false
   private destroyed = false
@@ -227,54 +272,9 @@ export class RunFooter implements FooterApi {
       return
     }
 
-    if (next.type === "queue") {
-      this.patch({ queue: next.queue })
-      return
-    }
-
-    if (next.type === "first") {
-      this.patch({ first: next.first })
-      return
-    }
-
-    if (next.type === "model") {
-      this.patch({ model: next.model })
-      return
-    }
-
-    if (next.type === "turn.send") {
-      this.patch({
-        phase: "running",
-        status: "sending prompt",
-        queue: next.queue,
-      })
-      return
-    }
-
-    if (next.type === "turn.wait") {
-      this.patch({
-        phase: "running",
-        status: "waiting for assistant",
-      })
-      return
-    }
-
-    if (next.type === "turn.idle") {
-      this.patch({
-        phase: "idle",
-        status: "",
-        queue: next.queue,
-      })
-      return
-    }
-
-    if (next.type === "turn.duration") {
-      this.patch({ duration: next.duration })
-      return
-    }
-
-    if (next.type === "stream.patch") {
-      this.patch(next.patch)
+    const patch = eventPatch(next)
+    if (patch) {
+      this.patch(patch)
       return
     }
 
@@ -288,7 +288,9 @@ export class RunFooter implements FooterApi {
       return
     }
 
-    this.present(next.view)
+    if (next.type === "stream.view") {
+      this.present(next.view)
+    }
   }
 
   private patch(next: FooterPatch): void {
