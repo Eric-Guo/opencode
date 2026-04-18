@@ -102,6 +102,46 @@ function feed() {
   }
 }
 
+function blockingFeed() {
+  let done = false
+  let wake: (() => void) | undefined
+  const started = defer()
+
+  const stream: AsyncIterableIterator<unknown> = {
+    [Symbol.asyncIterator]() {
+      return this
+    },
+    next() {
+      started.resolve()
+      if (done) {
+        return Promise.resolve({ done: true, value: undefined })
+      }
+
+      return new Promise((resolve) => {
+        wake = () => {
+          done = true
+          wake = undefined
+          resolve({ done: true, value: undefined })
+        }
+      })
+    },
+    return() {
+      done = true
+      wake?.()
+      wake = undefined
+      return Promise.resolve({ done: true, value: undefined })
+    },
+    throw(error) {
+      done = true
+      wake?.()
+      wake = undefined
+      return Promise.reject(error)
+    },
+  }
+
+  return { stream, started }
+}
+
 function footer(fn?: (commit: StreamCommit) => void) {
   const commits: StreamCommit[] = []
   const events: FooterEvent[] = []
@@ -576,6 +616,96 @@ describe("run stream transport", () => {
       ])
     } finally {
       src.close()
+      await transport.close()
+    }
+  })
+
+  test("closes an active turn without rejecting it", async () => {
+    const src = feed()
+    const ui = footer()
+    const ready = defer()
+    let aborted = false
+
+    const transport = await createSessionTransport({
+      sdk: sdk(src, {
+        promptAsync: async (_input, opt) => {
+          ready.resolve()
+          await new Promise<void>((resolve) => {
+            const onAbort = () => {
+              aborted = true
+              opt?.signal?.removeEventListener("abort", onAbort)
+              resolve()
+            }
+
+            opt?.signal?.addEventListener("abort", onAbort, { once: true })
+          })
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      const task = transport.runPromptTurn({
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: { text: "hello", parts: [] },
+        files: [],
+        includeFiles: false,
+      })
+
+      await ready.promise
+      await transport.close()
+      await task
+
+      expect(aborted).toBe(true)
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("closes while the event stream is waiting for the next item", async () => {
+    const src = blockingFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: {
+        event: {
+          subscribe: async () => ({
+            stream: src.stream,
+          }),
+        },
+        session: {
+          promptAsync: async () => {},
+          status: async () => ({ data: {} }),
+          messages: async () => ({ data: [] }),
+          children: async () => ({ data: [] }),
+        },
+        permission: {
+          list: async () => ({ data: [] }),
+        },
+        question: {
+          list: async () => ({ data: [] }),
+        },
+      } as unknown as OpencodeClient,
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      await src.started.promise
+      await Promise.race([
+        transport.close(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("close timed out")), 100)
+        }),
+      ])
+    } finally {
       await transport.close()
     }
   })

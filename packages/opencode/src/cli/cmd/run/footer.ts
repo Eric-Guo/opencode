@@ -26,6 +26,7 @@
 import { CliRenderEvents, type CliRenderer, type TreeSitterClient } from "@opentui/core"
 import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { SUBAGENT_INSPECTOR_ROWS, SUBAGENT_TAB_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
 import { printableBinding } from "./prompt.shared"
@@ -156,7 +157,7 @@ export class RunFooter implements FooterApi {
   private view: Accessor<FooterView>
   private setView: Setter<FooterView>
   private subagent: Accessor<FooterSubagentState>
-  private setSubagent: Setter<FooterSubagentState>
+  private setSubagent: (next: FooterSubagentState) => void
   private promptRoute: FooterPromptRoute = { type: "composer" }
   private tabsVisible = false
   private interruptTimeout: NodeJS.Timeout | undefined
@@ -190,9 +191,14 @@ export class RunFooter implements FooterApi {
     const [resources, setResources] = createSignal<RunResource[]>(options.resources)
     this.resources = resources
     this.setResources = setResources
-    const [subagent, setSubagent] = createSignal<FooterSubagentState>(createEmptySubagentState())
-    this.subagent = subagent
-    this.setSubagent = setSubagent
+    const [subagent, setSubagent] = createStore<FooterSubagentState>(createEmptySubagentState())
+    this.subagent = () => subagent as FooterSubagentState
+    this.setSubagent = (next) => {
+      setSubagent("tabs", reconcile(next.tabs, { key: "sessionID" }))
+      setSubagent("details", reconcile(next.details))
+      setSubagent("permissions", reconcile(next.permissions, { key: "id" }))
+      setSubagent("questions", reconcile(next.questions, { key: "id" }))
+    }
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
     this.interruptHint = printableBinding(options.keybinds.interrupt, options.keybinds.leader) || "esc"
     this.scrollback = new RunScrollbackStream(renderer, options.theme, {

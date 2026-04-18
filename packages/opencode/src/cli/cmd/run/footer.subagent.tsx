@@ -2,7 +2,7 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import "opentui-spinner/solid"
-import { For, createMemo } from "solid-js"
+import { createMemo, mapArray } from "solid-js"
 import { SPINNER_FRAMES } from "../tui/component/spinner"
 import { RunEntryContent, sameEntryGroup } from "./scrollback.writer"
 import type { FooterSubagentDetail, FooterSubagentTab, RunDiffStyle } from "./types"
@@ -35,21 +35,21 @@ function statusIcon(status: FooterSubagentTab["status"]) {
   return "◔"
 }
 
-function tabText(input: { tab: FooterSubagentTab; slot: string; count: number; width: number }) {
+function tabText(tab: FooterSubagentTab, slot: string, count: number, width: number) {
   const perTab = Math.max(
     1,
-    Math.floor((input.width - 4 - Math.max(0, input.count - 1) * 3) / Math.max(1, input.count)),
+    Math.floor((width - 4 - Math.max(0, count - 1) * 3) / Math.max(1, count)),
   )
-  if (input.count >= 8 || perTab < 12) {
-    return `[${input.slot}]`
+  if (count >= 8 || perTab < 12) {
+    return `[${slot}]`
   }
 
-  const label = `[${input.slot}] ${input.tab.label}`
-  if (input.count >= 5 || perTab < 24) {
+  const label = `[${slot}] ${tab.label}`
+  if (count >= 5 || perTab < 24) {
     return label
   }
 
-  const detail = input.tab.description || input.tab.title
+  const detail = tab.description || tab.title
   if (!detail) {
     return label
   }
@@ -63,6 +63,32 @@ export function RunFooterSubagentTabs(props: {
   theme: RunFooterTheme
   width: number
 }) {
+  const items = mapArray(
+    () => props.tabs,
+    (tab, index) => {
+      const active = () => props.selected === tab.sessionID
+      const slot = () => String(index() + 1)
+      return (
+        <box paddingRight={1}>
+          <box flexDirection="row" gap={1} width="100%">
+            {tab.status === "running" ? (
+              <box flexShrink={0}>
+                <spinner frames={SPINNER_FRAMES} interval={80} color={statusColor(props.theme, tab.status)} />
+              </box>
+            ) : (
+              <text fg={statusColor(props.theme, tab.status)} wrapMode="none" truncate flexShrink={0}>
+                {statusIcon(tab.status)}
+              </text>
+            )}
+            <text fg={active() ? props.theme.text : props.theme.muted} wrapMode="none" truncate>
+              {tabText(tab, slot(), props.tabs.length, props.width)}
+            </text>
+          </box>
+        </box>
+      )
+    },
+  )
+
   return (
     <box
       id="run-direct-footer-subagent-tabs"
@@ -74,35 +100,7 @@ export function RunFooterSubagentTabs(props: {
       flexDirection="row"
       flexShrink={0}
     >
-      <box flexDirection="row" gap={3} flexShrink={1} flexGrow={1}>
-        {props.tabs.map((tab, index) => {
-          const active = () => props.selected === tab.sessionID
-          const slot = String(index + 1)
-          return (
-            <box paddingRight={1}>
-              <box flexDirection="row" gap={1} width="100%">
-                {tab.status === "running" ? (
-                  <box flexShrink={0}>
-                    <spinner frames={SPINNER_FRAMES} interval={80} color={statusColor(props.theme, tab.status)} />
-                  </box>
-                ) : (
-                  <text fg={statusColor(props.theme, tab.status)} wrapMode="none" truncate flexShrink={0}>
-                    {statusIcon(tab.status)}
-                  </text>
-                )}
-                <text fg={active() ? props.theme.text : props.theme.muted} wrapMode="none" truncate>
-                  {tabText({
-                    tab,
-                    slot,
-                    count: props.tabs.length,
-                    width: props.width,
-                  })}
-                </text>
-              </box>
-            </box>
-          )
-        })}
-      </box>
+      <box flexDirection="row" gap={3} flexShrink={1} flexGrow={1}>{items()}</box>
     </box>
   )
 }
@@ -116,13 +114,22 @@ export function RunFooterSubagentBody(props: {
   onCycle: (dir: -1 | 1) => void
   onClose: () => void
 }) {
+  const theme = createMemo(() => props.theme())
+  const footer = createMemo(() => theme().footer)
   const commits = createMemo(() => props.detail()?.commits ?? [])
-  const entries = createMemo(() => {
-    return commits().map((commit, index, list) => ({
-      commit,
-      gap: index > 0 && !sameEntryGroup(list[index - 1], commit),
-    }))
-  })
+  const opts = createMemo(() => ({ diffStyle: props.diffStyle }))
+  const scrollbar = createMemo(() => ({
+    trackOptions: {
+      backgroundColor: footer().surface,
+      foregroundColor: footer().line,
+    },
+  }))
+  const rows = mapArray(commits, (commit, index) => (
+    <box flexDirection="column" gap={0}>
+      {index() > 0 && !sameEntryGroup(commits()[index() - 1], commit) ? <box height={1} flexShrink={0} /> : null}
+      <RunEntryContent commit={commit} theme={theme()} opts={opts()} width={props.width()} />
+    </box>
+  ))
   let scroll: ScrollBoxRenderable | undefined
 
   useKeyboard((event) => {
@@ -160,7 +167,7 @@ export function RunFooterSubagentBody(props: {
       width="100%"
       height="100%"
       flexDirection="column"
-      backgroundColor={props.theme().footer.surface}
+      backgroundColor={footer().surface}
     >
       <box paddingTop={1} paddingLeft={1} paddingRight={3} paddingBottom={1} flexDirection="column" flexGrow={1}>
         <scrollbox
@@ -168,35 +175,19 @@ export function RunFooterSubagentBody(props: {
           height="100%"
           stickyScroll={true}
           stickyStart="bottom"
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: props.theme().footer.surface,
-              foregroundColor: props.theme().footer.line,
-            },
-          }}
+          verticalScrollbarOptions={scrollbar()}
           ref={(item) => {
             scroll = item as ScrollBoxRenderable
           }}
         >
           <box width="100%" flexDirection="column" gap={0}>
-            <For each={entries()}>
-              {(item) => (
-                <box flexDirection="column" gap={0}>
-                  {item.gap ? <box height={1} flexShrink={0} /> : null}
-                  <RunEntryContent
-                    commit={item.commit}
-                    theme={props.theme()}
-                    opts={{ diffStyle: props.diffStyle }}
-                    width={props.width()}
-                  />
-                </box>
-              )}
-            </For>
-            {entries().length === 0 ? (
-              <text fg={props.theme().footer.muted} wrapMode="word">
+            {commits().length > 0 ? (
+              rows()
+            ) : (
+              <text fg={footer().muted} wrapMode="word">
                 No subagent activity yet
               </text>
-            ) : null}
+            )}
           </box>
         </scrollbox>
       </box>
