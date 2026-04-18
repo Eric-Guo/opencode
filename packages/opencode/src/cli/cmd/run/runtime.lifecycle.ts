@@ -92,21 +92,19 @@ function shutdown(renderer: CliRenderer): void {
   }
 }
 
-function splashTitle(title: string | undefined, history: RunPrompt[]): string | undefined {
+function splashInfo(title: string | undefined, history: RunPrompt[]) {
   if (title && !DEFAULT_TITLE.test(title)) {
-    return title
+    return {
+      title,
+      showSession: true,
+    }
   }
 
   const next = history.find((item) => item.text.trim().length > 0)
-  return next?.text ?? title
-}
-
-function splashSession(title: string | undefined, history: RunPrompt[]): boolean {
-  if (title && !DEFAULT_TITLE.test(title)) {
-    return true
+  return {
+    title: next?.text ?? title,
+    showSession: !!next,
   }
-
-  return !!history.find((item) => item.text.trim().length > 0)
 }
 
 function footerLabels(input: Pick<RunInput, "agent" | "model" | "variant">): FooterLabels {
@@ -171,9 +169,9 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     entry: false,
     exit: false,
   }
-  const showSession = splashSession(input.sessionTitle, input.history)
+  const splash = splashInfo(input.sessionTitle, input.history)
   const meta = splashMeta({
-    title: splashTitle(input.sessionTitle, input.history),
+    title: splash.title,
     session_id: input.sessionID,
   })
   const footerTask = import("./footer")
@@ -181,13 +179,13 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     renderer,
     state,
     "entry",
-    entrySplash({
-      ...meta,
-      theme: theme.entry,
-      background: theme.background,
-      showSession,
-    }),
-  )
+      entrySplash({
+        ...meta,
+        theme: theme.entry,
+        background: theme.background,
+        showSession: splash.showSession,
+      }),
+    )
   await renderer.idle().catch(() => {})
 
   const { RunFooter } = await footerTask
@@ -236,13 +234,14 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       const show = renderer.isDestroyed ? false : next.showExit
       if (!renderer.isDestroyed && show) {
         const sessionID = next.sessionID ?? input.sessionID
+        const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, input.history)
         queueSplash(
           renderer,
           state,
           "exit",
           exitSplash({
             ...splashMeta({
-              title: splashTitle(next.sessionTitle ?? input.sessionTitle, input.history),
+              title: splash.title,
               session_id: sessionID,
             }),
             theme: theme.entry,
