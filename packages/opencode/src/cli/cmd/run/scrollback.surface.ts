@@ -7,18 +7,16 @@
 import {
   CodeRenderable,
   MarkdownRenderable,
-  SyntaxStyle,
-  TextAttributes,
   TextRenderable,
   getTreeSitterClient,
   type TreeSitterClient,
   type CliRenderer,
-  type ColorInput,
   type ScrollbackSurface,
 } from "@opentui/core"
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
+import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { entryWriter, sameEntryGroup, spacerWriter } from "./scrollback.writer"
-import { type RunEntryTheme, type RunTheme } from "./theme"
+import { type RunTheme } from "./theme"
 import type { RunDiffStyle, RunEntryBody, StreamCommit } from "./types"
 
 type ActiveBody = Exclude<RunEntryBody, { type: "none" | "structured" }>
@@ -33,102 +31,7 @@ type ActiveEntry = {
   committedBlocks: number
 }
 
-let bare: SyntaxStyle | undefined
 let nextId = 0
-
-function syntax(style?: SyntaxStyle): SyntaxStyle {
-  if (style) {
-    return style
-  }
-
-  bare ??= SyntaxStyle.fromTheme([])
-  return bare
-}
-
-function syntaxFor(commit: StreamCommit, theme: RunTheme): SyntaxStyle {
-  if (commit.kind === "reasoning") {
-    return syntax(theme.block.subtleSyntax ?? theme.block.syntax)
-  }
-
-  return syntax(theme.block.syntax)
-}
-
-function failed(commit: StreamCommit): boolean {
-  return commit.kind === "tool" && (commit.toolState === "error" || commit.part?.state.status === "error")
-}
-
-function look(commit: StreamCommit, theme: RunEntryTheme): { fg: ColorInput; attrs?: number } {
-  if (commit.kind === "user") {
-    return {
-      fg: theme.user.body,
-      attrs: TextAttributes.BOLD,
-    }
-  }
-
-  if (failed(commit)) {
-    return {
-      fg: theme.error.body,
-      attrs: TextAttributes.BOLD,
-    }
-  }
-
-  if (commit.phase === "final") {
-    return {
-      fg: theme.system.body,
-      attrs: TextAttributes.DIM,
-    }
-  }
-
-  if (commit.kind === "tool" && commit.phase === "start") {
-    return {
-      fg: theme.tool.start ?? theme.tool.body,
-    }
-  }
-
-  if (commit.kind === "assistant") {
-    return { fg: theme.assistant.body }
-  }
-
-  if (commit.kind === "reasoning") {
-    return {
-      fg: theme.reasoning.body,
-      attrs: TextAttributes.DIM,
-    }
-  }
-
-  if (commit.kind === "error") {
-    return {
-      fg: theme.error.body,
-      attrs: TextAttributes.BOLD,
-    }
-  }
-
-  if (commit.kind === "tool") {
-    return { fg: theme.tool.body }
-  }
-
-  return { fg: theme.system.body }
-}
-
-function entryColor(commit: StreamCommit, theme: RunTheme): ColorInput {
-  if (commit.kind === "assistant") {
-    return theme.entry.assistant.body
-  }
-
-  if (commit.kind === "reasoning") {
-    return theme.entry.reasoning.body
-  }
-
-  if (failed(commit)) {
-    return theme.entry.error.body
-  }
-
-  if (commit.kind === "tool") {
-    return theme.block.text
-  }
-
-  return look(commit, theme.entry).fg
-}
 
 function commitMarkdownBlocks(input: {
   surface: ScrollbackSurface
@@ -147,7 +50,12 @@ function commitMarkdownBlocks(input: {
     return false
   }
 
-  input.surface.commitRows(first.renderable.y, last.renderable.y + last.renderable.height + (last.marginBottom ?? 0), {
+  const prev = input.renderable._blockStates[input.startBlock - 1]
+  const next = input.renderable._blockStates[input.endBlockExclusive]
+  const start = Math.max(0, first.renderable.y - (prev?.marginBottom ?? 0))
+  const end = last.renderable.y + last.renderable.height + (next ? 0 : (last.marginBottom ?? 0))
+
+  input.surface.commitRows(start, end, {
     trailingNewline: input.trailingNewline,
   })
   return true
@@ -179,6 +87,7 @@ export class RunScrollbackStream {
       startOnNewLine: entryFlags(commit).startOnNewLine,
     })
     const id = `run-scrollback-entry-${nextId++}`
+    const style = entryLook(commit, this.theme.entry)
     const renderable =
       body.type === "text"
         ? new TextRenderable(surface.renderContext, {
@@ -186,15 +95,15 @@ export class RunScrollbackStream {
           content: "",
           width: "100%",
           wrapMode: "word",
-          fg: look(commit, this.theme.entry).fg,
-          attributes: look(commit, this.theme.entry).attrs,
+          fg: style.fg,
+          attributes: style.attrs,
         })
         : body.type === "code"
           ? new CodeRenderable(surface.renderContext, {
             id,
             content: "",
             filetype: body.filetype,
-            syntaxStyle: syntaxFor(commit, this.theme),
+            syntaxStyle: entrySyntax(commit, this.theme),
             width: "100%",
             wrapMode: "word",
             drawUnstyledText: false,
@@ -205,7 +114,7 @@ export class RunScrollbackStream {
           : new MarkdownRenderable(surface.renderContext, {
             id,
             content: "",
-            syntaxStyle: syntaxFor(commit, this.theme),
+            syntaxStyle: entrySyntax(commit, this.theme),
             width: "100%",
             streaming: true,
             internalBlockMode: "top-level",
@@ -372,7 +281,7 @@ export class RunScrollbackStream {
     this.active = undefined
   }
 
-  public async complete(trailingNewline = true): Promise<void> {
+  public async complete(trailingNewline = false): Promise<void> {
     await this.finishActive(trailingNewline)
   }
 

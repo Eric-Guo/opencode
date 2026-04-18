@@ -5,9 +5,11 @@ import { RUN_THEME_FALLBACK } from "../../../src/cli/cmd/run/theme"
 
 type ClaimedCommit = {
   snapshot: {
+    height: number
     getRealCharBytes(addLineBreaks?: boolean): Uint8Array
     destroy(): void
   }
+  trailingNewline: boolean
 }
 
 const decoder = new TextDecoder()
@@ -108,6 +110,58 @@ test("completes coalesced markdown tables after one progress append", async () =
     expect(rendered).toContain("Value 4")
   } finally {
     destroyCommits(commits)
+  }
+})
+
+test("completes markdown replies without adding a second blank line above the footer", async () => {
+  const out = await createTestRenderer({
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "assistant",
+    text: "# Markdown Sample\n\n- Item 1\n- Item 2\n\n```js\nconst message = \"Hello, markdown\"\nconsole.log(message)\n```",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+
+  const progress = claimCommits(out.renderer)
+  try {
+    expect(progress).toHaveLength(1)
+    expect(progress[0]!.snapshot.height).toBe(4)
+    const rendered = decoder.decode(progress[0]!.snapshot.getRealCharBytes(true))
+    expect(rendered).toContain("Markdown Sample")
+    expect(rendered).toContain("Item 2")
+    expect(rendered).not.toContain("console.log(message)")
+  } finally {
+    destroyCommits(progress)
+  }
+
+  await scrollback.complete()
+
+  const final = claimCommits(out.renderer)
+  try {
+    expect(final).toHaveLength(1)
+    expect(final[0]!.trailingNewline).toBe(false)
+    const rendered = decoder.decode(final[0]!.snapshot.getRealCharBytes(true))
+    expect(rendered).toContain('const message = "Hello, markdown"')
+    expect(rendered).toContain("console.log(message)")
+  } finally {
+    destroyCommits(final)
   }
 })
 

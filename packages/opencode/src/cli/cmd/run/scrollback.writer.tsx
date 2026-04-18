@@ -1,107 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 
 import { createScrollbackWriter } from "@opentui/solid"
-import { SyntaxStyle, TextAttributes, TextRenderable, type ColorInput, type ScrollbackWriter } from "@opentui/core"
+import { TextRenderable, type ScrollbackWriter } from "@opentui/core"
 import { entryBody, entryFlags } from "./entry.body"
+import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolDiffView, toolFiletype, toolStructuredFinal } from "./tool"
-import { RUN_THEME_FALLBACK, type RunEntryTheme, type RunTheme } from "./theme"
+import { RUN_THEME_FALLBACK, type RunTheme } from "./theme"
 import type { ScrollbackOptions, StreamCommit } from "./types"
-
-let bare: SyntaxStyle | undefined
-
-function syntax(style?: SyntaxStyle): SyntaxStyle {
-  if (style) {
-    return style
-  }
-
-  bare ??= SyntaxStyle.fromTheme([])
-  return bare
-}
-
-function syntaxFor(commit: StreamCommit, theme: RunTheme): SyntaxStyle {
-  if (commit.kind === "reasoning") {
-    return syntax(theme.block.subtleSyntax ?? theme.block.syntax)
-  }
-
-  return syntax(theme.block.syntax)
-}
-
-function failed(commit: StreamCommit): boolean {
-  return commit.kind === "tool" && (commit.toolState === "error" || commit.part?.state.status === "error")
-}
-
-function look(commit: StreamCommit, theme: RunEntryTheme): { fg: ColorInput; attrs?: number } {
-  if (commit.kind === "user") {
-    return {
-      fg: theme.user.body,
-      attrs: TextAttributes.BOLD,
-    }
-  }
-
-  if (failed(commit)) {
-    return {
-      fg: theme.error.body,
-      attrs: TextAttributes.BOLD,
-    }
-  }
-
-  if (commit.phase === "final") {
-    return {
-      fg: theme.system.body,
-      attrs: TextAttributes.DIM,
-    }
-  }
-
-  if (commit.kind === "tool" && commit.phase === "start") {
-    return {
-      fg: theme.tool.start ?? theme.tool.body,
-    }
-  }
-
-  if (commit.kind === "assistant") {
-    return { fg: theme.assistant.body }
-  }
-
-  if (commit.kind === "reasoning") {
-    return {
-      fg: theme.reasoning.body,
-      attrs: TextAttributes.DIM,
-    }
-  }
-
-  if (commit.kind === "error") {
-    return {
-      fg: theme.error.body,
-      attrs: TextAttributes.BOLD,
-    }
-  }
-
-  if (commit.kind === "tool") {
-    return { fg: theme.tool.body }
-  }
-
-  return { fg: theme.system.body }
-}
-
-function entryColor(commit: StreamCommit, theme: RunTheme): ColorInput {
-  if (commit.kind === "assistant") {
-    return theme.entry.assistant.body
-  }
-
-  if (commit.kind === "reasoning") {
-    return theme.entry.reasoning.body
-  }
-
-  if (failed(commit)) {
-    return theme.entry.error.body
-  }
-
-  if (commit.kind === "tool") {
-    return theme.block.text
-  }
-
-  return look(commit, theme.entry).fg
-}
 
 function todoText(item: { status: string; content: string }): string {
   if (item.status === "completed") {
@@ -158,7 +63,7 @@ export function RunEntryContent(props: {
   }
 
   if (body.type === "text") {
-    const style = look(props.commit, theme.entry)
+    const style = entryLook(props.commit, theme.entry)
     return (
       <text width="100%" wrapMode="word" fg={style.fg} attributes={style.attrs}>
         {body.content}
@@ -174,7 +79,7 @@ export function RunEntryContent(props: {
         filetype={body.filetype}
         drawUnstyledText={false}
         streaming={props.commit.phase === "progress"}
-        syntaxStyle={syntaxFor(props.commit, theme)}
+        syntaxStyle={entrySyntax(props.commit, theme)}
         content={body.content}
         fg={entryColor(props.commit, theme)}
       />
@@ -192,15 +97,15 @@ export function RunEntryContent(props: {
           </text>
           <box width="100%" paddingLeft={1}>
             <line_number width="100%" fg={theme.block.muted} minWidth={3} paddingRight={1}>
-              <code
-                width="100%"
-                wrapMode="char"
-                filetype={toolFiletype(body.snapshot.file)}
-                streaming={false}
-                syntaxStyle={syntaxFor(props.commit, theme)}
-                content={body.snapshot.content}
-                fg={theme.block.text}
-              />
+                <code
+                  width="100%"
+                  wrapMode="char"
+                  filetype={toolFiletype(body.snapshot.file)}
+                  streaming={false}
+                  syntaxStyle={entrySyntax(props.commit, theme)}
+                  content={body.snapshot.content}
+                  fg={theme.block.text}
+                />
             </line_number>
           </box>
         </box>
@@ -218,14 +123,14 @@ export function RunEntryContent(props: {
               </text>
               {item.diff.trim() ? (
                 <box width="100%" paddingLeft={1}>
-                  <diff
-                    diff={item.diff}
-                    view={view}
-                    filetype={toolFiletype(item.file)}
-                    syntaxStyle={syntaxFor(props.commit, theme)}
-                    showLineNumbers={true}
-                    width="100%"
-                    wrapMode="word"
+                    <diff
+                      diff={item.diff}
+                      view={view}
+                      filetype={toolFiletype(item.file)}
+                      syntaxStyle={entrySyntax(props.commit, theme)}
+                      showLineNumbers={true}
+                      width="100%"
+                      wrapMode="word"
                     fg={theme.block.text}
                     addedBg={theme.block.diffAddedBg}
                     removedBg={theme.block.diffRemovedBg}
@@ -322,7 +227,7 @@ export function RunEntryContent(props: {
   return (
     <markdown
       width="100%"
-      syntaxStyle={syntaxFor(props.commit, theme)}
+      syntaxStyle={entrySyntax(props.commit, theme)}
       streaming={props.commit.phase === "progress"}
       content={body.content}
       fg={entryColor(props.commit, theme)}
