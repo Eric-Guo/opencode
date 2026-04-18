@@ -17,6 +17,7 @@ import { Flag } from "@/flag/flag"
 import { createRunDemo } from "./demo"
 import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo, resolveSessionInfo } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
+import { reusePendingTask } from "./runtime.shared"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
 import type { RunInput } from "./types"
@@ -59,6 +60,11 @@ type RunLocalInput = {
   thinking: boolean
   demo?: RunInput["demo"]
   demoText?: RunInput["demoText"]
+}
+
+type StreamState = {
+  mod: Awaited<typeof import("./stream.transport")>
+  handle: Awaited<ReturnType<Awaited<typeof import("./stream.transport")>["createSessionTransport"]>>
 }
 
 // Core runtime loop. Boot resolves the SDK context, then we set up the
@@ -291,28 +297,14 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
   })
 
   const streamTask = import("./stream.transport")
-  let stream:
-    | {
-        mod: Awaited<typeof import("./stream.transport")>
-        handle: Awaited<ReturnType<Awaited<typeof import("./stream.transport")>["createSessionTransport"]>>
-      }
-    | undefined
-  let loading:
-    | Promise<{
-        mod: Awaited<typeof import("./stream.transport")>
-        handle: Awaited<ReturnType<Awaited<typeof import("./stream.transport")>["createSessionTransport"]>>
-      }>
-    | undefined
+  let stream: StreamState | undefined
+  const loading: { current?: Promise<StreamState> } = {}
   const ensureStream = () => {
     if (stream) {
       return Promise.resolve(stream)
     }
 
-    if (loading) {
-      return loading
-    }
-
-    const task = (async () => {
+    return reusePendingTask(loading, async () => {
       await ensureSession()
       if (footer.isClosed) {
         throw new Error("runtime closed")
@@ -340,22 +332,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
       const next = { mod, handle }
       stream = next
       return next
-    })()
-
-    loading = task
-    task.then(
-      () => {
-        if (loading === task) {
-          loading = undefined
-        }
-      },
-      () => {
-        if (loading === task) {
-          loading = undefined
-        }
-      },
-    )
-    return task
+    })
   }
 
   try {

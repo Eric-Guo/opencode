@@ -6,6 +6,7 @@
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
 import { TuiConfig } from "../tui/config/tui"
+import { reusePendingTask } from "./runtime.shared"
 import { resolveSession, sessionHistory } from "./session.shared"
 import type { FooterKeybinds, RunDiffStyle, RunInput, RunPrompt } from "./types"
 import { pickVariant } from "./variant.shared"
@@ -20,28 +21,10 @@ const DEFAULT_KEYBINDS: FooterKeybinds = {
   inputNewline: "shift+return,ctrl+return,alt+return,ctrl+j",
 }
 
-let configTask: Promise<Awaited<ReturnType<typeof TuiConfig.get>>> | undefined
+const configTask: { current?: ReturnType<typeof TuiConfig.get> } = {}
 
 function loadConfig() {
-  if (configTask) {
-    return configTask
-  }
-
-  const task = TuiConfig.get()
-  configTask = task
-  task.then(
-    () => {
-      if (configTask === task) {
-        configTask = undefined
-      }
-    },
-    () => {
-      if (configTask === task) {
-        configTask = undefined
-      }
-    },
-  )
-  return task
+  return reusePendingTask(configTask, () => TuiConfig.get())
 }
 
 export type ModelInfo = {
