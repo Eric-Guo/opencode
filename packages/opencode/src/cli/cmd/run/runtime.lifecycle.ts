@@ -176,6 +176,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     title: splashTitle(input.sessionTitle, input.history),
     session_id: input.sessionID,
   })
+  const footerTask = import("./footer")
   queueSplash(
     renderer,
     state,
@@ -189,7 +190,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   )
   await renderer.idle().catch(() => {})
 
-  const { RunFooter } = await import("./footer")
+  const { RunFooter } = await footerTask
 
   const labels = footerLabels({
     agent: input.agent,

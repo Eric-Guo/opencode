@@ -20,6 +20,30 @@ const DEFAULT_KEYBINDS: FooterKeybinds = {
   inputNewline: "shift+return,ctrl+return,alt+return,ctrl+j",
 }
 
+let configTask: Promise<Awaited<ReturnType<typeof TuiConfig.get>>> | undefined
+
+function loadConfig() {
+  if (configTask) {
+    return configTask
+  }
+
+  const task = TuiConfig.get()
+  configTask = task
+  task.then(
+    () => {
+      if (configTask === task) {
+        configTask = undefined
+      }
+    },
+    () => {
+      if (configTask === task) {
+        configTask = undefined
+      }
+    },
+  )
+  return task
+}
+
 export type ModelInfo = {
   variants: string[]
   limits: Record<string, number>
@@ -98,7 +122,7 @@ export async function resolveSessionInfo(
 // Always ensures <leader>t is present in the variant cycle binding.
 export async function resolveFooterKeybinds(): Promise<FooterKeybinds> {
   try {
-    const config = await TuiConfig.get()
+    const config = await loadConfig()
     const configuredLeader = config.keybinds?.leader?.trim() || DEFAULT_KEYBINDS.leader
     const configuredVariantCycle = config.keybinds?.variant_cycle?.trim() || "ctrl+t"
     const configuredInterrupt = config.keybinds?.session_interrupt?.trim() || DEFAULT_KEYBINDS.interrupt
@@ -132,7 +156,7 @@ export async function resolveFooterKeybinds(): Promise<FooterKeybinds> {
 
 export async function resolveDiffStyle(): Promise<RunDiffStyle> {
   try {
-    const config = await TuiConfig.get()
+    const config = await loadConfig()
     return config.diff_style ?? "auto"
   } catch {
     return "auto"

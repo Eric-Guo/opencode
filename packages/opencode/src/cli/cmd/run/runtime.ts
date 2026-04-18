@@ -83,14 +83,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
           variant: undefined,
         })
   const savedTask = resolveSavedVariant(ctx.model)
-  const agentsTask = ctx.sdk.app
-    .agents({ directory: ctx.directory })
-    .then((x) => x.data ?? [])
-    .catch(() => [])
-  const resourcesTask = ctx.sdk.experimental.resource
-    .list({ directory: ctx.directory })
-    .then((x) => Object.values(x.data ?? {}))
-    .catch(() => [])
   let variants: string[] = []
   let limits: Record<string, number> = {}
   let aborting = false
@@ -210,17 +202,48 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
   })
   const footer = shell.footer
 
-  void Promise.all([agentsTask, resourcesTask]).then(([agents, resources]) => {
-    if (footer.isClosed) {
-      return
+  let catalogTask: Promise<void> | undefined
+  const loadCatalog = () => {
+    if (catalogTask) {
+      return catalogTask
     }
 
-    footer.event({
-      type: "catalog",
-      agents,
-      resources,
+    catalogTask = Promise.all([
+      ctx.sdk.app
+        .agents({ directory: ctx.directory })
+        .then((x) => x.data ?? [])
+        .catch(() => []),
+      ctx.sdk.experimental.resource
+        .list({ directory: ctx.directory })
+        .then((x) => Object.values(x.data ?? {}))
+        .catch(() => []),
+    ])
+      .then(([agents, resources]) => {
+        if (footer.isClosed) {
+          return
+        }
+
+        footer.event({
+          type: "catalog",
+          agents,
+          resources,
+        })
+      })
+      .catch(() => {})
+
+    return catalogTask
+  }
+
+  void footer
+    .idle()
+    .then(() => {
+      if (footer.isClosed) {
+        return
+      }
+
+      void loadCatalog()
     })
-  })
+    .catch(() => {})
 
   if (Flag.OPENCODE_SHOW_TTFD) {
     footer.append({
@@ -435,12 +458,12 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
         return pending
       }
 
-      pending = Promise.all([input.resolveAgent(), input.session(sdk)]).then(async ([agent, session]) => {
+      pending = Promise.all([input.resolveAgent(), input.session(sdk)]).then(([agent, session]) => {
         if (!session?.id) {
           throw new Error("Session not found")
         }
 
-        await input.share(sdk, session.id)
+        void input.share(sdk, session.id).catch(() => {})
         return {
           sessionID: session.id,
           sessionTitle: session.title,
