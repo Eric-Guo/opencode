@@ -274,11 +274,6 @@ export class RunFooter implements FooterApi {
     }
 
     if (next.type === "stream.patch") {
-      if (typeof next.patch.status === "string" && next.patch.phase === undefined) {
-        this.patch({ phase: "running", ...next.patch })
-        return
-      }
-
       this.patch(next.patch)
       return
     }
@@ -411,19 +406,7 @@ export class RunFooter implements FooterApi {
   }
 
   public destroy(): void {
-    if (this.destroyed) {
-      return
-    }
-
-    this.flush()
-    this.destroyed = true
-    this.notifyClose()
-    this.clearInterruptTimer()
-    this.clearExitTimer()
-    this.renderer.off(CliRenderEvents.DESTROY, this.handleDestroy)
-    this.prompts.clear()
-    this.closes.clear()
-    this.scrollback.destroy()
+    this.handleDestroy()
   }
 
   private notifyClose(): void {
