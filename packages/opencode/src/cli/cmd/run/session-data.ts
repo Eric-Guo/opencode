@@ -205,39 +205,46 @@ function out(data: SessionData, commits: SessionCommit[], footer?: FooterOutput)
   }
 }
 
-function pickView(data: SessionData): FooterView {
-  const permission = data.permissions[0]
-  if (permission) {
-    return { type: "permission", request: permission }
+export function pickBlockerView(input: {
+  permission?: PermissionRequest
+  question?: QuestionRequest
+}): FooterView {
+  if (input.permission) {
+    return { type: "permission", request: input.permission }
   }
 
-  const question = data.questions[0]
-  if (question) {
-    return { type: "question", request: question }
+  if (input.question) {
+    return { type: "question", request: input.question }
   }
 
   return { type: "prompt" }
 }
 
-function queueFooter(data: SessionData): FooterOutput {
-  const view = pickView(data)
+export function blockerStatus(view: FooterView) {
   if (view.type === "permission") {
-    return {
-      view,
-      patch: { status: "awaiting permission" },
-    }
+    return "awaiting permission"
   }
 
   if (view.type === "question") {
-    return {
-      view,
-      patch: { status: "awaiting answer" },
-    }
+    return "awaiting answer"
   }
+
+  return ""
+}
+
+function pickSessionView(data: SessionData): FooterView {
+  return pickBlockerView({
+    permission: data.permissions[0],
+    question: data.questions[0],
+  })
+}
+
+function queueFooter(data: SessionData): FooterOutput {
+  const view = pickSessionView(data)
 
   return {
     view,
-    patch: { status: "" },
+    patch: { status: blockerStatus(view) },
   }
 }
 
@@ -348,7 +355,7 @@ function syncPermission(data: SessionData, part: ToolPart): FooterOutput | undef
   }
 
   return {
-    view: pickView(data),
+    view: pickSessionView(data),
   }
 }
 

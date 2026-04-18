@@ -14,9 +14,11 @@
 // delayed idle from an older turn cannot complete a newer busy turn.
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import {
+  blockerStatus,
   bootstrapSessionData,
   createSessionData,
   flushInterrupted,
+  pickBlockerView,
   reduceSessionData,
   type SessionData,
 } from "./session-data"
@@ -212,18 +214,6 @@ function sameView(a: FooterView, b: FooterView) {
   return a.request === b.request
 }
 
-function blockerStatus(view: FooterView) {
-  if (view.type === "permission") {
-    return "awaiting permission"
-  }
-
-  if (view.type === "question") {
-    return "awaiting answer"
-  }
-
-  return ""
-}
-
 function blockerOrder(order: Map<string, number>, id: string) {
   return order.get(id) ?? Number.MAX_SAFE_INTEGER
 }
@@ -240,17 +230,10 @@ function firstByOrder<T extends { id: string }>(left: T[], right: T[], order: Ma
 }
 
 function pickView(data: SessionData, subagent: SubagentData, order: Map<string, number>): FooterView {
-  const permission = firstByOrder(data.permissions, listSubagentPermissions(subagent), order)
-  if (permission) {
-    return { type: "permission", request: permission }
-  }
-
-  const question = firstByOrder(data.questions, listSubagentQuestions(subagent), order)
-  if (question) {
-    return { type: "question", request: question }
-  }
-
-  return { type: "prompt" }
+  return pickBlockerView({
+    permission: firstByOrder(data.permissions, listSubagentPermissions(subagent), order),
+    question: firstByOrder(data.questions, listSubagentQuestions(subagent), order),
+  })
 }
 
 function composeFooter(input: {
