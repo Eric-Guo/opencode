@@ -335,8 +335,51 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
     })
   }
 
-  try {
+  const runQueue = async () => {
     let includeFiles = true
+    if (demo) {
+      await demo.start()
+    }
+
+    const mod = await import("./runtime.queue")
+    await mod.runPromptQueue({
+      footer,
+      initialInput: input.initialInput,
+      trace: log,
+      onPrompt: () => {
+        shown = true
+      },
+      run: async (prompt, signal) => {
+        if (demo && (await demo.prompt(prompt, signal))) {
+          return
+        }
+
+        try {
+          const next = await ensureStream()
+          await next.handle.runPromptTurn({
+            agent,
+            model: ctx.model,
+            variant: activeVariant,
+            prompt,
+            files: input.files,
+            includeFiles,
+            signal,
+          })
+          includeFiles = false
+        } catch (error) {
+          if (signal.aborted || footer.isClosed) {
+            return
+          }
+
+          const text =
+            stream?.mod.formatUnknownError(error) ?? (error instanceof Error ? error.message : String(error))
+          footer.append({ kind: "error", text, phase: "start", source: "system" })
+        }
+      },
+    })
+  }
+
+  try {
     const eager = ctx.resume === true || !input.resolveSession || !!input.demo
     if (eager) {
       await ensureStream()
@@ -353,45 +396,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
     }
 
     try {
-      if (demo) {
-        await demo.start()
-      }
-
-      const queue = await import("./runtime.queue")
-      await queue.runPromptQueue({
-        footer,
-        initialInput: input.initialInput,
-        trace: log,
-        onPrompt: () => {
-          shown = true
-        },
-        run: async (prompt, signal) => {
-          if (demo && (await demo.prompt(prompt, signal))) {
-            return
-          }
-
-          try {
-            const next = await ensureStream()
-            await next.handle.runPromptTurn({
-              agent,
-              model: ctx.model,
-              variant: activeVariant,
-              prompt,
-              files: input.files,
-              includeFiles,
-              signal,
-            })
-            includeFiles = false
-          } catch (error) {
-            if (signal.aborted || footer.isClosed) {
-              return
-            }
-            const text =
-              stream?.mod.formatUnknownError(error) ?? (error instanceof Error ? error.message : String(error))
-            footer.append({ kind: "error", text, phase: "start", source: "system" })
-          }
-        },
-      })
+      await runQueue()
     } finally {
       await stream?.handle.close()
     }
