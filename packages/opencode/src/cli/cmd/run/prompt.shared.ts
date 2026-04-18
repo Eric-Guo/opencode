@@ -46,14 +46,14 @@ export type PromptMove = {
   apply: boolean
 }
 
-function copy(prompt: RunPrompt): RunPrompt {
+export function promptCopy(prompt: RunPrompt): RunPrompt {
   return {
     text: prompt.text,
     parts: structuredClone(prompt.parts),
   }
 }
 
-function same(a: RunPrompt, b: RunPrompt): boolean {
+export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
   return a.text === b.text && JSON.stringify(a.parts) === JSON.stringify(b.parts)
 }
 
@@ -171,10 +171,10 @@ export function promptCycle(
 }
 
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
-  const list = (items ?? []).filter((item) => item.text.trim().length > 0).map(copy)
+  const list = (items ?? []).filter((item) => item.text.trim().length > 0).map(promptCopy)
   const next: RunPrompt[] = []
   for (const item of list) {
-    if (next.length > 0 && same(next[next.length - 1], item)) {
+    if (next.length > 0 && promptSame(next[next.length - 1], item)) {
       continue
     }
 
@@ -193,8 +193,8 @@ export function pushPromptHistory(state: PromptHistoryState, prompt: RunPrompt):
     return state
   }
 
-  const next = copy(prompt)
-  if (state.items[state.items.length - 1] && same(state.items[state.items.length - 1], next)) {
+  const next = promptCopy(prompt)
+  if (state.items[state.items.length - 1] && promptSame(state.items[state.items.length - 1], next)) {
     return {
       ...state,
       index: null,

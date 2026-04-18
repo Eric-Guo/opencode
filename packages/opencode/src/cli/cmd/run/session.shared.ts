@@ -5,6 +5,7 @@
 // the current model so the footer can pre-select it.
 import path from "path"
 import { fileURLToPath } from "url"
+import { promptCopy, promptSame } from "./prompt.shared"
 import type { RunInput, RunPrompt } from "./types"
 
 const LIMIT = 200
@@ -21,17 +22,6 @@ type Turn = {
 export type RunSession = {
   first: boolean
   turns: Turn[]
-}
-
-function copy(prompt: RunPrompt): RunPrompt {
-  return {
-    text: prompt.text,
-    parts: structuredClone(prompt.parts),
-  }
-}
-
-function same(a: RunPrompt, b: RunPrompt): boolean {
-  return a.text === b.text && JSON.stringify(a.parts) === JSON.stringify(b.parts)
 }
 
 function fileName(url: string, filename?: string) {
@@ -175,11 +165,11 @@ export function sessionHistory(session: RunSession, limit = LIMIT): RunPrompt[] 
       continue
     }
 
-    if (out[out.length - 1] && same(out[out.length - 1], turn.prompt)) {
+    if (out[out.length - 1] && promptSame(out[out.length - 1], turn.prompt)) {
       continue
     }
 
-    out.push(copy(turn.prompt))
+    out.push(promptCopy(turn.prompt))
   }
 
   return out.slice(-limit)

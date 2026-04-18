@@ -133,18 +133,34 @@ describe("run session shared", () => {
     })
   })
 
-  test("dedupes consecutive history entries and drops blank prompts", () => {
+  test("dedupes consecutive history entries, drops blanks, and copies prompt parts", () => {
+    const parts = [
+      {
+        type: "agent" as const,
+        name: "scan",
+        source: {
+          start: 0,
+          end: 5,
+          value: "@scan",
+        },
+      },
+    ]
     const session: RunSession = {
       first: false,
       turns: [
-        { prompt: { text: "one", parts: [] }, provider: "openai", model: "gpt-5", variant: "high" },
-        { prompt: { text: "one", parts: [] }, provider: "openai", model: "gpt-5", variant: "high" },
+        { prompt: { text: "one", parts }, provider: "openai", model: "gpt-5", variant: "high" },
+        { prompt: { text: "one", parts: structuredClone(parts) }, provider: "openai", model: "gpt-5", variant: "high" },
         { prompt: { text: "   ", parts: [] }, provider: "openai", model: "gpt-5", variant: "high" },
         { prompt: { text: "two", parts: [] }, provider: "openai", model: "gpt-5", variant: undefined },
       ],
     }
 
-    expect(sessionHistory(session).map((item) => item.text)).toEqual(["one", "two"])
+    const out = sessionHistory(session)
+
+    expect(out.map((item) => item.text)).toEqual(["one", "two"])
+    expect(out[0]?.parts).toEqual(parts)
+    expect(out[0]?.parts).not.toBe(parts)
+    expect(out[0]?.parts[0]).not.toBe(parts[0])
   })
 
   test("returns the latest matching variant for the active model", () => {
