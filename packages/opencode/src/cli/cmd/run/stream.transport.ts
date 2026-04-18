@@ -29,6 +29,7 @@ import {
   listSubagentQuestions,
   listSubagentTabs,
   reduceSubagentData,
+  sameSubagentTab,
   snapshotSelectedSubagentData,
   snapshotSubagentData,
   SUBAGENT_BOOTSTRAP_LIMIT,
@@ -305,30 +306,12 @@ function composeFooter(input: {
   return footer
 }
 
-function sameTab(a: FooterSubagentTab | undefined, b: FooterSubagentTab | undefined) {
-  if (!a || !b) {
-    return false
-  }
-
-  return (
-    a.sessionID === b.sessionID &&
-    a.partID === b.partID &&
-    a.callID === b.callID &&
-    a.label === b.label &&
-    a.description === b.description &&
-    a.status === b.status &&
-    a.title === b.title &&
-    a.toolCalls === b.toolCalls &&
-    a.lastUpdatedAt === b.lastUpdatedAt
-  )
-}
-
 function traceTabs(trace: Trace | undefined, prev: FooterSubagentTab[], next: FooterSubagentTab[]) {
   const before = new Map(prev.map((item) => [item.sessionID, item]))
   const after = new Map(next.map((item) => [item.sessionID, item]))
 
   for (const [sessionID, tab] of after) {
-    if (sameTab(before.get(sessionID), tab)) {
+    if (sameSubagentTab(before.get(sessionID), tab)) {
       continue
     }
 

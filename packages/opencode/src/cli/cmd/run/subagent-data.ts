@@ -67,8 +67,8 @@ function ensureDetail(data: SubagentData, sessionID: string) {
   return next
 }
 
-function sameTab(a: FooterSubagentTab | undefined, b: FooterSubagentTab) {
-  if (!a) {
+export function sameSubagentTab(a: FooterSubagentTab | undefined, b: FooterSubagentTab | undefined) {
+  if (!a || !b) {
     return false
   }
 
@@ -280,7 +280,7 @@ function syncTaskTab(data: SubagentData, part: ToolPart, children?: Set<string>)
   }
 
   const next = taskTab(part, sessionID)
-  if (sameTab(data.tabs.get(sessionID), next)) {
+  if (sameSubagentTab(data.tabs.get(sessionID), next)) {
     ensureDetail(data, sessionID)
     return false
   }
