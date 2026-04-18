@@ -232,14 +232,18 @@ export class RunFooter implements FooterApi {
         }),
       this.renderer as unknown as Parameters<typeof render>[1],
     ).catch(() => {
-      if (!this.destroyed && !this.renderer.isDestroyed) {
+      if (!this.isGone) {
         this.close()
       }
     })
   }
 
   public get isClosed(): boolean {
-    return this.closed || this.destroyed || this.renderer.isDestroyed
+    return this.closed || this.isGone
+  }
+
+  private get isGone(): boolean {
+    return this.destroyed || this.renderer.isDestroyed
   }
 
   public onPrompt(fn: (input: RunPrompt) => void): () => void {
@@ -263,7 +267,7 @@ export class RunFooter implements FooterApi {
 
   public event(next: FooterEvent): void {
     if (next.type === "catalog") {
-      if (this.destroyed || this.renderer.isDestroyed) {
+      if (this.isGone) {
         return
       }
 
@@ -279,7 +283,7 @@ export class RunFooter implements FooterApi {
     }
 
     if (next.type === "stream.subagent") {
-      if (this.destroyed || this.renderer.isDestroyed) {
+      if (this.isGone) {
         return
       }
 
@@ -294,7 +298,7 @@ export class RunFooter implements FooterApi {
   }
 
   private patch(next: FooterPatch): void {
-    if (this.destroyed || this.renderer.isDestroyed) {
+    if (this.isGone) {
       return
     }
 
@@ -328,7 +332,7 @@ export class RunFooter implements FooterApi {
   }
 
   private present(view: FooterView): void {
-    if (this.destroyed || this.renderer.isDestroyed) {
+    if (this.isGone) {
       return
     }
 
@@ -341,7 +345,7 @@ export class RunFooter implements FooterApi {
   // updates. Actual flush happens on the next microtask, so a burst of events
   // from one reducer pass becomes a single ordered drain.
   public append(commit: StreamCommit): void {
-    if (this.destroyed || this.renderer.isDestroyed) {
+    if (this.isGone) {
       return
     }
 
@@ -372,7 +376,7 @@ export class RunFooter implements FooterApi {
   }
 
   public idle(): Promise<void> {
-    if (this.destroyed || this.renderer.isDestroyed) {
+    if (this.isGone) {
       return Promise.resolve()
     }
 
@@ -382,7 +386,7 @@ export class RunFooter implements FooterApi {
     }
 
     return this.flushing.then(async () => {
-      if (this.destroyed || this.renderer.isDestroyed) {
+      if (this.isGone) {
         return
       }
 
@@ -449,7 +453,7 @@ export class RunFooter implements FooterApi {
   }
 
   private syncRows = (value: number): void => {
-    if (this.destroyed || this.renderer.isDestroyed) {
+    if (this.isGone) {
       return
     }
 
@@ -548,7 +552,7 @@ export class RunFooter implements FooterApi {
     this.clearInterruptTimer()
     this.interruptTimeout = setTimeout(() => {
       this.interruptTimeout = undefined
-      if (this.destroyed || this.renderer.isDestroyed || this.state().phase !== "running") {
+      if (this.isGone || this.state().phase !== "running") {
         return
       }
 
@@ -569,7 +573,7 @@ export class RunFooter implements FooterApi {
     this.clearExitTimer()
     this.exitTimeout = setTimeout(() => {
       this.exitTimeout = undefined
-      if (this.destroyed || this.renderer.isDestroyed || this.isClosed) {
+      if (this.isGone || this.isClosed) {
         return
       }
 
@@ -642,7 +646,7 @@ export class RunFooter implements FooterApi {
   // spacing, and progressive markdown/code settling so direct mode can append
   // immutable transcript rows without rewriting history.
   private flush(): void {
-    if (this.destroyed || this.renderer.isDestroyed || this.queue.length === 0) {
+    if (this.isGone || this.queue.length === 0) {
       this.queue.length = 0
       return
     }

@@ -248,6 +248,10 @@ function queueFooter(data: SessionData): FooterOutput {
   }
 }
 
+function queueOut(data: SessionData, commits: SessionCommit[]): SessionDataOutput {
+  return out(data, commits, queueFooter(data))
+}
+
 function upsert<T extends { id: string }>(list: T[], item: T) {
   const idx = list.findIndex((entry) => entry.id === item.id)
   if (idx === -1) {
@@ -574,47 +578,44 @@ function replay(data: SessionData, commits: SessionCommit[], messageID: string, 
   }
 }
 
-function startTool(part: ToolPart): SessionCommit {
+function toolCommit(
+  part: ToolPart,
+  next: Pick<SessionCommit, "text" | "phase" | "toolState"> & { toolError?: string },
+): SessionCommit {
   return {
     kind: "tool",
-    text: toolStatus(part),
-    phase: "start",
     source: "tool",
     messageID: part.messageID,
     partID: part.id,
     tool: part.tool,
     part,
-    toolState: "running",
+    ...next,
   }
+}
+
+function startTool(part: ToolPart): SessionCommit {
+  return toolCommit(part, {
+    text: toolStatus(part),
+    phase: "start",
+    toolState: "running",
+  })
 }
 
 function doneTool(part: ToolPart): SessionCommit {
-  return {
-    kind: "tool",
+  return toolCommit(part, {
     text: "",
     phase: "final",
-    source: "tool",
-    messageID: part.messageID,
-    partID: part.id,
-    tool: part.tool,
-    part,
     toolState: "completed",
-  }
+  })
 }
 
 function failTool(part: ToolPart, text: string): SessionCommit {
-  return {
-    kind: "tool",
+  return toolCommit(part, {
     text,
     phase: "final",
-    source: "tool",
-    messageID: part.messageID,
-    partID: part.id,
-    tool: part.tool,
-    part,
     toolState: "error",
     toolError: text,
-  }
+  })
 }
 
 // Emits "interrupted" final entries for all in-flight parts. Called when a turn is aborted.
@@ -879,7 +880,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     }
 
     upsert(data.permissions, enrichPermission(data, event.properties))
-    return out(data, commits, queueFooter(data))
+    return queueOut(data, commits)
   }
 
   if (event.type === "permission.replied") {
@@ -891,7 +892,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
-    return out(data, commits, queueFooter(data))
+    return queueOut(data, commits)
   }
 
   if (event.type === "question.asked") {
@@ -900,7 +901,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     }
 
     upsert(data.questions, event.properties)
-    return out(data, commits, queueFooter(data))
+    return queueOut(data, commits)
   }
 
   if (event.type === "question.replied" || event.type === "question.rejected") {
@@ -912,7 +913,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
-    return out(data, commits, queueFooter(data))
+    return queueOut(data, commits)
   }
 
   if (event.type === "session.error") {
