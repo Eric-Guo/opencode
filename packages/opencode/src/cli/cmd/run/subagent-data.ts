@@ -518,14 +518,19 @@ function snapshotQueues(data: SubagentData) {
   }
 }
 
-export function snapshotSubagentData(data: SubagentData): FooterSubagentState {
+function snapshotState(data: SubagentData, details: FooterSubagentState["details"]): FooterSubagentState {
   return {
     tabs: listSubagentTabs(data),
-    details: Object.fromEntries(
-      [...data.details.entries()].map(([sessionID, detail]) => [sessionID, snapshotDetail(detail)]),
-    ),
+    details,
     ...snapshotQueues(data),
   }
+}
+
+export function snapshotSubagentData(data: SubagentData): FooterSubagentState {
+  return snapshotState(
+    data,
+    Object.fromEntries([...data.details.entries()].map(([sessionID, detail]) => [sessionID, snapshotDetail(detail)])),
+  )
 }
 
 export function snapshotSelectedSubagentData(
@@ -534,11 +539,7 @@ export function snapshotSelectedSubagentData(
 ): FooterSubagentState {
   const detail = selectedSessionID ? data.details.get(selectedSessionID) : undefined
 
-  return {
-    tabs: listSubagentTabs(data),
-    details: detail ? { [detail.sessionID]: snapshotDetail(detail) } : {},
-    ...snapshotQueues(data),
-  }
+  return snapshotState(data, detail ? { [detail.sessionID]: snapshotDetail(detail) } : {})
 }
 
 export function bootstrapSubagentData(input: BootstrapSubagentInput) {
