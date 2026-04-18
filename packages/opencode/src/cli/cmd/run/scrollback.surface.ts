@@ -14,6 +14,7 @@ import {
   type ScrollbackSurface,
 } from "@opentui/core"
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
+import { withRunSpan } from "./otel"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { entryWriter, sameEntryGroup, spacerWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
@@ -66,6 +67,7 @@ export class RunScrollbackStream {
   private active: ActiveEntry | undefined
   private wrote: boolean
   private diffStyle: RunDiffStyle | undefined
+  private sessionID?: () => string | undefined
   private treeSitterClient: TreeSitterClient | undefined
 
   constructor(
@@ -74,11 +76,13 @@ export class RunScrollbackStream {
     options: {
       wrote?: boolean
       diffStyle?: RunDiffStyle
+      sessionID?: () => string | undefined
       treeSitterClient?: TreeSitterClient
     } = {},
   ) {
     this.wrote = options.wrote ?? true
     this.diffStyle = options.diffStyle
+    this.sessionID = options.sessionID
     this.treeSitterClient = options.treeSitterClient ?? getTreeSitterClient()
   }
 
@@ -282,7 +286,17 @@ export class RunScrollbackStream {
   }
 
   public async complete(trailingNewline = false): Promise<void> {
-    await this.finishActive(trailingNewline)
+    return withRunSpan(
+      "RunScrollbackStream.complete",
+      {
+        "opencode.entry.active": !!this.active,
+        "opencode.trailing_newline": trailingNewline,
+        "session.id": this.sessionID?.() || undefined,
+      },
+      async () => {
+        await this.finishActive(trailingNewline)
+      },
+    )
   }
 
   public destroy(): void {

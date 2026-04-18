@@ -27,6 +27,7 @@ import { CliRenderEvents, type CliRenderer, type TreeSitterClient } from "@opent
 import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
+import { withRunSpan } from "./otel"
 import { SUBAGENT_INSPECTOR_ROWS, SUBAGENT_TAB_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
 import { printableBinding } from "./prompt.shared"
@@ -62,6 +63,7 @@ type RunFooterOptions = {
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
   resources: RunResource[]
+  sessionID: () => string | undefined
   agentLabel: string
   modelLabel: string
   first: boolean
@@ -203,6 +205,7 @@ export class RunFooter implements FooterApi {
     this.interruptHint = printableBinding(options.keybinds.interrupt, options.keybinds.leader) || "esc"
     this.scrollback = new RunScrollbackStream(renderer, options.theme, {
       diffStyle: options.diffStyle,
+      sessionID: options.sessionID,
       treeSitterClient: options.treeSitterClient,
     })
 
@@ -338,7 +341,21 @@ export class RunFooter implements FooterApi {
   }
 
   private completeScrollback(): void {
-    this.flushing = this.flushing.then(() => this.scrollback.complete()).catch(() => {})
+    const phase = this.state().phase
+    this.flushing = this.flushing
+      .then(() =>
+        withRunSpan(
+          "RunFooter.completeScrollback",
+          {
+            "opencode.footer.phase": phase,
+            "session.id": this.options.sessionID() || undefined,
+          },
+          async () => {
+            await this.scrollback.complete()
+          },
+        ),
+      )
+      .catch(() => {})
   }
 
   private present(view: FooterView): void {
@@ -662,12 +679,23 @@ export class RunFooter implements FooterApi {
     }
 
     const batch = this.queue.splice(0)
+    const phase = this.state().phase
     this.flushing = this.flushing
-      .then(async () => {
-        for (const item of batch) {
-          await this.scrollback.append(item)
-        }
-      })
+      .then(() =>
+        withRunSpan(
+          "RunFooter.flush",
+          {
+            "opencode.batch.commits": batch.length,
+            "opencode.footer.phase": phase,
+            "session.id": this.options.sessionID() || undefined,
+          },
+          async () => {
+            for (const item of batch) {
+              await this.scrollback.append(item)
+            }
+          },
+        ),
+      )
       .catch(() => {})
   }
 }

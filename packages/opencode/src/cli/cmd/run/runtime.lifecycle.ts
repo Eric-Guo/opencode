@@ -10,6 +10,7 @@
 // sequence through RunFooter.requestExit().
 import { createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import * as Locale from "../../../util/locale"
+import { withRunSpan } from "./otel"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
 import { resolveRunTheme } from "./theme"
 import type {
@@ -51,6 +52,7 @@ export type LifecycleInput = {
   resources: RunResource[]
   sessionID: string
   sessionTitle?: string
+  getSessionID?: () => string | undefined
   first: boolean
   history: RunPrompt[]
   agent: string | undefined
@@ -149,117 +151,141 @@ function queueSplash(
 // scrollback commits and footer repaints happen in the same frame. After
 // the entry splash, RunFooter takes over the footer region.
 export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lifecycle> {
-  const renderer = await createCliRenderer({
-    targetFps: 30,
-    maxFps: 60,
-    useMouse: false,
-    autoFocus: false,
-    openConsoleOnError: false,
-    exitOnCtrlC: false,
-    useKittyKeyboard: { events: process.platform === "win32" },
-    screenMode: "split-footer",
-    footerHeight: FOOTER_HEIGHT,
-    externalOutputMode: "capture-stdout",
-    consoleMode: "disabled",
-    clearOnShutdown: false,
-  })
-  let theme = await resolveRunTheme(renderer)
-  renderer.setBackgroundColor(theme.background)
-  const state: SplashState = {
-    entry: false,
-    exit: false,
-  }
-  const splash = splashInfo(input.sessionTitle, input.history)
-  const meta = splashMeta({
-    title: splash.title,
-    session_id: input.sessionID,
-  })
-  const footerTask = import("./footer")
-  queueSplash(
-    renderer,
-    state,
-    "entry",
-      entrySplash({
-        ...meta,
-        theme: theme.entry,
-        background: theme.background,
-        showSession: splash.showSession,
-      }),
-    )
-  await renderer.idle().catch(() => {})
-
-  const { RunFooter } = await footerTask
-
-  const labels = footerLabels({
-    agent: input.agent,
-    model: input.model,
-    variant: input.variant,
-  })
-  const footer = new RunFooter(renderer, {
-    directory: input.directory,
-    findFiles: input.findFiles,
-    agents: input.agents,
-    resources: input.resources,
-    ...labels,
-    first: input.first,
-    history: input.history,
-    theme,
-    keybinds: input.keybinds,
-    diffStyle: input.diffStyle,
-    onPermissionReply: input.onPermissionReply,
-    onQuestionReply: input.onQuestionReply,
-    onQuestionReject: input.onQuestionReject,
-    onCycleVariant: input.onCycleVariant,
-    onInterrupt: input.onInterrupt,
-    onSubagentSelect: input.onSubagentSelect,
-  })
-
-  const sigint = () => {
-    footer.requestExit()
-  }
-  process.on("SIGINT", sigint)
-
-  let closed = false
-  const close = async (next: { showExit: boolean; sessionTitle?: string; sessionID?: string }) => {
-    if (closed) {
-      return
-    }
-
-    closed = true
-    process.off("SIGINT", sigint)
-
-    try {
-      await footer.idle().catch(() => {})
-
-      const show = renderer.isDestroyed ? false : next.showExit
-      if (!renderer.isDestroyed && show) {
-        const sessionID = next.sessionID ?? input.sessionID
-        const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, input.history)
-        queueSplash(
-          renderer,
-          state,
-          "exit",
-          exitSplash({
-            ...splashMeta({
-              title: splash.title,
-              session_id: sessionID,
-            }),
-            theme: theme.entry,
-            background: theme.background,
-          }),
-        )
-        await renderer.idle().catch(() => {})
+  return withRunSpan(
+    "RunLifecycle.boot",
+    {
+      "opencode.agent.name": input.agent,
+      "opencode.directory": input.directory,
+      "opencode.first": input.first,
+      "opencode.model.provider": input.model?.providerID,
+      "opencode.model.id": input.model?.modelID,
+      "opencode.model.variant": input.variant,
+      "session.id": input.getSessionID?.() || input.sessionID || undefined,
+    },
+    async () => {
+      const renderer = await createCliRenderer({
+        targetFps: 30,
+        maxFps: 60,
+        useMouse: false,
+        autoFocus: false,
+        openConsoleOnError: false,
+        exitOnCtrlC: false,
+        useKittyKeyboard: { events: process.platform === "win32" },
+        screenMode: "split-footer",
+        footerHeight: FOOTER_HEIGHT,
+        externalOutputMode: "capture-stdout",
+        consoleMode: "disabled",
+        clearOnShutdown: false,
+      })
+      const theme = await resolveRunTheme(renderer)
+      renderer.setBackgroundColor(theme.background)
+      const state: SplashState = {
+        entry: false,
+        exit: false,
       }
-    } finally {
-      footer.close()
-      await footer.idle().catch(() => {})
-      footer.destroy()
-      shutdown(renderer)
-    }
-  }
+      const splash = splashInfo(input.sessionTitle, input.history)
+      const meta = splashMeta({
+        title: splash.title,
+        session_id: input.sessionID,
+      })
+      const footerTask = import("./footer")
+      queueSplash(
+        renderer,
+        state,
+        "entry",
+        entrySplash({
+          ...meta,
+          theme: theme.entry,
+          background: theme.background,
+          showSession: splash.showSession,
+        }),
+      )
+      await renderer.idle().catch(() => {})
 
-  return {
-    footer,
-    close,
-  }
+      const { RunFooter } = await footerTask
+
+      const labels = footerLabels({
+        agent: input.agent,
+        model: input.model,
+        variant: input.variant,
+      })
+      const footer = new RunFooter(renderer, {
+        directory: input.directory,
+        findFiles: input.findFiles,
+        agents: input.agents,
+        resources: input.resources,
+        sessionID: input.getSessionID ?? (() => input.sessionID),
+        ...labels,
+        first: input.first,
+        history: input.history,
+        theme,
+        keybinds: input.keybinds,
+        diffStyle: input.diffStyle,
+        onPermissionReply: input.onPermissionReply,
+        onQuestionReply: input.onQuestionReply,
+        onQuestionReject: input.onQuestionReject,
+        onCycleVariant: input.onCycleVariant,
+        onInterrupt: input.onInterrupt,
+        onSubagentSelect: input.onSubagentSelect,
+      })
+
+      const sigint = () => {
+        footer.requestExit()
+      }
+      process.on("SIGINT", sigint)
+
+      let closed = false
+      const close = async (next: { showExit: boolean; sessionTitle?: string; sessionID?: string }) => {
+        if (closed) {
+          return
+        }
+
+        closed = true
+        return withRunSpan(
+          "RunLifecycle.close",
+          {
+            "opencode.show_exit": next.showExit,
+            "session.id": next.sessionID || input.getSessionID?.() || input.sessionID || undefined,
+          },
+          async () => {
+            process.off("SIGINT", sigint)
+
+            try {
+              await footer.idle().catch(() => {})
+
+              const show = renderer.isDestroyed ? false : next.showExit
+              if (!renderer.isDestroyed && show) {
+                const sessionID = next.sessionID || input.getSessionID?.() || input.sessionID
+                const splash = splashInfo(next.sessionTitle ?? input.sessionTitle, input.history)
+                queueSplash(
+                  renderer,
+                  state,
+                  "exit",
+                  exitSplash({
+                    ...splashMeta({
+                      title: splash.title,
+                      session_id: sessionID,
+                    }),
+                    theme: theme.entry,
+                    background: theme.background,
+                  }),
+                )
+                await renderer.idle().catch(() => {})
+              }
+            } finally {
+              footer.close()
+              await footer.idle().catch(() => {})
+              footer.destroy()
+              shutdown(renderer)
+            }
+          },
+        )
+      }
+
+      return {
+        footer,
+        close,
+      }
+    },
+  )
 }

@@ -22,6 +22,7 @@ function createFooter(renderer: TestRenderer) {
     findFiles: async () => [],
     agents: [],
     resources: [],
+    sessionID: () => "session-1",
     agentLabel: "Build",
     modelLabel: "Model default",
     first: false,
