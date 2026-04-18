@@ -105,7 +105,7 @@ export function printableBinding(binding: string, leader: string): string {
 
 export function isExitCommand(input: string): boolean {
   const text = input.trim().toLowerCase()
-  return text === "/exit" || text === "/quit"
+  return text === "/exit" || text === "/quit" || text === ":q"
 }
 
 export function promptInfo(event: {

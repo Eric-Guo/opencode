@@ -232,7 +232,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   }
 
   if (kind === "entry") {
-    push(lines, 0, y, "Type /exit or /quit to finish.", input.theme.system.body, undefined, undefined)
+    push(lines, 0, y, "Type /exit to finish.", input.theme.system.body, undefined, undefined)
     y += 1
   }
 

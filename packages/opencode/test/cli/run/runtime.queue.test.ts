@@ -161,6 +161,39 @@ describe("run runtime queue", () => {
     expect(seen).toEqual(["one", "two"])
   })
 
+  test("drains a prompt queued during an in-flight turn", async () => {
+    const ui = footer()
+    const seen: string[] = []
+    let wake: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      wake = resolve
+    })
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input) => {
+        seen.push(input.text)
+        if (seen.length === 1) {
+          await gate
+          return
+        }
+
+        ui.api.close()
+      },
+    })
+
+    ui.submit("one")
+    await Promise.resolve()
+    expect(seen).toEqual(["one"])
+
+    wake?.()
+    await Promise.resolve()
+    ui.submit("two")
+    await task
+
+    expect(seen).toEqual(["one", "two"])
+  })
+
   test("close aborts the active run and drops pending queued work", async () => {
     const ui = footer()
     const seen: string[] = []

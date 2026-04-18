@@ -152,7 +152,7 @@ function active(event: Event, sessionID: string): boolean {
 // Races the turn's deferred completion against an abort signal.
 function waitTurn(done: Wait["done"], signal: AbortSignal) {
   return Effect.raceAll([
-    Deferred.await(done).pipe(Effect.as("idle" as const)),
+    Deferred.await(done).pipe(Effect.as("idle" as const), Effect.exit),
     Effect.callback<"abort">((resume) => {
       if (signal.aborted) {
         resume(Effect.succeed("abort"))
@@ -166,8 +166,10 @@ function waitTurn(done: Wait["done"], signal: AbortSignal) {
 
       signal.addEventListener("abort", onAbort, { once: true })
       return Effect.sync(() => signal.removeEventListener("abort", onAbort))
-    }),
-  ])
+    }).pipe(Effect.exit),
+  ]).pipe(
+    Effect.flatMap((exit) => (Exit.isFailure(exit) ? Effect.failCause(exit.cause) : Effect.succeed(exit.value))),
+  )
 }
 
 export function formatUnknownError(error: unknown): string {

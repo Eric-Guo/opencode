@@ -668,6 +668,58 @@ describe("run stream transport", () => {
     }
   })
 
+  test("rejects the active turn when the event stream faults", async () => {
+    const ui = footer()
+    const ready = defer()
+
+    const transport = await createSessionTransport({
+      sdk: {
+        event: {
+          subscribe: async () => ({
+            stream: (async function* () {
+              await ready.promise
+              yield busy()
+              throw new Error("boom")
+            })(),
+          }),
+        },
+        session: {
+          promptAsync: async () => {
+            ready.resolve()
+          },
+          status: async () => ({ data: { "session-1": { type: "busy" } } }),
+          messages: async () => ({ data: [] }),
+          children: async () => ({ data: [] }),
+        },
+        permission: {
+          list: async () => ({ data: [] }),
+        },
+        question: {
+          list: async () => ({ data: [] }),
+        },
+      } as unknown as OpencodeClient,
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      await expect(
+        transport.runPromptTurn({
+          agent: undefined,
+          model: undefined,
+          variant: undefined,
+          prompt: { text: "hello", parts: [] },
+          files: [],
+          includeFiles: false,
+        }),
+      ).rejects.toThrow("boom")
+    } finally {
+      await transport.close()
+    }
+  })
+
   test("closes while the event stream is waiting for the next item", async () => {
     const src = blockingFeed()
     const ui = footer()
