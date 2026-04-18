@@ -7,16 +7,29 @@
 // so your last-used variant sticks. Cycling (ctrl+t) updates both the active
 // variant and the persisted file.
 import path from "path"
-import { Global } from "../../../global"
-import * as Filesystem from "../../../util/filesystem"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Context, Effect, Layer } from "effect"
+import { makeRuntime } from "@/effect/run-service"
+import { Global } from "@/global"
+import { isRecord } from "@/util/record"
 import { createSession, sessionVariant, type RunSession, type SessionMessages } from "./session.shared"
 import type { RunInput } from "./types"
 
 const MODEL_FILE = path.join(Global.Path.state, "model.json")
 
-type ModelState = {
+type ModelState = Record<string, unknown> & {
   variant?: Record<string, string | undefined>
 }
+type VariantService = {
+  readonly resolveSavedVariant: (model: RunInput["model"]) => Effect.Effect<string | undefined>
+  readonly saveVariant: (model: RunInput["model"], variant: string | undefined) => Effect.Effect<void>
+}
+type VariantRuntime = {
+  resolveSavedVariant(model: RunInput["model"]): Promise<string | undefined>
+  saveVariant(model: RunInput["model"], variant: string | undefined): Promise<void>
+}
+
+class Service extends Context.Service<Service, VariantService>()("@opencode/RunVariant") {}
 
 function modelKey(provider: string, model: string): string {
   return `${provider}/${model}`
@@ -86,41 +99,102 @@ export function resolveVariant(
   return fallback
 }
 
-export async function resolveSavedVariant(model: RunInput["model"]): Promise<string | undefined> {
-  if (!model) {
-    return undefined
+function state(value: unknown): ModelState {
+  if (!isRecord(value)) {
+    return {}
   }
 
-  try {
-    const state = await Filesystem.readJson<ModelState>(MODEL_FILE)
-    return state.variant?.[variantKey(model)]
-  } catch {
-    return undefined
+  const variant = isRecord(value.variant)
+    ? Object.fromEntries(
+        Object.entries(value.variant).flatMap(([key, item]) => {
+          if (typeof item !== "string") {
+            return []
+          }
+
+          return [[key, item] as const]
+        }),
+      )
+    : undefined
+
+  return {
+    ...value,
+    variant,
   }
 }
 
-export function saveVariant(model: RunInput["model"], variant: string | undefined): void {
-  if (!model) {
-    return
+function createLayer(fs = AppFileSystem.defaultLayer) {
+  return Layer.fresh(
+    Layer.effect(
+      Service,
+      Effect.gen(function* () {
+        const file = yield* AppFileSystem.Service
+
+        const read = Effect.fn("RunVariant.read")(function* () {
+          return yield* file.readJson(MODEL_FILE).pipe(
+            Effect.map(state),
+            Effect.catchCause(() => Effect.succeed({})),
+          )
+        })
+
+        const resolveSavedVariant = Effect.fn("RunVariant.resolveSavedVariant")(function* (model: RunInput["model"]) {
+          if (!model) {
+            return undefined
+          }
+
+          return (yield* read()).variant?.[variantKey(model)]
+        })
+
+        const saveVariant = Effect.fn("RunVariant.saveVariant")(function* (
+          model: RunInput["model"],
+          variant: string | undefined,
+        ) {
+          if (!model) {
+            return
+          }
+
+          const current = yield* read()
+          const next = {
+            ...(current.variant ?? {}),
+          }
+          const key = variantKey(model)
+          if (variant) {
+            next[key] = variant
+          }
+
+          if (!variant) {
+            delete next[key]
+          }
+
+          yield* file.writeJson(MODEL_FILE, {
+            ...current,
+            variant: next,
+          }).pipe(Effect.orElseSucceed(() => undefined))
+        })
+
+        return Service.of({
+          resolveSavedVariant,
+          saveVariant,
+        })
+      }),
+    ).pipe(Layer.provide(fs)),
+  )
+}
+
+/** @internal Exported for testing. */
+export function createVariantRuntime(fs = AppFileSystem.defaultLayer): VariantRuntime {
+  const runtime = makeRuntime(Service, createLayer(fs))
+  return {
+    resolveSavedVariant: (model) => runtime.runPromise((svc) => svc.resolveSavedVariant(model)).catch(() => undefined),
+    saveVariant: (model, variant) => runtime.runPromise((svc) => svc.saveVariant(model, variant)).catch(() => {}),
   }
+}
 
-  void (async () => {
-    const state = await Filesystem.readJson<ModelState>(MODEL_FILE).catch(() => ({}) as ModelState)
-    const map = {
-      ...(state.variant ?? {}),
-    }
-    const key = variantKey(model)
-    if (variant) {
-      map[key] = variant
-    }
+const runtime = createVariantRuntime()
 
-    if (!variant) {
-      delete map[key]
-    }
+export async function resolveSavedVariant(model: RunInput["model"]): Promise<string | undefined> {
+  return runtime.resolveSavedVariant(model)
+}
 
-    await Filesystem.writeJson(MODEL_FILE, {
-      ...state,
-      variant: map,
-    })
-  })().catch(() => {})
+export function saveVariant(model: RunInput["model"], variant: string | undefined): void {
+  void runtime.saveVariant(model, variant)
 }

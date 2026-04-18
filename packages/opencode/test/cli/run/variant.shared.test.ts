@@ -1,10 +1,50 @@
+import path from "path"
+import { NodeFileSystem } from "@effect/platform-node"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { describe, expect, test } from "bun:test"
-import { cycleVariant, formatModelLabel, pickVariant, resolveVariant } from "../../../src/cli/cmd/run/variant.shared"
+import { Effect, FileSystem, Layer } from "effect"
+import { Global } from "../../../src/global"
+import {
+  createVariantRuntime,
+  cycleVariant,
+  formatModelLabel,
+  pickVariant,
+  resolveVariant,
+} from "../../../src/cli/cmd/run/variant.shared"
 import type { SessionMessages } from "../../../src/cli/cmd/run/session.shared"
+import { testEffect } from "../../lib/effect"
 
 const model = {
   providerID: "openai",
   modelID: "gpt-5",
+}
+
+const it = testEffect(Layer.mergeAll(AppFileSystem.defaultLayer, NodeFileSystem.layer))
+
+function remap(root: string, file: string) {
+  if (file === Global.Path.state) {
+    return root
+  }
+
+  if (file.startsWith(Global.Path.state + path.sep)) {
+    return path.join(root, path.relative(Global.Path.state, file))
+  }
+
+  return file
+}
+
+function remappedFs(root: string) {
+  return Layer.effect(
+    AppFileSystem.Service,
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      return AppFileSystem.Service.of({
+        ...fs,
+        readJson: (file) => fs.readJson(remap(root, file)),
+        writeJson: (file, data, mode) => fs.writeJson(remap(root, file), data, mode),
+      })
+    }),
+  ).pipe(Layer.provide(AppFileSystem.defaultLayer))
 }
 
 describe("run variant shared", () => {
@@ -65,4 +105,62 @@ describe("run variant shared", () => {
 
     expect(pickVariant(model, msgs)).toBe("minimal")
   })
+
+  it.live("reads and writes saved variants through a runtime-backed app fs layer", () =>
+    Effect.gen(function* () {
+      const filesys = yield* FileSystem.FileSystem
+      const fs = yield* AppFileSystem.Service
+      const root = yield* filesys.makeTempDirectoryScoped()
+      const file = path.join(root, "model.json")
+
+      yield* fs.writeJson(file, {
+        recent: [{ providerID: "anthropic", modelID: "sonnet" }],
+        variant: {
+          "openai/gpt-4.1": "low",
+        },
+      })
+
+      const svc = createVariantRuntime(remappedFs(root))
+
+      yield* Effect.promise(() => svc.saveVariant(model, "high"))
+      expect(yield* Effect.promise(() => svc.resolveSavedVariant(model))).toBe("high")
+      expect(yield* fs.readJson(file)).toEqual({
+        recent: [{ providerID: "anthropic", modelID: "sonnet" }],
+        variant: {
+          "openai/gpt-4.1": "low",
+          "openai/gpt-5": "high",
+        },
+      })
+
+      yield* Effect.promise(() => svc.saveVariant(model, undefined))
+      expect(yield* Effect.promise(() => svc.resolveSavedVariant(model))).toBeUndefined()
+      expect(yield* fs.readJson(file)).toEqual({
+        recent: [{ providerID: "anthropic", modelID: "sonnet" }],
+        variant: {
+          "openai/gpt-4.1": "low",
+        },
+      })
+    }),
+  )
+
+  it.live("repairs malformed saved variant state on the next write", () =>
+    Effect.gen(function* () {
+      const filesys = yield* FileSystem.FileSystem
+      const fs = yield* AppFileSystem.Service
+      const root = yield* filesys.makeTempDirectoryScoped()
+      const file = path.join(root, "model.json")
+
+      yield* filesys.writeFileString(file, "{")
+
+      const svc = createVariantRuntime(remappedFs(root))
+
+      yield* Effect.promise(() => svc.saveVariant(model, "high"))
+      expect(yield* Effect.promise(() => svc.resolveSavedVariant(model))).toBe("high")
+      expect(yield* fs.readJson(file)).toEqual({
+        variant: {
+          "openai/gpt-5": "high",
+        },
+      })
+    }),
+  )
 })
