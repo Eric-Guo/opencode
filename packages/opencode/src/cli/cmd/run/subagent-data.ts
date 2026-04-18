@@ -91,6 +91,17 @@ function sameQueue<T extends { id: string }>(left: T[], right: T[]) {
   )
 }
 
+function queueSnapshot(data: SessionData) {
+  return {
+    permissions: data.permissions.slice(),
+    questions: data.questions.slice(),
+  }
+}
+
+function queueChanged(data: SessionData, before: ReturnType<typeof queueSnapshot>) {
+  return !sameQueue(before.permissions, data.permissions) || !sameQueue(before.questions, data.questions)
+}
+
 function sameCommit(left: StreamCommit, right: StreamCommit) {
   return (
     left.kind === right.kind &&
@@ -455,8 +466,7 @@ function applyChildEvent(input: {
   thinking: boolean
   limits: Record<string, number>
 }) {
-  const beforePermissions = input.detail.data.permissions.slice()
-  const beforeQuestions = input.detail.data.questions.slice()
+  const before = queueSnapshot(input.detail.data)
   const out = reduceSessionData({
     data: input.detail.data,
     event: input.event,
@@ -467,11 +477,7 @@ function applyChildEvent(input: {
   const changed = appendCommits(input.detail, out.commits)
   compactDetail(input.detail)
 
-  return (
-    changed ||
-    !sameQueue(beforePermissions, input.detail.data.permissions) ||
-    !sameQueue(beforeQuestions, input.detail.data.questions)
-  )
+  return changed || queueChanged(input.detail.data, before)
 }
 
 function knownSession(data: SubagentData, sessionID: string) {
@@ -575,8 +581,7 @@ export function bootstrapSubagentData(input: BootstrapSubagentInput) {
 
   for (const sessionID of input.data.tabs.keys()) {
     const detail = ensureDetail(input.data, sessionID)
-    const beforePermissions = detail.data.permissions.slice()
-    const beforeQuestions = detail.data.questions.slice()
+    const before = queueSnapshot(detail.data)
 
     bootstrapSessionData({
       data: detail.data,
@@ -590,10 +595,7 @@ export function bootstrapSubagentData(input: BootstrapSubagentInput) {
     })
     compactDetail(detail)
 
-    changed =
-      !sameQueue(beforePermissions, detail.data.permissions) ||
-      !sameQueue(beforeQuestions, detail.data.questions) ||
-      changed
+    changed = queueChanged(detail.data, before) || changed
   }
 
   return changed
@@ -605,8 +607,7 @@ export function bootstrapSubagentCalls(input: { data: SubagentData; sessionID: s
   }
 
   const detail = ensureDetail(input.data, input.sessionID)
-  const beforePermissions = detail.data.permissions.slice()
-  const beforeQuestions = detail.data.questions.slice()
+  const before = queueSnapshot(detail.data)
   const beforeCallCount = detail.data.call.size
   bootstrapSessionData({
     data: detail.data,
@@ -616,11 +617,7 @@ export function bootstrapSubagentCalls(input: { data: SubagentData; sessionID: s
   })
   compactDetail(detail)
 
-  return (
-    beforeCallCount !== detail.data.call.size ||
-    !sameQueue(beforePermissions, detail.data.permissions) ||
-    !sameQueue(beforeQuestions, detail.data.questions)
-  )
+  return beforeCallCount !== detail.data.call.size || queueChanged(detail.data, before)
 }
 
 export function clearFinishedSubagents(data: SubagentData) {
