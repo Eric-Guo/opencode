@@ -14,6 +14,7 @@ import { PushRelay } from "../../server/push-relay"
 import { Log } from "../../util"
 import { Global } from "../../global"
 import * as QRCode from "qrcode"
+import { bootstrap } from "../bootstrap"
 
 const log = Log.create({ service: "serve" })
 
@@ -215,7 +216,7 @@ export const ServeCommand = cmd({
       }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const opts = await resolveNetworkOptions(args)
+    const opts = await bootstrap(process.cwd(), () => resolveNetworkOptions(args))
     const relayURL = (
       args["relay-url"] ??
       process.env.OPENCODE_EXPERIMENTAL_PUSH_RELAY_URL ??
