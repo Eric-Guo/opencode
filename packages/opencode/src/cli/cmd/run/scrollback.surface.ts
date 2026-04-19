@@ -249,8 +249,15 @@ export class RunScrollbackStream {
       this.renderer.writeToScrollback(spacerWriter())
     }
 
-    if (body.type !== "structured" && entryCanStream(commit, body)) {
+    if (
+      body.type !== "structured" &&
+      (entryCanStream(commit, body) ||
+        (commit.kind === "tool" && commit.phase === "final" && body.type === "markdown"))
+    ) {
       await this.writeStreaming(commit, body)
+      if (entryDone(commit)) {
+        await this.finishActive(entryFlags(commit).trailingNewline)
+      }
       this.wrote = true
       this.tail = commit
       return

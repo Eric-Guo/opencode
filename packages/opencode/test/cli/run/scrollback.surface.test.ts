@@ -277,3 +277,78 @@ test("renders structured write finals as native code blocks", async () => {
     destroyCommits(commits)
   }
 })
+
+test("renders promoted task-result markdown without leading blank rows", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "task-1",
+    messageID: "msg-1",
+    tool: "task",
+    toolState: "completed",
+    part: {
+      id: "task-1",
+      sessionID: "session-1",
+      messageID: "msg-1",
+      type: "tool",
+      callID: "call-1",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: {
+          description: "Explore run.ts",
+          subagent_type: "explore",
+        },
+        output: [
+          "task_id: child-1 (for resuming to continue this task if needed)",
+          "",
+          "<task_result>",
+          "Location: `/tmp/run.ts`",
+          "",
+          "Summary:",
+          "- Local interactive mode",
+          "- Attach mode",
+          "</task_result>",
+        ].join("\n"),
+        metadata: {
+          sessionId: "child-1",
+        },
+        time: {
+          start: 1,
+          end: 2,
+        },
+      },
+    } as never,
+  })
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits.length).toBeGreaterThan(0)
+    const rendered = commits.map((item) => decoder.decode(item.snapshot.getRealCharBytes(true))).join("")
+    expect(rendered.startsWith("\n")).toBe(false)
+    expect(rendered.split("\n")[0]?.trim()).toBe("Location: `/tmp/run.ts`")
+    expect(rendered).toContain("Summary:")
+    expect(rendered).toContain("Local interactive mode")
+  } finally {
+    destroyCommits(commits)
+  }
+})

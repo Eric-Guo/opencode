@@ -2,6 +2,7 @@
 
 import { createScrollbackWriter } from "@opentui/solid"
 import { TextRenderable, type ScrollbackWriter } from "@opentui/core"
+import { createMemo } from "solid-js"
 import { entryBody, entryFlags } from "./entry.body"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolDiffView, toolFiletype, toolStructuredFinal } from "./tool"
@@ -57,53 +58,53 @@ export function RunEntryContent(props: {
   width?: number
 }) {
   const theme = props.theme ?? RUN_THEME_FALLBACK
-  const body = entryBody(props.commit)
-  if (body.type === "none") {
+  const body = createMemo(() => entryBody(props.commit))
+  if (body().type === "none") {
     return null
   }
 
-  if (body.type === "text") {
+  if (body().type === "text") {
     const style = entryLook(props.commit, theme.entry)
     return (
       <text width="100%" wrapMode="word" fg={style.fg} attributes={style.attrs}>
-        {body.content}
+        {body().content}
       </text>
     )
   }
 
-  if (body.type === "code") {
+  if (body().type === "code") {
     return (
       <code
         width="100%"
         wrapMode="word"
-        filetype={body.filetype}
+        filetype={body().filetype}
         drawUnstyledText={false}
         streaming={props.commit.phase === "progress"}
         syntaxStyle={entrySyntax(props.commit, theme)}
-        content={body.content}
+        content={body().content}
         fg={entryColor(props.commit, theme)}
       />
     )
   }
 
-  if (body.type === "structured") {
+  if (body().type === "structured") {
     const width = Math.max(1, Math.trunc(props.width ?? 80))
 
-    if (body.snapshot.kind === "code") {
+    if (body().snapshot.kind === "code") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
-            {body.snapshot.title}
+            {body().snapshot.title}
           </text>
           <box width="100%" paddingLeft={1}>
             <line_number width="100%" fg={theme.block.muted} minWidth={3} paddingRight={1}>
                 <code
                   width="100%"
                   wrapMode="char"
-                  filetype={toolFiletype(body.snapshot.file)}
+                  filetype={toolFiletype(body().snapshot.file)}
                   streaming={false}
                   syntaxStyle={entrySyntax(props.commit, theme)}
-                  content={body.snapshot.content}
+                  content={body().snapshot.content}
                   fg={theme.block.text}
                 />
             </line_number>
@@ -112,11 +113,11 @@ export function RunEntryContent(props: {
       )
     }
 
-    if (body.snapshot.kind === "diff") {
+    if (body().snapshot.kind === "diff") {
       const view = toolDiffView(width, props.opts?.diffStyle)
       return (
         <box width="100%" flexDirection="column" gap={1}>
-          {body.snapshot.items.map((item) => (
+          {body().snapshot.items.map((item) => (
             <box width="100%" flexDirection="column" gap={1}>
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
                 {item.title}
@@ -154,21 +155,21 @@ export function RunEntryContent(props: {
       )
     }
 
-    if (body.snapshot.kind === "task") {
+    if (body().snapshot.kind === "task") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
-            {body.snapshot.title}
+            {body().snapshot.title}
           </text>
           <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
-            {body.snapshot.rows.map((row) => (
+            {body().snapshot.rows.map((row) => (
               <text width="100%" wrapMode="word" fg={theme.block.text}>
                 {row}
               </text>
             ))}
-            {body.snapshot.tail ? (
+            {body().snapshot.tail ? (
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                {body.snapshot.tail}
+                {body().snapshot.tail}
               </text>
             ) : null}
           </box>
@@ -176,21 +177,21 @@ export function RunEntryContent(props: {
       )
     }
 
-    if (body.snapshot.kind === "todo") {
+    if (body().snapshot.kind === "todo") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
             # Todos
           </text>
           <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
-            {body.snapshot.items.map((item) => (
+            {body().snapshot.items.map((item) => (
               <text width="100%" wrapMode="word" fg={theme.block.text}>
                 {todoText(item)}
               </text>
             ))}
-            {body.snapshot.tail ? (
+            {body().snapshot.tail ? (
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                {body.snapshot.tail}
+                {body().snapshot.tail}
               </text>
             ) : null}
           </box>
@@ -199,27 +200,27 @@ export function RunEntryContent(props: {
     }
 
     return (
-      <box width="100%" flexDirection="column" gap={1}>
-        <text width="100%" wrapMode="word" fg={theme.block.muted}>
-          # Questions
-        </text>
-        <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
-          {body.snapshot.items.map((item) => (
-            <box width="100%" flexDirection="column" gap={0}>
-              <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                {item.question}
+        <box width="100%" flexDirection="column" gap={1}>
+          <text width="100%" wrapMode="word" fg={theme.block.muted}>
+            # Questions
+          </text>
+          <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
+            {body().snapshot.items.map((item) => (
+              <box width="100%" flexDirection="column" gap={0}>
+                <text width="100%" wrapMode="word" fg={theme.block.muted}>
+                  {item.question}
               </text>
               <text width="100%" wrapMode="word" fg={theme.block.text}>
                 {item.answer}
               </text>
-            </box>
-          ))}
-          {body.snapshot.tail ? (
-            <text width="100%" wrapMode="word" fg={theme.block.muted}>
-              {body.snapshot.tail}
-            </text>
-          ) : null}
-        </box>
+              </box>
+            ))}
+            {body().snapshot.tail ? (
+              <text width="100%" wrapMode="word" fg={theme.block.muted}>
+                {body().snapshot.tail}
+              </text>
+            ) : null}
+          </box>
       </box>
     )
   }
@@ -229,7 +230,7 @@ export function RunEntryContent(props: {
       width="100%"
       syntaxStyle={entrySyntax(props.commit, theme)}
       streaming={props.commit.phase === "progress"}
-      content={body.content}
+      content={body().content}
       fg={entryColor(props.commit, theme)}
       tableOptions={{ widthMode: "content" }}
     />

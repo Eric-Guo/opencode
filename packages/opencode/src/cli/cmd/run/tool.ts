@@ -771,14 +771,26 @@ function scrollPatchFinal(p: ToolProps<typeof ApplyPatchTool>): string {
   return rows.join("\n")
 }
 
-function scrollTaskStart(p: ToolProps<typeof TaskTool>): string {
-  const kind = Locale.titlecase(p.input.subagent_type || "general")
-  const desc = p.input.description
-  if (!desc) {
-    return `│ ${kind} Task`
+function scrollTaskStart(_: ToolProps<typeof TaskTool>): string {
+  return ""
+}
+
+function taskResult(output: string) {
+  if (!output.trim()) {
+    return
   }
 
-  return `│ ${kind} Task — ${desc}`
+  const match = output.match(/<task_result>\s*([\s\S]*?)\s*<\/task_result>/)
+  if (match) {
+    return match[1].trim() || undefined
+  }
+
+  const next = output
+    .split("\n")
+    .filter((line) => !line.startsWith("task_id:"))
+    .join("\n")
+    .trim()
+  return next || undefined
 }
 
 function scrollTaskFinal(p: ToolProps<typeof TaskTool>): string {
@@ -1412,6 +1424,17 @@ function textBody(content: string): RunEntryBody | undefined {
   }
 }
 
+function markdownBody(content: string): RunEntryBody | undefined {
+  if (!content) {
+    return
+  }
+
+  return {
+    type: "markdown",
+    content,
+  }
+}
+
 function structuredBody(commit: StreamCommit, raw: string): RunEntryBody | undefined {
   const snap = toolSnapshot(commit, raw)
   if (!snap) {
@@ -1427,6 +1450,19 @@ function structuredBody(commit: StreamCommit, raw: string): RunEntryBody | undef
 export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody | undefined {
   const ctx = toolFrame(commit, raw)
   const view = toolView(ctx.name)
+
+  if (ctx.name === "task") {
+    if (commit.phase === "start") {
+      return
+    }
+
+    if (commit.phase === "final" && ctx.status === "completed") {
+      const result = taskResult(text(ctx.state.output))
+      if (result) {
+        return markdownBody(result)
+      }
+    }
+  }
 
   if (commit.phase === "progress" && !view.output) {
     return

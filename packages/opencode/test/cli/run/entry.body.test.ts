@@ -114,6 +114,139 @@ describe("run entry body", () => {
     )).toBe(true)
   })
 
+  test("keeps running task tool state out of scrollback", () => {
+    expect(
+      entryBody(
+        commit({
+          kind: "tool",
+          text: "running inspect reducer",
+          phase: "start",
+          source: "tool",
+          tool: "task",
+          toolState: "running",
+          part: {
+            id: "task-1",
+            sessionID: "session-1",
+            messageID: "msg-1",
+            type: "tool",
+            callID: "call-1",
+            tool: "task",
+            state: {
+              status: "running",
+              input: {
+                description: "Inspect reducer",
+                subagent_type: "explore",
+              },
+            },
+          } as never,
+        }),
+      ),
+    ).toEqual({
+      type: "none",
+    })
+  })
+
+  test("renders completed task tool finals from promoted task results", () => {
+    expect(
+      entryBody(
+        commit({
+          kind: "tool",
+          text: "",
+          phase: "final",
+          source: "tool",
+          tool: "task",
+          toolState: "completed",
+          part: {
+            id: "task-1",
+            sessionID: "session-1",
+            messageID: "msg-1",
+            type: "tool",
+            callID: "call-1",
+            tool: "task",
+            state: {
+              status: "completed",
+              input: {
+                description: "Inspect reducer",
+                subagent_type: "explore",
+              },
+              output: [
+                "task_id: child-1 (for resuming to continue this task if needed)",
+                "",
+                "<task_result>",
+                "# Findings\n\n- Footer stays live",
+                "</task_result>",
+              ].join("\n"),
+              metadata: {
+                sessionId: "child-1",
+              },
+              time: {
+                start: 1,
+                end: 2,
+              },
+            },
+          } as never,
+        }),
+      ),
+    ).toEqual({
+      type: "markdown",
+      content: "# Findings\n\n- Footer stays live",
+    })
+  })
+
+  test("falls back to structured task final when task result is empty", () => {
+    const body = entryBody(
+      commit({
+        kind: "tool",
+        text: "",
+        phase: "final",
+        source: "tool",
+        tool: "task",
+        toolState: "completed",
+        part: {
+          id: "task-1",
+          sessionID: "session-1",
+          messageID: "msg-1",
+          type: "tool",
+          callID: "call-1",
+          tool: "task",
+          state: {
+            status: "completed",
+            input: {
+              description: "Inspect reducer",
+              subagent_type: "explore",
+            },
+            output: [
+              "task_id: child-1 (for resuming to continue this task if needed)",
+              "",
+              "<task_result>",
+              "",
+              "</task_result>",
+            ].join("\n"),
+            metadata: {
+              sessionId: "child-1",
+            },
+            time: {
+              start: 1,
+              end: 2,
+            },
+          },
+        } as never,
+      }),
+    )
+
+    expect(body.type).toBe("structured")
+    if (body.type !== "structured") {
+      throw new Error("expected structured body")
+    }
+
+    expect(body.snapshot).toEqual({
+      kind: "task",
+      title: "# Explore Task",
+      rows: ["◉ Inspect reducer", "↳ session child-1"],
+      tail: "└ Explore task completed · 1ms",
+    })
+  })
+
   test("streams tool progress text", () => {
     const body = entryBody(
       commit({
