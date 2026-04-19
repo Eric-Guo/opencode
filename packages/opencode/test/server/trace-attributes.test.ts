@@ -29,7 +29,6 @@ describe("paramToAttributeKey", () => {
     expect(paramToAttributeKey("slug")).toBe("opencode.slug")
   })
 })
-
 describe("requestAttributes", () => {
   test("includes http method and path", () => {
     const attrs = requestAttributes(fakeContext("GET", "http://localhost/session", {}))

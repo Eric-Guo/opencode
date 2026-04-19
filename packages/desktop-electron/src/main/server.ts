@@ -1,7 +1,19 @@
+import { randomBytes } from "node:crypto"
 import { app } from "electron"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { store } from "./store"
+
+const DEFAULT_RELAY_URL = "https://apn.dev.opencode.ai"
+const RELAY_SECRET_KEY = "relaySecret"
+
+function getOrCreateRelaySecret(): string {
+  const existing = store.get(RELAY_SECRET_KEY)
+  if (typeof existing === "string" && existing.length > 0) return existing
+  const secret = randomBytes(18).toString("base64url")
+  store.set(RELAY_SECRET_KEY, secret)
+  return secret
+}
 
 export type WslConfig = { enabled: boolean }
 
@@ -32,7 +44,7 @@ export function setWslConfig(config: WslConfig) {
 
 export async function spawnLocalServer(hostname: string, port: number, password: string) {
   prepareServerEnv(password)
-  const { Log, Server } = await import("virtual:opencode-server")
+  const { Log, Server, PushRelay } = await import("virtual:opencode-server")
   await Log.init({ level: "WARN" })
   const listener = await Server.listen({
     port,
@@ -40,6 +52,18 @@ export async function spawnLocalServer(hostname: string, port: number, password:
     username: "opencode",
     password,
   })
+
+  const relayURL = (process.env.OPENCODE_EXPERIMENTAL_PUSH_RELAY_URL ?? DEFAULT_RELAY_URL).trim()
+  const relaySecretInput = (process.env.OPENCODE_EXPERIMENTAL_PUSH_RELAY_SECRET ?? "").trim()
+  const relaySecret = relaySecretInput || getOrCreateRelaySecret()
+  if (relayURL && relaySecret) {
+    PushRelay.start({
+      relayURL,
+      relaySecret,
+      hostname,
+      port: listener.port,
+    })
+  }
 
   const wait = (async () => {
     const url = `http://${hostname}:${port}`

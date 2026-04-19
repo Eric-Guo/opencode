@@ -28,7 +28,6 @@ export function paramToAttributeKey(key: string): string {
   if (m) return `${m[1].toLowerCase()}.id`
   return `opencode.${key}`
 }
-
 export function requestAttributes(c: RequestLike): Record<string, string> {
   const attributes: Record<string, string> = {
     "http.method": c.req.method,
