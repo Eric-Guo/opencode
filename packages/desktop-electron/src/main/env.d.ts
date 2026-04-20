@@ -10,6 +10,10 @@ declare module "virtual:opencode-server" {
     export const listen: typeof import("../../../opencode/dist/types/src/node").Server.listen
     export type Listener = import("../../../opencode/dist/types/src/node").Server.Listener
   }
+  export namespace PushRelay {
+    export const start: typeof import("../../../opencode/dist/types/src/node").PushRelay.start
+    export const stop: typeof import("../../../opencode/dist/types/src/node").PushRelay.stop
+  }
   export namespace Config {
     export const get: typeof import("../../../opencode/dist/types/src/node").Config.get
     export type Info = import("../../../opencode/dist/types/src/node").Config.Info
