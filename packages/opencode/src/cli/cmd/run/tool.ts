@@ -1,15 +1,15 @@
-// Per-tool display rules for direct interactive mode.
+// Per-tool display rules shared across `opencode run` output paths.
 //
 // Each known tool (bash, edit, write, task, etc.) has a ToolRule that controls
-// four rendering contexts:
+// five display hooks:
 //
-//   view       → controls which phases produce scrollback output (output for
-//                progress, final for completion, snap for rich snapshots)
+//   view       → visibility policy for progress/final scrollback entries and
+//                whether completed finals can render as structured snapshots
 //   run        → inline summary for the non-interactive `run` command output
 //   scroll     → text formatting for start/progress/final scrollback entries
 //   permission → display info for the permission UI (icon, title, diff)
-//   snap       → structured snapshot (code block, diff, task card) for the
-//                rich scrollback writer
+//   snap       → structured snapshot (code block, diff, task card) for rich
+//                scrollback entries
 //
 // Tools not in TOOL_RULES get fallback formatting. The registry is typed
 // against the actual tool parameter/metadata types so each formatter gets
@@ -499,7 +499,7 @@ function patchTitle(file: PatchFile): string {
     return `# Moved ${toolPath(from)} -> ${rel || toolPath(file.movePath)}`
   }
 
-  return `← Patched ${rel || toolPath(from)}`
+  return `# Patched ${rel || toolPath(from)}`
 }
 
 function snapWrite(p: ToolProps<typeof WriteTool>): ToolSnapshot | undefined {
@@ -528,7 +528,7 @@ function snapEdit(p: ToolProps<typeof EditTool>): ToolSnapshot | undefined {
     kind: "diff",
     items: [
       {
-        title: `← Edit ${toolPath(file)}`,
+        title: `# Edited ${toolPath(file)}`,
         diff,
         file,
       },
@@ -569,29 +569,15 @@ function snapPatch(p: ToolProps<typeof ApplyPatchTool>): ToolSnapshot | undefine
 
 function snapTask(p: ToolProps<typeof TaskTool>): ToolSnapshot {
   const kind = Locale.titlecase(p.input.subagent_type || "general")
-  const rows: string[] = []
   const desc = p.input.description
-  if (desc) {
-    rows.push(`◉ ${desc}`)
-  }
   const title = text(p.frame.state.title)
-  if (title) {
-    rows.push(`↳ ${title}`)
-  }
-  const calls = num(p.frame.meta.toolcalls) ?? num(p.frame.meta.toolCalls) ?? num(p.frame.meta.calls)
-  if (calls !== undefined) {
-    rows.push(`↳ ${Locale.number(calls)} toolcall${calls === 1 ? "" : "s"}`)
-  }
-  const sid = text(p.frame.meta.sessionId) || text(p.frame.meta.sessionID)
-  if (sid) {
-    rows.push(`↳ session ${sid}`)
-  }
+  const rows = [desc || title].filter((item): item is string => Boolean(item))
 
   return {
     kind: "task",
     title: `# ${kind} Task`,
     rows,
-    tail: done(`${kind} task`, span(p.frame.state)),
+    tail: "",
   }
 }
 
@@ -705,23 +691,16 @@ function scrollReadStart(p: ToolProps<typeof ReadTool>): string {
   return `→ Read ${file}${tail}`.trim()
 }
 
-function scrollWriteStart(p: ToolProps<typeof WriteTool>): string {
-  return `← Write ${toolPath(p.input.filePath)}`.trim()
+function scrollWriteStart(_: ToolProps<typeof WriteTool>): string {
+  return ""
 }
 
-function scrollEditStart(p: ToolProps<typeof EditTool>): string {
-  const flag = info({ replaceAll: p.input.replaceAll })
-  const tail = flag ? ` ${flag}` : ""
-  return `← Edit ${toolPath(p.input.filePath)}${tail}`.trim()
+function scrollEditStart(_: ToolProps<typeof EditTool>): string {
+  return ""
 }
 
-function scrollPatchStart(p: ToolProps<typeof ApplyPatchTool>): string {
-  const files = list<PatchFile>(p.frame.meta.files)
-  if (files.length === 0) {
-    return "% Patch"
-  }
-
-  return `% Patch ${files.length} file${files.length === 1 ? "" : "s"}`
+function scrollPatchStart(_: ToolProps<typeof ApplyPatchTool>): string {
+  return ""
 }
 
 function patchLine(file: PatchFile): string {
@@ -745,6 +724,10 @@ function patchLine(file: PatchFile): string {
 }
 
 function scrollPatchFinal(p: ToolProps<typeof ApplyPatchTool>): string {
+  if (p.frame.status === "error") {
+    return fail(p.frame)
+  }
+
   const files = list<PatchFile>(p.frame.meta.files)
   const head = done("patch", span(p.frame.state))
   if (files.length === 0) {
@@ -782,26 +765,17 @@ function taskResult(output: string) {
 }
 
 function scrollTaskFinal(p: ToolProps<typeof TaskTool>): string {
+  if (p.frame.status === "error") {
+    return fail(p.frame)
+  }
+
   const kind = Locale.titlecase(p.input.subagent_type || "general")
-  const head = done(`${kind} task`, span(p.frame.state))
-  const rows: string[] = [head]
-
-  const title = text(p.frame.state.title)
-  if (title) {
-    rows.push(`↳ ${title}`)
+  const row = p.input.description || text(p.frame.state.title)
+  if (!row) {
+    return `# ${kind} Task`
   }
 
-  const calls = num(p.frame.meta.toolcalls) ?? num(p.frame.meta.toolCalls) ?? num(p.frame.meta.calls)
-  if (calls !== undefined) {
-    rows.push(`↳ ${Locale.number(calls)} toolcall${calls === 1 ? "" : "s"}`)
-  }
-
-  const sid = text(p.frame.meta.sessionId) || text(p.frame.meta.sessionID)
-  if (sid) {
-    rows.push(`↳ session ${sid}`)
-  }
-
-  return rows.join("\n")
+  return `# ${kind} Task\n${row}`
 }
 
 function scrollTodoStart(_: ToolProps<typeof TodoWriteTool>): string {

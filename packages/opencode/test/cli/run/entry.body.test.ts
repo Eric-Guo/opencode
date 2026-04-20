@@ -114,6 +114,112 @@ describe("run entry body", () => {
     )).toBe(true)
   })
 
+  test("keeps completed edit tool finals structured", () => {
+    const body = entryBody(
+      commit({
+        kind: "tool",
+        text: "",
+        phase: "final",
+        source: "tool",
+        tool: "edit",
+        toolState: "completed",
+        part: {
+          id: "tool-2",
+          sessionID: "session-1",
+          messageID: "msg-2",
+          type: "tool",
+          callID: "call-2",
+          tool: "edit",
+          state: {
+            status: "completed",
+            input: {
+              filePath: "src/a.ts",
+            },
+            metadata: {
+              diff: "@@ -1 +1 @@\n-old\n+new\n",
+            },
+            time: {
+              start: 1,
+              end: 2,
+            },
+          },
+        } as never,
+      }),
+    )
+
+    expect(body.type).toBe("structured")
+    if (body.type !== "structured") {
+      throw new Error("expected structured body")
+    }
+
+    expect(body.snapshot).toEqual({
+      kind: "diff",
+      items: [
+        {
+          title: "# Edited src/a.ts",
+          diff: "@@ -1 +1 @@\n-old\n+new\n",
+          file: "src/a.ts",
+        },
+      ],
+    })
+  })
+
+  test("keeps completed apply_patch tool finals structured", () => {
+    const body = entryBody(
+      commit({
+        kind: "tool",
+        text: "",
+        phase: "final",
+        source: "tool",
+        tool: "apply_patch",
+        toolState: "completed",
+        part: {
+          id: "tool-3",
+          sessionID: "session-1",
+          messageID: "msg-3",
+          type: "tool",
+          callID: "call-3",
+          tool: "apply_patch",
+          state: {
+            status: "completed",
+            input: {},
+            metadata: {
+              files: [
+                {
+                  type: "update",
+                  filePath: "src/a.ts",
+                  relativePath: "src/a.ts",
+                  patch: "@@ -1 +1 @@\n-old\n+new\n",
+                },
+              ],
+            },
+            time: {
+              start: 1,
+              end: 2,
+            },
+          },
+        } as never,
+      }),
+    )
+
+    expect(body.type).toBe("structured")
+    if (body.type !== "structured") {
+      throw new Error("expected structured body")
+    }
+
+    expect(body.snapshot).toEqual({
+      kind: "diff",
+      items: [
+        {
+          title: "# Patched src/a.ts",
+          diff: "@@ -1 +1 @@\n-old\n+new\n",
+          file: "src/a.ts",
+          deletions: 0,
+        },
+      ],
+    })
+  })
+
   test("keeps running task tool state out of scrollback", () => {
     expect(
       entryBody(
@@ -242,8 +348,8 @@ describe("run entry body", () => {
     expect(body.snapshot).toEqual({
       kind: "task",
       title: "# Explore Task",
-      rows: ["◉ Inspect reducer", "↳ session child-1"],
-      tail: "└ Explore task completed · 1ms",
+      rows: ["Inspect reducer"],
+      tail: "",
     })
   })
 

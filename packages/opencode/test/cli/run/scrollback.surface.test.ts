@@ -272,7 +272,7 @@ test("preserves blank rows between streamed markdown block commits", async () =>
   }
 })
 
-test("inserts a spacer between inline tool starts and block tool finals", async () => {
+test("renders write finals without a redundant start row", async () => {
   const out = await createTestRenderer({
     width: 80,
     screenMode: "split-footer",
@@ -321,8 +321,7 @@ test("inserts a spacer between inline tool starts and block tool finals", async 
 
   const start = claimCommits(out.renderer)
   try {
-    expect(start).toHaveLength(1)
-    expect(renderCommit(start[0]!).trim()).toBe("← Write src/a.ts")
+    expect(start).toHaveLength(0)
   } finally {
     destroyCommits(start)
   }
@@ -360,11 +359,205 @@ test("inserts a spacer between inline tool starts and block tool finals", async 
 
   const final = claimCommits(out.renderer)
   try {
-    expect(final).toHaveLength(2)
-    expect(renderCommit(final[0]!).trim()).toBe("")
-    expect(renderCommit(final[1]!)).toContain("# Wrote src/a.ts")
+    expect(final).toHaveLength(1)
+    expect(renderCommit(final[0]!)).toContain("# Wrote src/a.ts")
   } finally {
     destroyCommits(final)
+  }
+})
+
+test("renders edit finals without a redundant start row", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "start",
+    source: "tool",
+    partID: "tool-edit",
+    messageID: "msg-edit",
+    tool: "edit",
+    toolState: "running",
+    part: {
+      id: "tool-edit",
+      sessionID: "session-1",
+      messageID: "msg-edit",
+      type: "tool",
+      callID: "call-edit",
+      tool: "edit",
+      state: {
+        status: "running",
+        input: {
+          filePath: "src/a.ts",
+          oldString: "old",
+          newString: "new",
+        },
+        time: {
+          start: 1,
+        },
+      },
+    } as never,
+  })
+
+  expect(claimCommits(out.renderer)).toHaveLength(0)
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "tool-edit",
+    messageID: "msg-edit",
+    tool: "edit",
+    toolState: "completed",
+    part: {
+      id: "tool-edit",
+      sessionID: "session-1",
+      messageID: "msg-edit",
+      type: "tool",
+      callID: "call-edit",
+      tool: "edit",
+      state: {
+        status: "completed",
+        input: {
+          filePath: "src/a.ts",
+          oldString: "old",
+          newString: "new",
+        },
+        metadata: {
+          diff: "@@ -1 +1 @@\n-old\n+new\n",
+        },
+        time: {
+          start: 1,
+          end: 2,
+        },
+      },
+    } as never,
+  })
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits).toHaveLength(1)
+    expect(renderCommit(commits[0]!)).toContain("# Edited src/a.ts")
+  } finally {
+    destroyCommits(commits)
+  }
+})
+
+test("renders apply_patch finals without a redundant start row", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "start",
+    source: "tool",
+    partID: "tool-patch",
+    messageID: "msg-patch",
+    tool: "apply_patch",
+    toolState: "running",
+    part: {
+      id: "tool-patch",
+      sessionID: "session-1",
+      messageID: "msg-patch",
+      type: "tool",
+      callID: "call-patch",
+      tool: "apply_patch",
+      state: {
+        status: "running",
+        input: {},
+        metadata: {
+          files: [
+            {
+              type: "update",
+              filePath: "src/a.ts",
+              relativePath: "src/a.ts",
+              patch: "@@ -1 +1 @@\n-old\n+new\n",
+            },
+          ],
+        },
+        time: {
+          start: 1,
+        },
+      },
+    } as never,
+  })
+
+  expect(claimCommits(out.renderer)).toHaveLength(0)
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "tool-patch",
+    messageID: "msg-patch",
+    tool: "apply_patch",
+    toolState: "completed",
+    part: {
+      id: "tool-patch",
+      sessionID: "session-1",
+      messageID: "msg-patch",
+      type: "tool",
+      callID: "call-patch",
+      tool: "apply_patch",
+      state: {
+        status: "completed",
+        input: {},
+        metadata: {
+          files: [
+            {
+              type: "update",
+              filePath: "src/a.ts",
+              relativePath: "src/a.ts",
+              patch: "@@ -1 +1 @@\n-old\n+new\n",
+            },
+          ],
+        },
+        time: {
+          start: 1,
+          end: 2,
+        },
+      },
+    } as never,
+  })
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits).toHaveLength(1)
+    expect(renderCommit(commits[0]!)).toContain("# Patched src/a.ts")
+  } finally {
+    destroyCommits(commits)
   }
 })
 
@@ -751,7 +944,7 @@ test("bodyless starts keep the previous rendered item as separator context", asy
   try {
     expect(final).toHaveLength(2)
     expect(renderCommit(final[0]!).trim()).toBe("")
-    expect(renderCommit(final[1]!)).toContain("Explore task completed")
+    expect(renderCommit(final[1]!)).toContain("failed")
   } finally {
     destroyCommits(final)
   }
