@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { RGBA, SyntaxStyle } from "@opentui/core"
-import { opaqueSyntaxStyle } from "../../../src/cli/cmd/run/theme"
+import { opaqueSyntaxStyle } from "@/cli/cmd/run/theme"
 
 describe("run theme", () => {
   test("flattens subtle syntax alpha against the run background", () => {

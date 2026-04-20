@@ -5,7 +5,7 @@ import {
   sessionVariant,
   type RunSession,
   type SessionMessages,
-} from "../../../src/cli/cmd/run/session.shared"
+} from "@/cli/cmd/run/session.shared"
 
 const model = {
   providerID: "openai",

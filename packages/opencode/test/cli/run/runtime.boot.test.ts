@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
+import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import {
   resolveDiffStyle,
   resolveFooterKeybinds,
   resolveModelInfo,
   resolveSessionInfo,
-} from "../../../src/cli/cmd/run/runtime.boot"
-import type { RunInput } from "../../../src/cli/cmd/run/types"
+} from "@/cli/cmd/run/runtime.boot"
+import type { RunInput } from "@/cli/cmd/run/types"
 
 describe("run runtime boot", () => {
   afterEach(() => {

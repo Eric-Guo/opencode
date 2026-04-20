@@ -10,7 +10,7 @@ import {
   questionStoreCustom,
   questionSubmit,
   questionSync,
-} from "../../../src/cli/cmd/run/question.shared"
+} from "@/cli/cmd/run/question.shared"
 
 function req(input: Partial<QuestionRequest> = {}): QuestionRequest {
   return {

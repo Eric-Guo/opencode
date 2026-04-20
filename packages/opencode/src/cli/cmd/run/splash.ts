@@ -19,8 +19,8 @@ import {
   type ScrollbackSnapshot,
   type ScrollbackWriter,
 } from "@opentui/core"
-import * as Locale from "../../../util/locale"
-import { logo } from "../../logo"
+import * as Locale from "@/util/locale"
+import { logo } from "@/cli/logo"
 import type { RunEntryTheme } from "./theme"
 
 export const SPLASH_TITLE_LIMIT = 50

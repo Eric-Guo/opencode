@@ -13,7 +13,7 @@
 // active based on the env var, and subsequent calls return the cached result.
 import fs from "fs"
 import path from "path"
-import { Global } from "../../../global"
+import { Global } from "@/global"
 
 export type Trace = {
   write(type: string, data?: unknown): void

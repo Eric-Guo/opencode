@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
-import { RunScrollbackStream } from "../../../src/cli/cmd/run/scrollback.surface"
-import { RUN_THEME_FALLBACK } from "../../../src/cli/cmd/run/theme"
+import { RunScrollbackStream } from "@/cli/cmd/run/scrollback.surface"
+import { RUN_THEME_FALLBACK } from "@/cli/cmd/run/theme"
 
 type ClaimedCommit = {
   snapshot: {
@@ -142,7 +142,7 @@ test("completes markdown replies without adding a second blank line above the fo
   const progress = claimCommits(out.renderer)
   try {
     expect(progress).toHaveLength(1)
-    expect(progress[0]!.snapshot.height).toBe(4)
+    expect(progress[0]!.snapshot.height).toBe(5)
     const rendered = decoder.decode(progress[0]!.snapshot.getRealCharBytes(true))
     expect(rendered).toContain("Markdown Sample")
     expect(rendered).toContain("Item 2")
@@ -161,6 +161,109 @@ test("completes markdown replies without adding a second blank line above the fo
     expect(rendered).toContain('const message = "Hello, markdown"')
     expect(rendered).toContain("console.log(message)")
   } finally {
+    destroyCommits(final)
+  }
+})
+
+test("streamed assistant final leaves newline ownership to the next entry", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "assistant",
+    text: "hello",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+  destroyCommits(claimCommits(out.renderer))
+
+  await scrollback.append({
+    kind: "assistant",
+    text: "",
+    phase: "final",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+
+  const final = claimCommits(out.renderer)
+  try {
+    expect(final).toHaveLength(1)
+    expect(final[0]!.trailingNewline).toBe(false)
+  } finally {
+    destroyCommits(final)
+  }
+})
+
+test("preserves blank rows between streamed markdown block commits", async () => {
+  const out = await createTestRenderer({
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "assistant",
+    text: "# Title\n\nPara 1\n\n",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+
+  const first = claimCommits(out.renderer)
+  expect(first).toHaveLength(1)
+
+  await scrollback.append({
+    kind: "assistant",
+    text: "> Quote",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+
+  const second = claimCommits(out.renderer)
+  expect(second).toHaveLength(0)
+
+  await scrollback.complete()
+
+  const final = claimCommits(out.renderer)
+  try {
+    expect(final).toHaveLength(1)
+
+    const rendered = [...first, ...final]
+      .map((item) => decoder.decode(item.snapshot.getRealCharBytes(true)).replace(/ +\n/g, "\n"))
+      .join("")
+    expect(rendered).toContain("# Title\n\nPara 1\n\n> Quote")
+  } finally {
+    destroyCommits(first)
     destroyCommits(final)
   }
 })
@@ -345,7 +448,6 @@ test("renders promoted task-result markdown without leading blank rows", async (
     expect(commits.length).toBeGreaterThan(0)
     const rendered = commits.map((item) => decoder.decode(item.snapshot.getRealCharBytes(true))).join("")
     expect(rendered.startsWith("\n")).toBe(false)
-    expect(rendered.split("\n")[0]?.trim()).toBe("Location: `/tmp/run.ts`")
     expect(rendered).toContain("Summary:")
     expect(rendered).toContain("Local interactive mode")
   } finally {

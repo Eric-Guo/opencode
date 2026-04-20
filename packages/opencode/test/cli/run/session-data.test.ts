@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Event } from "@opencode-ai/sdk/v2"
-import { createSessionData, flushInterrupted, reduceSessionData } from "../../../src/cli/cmd/run/session-data"
+import { createSessionData, flushInterrupted, reduceSessionData } from "@/cli/cmd/run/session-data"
 
 function reduce(data: ReturnType<typeof createSessionData>, event: unknown, thinking = true) {
   return reduceSessionData({
@@ -69,6 +69,61 @@ describe("run session data", () => {
       {
         kind: "assistant",
         text: "hello",
+        phase: "progress",
+        source: "assistant",
+        messageID: "msg-1",
+        partID: "txt-1",
+      },
+    ])
+  })
+
+  test("buffers whitespace-only initial assistant chunks until real content arrives", () => {
+    let data = createSessionData()
+
+    data = reduce(data, assistant("msg-1")).data
+    data = reduce(data, {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "txt-1",
+          messageID: "msg-1",
+          sessionID: "session-1",
+          type: "text",
+          text: "",
+          time: { start: Date.now() },
+        },
+      },
+    }).data
+
+    let out = reduce(data, {
+      type: "message.part.delta",
+      properties: {
+        sessionID: "session-1",
+        messageID: "msg-1",
+        partID: "txt-1",
+        field: "text",
+        delta: " ",
+      },
+    })
+
+    expect(out.commits).toEqual([])
+
+    data = out.data
+    out = reduce(data, {
+      type: "message.part.delta",
+      properties: {
+        sessionID: "session-1",
+        messageID: "msg-1",
+        partID: "txt-1",
+        field: "text",
+        delta: "Found",
+      },
+    })
+
+    expect(out.commits).toEqual([
+      {
+        kind: "assistant",
+        text: " Found",
         phase: "progress",
         source: "assistant",
         messageID: "msg-1",

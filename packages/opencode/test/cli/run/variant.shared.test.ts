@@ -3,15 +3,15 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { describe, expect, test } from "bun:test"
 import { Effect, FileSystem, Layer } from "effect"
-import { Global } from "../../../src/global"
+import { Global } from "@/global"
 import {
   createVariantRuntime,
   cycleVariant,
   formatModelLabel,
   pickVariant,
   resolveVariant,
-} from "../../../src/cli/cmd/run/variant.shared"
-import type { SessionMessages } from "../../../src/cli/cmd/run/session.shared"
+} from "@/cli/cmd/run/variant.shared"
+import type { SessionMessages } from "@/cli/cmd/run/session.shared"
 import { testEffect } from "../../lib/effect"
 
 const model = {

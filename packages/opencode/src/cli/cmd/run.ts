@@ -16,13 +16,13 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { Flag } from "../../flag/flag"
+import { Flag } from "@/flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
-import { Filesystem } from "../../util"
+import { Filesystem } from "@/util"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
-import { Agent } from "../../agent/agent"
-import { Permission } from "../../permission"
+import { Agent } from "@/agent/agent"
+import { Permission } from "@/permission"
 import { AppRuntime } from "@/effect/app-runtime"
 import type { RunDemo } from "./run/types"
 
@@ -715,7 +715,7 @@ export const RunCommand = cmd({
       const model = pick(args.model)
       const { runInteractiveLocalMode } = await runtimeTask
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const { Server } = await import("../../server/server")
+        const { Server } = await import("@/server/server")
         const request = new Request(input, init)
         return Server.Default().app.fetch(request)
       }) as typeof globalThis.fetch
@@ -744,7 +744,7 @@ export const RunCommand = cmd({
 
     await bootstrap(directory ?? root, async () => {
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const { Server } = await import("../../server/server")
+        const { Server } = await import("@/server/server")
         const request = new Request(input, init)
         return Server.Default().app.fetch(request)
       }) as typeof globalThis.fetch

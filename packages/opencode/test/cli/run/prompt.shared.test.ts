@@ -8,8 +8,8 @@ import {
   promptInfo,
   promptKeys,
   pushPromptHistory,
-} from "../../../src/cli/cmd/run/prompt.shared"
-import type { FooterKeybinds, RunPrompt } from "../../../src/cli/cmd/run/types"
+} from "@/cli/cmd/run/prompt.shared"
+import type { FooterKeybinds, RunPrompt } from "@/cli/cmd/run/types"
 
 const keybinds: FooterKeybinds = {
   leader: "ctrl+x",

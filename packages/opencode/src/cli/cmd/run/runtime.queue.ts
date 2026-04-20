@@ -9,7 +9,7 @@
 // and tracks per-turn wall-clock duration for the footer status line.
 //
 // Resolves when the footer closes and all in-flight work finishes.
-import * as Locale from "../../../util/locale"
+import * as Locale from "@/util/locale"
 import { isExitCommand } from "./prompt.shared"
 import type { FooterApi, FooterEvent, RunPrompt } from "./types"
 

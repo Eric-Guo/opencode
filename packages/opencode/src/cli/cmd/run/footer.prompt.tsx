@@ -21,7 +21,7 @@ import {
   onMount,
   type Accessor,
 } from "solid-js"
-import * as Locale from "../../../util/locale"
+import * as Locale from "@/util/locale"
 import {
   createPromptHistory,
   isExitCommand,

@@ -25,7 +25,7 @@
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
 import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import * as Locale from "../../../util/locale"
+import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
 
@@ -492,11 +492,19 @@ function flushPart(data: SessionData, commits: SessionCommit[], partID: string, 
 
   if (sent === 0) {
     chunk = chunk.replace(/^\n+/, "")
+    // Some models emit a standalone whitespace token before real content.
+    // Keep buffering until we have visible text so scrollback doesn't get a blank row.
+    if (!chunk.trim()) {
+      return
+    }
     if (kind === "reasoning" && chunk) {
       chunk = `Thinking: ${chunk.replace(/\[REDACTED\]/g, "")}`
     }
     if (kind === "assistant" && chunk) {
       chunk = stripEcho(data, msg, chunk)
+      if (!chunk.trim()) {
+        return
+      }
     }
   }
 

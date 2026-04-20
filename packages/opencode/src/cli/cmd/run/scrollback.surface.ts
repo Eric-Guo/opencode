@@ -51,15 +51,26 @@ function commitMarkdownBlocks(input: {
     return false
   }
 
-  const prev = input.renderable._blockStates[input.startBlock - 1]
   const next = input.renderable._blockStates[input.endBlockExclusive]
-  const start = Math.max(0, first.renderable.y - (prev?.marginBottom ?? 0))
-  const end = last.renderable.y + last.renderable.height + (next ? 0 : (last.marginBottom ?? 0))
+  const start = first.renderable.y
+  const end = next ? next.renderable.y : last.renderable.y + last.renderable.height + (last.marginBottom ?? 0)
 
   input.surface.commitRows(start, end, {
     trailingNewline: input.trailingNewline,
   })
   return true
+}
+
+function wantsSpacer(prev: StreamCommit | undefined, next: StreamCommit): boolean {
+  if (!prev) {
+    return false
+  }
+
+  if (sameEntryGroup(prev, next)) {
+    return false
+  }
+
+  return !(prev.kind === "tool" && prev.phase === "start")
 }
 
 export class RunScrollbackStream {
@@ -238,14 +249,14 @@ export class RunScrollbackStream {
     const body = entryBody(commit)
     if (body.type === "none") {
       if (entryDone(commit)) {
-        await this.finishActive(entryFlags(commit).trailingNewline)
+        await this.finishActive(false)
       }
 
       this.tail = commit
       return
     }
 
-    if (this.wrote && !same) {
+    if (this.wrote && wantsSpacer(this.tail, commit)) {
       this.renderer.writeToScrollback(spacerWriter())
     }
 
@@ -256,7 +267,7 @@ export class RunScrollbackStream {
     ) {
       await this.writeStreaming(commit, body)
       if (entryDone(commit)) {
-        await this.finishActive(entryFlags(commit).trailingNewline)
+        await this.finishActive(false)
       }
       this.wrote = true
       this.tail = commit

@@ -8,7 +8,7 @@ import {
   permissionInfo,
   permissionReject,
   permissionRun,
-} from "../../../src/cli/cmd/run/permission.shared"
+} from "@/cli/cmd/run/permission.shared"
 
 function req(input: Partial<PermissionRequest> = {}): PermissionRequest {
   return {

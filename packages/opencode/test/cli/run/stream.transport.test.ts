@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
-import { createSessionTransport } from "../../../src/cli/cmd/run/stream.transport"
-import type { FooterApi, FooterEvent, RunFilePart, StreamCommit } from "../../../src/cli/cmd/run/types"
+import { createSessionTransport } from "@/cli/cmd/run/stream.transport"
+import type { FooterApi, FooterEvent, RunFilePart, StreamCommit } from "@/cli/cmd/run/types"
 
 function defer<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void

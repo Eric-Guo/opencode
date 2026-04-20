@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { writeSessionOutput } from "../../../src/cli/cmd/run/stream"
-import type { FooterApi, FooterEvent, StreamCommit } from "../../../src/cli/cmd/run/types"
+import { writeSessionOutput } from "@/cli/cmd/run/stream"
+import type { FooterApi, FooterEvent, StreamCommit } from "@/cli/cmd/run/types"
 
 function footer() {
   const events: FooterEvent[] = []

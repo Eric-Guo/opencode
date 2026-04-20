@@ -1,5 +1,5 @@
 import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import * as Locale from "../../../util/locale"
+import * as Locale from "@/util/locale"
 import {
   bootstrapSessionData,
   createSessionData,

@@ -2,10 +2,10 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import { RunEntryContent } from "../../../src/cli/cmd/run/scrollback.writer"
-import { RunFooterView } from "../../../src/cli/cmd/run/footer.view"
-import { RUN_THEME_FALLBACK } from "../../../src/cli/cmd/run/theme"
-import type { StreamCommit } from "../../../src/cli/cmd/run/types"
+import { RunEntryContent } from "@/cli/cmd/run/scrollback.writer"
+import { RunFooterView } from "@/cli/cmd/run/footer.view"
+import { RUN_THEME_FALLBACK } from "@/cli/cmd/run/theme"
+import type { StreamCommit } from "@/cli/cmd/run/types"
 
 test("run footer view loads", () => {
   expect(typeof RunFooterView).toBe("function")

@@ -9,7 +9,7 @@
 // Also wires SIGINT so Ctrl-c during a turn triggers the two-press exit
 // sequence through RunFooter.requestExit().
 import { createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
-import * as Locale from "../../../util/locale"
+import * as Locale from "@/util/locale"
 import { withRunSpan } from "./otel"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
 import { resolveRunTheme } from "./theme"

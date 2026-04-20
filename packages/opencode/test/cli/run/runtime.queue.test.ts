@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { runPromptQueue } from "../../../src/cli/cmd/run/runtime.queue"
-import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "../../../src/cli/cmd/run/types"
+import { runPromptQueue } from "@/cli/cmd/run/runtime.queue"
+import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "@/cli/cmd/run/types"
 
 function footer() {
   const prompts = new Set<(input: RunPrompt) => void>()

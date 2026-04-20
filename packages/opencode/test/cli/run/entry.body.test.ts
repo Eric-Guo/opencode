@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { entryBody, entryCanStream, entryDone } from "../../../src/cli/cmd/run/entry.body"
-import type { StreamCommit } from "../../../src/cli/cmd/run/types"
+import { entryBody, entryCanStream, entryDone } from "@/cli/cmd/run/entry.body"
+import type { StreamCommit } from "@/cli/cmd/run/types"
 
 function commit(input: Partial<StreamCommit> & Pick<StreamCommit, "kind" | "text" | "phase" | "source">): StreamCommit {
   return input

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { entryBody } from "../../../src/cli/cmd/run/entry.body"
+import { entryBody } from "@/cli/cmd/run/entry.body"
 import {
   bootstrapSubagentData,
   clearFinishedSubagents,
@@ -7,7 +7,7 @@ import {
   reduceSubagentData,
   snapshotSelectedSubagentData,
   snapshotSubagentData,
-} from "../../../src/cli/cmd/run/subagent-data"
+} from "@/cli/cmd/run/subagent-data"
 
 function visible(commits: Array<Parameters<typeof entryBody>[0]>) {
   return commits.flatMap((item) => {
