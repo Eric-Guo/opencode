@@ -391,7 +391,8 @@ function runTodo(p: ToolProps<typeof TodoWriteTool>): ToolInline {
           return []
         }
 
-        return [`${item.status === "completed" ? "[x]" : "[ ]"} ${body}`]
+        const mark = item.status === "completed" ? "[✓]" : item.status === "in_progress" ? "[•]" : "[ ]"
+        return [`${mark} ${body}`]
       })
       .join("\n"),
   }
@@ -608,24 +609,11 @@ function snapTodo(p: ToolProps<typeof TodoWriteTool>): ToolSnapshot {
       },
     ]
   })
-  const doneN = items.filter((item) => item.status === "completed").length
-  const runN = items.filter((item) => item.status === "in_progress").length
-  const left = items.length - doneN - runN
-  const tail = [`${items.length} total`]
-  if (doneN > 0) {
-    tail.push(`${doneN} done`)
-  }
-  if (runN > 0) {
-    tail.push(`${runN} active`)
-  }
-  if (left > 0) {
-    tail.push(`${left} pending`)
-  }
 
   return {
     kind: "todo",
     items,
-    tail: `${done("todos", span(p.frame.state))} · ${tail.join(" · ")}`,
+    tail: "",
   }
 }
 
@@ -816,13 +804,8 @@ function scrollTaskFinal(p: ToolProps<typeof TaskTool>): string {
   return rows.join("\n")
 }
 
-function scrollTodoStart(p: ToolProps<typeof TodoWriteTool>): string {
-  const todos = p.input.todos ?? []
-  if (todos.length === 0) {
-    return "⚙ Updating todos..."
-  }
-
-  return `⚙ Updating ${todos.length} todo${todos.length === 1 ? "" : "s"}`
+function scrollTodoStart(_: ToolProps<typeof TodoWriteTool>): string {
+  return ""
 }
 
 function scrollTodoFinal(p: ToolProps<typeof TodoWriteTool>): string {

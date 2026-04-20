@@ -11,18 +11,22 @@ import type { EntryLayout, RunEntryBody, ScrollbackOptions, StreamCommit } from 
 
 function todoText(item: { status: string; content: string }): string {
   if (item.status === "completed") {
-    return `[x] ${item.content}`
+    return `[✓] ${item.content}`
   }
 
   if (item.status === "cancelled") {
-    return `[ ] ${item.content} (cancelled)`
+    return `~[ ] ${item.content}~`
   }
 
   if (item.status === "in_progress") {
-    return `[ ] ${item.content} (in progress)`
+    return `[•] ${item.content}`
   }
 
   return `[ ] ${item.content}`
+}
+
+function todoColor(theme: RunTheme, status: string) {
+  return status === "in_progress" ? theme.footer.warning : theme.block.muted
 }
 
 export function entryGroupKey(commit: StreamCommit): string | undefined {
@@ -149,23 +153,28 @@ export function RunEntryContent(props: {
   }
 
   if (body().type === "structured") {
+    const snap = snapshot()
+    if (!snap) {
+      return null
+    }
+
     const width = Math.max(1, Math.trunc(props.width ?? 80))
 
-    if (snapshot()?.kind === "code") {
+    if (snap.kind === "code") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
-            {snapshot()?.title}
+            {snap.title}
           </text>
           <box width="100%" paddingLeft={1}>
             <line_number width="100%" fg={theme.block.muted} minWidth={3} paddingRight={1}>
               <code
                 width="100%"
                 wrapMode="char"
-                filetype={toolFiletype(snapshot()?.file)}
+                filetype={toolFiletype(snap.file)}
                 streaming={false}
                 syntaxStyle={entrySyntax(props.commit, theme)}
-                content={snapshot()?.content}
+                content={snap.content}
                 fg={theme.block.text}
               />
             </line_number>
@@ -174,11 +183,11 @@ export function RunEntryContent(props: {
       )
     }
 
-    if (snapshot()?.kind === "diff") {
+    if (snap.kind === "diff") {
       const view = toolDiffView(width, props.opts?.diffStyle)
       return (
         <box width="100%" flexDirection="column" gap={1}>
-          {(snapshot()?.items ?? []).map((item) => (
+          {snap.items.map((item) => (
             <box width="100%" flexDirection="column" gap={1}>
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
                 {item.title}
@@ -216,21 +225,21 @@ export function RunEntryContent(props: {
       )
     }
 
-    if (snapshot()?.kind === "task") {
+    if (snap.kind === "task") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
-            {snapshot()?.title}
+            {snap.title}
           </text>
           <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
-            {(snapshot()?.rows ?? []).map((row) => (
+            {snap.rows.map((row) => (
               <text width="100%" wrapMode="word" fg={theme.block.text}>
                 {row}
               </text>
             ))}
-            {snapshot()?.tail ? (
+            {snap.tail ? (
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                {snapshot()?.tail}
+                {snap.tail}
               </text>
             ) : null}
           </box>
@@ -238,26 +247,30 @@ export function RunEntryContent(props: {
       )
     }
 
-    if (snapshot()?.kind === "todo") {
+    if (snap.kind === "todo") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
             # Todos
           </text>
-          <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
-            {(snapshot()?.items ?? []).map((item) => (
-              <text width="100%" wrapMode="word" fg={theme.block.text}>
+          <box width="100%" flexDirection="column" gap={0}>
+            {snap.items.map((item) => (
+              <text width="100%" wrapMode="word" fg={todoColor(theme, item.status)}>
                 {todoText(item)}
               </text>
             ))}
-            {snapshot()?.tail ? (
+            {snap.tail ? (
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                {snapshot()?.tail}
+                {snap.tail}
               </text>
             ) : null}
           </box>
         </box>
       )
+    }
+
+    if (snap.kind !== "question") {
+      return null
     }
 
     return (
@@ -266,7 +279,7 @@ export function RunEntryContent(props: {
           # Questions
         </text>
         <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
-          {(snapshot()?.items ?? []).map((item) => (
+          {snap.items.map((item) => (
             <box width="100%" flexDirection="column" gap={0}>
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
                 {item.question}
@@ -276,9 +289,9 @@ export function RunEntryContent(props: {
               </text>
             </box>
           ))}
-          {snapshot()?.tail ? (
+          {snap.tail ? (
             <text width="100%" wrapMode="word" fg={theme.block.muted}>
-              {snapshot()?.tail}
+              {snap.tail}
             </text>
           ) : null}
         </box>

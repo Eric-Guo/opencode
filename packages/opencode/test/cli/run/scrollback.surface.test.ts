@@ -442,6 +442,110 @@ test("inserts a spacer between block assistant entries and following inline tool
   }
 })
 
+test("renders todos without redundant start or footer lines", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "start",
+    source: "tool",
+    partID: "todo-1",
+    messageID: "msg-1",
+    tool: "todowrite",
+    toolState: "running",
+    part: {
+      id: "todo-1",
+      sessionID: "session-1",
+      messageID: "msg-1",
+      type: "tool",
+      callID: "call-1",
+      tool: "todowrite",
+      state: {
+        status: "running",
+        input: {
+          todos: [
+            { status: "completed", content: "List files under `run/`" },
+            { status: "in_progress", content: "Count functions in each `run/` file" },
+            { status: "pending", content: "Mark each tracking item complete" },
+          ],
+        },
+        time: {
+          start: 1,
+        },
+      },
+    } as never,
+  })
+
+  expect(claimCommits(out.renderer)).toHaveLength(0)
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "todo-1",
+    messageID: "msg-1",
+    tool: "todowrite",
+    toolState: "completed",
+    part: {
+      id: "todo-1",
+      sessionID: "session-1",
+      messageID: "msg-1",
+      type: "tool",
+      callID: "call-1",
+      tool: "todowrite",
+      state: {
+        status: "completed",
+        input: {
+          todos: [
+            { status: "completed", content: "List files under `run/`" },
+            { status: "in_progress", content: "Count functions in each `run/` file" },
+            { status: "pending", content: "Mark each tracking item complete" },
+          ],
+        },
+        metadata: {},
+        time: {
+          start: 1,
+          end: 4,
+        },
+      },
+    } as never,
+  })
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits).toHaveLength(1)
+    const raw = decoder.decode(commits[0]!.snapshot.getRealCharBytes(true))
+    const rows = Array.from({ length: commits[0]!.snapshot.height }, (_, index) =>
+      raw.slice(index * 80, (index + 1) * 80).trimEnd(),
+    )
+    const rendered = rows.join("\n")
+    expect(rendered).toContain("# Todos")
+    expect(rendered).toContain("[✓] List files under `run/`")
+    expect(rendered).toContain("[•] Count functions in each `run/` file")
+    expect(rendered).toContain("[ ] Mark each tracking item complete")
+    expect(rendered).not.toContain("Updating")
+    expect(rendered).not.toContain("todos completed")
+    expect(rows).toContain("[✓] List files under `run/`")
+    expect(rows).toContain("[•] Count functions in each `run/` file")
+    expect(rows).toContain("[ ] Mark each tracking item complete")
+  } finally {
+    destroyCommits(commits)
+  }
+})
+
 test("bodyless starts keep the previous rendered item as separator context", async () => {
   const out = await createTestRenderer({
     width: 80,
