@@ -4,7 +4,7 @@ import { useKeyboard } from "@opentui/solid"
 import "opentui-spinner/solid"
 import { createMemo, mapArray } from "solid-js"
 import { SPINNER_FRAMES } from "../tui/component/spinner"
-import { RunEntryContent, sameEntryGroup } from "./scrollback.writer"
+import { RunEntryContent, separatorRows } from "./scrollback.writer"
 import type { FooterSubagentDetail, FooterSubagentTab, RunDiffStyle } from "./types"
 import type { RunFooterTheme, RunTheme } from "./theme"
 
@@ -13,7 +13,7 @@ export const SUBAGENT_INSPECTOR_ROWS = 8
 
 function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"]) {
   if (status === "completed") {
-    return theme.success
+    return theme.highlight
   }
 
   if (status === "error") {
@@ -121,8 +121,8 @@ export function RunFooterSubagentBody(props: {
     },
   }))
   const rows = mapArray(commits, (commit, index) => (
-    <box flexDirection="column" gap={0}>
-      {index() > 0 && !sameEntryGroup(commits()[index() - 1], commit) ? <box height={1} flexShrink={0} /> : null}
+    <box flexDirection="column" gap={0} flexShrink={0}>
+      {index() > 0 && separatorRows(commits()[index() - 1], commit) > 0 ? <box height={1} flexShrink={0} /> : null}
       <RunEntryContent commit={commit} theme={theme()} opts={opts()} width={props.width()} />
     </box>
   ))

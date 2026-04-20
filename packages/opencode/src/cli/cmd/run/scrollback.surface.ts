@@ -1,7 +1,7 @@
 // Retained streaming append logic for direct-mode scrollback.
 //
 // Static entries are rendered through `scrollback.writer.tsx`. This file only
-// keeps the minimum retained-surface machinery needed for streaming assistant,
+// keeps the retained-surface machinery needed for streaming assistant,
 // reasoning, and tool progress entries that need stable markdown/code layout
 // while content is still arriving.
 import {
@@ -16,7 +16,7 @@ import {
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
 import { withRunSpan } from "./otel"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
-import { entryWriter, sameEntryGroup, spacerWriter } from "./scrollback.writer"
+import { entryWriter, sameEntryGroup, separatorRows, spacerWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
 import type { RunDiffStyle, RunEntryBody, StreamCommit } from "./types"
 
@@ -30,6 +30,8 @@ type ActiveEntry = {
   content: string
   committedRows: number
   committedBlocks: number
+  pendingSpacerRows: number
+  rendered: boolean
 }
 
 let nextId = 0
@@ -40,6 +42,7 @@ function commitMarkdownBlocks(input: {
   startBlock: number
   endBlockExclusive: number
   trailingNewline: boolean
+  beforeCommit?: () => void
 }) {
   if (input.endBlockExclusive <= input.startBlock) {
     return false
@@ -53,30 +56,19 @@ function commitMarkdownBlocks(input: {
 
   const next = input.renderable._blockStates[input.endBlockExclusive]
   const start = first.renderable.y
-  const end = next ? next.renderable.y : last.renderable.y + last.renderable.height + (last.marginBottom ?? 0)
+  const end = next ? next.renderable.y : last.renderable.y + last.renderable.height
 
+  input.beforeCommit?.()
   input.surface.commitRows(start, end, {
     trailingNewline: input.trailingNewline,
   })
   return true
 }
 
-function wantsSpacer(prev: StreamCommit | undefined, next: StreamCommit): boolean {
-  if (!prev) {
-    return false
-  }
-
-  if (sameEntryGroup(prev, next)) {
-    return false
-  }
-
-  return !(prev.kind === "tool" && prev.phase === "start")
-}
-
 export class RunScrollbackStream {
   private tail: StreamCommit | undefined
+  private rendered: StreamCommit | undefined
   private active: ActiveEntry | undefined
-  private wrote: boolean
   private diffStyle: RunDiffStyle | undefined
   private sessionID?: () => string | undefined
   private treeSitterClient: TreeSitterClient | undefined
@@ -91,7 +83,6 @@ export class RunScrollbackStream {
       treeSitterClient?: TreeSitterClient
     } = {},
   ) {
-    this.wrote = options.wrote ?? true
     this.diffStyle = options.diffStyle
     this.sessionID = options.sessionID
     this.treeSitterClient = options.treeSitterClient ?? getTreeSitterClient()
@@ -148,13 +139,36 @@ export class RunScrollbackStream {
       content: "",
       committedRows: 0,
       committedBlocks: 0,
+      pendingSpacerRows: separatorRows(this.rendered, commit, body),
+      rendered: false,
     }
   }
 
-  private async flushActive(done: boolean, trailingNewline: boolean): Promise<void> {
+  private markRendered(commit: StreamCommit | undefined): void {
+    if (!commit) {
+      return
+    }
+
+    this.rendered = commit
+  }
+
+  private writeSpacer(rows: number): void {
+    if (rows === 0) {
+      return
+    }
+
+    this.renderer.writeToScrollback(spacerWriter())
+  }
+
+  private flushPendingSpacer(active: ActiveEntry): void {
+    this.writeSpacer(active.pendingSpacerRows)
+    active.pendingSpacerRows = 0
+  }
+
+  private async flushActive(done: boolean, trailingNewline: boolean): Promise<boolean> {
     const active = this.active
     if (!active) {
-      return
+      return false
     }
 
     if (active.body.type === "text") {
@@ -162,13 +176,17 @@ export class RunScrollbackStream {
       renderable.content = active.content
       active.surface.render()
       const targetRows = done ? active.surface.height : Math.max(active.committedRows, active.surface.height - 1)
-      if (targetRows > active.committedRows) {
-        active.surface.commitRows(active.committedRows, targetRows, {
-          trailingNewline: done && targetRows === active.surface.height ? trailingNewline : false,
-        })
-        active.committedRows = targetRows
+      if (targetRows <= active.committedRows) {
+        return false
       }
-      return
+
+      this.flushPendingSpacer(active)
+      active.surface.commitRows(active.committedRows, targetRows, {
+        trailingNewline: done && targetRows === active.surface.height ? trailingNewline : false,
+      })
+      active.committedRows = targetRows
+      active.rendered = true
+      return true
     }
 
     if (active.body.type === "code") {
@@ -177,13 +195,17 @@ export class RunScrollbackStream {
       renderable.streaming = !done
       await active.surface.settle()
       const targetRows = done ? active.surface.height : Math.max(active.committedRows, active.surface.height - 1)
-      if (targetRows > active.committedRows) {
-        active.surface.commitRows(active.committedRows, targetRows, {
-          trailingNewline: done && targetRows === active.surface.height ? trailingNewline : false,
-        })
-        active.committedRows = targetRows
+      if (targetRows <= active.committedRows) {
+        return false
       }
-      return
+
+      this.flushPendingSpacer(active)
+      active.surface.commitRows(active.committedRows, targetRows, {
+        trailingNewline: done && targetRows === active.surface.height ? trailingNewline : false,
+      })
+      active.committedRows = targetRows
+      active.rendered = true
+      return true
     }
 
     const renderable = active.renderable as MarkdownRenderable
@@ -192,7 +214,7 @@ export class RunScrollbackStream {
     await active.surface.settle()
     const targetBlockCount = done ? renderable._blockStates.length : renderable._stableBlockCount
     if (targetBlockCount <= active.committedBlocks) {
-      return
+      return false
     }
 
     if (
@@ -202,13 +224,18 @@ export class RunScrollbackStream {
         startBlock: active.committedBlocks,
         endBlockExclusive: targetBlockCount,
         trailingNewline: done && targetBlockCount === renderable._blockStates.length ? trailingNewline : false,
+        beforeCommit: () => this.flushPendingSpacer(active),
       })
     ) {
       active.committedBlocks = targetBlockCount
+      active.rendered = true
+      return true
     }
+
+    return false
   }
 
-  private async finishActive(trailingNewline: boolean): Promise<void> {
+  private async finishActive(trailingNewline: boolean): Promise<StreamCommit | undefined> {
     if (!this.active) {
       return
     }
@@ -226,11 +253,13 @@ export class RunScrollbackStream {
         active.surface.destroy()
       }
     }
+
+    return active.rendered ? active.commit : undefined
   }
 
   private async writeStreaming(commit: StreamCommit, body: ActiveBody): Promise<void> {
     if (!this.active || !sameEntryGroup(this.active.commit, commit) || this.active.body.type !== body.type) {
-      await this.finishActive(false)
+      this.markRendered(await this.finishActive(false))
       this.active = this.createEntry(commit, body)
     }
 
@@ -238,26 +267,25 @@ export class RunScrollbackStream {
     this.active.commit = commit
     this.active.content += body.content
     await this.flushActive(false, false)
+    if (this.active.rendered) {
+      this.markRendered(this.active.commit)
+    }
   }
 
   public async append(commit: StreamCommit): Promise<void> {
     const same = sameEntryGroup(this.tail, commit)
     if (!same) {
-      await this.finishActive(false)
+      this.markRendered(await this.finishActive(false))
     }
 
     const body = entryBody(commit)
     if (body.type === "none") {
       if (entryDone(commit)) {
-        await this.finishActive(false)
+        this.markRendered(await this.finishActive(false))
       }
 
       this.tail = commit
       return
-    }
-
-    if (this.wrote && wantsSpacer(this.tail, commit)) {
-      this.renderer.writeToScrollback(spacerWriter())
     }
 
     if (
@@ -267,16 +295,17 @@ export class RunScrollbackStream {
     ) {
       await this.writeStreaming(commit, body)
       if (entryDone(commit)) {
-        await this.finishActive(false)
+        this.markRendered(await this.finishActive(false))
       }
-      this.wrote = true
       this.tail = commit
       return
     }
 
     if (same) {
-      await this.finishActive(false)
+      this.markRendered(await this.finishActive(false))
     }
+
+    this.writeSpacer(separatorRows(this.rendered, commit, body))
 
     this.renderer.writeToScrollback(
       entryWriter({
@@ -287,7 +316,7 @@ export class RunScrollbackStream {
         },
       }),
     )
-    this.wrote = true
+    this.markRendered(commit)
     this.tail = commit
   }
 
@@ -312,7 +341,7 @@ export class RunScrollbackStream {
         "session.id": this.sessionID?.() || undefined,
       },
       async () => {
-        await this.finishActive(trailingNewline)
+        this.markRendered(await this.finishActive(trailingNewline))
       },
     )
   }

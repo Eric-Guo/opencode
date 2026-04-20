@@ -132,6 +132,8 @@ export type ToolSnapshot =
   | ToolTodoSnapshot
   | ToolQuestionSnapshot
 
+export type EntryLayout = "inline" | "block"
+
 export type RunEntryBody =
   | { type: "none" }
   | { type: "text"; content: string }

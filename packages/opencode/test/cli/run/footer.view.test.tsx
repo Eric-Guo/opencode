@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import { RunEntryContent } from "@/cli/cmd/run/scrollback.writer"
+import { RunEntryContent, separatorRows } from "@/cli/cmd/run/scrollback.writer"
 import { RunFooterView } from "@/cli/cmd/run/footer.view"
 import { RUN_THEME_FALLBACK } from "@/cli/cmd/run/theme"
 import type { StreamCommit } from "@/cli/cmd/run/types"
@@ -50,4 +50,47 @@ test("run entry content updates when live commit text changes", async () => {
   } finally {
     app.renderer.destroy()
   }
+})
+
+test("subagent rows use shared separator rules", async () => {
+  const commits: StreamCommit[] = [
+    {
+      kind: "tool",
+      source: "tool",
+      messageID: "msg-tool",
+      partID: "part-tool",
+      tool: "glob",
+      phase: "start",
+      text: "running glob",
+      toolState: "running",
+      part: {
+        id: "part-tool",
+        type: "tool",
+        tool: "glob",
+        callID: "call-tool",
+        messageID: "msg-tool",
+        sessionID: "session-1",
+        state: {
+          status: "running",
+          input: {
+            pattern: "**/run.ts",
+          },
+          time: {
+            start: 1,
+          },
+        },
+      } as never,
+    },
+    {
+      kind: "reasoning",
+      source: "reasoning",
+      messageID: "msg-reasoning",
+      partID: "part-reasoning",
+      phase: "progress",
+      text: "Thinking:  Found it.",
+    },
+  ]
+
+  expect(separatorRows(undefined, commits[0]!)).toBe(0)
+  expect(separatorRows(commits[0], commits[1]!)).toBe(1)
 })

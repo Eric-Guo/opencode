@@ -25,6 +25,10 @@ function claimCommits(renderer: TestRenderer): ClaimedCommit[] {
   return (renderer as any).externalOutputQueue.claim() as ClaimedCommit[]
 }
 
+function renderCommit(commit: ClaimedCommit): string {
+  return decoder.decode(commit.snapshot.getRealCharBytes(true)).replace(/ +\n/g, "\n")
+}
+
 function destroyCommits(commits: ClaimedCommit[]) {
   for (const commit of commits) {
     commit.snapshot.destroy()
@@ -264,6 +268,335 @@ test("preserves blank rows between streamed markdown block commits", async () =>
     expect(rendered).toContain("# Title\n\nPara 1\n\n> Quote")
   } finally {
     destroyCommits(first)
+    destroyCommits(final)
+  }
+})
+
+test("inserts a spacer between inline tool starts and block tool finals", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "start",
+    source: "tool",
+    partID: "tool-1",
+    messageID: "msg-1",
+    tool: "write",
+    toolState: "running",
+    part: {
+      id: "tool-1",
+      sessionID: "session-1",
+      messageID: "msg-1",
+      type: "tool",
+      callID: "call-1",
+      tool: "write",
+      state: {
+        status: "running",
+        input: {
+          filePath: "src/a.ts",
+          content: "const x = 1\n",
+        },
+        time: {
+          start: 1,
+        },
+      },
+    } as never,
+  })
+
+  const start = claimCommits(out.renderer)
+  try {
+    expect(start).toHaveLength(1)
+    expect(renderCommit(start[0]!).trim()).toBe("← Write src/a.ts")
+  } finally {
+    destroyCommits(start)
+  }
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "tool-1",
+    messageID: "msg-1",
+    tool: "write",
+    toolState: "completed",
+    part: {
+      id: "tool-1",
+      sessionID: "session-1",
+      messageID: "msg-1",
+      type: "tool",
+      callID: "call-1",
+      tool: "write",
+      state: {
+        status: "completed",
+        input: {
+          filePath: "src/a.ts",
+          content: "const x = 1\n",
+        },
+        metadata: {},
+        time: {
+          start: 1,
+          end: 2,
+        },
+      },
+    } as never,
+  })
+
+  const final = claimCommits(out.renderer)
+  try {
+    expect(final).toHaveLength(2)
+    expect(renderCommit(final[0]!).trim()).toBe("")
+    expect(renderCommit(final[1]!)).toContain("# Wrote src/a.ts")
+  } finally {
+    destroyCommits(final)
+  }
+})
+
+test("inserts a spacer between block assistant entries and following inline tools", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "assistant",
+    text: "hello",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+  await scrollback.complete()
+
+  const first = claimCommits(out.renderer)
+  try {
+    expect(first).toHaveLength(1)
+    expect(renderCommit(first[0]!).trim()).toBe("hello")
+  } finally {
+    destroyCommits(first)
+  }
+
+  await scrollback.append({
+    kind: "tool",
+    source: "tool",
+    messageID: "msg-tool",
+    partID: "part-tool",
+    tool: "glob",
+    phase: "start",
+    text: "running glob",
+    toolState: "running",
+    part: {
+      id: "part-tool",
+      type: "tool",
+      tool: "glob",
+      callID: "call-tool",
+      messageID: "msg-tool",
+      sessionID: "session-1",
+      state: {
+        status: "running",
+        input: {
+          pattern: "**/run.ts",
+        },
+        time: {
+          start: 1,
+        },
+      },
+    } as never,
+  })
+
+  const next = claimCommits(out.renderer)
+  try {
+    expect(next).toHaveLength(2)
+    expect(renderCommit(next[0]!).trim()).toBe("")
+    expect(renderCommit(next[1]!).replace(/ +/g, " ").trim()).toBe('✱ Glob "**/run.ts"')
+  } finally {
+    destroyCommits(next)
+  }
+})
+
+test("bodyless starts keep the previous rendered item as separator context", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "assistant",
+    text: "hello",
+    phase: "progress",
+    source: "assistant",
+    messageID: "msg-1",
+    partID: "part-1",
+  })
+  await scrollback.complete()
+  destroyCommits(claimCommits(out.renderer))
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "start",
+    source: "tool",
+    partID: "task-1",
+    messageID: "msg-2",
+    tool: "task",
+    toolState: "running",
+    part: {
+      id: "task-1",
+      sessionID: "session-1",
+      messageID: "msg-2",
+      type: "tool",
+      callID: "call-2",
+      tool: "task",
+      state: {
+        status: "running",
+        input: {
+          description: "Explore run.ts",
+          subagent_type: "explore",
+        },
+        time: {
+          start: 1,
+        },
+      },
+    } as never,
+  })
+
+  expect(claimCommits(out.renderer)).toHaveLength(0)
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "task-1",
+    messageID: "msg-2",
+    tool: "task",
+    toolState: "error",
+    part: {
+      id: "task-1",
+      sessionID: "session-1",
+      messageID: "msg-2",
+      type: "tool",
+      callID: "call-2",
+      tool: "task",
+      state: {
+        status: "error",
+        input: {
+          description: "Explore run.ts",
+          subagent_type: "explore",
+        },
+        error: "boom",
+        time: {
+          start: 1,
+          end: 2,
+        },
+      },
+    } as never,
+  })
+
+  const final = claimCommits(out.renderer)
+  try {
+    expect(final).toHaveLength(2)
+    expect(renderCommit(final[0]!).trim()).toBe("")
+    expect(renderCommit(final[1]!)).toContain("Explore task completed")
+  } finally {
+    destroyCommits(final)
+  }
+})
+
+test("streamed assistant blocks defer their spacer until first render", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "user",
+    text: "use subagent to explore run.ts",
+    phase: "start",
+    source: "system",
+  })
+  destroyCommits(claimCommits(out.renderer))
+
+  for (const chunk of ["Exploring", " run.ts", " via", " a codebase-aware", " subagent next."]) {
+    await scrollback.append({
+      kind: "assistant",
+      text: chunk,
+      phase: "progress",
+      source: "assistant",
+      messageID: "msg-1",
+      partID: "part-1",
+    })
+  }
+
+  const progress = claimCommits(out.renderer)
+  try {
+    expect(progress).toHaveLength(0)
+  } finally {
+    destroyCommits(progress)
+  }
+
+  await scrollback.complete()
+
+  const final = claimCommits(out.renderer)
+  try {
+    expect(final).toHaveLength(2)
+    expect(renderCommit(final[0]!).trim()).toBe("")
+    expect(renderCommit(final[1]!).replace(/\n/g, " ")).toContain(
+      "Exploring run.ts via a codebase-aware subagent next.",
+    )
+  } finally {
     destroyCommits(final)
   }
 })

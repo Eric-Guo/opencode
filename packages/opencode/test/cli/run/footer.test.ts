@@ -38,9 +38,9 @@ function createFooter(renderer: TestRenderer) {
       inputNewline: "shift+enter",
     },
     diffStyle: "auto",
-    onPermissionReply: () => {},
-    onQuestionReply: () => {},
-    onQuestionReject: () => {},
+    onPermissionReply: () => { },
+    onQuestionReply: () => { },
+    onQuestionReject: () => { },
     treeSitterClient,
   })
 }
@@ -209,16 +209,15 @@ test("run footer keeps tool start rows tight with following reasoning", async ()
       messageID: "msg-reasoning",
       partID: "part-reasoning",
       phase: "progress",
-      text: "Thinking:  Found it.",
+      text: "Thinking:    Found it.",
     })
 
     await footer.idle()
 
-    const rows = payloads
-      .map((item) => item.replace(/ +/g, " ").trim())
-      .filter(Boolean)
+    const rows = payloads.map((item) => item.replace(/ +/g, " ").trim())
 
-    expect(rows).toEqual(['✱ Glob "**/run.ts"', "_Thinking:_ Found it."])
+    expect(payloads).toHaveLength(3)
+    expect(rows).toEqual(['✱ Glob "**/run.ts"', "", "_Thinking:_ Found it."])
   } finally {
     lib.commitSplitFooterSnapshot = originalCommitSplitFooterSnapshot
   }

@@ -7,7 +7,7 @@ import { entryBody, entryFlags } from "./entry.body"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolDiffView, toolFiletype, toolStructuredFinal } from "./tool"
 import { RUN_THEME_FALLBACK, type RunTheme } from "./theme"
-import type { ScrollbackOptions, StreamCommit } from "./types"
+import type { EntryLayout, RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
 function todoText(item: { status: string; content: string }): string {
   if (item.status === "completed") {
@@ -44,11 +44,39 @@ export function sameEntryGroup(left: StreamCommit | undefined, right: StreamComm
 
   const current = entryGroupKey(left)
   const next = entryGroupKey(right)
-  if (current && next && current === next) {
-    return true
+  return Boolean(current && next && current === next)
+}
+
+export function entryLayout(commit: StreamCommit, body: RunEntryBody = entryBody(commit)): EntryLayout {
+  if (commit.kind === "tool") {
+    if (body.type === "structured" || body.type === "markdown") {
+      return "block"
+    }
+
+    return "inline"
   }
 
-  return left.kind === "tool" && left.phase === "start" && right.kind === "tool" && right.phase === "start"
+  if (commit.kind === "reasoning") {
+    return "block"
+  }
+
+  return "block"
+}
+
+export function separatorRows(
+  prev: StreamCommit | undefined,
+  next: StreamCommit,
+  body: RunEntryBody = entryBody(next),
+): number {
+  if (!prev || sameEntryGroup(prev, next)) {
+    return 0
+  }
+
+  if (entryLayout(prev) === "inline" && entryLayout(next, body) === "inline") {
+    return 0
+  }
+
+  return 1
 }
 
 export function RunEntryContent(props: {
@@ -59,6 +87,39 @@ export function RunEntryContent(props: {
 }) {
   const theme = props.theme ?? RUN_THEME_FALLBACK
   const body = createMemo(() => entryBody(props.commit))
+  const text = () => {
+    const value = body()
+    if (value.type !== "text") {
+      return
+    }
+
+    return value
+  }
+  const code = () => {
+    const value = body()
+    if (value.type !== "code") {
+      return
+    }
+
+    return value
+  }
+  const snapshot = () => {
+    const value = body()
+    if (value.type !== "structured") {
+      return
+    }
+
+    return value.snapshot
+  }
+  const markdown = () => {
+    const value = body()
+    if (value.type !== "markdown") {
+      return
+    }
+
+    return value
+  }
+
   if (body().type === "none") {
     return null
   }
@@ -67,7 +128,7 @@ export function RunEntryContent(props: {
     const style = entryLook(props.commit, theme.entry)
     return (
       <text width="100%" wrapMode="word" fg={style.fg} attributes={style.attrs}>
-        {body().content}
+        {text()?.content}
       </text>
     )
   }
@@ -77,11 +138,11 @@ export function RunEntryContent(props: {
       <code
         width="100%"
         wrapMode="word"
-        filetype={body().filetype}
+        filetype={code()?.filetype}
         drawUnstyledText={false}
         streaming={props.commit.phase === "progress"}
         syntaxStyle={entrySyntax(props.commit, theme)}
-        content={body().content}
+        content={code()?.content}
         fg={entryColor(props.commit, theme)}
       />
     )
@@ -90,48 +151,48 @@ export function RunEntryContent(props: {
   if (body().type === "structured") {
     const width = Math.max(1, Math.trunc(props.width ?? 80))
 
-    if (body().snapshot.kind === "code") {
+    if (snapshot()?.kind === "code") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
-            {body().snapshot.title}
+            {snapshot()?.title}
           </text>
           <box width="100%" paddingLeft={1}>
             <line_number width="100%" fg={theme.block.muted} minWidth={3} paddingRight={1}>
-                <code
-                  width="100%"
-                  wrapMode="char"
-                  filetype={toolFiletype(body().snapshot.file)}
-                  streaming={false}
-                  syntaxStyle={entrySyntax(props.commit, theme)}
-                  content={body().snapshot.content}
-                  fg={theme.block.text}
-                />
+              <code
+                width="100%"
+                wrapMode="char"
+                filetype={toolFiletype(snapshot()?.file)}
+                streaming={false}
+                syntaxStyle={entrySyntax(props.commit, theme)}
+                content={snapshot()?.content}
+                fg={theme.block.text}
+              />
             </line_number>
           </box>
         </box>
       )
     }
 
-    if (body().snapshot.kind === "diff") {
+    if (snapshot()?.kind === "diff") {
       const view = toolDiffView(width, props.opts?.diffStyle)
       return (
         <box width="100%" flexDirection="column" gap={1}>
-          {body().snapshot.items.map((item) => (
+          {(snapshot()?.items ?? []).map((item) => (
             <box width="100%" flexDirection="column" gap={1}>
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
                 {item.title}
               </text>
               {item.diff.trim() ? (
                 <box width="100%" paddingLeft={1}>
-                    <diff
-                      diff={item.diff}
-                      view={view}
-                      filetype={toolFiletype(item.file)}
-                      syntaxStyle={entrySyntax(props.commit, theme)}
-                      showLineNumbers={true}
-                      width="100%"
-                      wrapMode="word"
+                  <diff
+                    diff={item.diff}
+                    view={view}
+                    filetype={toolFiletype(item.file)}
+                    syntaxStyle={entrySyntax(props.commit, theme)}
+                    showLineNumbers={true}
+                    width="100%"
+                    wrapMode="word"
                     fg={theme.block.text}
                     addedBg={theme.block.diffAddedBg}
                     removedBg={theme.block.diffRemovedBg}
@@ -155,21 +216,21 @@ export function RunEntryContent(props: {
       )
     }
 
-    if (body().snapshot.kind === "task") {
+    if (snapshot()?.kind === "task") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
-            {body().snapshot.title}
+            {snapshot()?.title}
           </text>
           <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
-            {body().snapshot.rows.map((row) => (
+            {(snapshot()?.rows ?? []).map((row) => (
               <text width="100%" wrapMode="word" fg={theme.block.text}>
                 {row}
               </text>
             ))}
-            {body().snapshot.tail ? (
+            {snapshot()?.tail ? (
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                {body().snapshot.tail}
+                {snapshot()?.tail}
               </text>
             ) : null}
           </box>
@@ -177,21 +238,21 @@ export function RunEntryContent(props: {
       )
     }
 
-    if (body().snapshot.kind === "todo") {
+    if (snapshot()?.kind === "todo") {
       return (
         <box width="100%" flexDirection="column" gap={1}>
           <text width="100%" wrapMode="word" fg={theme.block.muted}>
             # Todos
           </text>
           <box width="100%" flexDirection="column" gap={0} paddingLeft={1}>
-            {body().snapshot.items.map((item) => (
+            {(snapshot()?.items ?? []).map((item) => (
               <text width="100%" wrapMode="word" fg={theme.block.text}>
                 {todoText(item)}
               </text>
             ))}
-            {body().snapshot.tail ? (
+            {snapshot()?.tail ? (
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                {body().snapshot.tail}
+                {snapshot()?.tail}
               </text>
             ) : null}
           </box>
@@ -200,27 +261,27 @@ export function RunEntryContent(props: {
     }
 
     return (
-        <box width="100%" flexDirection="column" gap={1}>
-          <text width="100%" wrapMode="word" fg={theme.block.muted}>
-            # Questions
-          </text>
-          <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
-            {body().snapshot.items.map((item) => (
-              <box width="100%" flexDirection="column" gap={0}>
-                <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                  {item.question}
+      <box width="100%" flexDirection="column" gap={1}>
+        <text width="100%" wrapMode="word" fg={theme.block.muted}>
+          # Questions
+        </text>
+        <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
+          {(snapshot()?.items ?? []).map((item) => (
+            <box width="100%" flexDirection="column" gap={0}>
+              <text width="100%" wrapMode="word" fg={theme.block.muted}>
+                {item.question}
               </text>
               <text width="100%" wrapMode="word" fg={theme.block.text}>
                 {item.answer}
               </text>
-              </box>
-            ))}
-            {body().snapshot.tail ? (
-              <text width="100%" wrapMode="word" fg={theme.block.muted}>
-                {body().snapshot.tail}
-              </text>
-            ) : null}
-          </box>
+            </box>
+          ))}
+          {snapshot()?.tail ? (
+            <text width="100%" wrapMode="word" fg={theme.block.muted}>
+              {snapshot()?.tail}
+            </text>
+          ) : null}
+        </box>
       </box>
     )
   }
@@ -230,7 +291,7 @@ export function RunEntryContent(props: {
       width="100%"
       syntaxStyle={entrySyntax(props.commit, theme)}
       streaming={props.commit.phase === "progress"}
-      content={body().content}
+      content={markdown()?.content}
       fg={entryColor(props.commit, theme)}
       tableOptions={{ widthMode: "content" }}
     />
