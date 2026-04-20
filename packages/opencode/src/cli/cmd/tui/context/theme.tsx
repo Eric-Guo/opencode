@@ -534,7 +534,7 @@ function pickPrimaryColor(
       const contrast = Math.abs(luminance(item.color) - luminance(bg))
       const vivid = chroma(item.color)
       if (contrast < 0.16 || vivid < 0.12) return []
-      return [{ ...item, score: vivid * 1.5 + contrast }]
+      return [{ key: item.key, color: item.color, score: vivid * 1.5 + contrast }]
     })
     .sort((a, b) => b.score - a.score)[0]
 }

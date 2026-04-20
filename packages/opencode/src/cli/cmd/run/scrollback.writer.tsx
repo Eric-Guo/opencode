@@ -301,7 +301,6 @@ export function entryWriter(input: {
   opts?: ScrollbackOptions
 }): ScrollbackWriter {
   return createScrollbackWriter(
-    // @ts-expect-error @opentui/solid scrollback helper still exposes solid-js JSX types
     (ctx) => <RunEntryContent commit={input.commit} theme={input.theme} opts={input.opts} width={ctx.width} />,
     entryFlags(input.commit),
   )
