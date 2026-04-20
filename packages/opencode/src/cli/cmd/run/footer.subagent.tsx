@@ -44,17 +44,13 @@ function tabText(tab: FooterSubagentTab, slot: string, count: number, width: num
     return `[${slot}]`
   }
 
-  const label = `[${slot}] ${tab.label}`
+  const prefix = `[${slot}]`
   if (count >= 5 || perTab < 24) {
-    return label
+    return prefix
   }
 
-  const detail = tab.description || tab.title
-  if (!detail) {
-    return label
-  }
-
-  return `${label} · ${detail}`
+  const label = tab.description || tab.title || tab.label
+  return `${prefix} ${label}`
 }
 
 export function RunFooterSubagentTabs(props: {
@@ -94,7 +90,7 @@ export function RunFooterSubagentTabs(props: {
       id="run-direct-footer-subagent-tabs"
       width="100%"
       height={SUBAGENT_TAB_ROWS}
-      paddingLeft={2}
+      paddingLeft={1}
       paddingRight={2}
       paddingBottom={1}
       flexDirection="row"
