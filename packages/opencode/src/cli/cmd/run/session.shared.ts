@@ -3,8 +3,6 @@
 // Fetches session messages from the SDK and extracts user turn text for
 // the prompt history ring. Also finds the most recently used variant for
 // the current model so the footer can pre-select it.
-import path from "path"
-import { fileURLToPath } from "url"
 import { promptCopy, promptSame } from "./prompt.shared"
 import type { RunInput, RunPrompt } from "./types"
 
@@ -31,8 +29,13 @@ function fileName(url: string, filename?: string) {
 
   try {
     const next = new URL(url)
-    if (next.protocol === "file:") {
-      return path.basename(fileURLToPath(next)) || url
+    if (next.protocol !== "file:") {
+      return url
+    }
+
+    const name = next.pathname.split("/").at(-1)
+    if (name) {
+      return decodeURIComponent(name)
     }
   } catch {}
 

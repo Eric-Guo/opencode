@@ -265,14 +265,14 @@ export function toolPath(input?: string, opts: { home?: boolean } = {}): string 
   }
 
   if (!rel.startsWith("..")) {
-    return rel
+    return rel.replaceAll("\\", "/")
   }
 
   if (opts.home && home && (abs === home || abs.startsWith(home + path.sep))) {
-    return abs.replace(home, "~")
+    return abs.replace(home, "~").replaceAll("\\", "/")
   }
 
-  return abs
+  return abs.replaceAll("\\", "/")
 }
 
 function fallbackInline(ctx: ToolFrame): ToolInline {
