@@ -136,7 +136,7 @@ function formatUsage(
     if (typeof cost === "number" && cost > 0) {
       return money.format(cost)
     }
-    return
+    return undefined
   }
 
   const text =
@@ -157,15 +157,15 @@ export function formatError(error: {
   }
 }): string {
   if (error.data?.message) {
-    return String(error.data.message)
+    return error.data.message
   }
 
   if (error.message) {
-    return String(error.message)
+    return error.message
   }
 
   if (error.name) {
-    return String(error.name)
+    return error.name
   }
 
   return "unknown error"
@@ -181,7 +181,7 @@ function msgErr(id: string): string {
 
 function patch(patch?: FooterPatch, view?: FooterView): FooterOutput | undefined {
   if (!patch && !view) {
-    return
+    return undefined
   }
 
   return {
@@ -262,7 +262,7 @@ function upsert<T extends { id: string }>(list: T[], item: T) {
   list[idx] = item
 }
 
-function remove<T extends { id: string }>(list: T[], id: string): boolean {
+function remove(list: Array<{ id: string }>, id: string): boolean {
   const idx = list.findIndex((entry) => entry.id === id)
   if (idx === -1) {
     return false
@@ -334,7 +334,7 @@ function enrichPermission(data: SessionData, request: PermissionRequest): Permis
 function syncPermission(data: SessionData, part: ToolPart): FooterOutput | undefined {
   data.call.set(key(part.messageID, part.callID), part.state.input)
   if (data.permissions.length === 0) {
-    return
+    return undefined
   }
 
   let changed = false
@@ -355,7 +355,7 @@ function syncPermission(data: SessionData, part: ToolPart): FooterOutput | undef
   })
 
   if (!changed || !active) {
-    return
+    return undefined
   }
 
   return {
@@ -437,7 +437,7 @@ function stashEcho(data: SessionData, part: ToolPart) {
     return
   }
 
-  const output = (part.state as { output?: unknown }).output
+  const output = "output" in part.state ? part.state.output : undefined
   if (typeof output !== "string") {
     return
   }
@@ -547,7 +547,7 @@ function drop(data: SessionData, partID: string) {
 // buffered text parts that were waiting on role confirmation. User-role
 // parts are silently dropped.
 function replay(data: SessionData, commits: SessionCommit[], messageID: string, role: MessageRole, thinking: boolean) {
-  for (const [partID, msg] of [...data.msg.entries()]) {
+  for (const [partID, msg] of data.msg.entries()) {
     if (msg !== messageID || data.ids.has(partID)) {
       continue
     }
@@ -628,7 +628,7 @@ function failTool(part: ToolPart, text: string): SessionCommit {
 
 // Emits "interrupted" final entries for all in-flight parts. Called when a turn is aborted.
 export function flushInterrupted(data: SessionData, commits: SessionCommit[]) {
-  for (const partID of [...data.part.keys()]) {
+  for (const partID of data.part.keys()) {
     if (data.ids.has(partID)) {
       continue
     }
@@ -689,7 +689,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     )
     if (usage) {
       next = {
-        ...(next ?? {}),
+        ...next,
         usage,
       }
     }

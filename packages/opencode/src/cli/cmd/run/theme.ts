@@ -114,7 +114,7 @@ function blend(color: RGBA, bg: RGBA): RGBA {
 
 export function opaqueSyntaxStyle(style: SyntaxStyle | undefined, bg: RGBA): SyntaxStyle | undefined {
   if (!style) {
-    return
+    return undefined
   }
 
   return SyntaxStyle.fromStyles(

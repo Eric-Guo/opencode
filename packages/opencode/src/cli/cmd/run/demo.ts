@@ -14,7 +14,7 @@
 // Demo mode also handles permission and question replies locally, completing
 // or failing the synthetic tool parts as appropriate.
 import path from "path"
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { Event, ToolPart } from "@opencode-ai/sdk/v2"
 import { createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import type {
@@ -47,6 +47,16 @@ const QUESTIONS = ["multi", "single", "checklist", "custom"] as const
 
 type PermissionKind = (typeof PERMISSIONS)[number]
 type QuestionKind = (typeof QUESTIONS)[number]
+
+function permissionKind(value: string | undefined): PermissionKind | undefined {
+  const next = (value || "edit").toLowerCase()
+  return PERMISSIONS.find((item) => item === next)
+}
+
+function questionKind(value: string | undefined): QuestionKind | undefined {
+  const next = (value || "multi").toLowerCase()
+  return QUESTIONS.find((item) => item === next)
+}
 
 const SAMPLE_MARKDOWN = [
   "# Direct Mode Demo",
@@ -565,16 +575,19 @@ function failTool(state: State, ref: Ref, error: string): void {
 }
 
 function emitError(state: State, text: string): void {
-  feed(state, {
+  const event = {
     type: "session.error",
     properties: {
       sessionID: state.id,
       error: {
-        name: "DemoError",
-        message: text,
+        name: "UnknownError",
+        data: {
+          message: text,
+        },
       },
     },
-  } as unknown as Event)
+  } satisfies Event
+  feed(state, event)
 }
 
 async function emitBash(state: State, signal?: AbortSignal): Promise<void> {
@@ -663,6 +676,25 @@ function emitTask(state: State): void {
       sessionId: "sub_demo_1",
     },
   })
+  const part = {
+    id: "sub_demo_tool_1",
+    type: "tool",
+    sessionID: "sub_demo_1",
+    messageID: "sub_demo_msg_tool",
+    callID: "sub_demo_call_1",
+    tool: "read",
+    state: {
+      status: "running",
+      input: {
+        filePath: "packages/opencode/src/cli/cmd/run/stream.ts",
+        offset: 1,
+        limit: 200,
+      },
+      time: {
+        start: Date.now(),
+      },
+    },
+  } satisfies ToolPart
   showSubagent(state, {
     sessionID: "sub_demo_1",
     partID: ref.part,
@@ -695,25 +727,7 @@ function emitTask(state: State): void {
         messageID: "sub_demo_msg_tool",
         partID: "sub_demo_tool_1",
         tool: "read",
-        part: {
-          id: "sub_demo_tool_1",
-          type: "tool",
-          sessionID: "sub_demo_1",
-          messageID: "sub_demo_msg_tool",
-          callID: "sub_demo_call_1",
-          tool: "read",
-          state: {
-            status: "running",
-            input: {
-              filePath: "packages/opencode/src/cli/cmd/run/stream.ts",
-              offset: 1,
-              limit: 200,
-            },
-            time: {
-              start: Date.now(),
-            },
-          },
-        } as never,
+        part,
       },
       {
         kind: "assistant",
@@ -1160,8 +1174,8 @@ export function createRunDemo(input: Input) {
     }
 
     if (cmd === "/permission") {
-      const kind = (list[1] || "edit").toLowerCase() as PermissionKind
-      if (!PERMISSIONS.includes(kind)) {
+      const kind = permissionKind(list[1])
+      if (!kind) {
         note(state.footer, `Pick a permission kind: ${PERMISSIONS.join(", ")}`)
         return true
       }
@@ -1171,8 +1185,8 @@ export function createRunDemo(input: Input) {
     }
 
     if (cmd === "/question") {
-      const kind = (list[1] || "multi").toLowerCase() as QuestionKind
-      if (!QUESTIONS.includes(kind)) {
+      const kind = questionKind(list[1])
+      if (!kind) {
         note(state.footer, `Pick a question kind: ${QUESTIONS.join(", ")}`)
         return true
       }
@@ -1194,7 +1208,7 @@ export function createRunDemo(input: Input) {
         return true
       }
 
-      note(state.footer, `Unknown kind \"${kind}\". Use: ${KINDS.join(", ")}`)
+      note(state.footer, `Unknown kind "${kind}". Use: ${KINDS.join(", ")}`)
       return true
     }
 
@@ -1203,19 +1217,20 @@ export function createRunDemo(input: Input) {
 
   const permission = (input: PermissionReply): boolean => {
     const item = state.perms.get(input.requestID)
-    if (!item) {
+    if (!item || !input.reply) {
       return false
     }
 
     state.perms.delete(input.requestID)
-    feed(state, {
+    const event = {
       type: "permission.replied",
       properties: {
         sessionID: state.id,
         requestID: input.requestID,
         reply: input.reply,
       },
-    } as Event)
+    } satisfies Event
+    feed(state, event)
 
     if (input.reply === "reject") {
       failTool(state, item.ref, input.message || "permission rejected")
@@ -1228,19 +1243,20 @@ export function createRunDemo(input: Input) {
 
   const questionReply = (input: QuestionReply): boolean => {
     const ask = state.asks.get(input.requestID)
-    if (!ask) {
+    if (!ask || !input.answers) {
       return false
     }
 
     state.asks.delete(input.requestID)
-    feed(state, {
+    const event = {
       type: "question.replied",
       properties: {
         sessionID: state.id,
         requestID: input.requestID,
         answers: input.answers,
       },
-    } as Event)
+    } satisfies Event
+    feed(state, event)
     doneTool(state, ask.ref, {
       title: "question",
       output: "",

@@ -12,14 +12,14 @@ const tracer = trace.getTracer("opencode.run")
 const runtime = ManagedRuntime.make(Observability.layer, { memoMap })
 let ready: Promise<void> | undefined
 
-function attributes(input?: RunSpanAttributes) {
+function attributes(input?: RunSpanAttributes): Record<string, string | number | boolean> | undefined {
   if (!input) {
-    return
+    return undefined
   }
 
   const out = Object.entries(input).flatMap(([key, value]) => (value === undefined ? [] : [[key, value] as const]))
   if (out.length === 0) {
-    return
+    return undefined
   }
 
   return Object.fromEntries(out)

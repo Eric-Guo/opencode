@@ -35,7 +35,6 @@ import {
   reduceSubagentData,
   sameSubagentTab,
   snapshotSelectedSubagentData,
-  snapshotSubagentData,
   SUBAGENT_BOOTSTRAP_LIMIT,
   SUBAGENT_CALL_BOOTSTRAP_LIMIT,
   type SubagentData,
@@ -135,6 +134,18 @@ function sid(event: Event): string | undefined {
   ) {
     return event.properties.sessionID
   }
+
+  return undefined
+}
+
+function isEvent(value: unknown): value is Event {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false
+  }
+
+  const type = Reflect.get(value, "type")
+  const properties = Reflect.get(value, "properties")
+  return typeof type === "string" && !!properties && typeof properties === "object"
 }
 
 function active(event: Event, sessionID: string): boolean {
@@ -156,7 +167,7 @@ function waitTurn(done: Wait["done"], signal: AbortSignal) {
     Effect.callback<"abort">((resume) => {
       if (signal.aborted) {
         resume(Effect.succeed("abort"))
-        return
+        return Effect.void
       }
 
       const onAbort = () => {
@@ -243,23 +254,23 @@ function composeFooter(input: {
 
   if (input.subagent) {
     footer = {
-      ...(footer ?? {}),
+      ...footer,
       subagent: input.subagent,
     }
   }
 
   if (!sameView(input.previous, input.current)) {
     footer = {
-      ...(footer ?? {}),
+      ...footer,
       view: input.current,
     }
   }
 
   if (input.current.type !== "prompt") {
     footer = {
-      ...(footer ?? {}),
+      ...footer,
       patch: {
-        ...(input.patch ?? {}),
+        ...input.patch,
         status: blockerStatus(input.current),
       },
     }
@@ -268,7 +279,7 @@ function composeFooter(input: {
 
   if (input.patch) {
     footer = {
-      ...(footer ?? {}),
+      ...footer,
       patch: input.patch,
     }
     return footer
@@ -276,7 +287,7 @@ function composeFooter(input: {
 
   if (input.previous.type !== "prompt") {
     footer = {
-      ...(footer ?? {}),
+      ...footer,
       patch: {
         status: "",
       },
@@ -622,7 +633,11 @@ function createLayer(input: StreamInput) {
                   return
                 }
 
-                const event = item as Event
+                if (!isEvent(item)) {
+                  return
+                }
+
+                const event = item
                 input.trace?.write("recv.event", event)
                 trackBlocker(event)
 
@@ -675,11 +690,13 @@ function createLayer(input: StreamInput) {
           }
 
           if (state.fault) {
-            return yield* Effect.fail(state.fault)
+            yield* Effect.fail(state.fault)
+            return
           }
 
           if (state.wait) {
-            return yield* Effect.fail(new Error("prompt already running"))
+            yield* Effect.fail(new Error("prompt already running"))
+            return
           }
 
           const prev = listSubagentTabs(state.subagent)
@@ -733,7 +750,7 @@ function createLayer(input: StreamInput) {
             ),
           )
 
-          return yield* send.pipe(
+          yield* send.pipe(
             Effect.flatMap(() => {
               if (turn.signal.aborted || next.signal?.aborted || input.footer.isClosed || closed) {
                 if (state.wait === item) {
@@ -805,6 +822,7 @@ function createLayer(input: StreamInput) {
               }),
             ),
           )
+          return
         })
 
         const selectSubagent = Effect.fn("RunStreamTransport.selectSubagent")((sessionID: string | undefined) =>

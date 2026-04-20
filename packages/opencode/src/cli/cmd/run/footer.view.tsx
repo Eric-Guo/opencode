@@ -84,11 +84,11 @@ function subagentShortcut(event: {
   super?: boolean
 }): number | undefined {
   if (!event.ctrl || event.meta || event.super) {
-    return
+    return undefined
   }
 
   if (!/^[0-9]$/.test(event.name)) {
-    return
+    return undefined
   }
 
   const slot = Number(event.name)
@@ -121,11 +121,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const showTabs = createMemo(() => active().type === "prompt" && tabs().length > 0)
   const detail = createMemo(() => {
     const current = route()
-    if (current.type !== "subagent") {
-      return
-    }
-
-    return subagent().details[current.sessionID]
+    return current.type === "subagent" ? subagent().details[current.sessionID] : undefined
   })
   const variant = createMemo(() => printableBinding(props.keybinds.variantCycle, props.keybinds.leader))
   const interrupt = createMemo(() => printableBinding(props.keybinds.interrupt, props.keybinds.leader))

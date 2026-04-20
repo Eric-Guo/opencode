@@ -117,24 +117,24 @@ function sameCommit(left: StreamCommit, right: StreamCommit) {
   )
 }
 
-function text(value: unknown) {
+function text(value: unknown): string | undefined {
   if (typeof value !== "string") {
-    return
+    return undefined
   }
 
   const next = value.trim()
   return next || undefined
 }
 
-function num(value: unknown) {
+function num(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value
   }
 
-  return
+  return undefined
 }
 
-function inputLabel(input: Record<string, unknown>) {
+function inputLabel(input: Record<string, unknown>): string | undefined {
   const description = text(input.description)
   if (description) {
     return description
@@ -175,19 +175,58 @@ function inputLabel(input: Record<string, unknown>) {
     return prompt
   }
 
-  return
+  return undefined
 }
 
 function stateTitle(part: ToolPart) {
   return text("title" in part.state ? part.state.title : undefined)
 }
 
-function callKey(messageID: string | undefined, callID: string | undefined) {
+function callKey(messageID: string | undefined, callID: string | undefined): string | undefined {
   if (!messageID || !callID) {
-    return
+    return undefined
   }
 
   return `${messageID}:${callID}`
+}
+
+function compactToolState(part: ToolPart): ToolPart["state"] {
+  if (part.state.status === "pending") {
+    return {
+      status: "pending",
+      input: part.state.input,
+      raw: part.state.raw,
+    }
+  }
+
+  if (part.state.status === "running") {
+    return {
+      status: "running",
+      input: part.state.input,
+      time: part.state.time,
+      ...(part.state.metadata ? { metadata: part.state.metadata } : {}),
+      ...(part.state.title ? { title: part.state.title } : {}),
+    }
+  }
+
+  if (part.state.status === "completed") {
+    return {
+      status: "completed",
+      input: part.state.input,
+      output: part.state.output,
+      title: part.state.title,
+      metadata: part.state.metadata,
+      time: part.state.time,
+    }
+  }
+
+  return {
+    status: "error",
+    input: part.state.input,
+    error: part.state.error,
+    time: part.state.time,
+    ...(part.state.metadata ? { metadata: part.state.metadata } : {}),
+  }
 }
 
 function recent<T>(input: Iterable<T>, limit: number) {
@@ -215,15 +254,9 @@ function compactToolPart(part: ToolPart): ToolPart {
     messageID: part.messageID,
     callID: part.callID,
     tool: part.tool,
-    state: {
-      status: part.state.status,
-      input: part.state.input,
-      metadata: "metadata" in part.state ? part.state.metadata : undefined,
-      time: "time" in part.state ? part.state.time : undefined,
-      title: "title" in part.state ? part.state.title : undefined,
-      error: "error" in part.state ? part.state.error : undefined,
-    },
-  } as ToolPart
+    state: compactToolState(part),
+    ...(part.metadata ? { metadata: part.metadata } : {}),
+  }
 }
 
 function compactCommit(commit: StreamCommit): StreamCommit {
@@ -623,7 +656,7 @@ export function bootstrapSubagentCalls(input: { data: SubagentData; sessionID: s
 export function clearFinishedSubagents(data: SubagentData) {
   let changed = false
 
-  for (const [sessionID, tab] of [...data.tabs.entries()]) {
+  for (const [sessionID, tab] of data.tabs.entries()) {
     if (tab.status === "running") {
       continue
     }

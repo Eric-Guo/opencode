@@ -68,12 +68,12 @@ function prompt(msg: SessionMessages[number]): RunPrompt {
   let cursor = Bun.stringWidth(text)
   const used: Array<{ start: number; end: number }> = []
 
-  const take = (value: string) => {
+  const take = (value: string): { start: number; end: number; value: string } | undefined => {
     let from = 0
     while (true) {
       const idx = text.indexOf(value, from)
       if (idx === -1) {
-        return
+        return undefined
       }
 
       const start = Bun.stringWidth(text.slice(0, idx))
@@ -128,7 +128,7 @@ function prompt(msg: SessionMessages[number]): RunPrompt {
 
 function turn(msg: SessionMessages[number]): Turn | undefined {
   if (msg.info.role !== "user") {
-    return
+    return undefined
   }
 
   return {
@@ -177,7 +177,7 @@ export function sessionHistory(session: RunSession, limit = LIMIT): RunPrompt[] 
 
 export function sessionVariant(session: RunSession, model: RunInput["model"]): string | undefined {
   if (!model) {
-    return
+    return undefined
   }
 
   for (let idx = session.turns.length - 1; idx >= 0; idx -= 1) {
@@ -188,4 +188,6 @@ export function sessionVariant(session: RunSession, model: RunInput["model"]): s
 
     return turn.variant
   }
+
+  return undefined
 }

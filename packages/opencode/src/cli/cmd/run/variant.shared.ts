@@ -132,7 +132,7 @@ function createLayer(fs = AppFileSystem.defaultLayer) {
         const read = Effect.fn("RunVariant.read")(function* () {
           return yield* file.readJson(MODEL_FILE).pipe(
             Effect.map(state),
-            Effect.catchCause(() => Effect.succeed({})),
+            Effect.catchCause(() => Effect.succeed(state(undefined))),
           )
         })
 
@@ -154,7 +154,7 @@ function createLayer(fs = AppFileSystem.defaultLayer) {
 
           const current = yield* read()
           const next = {
-            ...(current.variant ?? {}),
+            ...current.variant,
           }
           const key = variantKey(model)
           if (variant) {

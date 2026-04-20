@@ -56,7 +56,7 @@ function defer<T = void>(): Deferred<T> {
 // the queue depth so the user knows how many are pending.
 export async function runPromptQueue(input: QueueInput): Promise<void> {
   const stop = defer<{ type: "closed" }>()
-  const done = defer<void>()
+  const done = defer()
   const state: State = {
     queue: [],
     closed: input.footer.isClosed,

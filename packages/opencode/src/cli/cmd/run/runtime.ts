@@ -96,9 +96,13 @@ function eagerStream(input: RunRuntimeInput, ctx: BootContext) {
   return ctx.resume === true || !input.resolveSession || !!input.demo
 }
 
-async function resolveExitTitle(ctx: BootContext, input: RunRuntimeInput, state: RuntimeState) {
+async function resolveExitTitle(
+  ctx: BootContext,
+  input: RunRuntimeInput,
+  state: RuntimeState,
+): Promise<string | undefined> {
   if (!state.shown || !hasSession(input, state)) {
-    return
+    return undefined
   }
 
   return ctx.sdk.session
@@ -267,36 +271,35 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
       })
       const footer = shell.footer
 
+      const loadCatalog = async (): Promise<void> => {
+        if (footer.isClosed) {
+          return
+        }
+
+        const [agents, resources] = await Promise.all([
+          ctx.sdk.app
+            .agents({ directory: ctx.directory })
+            .then((x) => x.data ?? [])
+            .catch(() => []),
+          ctx.sdk.experimental.resource
+            .list({ directory: ctx.directory })
+            .then((x) => Object.values(x.data ?? {}))
+            .catch(() => []),
+        ])
+        if (footer.isClosed) {
+          return
+        }
+
+        footer.event({
+          type: "catalog",
+          agents,
+          resources,
+        })
+      }
+
       void footer
         .idle()
-        .then(() => {
-          if (footer.isClosed) {
-            return
-          }
-
-          return Promise.all([
-            ctx.sdk.app
-              .agents({ directory: ctx.directory })
-              .then((x) => x.data ?? [])
-              .catch(() => []),
-            ctx.sdk.experimental.resource
-              .list({ directory: ctx.directory })
-              .then((x) => Object.values(x.data ?? {}))
-              .catch(() => []),
-          ])
-            .then(([agents, resources]) => {
-              if (footer.isClosed) {
-                return
-              }
-
-              footer.event({
-                type: "catalog",
-                agents,
-                resources,
-              })
-            })
-            .catch(() => {})
-        })
+        .then(loadCatalog)
         .catch(() => {})
 
       if (Flag.OPENCODE_SHOW_TTFD) {
@@ -379,7 +382,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
             throw new Error("runtime closed")
           }
 
-          state.selectSubagent = handle.selectSubagent
+          state.selectSubagent = (sessionID) => handle.selectSubagent(sessionID)
           return { mod, handle }
         })()
         state.stream = next

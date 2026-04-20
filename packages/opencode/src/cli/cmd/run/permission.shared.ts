@@ -48,7 +48,7 @@ function dict(v: unknown): Dict {
     return {}
   }
 
-  return v as Dict
+  return { ...v }
 }
 
 function text(v: unknown): string {
@@ -225,7 +225,7 @@ export function permissionRun(state: PermissionBodyState, requestID: string, opt
 
 export function permissionReject(state: PermissionBodyState, requestID: string): PermissionReply | undefined {
   if (state.submitting) {
-    return
+    return undefined
   }
 
   return permissionReply(requestID, "reject", state.message)

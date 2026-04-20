@@ -31,7 +31,7 @@ function todoColor(theme: RunTheme, status: string) {
 
 export function entryGroupKey(commit: StreamCommit): string | undefined {
   if (!commit.partID) {
-    return
+    return undefined
   }
 
   if (toolStructuredFinal(commit)) {
@@ -93,35 +93,19 @@ export function RunEntryContent(props: {
   const body = createMemo(() => entryBody(props.commit))
   const text = () => {
     const value = body()
-    if (value.type !== "text") {
-      return
-    }
-
-    return value
+    return value.type === "text" ? value : undefined
   }
   const code = () => {
     const value = body()
-    if (value.type !== "code") {
-      return
-    }
-
-    return value
+    return value.type === "code" ? value : undefined
   }
   const snapshot = () => {
     const value = body()
-    if (value.type !== "structured") {
-      return
-    }
-
-    return value.snapshot
+    return value.type === "structured" ? value.snapshot : undefined
   }
   const markdown = () => {
     const value = body()
-    if (value.type !== "markdown") {
-      return
-    }
-
-    return value
+    return value.type === "markdown" ? value : undefined
   }
 
   if (body().type === "none") {

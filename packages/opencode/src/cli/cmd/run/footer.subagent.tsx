@@ -173,7 +173,7 @@ export function RunFooterSubagentBody(props: {
           stickyStart="bottom"
           verticalScrollbarOptions={scrollbar()}
           ref={(item) => {
-            scroll = item as ScrollBoxRenderable
+            scroll = item
           }}
         >
           <box width="100%" flexDirection="column" gap={0}>

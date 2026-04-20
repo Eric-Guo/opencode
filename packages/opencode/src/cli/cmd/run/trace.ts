@@ -50,14 +50,14 @@ function text(data: unknown) {
   )
 }
 
-export function trace() {
+export function trace(): Trace | undefined {
   if (state !== undefined) {
     return state || undefined
   }
 
   if (!process.env.OPENCODE_DIRECT_TRACE) {
     state = false
-    return
+    return undefined
   }
 
   const target = file()

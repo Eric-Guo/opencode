@@ -130,28 +130,28 @@ type ToolRegistry = {
   [K in ToolName]: ToolRule<ToolDefs[K]>
 }
 
-type AnyToolRule = ToolRule<Tool.Info>
+type AnyToolRule = ToolRule
 
 function dict(v: unknown): ToolDict {
   if (!v || typeof v !== "object" || Array.isArray(v)) {
     return {}
   }
 
-  return v as ToolDict
+  return { ...v }
 }
 
 function props<T = Tool.Info>(frame: ToolFrame): ToolProps<T> {
   return {
-    input: frame.input as Partial<Tool.InferParameters<T>>,
-    metadata: frame.meta as Partial<Tool.InferMetadata<T>>,
+    input: Object.assign(Object.create(null), frame.input),
+    metadata: Object.assign(Object.create(null), frame.meta),
     frame,
   }
 }
 
 function permission<T = Tool.Info>(ctx: ToolPermissionCtx): ToolPermissionProps<T> {
   return {
-    input: ctx.input as Partial<Tool.InferParameters<T>>,
-    metadata: ctx.meta as Partial<Tool.InferMetadata<T>>,
+    input: Object.assign(Object.create(null), ctx.input),
+    metadata: Object.assign(Object.create(null), ctx.meta),
     patterns: ctx.patterns,
   }
 }
@@ -162,14 +162,18 @@ function text(v: unknown): string {
 
 function num(v: unknown): number | undefined {
   if (typeof v !== "number" || !Number.isFinite(v)) {
-    return
+    return undefined
   }
 
   return v
 }
 
 function list<T>(v: unknown): T[] {
-  return Array.isArray(v) ? (v as T[]) : []
+  if (!Array.isArray(v)) {
+    return []
+  }
+
+  return v
 }
 
 function done(name: string, time: string): string {
@@ -193,7 +197,7 @@ function info(data: ToolDict, skip: string[] = []): string {
     return ""
   }
 
-  return `[${list.map(([key, val]) => `${key}=${val}`).join(", ")}]`
+  return `[${list.map(([key, val]) => `${key}=${String(val)}`).join(", ")}]`
 }
 
 function span(state: ToolDict): string {
@@ -506,7 +510,7 @@ function snapWrite(p: ToolProps<typeof WriteTool>): ToolSnapshot | undefined {
   const file = p.input.filePath || ""
   const content = p.input.content || ""
   if (!file && !content) {
-    return
+    return undefined
   }
 
   return {
@@ -521,7 +525,7 @@ function snapEdit(p: ToolProps<typeof EditTool>): ToolSnapshot | undefined {
   const file = p.input.filePath || ""
   const diff = p.metadata.diff || ""
   if (!file || !diff.trim()) {
-    return
+    return undefined
   }
 
   return {
@@ -539,31 +543,31 @@ function snapEdit(p: ToolProps<typeof EditTool>): ToolSnapshot | undefined {
 function snapPatch(p: ToolProps<typeof ApplyPatchTool>): ToolSnapshot | undefined {
   const files = list<PatchFile>(p.frame.meta.files)
   if (files.length === 0) {
-    return
+    return undefined
   }
 
   return {
     kind: "diff",
-    items: files
-      .map((file) => {
-        if (!file || typeof file !== "object") {
-          return
-        }
+    items: files.flatMap((file) => {
+      if (!file || typeof file !== "object") {
+        return []
+      }
 
-        const diff = typeof file.patch === "string" ? file.patch : ""
-        if (!diff.trim()) {
-          return
-        }
+      const diff = typeof file.patch === "string" ? file.patch : ""
+      if (!diff.trim()) {
+        return []
+      }
 
-        const name = file.movePath || file.filePath || file.relativePath
-        return {
+      const name = file.movePath || file.filePath || file.relativePath
+      return [
+        {
           title: patchTitle(file),
           diff,
           file: name,
           deletions: typeof file.deletions === "number" ? file.deletions : 0,
-        }
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item)),
+        },
+      ]
+    }),
   }
 }
 
@@ -746,9 +750,9 @@ function scrollTaskStart(_: ToolProps<typeof TaskTool>): string {
   return ""
 }
 
-function taskResult(output: string) {
+function taskResult(output: string): string | undefined {
   if (!output.trim()) {
-    return
+    return undefined
   }
 
   const match = output.match(/<task_result>\s*([\s\S]*?)\s*<\/task_result>/)
@@ -1236,10 +1240,10 @@ function key(name: string): name is ToolName {
 
 function rule(name?: string): AnyToolRule | undefined {
   if (!name || !key(name)) {
-    return
+    return undefined
   }
 
-  return TOOL_RULES[name] as AnyToolRule
+  return TOOL_RULES[name]
 }
 
 function frame(part: ToolPart): ToolFrame {
@@ -1345,13 +1349,13 @@ export function toolPermissionInfo(
 ): ToolPermissionInfo | undefined {
   const draw = rule(name)?.permission
   if (!draw) {
-    return
+    return undefined
   }
 
   try {
     return draw(permission({ input, meta, patterns }))
   } catch {
-    return
+    return undefined
   }
 }
 
@@ -1359,19 +1363,19 @@ export function toolSnapshot(commit: StreamCommit, raw: string): ToolSnapshot | 
   const ctx = toolFrame(commit, raw)
   const draw = rule(ctx.name)?.snap
   if (!draw) {
-    return
+    return undefined
   }
 
   try {
     return draw(props(ctx))
   } catch {
-    return
+    return undefined
   }
 }
 
 function textBody(content: string): RunEntryBody | undefined {
   if (!content) {
-    return
+    return undefined
   }
 
   return {
@@ -1382,7 +1386,7 @@ function textBody(content: string): RunEntryBody | undefined {
 
 function markdownBody(content: string): RunEntryBody | undefined {
   if (!content) {
-    return
+    return undefined
   }
 
   return {
@@ -1394,7 +1398,7 @@ function markdownBody(content: string): RunEntryBody | undefined {
 function structuredBody(commit: StreamCommit, raw: string): RunEntryBody | undefined {
   const snap = toolSnapshot(commit, raw)
   if (!snap) {
-    return
+    return undefined
   }
 
   return {
@@ -1409,7 +1413,7 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
 
   if (ctx.name === "task") {
     if (commit.phase === "start") {
-      return
+      return undefined
     }
 
     if (commit.phase === "final" && ctx.status === "completed") {
@@ -1421,7 +1425,7 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
   }
 
   if (commit.phase === "progress" && !view.output) {
-    return
+    return undefined
   }
 
   if (commit.phase === "final") {
@@ -1430,7 +1434,7 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
     }
 
     if (!view.final) {
-      return
+      return undefined
     }
 
     if (ctx.status && ctx.status !== "completed") {
@@ -1447,7 +1451,7 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
 
 export function toolFiletype(input?: string): string | undefined {
   if (!input) {
-    return
+    return undefined
   }
 
   const ext = path.extname(input)

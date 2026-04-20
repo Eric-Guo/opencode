@@ -172,7 +172,11 @@ export class RunScrollbackStream {
     }
 
     if (active.body.type === "text") {
-      const renderable = active.renderable as TextRenderable
+      if (!(active.renderable instanceof TextRenderable)) {
+        return false
+      }
+
+      const renderable = active.renderable
       renderable.content = active.content
       active.surface.render()
       const targetRows = done ? active.surface.height : Math.max(active.committedRows, active.surface.height - 1)
@@ -190,7 +194,11 @@ export class RunScrollbackStream {
     }
 
     if (active.body.type === "code") {
-      const renderable = active.renderable as CodeRenderable
+      if (!(active.renderable instanceof CodeRenderable)) {
+        return false
+      }
+
+      const renderable = active.renderable
       renderable.content = active.content
       renderable.streaming = !done
       await active.surface.settle()
@@ -208,7 +216,11 @@ export class RunScrollbackStream {
       return true
     }
 
-    const renderable = active.renderable as MarkdownRenderable
+    if (!(active.renderable instanceof MarkdownRenderable)) {
+      return false
+    }
+
+    const renderable = active.renderable
     renderable.content = active.content
     renderable.streaming = !done
     await active.surface.settle()
@@ -237,7 +249,7 @@ export class RunScrollbackStream {
 
   private async finishActive(trailingNewline: boolean): Promise<StreamCommit | undefined> {
     if (!this.active) {
-      return
+      return undefined
     }
 
     const active = this.active

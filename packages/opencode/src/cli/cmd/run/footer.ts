@@ -136,6 +136,8 @@ function eventPatch(next: FooterEvent): FooterPatch | undefined {
   if (next.type === "stream.patch") {
     return next.patch
   }
+
+  return undefined
 }
 
 export class RunFooter implements FooterApi {
@@ -187,14 +189,14 @@ export class RunFooter implements FooterApi {
     const [view, setView] = createSignal<FooterView>({ type: "prompt" })
     this.view = view
     this.setView = setView
-    const [agents, setAgents] = createSignal<RunAgent[]>(options.agents)
+    const [agents, setAgents] = createSignal(options.agents)
     this.agents = agents
     this.setAgents = setAgents
-    const [resources, setResources] = createSignal<RunResource[]>(options.resources)
+    const [resources, setResources] = createSignal(options.resources)
     this.resources = resources
     this.setResources = setResources
     const [subagent, setSubagent] = createStore<FooterSubagentState>(createEmptySubagentState())
-    this.subagent = () => subagent as FooterSubagentState
+    this.subagent = () => subagent
     this.setSubagent = (next) => {
       setSubagent("tabs", reconcile(next.tabs, { key: "sessionID" }))
       setSubagent("details", reconcile(next.details))
@@ -239,7 +241,7 @@ export class RunFooter implements FooterApi {
           onStatus: this.setStatus,
           onSubagentSelect: options.onSubagentSelect,
         }),
-      this.renderer as unknown as Parameters<typeof render>[1],
+      this.renderer,
     ).catch(() => {
       if (!this.isGone) {
         this.close()
