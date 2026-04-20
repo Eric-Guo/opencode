@@ -1,29 +1,15 @@
 import { expect, test } from "bun:test"
-import { RGBA, SyntaxStyle, type CliRenderer, type TerminalColors } from "@opentui/core"
-import { opaqueSyntaxStyle, resolveRunTheme } from "@/cli/cmd/run/theme"
-import { generateSystem, resolveTheme } from "@/cli/cmd/tui/context/theme"
+import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
+import { generateSystem, resolveRunTheme, resolveTheme } from "@/cli/cmd/run/theme"
 
-test("flattens subtle syntax alpha against the run background", () => {
-  const syntax = SyntaxStyle.fromStyles({
-    default: {
-      fg: RGBA.fromInts(169, 177, 214, 153),
-    },
-    emphasis: {
-      fg: RGBA.fromInts(224, 175, 104, 153),
-      italic: true,
-      bold: true,
-    },
-  })
-  const subtle = opaqueSyntaxStyle(syntax, RGBA.fromInts(42, 43, 61))
-
+test("resolve run theme keeps block syntax intentionally simple", async () => {
+  const theme = await resolveRunTheme(renderer("dark"))
   try {
-    expect(subtle?.getStyle("default")?.fg?.toInts()).toEqual([118, 123, 153, 255])
-    expect(subtle?.getStyle("emphasis")?.fg?.toInts()).toEqual([151, 122, 87, 255])
-    expect(subtle?.getStyle("emphasis")?.italic).toBe(true)
-    expect(subtle?.getStyle("emphasis")?.bold).toBe(true)
+    expect(theme.block.subtleSyntax).toBeUndefined()
+    expect(theme.block.syntax?.getStyle("keyword")?.fg).toEqual(RGBA.fromHex(colors.palette[5]!))
+    expect(theme.block.syntax?.getStyle("string")?.fg).toEqual(RGBA.fromHex(colors.palette[2]!))
   } finally {
-    syntax.destroy()
-    subtle?.destroy()
+    theme.block.syntax?.destroy()
   }
 })
 
@@ -66,6 +52,25 @@ function renderer(themeMode: "dark" | "light") {
   return item as CliRenderer
 }
 
+function spread(color: RGBA) {
+  const [r, g, b] = color.toInts()
+  return Math.max(r, g, b) - Math.min(r, g, b)
+}
+
+function system(defaultBackground: string, defaultForeground: string, mode: "dark" | "light") {
+  return resolveTheme(
+    generateSystem(
+      {
+        ...colors,
+        defaultBackground,
+        defaultForeground,
+      },
+      mode,
+    ),
+    mode,
+  )
+}
+
 test("system theme uses terminal ui colors for primary", () => {
   const theme = resolveTheme(generateSystem(colors, "dark"), "dark")
 
@@ -78,4 +83,32 @@ test("resolve run theme uses the system primary for footer highlight", async () 
   const theme = await resolveRunTheme(renderer("dark"))
 
   expect(theme.footer.highlight).toEqual(expected.primary)
+})
+
+test("system theme keeps dark surfaces close to neutral on colored backgrounds", () => {
+  const theme = system("#002b36", "#93a1a1", "dark")
+
+  expect(spread(theme.backgroundPanel)).toBeLessThan(25)
+  expect(spread(theme.backgroundElement)).toBeLessThan(25)
+})
+
+test("system theme keeps light surfaces close to neutral on warm backgrounds", () => {
+  const theme = system("#fbf1c7", "#3c3836", "light")
+
+  expect(spread(theme.backgroundPanel)).toBeLessThan(20)
+  expect(spread(theme.backgroundElement)).toBeLessThan(20)
+})
+
+test("system theme keeps dark surfaces neutral on saturated backgrounds", () => {
+  const theme = system("#0000ff", "#ffffff", "dark")
+
+  expect(spread(theme.backgroundPanel)).toBeLessThan(5)
+  expect(spread(theme.backgroundElement)).toBeLessThan(5)
+})
+
+test("system theme keeps light surfaces neutral on saturated backgrounds", () => {
+  const theme = system("#ffff00", "#000000", "light")
+
+  expect(spread(theme.backgroundPanel)).toBeLessThan(5)
+  expect(spread(theme.backgroundElement)).toBeLessThan(5)
 })
