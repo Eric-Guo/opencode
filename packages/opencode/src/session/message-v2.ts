@@ -381,6 +381,18 @@ export const User = Base.extend({
 })
 export type User = z.infer<typeof User>
 
+export const AssistantError = z
+  .discriminatedUnion("name", [
+    AuthError.Schema,
+    NamedError.Unknown.Schema,
+    OutputLengthError.Schema,
+    AbortedError.Schema,
+    StructuredOutputError.Schema,
+    ContextOverflowError.Schema,
+    APIError.Schema,
+  ])
+  .optional()
+
 export const Part = z
   .discriminatedUnion("type", [
     TextPart,
@@ -407,17 +419,7 @@ export const Assistant = Base.extend({
     created: z.number(),
     completed: z.number().optional(),
   }),
-  error: z
-    .discriminatedUnion("name", [
-      AuthError.Schema,
-      NamedError.Unknown.Schema,
-      OutputLengthError.Schema,
-      AbortedError.Schema,
-      StructuredOutputError.Schema,
-      ContextOverflowError.Schema,
-      APIError.Schema,
-    ])
-    .optional(),
+  error: AssistantError,
   parentID: MessageID.zod,
   modelID: ModelID.zod,
   providerID: ProviderID.zod,

@@ -12,7 +12,7 @@ const keybind = (value: string, description: string) =>
 
 // Windows prepends ctrl+z to the undo binding because `terminal_suspend`
 // cannot consume ctrl+z on native Windows terminals (no POSIX suspend).
-const inputUndoDefault = process.platform === "win32" ? "ctrl+z,ctrl+-,super+z" : "ctrl+-,super+z"
+export const InputUndoDefault = process.platform === "win32" ? "ctrl+z,ctrl+-,super+z" : "ctrl+-,super+z"
 
 const KeybindsSchema = Schema.Struct({
   leader: keybind("ctrl+x", "Leader key for keybind combinations"),
@@ -93,7 +93,7 @@ const KeybindsSchema = Schema.Struct({
   input_delete_to_line_start: keybind("ctrl+u", "Delete to start of line in input"),
   input_backspace: keybind("backspace,shift+backspace", "Backspace in input"),
   input_delete: keybind("ctrl+d,delete,shift+delete", "Delete character in input"),
-  input_undo: keybind(inputUndoDefault, "Undo in input"),
+  input_undo: keybind(InputUndoDefault, "Undo in input"),
   input_redo: keybind("ctrl+.,super+shift+z", "Redo in input"),
   input_word_forward: keybind("alt+f,alt+right,ctrl+right", "Move word forward in input"),
   input_word_backward: keybind("alt+b,alt+left,ctrl+left", "Move word backward in input"),
@@ -125,3 +125,4 @@ export type Keybinds = Schema.Schema.Type<typeof KeybindsSchema>
 export const Keybinds = zod(KeybindsSchema) as unknown as z.ZodObject<
   Record<keyof Keybinds, z.ZodDefault<z.ZodOptional<z.ZodString>>>
 >
+export const KeybindNames = Object.keys(Keybinds.shape)

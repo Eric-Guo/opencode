@@ -16,7 +16,7 @@ import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage"
 import { Log } from "../util"
 import { updateSchema } from "../util/update-schema"
-import { MessageV2 } from "./message-v2"
+import { AssistantError, MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { InstanceState } from "@/effect"
 import { Snapshot } from "@/snapshot"
@@ -246,7 +246,7 @@ export const Event = {
     "session.error",
     z.object({
       sessionID: SessionID.zod.optional(),
-      error: MessageV2.Assistant.shape.error,
+      error: AssistantError,
     }),
   ),
 }

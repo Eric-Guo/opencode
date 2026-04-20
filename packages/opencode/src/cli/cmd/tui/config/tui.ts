@@ -13,7 +13,7 @@ import { Global } from "@/global"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
-import { ConfigKeybinds } from "@/config/keybinds"
+import { InputUndoDefault, Keybinds } from "@/config/keybinds"
 import { InstallationLocal, InstallationVersion } from "@/installation/version"
 import { makeRuntime } from "@/effect/runtime"
 import { Filesystem, Log } from "@/util"
@@ -136,10 +136,10 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     keybinds.terminal_suspend = "none"
     keybinds.input_undo ??= unique([
       "ctrl+z",
-      ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(","),
+      ...InputUndoDefault.split(","),
     ]).join(",")
   }
-  acc.result.keybinds = ConfigKeybinds.Keybinds.parse(keybinds)
+  acc.result.keybinds = Keybinds.parse(keybinds)
 
   return {
     config: acc.result,

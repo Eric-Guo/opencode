@@ -2,14 +2,14 @@ import z from "zod"
 import { Effect } from "effect"
 import * as Tool from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
-import { Todo } from "../session/todo"
+import { Info as TodoInfo, Todo } from "../session/todo"
 
 const parameters = z.object({
-  todos: z.array(z.object(Todo.Info.shape)).describe("The updated todo list"),
+  todos: z.array(TodoInfo).describe("The updated todo list"),
 })
 
 type Metadata = {
-  todos: Todo.Info[]
+  todos: TodoInfo[]
 }
 
 export const TodoWriteTool = Tool.define<typeof parameters, Metadata, Todo.Service>(
