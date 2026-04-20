@@ -51,6 +51,7 @@ export async function spawnLocalServer(hostname: string, port: number, password:
     hostname,
     username: "opencode",
     password,
+    cors: ["oc://renderer"],
   })
 
   const relayURL = (process.env.OPENCODE_EXPERIMENTAL_PUSH_RELAY_URL ?? DEFAULT_RELAY_URL).trim()
