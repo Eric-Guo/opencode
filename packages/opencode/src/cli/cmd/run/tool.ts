@@ -630,7 +630,7 @@ function snapQuestion(p: ToolProps<typeof QuestionTool>): ToolSnapshot {
   return {
     kind: "question",
     items,
-    tail: done("questions", span(p.frame.state)),
+    tail: "",
   }
 }
 
@@ -831,9 +831,8 @@ function scrollTodoFinal(p: ToolProps<typeof TodoWriteTool>): string {
   return `${done("todos", span(p.frame.state))} · ${tail.join(" · ")}`
 }
 
-function scrollQuestionStart(p: ToolProps<typeof QuestionTool>): string {
-  const total = list(p.frame.input.questions).length
-  return `→ Asked ${total} question${total === 1 ? "" : "s"}`
+function scrollQuestionStart(_: ToolProps<typeof QuestionTool>): string {
+  return ""
 }
 
 function scrollQuestionFinal(p: ToolProps<typeof QuestionTool>): string {

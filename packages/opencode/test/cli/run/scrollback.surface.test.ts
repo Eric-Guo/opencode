@@ -546,6 +546,116 @@ test("renders todos without redundant start or footer lines", async () => {
   }
 })
 
+test("renders questions without redundant start or footer lines", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    wrote: false,
+  })
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "start",
+    source: "tool",
+    partID: "question-1",
+    messageID: "msg-1",
+    tool: "question",
+    toolState: "running",
+    part: {
+      id: "question-1",
+      sessionID: "session-1",
+      messageID: "msg-1",
+      type: "tool",
+      callID: "call-1",
+      tool: "question",
+      state: {
+        status: "running",
+        input: {
+          questions: [
+            {
+              question: "What should I work on in the codebase next?",
+              header: "Next work",
+              options: [{ label: "bug", description: "Bug fix" }],
+              multiple: false,
+            },
+          ],
+        },
+        time: {
+          start: 1,
+        },
+      },
+    } as never,
+  })
+
+  expect(claimCommits(out.renderer)).toHaveLength(0)
+
+  await scrollback.append({
+    kind: "tool",
+    text: "",
+    phase: "final",
+    source: "tool",
+    partID: "question-1",
+    messageID: "msg-1",
+    tool: "question",
+    toolState: "completed",
+    part: {
+      id: "question-1",
+      sessionID: "session-1",
+      messageID: "msg-1",
+      type: "tool",
+      callID: "call-1",
+      tool: "question",
+      state: {
+        status: "completed",
+        input: {
+          questions: [
+            {
+              question: "What should I work on in the codebase next?",
+              header: "Next work",
+              options: [{ label: "bug", description: "Bug fix" }],
+              multiple: false,
+            },
+          ],
+        },
+        metadata: {
+          answers: [["Bug fix"]],
+        },
+        time: {
+          start: 1,
+          end: 2100,
+        },
+      },
+    } as never,
+  })
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits).toHaveLength(1)
+    const raw = decoder.decode(commits[0]!.snapshot.getRealCharBytes(true))
+    const rows = Array.from({ length: commits[0]!.snapshot.height }, (_, index) =>
+      raw.slice(index * 80, (index + 1) * 80).trimEnd(),
+    )
+    const rendered = rows.join("\n")
+    expect(rendered).toContain("# Questions")
+    expect(rendered).toContain("What should I work on in the codebase next?")
+    expect(rendered).toContain("Bug fix")
+    expect(rendered).not.toContain("Asked")
+    expect(rendered).not.toContain("questions completed")
+    expect(rows).toContain("What should I work on in the codebase next?")
+    expect(rows).toContain("Bug fix")
+  } finally {
+    destroyCommits(commits)
+  }
+})
+
 test("bodyless starts keep the previous rendered item as separator context", async () => {
   const out = await createTestRenderer({
     width: 80,

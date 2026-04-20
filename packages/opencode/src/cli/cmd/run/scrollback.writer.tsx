@@ -278,9 +278,9 @@ export function RunEntryContent(props: {
         <text width="100%" wrapMode="word" fg={theme.block.muted}>
           # Questions
         </text>
-        <box width="100%" flexDirection="column" gap={1} paddingLeft={1}>
-          {snap.items.map((item) => (
-            <box width="100%" flexDirection="column" gap={0}>
+          <box width="100%" flexDirection="column" gap={1}>
+            {snap.items.map((item) => (
+              <box width="100%" flexDirection="column" gap={0}>
               <text width="100%" wrapMode="word" fg={theme.block.muted}>
                 {item.question}
               </text>
