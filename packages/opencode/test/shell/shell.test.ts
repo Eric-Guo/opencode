@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Shell } from "../../src/shell/shell"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "../../src/util"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
   const prev = process.env.SHELL
@@ -46,6 +46,11 @@ describe("shell", () => {
       expect(Shell.preferred("opencode-missing-shell")).toBe(preferred)
       expect(Shell.acceptable("opencode-missing-shell")).toBe(acceptable)
     })
+  })
+
+  test("falls back for terminal-only acceptable shells", () => {
+    expect(Shell.name(Shell.acceptable("fish"))).not.toBe("fish")
+    expect(Shell.name(Shell.acceptable("nu"))).not.toBe("nu")
   })
 
   if (process.platform === "win32") {
