@@ -66,9 +66,9 @@ function reasoningBody(raw: string): RunEntryBody {
 
   const lead = clean.match(/^\n+/)?.[0] ?? ""
   const body = lead ? clean.slice(lead.length) : clean
-  const mark = "Thinking: "
+  const mark = "Thinking:"
   if (body.startsWith(mark)) {
-    return codeBody(`${lead}_Thinking:_ ${body.slice(mark.length)}`, "markdown")
+    return codeBody(`${lead}_Thinking:_ ${body.slice(mark.length).trimStart()}`, "markdown")
   }
 
   return codeBody(clean, "markdown")
