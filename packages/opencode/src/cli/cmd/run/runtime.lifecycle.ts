@@ -189,7 +189,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
         session_id: input.sessionID,
       })
       const footerTask = import("./footer")
-      queueSplash(
+      const wrote = queueSplash(
         renderer,
         state,
         "entry",
@@ -219,6 +219,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
         first: input.first,
         history: input.history,
         theme,
+        wrote,
         keybinds: input.keybinds,
         diffStyle: input.diffStyle,
         onPermissionReply: input.onPermissionReply,

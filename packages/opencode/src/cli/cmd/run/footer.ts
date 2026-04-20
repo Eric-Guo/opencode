@@ -63,6 +63,7 @@ type RunFooterOptions = {
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
   resources: RunResource[]
+  wrote?: boolean
   sessionID: () => string | undefined
   agentLabel: string
   modelLabel: string
@@ -207,6 +208,7 @@ export class RunFooter implements FooterApi {
     this.interruptHint = printableBinding(options.keybinds.interrupt, options.keybinds.leader) || "esc"
     this.scrollback = new RunScrollbackStream(renderer, options.theme, {
       diffStyle: options.diffStyle,
+      wrote: options.wrote,
       sessionID: options.sessionID,
       treeSitterClient: options.treeSitterClient,
     })

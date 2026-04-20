@@ -72,6 +72,7 @@ export class RunScrollbackStream {
   private diffStyle: RunDiffStyle | undefined
   private sessionID?: () => string | undefined
   private treeSitterClient: TreeSitterClient | undefined
+  private wrote: boolean
 
   constructor(
     private renderer: CliRenderer,
@@ -86,6 +87,7 @@ export class RunScrollbackStream {
     this.diffStyle = options.diffStyle
     this.sessionID = options.sessionID
     this.treeSitterClient = options.treeSitterClient ?? getTreeSitterClient()
+    this.wrote = options.wrote ?? false
   }
 
   private createEntry(commit: StreamCommit, body: ActiveBody): ActiveEntry {
@@ -131,6 +133,8 @@ export class RunScrollbackStream {
 
     surface.root.add(renderable)
 
+    const rows = separatorRows(this.rendered, commit, body)
+
     return {
       body,
       commit,
@@ -139,7 +143,7 @@ export class RunScrollbackStream {
       content: "",
       committedRows: 0,
       committedBlocks: 0,
-      pendingSpacerRows: separatorRows(this.rendered, commit, body),
+      pendingSpacerRows: rows || (!this.rendered && this.wrote ? 1 : 0),
       rendered: false,
     }
   }
@@ -158,6 +162,7 @@ export class RunScrollbackStream {
     }
 
     this.renderer.writeToScrollback(spacerWriter())
+    this.wrote = false
   }
 
   private flushPendingSpacer(active: ActiveEntry): void {
@@ -317,7 +322,8 @@ export class RunScrollbackStream {
       this.markRendered(await this.finishActive(false))
     }
 
-    this.writeSpacer(separatorRows(this.rendered, commit, body))
+    const rows = separatorRows(this.rendered, commit, body)
+    this.writeSpacer(rows || (!this.rendered && this.wrote ? 1 : 0))
 
     this.renderer.writeToScrollback(
       entryWriter({

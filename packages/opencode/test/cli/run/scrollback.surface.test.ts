@@ -1008,6 +1008,91 @@ test("streamed assistant blocks defer their spacer until first render", async ()
   }
 })
 
+test("first entry after prior scrollback gets a spacer", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: true,
+  })
+
+  await scrollback.append({
+    kind: "user",
+    text: "use subagent to explore run.ts",
+    phase: "start",
+    source: "system",
+  })
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits).toHaveLength(2)
+    expect(renderCommit(commits[0]!).trim()).toBe("")
+    expect(renderCommit(commits[1]!).trim()).toBe("› use subagent to explore run.ts")
+  } finally {
+    destroyCommits(commits)
+  }
+})
+
+test("first streamed entry after prior scrollback gets a spacer", async () => {
+  const out = await createTestRenderer({
+    width: 80,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+  })
+  active.push(out.renderer)
+
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, {
+    treeSitterClient,
+    wrote: true,
+  })
+
+  for (const chunk of ["Exploring", " run.ts", " via", " a codebase-aware", " subagent next."]) {
+    await scrollback.append({
+      kind: "assistant",
+      text: chunk,
+      phase: "progress",
+      source: "assistant",
+      messageID: "msg-1",
+      partID: "part-1",
+    })
+  }
+
+  const progress = claimCommits(out.renderer)
+  try {
+    expect(progress).toHaveLength(0)
+  } finally {
+    destroyCommits(progress)
+  }
+
+  await scrollback.complete()
+
+  const commits = claimCommits(out.renderer)
+  try {
+    expect(commits).toHaveLength(2)
+    expect(renderCommit(commits[0]!).trim()).toBe("")
+    expect(renderCommit(commits[1]!).replace(/\n/g, " ")).toContain(
+      "Exploring run.ts via a codebase-aware subagent next.",
+    )
+  } finally {
+    destroyCommits(commits)
+  }
+})
+
 test("coalesces same-line tool progress into one snapshot", async () => {
   const out = await createTestRenderer({
     width: 80,
