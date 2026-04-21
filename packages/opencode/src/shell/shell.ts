@@ -90,7 +90,7 @@ function resolve(file: string) {
 function win() {
   return Array.from(
     new Set(
-      [Bun.which("pwsh"), Bun.which("powershell"), gitbash(), process.env.COMSPEC || "cmd.exe"]
+      [which("pwsh"), which("powershell"), gitbash(), process.env.COMSPEC || "cmd.exe"]
         .filter((item): item is string => Boolean(item))
         .map(full),
     ),
@@ -98,10 +98,8 @@ function win() {
 }
 
 async function unix() {
-  const file = Bun.file("/etc/shells")
-  if (await file.exists()) {
-    return Array.from(new Set((await file.text()).split("\n").filter((line) => line.trim() && !line.startsWith("#"))))
-  }
+  const text = await Filesystem.readText("/etc/shells").catch(() => "")
+  if (text) return Array.from(new Set(text.split("\n").filter((line) => line.trim() && !line.startsWith("#"))))
   return ["/bin/bash", "/bin/zsh", "/bin/sh"]
 }
 

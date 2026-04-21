@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Shell } from "../../src/shell/shell"
 import { Filesystem } from "../../src/util"
+import { which } from "../../src/util/which"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
   const prev = process.env.SHELL
@@ -77,7 +78,7 @@ describe("shell", () => {
     })
 
     test("resolves bare PowerShell shells", async () => {
-      const shell = Bun.which("pwsh") || Bun.which("powershell")
+      const shell = which("pwsh") || which("powershell")
       if (!shell) return
       await withShell(path.win32.basename(shell), async () => {
         expect(Shell.preferred()).toBe(shell)

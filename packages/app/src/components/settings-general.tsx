@@ -48,6 +48,8 @@ type ShellOption = {
   acceptable: boolean
 }
 
+const AUTO_SHELL_VALUE = "__opencode_auto_shell__"
+
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
 const stopDemoSound = () => {
@@ -179,7 +181,8 @@ export const SettingsGeneral: Component = () => {
   const globalSdk = useGlobalSDK()
 
   const [shells] = createResource<ShellOption[]>(() => globalSdk.client.pty.shells().then((res) => res.data || []))
-  const auto = { value: "", label: "Auto (Default)" }
+  const auto = { value: AUTO_SHELL_VALUE, label: "Auto (Default)" }
+  const currentShell = createMemo(() => globalSync.data.config.shell || AUTO_SHELL_VALUE)
 
   const shellOptions = createMemo(() => {
     const list = shells() || []
@@ -293,12 +296,12 @@ export const SettingsGeneral: Component = () => {
           <Select
             data-action="settings-shell"
             options={shellOptions()}
-            current={shellOptions().find((o) => o.value === globalSync.data.config.shell) ?? auto}
+            current={shellOptions().find((o) => o.value === currentShell()) ?? auto}
             value={(o) => o.value}
             label={(o) => o.label}
             onSelect={(option) => {
               if (!option) return
-              globalSync.updateConfig({ shell: option.value })
+              globalSync.updateConfig({ shell: option.value === AUTO_SHELL_VALUE ? "" : option.value })
             }}
             variant="secondary"
             size="small"
