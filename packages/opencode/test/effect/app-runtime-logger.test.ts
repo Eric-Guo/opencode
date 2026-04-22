@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { Context, Effect, Layer, Logger } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { Config } from "@/config/config"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
@@ -43,6 +44,13 @@ test("AppRuntime also installs EffectLogger through Observability.layer", async 
 
   expect(current.effectLogger).toBe(true)
   expect(current.defaultLogger).toBe(false)
+})
+
+test("AppRuntime gets global config without an instance context", async () => {
+  const config = await AppRuntime.runPromise(Config.Service.use((svc) => svc.getGlobal()))
+
+  expect(config).toBeDefined()
+  expect(config.username).toBeDefined()
 })
 
 test("AppRuntime attaches InstanceRef from ALS", async () => {
