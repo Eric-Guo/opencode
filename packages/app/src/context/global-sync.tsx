@@ -10,7 +10,7 @@ import type {
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/shared/util/path"
 import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
-import { createStore, produce, reconcile, unwrap } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
@@ -61,7 +61,7 @@ export const loadMcpQuery = (directory: string, sdk?: OpencodeClient) =>
 export const loadLspQuery = (directory: string, sdk?: OpencodeClient) =>
   queryOptions({
     queryKey: [directory, "lsp"],
-    queryFn: sdk ? () => sdk.lsp.status().then((r) => r.data ?? {}) : skipToken,
+    queryFn: sdk ? () => sdk.lsp.status().then((r) => r.data ?? []) : skipToken,
   })
 
 function createGlobalSync() {
@@ -203,6 +203,17 @@ function createGlobalSync() {
   //   bootstrapInstance,
   // })
 
+  const sdkFor = (directory: string) => {
+    const cached = sdkCache.get(directory)
+    if (cached) return cached
+    const sdk = globalSDK.createClient({
+      directory,
+      throwOnError: true,
+    })
+    sdkCache.set(directory, sdk)
+    return sdk
+  }
+
   const children = createChildStoreManager({
     owner,
     isBooting: (directory) => booting.has(directory),
@@ -218,18 +229,8 @@ function createGlobalSync() {
       clearSessionPrefetchDirectory(directory)
     },
     translate: language.t,
+    getSdk: sdkFor,
   })
-
-  const sdkFor = (directory: string) => {
-    const cached = sdkCache.get(directory)
-    if (cached) return cached
-    const sdk = globalSDK.createClient({
-      directory,
-      throwOnError: true,
-    })
-    sdkCache.set(directory, sdk)
-    return sdk
-  }
 
   async function loadSessions(directory: string) {
     const pending = sessionLoads.get(directory)
@@ -381,9 +382,7 @@ function createGlobalSync() {
       setSessionTodo,
       vcsCache: children.vcsCache.get(directory),
       loadLsp: () => {
-        void queryClient.fetchQuery(loadLspQuery(directory, sdkFor(directory))).then((data) => {
-          setStore("lsp", data ?? [])
-        })
+        void queryClient.fetchQuery(loadLspQuery(directory, sdkFor(directory)))
       },
     })
   })
