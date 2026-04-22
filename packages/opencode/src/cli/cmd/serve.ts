@@ -15,6 +15,7 @@ import { Log } from "../../util"
 import { Global } from "../../global"
 // dynamic import: static `import * as` of CJS package triggers Bun bundler splitting bug
 import type * as QRCodeType from "qrcode"
+import { bootstrap } from "../bootstrap"
 
 const log = Log.create({ service: "serve" })
 
@@ -217,7 +218,7 @@ export const ServeCommand = cmd({
       }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const opts = await resolveNetworkOptions(args)
+    const opts = await bootstrap(process.cwd(), () => resolveNetworkOptions(args))
     const relayURL = (
       args["relay-url"] ??
       process.env.OPENCODE_EXPERIMENTAL_PUSH_RELAY_URL ??
