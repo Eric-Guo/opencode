@@ -15,10 +15,17 @@ import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
-import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-sync/bootstrap"
+import {
+  bootstrapDirectory,
+  bootstrapGlobal,
+  clearProviderRev,
+  loadGlobalConfigQuery,
+  loadPathQuery,
+  loadProjectsQuery,
+  loadProvidersQuery,
+} from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
-import { createRefreshQueue } from "./global-sync/queue"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
@@ -26,7 +33,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
-import { queryOptions, skipToken, useQueryClient } from "@tanstack/solid-query"
+import { queryOptions, skipToken, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 
 type GlobalStore = {
   ready: boolean
@@ -45,6 +52,18 @@ type GlobalStore = {
 export const loadSessionsQuery = (directory: string) =>
   queryOptions<null>({ queryKey: [directory, "loadSessions"], queryFn: skipToken })
 
+export const loadMcpQuery = (directory: string, sdk?: OpencodeClient) =>
+  queryOptions({
+    queryKey: [directory, "mcp"],
+    queryFn: sdk ? () => sdk.mcp.status().then((r) => r.data ?? {}) : skipToken,
+  })
+
+export const loadLspQuery = (directory: string, sdk?: OpencodeClient) =>
+  queryOptions({
+    queryKey: [directory, "lsp"],
+    queryFn: sdk ? () => sdk.lsp.status().then((r) => r.data ?? {}) : skipToken,
+  })
+
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
@@ -61,15 +80,34 @@ function createGlobalSync() {
     createStore({ value: [] as Project[] }),
   )
 
+  const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
+    queries: [loadGlobalConfigQuery(), loadProvidersQuery(null), loadPathQuery(null), loadProjectsQuery()],
+  }))
+
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
-    ready: false,
-    path: { state: "", config: "", worktree: "", directory: "", home: "" },
+    get ready() {
+      return bootstrap.isPending
+    },
     project: projectCache.value,
     session_todo: {},
-    provider: { all: [], connected: [], default: {} },
     provider_auth: {},
-    config: {},
-    reload: undefined,
+    get path() {
+      const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
+      if (pathQuery.isLoading) return EMPTY
+      return pathQuery.data ?? EMPTY
+    },
+    get provider() {
+      const EMPTY = { all: [], connected: [], default: {} }
+      if (providerQuery.isLoading) return EMPTY
+      return providerQuery.data ?? EMPTY
+    },
+    get config() {
+      if (configQuery.isLoading) return {}
+      return configQuery.data ?? {}
+    },
+    get reload() {
+      return updateConfigMutation.isPending ? "pending" : undefined
+    },
   })
   const queryClient = useQueryClient()
 
@@ -109,6 +147,22 @@ function createGlobalSync() {
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
   }) as typeof setGlobalStore
 
+  const bootstrap = useQuery(() => ({
+    queryKey: ["bootstrap"],
+    queryFn: async () => {
+      await bootstrapGlobal({
+        globalSDK: globalSDK.client,
+        requestFailedTitle: language.t("common.requestFailed"),
+        translate: language.t,
+        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+        setGlobalStore: setBootStore,
+        queryClient,
+      })
+      bootedAt = Date.now()
+      return bootedAt
+    },
+  }))
+
   const set = ((...input: unknown[]) => {
     if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
       setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
@@ -143,11 +197,11 @@ function createGlobalSync() {
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
 
-  const queue = createRefreshQueue({
-    paused,
-    bootstrap,
-    bootstrapInstance,
-  })
+  // const queue = createRefreshQueue({
+  //   paused,
+  //   bootstrap: () => queryClient.fetchQuery({ queryKey: ["bootstrap"] }),
+  //   bootstrapInstance,
+  // })
 
   const children = createChildStoreManager({
     owner,
@@ -157,7 +211,7 @@ function createGlobalSync() {
       void bootstrapInstance(directory)
     },
     onDispose: (directory) => {
-      queue.clear(directory)
+      // queue.clear(directory)
       sessionMeta.delete(directory)
       sdkCache.delete(directory)
       clearProviderRev(directory)
@@ -301,14 +355,14 @@ function createGlobalSync() {
         project: globalStore.project,
         refresh: () => {
           if (recent) return
-          queue.refresh()
+          bootstrap.refetch()
         },
         setGlobalProject: setProjects,
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
         if (recent) return
         for (const directory of Object.keys(children.children)) {
-          queue.push(directory)
+          // queue.push(directory)
         }
       }
       return
@@ -323,46 +377,26 @@ function createGlobalSync() {
       directory,
       store,
       setStore,
-      push: queue.push,
+      push: () => {}, //  queue.push,
       setSessionTodo,
       vcsCache: children.vcsCache.get(directory),
       loadLsp: () => {
-        void sdkFor(directory)
-          .lsp.status()
-          .then((x) => {
-            setStore("lsp", x.data ?? [])
-            setStore("lsp_ready", true)
-          })
+        void queryClient.fetchQuery(loadLspQuery(directory, sdkFor(directory))).then((data) => {
+          setStore("lsp", data ?? [])
+        })
       },
     })
   })
 
   onCleanup(unsub)
-  onCleanup(() => {
-    queue.dispose()
-  })
+  // onCleanup(() => {
+  //   queue.dispose()
+  // })
   onCleanup(() => {
     for (const directory of Object.keys(children.children)) {
       children.disposeDirectory(directory)
     }
   })
-
-  async function bootstrap() {
-    bootingRoot = true
-    try {
-      await bootstrapGlobal({
-        globalSDK: globalSDK.client,
-        requestFailedTitle: language.t("common.requestFailed"),
-        translate: language.t,
-        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
-        setGlobalStore: setBootStore,
-        queryClient,
-      })
-      bootedAt = Date.now()
-    } finally {
-      bootingRoot = false
-    }
-  }
 
   onMount(() => {
     if (typeof requestAnimationFrame === "function") {
@@ -379,7 +413,6 @@ function createGlobalSync() {
         void globalSDK.event.start()
       }, 0)
     }
-    void bootstrap()
   })
 
   const projectApi = {
@@ -392,21 +425,10 @@ function createGlobalSync() {
     },
   }
 
-  const updateConfig = async (config: Config) => {
-    setGlobalStore("reload", "pending")
-    return globalSDK.client.global.config
-      .update({ config })
-      .then(bootstrap)
-      .then(() => {
-        queue.refresh()
-        setGlobalStore("reload", undefined)
-        queue.refresh()
-      })
-      .catch((error) => {
-        setGlobalStore("reload", undefined)
-        throw error
-      })
-  }
+  const updateConfigMutation = useMutation(() => ({
+    mutationFn: (config: Config) => globalSDK.client.global.config.update({ config }),
+    // onSuccess: () => bootstrap.refetch(),
+  }))
 
   return {
     data: globalStore,
@@ -419,8 +441,8 @@ function createGlobalSync() {
     },
     child: children.child,
     peek: children.peek,
-    bootstrap,
-    updateConfig,
+    // bootstrap,
+    updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
     todo: {
       set: setSessionTodo,
