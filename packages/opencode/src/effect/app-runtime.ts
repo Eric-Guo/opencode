@@ -66,7 +66,7 @@ const ConfigWithPluginPriority = Layer.effect(
     return {
       ...config,
       get: () => Effect.andThen(plugin.init(), config.get),
-      getGlobal: () => Effect.andThen(plugin.init(), config.getGlobal),
+      getGlobal: config.getGlobal,
       getConsoleState: () => Effect.andThen(plugin.init(), config.getConsoleState),
     }
   }),
