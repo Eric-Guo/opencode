@@ -48,7 +48,13 @@ type ShellOption = {
   acceptable: boolean
 }
 
-const AUTO_SHELL_VALUE = "__opencode_auto_shell__"
+type ShellSelectOption = {
+  id: string
+  value: string
+  label: string
+}
+
+
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
@@ -181,10 +187,10 @@ export const SettingsGeneral: Component = () => {
   const globalSdk = useGlobalSDK()
 
   const [shells] = createResource<ShellOption[]>(() => globalSdk.client.pty.shells().then((res) => res.data || []))
-  const auto = { value: AUTO_SHELL_VALUE, label: "Auto (Default)" }
-  const currentShell = createMemo(() => globalSync.data.config.shell || AUTO_SHELL_VALUE)
+  const autoOption = { id: "auto", value: "", label: "Auto (Default)" }
+  const currentShell = createMemo(() => globalSync.data.config.shell ?? "")
 
-  const shellOptions = createMemo(() => {
+  const shellOptions = createMemo<ShellSelectOption[]>(() => {
     const list = shells() || []
     const current = globalSync.data.config.shell
 
@@ -194,18 +200,21 @@ export const SettingsGeneral: Component = () => {
     }
 
     const options = [
-      auto,
+      autoOption,
       ...list.map((s) => {
         const dup = (nameCounts.get(s.name) || 0) > 1
         const text = dup ? s.path : s.name
         const label = s.acceptable ? text : `${text} (${language.t("settings.general.row.shell.terminalOnly")})`
-        const value = dup ? s.path : s.name
-        return { value, label }
+        return {
+          id: s.path,
+          value: dup ? s.path : s.name,
+          label,
+        }
       }),
     ]
 
     if (current && !options.some((o) => o.value === current)) {
-      options.push({ value: current, label: current })
+      options.push({ id: current, value: current, label: current })
     }
 
     return options
@@ -296,12 +305,12 @@ export const SettingsGeneral: Component = () => {
           <Select
             data-action="settings-shell"
             options={shellOptions()}
-            current={shellOptions().find((o) => o.value === currentShell()) ?? auto}
-            value={(o) => o.value}
+            current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
+            value={(o) => o.id}
             label={(o) => o.label}
             onSelect={(option) => {
               if (!option) return
-              globalSync.updateConfig({ shell: option.value === AUTO_SHELL_VALUE ? "" : option.value })
+              globalSync.updateConfig({ shell: option.value })
             }}
             variant="secondary"
             size="small"
