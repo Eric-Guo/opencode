@@ -108,10 +108,7 @@ function select(file: string | undefined, opts?: { acceptable?: boolean }) {
     const shell = resolve(file)
     if (shell) return shell
   }
-  if (process.platform === "win32") {
-    const shell = win()[0]
-    if (shell) return shell
-  }
+  if (process.platform === "win32") return win()[0]!
   return fallback()
 }
 
@@ -125,11 +122,6 @@ export function gitbash() {
 }
 
 function fallback() {
-  if (process.platform === "win32") {
-    const file = win()[0]
-    if (file) return file
-    return process.env.COMSPEC || "cmd.exe"
-  }
   if (process.platform === "darwin") return "/bin/zsh"
   const bash = which("bash")
   if (bash) return bash
@@ -212,7 +204,7 @@ acceptable.reset = () => defaultAcceptable.reset()
 
 export async function list(): Promise<Item[]> {
   const shells = process.platform === "win32" ? win() : await unix()
-  return shells.map(info)
+  return shells.filter((s) => resolve(s)).map(info)
 }
 
 export * as Shell from "./shell"
