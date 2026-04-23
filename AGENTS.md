@@ -1,12 +1,8 @@
-- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
-- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
-- Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
+# OpenCode Monorepo Agent Guide
 
-## Style Guide
+This file is for coding agents working in `/Users/ryanvogel/dev/opencode`.
 
-### General Principles
+## Scope And Precedence
 
 - Keep things in one function unless composable or reusable
 - Avoid `try`/`catch` where possible
@@ -56,48 +52,48 @@ else foo = 2
 
 ### Control Flow
 
-Avoid `else` statements. Prefer early returns.
+- Prefer early returns over nested `else` blocks.
+- Keep functions focused; split only when it improves reuse or readability.
 
-```ts
-// Good
-function foo() {
-  if (condition) return 1
-  return 2
-}
+### Error Handling
 
-// Bad
-function foo() {
-  if (condition) return 1
-  else return 2
-}
-```
+- Fail with actionable messages.
+- Avoid swallowing errors silently.
+- Log enough context to debug production issues (IDs, env, status), but never secrets.
+- In UI code, degrade gracefully for missing capabilities.
 
-### Schema Definitions (Drizzle)
+### Data / DB
 
-Use snake_case for field names so column names don't need to be redefined as strings.
+- For Drizzle schema, use snake_case fields and columns.
+- Keep migration and schema changes minimal and explicit.
+- Follow package-specific DB guidance in `packages/opencode/AGENTS.md`.
 
-```ts
-// Good
-const table = sqliteTable("session", {
-  id: text().primaryKey(),
-  project_id: text().notNull(),
-  created_at: integer().notNull(),
-})
+### Testing Philosophy
 
-// Bad
-const table = sqliteTable("session", {
-  id: text("id").primaryKey(),
-  projectID: text("project_id").notNull(),
-  createdAt: integer("created_at").notNull(),
-})
-```
+- Prefer testing real behavior over mocks.
+- Add regression tests for bug fixes where practical.
+- Keep fixtures small and focused.
 
-## Testing
+## Agent Workflow Tips
 
-- Avoid mocks as much as possible
-- Test actual implementation, do not duplicate logic into tests
-- Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+- Read existing code paths before introducing new abstractions.
+- Match local patterns first; do not impose a new style per file.
+- If a package has its own `AGENTS.md`, review it before editing.
+- For OpenCode Effect services, follow `packages/opencode/AGENTS.md` strictly.
 
-## Type Checking
+## Known Operational Notes
 
-- Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+- `packages/app/AGENTS.md` says: never restart app/server processes during that package's debugging workflow.
+- `packages/app/AGENTS.md` also documents local backend+web split for UI work.
+- `packages/opencode/AGENTS.md` contains mandatory Effect and database conventions.
+
+## Regeneration / Special Scripts
+
+- Regenerate JS SDK with: `./packages/sdk/js/script/build.ts`
+
+## Quick Checklist Before Finishing
+
+- Ran relevant package checks.
+- Updated docs/config when behavior changed.
+- Avoided committing unrelated files.
+- Kept edits minimal and aligned with local conventions.
