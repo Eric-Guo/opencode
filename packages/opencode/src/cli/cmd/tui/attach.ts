@@ -1,10 +1,10 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
-import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
 import { validateSession } from "./validate-session"
+import { Instance } from "@/project/instance"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -66,7 +66,10 @@ export const AttachCommand = cmd({
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
         return { Authorization: auth }
       })()
-      const config = await TuiConfig.get()
+      const config = await Instance.provide({
+        directory: process.cwd(),
+        fn: () => TuiConfig.get(),
+      })
 
       try {
         await validateSession({
@@ -81,7 +84,8 @@ export const AttachCommand = cmd({
         return
       }
 
-      await tui({
+      const app = await import("./app")
+      await app.tui({
         url: args.url,
         config,
         args: {

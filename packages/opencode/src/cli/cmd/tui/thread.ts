@@ -1,5 +1,4 @@
 import { cmd } from "@/cli/cmd/cmd"
-import { tui } from "./app"
 import { Rpc } from "@/util"
 import { type rpc } from "./worker"
 import path from "path"
@@ -181,13 +180,15 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await TuiConfig.get()
+      const config = await Instance.provide({
+        directory: cwd,
+        fn: () => TuiConfig.get(),
+      })
 
       const network = await Instance.provide({
         directory: cwd,
         fn: () => resolveNetworkOptionsNoConfig(args),
       })
-
       const external =
         process.argv.includes("--port") ||
         process.argv.includes("--hostname") ||
@@ -226,7 +227,8 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
-        await tui({
+        const app = await import("./app")
+        await app.tui({
           url: transport.url,
           async onSnapshot() {
             const tui = writeHeapSnapshot("tui.heapsnapshot")
@@ -255,4 +257,3 @@ export const TuiThreadCommand = cmd({
     process.exit(0)
   },
 })
-// scratch
