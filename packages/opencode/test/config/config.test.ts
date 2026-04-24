@@ -174,7 +174,7 @@ test("updates config and preserves empty shell sentinel", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      await save({ shell: "" } as any)
+      await save({ shell: "" })
 
       const writtenConfig = await Filesystem.readJson<{ shell?: string }>(path.join(tmp.path, "config.json"))
       expect(writtenConfig.shell).toBe("")
@@ -197,7 +197,7 @@ test("updates global config and omits empty shell key in json", async () => {
   await clear(true)
 
   try {
-    await saveGlobal({ shell: "" } as any)
+    await saveGlobal({ shell: "" })
 
     const writtenConfig = await Filesystem.readJson<{ shell?: string }>(path.join(tmp.path, "opencode.json"))
     expect("shell" in writtenConfig).toBe(false)
@@ -226,7 +226,7 @@ test("updates global config and omits empty shell key in jsonc", async () => {
   await clear(true)
 
   try {
-    await saveGlobal({ shell: "" } as any)
+    await saveGlobal({ shell: "" })
 
     const file = path.join(tmp.path, "opencode.jsonc")
     const writtenConfig = await Filesystem.readText(file)
