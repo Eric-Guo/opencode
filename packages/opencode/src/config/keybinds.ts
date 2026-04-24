@@ -62,6 +62,7 @@ const KeybindsSchema = Schema.Struct({
   agent_list: keybind("<leader>a", "List agents"),
   agent_cycle: keybind("tab", "Next agent"),
   agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
+  permission_auto_accept_toggle: keybind("none", "Toggle auto-accept for edit permissions"),
   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
   variant_list: keybind("none", "List model variants"),
   input_clear: keybind("ctrl+c", "Clear input field"),
