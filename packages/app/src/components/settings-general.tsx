@@ -193,7 +193,7 @@ export const SettingsGeneral: Component = () => {
     void syncDisplayBackend()
   })
 
-  const autoOption = { id: "auto", value: "", label: "Auto (Default)" }
+  const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
   const currentShell = createMemo(() => globalSync.data.config.shell ?? "")
 
   const shellOptions = createMemo<ShellSelectOption[]>(() => {

@@ -325,7 +325,7 @@ function writable(info: Info) {
 
 function writableGlobal(info: Info) {
   const next = writable(info)
-  // When a user changes config from a value back to default in the Desktop app, we dont want to leave a blank `"shell": "",` key
+  // When a user changes config from a value back to default in the Desktop app, we don't want to leave a blank `"shell": "",` key
   if ("shell" in next && next.shell === "") return { ...next, shell: undefined }
   return next
 }
