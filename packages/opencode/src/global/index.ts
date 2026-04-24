@@ -20,6 +20,7 @@ export const Path = {
   data,
   bin: path.join(cache, "bin"),
   log: path.join(data, "log"),
+  repos: path.join(data, "repos"),
   cache,
   config,
   state,
@@ -34,6 +35,7 @@ await Promise.all([
   fs.mkdir(Path.state, { recursive: true }),
   fs.mkdir(Path.log, { recursive: true }),
   fs.mkdir(Path.bin, { recursive: true }),
+  fs.mkdir(Path.repos, { recursive: true }),
 ])
 
 const CACHE_VERSION = "21"

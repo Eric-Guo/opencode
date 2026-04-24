@@ -167,6 +167,7 @@ export const Info = Schema.Struct({
         // subagent
         general: Schema.optional(AgentRef),
         explore: Schema.optional(AgentRef),
+        scout: Schema.optional(AgentRef),
         // specialized
         title: Schema.optional(AgentRef),
         summary: Schema.optional(AgentRef),

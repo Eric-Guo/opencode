@@ -4,6 +4,7 @@ import path from "path"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
+import { Global } from "../../src/global"
 import { Permission } from "../../src/permission"
 
 // Helper to evaluate permission for a tool with wildcard pattern
@@ -31,6 +32,7 @@ test("returns default native agents when no config", async () => {
       expect(names).toContain("plan")
       expect(names).toContain("general")
       expect(names).toContain("explore")
+      expect(names).toContain("scout")
       expect(names).toContain("compaction")
       expect(names).toContain("title")
       expect(names).toContain("summary")
@@ -49,6 +51,8 @@ test("build agent has correct default properties", async () => {
       expect(build?.native).toBe(true)
       expect(evalPerm(build, "edit")).toBe("allow")
       expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "repo_clone")).toBe("deny")
+      expect(evalPerm(build, "repo_overview")).toBe("deny")
     },
   })
 })
@@ -93,6 +97,28 @@ test("explore agent asks for external directories and allows Truncate.GLOB", asy
       expect(explore).toBeDefined()
       expect(Permission.evaluate("external_directory", "/some/other/path", explore!.permission).action).toBe("ask")
       expect(Permission.evaluate("external_directory", Truncate.GLOB, explore!.permission).action).toBe("allow")
+    },
+  })
+})
+
+test("scout agent allows repo cloning and repo cache reads", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const scout = await load(tmp.path, (svc) => svc.get("scout"))
+      expect(scout).toBeDefined()
+      expect(scout?.mode).toBe("subagent")
+      expect(evalPerm(scout, "repo_clone")).toBe("allow")
+      expect(evalPerm(scout, "repo_overview")).toBe("allow")
+      expect(evalPerm(scout, "edit")).toBe("deny")
+      expect(
+        Permission.evaluate(
+          "external_directory",
+          path.join(Global.Path.repos, "github.com", "owner", "repo", "README.md"),
+          scout!.permission,
+        ).action,
+      ).toBe("allow")
     },
   })
 })
