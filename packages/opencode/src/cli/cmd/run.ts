@@ -1,3 +1,16 @@
+// CLI entry point for `opencode run`.
+//
+// Handles three modes:
+//   1. Non-interactive (default): sends a single prompt, streams events to
+//      stdout, and exits when the session goes idle.
+//   2. Interactive local (`--interactive`): boots the split-footer direct mode
+//      with an in-process server (no external HTTP).
+//   3. Interactive attach (`--interactive --attach`): connects to a running
+//      opencode server and runs interactive mode against it.
+//
+// Also supports `--command` for slash-command execution, `--format json` for
+// raw event streaming, `--continue` / `--session` for session resumption,
+// and `--fork` for forking before continuing.
 import type { Argv } from "yargs"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -6,47 +19,42 @@ import { cmd } from "./cmd"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
-import { Filesystem } from "../../util"
+import { Filesystem } from "@/util"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
-import { Server } from "../../server/server"
-import { Provider } from "../../provider"
-import { Agent } from "../../agent/agent"
-import { Permission } from "../../permission"
-import { Tool } from "../../tool"
-import { GlobTool } from "../../tool/glob"
-import { GrepTool } from "../../tool/grep"
-import { ReadTool } from "../../tool/read"
-import { WebFetchTool } from "../../tool/webfetch"
-import { EditTool } from "../../tool/edit"
-import { WriteTool } from "../../tool/write"
-import { CodeSearchTool } from "../../tool/codesearch"
-import { WebSearchTool } from "../../tool/websearch"
-import { TaskTool } from "../../tool/task"
-import { SkillTool } from "../../tool/skill"
-import { BashTool } from "../../tool/bash"
-import { TodoWriteTool } from "../../tool/todo"
-import { Locale } from "../../util"
+import { Agent } from "@/agent/agent"
+import { Permission } from "@/permission"
 import { AppRuntime } from "@/effect/app-runtime"
+import type { RunDemo } from "./run/types"
 
-type ToolProps<T> = {
-  input: Tool.InferParameters<T>
-  metadata: Tool.InferMetadata<T>
-  part: ToolPart
+const runtimeTask = import("./run/runtime")
+type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
+
+function pick(value: string | undefined): ModelInput | undefined {
+  if (!value) return undefined
+  const [providerID, ...rest] = value.split("/")
+  return {
+    providerID,
+    modelID: rest.join("/"),
+  } as ModelInput
 }
 
-function props<T>(part: ToolPart): ToolProps<T> {
-  const state = part.state
-  return {
-    input: state.input as Tool.InferParameters<T>,
-    metadata: ("metadata" in state ? state.metadata : {}) as Tool.InferMetadata<T>,
-    part,
-  }
+type FilePart = {
+  type: "file"
+  url: string
+  filename: string
+  mime: string
 }
 
 type Inline = {
   icon: string
   title: string
   description?: string
+}
+
+type SessionInfo = {
+  id: string
+  title?: string
+  directory?: string
 }
 
 function inline(info: Inline) {
@@ -62,152 +70,22 @@ function block(info: Inline, output?: string) {
   UI.empty()
 }
 
-function fallback(part: ToolPart) {
-  const state = part.state
-  const input = "input" in state ? state.input : undefined
-  const title =
-    ("title" in state && state.title ? state.title : undefined) ||
-    (input && typeof input === "object" && Object.keys(input).length > 0 ? JSON.stringify(input) : "Unknown")
-  inline({
-    icon: "⚙",
-    title: `${part.tool} ${title}`,
-  })
-}
+async function tool(part: ToolPart) {
+  try {
+    const { toolInlineInfo } = await import("./run/tool")
+    const next = toolInlineInfo(part)
+    if (next.mode === "block") {
+      block(next, next.body)
+      return
+    }
 
-function glob(info: ToolProps<typeof GlobTool>) {
-  const root = info.input.path ?? ""
-  const title = `Glob "${info.input.pattern}"`
-  const suffix = root ? `in ${normalizePath(root)}` : ""
-  const num = info.metadata.count
-  const description =
-    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
-  inline({
-    icon: "✱",
-    title,
-    ...(description && { description }),
-  })
-}
-
-function grep(info: ToolProps<typeof GrepTool>) {
-  const root = info.input.path ?? ""
-  const title = `Grep "${info.input.pattern}"`
-  const suffix = root ? `in ${normalizePath(root)}` : ""
-  const num = info.metadata.matches
-  const description =
-    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
-  inline({
-    icon: "✱",
-    title,
-    ...(description && { description }),
-  })
-}
-
-function read(info: ToolProps<typeof ReadTool>) {
-  const file = normalizePath(info.input.filePath)
-  const pairs = Object.entries(info.input).filter(([key, value]) => {
-    if (key === "filePath") return false
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-  })
-  const description = pairs.length ? `[${pairs.map(([key, value]) => `${key}=${value}`).join(", ")}]` : undefined
-  inline({
-    icon: "→",
-    title: `Read ${file}`,
-    ...(description && { description }),
-  })
-}
-
-function write(info: ToolProps<typeof WriteTool>) {
-  block(
-    {
-      icon: "←",
-      title: `Write ${normalizePath(info.input.filePath)}`,
-    },
-    info.part.state.status === "completed" ? info.part.state.output : undefined,
-  )
-}
-
-function webfetch(info: ToolProps<typeof WebFetchTool>) {
-  inline({
-    icon: "%",
-    title: `WebFetch ${info.input.url}`,
-  })
-}
-
-function edit(info: ToolProps<typeof EditTool>) {
-  const title = normalizePath(info.input.filePath)
-  const diff = info.metadata.diff
-  block(
-    {
-      icon: "←",
-      title: `Edit ${title}`,
-    },
-    diff,
-  )
-}
-
-function codesearch(info: ToolProps<typeof CodeSearchTool>) {
-  inline({
-    icon: "◇",
-    title: `Exa Code Search "${info.input.query}"`,
-  })
-}
-
-function websearch(info: ToolProps<typeof WebSearchTool>) {
-  inline({
-    icon: "◈",
-    title: `Exa Web Search "${info.input.query}"`,
-  })
-}
-
-function task(info: ToolProps<typeof TaskTool>) {
-  const input = info.part.state.input
-  const status = info.part.state.status
-  const subagent =
-    typeof input.subagent_type === "string" && input.subagent_type.trim().length > 0 ? input.subagent_type : "unknown"
-  const agent = Locale.titlecase(subagent)
-  const desc =
-    typeof input.description === "string" && input.description.trim().length > 0 ? input.description : undefined
-  const icon = status === "error" ? "✗" : status === "running" ? "•" : "✓"
-  const name = desc ?? `${agent} Task`
-  inline({
-    icon,
-    title: name,
-    description: desc ? `${agent} Agent` : undefined,
-  })
-}
-
-function skill(info: ToolProps<typeof SkillTool>) {
-  inline({
-    icon: "→",
-    title: `Skill "${info.input.name}"`,
-  })
-}
-
-function bash(info: ToolProps<typeof BashTool>) {
-  const output = info.part.state.status === "completed" ? info.part.state.output?.trim() : undefined
-  block(
-    {
-      icon: "$",
-      title: `${info.input.command}`,
-    },
-    output,
-  )
-}
-
-function todo(info: ToolProps<typeof TodoWriteTool>) {
-  block(
-    {
-      icon: "#",
-      title: "Todos",
-    },
-    info.input.todos.map((item) => `${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`).join("\n"),
-  )
-}
-
-function normalizePath(input?: string) {
-  if (!input) return ""
-  if (path.isAbsolute(input)) return path.relative(process.cwd(), input) || "."
-  return input
+    inline(next)
+  } catch {
+    inline({
+      icon: "⚙",
+      title: part.tool,
+    })
+  }
 }
 
 export const RunCommand = cmd({
@@ -292,6 +170,11 @@ export const RunCommand = cmd({
       .option("thinking", {
         type: "boolean",
         describe: "show thinking blocks",
+      })
+      .option("interactive", {
+        alias: ["i"],
+        type: "boolean",
+        describe: "run in direct interactive split-footer mode",
         default: false,
       })
       .option("dangerously-skip-permissions", {
@@ -299,30 +182,87 @@ export const RunCommand = cmd({
         describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
         default: false,
       })
+      .option("demo", {
+        type: "string",
+        choices: ["on", "permission", "question", "mix", "text"],
+        describe: "enable direct interactive demo slash commands",
+      })
+      .option("demo-text", {
+        type: "string",
+        describe: "text used with --demo text",
+      })
   },
   handler: async (args) => {
+    const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
+    const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
+    const die = (message: string): never => {
+      UI.error(message)
+      process.exit(1)
+    }
+
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
 
+    if (args.interactive && args.command) {
+      die("--interactive cannot be used with --command")
+    }
+
+    if (args.demo && !args.interactive) {
+      die("--demo requires --interactive")
+    }
+
+    if (args.demoText && args.demo !== "text") {
+      die("--demo-text requires --demo text")
+    }
+
+    if (args.interactive && args.format === "json") {
+      die("--interactive cannot be used with --format json")
+    }
+
+    if (args.interactive && !process.stdin.isTTY) {
+      die("--interactive requires a TTY")
+    }
+
+    if (args.interactive && !process.stdout.isTTY) {
+      die("--interactive requires a TTY stdout")
+    }
+
+    const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
     const directory = (() => {
-      if (!args.dir) return undefined
+      if (!args.dir) return args.attach ? undefined : root
       if (args.attach) return args.dir
+
       try {
-        process.chdir(args.dir)
+        process.chdir(path.isAbsolute(args.dir) ? args.dir : path.join(root, args.dir))
         return process.cwd()
       } catch {
         UI.error("Failed to change directory to " + args.dir)
         process.exit(1)
       }
     })()
+    const attachHeaders = (() => {
+      if (!args.attach) return undefined
+      const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
+      if (!password) return undefined
+      const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
+      const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+      return { Authorization: auth }
+    })()
+    const attachSDK = (dir?: string) => {
+      return createOpencodeClient({
+        baseUrl: args.attach!,
+        directory: dir,
+        headers: attachHeaders,
+      })
+    }
 
-    const files: { type: "file"; url: string; filename: string; mime: string }[] = []
+    const files: FilePart[] = []
     if (args.file) {
       const list = Array.isArray(args.file) ? args.file : [args.file]
 
       for (const filePath of list) {
-        const resolvedPath = path.resolve(process.cwd(), filePath)
+        const resolvedPath = path.resolve(args.attach ? root : (directory ?? root), filePath)
         if (!(await Filesystem.exists(resolvedPath))) {
           UI.error(`File not found: ${filePath}`)
           process.exit(1)
@@ -341,7 +281,7 @@ export const RunCommand = cmd({
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
-    if (message.trim().length === 0 && !args.command) {
+    if (message.trim().length === 0 && !args.command && !args.interactive) {
       UI.error("You must provide a message or a command")
       process.exit(1)
     }
@@ -351,23 +291,25 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
-    const rules: Permission.Ruleset = [
-      {
-        permission: "question",
-        action: "deny",
-        pattern: "*",
-      },
-      {
-        permission: "plan_enter",
-        action: "deny",
-        pattern: "*",
-      },
-      {
-        permission: "plan_exit",
-        action: "deny",
-        pattern: "*",
-      },
-    ]
+    const rules: Permission.Ruleset = args.interactive
+      ? []
+      : [
+          {
+            permission: "question",
+            action: "deny",
+            pattern: "*",
+          },
+          {
+            permission: "plan_enter",
+            action: "deny",
+            pattern: "*",
+          },
+          {
+            permission: "plan_exit",
+            action: "deny",
+            pattern: "*",
+          },
+        ]
 
     function title() {
       if (args.title === undefined) return
@@ -375,19 +317,83 @@ export const RunCommand = cmd({
       return message.slice(0, 50) + (message.length > 50 ? "..." : "")
     }
 
-    async function session(sdk: OpencodeClient) {
-      const baseID = args.continue ? (await sdk.session.list()).data?.find((s) => !s.parentID)?.id : args.session
+    async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
+      if (args.session) {
+        const current = await sdk.session
+          .get({
+            sessionID: args.session,
+          })
+          .catch(() => undefined)
 
-      if (baseID && args.fork) {
-        const forked = await sdk.session.fork({ sessionID: baseID })
-        return forked.data?.id
+        if (!current?.data) {
+          UI.error("Session not found")
+          process.exit(1)
+        }
+
+        if (args.fork) {
+          const forked = await sdk.session.fork({
+            sessionID: args.session,
+          })
+          const id = forked.data?.id
+          if (!id) {
+            return
+          }
+
+          return {
+            id,
+            title: forked.data?.title ?? current.data.title,
+            directory: forked.data?.directory ?? current.data.directory,
+          }
+        }
+
+        return {
+          id: current.data.id,
+          title: current.data.title,
+          directory: current.data.directory,
+        }
       }
 
-      if (baseID) return baseID
+      const base = args.continue ? (await sdk.session.list()).data?.find((item) => !item.parentID) : undefined
+
+      if (base && args.fork) {
+        const forked = await sdk.session.fork({
+          sessionID: base.id,
+        })
+        const id = forked.data?.id
+        if (!id) {
+          return
+        }
+
+        return {
+          id,
+          title: forked.data?.title ?? base.title,
+          directory: forked.data?.directory ?? base.directory,
+        }
+      }
+
+      if (base) {
+        return {
+          id: base.id,
+          title: base.title,
+          directory: base.directory,
+        }
+      }
 
       const name = title()
-      const result = await sdk.session.create({ title: name, permission: rules })
-      return result.data?.id
+      const result = await sdk.session.create({
+        title: name,
+        permission: rules,
+      })
+      const id = result.data?.id
+      if (!id) {
+        return
+      }
+
+      return {
+        id,
+        title: result.data?.title ?? name,
+        directory: result.data?.directory,
+      }
     }
 
     async function share(sdk: OpencodeClient, sessionID: string) {
@@ -405,44 +411,131 @@ export const RunCommand = cmd({
       }
     }
 
-    async function execute(sdk: OpencodeClient) {
-      function tool(part: ToolPart) {
-        try {
-          if (part.tool === "bash") return bash(props<typeof BashTool>(part))
-          if (part.tool === "glob") return glob(props<typeof GlobTool>(part))
-          if (part.tool === "grep") return grep(props<typeof GrepTool>(part))
-          if (part.tool === "read") return read(props<typeof ReadTool>(part))
-          if (part.tool === "write") return write(props<typeof WriteTool>(part))
-          if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
-          if (part.tool === "edit") return edit(props<typeof EditTool>(part))
-          if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
-          if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
-          if (part.tool === "task") return task(props<typeof TaskTool>(part))
-          if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
-          if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
-          return fallback(part)
-        } catch {
-          return fallback(part)
-        }
+    async function current(sdk: OpencodeClient): Promise<string> {
+      if (!args.attach) {
+        return directory ?? root
       }
+
+      const next = await sdk.path
+        .get()
+        .then((x) => x.data?.directory)
+        .catch(() => undefined)
+      if (next) {
+        return next
+      }
+
+      UI.error("Failed to resolve remote directory")
+      process.exit(1)
+    }
+
+    async function localAgent() {
+      if (!args.agent) return undefined
+      const name = args.agent
+
+      const entry = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(name)))
+      if (!entry) {
+        UI.println(
+          UI.Style.TEXT_WARNING_BOLD + "!",
+          UI.Style.TEXT_NORMAL,
+          `agent "${name}" not found. Falling back to default agent`,
+        )
+        return undefined
+      }
+      if (entry.mode === "subagent") {
+        UI.println(
+          UI.Style.TEXT_WARNING_BOLD + "!",
+          UI.Style.TEXT_NORMAL,
+          `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
+        )
+        return undefined
+      }
+      return name
+    }
+
+    async function attachAgent(sdk: OpencodeClient) {
+      if (!args.agent) return undefined
+      const name = args.agent
+
+      const modes = await sdk.app
+        .agents(undefined, { throwOnError: true })
+        .then((x) => x.data ?? [])
+        .catch(() => undefined)
+
+      if (!modes) {
+        UI.println(
+          UI.Style.TEXT_WARNING_BOLD + "!",
+          UI.Style.TEXT_NORMAL,
+          `failed to list agents from ${args.attach}. Falling back to default agent`,
+        )
+        return undefined
+      }
+
+      const agent = modes.find((a) => a.name === name)
+      if (!agent) {
+        UI.println(
+          UI.Style.TEXT_WARNING_BOLD + "!",
+          UI.Style.TEXT_NORMAL,
+          `agent "${name}" not found. Falling back to default agent`,
+        )
+        return undefined
+      }
+
+      if (agent.mode === "subagent") {
+        UI.println(
+          UI.Style.TEXT_WARNING_BOLD + "!",
+          UI.Style.TEXT_NORMAL,
+          `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
+        )
+        return undefined
+      }
+
+      return name
+    }
+
+    async function pickAgent(sdk: OpencodeClient) {
+      if (!args.agent) return undefined
+      if (args.attach) {
+        return attachAgent(sdk)
+      }
+
+      return localAgent()
+    }
+
+    async function execute(sdk: OpencodeClient) {
+      const sess = await session(sdk)
+      if (!sess?.id) {
+        UI.error("Session not found")
+        process.exit(1)
+      }
+      const sessionID = sess.id
 
       function emit(type: string, data: Record<string, unknown>) {
         if (args.format === "json") {
-          process.stdout.write(JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL)
+          process.stdout.write(
+            JSON.stringify({
+              type,
+              timestamp: Date.now(),
+              sessionID,
+              ...data,
+            }) + EOL,
+          )
           return true
         }
         return false
       }
 
-      const events = await sdk.event.subscribe()
-      let error: string | undefined
-
-      async function loop() {
+      // Consume one subscribed event stream for the active session and mirror it
+      // to stdout/UI. `client` is passed explicitly because attach mode may
+      // rebind the SDK to the session's directory after the subscription is
+      // created, and replies issued from inside the loop must use that client.
+      async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
         const toggles = new Map<string, boolean>()
+        let error: string | undefined
 
         for await (const event of events.stream) {
           if (
             event.type === "message.updated" &&
+            event.properties.sessionID === sessionID &&
             event.properties.info.role === "assistant" &&
             args.format !== "json" &&
             toggles.get("start") !== true
@@ -460,7 +553,7 @@ export const RunCommand = cmd({
             if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
               if (emit("tool_use", { part })) continue
               if (part.state.status === "completed") {
-                tool(part)
+                await tool(part)
                 continue
               }
               inline({
@@ -477,7 +570,7 @@ export const RunCommand = cmd({
               args.format !== "json"
             ) {
               if (toggles.get(part.id) === true) continue
-              task(props<typeof TaskTool>(part))
+              await tool(part)
               toggles.set(part.id, true)
             }
 
@@ -542,7 +635,7 @@ export const RunCommand = cmd({
             if (permission.sessionID !== sessionID) continue
 
             if (args["dangerously-skip-permissions"]) {
-              await sdk.permission.reply({
+              await client.permission.reply({
                 requestID: permission.id,
                 reply: "once",
               })
@@ -552,7 +645,7 @@ export const RunCommand = cmd({
                 UI.Style.TEXT_NORMAL +
                   `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
               )
-              await sdk.permission.reply({
+              await client.permission.reply({
                 requestID: permission.id,
                 reply: "reject",
               })
@@ -560,121 +653,106 @@ export const RunCommand = cmd({
           }
         }
       }
+      const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
+      const client = args.attach ? attachSDK(cwd) : sdk
 
       // Validate agent if specified
-      const agent = await (async () => {
-        if (!args.agent) return undefined
-        const name = args.agent
+      const agent = await pickAgent(client)
 
-        // When attaching, validate against the running server instead of local Instance state.
-        if (args.attach) {
-          const modes = await sdk.app
-            .agents(undefined, { throwOnError: true })
-            .then((x) => x.data ?? [])
-            .catch(() => undefined)
+      await share(client, sessionID)
 
-          if (!modes) {
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL,
-              `failed to list agents from ${args.attach}. Falling back to default agent`,
-            )
-            return undefined
-          }
-
-          const agent = modes.find((a) => a.name === name)
-          if (!agent) {
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL,
-              `agent "${name}" not found. Falling back to default agent`,
-            )
-            return undefined
-          }
-
-          if (agent.mode === "subagent") {
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL,
-              `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
-            )
-            return undefined
-          }
-
-          return name
-        }
-
-        const entry = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(name)))
-        if (!entry) {
-          UI.println(
-            UI.Style.TEXT_WARNING_BOLD + "!",
-            UI.Style.TEXT_NORMAL,
-            `agent "${name}" not found. Falling back to default agent`,
-          )
-          return undefined
-        }
-        if (entry.mode === "subagent") {
-          UI.println(
-            UI.Style.TEXT_WARNING_BOLD + "!",
-            UI.Style.TEXT_NORMAL,
-            `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
-          )
-          return undefined
-        }
-        return name
-      })()
-
-      const sessionID = await session(sdk)
-      if (!sessionID) {
-        UI.error("Session not found")
-        process.exit(1)
-      }
-      await share(sdk, sessionID)
-
-      loop().catch((e) => {
-        console.error(e)
-        process.exit(1)
-      })
-
-      if (args.command) {
-        await sdk.session.command({
-          sessionID,
-          agent,
-          model: args.model,
-          command: args.command,
-          arguments: message,
-          variant: args.variant,
+      if (!args.interactive) {
+        const events = await client.event.subscribe()
+        loop(client, events).catch((e) => {
+          console.error(e)
+          process.exit(1)
         })
-      } else {
-        const model = args.model ? Provider.parseModel(args.model) : undefined
-        await sdk.session.prompt({
+
+        if (args.command) {
+          await client.session.command({
+            sessionID,
+            agent,
+            model: args.model,
+            command: args.command,
+            arguments: message,
+            variant: args.variant,
+          })
+          return
+        }
+
+        const model = pick(args.model)
+        await client.session.prompt({
           sessionID,
           agent,
           model,
           variant: args.variant,
           parts: [...files, { type: "text", text: message }],
         })
+        return
       }
+
+      const model = pick(args.model)
+      const { runInteractiveMode } = await runtimeTask
+      await runInteractiveMode({
+        sdk: client,
+        directory: cwd,
+        sessionID,
+        sessionTitle: sess.title,
+        resume: Boolean(args.session || args.continue) && !args.fork,
+        agent,
+        model,
+        variant: args.variant,
+        files,
+        initialInput: rawMessage.trim().length > 0 ? rawMessage : undefined,
+        thinking,
+        demo: args.demo as RunDemo | undefined,
+        demoText: args.demoText,
+      })
+      return
     }
 
-    if (args.attach) {
-      const headers = (() => {
-        const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
-        if (!password) return undefined
-        const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
-        const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
-        return { Authorization: auth }
-      })()
-      const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
-      return await execute(sdk)
-    }
-
-    await bootstrap(process.cwd(), async () => {
+    if (args.interactive && !args.attach && !args.session && !args.continue) {
+      const model = pick(args.model)
+      const { runInteractiveLocalMode } = await runtimeTask
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const { Server } = await import("@/server/server")
         const request = new Request(input, init)
         return Server.Default().app.fetch(request)
       }) as typeof globalThis.fetch
-      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
+
+      return await runInteractiveLocalMode({
+        directory: directory ?? root,
+        fetch: fetchFn,
+        resolveAgent: localAgent,
+        session,
+        share,
+        agent: args.agent,
+        model,
+        variant: args.variant,
+        files,
+        initialInput: rawMessage.trim().length > 0 ? rawMessage : undefined,
+        thinking,
+        demo: args.demo as RunDemo | undefined,
+        demoText: args.demoText,
+      })
+    }
+
+    if (args.attach) {
+      const sdk = attachSDK(directory)
+      return await execute(sdk)
+    }
+
+    await bootstrap(directory ?? root, async () => {
+      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const { Server } = await import("@/server/server")
+        const request = new Request(input, init)
+        return Server.Default().app.fetch(request)
+      }) as typeof globalThis.fetch
+      const sdk = createOpencodeClient({
+        baseUrl: "http://opencode.internal",
+        fetch: fetchFn,
+        directory,
+      })
       await execute(sdk)
     })
   },
