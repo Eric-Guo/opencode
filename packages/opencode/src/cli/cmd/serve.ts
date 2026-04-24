@@ -7,9 +7,6 @@ import { Server } from "../../server/server"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
-import { Workspace } from "../../control-plane/workspace"
-import { Project } from "../../project"
-import { Installation } from "../../installation"
 import { PushRelay } from "../../server/push-relay"
 import { Log } from "../../util"
 import { Global } from "../../global"
@@ -192,6 +189,7 @@ async function printPairQR(pair: PairPayload) {
   console.log("scan qr code in mobile app or phone camera (latest 1.0.2.1)")
   console.log(code)
 }
+import { bootstrap } from "../bootstrap"
 
 export const ServeCommand = cmd({
   command: "serve",
@@ -217,7 +215,7 @@ export const ServeCommand = cmd({
       }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const opts = await resolveNetworkOptions(args)
+    const opts = await bootstrap(process.cwd(), () => resolveNetworkOptions(args))
     const relayURL = (
       args["relay-url"] ??
       process.env.OPENCODE_EXPERIMENTAL_PUSH_RELAY_URL ??
@@ -269,7 +267,6 @@ export const ServeCommand = cmd({
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
-
     const server = await Server.listen(opts)
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
