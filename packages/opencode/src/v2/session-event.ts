@@ -1,47 +1,11 @@
-import { Identifier } from "@/id/id"
-import { FileAttachment, Prompt } from "./session-prompt"
 import { SessionID } from "@/session/schema"
-import { SyncEvent } from "@/sync"
-import { withStatics } from "@/util/schema"
+import { Event as BaseEvent } from "./event"
+import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
 export { FileAttachment }
 
-export const ID = Schema.String.pipe(
-  Schema.brand("Session.Event.ID"),
-  withStatics((s) => ({
-    create: () => s.make(Identifier.create("evt", "ascending")),
-  })),
-)
+export const ID = BaseEvent.ID
 export type ID = Schema.Schema.Type<typeof ID>
-
-function defineEvent<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
-  type: Type
-  schema: Fields
-  version?: number
-}) {
-  const Event = Schema.Struct({
-    id: ID,
-    sessionID: SessionID,
-    metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
-    timestamp: Schema.DateTimeUtc,
-    type: Schema.Literal(input.type),
-    version: Schema.Number.pipe(Schema.optional),
-    ...input.schema,
-  }).annotate({
-    identifier: input.type,
-  })
-
-  const Sync = SyncEvent.define({
-    type: input.type,
-    version: input.version ?? 1,
-    aggregate: "sessionID",
-    schema: Event,
-  })
-
-  return Object.assign(Event, {
-    Sync,
-  })
-}
 
 export const Source = Schema.Struct({
   start: Schema.Number,
@@ -52,26 +16,36 @@ export const Source = Schema.Struct({
 })
 export type Source = Schema.Schema.Type<typeof Source>
 
-export const Prompted = defineEvent({
+const Base = {
+  sessionID: SessionID,
+}
+
+export const Prompted = BaseEvent.define({
   type: "session.prompted",
+  aggregate: "sessionID",
   schema: {
+    ...Base,
     prompt: Prompt,
   },
 })
 export type Prompted = Schema.Schema.Type<typeof Prompted>
 
-export const Synthetic = defineEvent({
+export const Synthetic = BaseEvent.define({
   type: "session.synthetic",
+  aggregate: "sessionID",
   schema: {
+    ...Base,
     text: Schema.String,
   },
 })
 export type Synthetic = Schema.Schema.Type<typeof Synthetic>
 
 export namespace Step {
-  export const Started = defineEvent({
+  export const Started = BaseEvent.define({
     type: "session.step.started",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       model: Schema.Struct({
         id: Schema.String,
         providerID: Schema.String,
@@ -81,9 +55,11 @@ export namespace Step {
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Ended = defineEvent({
+  export const Ended = BaseEvent.define({
     type: "session.step.ended",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       reason: Schema.String,
       cost: Schema.Number,
       tokens: Schema.Struct({
@@ -101,23 +77,30 @@ export namespace Step {
 }
 
 export namespace Text {
-  export const Started = defineEvent({
+  export const Started = BaseEvent.define({
     type: "session.text.started",
-    schema: {},
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+    },
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Delta = defineEvent({
+  export const Delta = BaseEvent.define({
     type: "session.text.delta",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       delta: Schema.String,
     },
   })
   export type Delta = Schema.Schema.Type<typeof Delta>
 
-  export const Ended = defineEvent({
+  export const Ended = BaseEvent.define({
     type: "session.text.ended",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       text: Schema.String,
     },
   })
@@ -125,23 +108,30 @@ export namespace Text {
 }
 
 export namespace Reasoning {
-  export const Started = defineEvent({
+  export const Started = BaseEvent.define({
     type: "session.reasoning.started",
-    schema: {},
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+    },
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Delta = defineEvent({
+  export const Delta = BaseEvent.define({
     type: "session.reasoning.delta",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       delta: Schema.String,
     },
   })
   export type Delta = Schema.Schema.Type<typeof Delta>
 
-  export const Ended = defineEvent({
+  export const Ended = BaseEvent.define({
     type: "session.reasoning.ended",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       text: Schema.String,
     },
   })
@@ -150,27 +140,33 @@ export namespace Reasoning {
 
 export namespace Tool {
   export namespace Input {
-    export const Started = defineEvent({
+    export const Started = BaseEvent.define({
       type: "session.tool.input.started",
+      aggregate: "sessionID",
       schema: {
+        ...Base,
         callID: Schema.String,
         name: Schema.String,
       },
     })
     export type Started = Schema.Schema.Type<typeof Started>
 
-    export const Delta = defineEvent({
+    export const Delta = BaseEvent.define({
       type: "session.tool.input.delta",
+      aggregate: "sessionID",
       schema: {
+        ...Base,
         callID: Schema.String,
         delta: Schema.String,
       },
     })
     export type Delta = Schema.Schema.Type<typeof Delta>
 
-    export const Ended = defineEvent({
+    export const Ended = BaseEvent.define({
       type: "session.tool.input.ended",
+      aggregate: "sessionID",
       schema: {
+        ...Base,
         callID: Schema.String,
         text: Schema.String,
       },
@@ -178,9 +174,11 @@ export namespace Tool {
     export type Ended = Schema.Schema.Type<typeof Ended>
   }
 
-  export const Called = defineEvent({
+  export const Called = BaseEvent.define({
     type: "session.tool.called",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       callID: Schema.String,
       tool: Schema.String,
       input: Schema.Record(Schema.String, Schema.Unknown),
@@ -192,9 +190,11 @@ export namespace Tool {
   })
   export type Called = Schema.Schema.Type<typeof Called>
 
-  export const Success = defineEvent({
+  export const Success = BaseEvent.define({
     type: "session.tool.success",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       callID: Schema.String,
       title: Schema.String,
       output: Schema.String.pipe(Schema.optional),
@@ -207,9 +207,11 @@ export namespace Tool {
   })
   export type Success = Schema.Schema.Type<typeof Success>
 
-  export const Error = defineEvent({
+  export const Error = BaseEvent.define({
     type: "session.tool.error",
+    aggregate: "sessionID",
     schema: {
+      ...Base,
       callID: Schema.String,
       error: Schema.String,
       provider: Schema.Struct({
@@ -233,18 +235,22 @@ export const RetryError = Schema.Struct({
 })
 export type RetryError = Schema.Schema.Type<typeof RetryError>
 
-export const Retried = defineEvent({
+export const Retried = BaseEvent.define({
   type: "session.retried",
+  aggregate: "sessionID",
   schema: {
+    ...Base,
     attempt: Schema.Number,
     error: RetryError,
   },
 })
 export type Retried = Schema.Schema.Type<typeof Retried>
 
-export const Compacted = defineEvent({
+export const Compacted = BaseEvent.define({
   type: "session.compacted",
+  aggregate: "sessionID",
   schema: {
+    ...Base,
     auto: Schema.Boolean,
     overflow: Schema.Boolean.pipe(Schema.optional),
   },

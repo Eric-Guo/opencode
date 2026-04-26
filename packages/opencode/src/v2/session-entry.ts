@@ -1,12 +1,13 @@
 import { Schema } from "effect"
 import { Prompt } from "./session-prompt"
 import { SessionEvent } from "./session-event"
+import { Event } from "./event"
 
-export const ID = SessionEvent.ID
+export const ID = Event.ID
 export type ID = Schema.Schema.Type<typeof ID>
 
 const Base = {
-  id: SessionEvent.ID,
+  id: ID,
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   time: Schema.Struct({
     created: Schema.DateTimeUtc,
