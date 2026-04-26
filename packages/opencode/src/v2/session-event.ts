@@ -16,12 +16,16 @@ export const Source = Schema.Struct({
 })
 export type Source = Schema.Schema.Type<typeof Source>
 
+const Base = {
+  timestamp: Schema.DateTimeUtcFromMillis,
+  sessionID: SessionID,
+}
+
 export const Prompted = Event.define({
   type: "session.next.prompted",
   aggregate: "sessionID",
   schema: {
-    timestamp: Schema.DateTimeUtcFromMillis,
-    sessionID: SessionID,
+    ...Base,
     prompt: Prompt,
   },
 })
@@ -31,8 +35,7 @@ export const Synthetic = Event.define({
   type: "session.next.synthetic",
   aggregate: "sessionID",
   schema: {
-    timestamp: Schema.DateTimeUtcFromMillis,
-    sessionID: SessionID,
+    ...Base,
     text: Schema.String,
   },
 })
@@ -43,8 +46,7 @@ export namespace Step {
     type: "session.next.step.started",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       model: Schema.Struct({
         id: Schema.String,
         providerID: Schema.String,
@@ -58,8 +60,7 @@ export namespace Step {
     type: "session.next.step.ended",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       reason: Schema.String,
       cost: Schema.Number,
       tokens: Schema.Struct({
@@ -81,8 +82,7 @@ export namespace Text {
     type: "session.next.text.started",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
     },
   })
   export type Started = Schema.Schema.Type<typeof Started>
@@ -91,8 +91,7 @@ export namespace Text {
     type: "session.next.text.delta",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       delta: Schema.String,
     },
   })
@@ -102,8 +101,7 @@ export namespace Text {
     type: "session.next.text.ended",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       text: Schema.String,
     },
   })
@@ -115,8 +113,7 @@ export namespace Reasoning {
     type: "session.next.reasoning.started",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       reasoningID: Schema.String,
     },
   })
@@ -126,8 +123,7 @@ export namespace Reasoning {
     type: "session.next.reasoning.delta",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       reasoningID: Schema.String,
       delta: Schema.String,
     },
@@ -138,8 +134,7 @@ export namespace Reasoning {
     type: "session.next.reasoning.ended",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       reasoningID: Schema.String,
       text: Schema.String,
     },
@@ -153,8 +148,7 @@ export namespace Tool {
       type: "session.next.tool.input.started",
       aggregate: "sessionID",
       schema: {
-        timestamp: Schema.DateTimeUtcFromMillis,
-        sessionID: SessionID,
+        ...Base,
         callID: Schema.String,
         name: Schema.String,
       },
@@ -165,8 +159,7 @@ export namespace Tool {
       type: "session.next.tool.input.delta",
       aggregate: "sessionID",
       schema: {
-        timestamp: Schema.DateTimeUtcFromMillis,
-        sessionID: SessionID,
+        ...Base,
         callID: Schema.String,
         delta: Schema.String,
       },
@@ -177,8 +170,7 @@ export namespace Tool {
       type: "session.next.tool.input.ended",
       aggregate: "sessionID",
       schema: {
-        timestamp: Schema.DateTimeUtcFromMillis,
-        sessionID: SessionID,
+        ...Base,
         callID: Schema.String,
         text: Schema.String,
       },
@@ -190,8 +182,7 @@ export namespace Tool {
     type: "session.next.tool.called",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       callID: Schema.String,
       tool: Schema.String,
       input: Schema.Record(Schema.String, Schema.Unknown),
@@ -203,16 +194,26 @@ export namespace Tool {
   })
   export type Called = Schema.Schema.Type<typeof Called>
 
+  export const Progress = Event.define({
+    type: "session.next.tool.progress",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      callID: Schema.String,
+      details: Schema.Record(Schema.String, Schema.Unknown),
+    },
+  })
+  export type Progress = Schema.Schema.Type<typeof Progress>
+
   export const Success = Event.define({
     type: "session.next.tool.success",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       callID: Schema.String,
-      title: Schema.String,
       output: Schema.String.pipe(Schema.optional),
       attachments: Schema.Array(FileAttachment).pipe(Schema.optional),
+      details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
@@ -225,8 +226,7 @@ export namespace Tool {
     type: "session.next.tool.error",
     aggregate: "sessionID",
     schema: {
-      timestamp: Schema.DateTimeUtcFromMillis,
-      sessionID: SessionID,
+      ...Base,
       callID: Schema.String,
       error: Schema.String,
       provider: Schema.Struct({
@@ -254,8 +254,7 @@ export const Retried = Event.define({
   type: "session.next.retried",
   aggregate: "sessionID",
   schema: {
-    timestamp: Schema.DateTimeUtcFromMillis,
-    sessionID: SessionID,
+    ...Base,
     attempt: Schema.Number,
     error: RetryError,
   },
@@ -266,8 +265,7 @@ export const Compacted = Event.define({
   type: "session.next.compacted",
   aggregate: "sessionID",
   schema: {
-    timestamp: Schema.DateTimeUtcFromMillis,
-    sessionID: SessionID,
+    ...Base,
     auto: Schema.Boolean,
     overflow: Schema.Boolean.pipe(Schema.optional),
   },
@@ -287,6 +285,7 @@ export const All = Schema.Union(
     Tool.Input.Delta,
     Tool.Input.Ended,
     Tool.Called,
+    Tool.Progress,
     Tool.Success,
     Tool.Error,
     Reasoning.Started,

@@ -62,16 +62,14 @@ export class ToolStatePending extends Schema.Class<ToolStatePending>("Session.En
 export class ToolStateRunning extends Schema.Class<ToolStateRunning>("Session.Entry.ToolState.Running")({
   status: Schema.Literal("running"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  title: Schema.String.pipe(Schema.optional),
-  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 }) {}
 
 export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Session.Entry.ToolState.Completed")({
   status: Schema.Literal("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
   output: Schema.String,
-  title: Schema.String,
-  metadata: Schema.Record(Schema.String, Schema.Unknown),
+  details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
 }) {}
 
@@ -79,7 +77,7 @@ export class ToolStateError extends Schema.Class<ToolStateError>("Session.Entry.
   status: Schema.Literal("error"),
   input: Schema.Record(Schema.String, Schema.Unknown),
   error: Schema.String,
-  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 }) {}
 
 export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(

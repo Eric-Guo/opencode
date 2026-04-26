@@ -380,7 +380,6 @@ export const layer: Layer.Layer<
             SyncEvent.run(SessionEvent.Tool.Success.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
-              title: value.output.title,
               output: value.output.output,
               attachments: value.output.attachments?.map((item: MessageV2.FilePart) => ({
                 uri: item.url,
@@ -396,9 +395,9 @@ export const layer: Layer.Layer<
                     }
                   : {}),
               })),
+              details: value.output.metadata,
               provider: {
                 executed: toolCall?.part.metadata?.providerExecuted === true,
-                metadata: value.output.metadata,
               },
               timestamp: DateTime.makeUnsafe(Date.now()),
             })

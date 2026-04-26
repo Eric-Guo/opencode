@@ -169,6 +169,16 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
+    "session.next.tool.progress": (event) => {
+      if (currentAssistant) {
+        adapter.updateAssistant(
+          produce(currentAssistant, (draft) => {
+            const match = latestTool(draft, event.data.callID)
+            if (match && match.state.status === "running") match.state.details = event.data.details
+          }),
+        )
+      }
+    },
     "session.next.tool.success": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
@@ -179,8 +189,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
                 status: "completed",
                 input: match.state.input,
                 output: event.data.output ?? "",
-                title: event.data.title,
-                metadata: event.metadata ?? {},
+                details: event.data.details,
                 attachments: [...(event.data.attachments ?? [])],
               }
             }
@@ -198,7 +207,6 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
                 status: "error",
                 error: event.data.error,
                 input: match.state.input,
-                metadata: event.metadata ?? {},
               }
             }
           }),
