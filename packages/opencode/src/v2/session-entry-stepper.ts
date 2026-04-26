@@ -60,8 +60,10 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
   const latestText = (assistant: DraftAssistant | undefined) =>
     assistant?.content.findLast((item): item is DraftText => item.type === "text")
 
-  const latestReasoning = (assistant: DraftAssistant | undefined) =>
-    assistant?.content.findLast((item): item is DraftReasoning => item.type === "reasoning")
+  const latestReasoning = (assistant: DraftAssistant | undefined, reasoningID: string) =>
+    assistant?.content.findLast(
+      (item): item is DraftReasoning => item.type === "reasoning" && item.reasoningID === reasoningID,
+    )
 
   SessionEvent.All.match(event, {
     "session.next.prompted": (event) => {
@@ -203,12 +205,13 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "session.next.reasoning.started": () => {
+    "session.next.reasoning.started": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
             draft.content.push({
               type: "reasoning",
+              reasoningID: event.data.reasoningID,
               text: "",
             })
           }),
@@ -219,7 +222,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
-            const match = latestReasoning(draft)
+            const match = latestReasoning(draft, event.data.reasoningID)
             if (match) match.text += event.data.delta
           }),
         )
@@ -229,7 +232,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
-            const match = latestReasoning(draft)
+            const match = latestReasoning(draft, event.data.reasoningID)
             if (match) match.text = event.data.text
           }),
         )

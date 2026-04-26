@@ -226,6 +226,7 @@ export const layer: Layer.Layer<
             if (value.id in ctx.reasoningMap) return
             SyncEvent.run(SessionEvent.Reasoning.Started.Sync, {
               sessionID: ctx.sessionID,
+              reasoningID: value.id,
               timestamp: DateTime.makeUnsafe(Date.now()),
             })
             ctx.reasoningMap[value.id] = {
@@ -242,6 +243,12 @@ export const layer: Layer.Layer<
 
           case "reasoning-delta":
             if (!(value.id in ctx.reasoningMap)) return
+            SyncEvent.run(SessionEvent.Reasoning.Delta.Sync, {
+              sessionID: ctx.sessionID,
+              reasoningID: value.id,
+              delta: value.text,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             yield* session.updatePartDelta({
@@ -257,6 +264,7 @@ export const layer: Layer.Layer<
             if (!(value.id in ctx.reasoningMap)) return
             SyncEvent.run(SessionEvent.Reasoning.Ended.Sync, {
               sessionID: ctx.sessionID,
+              reasoningID: value.id,
               text: ctx.reasoningMap[value.id].text,
               timestamp: DateTime.makeUnsafe(Date.now()),
             })
