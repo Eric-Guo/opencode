@@ -18,6 +18,7 @@ const paths = {
   data,
   bin: path.join(cache, "bin"),
   log: path.join(data, "log"),
+  repos: path.join(data, "repos"),
   cache,
   config,
   state,
@@ -33,6 +34,7 @@ await Promise.all([
   fs.mkdir(Path.state, { recursive: true }),
   fs.mkdir(Path.log, { recursive: true }),
   fs.mkdir(Path.bin, { recursive: true }),
+  fs.mkdir(Path.repos, { recursive: true }),
 ])
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Global") {}
@@ -45,6 +47,7 @@ export interface Interface {
   readonly state: string
   readonly bin: string
   readonly log: string
+  readonly repos: string
 }
 
 export const layer = Layer.effect(
@@ -58,6 +61,7 @@ export const layer = Layer.effect(
       state: Path.state,
       bin: Path.bin,
       log: Path.log,
+      repos: Path.repos,
     })
   }),
 )

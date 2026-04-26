@@ -103,6 +103,7 @@ const testGlobal = Layer.succeed(
     state: os.tmpdir(),
     bin: os.tmpdir(),
     log: os.tmpdir(),
+    repos: os.tmpdir(),
   }),
 )
 
