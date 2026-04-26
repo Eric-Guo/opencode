@@ -16,15 +16,11 @@ export const Source = Schema.Struct({
 })
 export type Source = Schema.Schema.Type<typeof Source>
 
-const Base = {
-  sessionID: SessionID,
-}
-
 export const Prompted = BaseEvent.define({
   type: "session.prompted",
   aggregate: "sessionID",
   schema: {
-    ...Base,
+    sessionID: SessionID,
     prompt: Prompt,
   },
 })
@@ -34,7 +30,7 @@ export const Synthetic = BaseEvent.define({
   type: "session.synthetic",
   aggregate: "sessionID",
   schema: {
-    ...Base,
+    sessionID: SessionID,
     text: Schema.String,
   },
 })
@@ -45,7 +41,7 @@ export namespace Step {
     type: "session.step.started",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       model: Schema.Struct({
         id: Schema.String,
         providerID: Schema.String,
@@ -59,7 +55,7 @@ export namespace Step {
     type: "session.step.ended",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       reason: Schema.String,
       cost: Schema.Number,
       tokens: Schema.Struct({
@@ -81,7 +77,7 @@ export namespace Text {
     type: "session.text.started",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
     },
   })
   export type Started = Schema.Schema.Type<typeof Started>
@@ -90,7 +86,7 @@ export namespace Text {
     type: "session.text.delta",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       delta: Schema.String,
     },
   })
@@ -100,7 +96,7 @@ export namespace Text {
     type: "session.text.ended",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       text: Schema.String,
     },
   })
@@ -112,7 +108,7 @@ export namespace Reasoning {
     type: "session.reasoning.started",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
     },
   })
   export type Started = Schema.Schema.Type<typeof Started>
@@ -121,7 +117,7 @@ export namespace Reasoning {
     type: "session.reasoning.delta",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       delta: Schema.String,
     },
   })
@@ -131,7 +127,7 @@ export namespace Reasoning {
     type: "session.reasoning.ended",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       text: Schema.String,
     },
   })
@@ -144,7 +140,7 @@ export namespace Tool {
       type: "session.tool.input.started",
       aggregate: "sessionID",
       schema: {
-        ...Base,
+        sessionID: SessionID,
         callID: Schema.String,
         name: Schema.String,
       },
@@ -155,7 +151,7 @@ export namespace Tool {
       type: "session.tool.input.delta",
       aggregate: "sessionID",
       schema: {
-        ...Base,
+        sessionID: SessionID,
         callID: Schema.String,
         delta: Schema.String,
       },
@@ -166,7 +162,7 @@ export namespace Tool {
       type: "session.tool.input.ended",
       aggregate: "sessionID",
       schema: {
-        ...Base,
+        sessionID: SessionID,
         callID: Schema.String,
         text: Schema.String,
       },
@@ -178,7 +174,7 @@ export namespace Tool {
     type: "session.tool.called",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       callID: Schema.String,
       tool: Schema.String,
       input: Schema.Record(Schema.String, Schema.Unknown),
@@ -194,7 +190,7 @@ export namespace Tool {
     type: "session.tool.success",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       callID: Schema.String,
       title: Schema.String,
       output: Schema.String.pipe(Schema.optional),
@@ -211,7 +207,7 @@ export namespace Tool {
     type: "session.tool.error",
     aggregate: "sessionID",
     schema: {
-      ...Base,
+      sessionID: SessionID,
       callID: Schema.String,
       error: Schema.String,
       provider: Schema.Struct({
@@ -239,7 +235,7 @@ export const Retried = BaseEvent.define({
   type: "session.retried",
   aggregate: "sessionID",
   schema: {
-    ...Base,
+    sessionID: SessionID,
     attempt: Schema.Number,
     error: RetryError,
   },
@@ -250,7 +246,7 @@ export const Compacted = BaseEvent.define({
   type: "session.compacted",
   aggregate: "sessionID",
   schema: {
-    ...Base,
+    sessionID: SessionID,
     auto: Schema.Boolean,
     overflow: Schema.Boolean.pipe(Schema.optional),
   },
