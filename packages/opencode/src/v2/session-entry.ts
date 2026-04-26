@@ -107,6 +107,7 @@ export class AssistantText extends Schema.Class<AssistantText>("Session.Entry.As
 
 export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Session.Entry.Assistant.Reasoning")({
   type: Schema.Literal("reasoning"),
+  reasoningID: Schema.String,
   text: Schema.String,
 }) {}
 

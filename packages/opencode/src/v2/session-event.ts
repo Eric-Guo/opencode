@@ -117,6 +117,7 @@ export namespace Reasoning {
     schema: {
       timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
+      reasoningID: Schema.String,
     },
   })
   export type Started = Schema.Schema.Type<typeof Started>
@@ -127,6 +128,7 @@ export namespace Reasoning {
     schema: {
       timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
+      reasoningID: Schema.String,
       delta: Schema.String,
     },
   })
@@ -138,6 +140,7 @@ export namespace Reasoning {
     schema: {
       timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
+      reasoningID: Schema.String,
       text: Schema.String,
     },
   })
