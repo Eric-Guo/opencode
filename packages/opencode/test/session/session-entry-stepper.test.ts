@@ -414,13 +414,13 @@ describe("session-entry-stepper", () => {
             (callID, title, input, output, metadata, attachments, parts) => {
               const next = run(
                 [
-                  SessionEvent.Tool.Input.Started.create({ callID, name: "bash", timestamp: time(1) }),
+                  SessionEvent.Tool.Input.Started.create({ callID, name: "shell", timestamp: time(1) }),
                   ...parts.map((x, i) =>
                     SessionEvent.Tool.Input.Delta.create({ callID, delta: x, timestamp: time(i + 2) }),
                   ),
                   SessionEvent.Tool.Called.create({
                     callID,
-                    tool: "bash",
+                    tool: "shell",
                     input,
                     provider: { executed: true },
                     timestamp: time(parts.length + 2),
@@ -459,10 +459,10 @@ describe("session-entry-stepper", () => {
           FastCheck.property(word, dict, word, maybe(dict), (callID, input, error, metadata) => {
             const next = run(
               [
-                SessionEvent.Tool.Input.Started.create({ callID, name: "bash", timestamp: time(1) }),
+                SessionEvent.Tool.Input.Started.create({ callID, name: "shell", timestamp: time(1) }),
                 SessionEvent.Tool.Called.create({
                   callID,
-                  tool: "bash",
+                  tool: "shell",
                   input,
                   provider: { executed: true },
                   timestamp: time(2),
@@ -496,7 +496,7 @@ describe("session-entry-stepper", () => {
           FastCheck.property(word, word, (callID, title) => {
             const next = run(
               [
-                SessionEvent.Tool.Input.Started.create({ callID, name: "bash", timestamp: time(1) }),
+                SessionEvent.Tool.Input.Started.create({ callID, name: "shell", timestamp: time(1) }),
                 SessionEvent.Tool.Success.create({
                   callID,
                   title,
@@ -691,10 +691,10 @@ describe("session-entry-stepper", () => {
                 SessionEvent.Reasoning.Started.create({ timestamp: time(2) }),
                 ...reason.map((x, i) => SessionEvent.Reasoning.Delta.create({ delta: x, timestamp: time(i + 3) })),
                 SessionEvent.Reasoning.Ended.create({ text: end, timestamp: time(reason.length + 3) }),
-                SessionEvent.Tool.Input.Started.create({ callID, name: "bash", timestamp: time(reason.length + 4) }),
+                SessionEvent.Tool.Input.Started.create({ callID, name: "shell", timestamp: time(reason.length + 4) }),
                 SessionEvent.Tool.Called.create({
                   callID,
-                  tool: "bash",
+                  tool: "shell",
                   input,
                   provider: { executed: true },
                   timestamp: time(reason.length + 5),
@@ -771,10 +771,10 @@ describe("session-entry-stepper", () => {
           FastCheck.property(dict, dict, word, word, (a, b, title, error) => {
             const next = run(
               [
-                SessionEvent.Tool.Input.Started.create({ callID: "a", name: "bash", timestamp: time(1) }),
+                SessionEvent.Tool.Input.Started.create({ callID: "a", name: "shell", timestamp: time(1) }),
                 SessionEvent.Tool.Called.create({
                   callID: "a",
-                  tool: "bash",
+                  tool: "shell",
                   input: a,
                   provider: { executed: true },
                   timestamp: time(2),
@@ -789,7 +789,7 @@ describe("session-entry-stepper", () => {
                 SessionEvent.Tool.Input.Started.create({ callID: "b", name: "grep", timestamp: time(4) }),
                 SessionEvent.Tool.Called.create({
                   callID: "b",
-                  tool: "bash",
+                  tool: "shell",
                   input: b,
                   provider: { executed: true },
                   timestamp: time(5),
@@ -827,13 +827,13 @@ describe("session-entry-stepper", () => {
           FastCheck.property(dict, dict, word, word, text, text, (a, b, titleA, titleB, deltaA, deltaB) => {
             const next = run(
               [
-                SessionEvent.Tool.Input.Started.create({ callID: "a", name: "bash", timestamp: time(1) }),
+                SessionEvent.Tool.Input.Started.create({ callID: "a", name: "shell", timestamp: time(1) }),
                 SessionEvent.Tool.Input.Started.create({ callID: "b", name: "grep", timestamp: time(2) }),
                 SessionEvent.Tool.Input.Delta.create({ callID: "a", delta: deltaA, timestamp: time(3) }),
                 SessionEvent.Tool.Input.Delta.create({ callID: "b", delta: deltaB, timestamp: time(4) }),
                 SessionEvent.Tool.Called.create({
                   callID: "a",
-                  tool: "bash",
+                  tool: "shell",
                   input: a,
                   provider: { executed: true },
                   timestamp: time(5),

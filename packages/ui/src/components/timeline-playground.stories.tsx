@@ -314,8 +314,8 @@ const TOOL_SAMPLES = {
     title: "Found 2 matches",
     metadata: {},
   },
-  bash: {
-    tool: "bash",
+  shell: {
+    tool: "shell",
     input: { command: "bun test --filter session", description: "Run session tests" },
     output:
       "bun test v1.3.13\n\n✓ session-turn.test.tsx (3 tests) 45ms\n✓ message-part.test.tsx (7 tests) 120ms\n\nTest Suites: 2 passed, 2 total\nTests:       10 passed, 10 total\nTime:        0.89s",
@@ -1333,7 +1333,7 @@ function Playground() {
       toolPart(TOOL_SAMPLES.glob),
       toolPart(TOOL_SAMPLES.grep),
       toolPart(TOOL_SAMPLES.edit),
-      toolPart(TOOL_SAMPLES.bash),
+      toolPart(TOOL_SAMPLES.shell),
       textPart(MARKDOWN_SAMPLES.mixed),
     ])
   }
@@ -1356,7 +1356,7 @@ function Playground() {
       toolPart(TOOL_SAMPLES.glob),
       toolPart(TOOL_SAMPLES.grep),
       toolPart(TOOL_SAMPLES.edit),
-      toolPart(TOOL_SAMPLES.bash),
+      toolPart(TOOL_SAMPLES.shell),
       textPart(MARKDOWN_SAMPLES.blockquote),
     ])
     addContextGroupTurn()

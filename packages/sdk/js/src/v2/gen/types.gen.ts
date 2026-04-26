@@ -1212,7 +1212,7 @@ export type PermissionConfig =
       glob?: PermissionRuleConfig
       grep?: PermissionRuleConfig
       list?: PermissionRuleConfig
-      bash?: PermissionRuleConfig
+      shell?: PermissionRuleConfig
       task?: PermissionRuleConfig
       external_directory?: PermissionRuleConfig
       todowrite?: PermissionActionConfig

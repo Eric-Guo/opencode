@@ -33,6 +33,7 @@ import type { Diagnostic } from "vscode-languageserver-types"
 import styles from "./part.module.css"
 
 const MIN_DURATION = 2000
+const SHELL = new Set(["shell", "bash"])
 
 export interface PartProps {
   index: number
@@ -90,7 +91,7 @@ export function Part(props: PartProps) {
               <Match when={props.part.type === "tool" && props.part.tool === "todowrite"}>
                 <IconQueueList width={18} height={18} />
               </Match>
-              <Match when={props.part.type === "tool" && props.part.tool === "bash"}>
+              <Match when={props.part.type === "tool" && SHELL.has(props.part.tool)}>
                 <IconCommandLine width={18} height={18} />
               </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "edit"}>
@@ -240,7 +241,7 @@ export function Part(props: PartProps) {
                       state={props.part.state}
                     />
                   </Match>
-                  <Match when={props.part.tool === "bash"}>
+                  <Match when={SHELL.has(props.part.tool)}>
                     <BashTool
                       id={props.part.id}
                       tool={props.part.tool}
