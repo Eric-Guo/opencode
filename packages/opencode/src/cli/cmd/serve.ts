@@ -10,6 +10,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { PushRelay } from "../../server/push-relay"
 import { Log } from "../../util"
 import { Global } from "@opencode-ai/core/global"
+import { bootstrap } from "../bootstrap"
 // dynamic import: static `import * as` of CJS package triggers Bun bundler splitting bug
 import type * as QRCodeType from "qrcode"
 
@@ -214,7 +215,7 @@ export const ServeCommand = cmd({
       }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const opts = await resolveNetworkOptions(args)
+    const opts = await bootstrap(process.cwd(), () => resolveNetworkOptions(args))
     const relayURL = (
       args["relay-url"] ??
       process.env.OPENCODE_EXPERIMENTAL_PUSH_RELAY_URL ??
