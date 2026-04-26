@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Prompt } from "./session-prompt"
 import { SessionEvent } from "./session-event"
 
 export const ID = SessionEvent.ID
@@ -14,22 +15,22 @@ const Base = {
 
 export class User extends Schema.Class<User>("Session.Entry.User")({
   ...Base,
-  text: SessionEvent.Prompt.fields.text,
-  files: SessionEvent.Prompt.fields.files,
-  agents: SessionEvent.Prompt.fields.agents,
+  text: Prompt.fields.text,
+  files: Prompt.fields.files,
+  agents: Prompt.fields.agents,
   type: Schema.Literal("user"),
   time: Schema.Struct({
     created: Schema.DateTimeUtc,
   }),
 }) {
-  static fromEvent(event: SessionEvent.Prompt) {
+  static fromEvent(event: SessionEvent.Prompted) {
     return new User({
       id: event.id,
       type: "user",
       metadata: event.metadata,
-      text: event.text,
-      files: event.files,
-      agents: event.agents,
+      text: event.prompt.text,
+      files: event.prompt.files,
+      agents: event.prompt.agents,
       time: { created: event.timestamp },
     })
   }
@@ -43,6 +44,7 @@ export class Synthetic extends Schema.Class<Synthetic>("Session.Entry.Synthetic"
   static fromEvent(event: SessionEvent.Synthetic) {
     return new Synthetic({
       ...event,
+      type: "synthetic",
       time: { created: event.timestamp },
     })
   }

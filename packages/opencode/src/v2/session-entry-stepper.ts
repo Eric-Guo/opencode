@@ -64,7 +64,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
     assistant?.content.findLast((item): item is DraftReasoning => item.type === "reasoning")
 
   SessionEvent.Event.match(event, {
-    prompt: (event) => {
+    "session.prompted": (event) => {
       const entry = SessionEntry.User.fromEvent(event)
       if (currentAssistant) {
         adapter.appendPending(entry)
@@ -72,10 +72,10 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
       }
       adapter.appendEntry(entry)
     },
-    synthetic: (event) => {
+    "session.synthetic": (event) => {
       adapter.appendEntry(SessionEntry.Synthetic.fromEvent(event))
     },
-    "step.started": (event) => {
+    "session.step.started": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -85,7 +85,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
       }
       adapter.appendEntry(SessionEntry.Assistant.fromEvent(event))
     },
-    "step.ended": (event) => {
+    "session.step.ended": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -96,7 +96,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "text.started": () => {
+    "session.text.started": () => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -108,7 +108,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "text.delta": (event) => {
+    "session.text.delta": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -118,8 +118,8 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "text.ended": () => {},
-    "tool.input.started": (event) => {
+    "session.text.ended": () => {},
+    "session.tool.input.started": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -139,7 +139,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "tool.input.delta": (event) => {
+    "session.tool.input.delta": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -150,8 +150,8 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "tool.input.ended": () => {},
-    "tool.called": (event) => {
+    "session.tool.input.ended": () => {},
+    "session.tool.called": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -167,7 +167,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "tool.success": (event) => {
+    "session.tool.success": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -186,7 +186,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "tool.error": (event) => {
+    "session.tool.error": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -203,7 +203,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "reasoning.started": () => {
+    "session.reasoning.started": () => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -215,7 +215,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "reasoning.delta": (event) => {
+    "session.reasoning.delta": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -225,7 +225,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    "reasoning.ended": (event) => {
+    "session.reasoning.ended": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -235,7 +235,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    retried: (event) => {
+    "session.retried": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
@@ -244,7 +244,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
         )
       }
     },
-    compacted: (event) => {
+    "session.compacted": (event) => {
       adapter.appendEntry(SessionEntry.Compaction.fromEvent(event))
     },
   })
