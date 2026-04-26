@@ -17,13 +17,10 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
   aggregate: string
   version?: number
 }) {
-  const Event = Schema.Struct({
-    id: ID,
+  const Payload = Schema.Struct({
     metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
-    timestamp: Schema.DateTimeUtc,
     type: Schema.Literal(input.type),
-    version: Schema.Number.pipe(Schema.optional),
-    ...input.schema,
+    data: Schema.Struct(input.schema),
   }).annotate({
     identifier: input.type,
   })
@@ -32,10 +29,14 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
     type: input.type,
     version: input.version ?? 1,
     aggregate: input.aggregate,
-    schema: Event,
+    schema: Payload.fields.data,
   })
 
-  return Object.assign(Event, { Sync })
+  return Object.assign(Payload, {
+    Sync,
+    version: input.version,
+    aggregate: input.aggregate,
+  })
 }
 
 export * as Event from "./event"
