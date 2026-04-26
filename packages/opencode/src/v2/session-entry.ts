@@ -26,27 +26,30 @@ export class User extends Schema.Class<User>("Session.Entry.User")({
 }) {
   static fromEvent(event: SessionEvent.Prompted) {
     return new User({
-      id: event.id,
+      id: ID.create(),
       type: "user",
       metadata: event.metadata,
-      text: event.prompt.text,
-      files: event.prompt.files,
-      agents: event.prompt.agents,
-      time: { created: event.timestamp },
+      text: event.data.prompt.text,
+      files: event.data.prompt.files,
+      agents: event.data.prompt.agents,
+      time: { created: event.data.timestamp },
     })
   }
 }
 
 export class Synthetic extends Schema.Class<Synthetic>("Session.Entry.Synthetic")({
-  ...SessionEvent.Synthetic.fields,
   ...Base,
+  sessionID: SessionEvent.Synthetic.fields.data.fields.sessionID,
+  text: SessionEvent.Synthetic.fields.data.fields.text,
   type: Schema.Literal("synthetic"),
 }) {
   static fromEvent(event: SessionEvent.Synthetic) {
     return new Synthetic({
-      ...event,
+      sessionID: event.data.sessionID,
+      text: event.data.text,
+      id: ID.create(),
       type: "synthetic",
-      time: { created: event.timestamp },
+      time: { created: event.data.timestamp },
     })
   }
 }
@@ -116,10 +119,10 @@ export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Entry.
 }) {
   static fromEvent(event: SessionEvent.Retried) {
     return new AssistantRetry({
-      attempt: event.attempt,
-      error: event.error,
+      attempt: event.data.attempt,
+      error: event.data.error,
       time: {
-        created: event.timestamp,
+        created: event.data.timestamp,
       },
     })
   }
@@ -153,10 +156,10 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
 }) {
   static fromEvent(event: SessionEvent.Step.Started) {
     return new Assistant({
-      id: event.id,
+      id: ID.create(),
       type: "assistant",
       time: {
-        created: event.timestamp,
+        created: event.data.timestamp,
       },
       content: [],
       retries: [],
@@ -165,15 +168,20 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
 }
 
 export class Compaction extends Schema.Class<Compaction>("Session.Entry.Compaction")({
-  ...SessionEvent.Compacted.fields,
   type: Schema.Literal("compaction"),
+  sessionID: SessionEvent.Compacted.fields.data.fields.sessionID,
+  auto: SessionEvent.Compacted.fields.data.fields.auto,
+  overflow: SessionEvent.Compacted.fields.data.fields.overflow,
   ...Base,
 }) {
   static fromEvent(event: SessionEvent.Compacted) {
     return new Compaction({
-      ...event,
+      sessionID: event.data.sessionID,
+      auto: event.data.auto,
+      overflow: event.data.overflow,
+      id: ID.create(),
       type: "compaction",
-      time: { created: event.timestamp },
+      time: { created: event.data.timestamp },
     })
   }
 }

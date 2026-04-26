@@ -1,10 +1,10 @@
 import { SessionID } from "@/session/schema"
-import { Event as BaseEvent } from "./event"
+import { Event } from "./event"
 import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
 export { FileAttachment }
 
-export const ID = BaseEvent.ID
+export const ID = Event.ID
 export type ID = Schema.Schema.Type<typeof ID>
 
 export const Source = Schema.Struct({
@@ -12,24 +12,26 @@ export const Source = Schema.Struct({
   end: Schema.Number,
   text: Schema.String,
 }).annotate({
-  identifier: "session.event.source",
+  identifier: "session.next.event.source",
 })
 export type Source = Schema.Schema.Type<typeof Source>
 
-export const Prompted = BaseEvent.define({
-  type: "session.prompted",
+export const Prompted = Event.define({
+  type: "session.next.prompted",
   aggregate: "sessionID",
   schema: {
+    timestamp: Schema.DateTimeUtcFromMillis,
     sessionID: SessionID,
     prompt: Prompt,
   },
 })
 export type Prompted = Schema.Schema.Type<typeof Prompted>
 
-export const Synthetic = BaseEvent.define({
-  type: "session.synthetic",
+export const Synthetic = Event.define({
+  type: "session.next.synthetic",
   aggregate: "sessionID",
   schema: {
+    timestamp: Schema.DateTimeUtcFromMillis,
     sessionID: SessionID,
     text: Schema.String,
   },
@@ -37,10 +39,11 @@ export const Synthetic = BaseEvent.define({
 export type Synthetic = Schema.Schema.Type<typeof Synthetic>
 
 export namespace Step {
-  export const Started = BaseEvent.define({
-    type: "session.step.started",
+  export const Started = Event.define({
+    type: "session.next.step.started",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       model: Schema.Struct({
         id: Schema.String,
@@ -51,10 +54,11 @@ export namespace Step {
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Ended = BaseEvent.define({
-    type: "session.step.ended",
+  export const Ended = Event.define({
+    type: "session.next.step.ended",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       reason: Schema.String,
       cost: Schema.Number,
@@ -73,29 +77,32 @@ export namespace Step {
 }
 
 export namespace Text {
-  export const Started = BaseEvent.define({
-    type: "session.text.started",
+  export const Started = Event.define({
+    type: "session.next.text.started",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
     },
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Delta = BaseEvent.define({
-    type: "session.text.delta",
+  export const Delta = Event.define({
+    type: "session.next.text.delta",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       delta: Schema.String,
     },
   })
   export type Delta = Schema.Schema.Type<typeof Delta>
 
-  export const Ended = BaseEvent.define({
-    type: "session.text.ended",
+  export const Ended = Event.define({
+    type: "session.next.text.ended",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       text: Schema.String,
     },
@@ -104,29 +111,32 @@ export namespace Text {
 }
 
 export namespace Reasoning {
-  export const Started = BaseEvent.define({
-    type: "session.reasoning.started",
+  export const Started = Event.define({
+    type: "session.next.reasoning.started",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
     },
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Delta = BaseEvent.define({
-    type: "session.reasoning.delta",
+  export const Delta = Event.define({
+    type: "session.next.reasoning.delta",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       delta: Schema.String,
     },
   })
   export type Delta = Schema.Schema.Type<typeof Delta>
 
-  export const Ended = BaseEvent.define({
-    type: "session.reasoning.ended",
+  export const Ended = Event.define({
+    type: "session.next.reasoning.ended",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       text: Schema.String,
     },
@@ -136,10 +146,11 @@ export namespace Reasoning {
 
 export namespace Tool {
   export namespace Input {
-    export const Started = BaseEvent.define({
-      type: "session.tool.input.started",
+    export const Started = Event.define({
+      type: "session.next.tool.input.started",
       aggregate: "sessionID",
       schema: {
+        timestamp: Schema.DateTimeUtcFromMillis,
         sessionID: SessionID,
         callID: Schema.String,
         name: Schema.String,
@@ -147,10 +158,11 @@ export namespace Tool {
     })
     export type Started = Schema.Schema.Type<typeof Started>
 
-    export const Delta = BaseEvent.define({
-      type: "session.tool.input.delta",
+    export const Delta = Event.define({
+      type: "session.next.tool.input.delta",
       aggregate: "sessionID",
       schema: {
+        timestamp: Schema.DateTimeUtcFromMillis,
         sessionID: SessionID,
         callID: Schema.String,
         delta: Schema.String,
@@ -158,10 +170,11 @@ export namespace Tool {
     })
     export type Delta = Schema.Schema.Type<typeof Delta>
 
-    export const Ended = BaseEvent.define({
-      type: "session.tool.input.ended",
+    export const Ended = Event.define({
+      type: "session.next.tool.input.ended",
       aggregate: "sessionID",
       schema: {
+        timestamp: Schema.DateTimeUtcFromMillis,
         sessionID: SessionID,
         callID: Schema.String,
         text: Schema.String,
@@ -170,10 +183,11 @@ export namespace Tool {
     export type Ended = Schema.Schema.Type<typeof Ended>
   }
 
-  export const Called = BaseEvent.define({
-    type: "session.tool.called",
+  export const Called = Event.define({
+    type: "session.next.tool.called",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       callID: Schema.String,
       tool: Schema.String,
@@ -186,10 +200,11 @@ export namespace Tool {
   })
   export type Called = Schema.Schema.Type<typeof Called>
 
-  export const Success = BaseEvent.define({
-    type: "session.tool.success",
+  export const Success = Event.define({
+    type: "session.next.tool.success",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       callID: Schema.String,
       title: Schema.String,
@@ -203,10 +218,11 @@ export namespace Tool {
   })
   export type Success = Schema.Schema.Type<typeof Success>
 
-  export const Error = BaseEvent.define({
-    type: "session.tool.error",
+  export const Error = Event.define({
+    type: "session.next.tool.error",
     aggregate: "sessionID",
     schema: {
+      timestamp: Schema.DateTimeUtcFromMillis,
       sessionID: SessionID,
       callID: Schema.String,
       error: Schema.String,
@@ -227,14 +243,15 @@ export const RetryError = Schema.Struct({
   responseBody: Schema.String.pipe(Schema.optional),
   metadata: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
 }).annotate({
-  identifier: "session.retry_error",
+  identifier: "session.next.retry_error",
 })
 export type RetryError = Schema.Schema.Type<typeof RetryError>
 
-export const Retried = BaseEvent.define({
-  type: "session.retried",
+export const Retried = Event.define({
+  type: "session.next.retried",
   aggregate: "sessionID",
   schema: {
+    timestamp: Schema.DateTimeUtcFromMillis,
     sessionID: SessionID,
     attempt: Schema.Number,
     error: RetryError,
@@ -242,10 +259,11 @@ export const Retried = BaseEvent.define({
 })
 export type Retried = Schema.Schema.Type<typeof Retried>
 
-export const Compacted = BaseEvent.define({
-  type: "session.compacted",
+export const Compacted = Event.define({
+  type: "session.next.compacted",
   aggregate: "sessionID",
   schema: {
+    timestamp: Schema.DateTimeUtcFromMillis,
     sessionID: SessionID,
     auto: Schema.Boolean,
     overflow: Schema.Boolean.pipe(Schema.optional),
@@ -253,7 +271,7 @@ export const Compacted = BaseEvent.define({
 })
 export type Compacted = Schema.Schema.Type<typeof Compacted>
 
-export const Event = Schema.Union(
+export const All = Schema.Union(
   [
     Prompted,
     Synthetic,
@@ -278,7 +296,8 @@ export const Event = Schema.Union(
     mode: "oneOf",
   },
 ).pipe(Schema.toTaggedUnion("type"))
-export type Event = Schema.Schema.Type<typeof Event>
+
+export type Event = Schema.Schema.Type<typeof All>
 export type Type = Event["type"]
 
 export * as SessionEvent from "./session-event"
