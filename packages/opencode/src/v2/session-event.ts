@@ -1,9 +1,10 @@
 import { Identifier } from "@/id/id"
+import { FileAttachment, Prompt } from "./session-prompt"
+import { SessionID } from "@/session/schema"
+import { SyncEvent } from "@/sync"
 import { withStatics } from "@/util/schema"
 import { Schema } from "effect"
-import { SyncEvent } from "@/sync"
-import { SessionID } from "@/session/schema"
-import * as DateTime from "effect/DateTime"
+export { FileAttachment }
 
 export const ID = Schema.String.pipe(
   Schema.brand("Session.Event.ID"),
@@ -12,109 +13,64 @@ export const ID = Schema.String.pipe(
   })),
 )
 export type ID = Schema.Schema.Type<typeof ID>
-type Stamp = Schema.Schema.Type<typeof Schema.DateTimeUtc>
-type BaseInput = {
-  id?: ID
-  sessionID: SessionID
-  metadata?: Record<string, unknown>
-  timestamp?: Stamp
+
+function defineEvent<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
+  type: Type
+  schema: Fields
+  version?: number
+}) {
+  const Event = Schema.Struct({
+    id: ID,
+    sessionID: SessionID,
+    metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+    timestamp: Schema.DateTimeUtc,
+    type: Schema.Literal(input.type),
+    version: Schema.Number.pipe(Schema.optional),
+    ...input.schema,
+  }).annotate({
+    identifier: input.type,
+  })
+
+  const Sync = SyncEvent.define({
+    type: input.type,
+    version: input.version ?? 1,
+    aggregate: "sessionID",
+    schema: Event,
+  })
+
+  return Object.assign(Event, {
+    Sync,
+  })
 }
 
-function defineEvent<Self>(identifier: string) {
-  return <const Type extends string, Fields extends Schema.Struct.Fields>(input: {
-    type: Type
-    schema: Fields
-    version?: number
-  }) => {
-    const RawEvent = Schema.Class<Self>(identifier)({
-      id: ID,
-      sessionID: SessionID,
-      metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
-      timestamp: Schema.DateTimeUtc,
-      type: Schema.Literal(input.type),
-      ...input.schema,
-    })
-    const Event = RawEvent as Exclude<typeof RawEvent, string>
-
-    const Sync = SyncEvent.define({
-      type: input.type,
-      version: input.version ?? 1,
-      aggregate: "sessionID",
-      schema: Event,
-    })
-
-    return Object.assign(Event, {
-      Sync,
-      create(value: BaseInput & Record<string, unknown>) {
-        return new (Event as unknown as new (value: Record<string, unknown>) => Self)({
-          ...value,
-          id: value.id ?? ID.create(),
-          sessionID: value.sessionID,
-          timestamp: value.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          type: input.type,
-        })
-      },
-    })
-  }
-}
-
-export class Source extends Schema.Class<Source>("Session.Event.Source")({
+export const Source = Schema.Struct({
   start: Schema.Number,
   end: Schema.Number,
   text: Schema.String,
-}) {}
+}).annotate({
+  identifier: "session.event.source",
+})
+export type Source = Schema.Schema.Type<typeof Source>
 
-export class FileAttachment extends Schema.Class<FileAttachment>("Session.Event.FileAttachment")({
-  uri: Schema.String,
-  mime: Schema.String,
-  name: Schema.String.pipe(Schema.optional),
-  description: Schema.String.pipe(Schema.optional),
-  source: Source.pipe(Schema.optional),
-}) {
-  static create(input: FileAttachment) {
-    return new FileAttachment({
-      uri: input.uri,
-      mime: input.mime,
-      name: input.name,
-      description: input.description,
-      source: input.source,
-    })
-  }
-}
-
-export class AgentAttachment extends Schema.Class<AgentAttachment>("Session.Event.AgentAttachment")({
-  name: Schema.String,
-  source: Source.pipe(Schema.optional),
-}) {}
-
-export class RetryError extends Schema.Class<RetryError>("Session.Event.Retry.Error")({
-  message: Schema.String,
-  statusCode: Schema.Number.pipe(Schema.optional),
-  isRetryable: Schema.Boolean,
-  responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  responseBody: Schema.String.pipe(Schema.optional),
-  metadata: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-}) {}
-
-export class Prompt extends defineEvent<Prompt>("Session.Event.Prompt")({
-  type: "prompt",
+export const Prompted = defineEvent({
+  type: "session.prompted",
   schema: {
-    text: Schema.String,
-    files: Schema.Array(FileAttachment).pipe(Schema.optional),
-    agents: Schema.Array(AgentAttachment).pipe(Schema.optional),
+    prompt: Prompt,
   },
-}) {}
+})
+export type Prompted = Schema.Schema.Type<typeof Prompted>
 
-export class Synthetic extends defineEvent<Synthetic>("Session.Event.Synthetic")({
-  type: "synthetic",
+export const Synthetic = defineEvent({
+  type: "session.synthetic",
   schema: {
     text: Schema.String,
   },
-}) {}
+})
+export type Synthetic = Schema.Schema.Type<typeof Synthetic>
 
 export namespace Step {
-  export class Started extends defineEvent<Started>("Session.Event.Step.Started")({
-    type: "step.started",
+  export const Started = defineEvent({
+    type: "session.step.started",
     schema: {
       model: Schema.Struct({
         id: Schema.String,
@@ -122,10 +78,11 @@ export namespace Step {
         variant: Schema.String.pipe(Schema.optional),
       }),
     },
-  }) {}
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
 
-  export class Ended extends defineEvent<Ended>("Session.Event.Step.Ended")({
-    type: "step.ended",
+  export const Ended = defineEvent({
+    type: "session.step.ended",
     schema: {
       reason: Schema.String,
       cost: Schema.Number,
@@ -139,80 +96,90 @@ export namespace Step {
         }),
       }),
     },
-  }) {}
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
 }
 
 export namespace Text {
-  export class Started extends defineEvent<Started>("Session.Event.Text.Started")({
-    type: "text.started",
+  export const Started = defineEvent({
+    type: "session.text.started",
     schema: {},
-  }) {}
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
 
-  export class Delta extends defineEvent<Delta>("Session.Event.Text.Delta")({
-    type: "text.delta",
+  export const Delta = defineEvent({
+    type: "session.text.delta",
     schema: {
       delta: Schema.String,
     },
-  }) {}
+  })
+  export type Delta = Schema.Schema.Type<typeof Delta>
 
-  export class Ended extends defineEvent<Ended>("Session.Event.Text.Ended")({
-    type: "text.ended",
+  export const Ended = defineEvent({
+    type: "session.text.ended",
     schema: {
       text: Schema.String,
     },
-  }) {}
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
 }
 
 export namespace Reasoning {
-  export class Started extends defineEvent<Started>("Session.Event.Reasoning.Started")({
-    type: "reasoning.started",
+  export const Started = defineEvent({
+    type: "session.reasoning.started",
     schema: {},
-  }) {}
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
 
-  export class Delta extends defineEvent<Delta>("Session.Event.Reasoning.Delta")({
-    type: "reasoning.delta",
+  export const Delta = defineEvent({
+    type: "session.reasoning.delta",
     schema: {
       delta: Schema.String,
     },
-  }) {}
+  })
+  export type Delta = Schema.Schema.Type<typeof Delta>
 
-  export class Ended extends defineEvent<Ended>("Session.Event.Reasoning.Ended")({
-    type: "reasoning.ended",
+  export const Ended = defineEvent({
+    type: "session.reasoning.ended",
     schema: {
       text: Schema.String,
     },
-  }) {}
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
 }
 
 export namespace Tool {
   export namespace Input {
-    export class Started extends defineEvent<Started>("Session.Event.Tool.Input.Started")({
-      type: "tool.input.started",
+    export const Started = defineEvent({
+      type: "session.tool.input.started",
       schema: {
         callID: Schema.String,
         name: Schema.String,
       },
-    }) {}
+    })
+    export type Started = Schema.Schema.Type<typeof Started>
 
-    export class Delta extends defineEvent<Delta>("Session.Event.Tool.Input.Delta")({
-      type: "tool.input.delta",
+    export const Delta = defineEvent({
+      type: "session.tool.input.delta",
       schema: {
         callID: Schema.String,
         delta: Schema.String,
       },
-    }) {}
+    })
+    export type Delta = Schema.Schema.Type<typeof Delta>
 
-    export class Ended extends defineEvent<Ended>("Session.Event.Tool.Input.Ended")({
-      type: "tool.input.ended",
+    export const Ended = defineEvent({
+      type: "session.tool.input.ended",
       schema: {
         callID: Schema.String,
         text: Schema.String,
       },
-    }) {}
+    })
+    export type Ended = Schema.Schema.Type<typeof Ended>
   }
 
-  export class Called extends defineEvent<Called>("Session.Event.Tool.Called")({
-    type: "tool.called",
+  export const Called = defineEvent({
+    type: "session.tool.called",
     schema: {
       callID: Schema.String,
       tool: Schema.String,
@@ -222,10 +189,11 @@ export namespace Tool {
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       }),
     },
-  }) {}
+  })
+  export type Called = Schema.Schema.Type<typeof Called>
 
-  export class Success extends defineEvent<Success>("Session.Event.Tool.Success")({
-    type: "tool.success",
+  export const Success = defineEvent({
+    type: "session.tool.success",
     schema: {
       callID: Schema.String,
       title: Schema.String,
@@ -236,10 +204,11 @@ export namespace Tool {
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       }),
     },
-  }) {}
+  })
+  export type Success = Schema.Schema.Type<typeof Success>
 
-  export class Error extends defineEvent<Error>("Session.Event.Tool.Error")({
-    type: "tool.error",
+  export const Error = defineEvent({
+    type: "session.tool.error",
     schema: {
       callID: Schema.String,
       error: Schema.String,
@@ -248,28 +217,43 @@ export namespace Tool {
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       }),
     },
-  }) {}
+  })
+  export type Error = Schema.Schema.Type<typeof Error>
 }
 
-export class Retried extends defineEvent<Retried>("Session.Event.Retried")({
-  type: "retried",
+export const RetryError = Schema.Struct({
+  message: Schema.String,
+  statusCode: Schema.Number.pipe(Schema.optional),
+  isRetryable: Schema.Boolean,
+  responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+  responseBody: Schema.String.pipe(Schema.optional),
+  metadata: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+}).annotate({
+  identifier: "session.retry_error",
+})
+export type RetryError = Schema.Schema.Type<typeof RetryError>
+
+export const Retried = defineEvent({
+  type: "session.retried",
   schema: {
     attempt: Schema.Number,
     error: RetryError,
   },
-}) {}
+})
+export type Retried = Schema.Schema.Type<typeof Retried>
 
-export class Compacted extends defineEvent<Compacted>("Session.Event.Compacted")({
-  type: "compacted",
+export const Compacted = defineEvent({
+  type: "session.compacted",
   schema: {
     auto: Schema.Boolean,
     overflow: Schema.Boolean.pipe(Schema.optional),
   },
-}) {}
+})
+export type Compacted = Schema.Schema.Type<typeof Compacted>
 
 export const Event = Schema.Union(
   [
-    Prompt,
+    Prompted,
     Synthetic,
     Step.Started,
     Step.Ended,
