@@ -8,6 +8,20 @@ import { tmpdir } from "../fixture/fixture"
 
 Shell.preferred.reset()
 
+const withShell = async (shell: string | undefined, fn: () => Promise<void>) => {
+  const prev = process.env.SHELL
+  if (shell === undefined) delete process.env.SHELL
+  else process.env.SHELL = shell
+  Shell.preferred.reset()
+  try {
+    await fn()
+  } finally {
+    if (prev === undefined) delete process.env.SHELL
+    else process.env.SHELL = prev
+    Shell.preferred.reset()
+  }
+}
+
 describe("pty shell args", () => {
   if (process.platform !== "win32") return
 
@@ -66,4 +80,41 @@ describe("pty shell args", () => {
       { timeout: 30000 },
     )
   }
+})
+
+describe("pty configured shell", () => {
+  test(
+    "uses configured shell for default PTY command",
+    async () => {
+      const configured = process.platform === "win32" ? Bun.which("pwsh") || Bun.which("powershell") : Bun.which("bash")
+      if (!configured) return
+
+      await withShell(process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : "/bin/sh", async () => {
+        await using dir = await tmpdir({
+          config: { shell: Shell.name(configured) },
+        })
+        await Instance.provide({
+          directory: dir.path,
+          fn: () =>
+            AppRuntime.runPromise(
+              Effect.gen(function* () {
+                const pty = yield* Pty.Service
+                const info = yield* pty.create({ title: "configured" })
+                try {
+                  if (process.platform === "win32") {
+                    expect(info.command.toLowerCase()).toBe(configured.toLowerCase())
+                  } else {
+                    expect(info.command).toBe(configured)
+                  }
+                  expect(info.args).toEqual(process.platform === "win32" ? [] : ["-l"])
+                } finally {
+                  yield* pty.remove(info.id)
+                }
+              }),
+            ),
+        })
+      })
+    },
+    { timeout: 30000 },
+  )
 })
