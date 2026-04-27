@@ -10,6 +10,7 @@ import { ProviderTransform } from "../provider"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_SCOUT from "./prompt/scout.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -82,20 +83,26 @@ export const layer = Layer.effect(
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
         const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
+        const readonlyExternalDirectory = {
+          "*": "ask",
+          ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+        } satisfies Record<string, "allow" | "ask" | "deny">
 
         const defaults = Permission.fromConfig({
           "*": "allow",
           doom_loop: "ask",
-        external_directory: {
-          "*": "ask",
-          ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-        },
-        question: "deny",
-        plan_enter: "deny",
-        plan_exit: "deny",
-        edit: "ask",
-        // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
-        read: {
+          external_directory: {
+            "*": "ask",
+            ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+          },
+          question: "deny",
+          plan_enter: "deny",
+          plan_exit: "deny",
+          edit: "ask",
+          repo_clone: "deny",
+          repo_overview: "deny",
+          // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
+          read: {
             "*": "allow",
             "*.env": "ask",
             "*.env.*": "ask",
@@ -172,15 +179,39 @@ export const layer = Layer.effect(
                 websearch: "allow",
                 codesearch: "allow",
                 read: "allow",
-                external_directory: {
-                  "*": "ask",
-                  ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-                },
+                external_directory: readonlyExternalDirectory,
               }),
               user,
             ),
             description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
             prompt: PROMPT_EXPLORE,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          scout: {
+            name: "scout",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                grep: "allow",
+                glob: "allow",
+                webfetch: "allow",
+                websearch: "allow",
+                codesearch: "allow",
+                read: "allow",
+                repo_clone: "allow",
+                repo_overview: "allow",
+                external_directory: {
+                  ...readonlyExternalDirectory,
+                  [path.join(Global.Path.data, "repos", "*")]: "allow",
+                },
+              }),
+              user,
+            ),
+            description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
+            prompt: PROMPT_SCOUT,
             options: {},
             mode: "subagent",
             native: true,
