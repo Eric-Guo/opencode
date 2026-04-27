@@ -16,7 +16,7 @@ Interactive playground for animating the Shell tool subtitle ("submessage") in t
 
 ### Production component path
 - Trigger layout: \`packages/ui/src/components/basic-tool.tsx\`
-- Bash tool subtitle source: \`packages/ui/src/components/message-part.tsx\` (tool: \`bash\`, \`trigger.subtitle\`)
+- Shell tool subtitle source: \`packages/ui/src/components/message-part.tsx\` (tool: \`shell\`, \`trigger.subtitle\`)
 
 ### What this playground tunes
 - Width reveal (spring-driven pixel width via \`useSpring\`)

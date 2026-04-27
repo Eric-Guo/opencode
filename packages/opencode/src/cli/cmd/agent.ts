@@ -10,16 +10,16 @@ import fs from "fs/promises"
 import { Filesystem } from "../../util"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
+import { ShellToolID } from "../../tool/shell/id"
 import { EOL } from "os"
 import type { Argv } from "yargs"
-
 type AgentMode = "all" | "primary" | "subagent"
 
 // Permission keys (not raw tool names). Multiple tools can map to a single
 // permission — e.g. write/edit/apply_patch all gate on `edit` — so we configure
 // agents at the permission level to match how the runtime actually enforces it.
 const AVAILABLE_PERMISSIONS = [
-  "bash",
+  "shell",
   "read",
   "edit",
   "glob",
@@ -32,6 +32,13 @@ const AVAILABLE_PERMISSIONS = [
   "lsp",
   "skill",
 ]
+
+const EDIT_TOOLS = ["edit", "write", "patch", "multiedit", "apply_patch"]
+
+function normalizePermission(input: string) {
+  if (EDIT_TOOLS.includes(input)) return "edit"
+  return ShellToolID.normalize(input)
+}
 
 const AgentCreateCommand = cmd({
   command: "create",
@@ -140,7 +147,9 @@ const AgentCreateCommand = cmd({
         // Select permissions to allow
         let selected: string[]
         if (perms !== undefined) {
-          selected = perms ? perms.split(",").map((t) => t.trim()) : AVAILABLE_PERMISSIONS
+          selected = perms
+            ? [...new Set(perms.split(",").map((t) => normalizePermission(t.trim())).filter(Boolean))]
+            : AVAILABLE_PERMISSIONS
         } else {
           const result = await prompts.multiselect({
             message: "Select permissions to allow (Space to toggle)",

@@ -1352,7 +1352,7 @@ test("migrates legacy tools config to permissions - allow", async () => {
     fn: async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "allow",
+        shell: "allow",
         read: "allow",
       })
     },
@@ -1383,7 +1383,7 @@ test("migrates legacy tools config to permissions - deny", async () => {
     fn: async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "deny",
+        shell: "deny",
         webfetch: "deny",
       })
     },
@@ -1581,7 +1581,7 @@ test("migrates mixed legacy tools config", async () => {
     fn: async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "allow",
+        shell: "allow",
         edit: "allow",
         read: "deny",
         webfetch: "allow",
@@ -1617,7 +1617,7 @@ test("merges legacy tools with existing permission config", async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
         glob: "allow",
-        bash: "allow",
+        shell: "allow",
       })
     },
   })
@@ -1664,6 +1664,34 @@ test("permission config preserves user key order", async () => {
         "tools_*",
         "pr_comments_*",
       ])
+    },
+  })
+})
+
+test("permission config preserves shell and legacy bash order", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission: {
+            shell: "deny",
+            bash: "allow",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(Object.keys(config.permission!)).toEqual(["shell", "bash"])
+      expect(config.permission).toEqual({
+        shell: "deny",
+        bash: "allow",
+      })
     },
   })
 })

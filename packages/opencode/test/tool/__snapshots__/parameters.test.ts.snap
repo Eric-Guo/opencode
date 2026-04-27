@@ -16,7 +16,7 @@ exports[`tool parameters JSON Schema (wire shape) apply_patch 1`] = `
 }
 `;
 
-exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
+exports[`tool parameters JSON Schema (wire shape) shell 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {

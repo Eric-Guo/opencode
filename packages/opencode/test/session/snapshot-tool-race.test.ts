@@ -23,6 +23,7 @@ import { SessionRevert } from "../../src/session/revert"
 import { SessionSummary } from "../../src/session/summary"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Log } from "../../src/util"
+import { ShellToolID } from "../../src/tool/shell/id"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
@@ -198,13 +199,15 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
         permission: [{ permission: "*", pattern: "*", action: "allow" }],
       })
 
-      // Use bash tool (always registered) to create a file
+      const shell = ShellToolID.id
+
+      // Use the active shell tool to create a file
       const command = `echo 'snapshot race test content' > ${path.join(dir, "race-test.txt")}`
-      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), "bash", {
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), shell, {
         command,
         description: "create test file",
       })
-      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
+      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes(shell), "done")
 
       // Seed user message
       yield* prompt.prompt({
@@ -232,7 +235,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
       const tool = allMsgs
         .flatMap((m) => m.parts)
-        .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash")
+        .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === shell)
       expect(tool?.state.status).toBe("completed")
 
       // Poll for diff — summarize() is fire-and-forget
@@ -246,4 +249,5 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
     }),
     { git: true, config: providerCfg },
   ),
+  20_000,
 )

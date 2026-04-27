@@ -651,7 +651,7 @@ describe("session.compaction.prune", () => {
             sessionID: info.id,
             type: "tool",
             callID: crypto.randomUUID(),
-            tool: "bash",
+            tool: "shell",
             state: {
               status: "completed",
               input: {},

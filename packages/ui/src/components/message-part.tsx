@@ -271,6 +271,8 @@ export type ToolInfo = {
   subtitle?: string
 }
 
+const SHELL = new Set(["shell", "bash"])
+
 function agentTitle(i18n: UiI18n, type?: string) {
   if (!type) return i18n.t("ui.tool.agent.default")
   return i18n.t("ui.tool.agent", { type })
@@ -319,6 +321,14 @@ function taskAgent(
 
 export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   const i18n = useI18n()
+  if (SHELL.has(tool)) {
+    return {
+      icon: "console",
+      title: i18n.t("ui.tool.shell"),
+      subtitle: input.description,
+    }
+  }
+
   switch (tool) {
     case "read":
       return {
@@ -373,12 +383,6 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         subtitle: input.description,
       }
     }
-    case "bash":
-      return {
-        icon: "console",
-        title: i18n.t("ui.tool.shell"),
-        subtitle: input.description,
-      }
     case "edit":
       return {
         icon: "code-lines",
@@ -582,7 +586,7 @@ function renderable(part: PartType, showReasoningSummaries = true) {
 }
 
 function toolDefaultOpen(tool: string, shell = false, edit = false) {
-  if (tool === "bash") return shell
+  if (SHELL.has(tool)) return shell
   if (tool === "edit" || tool === "write" || tool === "apply_patch") return edit
 }
 
@@ -1254,6 +1258,7 @@ export function registerTool(input: { name: string; render?: ToolComponent }) {
 }
 
 export function getTool(name: string) {
+  if (name === "bash") return state.shell?.render
   return state[name]?.render
 }
 
@@ -1818,7 +1823,7 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
-  name: "bash",
+  name: "shell",
   render(props) {
     const i18n = useI18n()
     const pending = () => props.status === "pending" || props.status === "running"
