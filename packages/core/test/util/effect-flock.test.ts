@@ -98,6 +98,7 @@ const testGlobal = Layer.succeed(
   Global.Service.of({
     home: os.homedir(),
     data: os.tmpdir(),
+    repos: os.tmpdir(),
     cache: os.tmpdir(),
     config: os.tmpdir(),
     state: os.tmpdir(),
