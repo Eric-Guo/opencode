@@ -1,43 +1,43 @@
 import { produce, type WritableDraft } from "immer"
 import { SessionEvent } from "./session-event"
-import { SessionEntry } from "./session-entry"
+import { SessionMessage } from "./session-message"
 
 export type MemoryState = {
-  entries: SessionEntry.Entry[]
-  pending: SessionEntry.Entry[]
+  messages: SessionMessage.Message[]
+  pending: SessionMessage.Message[]
 }
 
 export interface Adapter<Result> {
-  readonly getCurrentAssistant: () => SessionEntry.Assistant | undefined
-  readonly updateAssistant: (assistant: SessionEntry.Assistant) => void
-  readonly appendEntry: (entry: SessionEntry.Entry) => void
-  readonly appendPending: (entry: SessionEntry.Entry) => void
+  readonly getCurrentAssistant: () => SessionMessage.Assistant | undefined
+  readonly updateAssistant: (assistant: SessionMessage.Assistant) => void
+  readonly appendMessage: (message: SessionMessage.Message) => void
+  readonly appendPending: (message: SessionMessage.Message) => void
   readonly finish: () => Result
 }
 
 export function memory(state: MemoryState): Adapter<MemoryState> {
   const activeAssistantIndex = () =>
-    state.entries.findLastIndex((entry) => entry.type === "assistant" && !entry.time.completed)
+    state.messages.findLastIndex((message) => message.type === "assistant" && !message.time.completed)
 
   return {
     getCurrentAssistant() {
       const index = activeAssistantIndex()
       if (index < 0) return
-      const assistant = state.entries[index]
+      const assistant = state.messages[index]
       return assistant?.type === "assistant" ? assistant : undefined
     },
     updateAssistant(assistant) {
       const index = activeAssistantIndex()
       if (index < 0) return
-      const current = state.entries[index]
+      const current = state.messages[index]
       if (current?.type !== "assistant") return
-      state.entries[index] = assistant
+      state.messages[index] = assistant
     },
-    appendEntry(entry) {
-      state.entries.push(entry)
+    appendMessage(message) {
+      state.messages.push(message)
     },
-    appendPending(entry) {
-      state.pending.push(entry)
+    appendPending(message) {
+      state.pending.push(message)
     },
     finish() {
       return state
@@ -45,12 +45,12 @@ export function memory(state: MemoryState): Adapter<MemoryState> {
   }
 }
 
-export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.Event): Result {
+export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Event): Result {
   const currentAssistant = adapter.getCurrentAssistant()
-  type DraftAssistant = WritableDraft<SessionEntry.Assistant>
-  type DraftTool = WritableDraft<SessionEntry.AssistantTool>
-  type DraftText = WritableDraft<SessionEntry.AssistantText>
-  type DraftReasoning = WritableDraft<SessionEntry.AssistantReasoning>
+  type DraftAssistant = WritableDraft<SessionMessage.Assistant>
+  type DraftTool = WritableDraft<SessionMessage.AssistantTool>
+  type DraftText = WritableDraft<SessionMessage.AssistantText>
+  type DraftReasoning = WritableDraft<SessionMessage.AssistantReasoning>
 
   const latestTool = (assistant: DraftAssistant | undefined, callID?: string) =>
     assistant?.content.findLast(
@@ -67,15 +67,15 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
 
   SessionEvent.All.match(event, {
     "session.next.prompted": (event) => {
-      const entry = SessionEntry.User.fromEvent(event)
+      const message = SessionMessage.User.fromEvent(event)
       if (currentAssistant) {
-        adapter.appendPending(entry)
+        adapter.appendPending(message)
         return
       }
-      adapter.appendEntry(entry)
+      adapter.appendMessage(message)
     },
     "session.next.synthetic": (event) => {
-      adapter.appendEntry(SessionEntry.Synthetic.fromEvent(event))
+      adapter.appendMessage(SessionMessage.Synthetic.fromEvent(event))
     },
     "session.next.step.started": (event) => {
       if (currentAssistant) {
@@ -85,7 +85,7 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
           }),
         )
       }
-      adapter.appendEntry(SessionEntry.Assistant.fromEvent(event))
+      adapter.appendMessage(SessionMessage.Assistant.fromEvent(event))
     },
     "session.next.step.ended": (event) => {
       if (currentAssistant) {
@@ -250,23 +250,17 @@ export function stepWith<Result>(adapter: Adapter<Result>, event: SessionEvent.E
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
-            draft.retries = [...(draft.retries ?? []), SessionEntry.AssistantRetry.fromEvent(event)]
+            draft.retries = [...(draft.retries ?? []), SessionMessage.AssistantRetry.fromEvent(event)]
           }),
         )
       }
     },
     "session.next.compacted": (event) => {
-      adapter.appendEntry(SessionEntry.Compaction.fromEvent(event))
+      adapter.appendMessage(SessionMessage.Compaction.fromEvent(event))
     },
   })
 
   return adapter.finish()
 }
 
-export function step(old: MemoryState, event: SessionEvent.Event): MemoryState {
-  return produce(old, (draft) => {
-    stepWith(memory(draft as MemoryState), event)
-  })
-}
-
-export * as SessionEntryStepper from "./session-entry-stepper"
+export * as SessionMessageUpdater from "./session-message-updater"
