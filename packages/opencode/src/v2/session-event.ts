@@ -54,6 +54,7 @@ export namespace Step {
         providerID: Schema.String,
         variant: Schema.String.pipe(Schema.optional),
       }),
+      snapshot: Schema.String.pipe(Schema.optional),
     },
   })
   export type Started = Schema.Schema.Type<typeof Started>
@@ -74,6 +75,7 @@ export namespace Step {
           write: Schema.Number,
         }),
       }),
+      snapshot: Schema.String.pipe(Schema.optional),
     },
   })
   export type Ended = Schema.Schema.Type<typeof Ended>

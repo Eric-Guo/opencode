@@ -432,6 +432,7 @@ export const layer: Layer.Layer<
                 providerID: ctx.model.providerID,
                 variant: input.assistantMessage.variant,
               },
+              snapshot: ctx.snapshot,
               timestamp: DateTime.makeUnsafe(Date.now()),
             })
             yield* session.updatePart({
@@ -444,6 +445,7 @@ export const layer: Layer.Layer<
             return
 
           case "finish-step": {
+            const completedSnapshot = yield* snapshot.track()
             const usage = Session.getUsage({
               model: ctx.model,
               usage: value.usage,
@@ -454,6 +456,7 @@ export const layer: Layer.Layer<
               reason: value.finishReason,
               cost: usage.cost,
               tokens: usage.tokens,
+              snapshot: completedSnapshot,
               timestamp: DateTime.makeUnsafe(Date.now()),
             })
             ctx.assistantMessage.finish = value.finishReason
@@ -462,7 +465,7 @@ export const layer: Layer.Layer<
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.finishReason,
-              snapshot: yield* snapshot.track(),
+              snapshot: completedSnapshot,
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.assistantMessage.sessionID,
               type: "step-finish",
