@@ -152,6 +152,10 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
   type: Schema.Literal("assistant"),
   content: AssistantContent.pipe(Schema.Array),
   retries: AssistantRetry.pipe(Schema.Array, Schema.optional),
+  snapshot: Schema.Struct({
+    start: Schema.String.pipe(Schema.optional),
+    end: Schema.String.pipe(Schema.optional),
+  }).pipe(Schema.optional),
   cost: Schema.Number.pipe(Schema.optional),
   tokens: Schema.Struct({
     input: Schema.Number,
@@ -177,6 +181,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
       },
       content: [],
       retries: [],
+      snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
     })
   }
 }
