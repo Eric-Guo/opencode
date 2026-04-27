@@ -1,5 +1,6 @@
 export { Config } from "./config"
 export { Server } from "./server/server"
+export { PushRelay } from "./server/push-relay"
 export { bootstrap } from "./cli/bootstrap"
 export { Log } from "./util"
 export { Database } from "./storage"
