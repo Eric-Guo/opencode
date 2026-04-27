@@ -7,9 +7,7 @@ import { Server } from "../../server/server"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Workspace } from "../../control-plane/workspace"
-import { Project } from "../../project"
-import { Installation } from "../../installation"
+import { bootstrap } from "../bootstrap"
 import { PushRelay } from "../../server/push-relay"
 import { Log } from "../../util"
 import { Global } from "@opencode-ai/core/global"
@@ -217,7 +215,7 @@ export const ServeCommand = cmd({
       }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const opts = await resolveNetworkOptions(args)
+    const opts = await bootstrap(process.cwd(), () => resolveNetworkOptions(args))
     const relayURL = (
       args["relay-url"] ??
       process.env.OPENCODE_EXPERIMENTAL_PUSH_RELAY_URL ??
