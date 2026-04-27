@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { Prompt } from "./session-prompt"
 import { SessionEvent } from "./session-event"
 import { Event } from "./event"
+import { ToolOutput } from "./tool-output"
 
 export const ID = Event.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -62,22 +63,27 @@ export class ToolStatePending extends Schema.Class<ToolStatePending>("Session.Me
 export class ToolStateRunning extends Schema.Class<ToolStateRunning>("Session.Message.ToolState.Running")({
   status: Schema.Literal("running"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  structured: ToolOutput.Structured,
+  content: ToolOutput.Content.pipe(Schema.Array),
 }) {}
 
 export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Session.Message.ToolState.Completed")({
   status: Schema.Literal("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  output: Schema.String,
-  details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
+  content: ToolOutput.Content.pipe(Schema.Array),
+  structured: ToolOutput.Structured,
 }) {}
 
 export class ToolStateError extends Schema.Class<ToolStateError>("Session.Message.ToolState.Error")({
   status: Schema.Literal("error"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  error: Schema.String,
-  details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  content: ToolOutput.Content.pipe(Schema.Array),
+  structured: ToolOutput.Structured,
+  error: Schema.Struct({
+    type: Schema.String,
+    message: Schema.String,
+  }),
 }) {}
 
 export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(

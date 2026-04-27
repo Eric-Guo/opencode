@@ -380,22 +380,19 @@ export const layer: Layer.Layer<
             SyncEvent.run(SessionEvent.Tool.Success.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
-              output: value.output.output,
-              attachments: value.output.attachments?.map((item: MessageV2.FilePart) => ({
-                uri: item.url,
-                mime: item.mime,
-                ...(item.filename ? { name: item.filename } : {}),
-                ...(item.source
-                  ? {
-                      source: {
-                        start: item.source.text.start,
-                        end: item.source.text.end,
-                        text: item.source.text.value,
-                      },
-                    }
-                  : {}),
-              })),
-              details: value.output.metadata,
+              structured: value.output.metadata,
+              content: [
+                {
+                  type: "text",
+                  text: value.output.output,
+                },
+                ...value.output.attachments?.map((item: MessageV2.FilePart) => ({
+                  type: "file",
+                  uri: item.url,
+                  mime: item.mime,
+                  name: item.filename,
+                })),
+              ],
               provider: {
                 executed: toolCall?.part.metadata?.providerExecuted === true,
               },
@@ -410,7 +407,10 @@ export const layer: Layer.Layer<
             SyncEvent.run(SessionEvent.Tool.Error.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
-              error: errorMessage(value.error),
+              error: {
+                type: "unknown",
+                message: errorMessage(value.error),
+              },
               provider: {
                 executed: toolCall?.part.metadata?.providerExecuted === true,
               },

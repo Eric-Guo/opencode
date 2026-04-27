@@ -163,6 +163,8 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
               match.state = {
                 status: "running",
                 input: event.data.input,
+                structured: {},
+                content: [],
               }
             }
           }),
@@ -174,7 +176,10 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
             const match = latestTool(draft, event.data.callID)
-            if (match && match.state.status === "running") match.state.details = event.data.details
+            if (match && match.state.status === "running") {
+              match.state.structured = event.data.structured
+              match.state.content = [...event.data.content]
+            }
           }),
         )
       }
@@ -188,9 +193,8 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
               match.state = {
                 status: "completed",
                 input: match.state.input,
-                output: event.data.output ?? "",
-                details: event.data.details,
-                attachments: [...(event.data.attachments ?? [])],
+                structured: event.data.structured,
+                content: [...event.data.content],
               }
             }
           }),
@@ -207,6 +211,8 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
                 status: "error",
                 error: event.data.error,
                 input: match.state.input,
+                structured: match.state.structured,
+                content: match.state.content,
               }
             }
           }),

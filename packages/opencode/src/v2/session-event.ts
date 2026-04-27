@@ -3,6 +3,7 @@ import { Event } from "./event"
 import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
 export { FileAttachment }
+import { ToolOutput } from "./tool-output"
 
 export const ID = Event.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -201,7 +202,8 @@ export namespace Tool {
     schema: {
       ...Base,
       callID: Schema.String,
-      details: Schema.Record(Schema.String, Schema.Unknown),
+      structured: ToolOutput.Structured,
+      content: Schema.Array(ToolOutput.Content),
     },
   })
   export type Progress = Schema.Schema.Type<typeof Progress>
@@ -212,9 +214,8 @@ export namespace Tool {
     schema: {
       ...Base,
       callID: Schema.String,
-      output: Schema.String.pipe(Schema.optional),
-      attachments: Schema.Array(FileAttachment).pipe(Schema.optional),
-      details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+      structured: ToolOutput.Structured,
+      content: Schema.Array(ToolOutput.Content),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
@@ -229,7 +230,10 @@ export namespace Tool {
     schema: {
       ...Base,
       callID: Schema.String,
-      error: Schema.String,
+      error: Schema.Struct({
+        type: Schema.String,
+        message: Schema.String,
+      }),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
