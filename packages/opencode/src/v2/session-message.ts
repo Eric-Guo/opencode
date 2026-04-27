@@ -14,7 +14,7 @@ const Base = {
   }),
 }
 
-export class User extends Schema.Class<User>("Session.Entry.User")({
+export class User extends Schema.Class<User>("Session.Message.User")({
   ...Base,
   text: Prompt.fields.text,
   files: Prompt.fields.files,
@@ -37,7 +37,7 @@ export class User extends Schema.Class<User>("Session.Entry.User")({
   }
 }
 
-export class Synthetic extends Schema.Class<Synthetic>("Session.Entry.Synthetic")({
+export class Synthetic extends Schema.Class<Synthetic>("Session.Message.Synthetic")({
   ...Base,
   sessionID: SessionEvent.Synthetic.fields.data.fields.sessionID,
   text: SessionEvent.Synthetic.fields.data.fields.text,
@@ -54,18 +54,18 @@ export class Synthetic extends Schema.Class<Synthetic>("Session.Entry.Synthetic"
   }
 }
 
-export class ToolStatePending extends Schema.Class<ToolStatePending>("Session.Entry.ToolState.Pending")({
+export class ToolStatePending extends Schema.Class<ToolStatePending>("Session.Message.ToolState.Pending")({
   status: Schema.Literal("pending"),
   input: Schema.String,
 }) {}
 
-export class ToolStateRunning extends Schema.Class<ToolStateRunning>("Session.Entry.ToolState.Running")({
+export class ToolStateRunning extends Schema.Class<ToolStateRunning>("Session.Message.ToolState.Running")({
   status: Schema.Literal("running"),
   input: Schema.Record(Schema.String, Schema.Unknown),
   details: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
 }) {}
 
-export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Session.Entry.ToolState.Completed")({
+export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Session.Message.ToolState.Completed")({
   status: Schema.Literal("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
   output: Schema.String,
@@ -73,7 +73,7 @@ export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Sessio
   attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
 }) {}
 
-export class ToolStateError extends Schema.Class<ToolStateError>("Session.Entry.ToolState.Error")({
+export class ToolStateError extends Schema.Class<ToolStateError>("Session.Message.ToolState.Error")({
   status: Schema.Literal("error"),
   input: Schema.Record(Schema.String, Schema.Unknown),
   error: Schema.String,
@@ -85,7 +85,7 @@ export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolS
 )
 export type ToolState = Schema.Schema.Type<typeof ToolState>
 
-export class AssistantTool extends Schema.Class<AssistantTool>("Session.Entry.Assistant.Tool")({
+export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.Assistant.Tool")({
   type: Schema.Literal("tool"),
   callID: Schema.String,
   name: Schema.String,
@@ -98,18 +98,18 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Entry.As
   }),
 }) {}
 
-export class AssistantText extends Schema.Class<AssistantText>("Session.Entry.Assistant.Text")({
+export class AssistantText extends Schema.Class<AssistantText>("Session.Message.Assistant.Text")({
   type: Schema.Literal("text"),
   text: Schema.String,
 }) {}
 
-export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Session.Entry.Assistant.Reasoning")({
+export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Session.Message.Assistant.Reasoning")({
   type: Schema.Literal("reasoning"),
   reasoningID: Schema.String,
   text: Schema.String,
 }) {}
 
-export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Entry.Assistant.Retry")({
+export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Message.Assistant.Retry")({
   attempt: Schema.Number,
   error: SessionEvent.RetryError,
   time: Schema.Struct({
@@ -132,7 +132,16 @@ export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning,
 )
 export type AssistantContent = Schema.Schema.Type<typeof AssistantContent>
 
-export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant")({
+// GET /v2/session/{sessionID}/message?limit=10
+// user
+// synthetic
+// synthetic
+// assistant HTTP req/retried 5 times/response
+// compaction
+// assistant
+// user
+
+export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistant")({
   ...Base,
   type: Schema.Literal("assistant"),
   content: AssistantContent.pipe(Schema.Array),
@@ -166,7 +175,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
   }
 }
 
-export class Compaction extends Schema.Class<Compaction>("Session.Entry.Compaction")({
+export class Compaction extends Schema.Class<Compaction>("Session.Message.Compaction")({
   type: Schema.Literal("compaction"),
   sessionID: SessionEvent.Compacted.fields.data.fields.sessionID,
   auto: SessionEvent.Compacted.fields.data.fields.auto,
@@ -185,34 +194,34 @@ export class Compaction extends Schema.Class<Compaction>("Session.Entry.Compacti
   }
 }
 
-export const Entry = Schema.Union([User, Synthetic, Assistant, Compaction]).pipe(Schema.toTaggedUnion("type"))
+export const Message = Schema.Union([User, Synthetic, Assistant, Compaction]).pipe(Schema.toTaggedUnion("type"))
 
-export type Entry = Schema.Schema.Type<typeof Entry>
+export type Message = Schema.Schema.Type<typeof Message>
 
-export type Type = Entry["type"]
+export type Type = Message["type"]
 
 /*
 export interface Interface {
-  readonly decode: (row: typeof SessionEntryTable.$inferSelect) => Entry
-  readonly fromSession: (sessionID: SessionID) => Effect.Effect<Entry[], never>
+  readonly decode: (row: typeof SessionMessageTable.$inferSelect) => Message
+  readonly fromSession: (sessionID: SessionID) => Effect.Effect<Message[], never>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionEntry") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionMessage") {}
 
 export const layer: Layer.Layer<Service, never, never> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const decodeEntry = Schema.decodeUnknownSync(Entry)
+    const decodeMessage = Schema.decodeUnknownSync(Message)
 
-    const decode: (typeof Service.Service)["decode"] = (row) => decodeEntry({ ...row, id: row.id, type: row.type })
+    const decode: (typeof Service.Service)["decode"] = (row) => decodeMessage({ ...row, id: row.id, type: row.type })
 
-    const fromSession = Effect.fn("SessionEntry.fromSession")(function* (sessionID: SessionID) {
+    const fromSession = Effect.fn("SessionMessage.fromSession")(function* (sessionID: SessionID) {
       return Database.use((db) =>
         db
           .select()
-          .from(SessionEntryTable)
-          .where(eq(SessionEntryTable.session_id, sessionID))
-          .orderBy(SessionEntryTable.id)
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, sessionID))
+          .orderBy(SessionMessageTable.id)
           .all()
           .map((row) => decode(row)),
       )
@@ -226,4 +235,4 @@ export const layer: Layer.Layer<Service, never, never> = Layer.effect(
 )
 */
 
-export * as SessionEntry from "./session-entry"
+export * as SessionMessage from "./session-message"

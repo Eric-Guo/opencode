@@ -1,7 +1,7 @@
 import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
-import type { SessionEntry } from "../v2/session-entry"
+import type { SessionMessage } from "../v2/session-message"
 import type { Snapshot } from "../snapshot"
 import type { Permission } from "../permission"
 import type { ProjectID } from "../project/schema"
@@ -96,22 +96,22 @@ export const TodoTable = sqliteTable(
   ],
 )
 
-export const SessionEntryTable = sqliteTable(
-  "session_entry",
+export const SessionMessageTable = sqliteTable(
+  "session_message",
   {
-    id: text().$type<SessionEntry.ID>().primaryKey(),
+    id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
       .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().$type<SessionEntry.Type>().notNull(),
+    type: text().$type<SessionMessage.Type>().notNull(),
     ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<Omit<SessionEntry.Entry, "type" | "id">>(),
+    data: text({ mode: "json" }).notNull().$type<Omit<SessionMessage.Message, "type" | "id">>(),
   },
   (table) => [
-    index("session_entry_session_idx").on(table.session_id),
-    index("session_entry_session_type_idx").on(table.session_id, table.type),
-    index("session_entry_time_created_idx").on(table.time_created),
+    index("session_message_session_idx").on(table.session_id),
+    index("session_message_session_type_idx").on(table.session_id, table.type),
+    index("session_message_time_created_idx").on(table.time_created),
   ],
 )
 

@@ -24,6 +24,7 @@ const Base = {
 export const Prompted = Event.define({
   type: "session.next.prompted",
   aggregate: "sessionID",
+  version: 1,
   schema: {
     ...Base,
     prompt: Prompt,

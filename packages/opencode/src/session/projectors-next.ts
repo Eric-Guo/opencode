@@ -1,40 +1,42 @@
 import { and, desc, eq } from "@/storage"
 import type { Database } from "@/storage"
-import { SessionEntry } from "@/v2/session-entry"
-import { SessionEntryStepper } from "@/v2/session-entry-stepper"
+import { SessionMessage } from "@/v2/session-message"
+import { SessionMessageUpdater } from "@/v2/session-message-updater"
 import { SessionEvent } from "@/v2/session-event"
 import * as DateTime from "effect/DateTime"
 import { SyncEvent } from "@/sync"
-import { SessionEntryTable } from "./session.sql"
+import { SessionMessageTable } from "./session.sql"
 import type { SessionID } from "./schema"
 
-function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionEntryStepper.Adapter<void> {
+function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdater.Adapter<void> {
   return {
     getCurrentAssistant() {
       return db
         .select()
-        .from(SessionEntryTable)
-        .where(and(eq(SessionEntryTable.session_id, sessionID), eq(SessionEntryTable.type, "assistant")))
-        .orderBy(desc(SessionEntryTable.id))
+        .from(SessionMessageTable)
+        .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "assistant")))
+        .orderBy(desc(SessionMessageTable.id))
         .all()
-        .map((row) => ({ id: row.id, type: row.type, ...row.data }) as SessionEntry.Entry)
-        .find((entry): entry is SessionEntry.Assistant => entry.type === "assistant" && !entry.time.completed)
+        .map((row) => ({ id: row.id, type: row.type, ...row.data }) as SessionMessage.Message)
+        .find((message): message is SessionMessage.Assistant => message.type === "assistant" && !message.time.completed)
     },
     updateAssistant(assistant) {
       const { id, type, ...data } = assistant
-      db.update(SessionEntryTable)
+      db.update(SessionMessageTable)
         .set({ data })
-        .where(and(eq(SessionEntryTable.id, id), eq(SessionEntryTable.session_id, sessionID), eq(SessionEntryTable.type, type)))
+        .where(
+          and(eq(SessionMessageTable.id, id), eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, type)),
+        )
         .run()
     },
-    appendEntry(entry) {
-      const { id, type, ...data } = entry
-      db.insert(SessionEntryTable)
+    appendMessage(message) {
+      const { id, type, ...data } = message
+      db.insert(SessionMessageTable)
         .values({
           id,
           session_id: sessionID,
           type,
-          time_created: DateTime.toEpochMillis(entry.time.created),
+          time_created: DateTime.toEpochMillis(message.time.created),
           data,
         })
         .run()
@@ -44,57 +46,57 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionEntryStepper.
   }
 }
 
-function step(db: Database.TxOrDb, event: SessionEvent.Event) {
-  SessionEntryStepper.stepWith(sqlite(db, event.data.sessionID), event)
+function update(db: Database.TxOrDb, event: SessionEvent.Event) {
+  SessionMessageUpdater.update(sqlite(db, event.data.sessionID), event)
 }
 
 export default [
   SyncEvent.project(SessionEvent.Prompted.Sync, (db, data) => {
-    step(db, { type: "session.next.prompted", data })
+    update(db, { type: "session.next.prompted", data })
   }),
   SyncEvent.project(SessionEvent.Synthetic.Sync, (db, data) => {
-    step(db, { type: "session.next.synthetic", data })
+    update(db, { type: "session.next.synthetic", data })
   }),
   SyncEvent.project(SessionEvent.Step.Started.Sync, (db, data) => {
-    step(db, { type: "session.next.step.started", data })
+    update(db, { type: "session.next.step.started", data })
   }),
   SyncEvent.project(SessionEvent.Step.Ended.Sync, (db, data) => {
-    step(db, { type: "session.next.step.ended", data })
+    update(db, { type: "session.next.step.ended", data })
   }),
   SyncEvent.project(SessionEvent.Text.Started.Sync, (db, data) => {
-    step(db, { type: "session.next.text.started", data })
+    update(db, { type: "session.next.text.started", data })
   }),
   SyncEvent.project(SessionEvent.Text.Delta.Sync, () => {}),
   SyncEvent.project(SessionEvent.Text.Ended.Sync, (db, data) => {
-    step(db, { type: "session.next.text.ended", data })
+    update(db, { type: "session.next.text.ended", data })
   }),
   SyncEvent.project(SessionEvent.Tool.Input.Started.Sync, (db, data) => {
-    step(db, { type: "session.next.tool.input.started", data })
+    update(db, { type: "session.next.tool.input.started", data })
   }),
   SyncEvent.project(SessionEvent.Tool.Input.Delta.Sync, () => {}),
   SyncEvent.project(SessionEvent.Tool.Input.Ended.Sync, (db, data) => {
-    step(db, { type: "session.next.tool.input.ended", data })
+    update(db, { type: "session.next.tool.input.ended", data })
   }),
   SyncEvent.project(SessionEvent.Tool.Called.Sync, (db, data) => {
-    step(db, { type: "session.next.tool.called", data })
+    update(db, { type: "session.next.tool.called", data })
   }),
   SyncEvent.project(SessionEvent.Tool.Success.Sync, (db, data) => {
-    step(db, { type: "session.next.tool.success", data })
+    update(db, { type: "session.next.tool.success", data })
   }),
   SyncEvent.project(SessionEvent.Tool.Error.Sync, (db, data) => {
-    step(db, { type: "session.next.tool.error", data })
+    update(db, { type: "session.next.tool.error", data })
   }),
   SyncEvent.project(SessionEvent.Reasoning.Started.Sync, (db, data) => {
-    step(db, { type: "session.next.reasoning.started", data })
+    update(db, { type: "session.next.reasoning.started", data })
   }),
   SyncEvent.project(SessionEvent.Reasoning.Delta.Sync, () => {}),
   SyncEvent.project(SessionEvent.Reasoning.Ended.Sync, (db, data) => {
-    step(db, { type: "session.next.reasoning.ended", data })
+    update(db, { type: "session.next.reasoning.ended", data })
   }),
   SyncEvent.project(SessionEvent.Retried.Sync, (db, data) => {
-    step(db, { type: "session.next.retried", data })
+    update(db, { type: "session.next.retried", data })
   }),
   SyncEvent.project(SessionEvent.Compacted.Sync, (db, data) => {
-    step(db, { type: "session.next.compacted", data })
+    update(db, { type: "session.next.compacted", data })
   }),
 ]

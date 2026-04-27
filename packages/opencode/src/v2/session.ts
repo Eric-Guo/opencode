@@ -1,5 +1,5 @@
 import { Context, Layer, Schema, Effect } from "effect"
-import { SessionEntry } from "./session-entry"
+import { SessionMessage } from "./session-message"
 import { Struct } from "effect"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
@@ -9,8 +9,8 @@ export const ID = SessionID
 export type ID = Schema.Schema.Type<typeof ID>
 
 export class PromptInput extends Schema.Class<PromptInput>("Session.PromptInput")({
-  ...Struct.omit(SessionEntry.User.fields, ["time", "type"]),
-  id: Schema.optionalKey(SessionEntry.ID),
+  ...Struct.omit(SessionMessage.User.fields, ["time", "type"]),
+  id: Schema.optionalKey(SessionMessage.ID),
   sessionID: ID,
 }) {}
 
@@ -30,7 +30,7 @@ export class Info extends Schema.Class<Info>("Session.Info")({
 export interface Interface {
   fromID: (id: ID) => Effect.Effect<Info>
   create: (input: CreateInput) => Effect.Effect<Info>
-  prompt: (input: PromptInput) => Effect.Effect<SessionEntry.User>
+  prompt: (input: PromptInput) => Effect.Effect<SessionMessage.User>
 }
 
 export class Service extends Context.Service<Service, Interface>()("Session.Service") {}
