@@ -22,6 +22,7 @@ import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect"
+import { ShellToolID } from "@/tool/shell/id"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
@@ -206,6 +207,8 @@ const live: Layer.Layer<
         input.model.providerID.toLowerCase().includes("litellm") ||
         input.model.api.id.toLowerCase().includes("litellm")
 
+      const repair = (toolName: string) => repairToolName(toolName, tools)
+
       // LiteLLM/Bedrock rejects requests where the message history contains tool
       // calls but no tools param is present. When there are no active tools (e.g.
       // during compaction), inject a stub tool to satisfy the validation requirement.
@@ -239,7 +242,7 @@ const live: Layer.Layer<
         workflowModel.sessionID = input.sessionID
         workflowModel.systemPrompt = system.join("\n")
         workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
-          const t = tools[toolName]
+          const t = tools[repair(toolName) ?? toolName]
           if (!t || !t.execute) {
             return { result: "", error: `Unknown tool: ${toolName}` }
           }
@@ -337,15 +340,15 @@ const live: Layer.Layer<
           })
         },
         async experimental_repairToolCall(failed) {
-          const lower = failed.toolCall.toolName.toLowerCase()
-          if (lower !== failed.toolCall.toolName && tools[lower]) {
+          const repaired = repair(failed.toolCall.toolName)
+          if (repaired && repaired !== failed.toolCall.toolName) {
             l.info("repairing tool call", {
               tool: failed.toolCall.toolName,
-              repaired: lower,
+              repaired,
             })
             return {
               ...failed.toolCall,
-              toolName: lower,
+              toolName: repaired,
             }
           }
           return {
@@ -443,12 +446,23 @@ export const defaultLayer = Layer.suspend(() =>
   ),
 )
 
+export function repairToolName(toolName: string, tools: Record<string, Tool>) {
+  const next = ShellToolID.normalize(toolName.toLowerCase())
+  if (!tools[next]) return
+  return next
+}
+
 function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
   const disabled = Permission.disabled(
     Object.keys(input.tools),
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
-  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  return Record.filter(input.tools, (_, k) => {
+    const userTool = input.user.tools?.[k]
+    if (userTool !== undefined) return userTool !== false && !disabled.has(k)
+    if (k === ShellToolID.id && input.user.tools?.[ShellToolID.legacy] === false) return false
+    return !disabled.has(k)
+  })
 }
 
 // Check if messages contain any tool-call content

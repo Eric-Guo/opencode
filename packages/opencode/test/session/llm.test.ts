@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
-import { tool, type ModelMessage } from "ai"
+import { tool, type ModelMessage, type Tool } from "ai"
 import { Cause, Effect, Exit, Stream } from "effect"
 import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
@@ -63,7 +63,7 @@ describe("session.llm.hasToolCalls", () => {
           {
             type: "tool-call",
             toolCallId: "call-123",
-            toolName: "bash",
+            toolName: "shell",
           },
         ],
       },
@@ -79,7 +79,7 @@ describe("session.llm.hasToolCalls", () => {
           {
             type: "tool-result",
             toolCallId: "call-123",
-            toolName: "bash",
+            toolName: "shell",
           },
         ],
       },
@@ -116,6 +116,17 @@ describe("session.llm.hasToolCalls", () => {
       },
     ] as ModelMessage[]
     expect(LLM.hasToolCalls(messages)).toBe(true)
+  })
+})
+
+describe("session.llm.repairToolName", () => {
+  test("normalizes legacy bash alias to shell when available", () => {
+    expect(LLM.repairToolName("bash", { shell: {} as Tool })).toBe("shell")
+    expect(LLM.repairToolName("BASH", { shell: {} as Tool })).toBe("shell")
+  })
+
+  test("returns undefined when normalized tool is unavailable", () => {
+    expect(LLM.repairToolName("bash", { read: {} as Tool })).toBeUndefined()
   })
 })
 
@@ -557,6 +568,100 @@ describe("session.llm.stream", () => {
         const capture = await request
         const tools = capture.body.tools as Array<{ function?: { name?: string } }> | undefined
         expect(tools?.some((item) => item.function?.name === "question")).toBe(true)
+      },
+    })
+  })
+
+  test("disables shell when user message uses legacy bash override", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "alibaba"
+    const modelID = "qwen-plus"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-legacy-bash-tools")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-legacy-bash-tools"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+          tools: { bash: false },
+        } satisfies MessageV2.User
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {
+            shell: tool({
+              description: "Run a shell command",
+              inputSchema: z.object({ command: z.string() }),
+              execute: async () => ({ output: "" }),
+            }),
+            read: tool({
+              description: "Read a file",
+              inputSchema: z.object({ filePath: z.string() }),
+              execute: async () => ({ output: "" }),
+            }),
+          },
+        })
+
+        const capture = await request
+        const names =
+          (capture.body.tools as Array<{ function?: { name?: string } }> | undefined)?.flatMap((item) =>
+            item.function?.name ? [item.function.name] : [],
+          ) ?? []
+
+        expect(names).not.toContain("shell")
+        expect(names).toContain("read")
       },
     })
   })

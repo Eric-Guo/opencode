@@ -10,12 +10,12 @@ import fs from "fs/promises"
 import { Filesystem } from "../../util"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
+import { ShellToolID } from "../../tool/shell/id"
 import { EOL } from "os"
 import type { Argv } from "yargs"
-
 type AgentMode = "all" | "primary" | "subagent"
 
-const AVAILABLE_TOOLS = ["bash", "read", "write", "edit", "glob", "grep", "webfetch", "task", "todowrite"]
+const AVAILABLE_TOOLS = ["shell", "read", "write", "edit", "glob", "grep", "webfetch", "task", "todowrite"]
 
 const AgentCreateCommand = cmd({
   command: "create",
@@ -123,7 +123,17 @@ const AgentCreateCommand = cmd({
         // Select tools
         let selectedTools: string[]
         if (cliTools !== undefined) {
-          selectedTools = cliTools ? cliTools.split(",").map((t) => t.trim()) : AVAILABLE_TOOLS
+          selectedTools = cliTools
+            ? [
+                ...new Set(
+                  cliTools
+                    .split(",")
+                    .map((t) => t.trim())
+                    .map(ShellToolID.normalize)
+                    .filter(Boolean),
+                ),
+              ]
+            : AVAILABLE_TOOLS
         } else {
           const result = await prompts.multiselect({
             message: "Select tools to enable (Space to toggle)",

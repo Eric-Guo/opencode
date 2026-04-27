@@ -5,7 +5,7 @@ const docs = `### Overview
 Tool call failure summary styled like a tool trigger.
 
 ### API
-- Required: \`tool\` (tool id, e.g. apply_patch, bash)
+- Required: \`tool\` (tool id, e.g. apply_patch, shell)
 - Required: \`error\` (error string)
 
 ### Behavior
@@ -19,8 +19,8 @@ const samples = [
       "apply_patch verification failed: Failed to find expected lines in /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-turn.tsx",
   },
   {
-    tool: "bash",
-    error: "bash Command failed: exit code 1: bun test --watch",
+    tool: "shell",
+    error: "shell Command failed: exit code 1: bun test --watch",
   },
   {
     tool: "read",
@@ -72,7 +72,7 @@ export default {
   argTypes: {
     tool: {
       control: "select",
-      options: ["apply_patch", "bash", "read", "glob", "grep", "webfetch", "websearch", "codesearch", "question"],
+      options: ["apply_patch", "shell", "read", "glob", "grep", "webfetch", "websearch", "codesearch", "question"],
     },
     error: {
       control: "text",

@@ -43,6 +43,7 @@ import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
+import { ShellToolID } from "@/tool/shell/id"
 
 const log = Log.create({ service: "config" })
 
@@ -666,8 +667,12 @@ export const layer = Layer.effect(
           const perms: Record<string, ConfigPermission.Action> = {}
           for (const [tool, enabled] of Object.entries(result.tools)) {
             const action: ConfigPermission.Action = enabled ? "allow" : "deny"
-            if (tool === "write" || tool === "edit" || tool === "patch") {
+            if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
               perms.edit = action
+              continue
+            }
+            if (ShellToolID.normalize(tool) === ShellToolID.id) {
+              perms.shell = action
               continue
             }
             perms[tool] = action

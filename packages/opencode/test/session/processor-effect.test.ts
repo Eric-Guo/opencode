@@ -650,7 +650,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
       Effect.gen(function* () {
         const { processors, session, provider } = yield* boot()
 
-        yield* llm.toolHang("bash", { cmd: "pwd" })
+        yield* llm.toolHang("shell", { cmd: "pwd" })
 
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "tool abort")
