@@ -86,15 +86,16 @@ export const layer = Layer.effect(
         const defaults = Permission.fromConfig({
           "*": "allow",
           doom_loop: "ask",
-          external_directory: {
-            "*": "ask",
-            ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-          },
-          question: "deny",
-          plan_enter: "deny",
-          plan_exit: "deny",
-          // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
-          read: {
+        external_directory: {
+          "*": "ask",
+          ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+        },
+        question: "deny",
+        plan_enter: "deny",
+        plan_exit: "deny",
+        edit: "ask",
+        // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
+        read: {
             "*": "allow",
             "*.env": "ask",
             "*.env.*": "ask",
