@@ -1,5 +1,5 @@
-import { and, desc, eq } from "@/storage"
-import type { Database } from "@/storage"
+import { and, desc, eq } from "@/storage/db"
+import type { Database } from "@/storage/db"
 import { SessionMessage } from "@/v2/session-message"
 import { SessionMessageUpdater } from "@/v2/session-message-updater"
 import { SessionEvent } from "@/v2/session-event"
@@ -25,7 +25,11 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
       db.update(SessionMessageTable)
         .set({ data })
         .where(
-          and(eq(SessionMessageTable.id, id), eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, type)),
+          and(
+            eq(SessionMessageTable.id, id),
+            eq(SessionMessageTable.session_id, sessionID),
+            eq(SessionMessageTable.type, type),
+          ),
         )
         .run()
     },
