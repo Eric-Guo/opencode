@@ -253,15 +253,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         )
       }
     },
-    "session.next.retried": (event) => {
-      if (currentAssistant) {
-        adapter.updateAssistant(
-          produce(currentAssistant, (draft) => {
-            draft.retries = [...(draft.retries ?? []), SessionMessage.AssistantRetry.fromEvent(event)]
-          }),
-        )
-      }
-    },
+    "session.next.retried": () => {},
     "session.next.compacted": (event) => {
       adapter.appendMessage(SessionMessage.Compaction.fromEvent(event))
     },

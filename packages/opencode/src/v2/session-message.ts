@@ -115,43 +115,15 @@ export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Sessio
   text: Schema.String,
 }) {}
 
-export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Message.Assistant.Retry")({
-  attempt: Schema.Number,
-  error: SessionEvent.RetryError,
-  time: Schema.Struct({
-    created: Schema.DateTimeUtc,
-  }),
-}) {
-  static fromEvent(event: SessionEvent.Retried) {
-    return new AssistantRetry({
-      attempt: event.data.attempt,
-      error: event.data.error,
-      time: {
-        created: event.data.timestamp,
-      },
-    })
-  }
-}
-
 export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
   Schema.toTaggedUnion("type"),
 )
 export type AssistantContent = Schema.Schema.Type<typeof AssistantContent>
 
-// GET /v2/session/{sessionID}/message?limit=10
-// user
-// synthetic
-// synthetic
-// assistant HTTP req/retried 5 times/response
-// compaction
-// assistant
-// user
-
 export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistant")({
   ...Base,
   type: Schema.Literal("assistant"),
   content: AssistantContent.pipe(Schema.Array),
-  retries: AssistantRetry.pipe(Schema.Array, Schema.optional),
   snapshot: Schema.Struct({
     start: Schema.String.pipe(Schema.optional),
     end: Schema.String.pipe(Schema.optional),
@@ -180,7 +152,6 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
         created: event.data.timestamp,
       },
       content: [],
-      retries: [],
       snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
     })
   }
