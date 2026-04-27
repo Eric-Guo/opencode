@@ -386,12 +386,12 @@ export const layer: Layer.Layer<
                   type: "text",
                   text: value.output.output,
                 },
-                ...value.output.attachments?.map((item: MessageV2.FilePart) => ({
+                ...(value.output.attachments?.map((item: MessageV2.FilePart) => ({
                   type: "file",
                   uri: item.url,
                   mime: item.mime,
                   name: item.filename,
-                })),
+                })) ?? []),
               ],
               provider: {
                 executed: toolCall?.part.metadata?.providerExecuted === true,
