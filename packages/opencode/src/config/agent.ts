@@ -12,7 +12,6 @@ import * as ConfigMarkdown from "./markdown"
 import { ConfigModelID } from "./model-id"
 import { ConfigParse } from "./parse"
 import { ConfigPermission } from "./permission"
-import { ShellToolID } from "@/tool/shell/id"
 
 const log = Log.create({ service: "config" })
 
@@ -90,7 +89,7 @@ const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema
       permission.edit = action
       continue
     }
-    if (ShellToolID.normalize(tool) === ShellToolID.id) {
+    if (tool === "bash") {
       permission.bash = action
       continue
     }

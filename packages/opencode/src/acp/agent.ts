@@ -292,7 +292,7 @@ export class Agent implements ACPAgent {
               const content: ToolCallContent[] = []
               if (output) {
                 const hash = Hash.fast(output)
-                if (ShellToolID.normalize(part.tool) === ShellToolID.id) {
+                if (part.tool === ShellToolID.id) {
                   if (this.shellSnapshots.get(part.callID) === hash) {
                     await this.connection
                       .sessionUpdate({
@@ -1107,7 +1107,7 @@ export class Agent implements ACPAgent {
   }
 
   private shellOutput(part: ToolPart) {
-    if (ShellToolID.normalize(part.tool) !== ShellToolID.id) return
+    if (part.tool !== ShellToolID.id) return
     if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
     const output = part.state.metadata["output"]
     if (typeof output !== "string") return
@@ -1550,7 +1550,7 @@ export class Agent implements ACPAgent {
 
 function toToolKind(toolName: string): ToolKind {
   const tool = toolName.toLocaleLowerCase()
-  if (ShellToolID.normalize(tool) === ShellToolID.id) return "execute"
+  if (tool === ShellToolID.id) return "execute"
 
   switch (tool) {
     case "webfetch":
@@ -1577,7 +1577,7 @@ function toToolKind(toolName: string): ToolKind {
 
 function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {
   const tool = toolName.toLocaleLowerCase()
-  if (ShellToolID.normalize(tool) === ShellToolID.id) return []
+  if (tool === ShellToolID.id) return []
 
   switch (tool) {
     case "read":

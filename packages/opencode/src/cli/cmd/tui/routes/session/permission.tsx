@@ -288,7 +288,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
-            if (ShellToolID.normalize(permission) === ShellToolID.id) {
+            if (permission === ShellToolID.id) {
               const title =
                 typeof data.description === "string" && data.description ? data.description : "Shell command"
               const command = typeof data.command === "string" ? data.command : ""

@@ -25,8 +25,4 @@ export namespace ShellToolID {
   export function has(value: string): value is ID {
     return value === id
   }
-
-  export function normalize(value: string) {
-    return value
-  }
 }

@@ -43,7 +43,6 @@ import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
-import { ShellToolID } from "@/tool/shell/id"
 
 const log = Log.create({ service: "config" })
 
@@ -671,7 +670,7 @@ export const layer = Layer.effect(
               perms.edit = action
               continue
             }
-            if (ShellToolID.normalize(tool) === ShellToolID.id) {
+            if (tool === "bash") {
               perms.bash = action
               continue
             }

@@ -1,6 +1,5 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
-import { ShellToolID } from "./shell/id"
 import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
@@ -40,7 +39,7 @@ export const TaskTool = Tool.define(
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
-      const primaryTools = (cfg.experimental?.primary_tools ?? []).map(ShellToolID.normalize)
+      const primaryTools = cfg.experimental?.primary_tools ?? []
 
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({

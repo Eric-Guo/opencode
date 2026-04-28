@@ -22,7 +22,6 @@ import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect"
-import { ShellToolID } from "@/tool/shell/id"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
@@ -447,7 +446,7 @@ export const defaultLayer = Layer.suspend(() =>
 )
 
 export function repairToolName(toolName: string, tools: Record<string, Tool>) {
-  const next = ShellToolID.normalize(toolName.toLowerCase())
+  const next = toolName.toLowerCase()
   if (!tools[next]) return
   return next
 }
