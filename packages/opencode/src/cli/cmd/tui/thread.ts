@@ -1,5 +1,4 @@
 import { cmd } from "@/cli/cmd/cmd"
-import { tui } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"
@@ -231,6 +230,7 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
+        const { tui } = await import("./app")
         await tui({
           url: transport.url,
           async onSnapshot() {
