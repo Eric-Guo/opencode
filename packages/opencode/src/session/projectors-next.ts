@@ -7,6 +7,23 @@ import * as DateTime from "effect/DateTime"
 import { SyncEvent } from "@/sync"
 import { SessionMessageTable } from "./session.sql"
 import type { SessionID } from "./schema"
+import { Schema } from "effect"
+
+const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
+type SessionMessageData = NonNullable<typeof SessionMessageTable.$inferInsert["data"]>
+
+function encodeDateTimes(value: unknown): unknown {
+  if (DateTime.isDateTime(value)) return DateTime.toEpochMillis(value)
+  if (Array.isArray(value)) return value.map(encodeDateTimes)
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encodeDateTimes(item)]))
+  }
+  return value
+}
+
+function encodeMessageData(value: unknown): SessionMessageData {
+  return encodeDateTimes(value) as SessionMessageData
+}
 
 function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdater.Adapter<void> {
   return {
@@ -17,13 +34,13 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
         .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "assistant")))
         .orderBy(desc(SessionMessageTable.id))
         .all()
-        .map((row) => ({ id: row.id, type: row.type, ...row.data }) as SessionMessage.Message)
+        .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
         .find((message): message is SessionMessage.Assistant => message.type === "assistant" && !message.time.completed)
     },
     updateAssistant(assistant) {
       const { id, type, ...data } = assistant
       db.update(SessionMessageTable)
-        .set({ data })
+        .set({ data: encodeMessageData(data) })
         .where(
           and(
             eq(SessionMessageTable.id, id),
@@ -36,13 +53,15 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
     appendMessage(message) {
       const { id, type, ...data } = message
       db.insert(SessionMessageTable)
-        .values({
-          id,
-          session_id: sessionID,
-          type,
-          time_created: DateTime.toEpochMillis(message.time.created),
-          data,
-        })
+        .values([
+          {
+            id,
+            session_id: sessionID,
+            type,
+            time_created: DateTime.toEpochMillis(message.time.created),
+            data: encodeMessageData(data),
+          },
+        ])
         .run()
     },
     appendPending() {},

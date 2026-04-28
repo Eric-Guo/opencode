@@ -11,7 +11,7 @@ const Base = {
   id: ID,
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   time: Schema.Struct({
-    created: Schema.DateTimeUtc,
+    created: Schema.DateTimeUtcFromMillis,
   }),
 }
 
@@ -22,7 +22,7 @@ export class User extends Schema.Class<User>("Session.Message.User")({
   agents: Prompt.fields.agents,
   type: Schema.Literal("user"),
   time: Schema.Struct({
-    created: Schema.DateTimeUtc,
+    created: Schema.DateTimeUtcFromMillis,
   }),
 }) {
   static fromEvent(event: SessionEvent.Prompted) {
@@ -97,10 +97,10 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.
   name: Schema.String,
   state: ToolState,
   time: Schema.Struct({
-    created: Schema.DateTimeUtc,
-    ran: Schema.DateTimeUtc.pipe(Schema.optional),
-    completed: Schema.DateTimeUtc.pipe(Schema.optional),
-    pruned: Schema.DateTimeUtc.pipe(Schema.optional),
+    created: Schema.DateTimeUtcFromMillis,
+    ran: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    completed: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    pruned: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
 }) {}
 
@@ -140,8 +140,8 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
   }).pipe(Schema.optional),
   error: Schema.String.pipe(Schema.optional),
   time: Schema.Struct({
-    created: Schema.DateTimeUtc,
-    completed: Schema.DateTimeUtc.pipe(Schema.optional),
+    created: Schema.DateTimeUtcFromMillis,
+    completed: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
 }) {
   static fromEvent(event: SessionEvent.Step.Started) {
@@ -181,40 +181,5 @@ export const Message = Schema.Union([User, Synthetic, Assistant, Compaction]).pi
 export type Message = Schema.Schema.Type<typeof Message>
 
 export type Type = Message["type"]
-
-/*
-export interface Interface {
-  readonly decode: (row: typeof SessionMessageTable.$inferSelect) => Message
-  readonly fromSession: (sessionID: SessionID) => Effect.Effect<Message[], never>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionMessage") {}
-
-export const layer: Layer.Layer<Service, never, never> = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const decodeMessage = Schema.decodeUnknownSync(Message)
-
-    const decode: (typeof Service.Service)["decode"] = (row) => decodeMessage({ ...row, id: row.id, type: row.type })
-
-    const fromSession = Effect.fn("SessionMessage.fromSession")(function* (sessionID: SessionID) {
-      return Database.use((db) =>
-        db
-          .select()
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.session_id, sessionID))
-          .orderBy(SessionMessageTable.id)
-          .all()
-          .map((row) => decode(row)),
-      )
-    })
-
-    return Service.of({
-      decode,
-      fromSession,
-    })
-  }),
-)
-*/
 
 export * as SessionMessage from "./session-message"

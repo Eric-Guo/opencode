@@ -1041,6 +1041,7 @@ export type EventSessionNextStepStarted = {
       providerID: string
       variant?: string
     }
+    snapshot?: string
   }
 }
 
@@ -1060,6 +1061,7 @@ export type EventSessionNextStepEnded = {
         write: number
       }
     }
+    snapshot?: string
   }
 }
 
@@ -1167,15 +1169,28 @@ export type EventSessionNextToolCalled = {
   }
 }
 
+export type ToolTextContent = {
+  type: "text"
+  text: string
+}
+
+export type ToolFileContent = {
+  type: "file"
+  uri: string
+  mime: string
+  name?: string
+}
+
 export type EventSessionNextToolProgress = {
   type: "session.next.tool.progress"
   properties: {
     timestamp: number
     sessionID: string
     callID: string
-    details: {
+    structured: {
       [key: string]: unknown
     }
+    content: Array<ToolTextContent | ToolFileContent>
   }
 }
 
@@ -1185,11 +1200,10 @@ export type EventSessionNextToolSuccess = {
     timestamp: number
     sessionID: string
     callID: string
-    output?: string
-    attachments?: Array<PromptFileAttachment>
-    details?: {
+    structured: {
       [key: string]: unknown
     }
+    content: Array<ToolTextContent | ToolFileContent>
     provider: {
       executed: boolean
       metadata?: {
@@ -1205,7 +1219,10 @@ export type EventSessionNextToolError = {
     timestamp: number
     sessionID: string
     callID: string
-    error: string
+    error: {
+      type: string
+      message: string
+    }
     provider: {
       executed: boolean
       metadata?: {
@@ -1406,6 +1423,7 @@ export type SyncEventSessionNextStepStarted = {
       providerID: string
       variant?: string
     }
+    snapshot?: string
   }
 }
 
@@ -1429,6 +1447,7 @@ export type SyncEventSessionNextStepEnded = {
         write: number
       }
     }
+    snapshot?: string
   }
 }
 
@@ -1586,9 +1605,10 @@ export type SyncEventSessionNextToolProgress = {
     timestamp: number
     sessionID: string
     callID: string
-    details: {
+    structured: {
       [key: string]: unknown
     }
+    content: Array<ToolTextContent | ToolFileContent>
   }
 }
 
@@ -1602,11 +1622,10 @@ export type SyncEventSessionNextToolSuccess = {
     timestamp: number
     sessionID: string
     callID: string
-    output?: string
-    attachments?: Array<PromptFileAttachment>
-    details?: {
+    structured: {
       [key: string]: unknown
     }
+    content: Array<ToolTextContent | ToolFileContent>
     provider: {
       executed: boolean
       metadata?: {
@@ -1626,7 +1645,10 @@ export type SyncEventSessionNextToolError = {
     timestamp: number
     sessionID: string
     callID: string
-    error: string
+    error: {
+      type: string
+      message: string
+    }
     provider: {
       executed: boolean
       metadata?: {

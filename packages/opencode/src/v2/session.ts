@@ -1,69 +1,37 @@
-import { Context, Layer, Schema, Effect } from "effect"
+import { SessionMessageTable } from "@/session/session.sql"
+import type { SessionID } from "@/session/schema"
+import { asc, eq } from "@/storage/db"
+import * as Database from "@/storage/db"
+import { Context, Effect, Layer, Schema } from "effect"
 import { SessionMessage } from "./session-message"
-import { Struct } from "effect"
-import { Session } from "@/session/session"
-import { SessionID } from "@/session/schema"
-
-export const ID = SessionID
-
-export type ID = Schema.Schema.Type<typeof ID>
-
-export class PromptInput extends Schema.Class<PromptInput>("Session.PromptInput")({
-  ...Struct.omit(SessionMessage.User.fields, ["time", "type"]),
-  id: Schema.optionalKey(SessionMessage.ID),
-  sessionID: ID,
-}) {}
-
-export class CreateInput extends Schema.Class<CreateInput>("Session.CreateInput")({
-  id: Schema.optionalKey(ID),
-}) {}
-
-export class Info extends Schema.Class<Info>("Session.Info")({
-  id: ID,
-  model: Schema.Struct({
-    id: Schema.String,
-    providerID: Schema.String,
-    modelID: Schema.String,
-  }).pipe(Schema.optional),
-}) {}
 
 export interface Interface {
-  fromID: (id: ID) => Effect.Effect<Info>
-  create: (input: CreateInput) => Effect.Effect<Info>
-  prompt: (input: PromptInput) => Effect.Effect<SessionMessage.User>
+  readonly messages: (sessionID: SessionID) => Effect.Effect<SessionMessage.Message[], never>
 }
 
-export class Service extends Context.Service<Service, Interface>()("Session.Service") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
-export const layer = Layer.effect(Service)(
+export const layer: Layer.Layer<Service> = Layer.effect(
+  Service,
   Effect.gen(function* () {
-    const session = yield* Session.Service
+    const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
+    const decode = (row: typeof SessionMessageTable.$inferSelect) =>
+      decodeMessage({ ...row.data, id: row.id, type: row.type })
 
-    const create: Interface["create"] = Effect.fn("Session.create")(function* (_input) {
-      throw new Error("Not implemented")
+    const messages = Effect.fn("V2Session.messages")(function* (sessionID: SessionID) {
+      return Database.use((db) =>
+        db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, sessionID))
+          .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
+          .all()
+          .map((row) => decode(row)),
+      )
     })
 
-    const prompt: Interface["prompt"] = Effect.fn("Session.prompt")(function* (_input) {
-      throw new Error("Not implemented")
-    })
-
-    const fromID: Interface["fromID"] = Effect.fn("Session.fromID")(function* (id) {
-      const match = yield* session.get(id)
-      return fromV1(match)
-    })
-
-    return Service.of({
-      create,
-      prompt,
-      fromID,
-    })
+    return Service.of({ messages })
   }),
 )
-
-function fromV1(input: Session.Info): Info {
-  return new Info({
-    id: ID.make(input.id),
-  })
-}
 
 export * as SessionV2 from "./session"
