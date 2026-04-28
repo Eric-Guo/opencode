@@ -48,6 +48,24 @@ import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import * as Effect from "effect/Effect"
+
+// Adjusts the default Config layer to ensure that plugins are always initialised before
+// any other layers read the current config
+const ConfigWithPluginPriority = Layer.effect(
+  Config.Service,
+  Effect.gen(function* () {
+    const config = yield* Config.Service
+    const plugin = yield* Plugin.Service
+
+    return {
+      ...config,
+      get: () => Effect.andThen(plugin.init(), config.get),
+      getGlobal: () => Effect.andThen(plugin.init(), config.getGlobal),
+      getConsoleState: () => Effect.andThen(plugin.init(), config.getConsoleState),
+    }
+  }),
+).pipe(Layer.provide(Layer.merge(Plugin.defaultLayer, Config.defaultLayer)))
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -55,7 +73,7 @@ export const AppLayer = Layer.mergeAll(
   Bus.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
-  Config.defaultLayer,
+  ConfigWithPluginPriority,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
   File.defaultLayer,
