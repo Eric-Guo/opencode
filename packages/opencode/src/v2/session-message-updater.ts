@@ -82,6 +82,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
             draft.time.completed = event.data.timestamp
+            draft.finish = event.data.finish
             draft.cost = event.data.cost
             draft.tokens = event.data.tokens
             if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, end: event.data.snapshot }

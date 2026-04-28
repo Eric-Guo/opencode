@@ -52,6 +52,7 @@ export namespace Step {
     schema: {
       ...Base,
       id: ID,
+      agent: Schema.String,
       model: Schema.Struct({
         id: Schema.String,
         providerID: Schema.String,
@@ -67,7 +68,7 @@ export namespace Step {
     aggregate: "sessionID",
     schema: {
       ...Base,
-      reason: Schema.String,
+      finish: Schema.String,
       cost: Schema.Number,
       tokens: Schema.Struct({
         input: Schema.Number,
