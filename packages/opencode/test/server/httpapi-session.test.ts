@@ -175,6 +175,8 @@ describe("session HttpApi", () => {
               const message = new SessionMessage.Assistant({
                 id: SessionMessage.ID.create(),
                 type: "assistant",
+                agent: "build",
+                model: { id: "model", providerID: "provider" },
                 time: { created: DateTime.makeUnsafe(1) },
                 content: [],
               })
@@ -189,6 +191,8 @@ describe("session HttpApi", () => {
                       time_created: 1,
                       data: {
                         time: { created: 1 },
+                        agent: message.agent,
+                        model: message.model,
                         content: message.content,
                       } as NonNullable<typeof SessionMessageTable.$inferInsert["data"]>,
                     },

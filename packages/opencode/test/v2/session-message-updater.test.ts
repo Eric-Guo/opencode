@@ -14,6 +14,7 @@ test("step snapshots carry over to assistant messages", () => {
       id: SessionEvent.ID.create(),
       sessionID,
       timestamp: DateTime.makeUnsafe(1),
+      agent: "build",
       model: { id: "model", providerID: "provider" },
       snapshot: "before",
     },
@@ -24,7 +25,7 @@ test("step snapshots carry over to assistant messages", () => {
     data: {
       sessionID,
       timestamp: DateTime.makeUnsafe(2),
-      reason: "stop",
+      finish: "stop",
       cost: 0,
       tokens: {
         input: 1,
@@ -39,6 +40,7 @@ test("step snapshots carry over to assistant messages", () => {
   expect(state.messages[0]?.type).toBe("assistant")
   if (state.messages[0]?.type !== "assistant") return
   expect(state.messages[0].snapshot).toEqual({ start: "before", end: "after" })
+  expect(state.messages[0].finish).toBe("stop")
 })
 
 test("text ended populates assistant text content", () => {
@@ -51,6 +53,7 @@ test("text ended populates assistant text content", () => {
       id: SessionEvent.ID.create(),
       sessionID,
       timestamp: DateTime.makeUnsafe(1),
+      agent: "build",
       model: { id: "model", providerID: "provider" },
     },
   } satisfies SessionEvent.Event)

@@ -123,11 +123,14 @@ export type AssistantContent = Schema.Schema.Type<typeof AssistantContent>
 export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistant")({
   ...Base,
   type: Schema.Literal("assistant"),
+  agent: Schema.String,
+  model: SessionEvent.Step.Started.fields.data.fields.model,
   content: AssistantContent.pipe(Schema.Array),
   snapshot: Schema.Struct({
     start: Schema.String.pipe(Schema.optional),
     end: Schema.String.pipe(Schema.optional),
   }).pipe(Schema.optional),
+  finish: Schema.String.pipe(Schema.optional),
   cost: Schema.Number.pipe(Schema.optional),
   tokens: Schema.Struct({
     input: Schema.Number,
@@ -148,6 +151,8 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
     return new Assistant({
       id: event.data.id,
       type: "assistant",
+      agent: event.data.agent,
+      model: event.data.model,
       time: {
         created: event.data.timestamp,
       },

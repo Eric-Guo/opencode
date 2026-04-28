@@ -437,6 +437,7 @@ export const layer: Layer.Layer<
             SyncEvent.run(SessionEvent.Step.Started.Sync, {
               id: SessionEvent.ID.create(),
               sessionID: ctx.sessionID,
+              agent: input.assistantMessage.agent,
               model: {
                 id: ctx.model.id,
                 providerID: ctx.model.providerID,
@@ -464,7 +465,7 @@ export const layer: Layer.Layer<
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             SyncEvent.run(SessionEvent.Step.Ended.Sync, {
               sessionID: ctx.sessionID,
-              reason: value.finishReason,
+              finish: value.finishReason,
               cost: usage.cost,
               tokens: usage.tokens,
               snapshot: completedSnapshot,
