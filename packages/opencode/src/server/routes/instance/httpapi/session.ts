@@ -95,6 +95,14 @@ const PermissionResponsePayload = Schema.Struct({
   response: Permission.Reply,
 }).annotate({ identifier: "SessionPermissionResponseInput" })
 
+const mapNotFound = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  self.pipe(
+    Effect.catchIf(NotFoundError.isInstance, () => Effect.fail(new HttpApiError.NotFound({}))),
+    Effect.catchDefect((error) =>
+      NotFoundError.isInstance(error) ? Effect.fail(new HttpApiError.NotFound({})) : Effect.die(error),
+    ),
+  )
+
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
@@ -150,6 +158,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("get", SessionPaths.get, {
           params: { sessionID: SessionID },
           success: Session.Info,
+          error: HttpApiError.NotFound,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.get",
@@ -203,6 +212,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("message", SessionPaths.message, {
           params: { sessionID: SessionID, messageID: MessageID },
           success: MessageV2.WithParts,
+          error: HttpApiError.NotFound,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.message",
@@ -459,7 +469,7 @@ export const sessionHandlers = HttpApiBuilder.group(SessionApi, "session", (hand
     })
 
     const get = Effect.fn("SessionHttpApi.get")(function* (ctx: { params: { sessionID: SessionID } }) {
-      return yield* session.get(ctx.params.sessionID)
+      return yield* mapNotFound(session.get(ctx.params.sessionID))
     })
 
     const children = Effect.fn("SessionHttpApi.children")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -481,7 +491,7 @@ export const sessionHandlers = HttpApiBuilder.group(SessionApi, "session", (hand
       params: { sessionID: SessionID }
       query: typeof MessagesQuery.Type
     }) {
-      return yield* Effect.gen(function* () {
+      return yield* mapNotFound(Effect.gen(function* () {
         if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
         if (ctx.query.before) {
           const before = ctx.query.before
@@ -514,21 +524,14 @@ export const sessionHandlers = HttpApiBuilder.group(SessionApi, "session", (hand
             "X-Next-Cursor": page.cursor,
           },
         })
-      }).pipe(
-        Effect.catchIf(NotFoundError.isInstance, () => Effect.fail(new HttpApiError.NotFound({}))),
-        Effect.catchDefect((error) =>
-          NotFoundError.isInstance(error)
-            ? Effect.fail(new HttpApiError.NotFound({}))
-            : Effect.die(error),
-        ),
-      )
+      }))
     })
 
     const message = Effect.fn("SessionHttpApi.message")(function* (ctx: {
       params: { sessionID: SessionID; messageID: MessageID }
     }) {
-      return yield* Effect.sync(() =>
-        MessageV2.get({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID }),
+      return yield* mapNotFound(
+        Effect.sync(() => MessageV2.get({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID })),
       )
     })
 
