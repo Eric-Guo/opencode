@@ -85,12 +85,8 @@ const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema
   const permission: ConfigPermission.Info = {}
   for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
     const action = enabled ? "allow" : "deny"
-    if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+    if (tool === "write" || tool === "edit" || tool === "patch") {
       permission.edit = action
-      continue
-    }
-    if (tool === "bash") {
-      permission.bash = action
       continue
     }
     permission[tool] = action

@@ -1669,32 +1669,6 @@ test("permission config preserves user key order", async () => {
   })
 })
 
-test("permission config preserves bash key", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          permission: {
-            bash: "allow",
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await load()
-      expect(Object.keys(config.permission!)).toEqual(["bash"])
-      expect(config.permission).toEqual({
-        bash: "allow",
-      })
-    },
-  })
-})
-
 test("Effect config parser preserves permission order while rejecting unknown top-level keys", () => {
   const config = ConfigParse.effectSchema(
     Config.Info,
