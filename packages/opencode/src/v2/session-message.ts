@@ -27,7 +27,7 @@ export class User extends Schema.Class<User>("Session.Message.User")({
 }) {
   static fromEvent(event: SessionEvent.Prompted) {
     return new User({
-      id: ID.create(),
+      id: event.data.id,
       type: "user",
       metadata: event.metadata,
       text: event.data.prompt.text,
@@ -48,7 +48,7 @@ export class Synthetic extends Schema.Class<Synthetic>("Session.Message.Syntheti
     return new Synthetic({
       sessionID: event.data.sessionID,
       text: event.data.text,
-      id: ID.create(),
+      id: event.data.id,
       type: "synthetic",
       time: { created: event.data.timestamp },
     })
@@ -146,7 +146,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
 }) {
   static fromEvent(event: SessionEvent.Step.Started) {
     return new Assistant({
-      id: ID.create(),
+      id: event.data.id,
       type: "assistant",
       time: {
         created: event.data.timestamp,
@@ -169,14 +169,16 @@ export class Compaction extends Schema.Class<Compaction>("Session.Message.Compac
       sessionID: event.data.sessionID,
       auto: event.data.auto,
       overflow: event.data.overflow,
-      id: ID.create(),
+      id: event.data.id,
       type: "compaction",
       time: { created: event.data.timestamp },
     })
   }
 }
 
-export const Message = Schema.Union([User, Synthetic, Assistant, Compaction]).pipe(Schema.toTaggedUnion("type"))
+export const Message = Schema.Union([User, Synthetic, Assistant, Compaction])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "Session.Message" })
 
 export type Message = Schema.Schema.Type<typeof Message>
 

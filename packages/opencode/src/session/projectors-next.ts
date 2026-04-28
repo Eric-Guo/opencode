@@ -64,7 +64,6 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
         ])
         .run()
     },
-    appendPending() {},
     finish() {},
   }
 }

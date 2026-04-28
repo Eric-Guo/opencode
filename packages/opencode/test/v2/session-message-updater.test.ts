@@ -5,12 +5,13 @@ import { SessionEvent } from "../../src/v2/session-event"
 import { SessionMessageUpdater } from "../../src/v2/session-message-updater"
 
 test("step snapshots carry over to assistant messages", () => {
-  const state: SessionMessageUpdater.MemoryState = { messages: [], pending: [] }
+  const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
 
   SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     type: "session.next.step.started",
     data: {
+      id: SessionEvent.ID.create(),
       sessionID,
       timestamp: DateTime.makeUnsafe(1),
       model: { id: "model", providerID: "provider" },
@@ -41,12 +42,13 @@ test("step snapshots carry over to assistant messages", () => {
 })
 
 test("text ended populates assistant text content", () => {
-  const state: SessionMessageUpdater.MemoryState = { messages: [], pending: [] }
+  const state: SessionMessageUpdater.MemoryState = { messages: [] }
   const sessionID = SessionID.make("session")
 
   SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
     type: "session.next.step.started",
     data: {
+      id: SessionEvent.ID.create(),
       sessionID,
       timestamp: DateTime.makeUnsafe(1),
       model: { id: "model", providerID: "provider" },

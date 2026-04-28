@@ -28,6 +28,7 @@ export const Prompted = Event.define({
   version: 1,
   schema: {
     ...Base,
+    id: ID,
     prompt: Prompt,
   },
 })
@@ -38,6 +39,7 @@ export const Synthetic = Event.define({
   aggregate: "sessionID",
   schema: {
     ...Base,
+    id: ID,
     text: Schema.String,
   },
 })
@@ -49,6 +51,7 @@ export namespace Step {
     aggregate: "sessionID",
     schema: {
       ...Base,
+      id: ID,
       model: Schema.Struct({
         id: Schema.String,
         providerID: Schema.String,
@@ -273,6 +276,7 @@ export const Compacted = Event.define({
   aggregate: "sessionID",
   schema: {
     ...Base,
+    id: ID,
     auto: Schema.Boolean,
     overflow: Schema.Boolean.pipe(Schema.optional),
   },
