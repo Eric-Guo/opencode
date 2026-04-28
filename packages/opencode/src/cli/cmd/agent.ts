@@ -12,7 +12,6 @@ import matter from "gray-matter"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
 import type { Argv } from "yargs"
-
 type AgentMode = "all" | "primary" | "subagent"
 
 // Permission keys (not raw tool names). Multiple tools can map to a single

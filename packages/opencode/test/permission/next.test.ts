@@ -103,6 +103,28 @@ test("fromConfig - mixed string and object values", () => {
   ])
 })
 
+test("fromConfig - custom key remains separate from bash", () => {
+  const result = Permission.fromConfig({
+    custom: "deny",
+    bash: "allow",
+  })
+  expect(result).toEqual([
+    { permission: "custom", pattern: "*", action: "deny" },
+    { permission: "bash", pattern: "*", action: "allow" },
+  ])
+  expect(Permission.evaluate("bash", "ls", result).action).toBe("allow")
+  expect(Permission.evaluate("custom", "ls", result).action).toBe("deny")
+})
+
+test("fromConfig - custom rules do not affect bash rules", () => {
+  const result = Permission.fromConfig({
+    custom: { "rm *": "deny" },
+    bash: { "*": "allow", "rm *": "ask" },
+  })
+  expect(Permission.evaluate("custom", "rm foo", result).action).toBe("deny")
+  expect(Permission.evaluate("bash", "rm foo", result).action).toBe("ask")
+})
+
 test("fromConfig - empty object", () => {
   const result = Permission.fromConfig({})
   expect(result).toEqual([])
@@ -280,6 +302,11 @@ test("merge - config ask overrides default allow", () => {
 test("evaluate - exact pattern match", () => {
   const result = Permission.evaluate("bash", "rm", [{ permission: "bash", pattern: "rm", action: "deny" }])
   expect(result.action).toBe("deny")
+})
+
+test("evaluate - custom tool does not match bash rules", () => {
+  const result = Permission.evaluate("custom", "rm", [{ permission: "bash", pattern: "rm", action: "deny" }])
+  expect(result.action).toBe("ask")
 })
 
 test("evaluate - wildcard pattern match", () => {

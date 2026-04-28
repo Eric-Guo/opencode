@@ -39,6 +39,7 @@ export const TaskTool = Tool.define(
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
+      const primaryTools = cfg.experimental?.primary_tools ?? []
 
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
@@ -88,11 +89,11 @@ export const TaskTool = Tool.define(
                     action: "deny" as const,
                   },
                 ]),
-            ...(cfg.experimental?.primary_tools?.map((item) => ({
+            ...primaryTools.map((item) => ({
               pattern: "*",
               action: "allow" as const,
               permission: item,
-            })) ?? []),
+            })),
           ],
         }))
 
@@ -139,7 +140,7 @@ export const TaskTool = Tool.define(
               tools: {
                 ...(canTodo ? {} : { todowrite: false }),
                 ...(canTask ? {} : { task: false }),
-                ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
+                ...Object.fromEntries(primaryTools.map((item) => [item, false])),
               },
               parts,
             })

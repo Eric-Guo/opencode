@@ -1,33 +1,40 @@
 import { test, expect } from "bun:test"
-import { BashArity } from "../../src/permission/arity"
+import { ShellArity } from "../../src/tool/shell/arity"
 
 test("arity 1 - unknown commands default to first token", () => {
-  expect(BashArity.prefix(["unknown", "command", "subcommand"])).toEqual(["unknown"])
-  expect(BashArity.prefix(["touch", "foo.txt"])).toEqual(["touch"])
+  expect(ShellArity.prefix(["unknown", "command", "subcommand"], "bash")).toEqual(["unknown"])
+  expect(ShellArity.prefix(["touch", "foo.txt"], "bash")).toEqual(["touch"])
 })
 
 test("arity 2 - two token commands", () => {
-  expect(BashArity.prefix(["git", "checkout", "main"])).toEqual(["git", "checkout"])
-  expect(BashArity.prefix(["docker", "run", "nginx"])).toEqual(["docker", "run"])
+  expect(ShellArity.prefix(["git", "checkout", "main"], "bash")).toEqual(["git", "checkout"])
+  expect(ShellArity.prefix(["docker", "run", "nginx"], "bash")).toEqual(["docker", "run"])
 })
 
 test("arity 3 - three token commands", () => {
-  expect(BashArity.prefix(["aws", "s3", "ls", "my-bucket"])).toEqual(["aws", "s3", "ls"])
-  expect(BashArity.prefix(["npm", "run", "dev", "script"])).toEqual(["npm", "run", "dev"])
+  expect(ShellArity.prefix(["aws", "s3", "ls", "my-bucket"], "bash")).toEqual(["aws", "s3", "ls"])
+  expect(ShellArity.prefix(["npm", "run", "dev", "script"], "bash")).toEqual(["npm", "run", "dev"])
 })
 
 test("longest match wins - nested prefixes", () => {
-  expect(BashArity.prefix(["docker", "compose", "up", "service"])).toEqual(["docker", "compose", "up"])
-  expect(BashArity.prefix(["consul", "kv", "get", "config"])).toEqual(["consul", "kv", "get"])
+  expect(ShellArity.prefix(["docker", "compose", "up", "service"], "bash")).toEqual(["docker", "compose", "up"])
+  expect(ShellArity.prefix(["consul", "kv", "get", "config"], "bash")).toEqual(["consul", "kv", "get"])
 })
 
 test("exact length matches", () => {
-  expect(BashArity.prefix(["git", "checkout"])).toEqual(["git", "checkout"])
-  expect(BashArity.prefix(["npm", "run", "dev"])).toEqual(["npm", "run", "dev"])
+  expect(ShellArity.prefix(["git", "checkout"], "bash")).toEqual(["git", "checkout"])
+  expect(ShellArity.prefix(["npm", "run", "dev"], "bash")).toEqual(["npm", "run", "dev"])
 })
 
 test("edge cases", () => {
-  expect(BashArity.prefix([])).toEqual([])
-  expect(BashArity.prefix(["single"])).toEqual(["single"])
-  expect(BashArity.prefix(["git"])).toEqual(["git"])
+  expect(ShellArity.prefix([], "bash")).toEqual([])
+  expect(ShellArity.prefix(["single"], "bash")).toEqual(["single"])
+  expect(ShellArity.prefix(["git"], "bash")).toEqual(["git"])
+})
+
+test("powershell verb-noun structures", () => {
+  expect(ShellArity.prefix(["Get-Content", "file.txt"], "pwsh")).toEqual(["Get-Content"])
+  expect(ShellArity.prefix(["Remove-Item", "-Recurse", "dir"], "powershell")).toEqual(["Remove-Item"])
+  expect(ShellArity.prefix(["git", "checkout", "main"], "pwsh")).toEqual(["git", "checkout"])
+  expect(ShellArity.prefix(["redis-cli", "ping"], "pwsh")).toEqual(["redis-cli", "ping"])
 })

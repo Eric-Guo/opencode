@@ -679,7 +679,7 @@ const part = (row: typeof PartTable.$inferSelect) =>
     id: row.id,
     sessionID: row.session_id,
     messageID: row.message_id,
-  }) as Part
+  } as Part)
 
 const older = (row: Cursor) =>
   or(lt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)))
