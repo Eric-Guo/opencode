@@ -1617,7 +1617,7 @@ test("merges legacy tools with existing permission config", async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
         glob: "allow",
-        shell: "allow",
+        bash: "allow",
       })
     },
   })
@@ -1668,7 +1668,7 @@ test("permission config preserves user key order", async () => {
   })
 })
 
-test("permission config preserves shell and legacy bash order", async () => {
+test("permission config preserves bash key", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Filesystem.write(
@@ -1676,7 +1676,6 @@ test("permission config preserves shell and legacy bash order", async () => {
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           permission: {
-            shell: "deny",
             bash: "allow",
           },
         }),
@@ -1687,9 +1686,8 @@ test("permission config preserves shell and legacy bash order", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await load()
-      expect(Object.keys(config.permission!)).toEqual(["shell", "bash"])
+      expect(Object.keys(config.permission!)).toEqual(["bash"])
       expect(config.permission).toEqual({
-        shell: "deny",
         bash: "allow",
       })
     },

@@ -172,7 +172,7 @@ describe("transcript", () => {
         messageID: "msg_123",
         type: "tool",
         callID: "call_1",
-        tool: "shell",
+        tool: "bash",
         state: {
           status: "completed",
           input: { command: "ls" },
@@ -197,7 +197,7 @@ describe("transcript", () => {
         messageID: "msg_123",
         type: "tool",
         callID: "call_1",
-        tool: "shell",
+        tool: "bash",
         state: {
           status: "completed",
           input: { command: "echo '```hello```'" },
@@ -222,7 +222,7 @@ describe("transcript", () => {
         messageID: "msg_123",
         type: "tool",
         callID: "call_1",
-        tool: "shell",
+        tool: "bash",
         state: {
           status: "completed",
           input: { command: "ls" },
@@ -245,7 +245,7 @@ describe("transcript", () => {
         messageID: "msg_123",
         type: "tool",
         callID: "call_1",
-        tool: "shell",
+        tool: "bash",
         state: {
           status: "error",
           input: { command: "invalid" },

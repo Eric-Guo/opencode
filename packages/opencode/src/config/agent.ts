@@ -91,7 +91,7 @@ const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema
       continue
     }
     if (ShellToolID.normalize(tool) === ShellToolID.id) {
-      permission.shell = action
+      permission.bash = action
       continue
     }
     permission[tool] = action

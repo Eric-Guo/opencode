@@ -190,7 +190,7 @@ describe("tool.shell", () => {
 })
 
 describe("tool.shell permissions", () => {
-  each("asks for shell permission with correct pattern", async () => {
+  each("asks for bash permission with correct pattern", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -213,7 +213,7 @@ describe("tool.shell permissions", () => {
     })
   })
 
-  each("asks for shell permission with multiple commands", async () => {
+  each("asks for bash permission with multiple commands", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -698,7 +698,7 @@ describe("tool.shell permissions", () => {
                 ),
               )
               const extDirReq = requests.find((r) => r.permission === "external_directory")
-                const bashReq = requests.find((r) => r.permission === expectedPermission)
+              const bashReq = requests.find((r) => r.permission === expectedPermission)
               expect(extDirReq).toBeDefined()
               expect(extDirReq!.patterns).toContain(
                 Filesystem.normalizePathPattern(path.join(process.env.WINDIR!, "*")),
@@ -977,7 +977,7 @@ describe("tool.shell permissions", () => {
     })
   })
 
-  each("does not ask for shell permission when command is cd only", async () => {
+  each("does not ask for bash permission when command is cd only", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,

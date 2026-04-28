@@ -19,8 +19,7 @@ export namespace ShellKind {
 }
 
 export namespace ShellToolID {
-  export const id = "shell"
-  export const legacy = "bash"
+  export const id = "bash"
   export type ID = typeof id
 
   export function has(value: string): value is ID {
@@ -28,6 +27,6 @@ export namespace ShellToolID {
   }
 
   export function normalize(value: string) {
-    return value === legacy ? id : value
+    return value
   }
 }

@@ -672,7 +672,7 @@ export const layer = Layer.effect(
               continue
             }
             if (ShellToolID.normalize(tool) === ShellToolID.id) {
-              perms.shell = action
+              perms.bash = action
               continue
             }
             perms[tool] = action

@@ -78,14 +78,14 @@ function withProvided(dir: string) {
 
 test("fromConfig - string value becomes wildcard rule", () => {
   const result = Permission.fromConfig({ bash: "allow" })
-  expect(result).toEqual([{ permission: "shell", pattern: "*", action: "allow" }])
+  expect(result).toEqual([{ permission: "bash", pattern: "*", action: "allow" }])
 })
 
 test("fromConfig - object value converts to rules array", () => {
   const result = Permission.fromConfig({ bash: { "*": "allow", rm: "deny" } })
   expect(result).toEqual([
-    { permission: "shell", pattern: "*", action: "allow" },
-    { permission: "shell", pattern: "rm", action: "deny" },
+    { permission: "bash", pattern: "*", action: "allow" },
+    { permission: "bash", pattern: "rm", action: "deny" },
   ])
 })
 
@@ -96,32 +96,32 @@ test("fromConfig - mixed string and object values", () => {
     webfetch: "ask",
   })
   expect(result).toEqual([
-    { permission: "shell", pattern: "*", action: "allow" },
-    { permission: "shell", pattern: "rm", action: "deny" },
+    { permission: "bash", pattern: "*", action: "allow" },
+    { permission: "bash", pattern: "rm", action: "deny" },
     { permission: "edit", pattern: "*", action: "allow" },
     { permission: "webfetch", pattern: "*", action: "ask" },
   ])
 })
 
-test("fromConfig - shell and legacy bash normalize to shell in key order", () => {
+test("fromConfig - custom key remains separate from bash", () => {
   const result = Permission.fromConfig({
-    shell: "deny",
+    custom: "deny",
     bash: "allow",
   })
   expect(result).toEqual([
-    { permission: "shell", pattern: "*", action: "deny" },
-    { permission: "shell", pattern: "*", action: "allow" },
+    { permission: "custom", pattern: "*", action: "deny" },
+    { permission: "bash", pattern: "*", action: "allow" },
   ])
   expect(Permission.evaluate("bash", "ls", result).action).toBe("allow")
-  expect(Permission.evaluate("shell", "ls", result).action).toBe("allow")
+  expect(Permission.evaluate("custom", "ls", result).action).toBe("deny")
 })
 
-test("fromConfig - legacy bash rules coexist with canonical shell rules", () => {
+test("fromConfig - custom rules do not affect bash rules", () => {
   const result = Permission.fromConfig({
-    shell: { "rm *": "deny" },
+    custom: { "rm *": "deny" },
     bash: { "*": "allow", "rm *": "ask" },
   })
-  expect(Permission.evaluate("shell", "rm foo", result).action).toBe("ask")
+  expect(Permission.evaluate("custom", "rm foo", result).action).toBe("deny")
   expect(Permission.evaluate("bash", "rm foo", result).action).toBe("ask")
 })
 
@@ -158,8 +158,8 @@ test("fromConfig - preserves top-level config key order", () => {
   const wildcardFirst = Permission.fromConfig({ "*": "deny", bash: "allow" })
   const specificFirst = Permission.fromConfig({ bash: "allow", "*": "deny" })
 
-  expect(wildcardFirst.map((r) => r.permission)).toEqual(["*", "shell"])
-  expect(specificFirst.map((r) => r.permission)).toEqual(["shell", "*"])
+  expect(wildcardFirst.map((r) => r.permission)).toEqual(["*", "bash"])
+  expect(specificFirst.map((r) => r.permission)).toEqual(["bash", "*"])
 
   expect(Permission.evaluate("bash", "ls", wildcardFirst).action).toBe("allow")
   expect(Permission.evaluate("bash", "ls", specificFirst).action).toBe("deny")
@@ -178,7 +178,7 @@ test("fromConfig - top-level ordering is not sorted by wildcard specificity", ()
     edit: "deny",
     "mcp_*": "allow",
   })
-  expect(ruleset.map((r) => r.permission)).toEqual(["shell", "*", "edit", "mcp_*"])
+  expect(ruleset.map((r) => r.permission)).toEqual(["bash", "*", "edit", "mcp_*"])
 })
 
 test("fromConfig - sub-pattern insertion order inside a tool key is preserved", () => {
@@ -304,9 +304,9 @@ test("evaluate - exact pattern match", () => {
   expect(result.action).toBe("deny")
 })
 
-test("evaluate - shell matches legacy bash rules", () => {
-  const result = Permission.evaluate("shell", "rm", [{ permission: "bash", pattern: "rm", action: "deny" }])
-  expect(result.action).toBe("deny")
+test("evaluate - custom tool does not match bash rules", () => {
+  const result = Permission.evaluate("custom", "rm", [{ permission: "bash", pattern: "rm", action: "deny" }])
+  expect(result.action).toBe("ask")
 })
 
 test("evaluate - wildcard pattern match", () => {

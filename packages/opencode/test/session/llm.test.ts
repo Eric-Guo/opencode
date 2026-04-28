@@ -63,7 +63,7 @@ describe("session.llm.hasToolCalls", () => {
           {
             type: "tool-call",
             toolCallId: "call-123",
-            toolName: "shell",
+            toolName: "bash",
           },
         ],
       },
@@ -79,7 +79,7 @@ describe("session.llm.hasToolCalls", () => {
           {
             type: "tool-result",
             toolCallId: "call-123",
-            toolName: "shell",
+            toolName: "bash",
           },
         ],
       },
@@ -120,9 +120,9 @@ describe("session.llm.hasToolCalls", () => {
 })
 
 describe("session.llm.repairToolName", () => {
-  test("normalizes legacy bash alias to shell when available", () => {
-    expect(LLM.repairToolName("bash", { shell: {} as Tool })).toBe("shell")
-    expect(LLM.repairToolName("BASH", { shell: {} as Tool })).toBe("shell")
+  test("normalizes bash casing when available", () => {
+    expect(LLM.repairToolName("bash", { bash: {} as Tool })).toBe("bash")
+    expect(LLM.repairToolName("BASH", { bash: {} as Tool })).toBe("bash")
   })
 
   test("returns undefined when normalized tool is unavailable", () => {
@@ -572,7 +572,7 @@ describe("session.llm.stream", () => {
     })
   })
 
-  test("disables shell when user message uses legacy bash override", async () => {
+  test("disables bash when user message uses bash override", async () => {
     const server = state.server
     if (!server) {
       throw new Error("Server not initialized")
@@ -641,7 +641,7 @@ describe("session.llm.stream", () => {
           system: ["You are a helpful assistant."],
           messages: [{ role: "user", content: "Hello" }],
           tools: {
-            shell: tool({
+            bash: tool({
               description: "Run a shell command",
               inputSchema: z.object({ command: z.string() }),
               execute: async () => ({ output: "" }),
@@ -660,7 +660,7 @@ describe("session.llm.stream", () => {
             item.function?.name ? [item.function.name] : [],
           ) ?? []
 
-        expect(names).not.toContain("shell")
+        expect(names).not.toContain("bash")
         expect(names).toContain("read")
       },
     })

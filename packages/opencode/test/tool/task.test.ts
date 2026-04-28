@@ -351,7 +351,7 @@ describe("tool.task", () => {
               action: "deny",
             },
             {
-              permission: "shell",
+              permission: "bash",
               pattern: "*",
               action: "allow",
             },
@@ -363,7 +363,7 @@ describe("tool.task", () => {
           ])
           expect(seen?.tools).toEqual({
             todowrite: false,
-            shell: false,
+            bash: false,
             read: false,
           })
         }),

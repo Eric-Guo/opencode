@@ -460,7 +460,6 @@ function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" 
   return Record.filter(input.tools, (_, k) => {
     const userTool = input.user.tools?.[k]
     if (userTool !== undefined) return userTool !== false && !disabled.has(k)
-    if (k === ShellToolID.id && input.user.tools?.[ShellToolID.legacy] === false) return false
     return !disabled.has(k)
   })
 }

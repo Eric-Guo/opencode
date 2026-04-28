@@ -36,7 +36,7 @@ const accepts = (schema: Schema.Decoder<unknown>, input: unknown): boolean =>
 describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
     test("apply_patch", () => expect(toJsonSchema(ApplyPatch)).toMatchSnapshot())
-    test("shell", () => expect(toJsonSchema(Shell)).toMatchSnapshot())
+    test("bash", () => expect(toJsonSchema(Shell)).toMatchSnapshot())
     test("codesearch", () => expect(toJsonSchema(CodeSearch)).toMatchSnapshot())
     test("edit", () => expect(toJsonSchema(Edit)).toMatchSnapshot())
     test("glob", () => expect(toJsonSchema(Glob)).toMatchSnapshot())
