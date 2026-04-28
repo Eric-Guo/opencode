@@ -93,8 +93,12 @@ export type ToolState = Schema.Schema.Type<typeof ToolState>
 
 export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.Assistant.Tool")({
   type: Schema.Literal("tool"),
-  callID: Schema.String,
+  id: Schema.String,
   name: Schema.String,
+  provider: Schema.Struct({
+    executed: Schema.Boolean,
+    metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  }).pipe(Schema.optional),
   state: ToolState,
   time: Schema.Struct({
     created: Schema.DateTimeUtcFromMillis,
@@ -111,7 +115,7 @@ export class AssistantText extends Schema.Class<AssistantText>("Session.Message.
 
 export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Session.Message.Assistant.Reasoning")({
   type: Schema.Literal("reasoning"),
-  reasoningID: Schema.String,
+  id: Schema.String,
   text: Schema.String,
 }) {}
 
