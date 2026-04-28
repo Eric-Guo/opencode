@@ -34,4 +34,6 @@ export const layer: Layer.Layer<Service> = Layer.effect(
   }),
 )
 
+export const defaultLayer = layer
+
 export * as SessionV2 from "./session"

@@ -1,4 +1,3 @@
-import { Session as LegacySession } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionMessage } from "@/v2/session-message"
 import { SessionV2 } from "@/v2/session"
@@ -37,18 +36,16 @@ export const V2Api = HttpApi.make("v2")
     }),
   )
 
-export const v2Handlers = Layer.unwrap(
+export const v2Handlers = HttpApiBuilder.group(V2Api, "v2", (handlers) =>
   Effect.gen(function* () {
-    const legacySession = yield* LegacySession.Service
     const session = yield* SessionV2.Service
-
-    const messages = Effect.fn("V2HttpApi.messages")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* legacySession.get(ctx.params.sessionID)
-      return yield* session.messages(ctx.params.sessionID)
-    })
-
-    return HttpApiBuilder.group(V2Api, "v2", (handlers) => handlers.handle("messages", messages))
+    return handlers.handle(
+      "messages",
+      Effect.fn(function* (ctx) {
+        return yield* session.messages(ctx.params.sessionID)
+      }),
+    )
   }),
-).pipe(Layer.provide(LegacySession.defaultLayer), Layer.provide(SessionV2.layer))
+).pipe(Layer.provide(SessionV2.defaultLayer))
 
 export * as V2HttpApi from "./v2"
