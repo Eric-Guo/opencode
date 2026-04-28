@@ -4,14 +4,12 @@ import { SessionMessage } from "./session-message"
 
 export type MemoryState = {
   messages: SessionMessage.Message[]
-  pending: SessionMessage.Message[]
 }
 
 export interface Adapter<Result> {
   readonly getCurrentAssistant: () => SessionMessage.Assistant | undefined
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => void
   readonly appendMessage: (message: SessionMessage.Message) => void
-  readonly appendPending: (message: SessionMessage.Message) => void
   readonly finish: () => Result
 }
 
@@ -35,9 +33,6 @@ export function memory(state: MemoryState): Adapter<MemoryState> {
     },
     appendMessage(message) {
       state.messages.push(message)
-    },
-    appendPending(message) {
-      state.pending.push(message)
     },
     finish() {
       return state
@@ -67,12 +62,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
 
   SessionEvent.All.match(event, {
     "session.next.prompted": (event) => {
-      const message = SessionMessage.User.fromEvent(event)
-      if (currentAssistant) {
-        adapter.appendPending(message)
-        return
-      }
-      adapter.appendMessage(message)
+      adapter.appendMessage(SessionMessage.User.fromEvent(event))
     },
     "session.next.synthetic": (event) => {
       adapter.appendMessage(SessionMessage.Synthetic.fromEvent(event))
