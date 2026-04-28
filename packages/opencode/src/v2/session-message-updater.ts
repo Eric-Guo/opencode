@@ -121,7 +121,16 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         )
       }
     },
-    "session.next.text.ended": () => {},
+    "session.next.text.ended": (event) => {
+      if (currentAssistant) {
+        adapter.updateAssistant(
+          produce(currentAssistant, (draft) => {
+            const match = latestText(draft)
+            if (match) match.text = event.data.text
+          }),
+        )
+      }
+    },
     "session.next.tool.input.started": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
