@@ -49,7 +49,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
 
   const latestTool = (assistant: DraftAssistant | undefined, callID?: string) =>
     assistant?.content.findLast(
-      (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.callID === callID),
+      (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.id === callID),
     )
 
   const latestText = (assistant: DraftAssistant | undefined) =>
@@ -57,7 +57,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
 
   const latestReasoning = (assistant: DraftAssistant | undefined, reasoningID: string) =>
     assistant?.content.findLast(
-      (item): item is DraftReasoning => item.type === "reasoning" && item.reasoningID === reasoningID,
+      (item): item is DraftReasoning => item.type === "reasoning" && item.id === reasoningID,
     )
 
   SessionEvent.All.match(event, {
@@ -128,7 +128,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
           produce(currentAssistant, (draft) => {
             draft.content.push({
               type: "tool",
-              callID: event.data.callID,
+              id: event.data.callID,
               name: event.data.name,
               time: {
                 created: event.data.timestamp,
@@ -160,6 +160,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
           produce(currentAssistant, (draft) => {
             const match = latestTool(draft, event.data.callID)
             if (match) {
+              match.provider = event.data.provider
               match.time.ran = event.data.timestamp
               match.state = {
                 status: "running",
@@ -191,6 +192,8 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
           produce(currentAssistant, (draft) => {
             const match = latestTool(draft, event.data.callID)
             if (match && match.state.status === "running") {
+              match.provider = event.data.provider
+              match.time.completed = event.data.timestamp
               match.state = {
                 status: "completed",
                 input: match.state.input,
@@ -208,6 +211,8 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
           produce(currentAssistant, (draft) => {
             const match = latestTool(draft, event.data.callID)
             if (match && match.state.status === "running") {
+              match.provider = event.data.provider
+              match.time.completed = event.data.timestamp
               match.state = {
                 status: "error",
                 error: event.data.error,
@@ -226,7 +231,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
           produce(currentAssistant, (draft) => {
             draft.content.push({
               type: "reasoning",
-              reasoningID: event.data.reasoningID,
+              id: event.data.reasoningID,
               text: "",
             })
           }),

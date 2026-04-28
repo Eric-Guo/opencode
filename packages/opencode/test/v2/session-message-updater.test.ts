@@ -79,3 +79,61 @@ test("text ended populates assistant text content", () => {
   if (state.messages[0]?.type !== "assistant") return
   expect(state.messages[0].content).toEqual([{ type: "text", text: "hello assistant" }])
 })
+
+test("tool completion stores completed timestamp", () => {
+  const state: SessionMessageUpdater.MemoryState = { messages: [] }
+  const sessionID = SessionID.make("session")
+  const callID = "call"
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    type: "session.next.step.started",
+    data: {
+      id: SessionEvent.ID.create(),
+      sessionID,
+      timestamp: DateTime.makeUnsafe(1),
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    type: "session.next.tool.input.started",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(2),
+      callID,
+      name: "bash",
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    type: "session.next.tool.called",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(3),
+      callID,
+      tool: "bash",
+      input: { command: "pwd" },
+      provider: { executed: true, metadata: { source: "provider" } },
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    type: "session.next.tool.success",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(4),
+      callID,
+      structured: {},
+      content: [{ type: "text", text: "/tmp" }],
+      provider: { executed: true, metadata: { status: "done" } },
+    },
+  } satisfies SessionEvent.Event)
+
+  expect(state.messages[0]?.type).toBe("assistant")
+  if (state.messages[0]?.type !== "assistant") return
+  expect(state.messages[0].content[0]?.type).toBe("tool")
+  if (state.messages[0].content[0]?.type !== "tool") return
+  expect(state.messages[0].content[0].time.completed).toEqual(DateTime.makeUnsafe(4))
+  expect(state.messages[0].content[0].provider).toEqual({ executed: true, metadata: { status: "done" } })
+})
