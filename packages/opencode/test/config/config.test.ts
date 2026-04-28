@@ -1353,7 +1353,7 @@ test("migrates legacy tools config to permissions - allow", async () => {
     fn: async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
-        shell: "allow",
+        bash: "allow",
         read: "allow",
       })
     },
@@ -1384,7 +1384,7 @@ test("migrates legacy tools config to permissions - deny", async () => {
     fn: async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
-        shell: "deny",
+        bash: "deny",
         webfetch: "deny",
       })
     },
@@ -1582,7 +1582,7 @@ test("migrates mixed legacy tools config", async () => {
     fn: async () => {
       const config = await load()
       expect(config.agent?.["test"]?.permission).toEqual({
-        shell: "allow",
+        bash: "allow",
         edit: "allow",
         read: "deny",
         webfetch: "allow",

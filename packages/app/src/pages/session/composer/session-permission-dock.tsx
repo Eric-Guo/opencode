@@ -14,9 +14,8 @@ export function SessionPermissionDock(props: {
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.permission}.description`
-    const fallback = props.request.permission === "shell" ? "settings.permissions.tool.bash.description" : key
     const value = language.t(key as Parameters<typeof language.t>[0])
-    if (value === key) return fallback === key ? "" : language.t(fallback as Parameters<typeof language.t>[0])
+    if (value === key) return ""
     return value
   }
 
