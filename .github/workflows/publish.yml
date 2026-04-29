@@ -341,6 +341,30 @@ jobs:
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
+      - name: Create and upload macOS .app.tar.gz
+        if: runner.os == 'macOS' && needs.version.outputs.release
+        working-directory: packages/desktop-electron/dist
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          if [[ "${{ matrix.settings.target }}" == "x86_64-apple-darwin" ]]; then
+            APP_DIR="mac"
+            OUT_NAME="opencode-desktop-darwin-x64.app.tar.gz"
+          elif [[ "${{ matrix.settings.target }}" == "aarch64-apple-darwin" ]]; then
+            APP_DIR="mac-arm64"
+            OUT_NAME="opencode-desktop-darwin-aarch64.app.tar.gz"
+          else
+            echo "Unknown macOS target: ${{ matrix.settings.target }}"
+            exit 1
+          fi
+          APP_PATH=$(find "$APP_DIR" -maxdepth 1 -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found in $APP_DIR"
+            exit 1
+          fi
+          tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+          gh release upload "v${{ needs.version.outputs.version }}" "$OUT_NAME" --clobber --repo "${{ needs.version.outputs.repo }}"
+
       - name: Verify signed Windows Electron artifacts
         if: runner.os == 'Windows'
         shell: pwsh

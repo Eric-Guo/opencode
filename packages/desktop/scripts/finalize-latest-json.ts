@@ -110,14 +110,6 @@ function link(raw: string) {
   return `https://github.com/${repo}/releases/download/v${version}/${raw}`
 }
 
-function lkey(arch: string, raw: string | undefined) {
-  if (!raw) return
-  const low = raw.split("?")[0]?.toLowerCase() ?? ""
-  if (low.endsWith(".deb")) return `linux-${arch}-deb`
-  if (low.endsWith(".rpm")) return `linux-${arch}-rpm`
-  if (low.endsWith(".appimage")) return `linux-${arch}-appimage`
-}
-
 async function sign(url: string, key: string) {
   const name = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? key)
   const asset = amap.get(name)
@@ -167,26 +159,35 @@ const out: Record<string, { url: string; signature: string }> = {}
 
 const winxexe = pick(winx?.files ?? [], [".exe"])
 const winaexe = pick(wina?.files ?? [], [".exe"])
-const macxzip = pick(macx?.files ?? [], [".zip", ".dmg"])
-const macazip = pick(maca?.files ?? [], [".zip", ".dmg"])
-const linxapp = pick(linx?.files ?? [], [".appimage", ".deb", ".rpm"])
-const linaapp = pick(lina?.files ?? [], [".appimage", ".deb", ".rpm"])
-const linxkey = lkey("x86_64", linxapp)
-const linakey = lkey("aarch64", linaapp)
+
+const macxTarGz = "opencode-desktop-darwin-x64.app.tar.gz"
+const macaTarGz = "opencode-desktop-darwin-aarch64.app.tar.gz"
+
+const linxDeb = pick(linx?.files ?? [], [".deb"])
+const linxRpm = pick(linx?.files ?? [], [".rpm"])
+const linxAppImage = pick(linx?.files ?? [], [".appimage"])
+const linaDeb = pick(lina?.files ?? [], [".deb"])
+const linaRpm = pick(lina?.files ?? [], [".rpm"])
+const linaAppImage = pick(lina?.files ?? [], [".appimage"])
 
 await add(out, "windows-x86_64-nsis", winxexe)
 await add(out, "windows-aarch64-nsis", winaexe)
-await add(out, "darwin-x86_64-app", macxzip)
-await add(out, "darwin-aarch64-app", macazip)
-if (linxkey) await add(out, linxkey, linxapp)
-if (linakey) await add(out, linakey, linaapp)
+await add(out, "darwin-x86_64-app", macxTarGz)
+await add(out, "darwin-aarch64-app", macaTarGz)
+
+await add(out, "linux-x86_64-deb", linxDeb)
+await add(out, "linux-x86_64-rpm", linxRpm)
+await add(out, "linux-x86_64-appimage", linxAppImage)
+await add(out, "linux-aarch64-deb", linaDeb)
+await add(out, "linux-aarch64-rpm", linaRpm)
+await add(out, "linux-aarch64-appimage", linaAppImage)
 
 alias(out, "windows-x86_64", "windows-x86_64-nsis")
 alias(out, "windows-aarch64", "windows-aarch64-nsis")
 alias(out, "darwin-x86_64", "darwin-x86_64-app")
 alias(out, "darwin-aarch64", "darwin-aarch64-app")
-if (linxkey) alias(out, "linux-x86_64", linxkey)
-if (linakey) alias(out, "linux-aarch64", linakey)
+alias(out, "linux-x86_64", "linux-x86_64-deb")
+alias(out, "linux-aarch64", "linux-aarch64-deb")
 
 const platforms = Object.fromEntries(
   Object.keys(out)
