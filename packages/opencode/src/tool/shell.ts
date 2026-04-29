@@ -19,8 +19,8 @@ import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import { ShellArity } from "./shell/arity"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
+import { BashArity } from "@/permission/arity"
 
 export { Parameters } from "./shell/prompt"
 
@@ -381,7 +381,7 @@ export const ShellTool = Tool.define(
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {
           scan.patterns.add(source(node))
-          scan.always.add(ShellArity.prefix(tokens, shellKind).join(" ") + " *")
+          scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
         }
       }
 

@@ -1550,9 +1550,11 @@ export class Agent implements ACPAgent {
 
 function toToolKind(toolName: string): ToolKind {
   const tool = toolName.toLocaleLowerCase()
-  if (tool === ShellToolID.id) return "execute"
 
   switch (tool) {
+    case ShellToolID.id:
+      return "execute"
+
     case "webfetch":
       return "fetch"
 
@@ -1577,7 +1579,6 @@ function toToolKind(toolName: string): ToolKind {
 
 function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {
   const tool = toolName.toLocaleLowerCase()
-  if (tool === ShellToolID.id) return []
 
   switch (tool) {
     case "read":
@@ -1587,6 +1588,8 @@ function toLocations(toolName: string, input: Record<string, any>): { path: stri
     case "glob":
     case "grep":
       return input["path"] ? [{ path: input["path"] }] : []
+    case ShellToolID.id:
+      return []
     default:
       return []
   }
