@@ -1,5 +1,5 @@
 export namespace ShellKind {
-  export const ids = ["bash", "pwsh", "powershell"] as const
+  export const ids = ["bash", "pwsh", "powershell", "cmd"] as const
   export type ID = (typeof ids)[number]
 
   const kind = new Set<string>(ids)

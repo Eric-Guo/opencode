@@ -26,7 +26,7 @@ export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
-const CWD = new Set(["cd", "push-location", "set-location"])
+const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
   "rm",
@@ -49,6 +49,7 @@ const FILES = new Set([
   "new-item",
   "rename-item",
 ])
+const CMD_FILES = new Set(["copy", "del", "dir", "erase", "md", "mkdir", "move", "rd", "ren", "rename", "rmdir", "type"])
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
 
@@ -174,11 +175,16 @@ function prefix(text: string) {
   return text.slice(0, match.index)
 }
 
-function pathArgs(list: Part[], ps: boolean) {
+function pathArgs(list: Part[], ps: boolean, cmd = false) {
   if (!ps) {
     return list
       .slice(1)
-      .filter((item) => !item.text.startsWith("-") && !(list[0]?.text === "chmod" && item.text.startsWith("+")))
+      .filter(
+        (item) =>
+          !item.text.startsWith("-") &&
+          !(cmd && item.text.startsWith("/")) &&
+          !(list[0]?.text === "chmod" && item.text.startsWith("+")),
+      )
       .map((item) => item.text)
   }
 
@@ -363,8 +369,8 @@ export const ShellTool = Tool.define(
         const tokens = command.map((item) => item.text)
         const cmd = ps ? tokens[0]?.toLowerCase() : tokens[0]
 
-        if (cmd && FILES.has(cmd)) {
-          for (const arg of pathArgs(command, ps)) {
+        if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
+          for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
             const resolved = yield* argPath(arg, cwd, ps, shell)
             log.info("resolved path", { arg, resolved })
             if (!resolved || Instance.containsPath(resolved)) continue

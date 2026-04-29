@@ -70,6 +70,7 @@ const shells = (() => {
 })()
 const PS = new Set(["pwsh", "powershell"])
 const ps = shells.filter((item) => PS.has(item.label))
+const cmdShell = shells.find((item) => item.label === "cmd")
 
 const sh = () => Shell.name(Shell.acceptable())
 const evalarg = (text: string) => (sh() === "cmd" ? quote(text) : squote(text))
@@ -734,6 +735,35 @@ describe("tool.shell permissions", () => {
         }),
       )
     }
+  }
+
+  if (process.platform === "win32" && cmdShell) {
+    test(
+      "asks for external_directory permission for cmd file commands [cmd]",
+      withShell(cmdShell, async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const bash = await initShell()
+            const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+            await Effect.runPromise(
+              bash.execute(
+                {
+                  command: `type "${path.join(process.env.WINDIR!, "win.ini")}"`,
+                  description: "Read Windows ini with cmd",
+                },
+                capture(requests),
+              ),
+            )
+            const extDirReq = requests.find((r) => r.permission === "external_directory")
+            expect(extDirReq).toBeDefined()
+            expect(extDirReq!.patterns).toContain(
+              Filesystem.normalizePathPattern(path.join(process.env.WINDIR!, "*")),
+            )
+          },
+        })
+      }),
+    )
   }
 
   each("asks for external_directory permission when cd to parent", async () => {
