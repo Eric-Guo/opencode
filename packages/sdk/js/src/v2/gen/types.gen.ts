@@ -1039,6 +1039,7 @@ export type EventSessionNextStepStarted = {
     timestamp: number
     sessionID: string
     id: string
+    agent: string
     model: {
       id: string
       providerID: string
@@ -1053,7 +1054,7 @@ export type EventSessionNextStepEnded = {
   properties: {
     timestamp: number
     sessionID: string
-    reason: string
+    finish: string
     cost: number
     tokens: {
       input: number
@@ -1425,6 +1426,7 @@ export type SyncEventSessionNextStepStarted = {
     timestamp: number
     sessionID: string
     id: string
+    agent: string
     model: {
       id: string
       providerID: string
@@ -1443,7 +1445,7 @@ export type SyncEventSessionNextStepEnded = {
   data: {
     timestamp: number
     sessionID: string
-    reason: string
+    finish: string
     cost: number
     tokens: {
       input: number
@@ -2668,7 +2670,7 @@ export type SessionMessageAssistantText = {
 
 export type SessionMessageAssistantReasoning = {
   type: "reasoning"
-  reasoningID: string
+  id: string
   text: string
 }
 
@@ -2717,8 +2719,14 @@ export type SessionMessageToolStateError = {
 
 export type SessionMessageAssistantTool = {
   type: "tool"
-  callID: string
+  id: string
   name: string
+  provider?: {
+    executed: boolean
+    metadata?: {
+      [key: string]: unknown
+    }
+  }
   state:
     | SessionMessageToolStatePending
     | SessionMessageToolStateRunning
@@ -2742,11 +2750,18 @@ export type SessionMessageAssistant = {
     completed?: number
   }
   type: "assistant"
+  agent: string
+  model: {
+    id: string
+    providerID: string
+    variant?: string
+  }
   content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
   snapshot?: {
     start?: string
     end?: string
   }
+  finish?: string
   cost?: number
   tokens?: {
     input: number
