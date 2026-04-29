@@ -423,13 +423,6 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
       - uses: actions/download-artifact@v4
         with:
           name: opencode-cli
@@ -450,6 +443,13 @@ jobs:
         with:
           pattern: latest-yml-*
           path: /tmp/latest-yml
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Cache apt packages (AUR)
         uses: actions/cache@v4
