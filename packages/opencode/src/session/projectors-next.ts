@@ -37,8 +37,31 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
         .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
         .find((message): message is SessionMessage.Assistant => message.type === "assistant" && !message.time.completed)
     },
+    getCurrentCompaction() {
+      return db
+        .select()
+        .from(SessionMessageTable)
+        .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
+        .orderBy(desc(SessionMessageTable.id))
+        .all()
+        .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+        .find((message): message is SessionMessage.Compaction => message.type === "compaction")
+    },
     updateAssistant(assistant) {
       const { id, type, ...data } = assistant
+      db.update(SessionMessageTable)
+        .set({ data: encodeMessageData(data) })
+        .where(
+          and(
+            eq(SessionMessageTable.id, id),
+            eq(SessionMessageTable.session_id, sessionID),
+            eq(SessionMessageTable.type, type),
+          ),
+        )
+        .run()
+    },
+    updateCompaction(compaction) {
+      const { id, type, ...data } = compaction
       db.update(SessionMessageTable)
         .set({ data: encodeMessageData(data) })
         .where(
@@ -118,7 +141,13 @@ export default [
   SyncEvent.project(SessionEvent.Retried.Sync, (db, data) => {
     update(db, { type: "session.next.retried", data })
   }),
-  SyncEvent.project(SessionEvent.Compacted.Sync, (db, data) => {
-    update(db, { type: "session.next.compacted", data })
+  SyncEvent.project(SessionEvent.Compaction.Started.Sync, (db, data) => {
+    update(db, { type: "session.next.compaction.started", data })
+  }),
+  SyncEvent.project(SessionEvent.Compaction.Delta.Sync, (db, data) => {
+    update(db, { type: "session.next.compaction.delta", data })
+  }),
+  SyncEvent.project(SessionEvent.Compaction.Ended.Sync, (db, data) => {
+    update(db, { type: "session.next.compaction.ended", data })
   }),
 ]

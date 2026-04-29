@@ -272,17 +272,38 @@ export const Retried = Event.define({
 })
 export type Retried = Schema.Schema.Type<typeof Retried>
 
-export const Compacted = Event.define({
-  type: "session.next.compacted",
-  aggregate: "sessionID",
-  schema: {
-    ...Base,
-    id: ID,
-    auto: Schema.Boolean,
-    overflow: Schema.Boolean.pipe(Schema.optional),
-  },
-})
-export type Compacted = Schema.Schema.Type<typeof Compacted>
+export namespace Compaction {
+  export const Started = Event.define({
+    type: "session.next.compaction.started",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      id: ID,
+      reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
+    },
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
+
+  export const Delta = Event.define({
+    type: "session.next.compaction.delta",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      text: Schema.String,
+    },
+  })
+
+  export const Ended = Event.define({
+    type: "session.next.compaction.ended",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      text: Schema.String,
+      include: Schema.String.pipe(Schema.optional),
+    },
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
+}
 
 export const All = Schema.Union(
   [
@@ -304,12 +325,23 @@ export const All = Schema.Union(
     Reasoning.Delta,
     Reasoning.Ended,
     Retried,
-    Compacted,
+    Compaction.Started,
+    Compaction.Delta,
+    Compaction.Ended,
   ],
   {
     mode: "oneOf",
   },
 ).pipe(Schema.toTaggedUnion("type"))
+
+// user
+// assistant
+// assistant
+// assistant
+// user
+// compaction marker
+// -> text
+// assistant
 
 export type Event = Schema.Schema.Type<typeof All>
 export type Type = Event["type"]

@@ -137,3 +137,57 @@ test("tool completion stores completed timestamp", () => {
   expect(state.messages[0].content[0].time.completed).toEqual(DateTime.makeUnsafe(4))
   expect(state.messages[0].content[0].provider).toEqual({ executed: true, metadata: { status: "done" } })
 })
+
+test("compaction events reduce to compaction message", () => {
+  const state: SessionMessageUpdater.MemoryState = { messages: [] }
+  const sessionID = SessionID.make("session")
+  const id = SessionEvent.ID.create()
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    type: "session.next.compaction.started",
+    data: {
+      id,
+      sessionID,
+      timestamp: DateTime.makeUnsafe(1),
+      reason: "auto",
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    type: "session.next.compaction.delta",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(2),
+      text: "hello ",
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    type: "session.next.compaction.delta",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(3),
+      text: "summary",
+    },
+  } satisfies SessionEvent.Event)
+
+  SessionMessageUpdater.update(SessionMessageUpdater.memory(state), {
+    type: "session.next.compaction.ended",
+    data: {
+      sessionID,
+      timestamp: DateTime.makeUnsafe(4),
+      text: "final summary",
+      include: "recent context",
+    },
+  } satisfies SessionEvent.Event)
+
+  expect(state.messages).toHaveLength(1)
+  expect(state.messages[0]).toMatchObject({
+    id,
+    type: "compaction",
+    reason: "auto",
+    summary: "final summary",
+    include: "recent context",
+    time: { created: DateTime.makeUnsafe(1) },
+  })
+})

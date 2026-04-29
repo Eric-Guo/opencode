@@ -17,6 +17,13 @@ function activeAssistant(messages: SessionMessage[]) {
   return assistant?.type === "assistant" ? assistant : undefined
 }
 
+function activeCompaction(messages: SessionMessage[]) {
+  const index = messages.findLastIndex((message) => message.type === "compaction")
+  if (index < 0) return
+  const compaction = messages[index]
+  return compaction?.type === "compaction" ? compaction : undefined
+}
+
 function latestTool(assistant: SessionMessageAssistant | undefined, callID?: string) {
   return assistant?.content.findLast(
     (item): item is SessionMessageAssistantTool => item.type === "tool" && (callID === undefined || item.id === callID),
@@ -214,16 +221,29 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
           break
         case "session.next.retried":
           break
-        case "session.next.compacted":
+        case "session.next.compaction.started":
           update(event.properties.sessionID, (draft) => {
             draft.push({
               id: event.properties.id,
               type: "compaction",
-              sessionID: event.properties.sessionID,
-              auto: event.properties.auto,
-              overflow: event.properties.overflow,
+              reason: event.properties.reason,
+              summary: "",
               time: { created: event.properties.timestamp },
             })
+          })
+          break
+        case "session.next.compaction.delta":
+          update(event.properties.sessionID, (draft) => {
+            const match = activeCompaction(draft)
+            if (match) match.summary += event.properties.text
+          })
+          break
+        case "session.next.compaction.ended":
+          update(event.properties.sessionID, (draft) => {
+            const match = activeCompaction(draft)
+            if (!match) return
+            match.summary = event.properties.text
+            match.include = event.properties.include
           })
           break
       }

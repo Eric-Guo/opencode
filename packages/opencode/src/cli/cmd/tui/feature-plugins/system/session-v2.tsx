@@ -200,13 +200,13 @@ function CompactionMessage(props: { message: SessionMessageCompaction }) {
     <box
       marginTop={1}
       border={["top"]}
-      title={props.message.auto ? " Auto Compaction " : " Compaction "}
+      title={props.message.reason === "auto" ? " Auto Compaction " : " Compaction "}
       titleAlignment="center"
       borderColor={theme.borderActive}
       flexShrink={0}
     >
-      <Show when={props.message.overflow}>
-        <text fg={theme.textMuted}>Context overflow triggered this compaction.</text>
+      <Show when={props.message.summary}>
+        <text fg={theme.textMuted}>{props.message.summary}</text>
       </Show>
     </box>
   )

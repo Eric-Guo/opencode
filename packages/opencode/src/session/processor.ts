@@ -433,19 +433,21 @@ export const layer: Layer.Layer<
 
           case "start-step":
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Step.Started.Sync, {
-              id: SessionEvent.ID.create(),
-              sessionID: ctx.sessionID,
-              agent: input.assistantMessage.agent,
-              model: {
-                id: ctx.model.id,
-                providerID: ctx.model.providerID,
-                variant: input.assistantMessage.variant,
-              },
-              snapshot: ctx.snapshot,
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!ctx.assistantMessage.summary) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              SyncEvent.run(SessionEvent.Step.Started.Sync, {
+                id: SessionEvent.ID.create(),
+                sessionID: ctx.sessionID,
+                agent: input.assistantMessage.agent,
+                model: {
+                  id: ctx.model.id,
+                  providerID: ctx.model.providerID,
+                  variant: input.assistantMessage.variant,
+                },
+                snapshot: ctx.snapshot,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -462,15 +464,17 @@ export const layer: Layer.Layer<
               usage: value.usage,
               metadata: value.providerMetadata,
             })
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Step.Ended.Sync, {
-              sessionID: ctx.sessionID,
-              finish: value.finishReason,
-              cost: usage.cost,
-              tokens: usage.tokens,
-              snapshot: completedSnapshot,
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!ctx.assistantMessage.summary) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              SyncEvent.run(SessionEvent.Step.Ended.Sync, {
+                sessionID: ctx.sessionID,
+                finish: value.finishReason,
+                cost: usage.cost,
+                tokens: usage.tokens,
+                snapshot: completedSnapshot,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             ctx.assistantMessage.finish = value.finishReason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
@@ -515,11 +519,13 @@ export const layer: Layer.Layer<
           }
 
           case "text-start":
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Text.Started.Sync, {
-              sessionID: ctx.sessionID,
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!ctx.assistantMessage.summary) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              SyncEvent.run(SessionEvent.Text.Started.Sync, {
+                sessionID: ctx.sessionID,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             ctx.currentText = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -534,6 +540,13 @@ export const layer: Layer.Layer<
 
           case "text-delta":
             if (!ctx.currentText) return
+            if (ctx.assistantMessage.summary) {
+              SyncEvent.run(SessionEvent.Compaction.Delta.Sync, {
+                sessionID: ctx.sessionID,
+                text: value.text,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePartDelta({
@@ -558,12 +571,14 @@ export const layer: Layer.Layer<
               },
               { text: ctx.currentText.text },
             )).text
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Text.Ended.Sync, {
-              sessionID: ctx.sessionID,
-              text: ctx.currentText.text,
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
+            if (!ctx.assistantMessage.summary) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              SyncEvent.run(SessionEvent.Text.Ended.Sync, {
+                sessionID: ctx.sessionID,
+                text: ctx.currentText.text,
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
             {
               const end = Date.now()
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }

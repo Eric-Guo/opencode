@@ -8,7 +8,9 @@ export type MemoryState = {
 
 export interface Adapter<Result> {
   readonly getCurrentAssistant: () => SessionMessage.Assistant | undefined
+  readonly getCurrentCompaction: () => SessionMessage.Compaction | undefined
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => void
+  readonly updateCompaction: (compaction: SessionMessage.Compaction) => void
   readonly appendMessage: (message: SessionMessage.Message) => void
   readonly finish: () => Result
 }
@@ -16,6 +18,7 @@ export interface Adapter<Result> {
 export function memory(state: MemoryState): Adapter<MemoryState> {
   const activeAssistantIndex = () =>
     state.messages.findLastIndex((message) => message.type === "assistant" && !message.time.completed)
+  const activeCompactionIndex = () => state.messages.findLastIndex((message) => message.type === "compaction")
 
   return {
     getCurrentAssistant() {
@@ -24,12 +27,25 @@ export function memory(state: MemoryState): Adapter<MemoryState> {
       const assistant = state.messages[index]
       return assistant?.type === "assistant" ? assistant : undefined
     },
+    getCurrentCompaction() {
+      const index = activeCompactionIndex()
+      if (index < 0) return
+      const compaction = state.messages[index]
+      return compaction?.type === "compaction" ? compaction : undefined
+    },
     updateAssistant(assistant) {
       const index = activeAssistantIndex()
       if (index < 0) return
       const current = state.messages[index]
       if (current?.type !== "assistant") return
       state.messages[index] = assistant
+    },
+    updateCompaction(compaction) {
+      const index = activeCompactionIndex()
+      if (index < 0) return
+      const current = state.messages[index]
+      if (current?.type !== "compaction") return
+      state.messages[index] = compaction
     },
     appendMessage(message) {
       state.messages.push(message)
@@ -259,8 +275,29 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
       }
     },
     "session.next.retried": () => {},
-    "session.next.compacted": (event) => {
+    "session.next.compaction.started": (event) => {
       adapter.appendMessage(SessionMessage.Compaction.fromEvent(event))
+    },
+    "session.next.compaction.delta": (event) => {
+      const currentCompaction = adapter.getCurrentCompaction()
+      if (currentCompaction) {
+        adapter.updateCompaction(
+          produce(currentCompaction, (draft) => {
+            draft.summary += event.data.text
+          }),
+        )
+      }
+    },
+    "session.next.compaction.ended": (event) => {
+      const currentCompaction = adapter.getCurrentCompaction()
+      if (currentCompaction) {
+        adapter.updateCompaction(
+          produce(currentCompaction, (draft) => {
+            draft.summary = event.data.text
+            draft.include = event.data.include
+          }),
+        )
+      }
     },
   })
 

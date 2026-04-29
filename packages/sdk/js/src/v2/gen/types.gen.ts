@@ -1259,14 +1259,32 @@ export type EventSessionNextRetried = {
   }
 }
 
-export type EventSessionNextCompacted = {
-  type: "session.next.compacted"
+export type EventSessionNextCompactionStarted = {
+  type: "session.next.compaction.started"
   properties: {
     timestamp: number
     sessionID: string
     id: string
-    auto: boolean
-    overflow?: boolean
+    reason: "auto" | "manual"
+  }
+}
+
+export type EventSessionNextCompactionDelta = {
+  type: "session.next.compaction.delta"
+  properties: {
+    timestamp: number
+    sessionID: string
+    text: string
+  }
+}
+
+export type EventSessionNextCompactionEnded = {
+  type: "session.next.compaction.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    text: string
+    include?: string
   }
 }
 
@@ -1681,9 +1699,9 @@ export type SyncEventSessionNextRetried = {
   }
 }
 
-export type SyncEventSessionNextCompacted = {
+export type SyncEventSessionNextCompactionStarted = {
   type: "sync"
-  name: "session.next.compacted.1"
+  name: "session.next.compaction.started.1"
   id: string
   seq: number
   aggregateID: "sessionID"
@@ -1691,8 +1709,34 @@ export type SyncEventSessionNextCompacted = {
     timestamp: number
     sessionID: string
     id: string
-    auto: boolean
-    overflow?: boolean
+    reason: "auto" | "manual"
+  }
+}
+
+export type SyncEventSessionNextCompactionDelta = {
+  type: "sync"
+  name: "session.next.compaction.delta.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    text: string
+  }
+}
+
+export type SyncEventSessionNextCompactionEnded = {
+  type: "sync"
+  name: "session.next.compaction.ended.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    text: string
+    include?: string
   }
 }
 
@@ -1766,7 +1810,9 @@ export type GlobalEvent = {
     | EventSessionNextToolSuccess
     | EventSessionNextToolError
     | EventSessionNextRetried
-    | EventSessionNextCompacted
+    | EventSessionNextCompactionStarted
+    | EventSessionNextCompactionDelta
+    | EventSessionNextCompactionEnded
     | SyncEventMessageUpdated
     | SyncEventMessageRemoved
     | SyncEventMessagePartUpdated
@@ -1792,7 +1838,9 @@ export type GlobalEvent = {
     | SyncEventSessionNextToolSuccess
     | SyncEventSessionNextToolError
     | SyncEventSessionNextRetried
-    | SyncEventSessionNextCompacted
+    | SyncEventSessionNextCompactionStarted
+    | SyncEventSessionNextCompactionDelta
+    | SyncEventSessionNextCompactionEnded
 }
 
 /**
@@ -2777,9 +2825,9 @@ export type SessionMessageAssistant = {
 
 export type SessionMessageCompaction = {
   type: "compaction"
-  sessionID: string
-  auto: boolean
-  overflow?: boolean
+  reason: "auto" | "manual"
+  summary: string
+  include?: string
   id: string
   metadata?: {
     [key: string]: unknown
@@ -2907,7 +2955,9 @@ export type Event =
   | EventSessionNextToolSuccess
   | EventSessionNextToolError
   | EventSessionNextRetried
-  | EventSessionNextCompacted
+  | EventSessionNextCompactionStarted
+  | EventSessionNextCompactionDelta
+  | EventSessionNextCompactionEnded
 
 export type McpStatusConnected = {
   status: "connected"

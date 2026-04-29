@@ -168,18 +168,18 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
 
 export class Compaction extends Schema.Class<Compaction>("Session.Message.Compaction")({
   type: Schema.Literal("compaction"),
-  sessionID: SessionEvent.Compacted.fields.data.fields.sessionID,
-  auto: SessionEvent.Compacted.fields.data.fields.auto,
-  overflow: SessionEvent.Compacted.fields.data.fields.overflow,
+  reason: SessionEvent.Compaction.Started.fields.data.fields.reason,
+  summary: Schema.String,
+  include: Schema.String.pipe(Schema.optional),
   ...Base,
 }) {
-  static fromEvent(event: SessionEvent.Compacted) {
+  static fromEvent(event: SessionEvent.Compaction.Started) {
     return new Compaction({
-      sessionID: event.data.sessionID,
-      auto: event.data.auto,
-      overflow: event.data.overflow,
       id: event.data.id,
       type: "compaction",
+      metadata: event.metadata,
+      reason: event.data.reason,
+      summary: "",
       time: { created: event.data.timestamp },
     })
   }
