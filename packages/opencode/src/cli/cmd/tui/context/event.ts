@@ -12,22 +12,7 @@ export function useEvent() {
         return
       }
 
-      // Special hack for truly global events
-      if (event.directory === "global") {
-        handler(event.payload)
-      }
-
-      if (project.workspace.current()) {
-        if (event.workspace === project.workspace.current()) {
-          handler(event.payload)
-        }
-
-        return
-      }
-
-      if (event.directory === project.instance.directory()) {
-        handler(event.payload)
-      }
+      handler(event.payload)
     })
   }
 

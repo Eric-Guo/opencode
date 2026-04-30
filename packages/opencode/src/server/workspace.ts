@@ -48,14 +48,14 @@ export function workspaceProxyURL(target: string | URL, requestURL: URL) {
   return proxyURL
 }
 
-async function getSessionWorkspace(url: URL) {
+async function getSession(url: URL) {
   const id = getWorkspaceRouteSessionID(url)
   if (!id) return null
 
   const session = await AppRuntime.runPromise(
     Session.Service.use((svc) => svc.get(id)).pipe(Effect.withSpan("WorkspaceRouter.lookup")),
   ).catch(() => undefined)
-  return session?.workspaceID
+  return session
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {
@@ -64,10 +64,20 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
   return async (c, next) => {
     const url = new URL(c.req.url)
 
-    const sessionWorkspaceID = await getSessionWorkspace(url)
-    const workspaceID = sessionWorkspaceID || url.searchParams.get("workspace")
+    const session = await getSession(url)
+    const workspaceID = session?.workspaceID || url.searchParams.get("workspace")
 
     if (!workspaceID || url.pathname.startsWith("/console") || Flag.OPENCODE_WORKSPACE_ID) {
+      if (session) {
+        return Instance.provide({
+          directory: session.directory,
+          init: () => AppRuntime.runPromise(InstanceBootstrap),
+          async fn() {
+            return next()
+          },
+        })
+      }
+
       return next()
     }
 
