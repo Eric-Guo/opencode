@@ -9,6 +9,10 @@ import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/se
 import { Session } from "@/session/session"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionMessage } from "../../src/v2/session-message"
+import { SessionMessageTable } from "../../src/session/session.sql"
+import * as Database from "../../src/storage/db"
+import * as DateTime from "effect/DateTime"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
@@ -163,6 +167,45 @@ describe("session HttpApi", () => {
             { headers },
           ),
         ).toMatchObject({ info: { id: message.info.id } })
+
+        yield* Effect.promise(() =>
+          Instance.provide({
+            directory: tmp.path,
+            fn: async () => {
+              const message = new SessionMessage.Assistant({
+                id: SessionMessage.ID.create(),
+                type: "assistant",
+                agent: "build",
+                model: { id: "model", providerID: "provider" },
+                time: { created: DateTime.makeUnsafe(1) },
+                content: [],
+              })
+              Database.use((db) =>
+                db
+                  .insert(SessionMessageTable)
+                  .values([
+                    {
+                      id: message.id,
+                      session_id: parent.id,
+                      type: message.type,
+                      time_created: 1,
+                      data: {
+                        time: { created: 1 },
+                        agent: message.agent,
+                        model: message.model,
+                        content: message.content,
+                      } as NonNullable<typeof SessionMessageTable.$inferInsert["data"]>,
+                    },
+                  ])
+                  .run(),
+              )
+            },
+          }),
+        )
+
+        expect(yield* requestJson<SessionMessage.Message[]>(`/api/session/${parent.id}/message`, { headers })).toMatchObject([
+          { type: "assistant" },
+        ])
       }),
     ),
   )
