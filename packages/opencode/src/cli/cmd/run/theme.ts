@@ -86,7 +86,9 @@ type SharedSyntaxTheme = TuiThemeCurrent & {
 export const transparent = RGBA.fromValues(0, 0, 0, 0)
 
 function alpha(color: RGBA, value: number): RGBA {
-  return RGBA.fromValues(color.r, color.g, color.b, Math.max(0, Math.min(1, value)), color.tag)
+  const copy = RGBA.clone(color)
+  copy.a = Math.max(0, Math.min(1, value))
+  return copy
 }
 
 function rgba(hex: string, value?: number): RGBA {
