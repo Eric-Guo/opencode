@@ -1,6 +1,5 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
-import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
@@ -67,6 +66,7 @@ export const AttachCommand = cmd({
         return { Authorization: auth }
       })()
       const config = await TuiConfig.get()
+      const { tui } = await import("./app")
 
       try {
         await validateSession({
