@@ -13,6 +13,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Global } from "@opencode-ai/core/global"
 import { Shell } from "@/shell/shell"
 import { ShellID } from "./shell/id"
 
@@ -585,7 +586,7 @@ export const ShellTool = Tool.define(
         const shell = Shell.acceptable(cfg.shell)
         const name = Shell.name(shell)
         const limits = yield* trunc.limits()
-        const prompt = ShellPrompt.render(name, process.platform, limits)
+        const prompt = ShellPrompt.render(name, process.platform, limits, Global.Path.tmp)
         log.info("shell tool using shell", { shell })
 
         return {

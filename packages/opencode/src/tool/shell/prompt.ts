@@ -1,7 +1,6 @@
 import { Schema } from "effect"
 import DESCRIPTION from "./shell.txt"
 import { PositiveInt } from "@/util/schema"
-import { Global } from "@opencode-ai/core/global"
 import { ShellID } from "./id"
 
 const PS = new Set(["powershell", "pwsh"])
@@ -272,14 +271,14 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
   }
 }
 
-export function render(name: string, platform: NodeJS.Platform, limits: Limits) {
+export function render(name: string, platform: NodeJS.Platform, limits: Limits, tmp: string) {
   const selected = profile(name, platform, limits)
   return {
     description: renderPrompt(DESCRIPTION, {
       intro: selected.intro,
       os: platform,
       shell: name,
-      tmp: Global.Path.tmp,
+      tmp,
       workdirSection: selected.workdirSection,
       commandSection: selected.commandSection,
       gitCommands: selected.gitCommands,
