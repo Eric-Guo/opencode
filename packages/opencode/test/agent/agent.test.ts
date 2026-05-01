@@ -4,7 +4,7 @@ import path from "path"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
-import { Global } from "../../src/global"
+import { Global } from "@opencode-ai/core/global"
 import { Permission } from "../../src/permission"
 
 // Helper to evaluate permission for a tool with wildcard pattern
@@ -88,7 +88,7 @@ test("explore agent denies edit and write", async () => {
 })
 
 test("explore agent asks for external directories and allows Truncate.GLOB", async () => {
-  const { Truncate } = await import("../../src/tool")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
@@ -522,7 +522,7 @@ test("legacy tools config maps write/edit/patch to edit permission", async () =>
 })
 
 test("Truncate.GLOB is allowed even when user denies external_directory globally", async () => {
-  const { Truncate } = await import("../../src/tool")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       permission: {
@@ -542,7 +542,7 @@ test("Truncate.GLOB is allowed even when user denies external_directory globally
 })
 
 test("Truncate.GLOB is allowed even when user denies external_directory per-agent", async () => {
-  const { Truncate } = await import("../../src/tool")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -566,7 +566,7 @@ test("Truncate.GLOB is allowed even when user denies external_directory per-agen
 })
 
 test("explicit Truncate.GLOB deny is respected", async () => {
-  const { Truncate } = await import("../../src/tool")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       permission: {
