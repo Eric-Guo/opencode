@@ -15,6 +15,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Plugin } from "../../src/plugin"
+import { Global } from "@opencode-ai/core/global"
 
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(
@@ -170,6 +171,7 @@ describe("tool.shell", () => {
         const fallback = Shell.name(Shell.acceptable("fish"))
         expect(fallback).not.toBe("fish")
         expect(bash.description).toContain(fallback)
+        expect(bash.description).toContain(`Use \`${Global.Path.tmp}\``)
 
         const result = await Effect.runPromise(
           bash.execute(

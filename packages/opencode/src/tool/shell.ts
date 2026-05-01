@@ -573,7 +573,7 @@ export const ShellTool = Tool.define(
         const shell = Shell.acceptable(cfg.shell)
         const name = Shell.name(shell)
         const limits = yield* trunc.limits()
-        const prompt = ShellPrompt.render(name, process.platform, limits)
+        const prompt = ShellPrompt.render(name, process.platform, limits, Global.Path.tmp)
         log.info("shell tool using shell", { shell })
 
         return {

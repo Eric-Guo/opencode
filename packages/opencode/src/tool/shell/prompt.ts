@@ -274,13 +274,14 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits) {
   }
 }
 
-export function render(name: string, platform: NodeJS.Platform, limits: Limits) {
+export function render(name: string, platform: NodeJS.Platform, limits: Limits, tmp: string) {
   const selected = profile(name, platform, limits)
   return {
     description: renderPrompt(DESCRIPTION, {
       intro: selected.intro,
       os: platform,
       shell: name,
+      tmp,
       workdirSection: selected.workdirSection,
       commandSection: selected.commandSection,
       gitCommands: selected.gitCommands,
