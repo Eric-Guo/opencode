@@ -1332,7 +1332,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
       SyncEvent.run(SessionEvent.Prompted.Sync, {
-        id: SessionEvent.ID.create(),
         sessionID: input.sessionID,
         timestamp: DateTime.makeUnsafe(info.time.created),
         prompt: {
@@ -1344,7 +1343,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       for (const text of nextPrompt.synthetic) {
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
         SyncEvent.run(SessionEvent.Synthetic.Sync, {
-          id: SessionEvent.ID.create(),
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
           text,

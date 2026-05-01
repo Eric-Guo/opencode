@@ -4,6 +4,40 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
+<<<<<<< HEAD
+=======
+export type Project = {
+  id: string
+  worktree: string
+  vcs?: "git"
+  name?: string
+  icon?: {
+    url?: string
+    override?: string
+    color?: string
+  }
+  commands?: {
+    /**
+     * Startup script to run when creating a new workspace (worktree)
+     */
+    start?: string
+  }
+  time: {
+    created: number
+    updated: number
+    initialized?: number
+  }
+  sandboxes: Array<string>
+}
+
+export type EventProjectUpdated = {
+  id: string
+  type: "project.updated"
+  properties: Project
+}
+<<<<<<< HEAD
+
+>>>>>>> cbb60d3a5 (core: add unique IDs to all events for reliable tracking and debugging)
 export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
@@ -6500,3 +6534,5 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
+=======
+>>>>>>> 13afcef87 (core: add unique IDs to all events for reliable tracking and debugging)
