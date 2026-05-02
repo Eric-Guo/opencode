@@ -171,6 +171,72 @@ describeWatcher("FileWatcher", () => {
     )
   })
 
+  test("bootstrap starts root watcher events", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const script = `
+import fs from "fs/promises"
+import path from "path"
+import { Deferred, Effect } from "effect"
+import { Bus } from "@/bus"
+import { bootstrap } from "@/cli/bootstrap"
+import { FileWatcher } from "@/file/watcher"
+
+const dir = process.argv[1]
+
+function nextUpdate(check, trigger) {
+  return Effect.gen(function* () {
+    const deferred = yield* Deferred.make()
+    const cleanup = yield* Effect.sync(() => {
+      const unsub = Bus.subscribe(FileWatcher.Event.Updated, (evt) => {
+        if (!check(evt.properties)) return
+        unsub()
+        Deferred.doneUnsafe(deferred, Effect.succeed(evt.properties))
+      })
+      return unsub
+    })
+    return yield* Effect.acquireUseRelease(
+      Effect.succeed(deferred),
+      (deferred) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(trigger)
+          return yield* Deferred.await(deferred).pipe(Effect.timeout("5 seconds"))
+        }),
+      () => Effect.sync(cleanup),
+    )
+  })
+}
+
+try {
+  await bootstrap(dir, async () => {
+    const ready = path.join(dir, ".watcher-bootstrap-ready")
+    await Effect.runPromise(
+      nextUpdate(
+        (evt) => evt.file === ready && evt.event === "add",
+        () => fs.writeFile(ready, "ready"),
+      ).pipe(Effect.ensuring(Effect.promise(() => fs.rm(ready, { force: true }).catch(() => undefined)))),
+    )
+
+    const file = path.join(dir, "bootstrap-watch.txt")
+    const evt = await Effect.runPromise(
+      nextUpdate(
+        (evt) => evt.file === file && evt.event === "add",
+        () => fs.writeFile(file, "bootstrap"),
+      ),
+    )
+    if (evt.file !== file || evt.event !== "add") throw new Error("Unexpected watcher event")
+  })
+  process.exit(0)
+} catch (error) {
+  console.error(error)
+  process.exit(1)
+}
+`
+
+    await $`OPENCODE_EXPERIMENTAL_FILEWATCHER=true OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER=false bun -e ${script} ${tmp.path}`.cwd(
+      path.join(import.meta.dir, "../.."),
+    )
+  })
+
   test("watches non-git roots", async () => {
     await using tmp = await tmpdir()
     const file = path.join(tmp.path, "plain.txt")
