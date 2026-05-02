@@ -77,12 +77,15 @@ export interface Interface {
       direction: "previous" | "next"
     }
   }) => Effect.Effect<SessionMessage.Message[], never>
+  readonly context: (sessionID: SessionID) => Effect.Effect<SessionMessage.Message[], never>
   readonly prompt: (input: {
     id?: EventV2.ID
     sessionID: SessionID
     prompt: Prompt
     delivery?: Delivery
   }) => Effect.Effect<SessionMessage.User, never>
+  readonly shell: (input: { id?: EventV2.ID; sessionID: SessionID; command: string }) => Effect.Effect<void, never>
+  readonly skill: (input: { id?: EventV2.ID; sessionID: SessionID; skill: string }) => Effect.Effect<void, never>
   readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: {
     sessionID: SessionID
@@ -209,9 +212,43 @@ export const layer = Layer.effect(
         })
         return rows.map((row) => decode(row))
       }),
+      context: Effect.fn("V2Session.context")(function* (sessionID) {
+        const rows = Database.use((db) => {
+          const compaction = db
+            .select()
+            .from(SessionMessageTable)
+            .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
+            .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
+            .limit(1)
+            .get()
+
+          return db
+            .select()
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.session_id, sessionID),
+                compaction
+                  ? or(
+                      gt(SessionMessageTable.time_created, compaction.time_created),
+                      and(
+                        eq(SessionMessageTable.time_created, compaction.time_created),
+                        gte(SessionMessageTable.id, compaction.id),
+                      ),
+                    )
+                  : undefined,
+              ),
+            )
+            .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
+            .all()
+        })
+        return rows.map((row) => decode(row))
+      }),
       prompt: Effect.fn("V2Session.prompt")(function* (_input) {
         return {} as any
       }),
+      shell: Effect.fn("V2Session.shell")(function* (_input) {}),
+      skill: Effect.fn("V2Session.skill")(function* (_input) {}),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
         EventV2.run(SessionEvent.AgentSwitched.Sync, {
           sessionID: input.sessionID,

@@ -105,5 +105,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
           return HttpApiSchema.NoContent.make()
         }),
       )
+      .handle(
+        "context",
+        Effect.fn(function* (ctx) {
+          return yield* session.context(ctx.params.sessionID)
+        }),
+      )
   }),
 )

@@ -119,6 +119,18 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       }),
     ),
   )
+  .add(
+    HttpApiEndpoint.get("context", "/api/session/:sessionID/context", {
+      params: { sessionID: SessionID },
+      success: Schema.Array(SessionMessage.Message),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.session.context",
+        summary: "Get v2 session context",
+        description: "Retrieve the active context messages for a v2 session (all messages after the last compaction).",
+      }),
+    ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "v2",
