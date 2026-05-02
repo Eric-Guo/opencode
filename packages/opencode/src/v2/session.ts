@@ -6,11 +6,10 @@ import * as Database from "@/storage/db"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { SessionMessage } from "./session-message"
 import type { Prompt } from "./session-prompt"
-import type { Event } from "./event"
+import { EventV2 } from "./event"
 import { ProjectID } from "@/project/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { SessionEvent } from "./session-event"
-import { SyncEvent } from "@/sync"
 
 export const Delivery = Schema.Union([Schema.Literal("immediate"), Schema.Literal("deferred")]).annotate({
   identifier: "Session.Delivery",
@@ -79,7 +78,7 @@ export interface Interface {
     }
   }) => Effect.Effect<SessionMessage.Message[], never>
   readonly prompt: (input: {
-    id?: Event.ID
+    id?: EventV2.ID
     sessionID: SessionID
     prompt: Prompt
     delivery?: Delivery
@@ -214,14 +213,14 @@ export const layer = Layer.effect(
         return {} as any
       }),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
-        SyncEvent.run(SessionEvent.AgentSwitched.Sync, {
+        EventV2.run(SessionEvent.AgentSwitched.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
           agent: input.agent,
         })
       }),
       switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
-        SyncEvent.run(SessionEvent.ModelSwitched.Sync, {
+        EventV2.run(SessionEvent.ModelSwitched.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
           id: input.id,

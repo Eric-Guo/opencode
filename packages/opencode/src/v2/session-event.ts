@@ -1,6 +1,6 @@
 import { SessionID } from "@/session/schema"
 import { NonNegativeInt } from "@/util/schema"
-import { Event } from "./event"
+import { EventV2 } from "./event"
 import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
 export { FileAttachment }
@@ -21,7 +21,7 @@ const Base = {
   sessionID: SessionID,
 }
 
-export const AgentSwitched = Event.define({
+export const AgentSwitched = EventV2.define({
   type: "session.next.agent.switched",
   aggregate: "sessionID",
   version: 1,
@@ -32,7 +32,7 @@ export const AgentSwitched = Event.define({
 })
 export type AgentSwitched = Schema.Schema.Type<typeof AgentSwitched>
 
-export const ModelSwitched = Event.define({
+export const ModelSwitched = EventV2.define({
   type: "session.next.model.switched",
   aggregate: "sessionID",
   version: 1,
@@ -45,7 +45,7 @@ export const ModelSwitched = Event.define({
 })
 export type ModelSwitched = Schema.Schema.Type<typeof ModelSwitched>
 
-export const Prompted = Event.define({
+export const Prompted = EventV2.define({
   type: "session.next.prompted",
   aggregate: "sessionID",
   version: 1,
@@ -56,7 +56,7 @@ export const Prompted = Event.define({
 })
 export type Prompted = Schema.Schema.Type<typeof Prompted>
 
-export const Synthetic = Event.define({
+export const Synthetic = EventV2.define({
   type: "session.next.synthetic",
   aggregate: "sessionID",
   schema: {
@@ -67,7 +67,7 @@ export const Synthetic = Event.define({
 export type Synthetic = Schema.Schema.Type<typeof Synthetic>
 
 export namespace Shell {
-  export const Started = Event.define({
+  export const Started = EventV2.define({
     type: "session.next.shell.started",
     aggregate: "sessionID",
     schema: {
@@ -78,7 +78,7 @@ export namespace Shell {
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Ended = Event.define({
+  export const Ended = EventV2.define({
     type: "session.next.shell.ended",
     aggregate: "sessionID",
     schema: {
@@ -91,7 +91,7 @@ export namespace Shell {
 }
 
 export namespace Step {
-  export const Started = Event.define({
+  export const Started = EventV2.define({
     type: "session.next.step.started",
     aggregate: "sessionID",
     schema: {
@@ -107,7 +107,7 @@ export namespace Step {
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Ended = Event.define({
+  export const Ended = EventV2.define({
     type: "session.next.step.ended",
     aggregate: "sessionID",
     schema: {
@@ -130,7 +130,7 @@ export namespace Step {
 }
 
 export namespace Text {
-  export const Started = Event.define({
+  export const Started = EventV2.define({
     type: "session.next.text.started",
     aggregate: "sessionID",
     schema: {
@@ -139,7 +139,7 @@ export namespace Text {
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Delta = Event.define({
+  export const Delta = EventV2.define({
     type: "session.next.text.delta",
     aggregate: "sessionID",
     schema: {
@@ -149,7 +149,7 @@ export namespace Text {
   })
   export type Delta = Schema.Schema.Type<typeof Delta>
 
-  export const Ended = Event.define({
+  export const Ended = EventV2.define({
     type: "session.next.text.ended",
     aggregate: "sessionID",
     schema: {
@@ -161,7 +161,7 @@ export namespace Text {
 }
 
 export namespace Reasoning {
-  export const Started = Event.define({
+  export const Started = EventV2.define({
     type: "session.next.reasoning.started",
     aggregate: "sessionID",
     schema: {
@@ -171,7 +171,7 @@ export namespace Reasoning {
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Delta = Event.define({
+  export const Delta = EventV2.define({
     type: "session.next.reasoning.delta",
     aggregate: "sessionID",
     schema: {
@@ -182,7 +182,7 @@ export namespace Reasoning {
   })
   export type Delta = Schema.Schema.Type<typeof Delta>
 
-  export const Ended = Event.define({
+  export const Ended = EventV2.define({
     type: "session.next.reasoning.ended",
     aggregate: "sessionID",
     schema: {
@@ -196,7 +196,7 @@ export namespace Reasoning {
 
 export namespace Tool {
   export namespace Input {
-    export const Started = Event.define({
+    export const Started = EventV2.define({
       type: "session.next.tool.input.started",
       aggregate: "sessionID",
       schema: {
@@ -207,7 +207,7 @@ export namespace Tool {
     })
     export type Started = Schema.Schema.Type<typeof Started>
 
-    export const Delta = Event.define({
+    export const Delta = EventV2.define({
       type: "session.next.tool.input.delta",
       aggregate: "sessionID",
       schema: {
@@ -218,7 +218,7 @@ export namespace Tool {
     })
     export type Delta = Schema.Schema.Type<typeof Delta>
 
-    export const Ended = Event.define({
+    export const Ended = EventV2.define({
       type: "session.next.tool.input.ended",
       aggregate: "sessionID",
       schema: {
@@ -230,7 +230,7 @@ export namespace Tool {
     export type Ended = Schema.Schema.Type<typeof Ended>
   }
 
-  export const Called = Event.define({
+  export const Called = EventV2.define({
     type: "session.next.tool.called",
     aggregate: "sessionID",
     schema: {
@@ -246,7 +246,7 @@ export namespace Tool {
   })
   export type Called = Schema.Schema.Type<typeof Called>
 
-  export const Progress = Event.define({
+  export const Progress = EventV2.define({
     type: "session.next.tool.progress",
     aggregate: "sessionID",
     schema: {
@@ -258,7 +258,7 @@ export namespace Tool {
   })
   export type Progress = Schema.Schema.Type<typeof Progress>
 
-  export const Success = Event.define({
+  export const Success = EventV2.define({
     type: "session.next.tool.success",
     aggregate: "sessionID",
     schema: {
@@ -274,7 +274,7 @@ export namespace Tool {
   })
   export type Success = Schema.Schema.Type<typeof Success>
 
-  export const Error = Event.define({
+  export const Error = EventV2.define({
     type: "session.next.tool.error",
     aggregate: "sessionID",
     schema: {
@@ -305,7 +305,7 @@ export const RetryError = Schema.Struct({
 })
 export type RetryError = Schema.Schema.Type<typeof RetryError>
 
-export const Retried = Event.define({
+export const Retried = EventV2.define({
   type: "session.next.retried",
   aggregate: "sessionID",
   schema: {
@@ -317,7 +317,7 @@ export const Retried = Event.define({
 export type Retried = Schema.Schema.Type<typeof Retried>
 
 export namespace Compaction {
-  export const Started = Event.define({
+  export const Started = EventV2.define({
     type: "session.next.compaction.started",
     aggregate: "sessionID",
     schema: {
@@ -327,7 +327,7 @@ export namespace Compaction {
   })
   export type Started = Schema.Schema.Type<typeof Started>
 
-  export const Delta = Event.define({
+  export const Delta = EventV2.define({
     type: "session.next.compaction.delta",
     aggregate: "sessionID",
     schema: {
@@ -336,7 +336,7 @@ export namespace Compaction {
     },
   })
 
-  export const Ended = Event.define({
+  export const Ended = EventV2.define({
     type: "session.next.compaction.ended",
     aggregate: "sessionID",
     schema: {

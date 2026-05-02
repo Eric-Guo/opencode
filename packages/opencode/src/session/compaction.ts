@@ -19,7 +19,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
-import { SyncEvent } from "@/sync"
+import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
 
 const log = Log.create({ service: "session.compaction" })
@@ -566,7 +566,7 @@ export const layer: Layer.Layer<
             parts: [],
           },
         )
-        SyncEvent.run(SessionEvent.Compaction.Ended.Sync, {
+        EventV2.run(SessionEvent.Compaction.Ended.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
           text: summary ?? "",
@@ -600,7 +600,7 @@ export const layer: Layer.Layer<
         auto: input.auto,
         overflow: input.overflow,
       })
-      SyncEvent.run(SessionEvent.Compaction.Started.Sync, {
+      EventV2.run(SessionEvent.Compaction.Started.Sync, {
         sessionID: input.sessionID,
         timestamp: DateTime.makeUnsafe(Date.now()),
         reason: input.auto ? "auto" : "manual",

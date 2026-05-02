@@ -20,7 +20,7 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
-import { SyncEvent } from "@/sync"
+import { EventV2 } from "@/v2/event"
 import { SessionEvent } from "@/v2/session-event"
 import * as DateTime from "effect/DateTime"
 
@@ -225,7 +225,7 @@ export const layer: Layer.Layer<
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Reasoning.Started.Sync, {
+            EventV2.run(SessionEvent.Reasoning.Started.Sync, {
               sessionID: ctx.sessionID,
               reasoningID: value.id,
               timestamp: DateTime.makeUnsafe(Date.now()),
@@ -245,7 +245,7 @@ export const layer: Layer.Layer<
           case "reasoning-delta":
             if (!(value.id in ctx.reasoningMap)) return
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Reasoning.Delta.Sync, {
+            EventV2.run(SessionEvent.Reasoning.Delta.Sync, {
               sessionID: ctx.sessionID,
               reasoningID: value.id,
               delta: value.text,
@@ -265,7 +265,7 @@ export const layer: Layer.Layer<
           case "reasoning-end":
             if (!(value.id in ctx.reasoningMap)) return
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Reasoning.Ended.Sync, {
+            EventV2.run(SessionEvent.Reasoning.Ended.Sync, {
               sessionID: ctx.sessionID,
               reasoningID: value.id,
               text: ctx.reasoningMap[value.id].text,
@@ -284,7 +284,7 @@ export const layer: Layer.Layer<
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Tool.Input.Started.Sync, {
+            EventV2.run(SessionEvent.Tool.Input.Started.Sync, {
               sessionID: ctx.sessionID,
               callID: value.id,
               name: value.toolName,
@@ -313,7 +313,7 @@ export const layer: Layer.Layer<
 
           case "tool-input-end": {
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Tool.Input.Ended.Sync, {
+            EventV2.run(SessionEvent.Tool.Input.Ended.Sync, {
               sessionID: ctx.sessionID,
               callID: value.id,
               text: "",
@@ -328,7 +328,7 @@ export const layer: Layer.Layer<
             }
             const toolCall = yield* readToolCall(value.toolCallId)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Tool.Called.Sync, {
+            EventV2.run(SessionEvent.Tool.Called.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
               tool: value.toolName,
@@ -384,7 +384,7 @@ export const layer: Layer.Layer<
           case "tool-result": {
             const toolCall = yield* readToolCall(value.toolCallId)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Tool.Success.Sync, {
+              EventV2.run(SessionEvent.Tool.Success.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
               structured: value.output.metadata,
@@ -412,7 +412,7 @@ export const layer: Layer.Layer<
           case "tool-error": {
             const toolCall = yield* readToolCall(value.toolCallId)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            SyncEvent.run(SessionEvent.Tool.Error.Sync, {
+            EventV2.run(SessionEvent.Tool.Error.Sync, {
               sessionID: ctx.sessionID,
               callID: value.toolCallId,
               error: {
@@ -435,7 +435,7 @@ export const layer: Layer.Layer<
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              SyncEvent.run(SessionEvent.Step.Started.Sync, {
+              EventV2.run(SessionEvent.Step.Started.Sync, {
                 sessionID: ctx.sessionID,
                 agent: input.assistantMessage.agent,
                 model: {
@@ -465,7 +465,7 @@ export const layer: Layer.Layer<
             })
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              SyncEvent.run(SessionEvent.Step.Ended.Sync, {
+              EventV2.run(SessionEvent.Step.Ended.Sync, {
                 sessionID: ctx.sessionID,
                 finish: value.finishReason,
                 cost: usage.cost,
@@ -520,7 +520,7 @@ export const layer: Layer.Layer<
           case "text-start":
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              SyncEvent.run(SessionEvent.Text.Started.Sync, {
+              EventV2.run(SessionEvent.Text.Started.Sync, {
                 sessionID: ctx.sessionID,
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
@@ -540,7 +540,7 @@ export const layer: Layer.Layer<
           case "text-delta":
             if (!ctx.currentText) return
             if (ctx.assistantMessage.summary) {
-              SyncEvent.run(SessionEvent.Compaction.Delta.Sync, {
+              EventV2.run(SessionEvent.Compaction.Delta.Sync, {
                 sessionID: ctx.sessionID,
                 text: value.text,
                 timestamp: DateTime.makeUnsafe(Date.now()),
@@ -572,7 +572,7 @@ export const layer: Layer.Layer<
             )).text
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              SyncEvent.run(SessionEvent.Text.Ended.Sync, {
+              EventV2.run(SessionEvent.Text.Ended.Sync, {
                 sessionID: ctx.sessionID,
                 text: ctx.currentText.text,
                 timestamp: DateTime.makeUnsafe(Date.now()),
@@ -706,7 +706,7 @@ export const layer: Layer.Layer<
                 parse,
                 set: (info) => {
                   // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-                  SyncEvent.run(SessionEvent.Retried.Sync, {
+                  EventV2.run(SessionEvent.Retried.Sync, {
                     sessionID: ctx.sessionID,
                     attempt: info.attempt,
                     error: {

@@ -1,10 +1,10 @@
 import { Schema } from "effect"
 import { Prompt } from "./session-prompt"
 import { SessionEvent } from "./session-event"
-import { Event } from "./event"
+import { EventV2 } from "./event"
 import { ToolOutput } from "./tool-output"
 
-export const ID = Event.ID
+export const ID = EventV2.ID
 export type ID = Schema.Schema.Type<typeof ID>
 
 const Base = {
