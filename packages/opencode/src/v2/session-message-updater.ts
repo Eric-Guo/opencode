@@ -9,8 +9,10 @@ export type MemoryState = {
 export interface Adapter<Result> {
   readonly getCurrentAssistant: () => SessionMessage.Assistant | undefined
   readonly getCurrentCompaction: () => SessionMessage.Compaction | undefined
+  readonly getCurrentShell: (callID: string) => SessionMessage.Shell | undefined
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => void
   readonly updateCompaction: (compaction: SessionMessage.Compaction) => void
+  readonly updateShell: (shell: SessionMessage.Shell) => void
   readonly appendMessage: (message: SessionMessage.Message) => void
   readonly finish: () => Result
 }
@@ -19,6 +21,8 @@ export function memory(state: MemoryState): Adapter<MemoryState> {
   const activeAssistantIndex = () =>
     state.messages.findLastIndex((message) => message.type === "assistant" && !message.time.completed)
   const activeCompactionIndex = () => state.messages.findLastIndex((message) => message.type === "compaction")
+  const activeShellIndex = (callID: string) =>
+    state.messages.findLastIndex((message) => message.type === "shell" && message.callID === callID)
 
   return {
     getCurrentAssistant() {
@@ -33,6 +37,12 @@ export function memory(state: MemoryState): Adapter<MemoryState> {
       const compaction = state.messages[index]
       return compaction?.type === "compaction" ? compaction : undefined
     },
+    getCurrentShell(callID) {
+      const index = activeShellIndex(callID)
+      if (index < 0) return
+      const shell = state.messages[index]
+      return shell?.type === "shell" ? shell : undefined
+    },
     updateAssistant(assistant) {
       const index = activeAssistantIndex()
       if (index < 0) return
@@ -46,6 +56,13 @@ export function memory(state: MemoryState): Adapter<MemoryState> {
       const current = state.messages[index]
       if (current?.type !== "compaction") return
       state.messages[index] = compaction
+    },
+    updateShell(shell) {
+      const index = activeShellIndex(shell.callID)
+      if (index < 0) return
+      const current = state.messages[index]
+      if (current?.type !== "shell") return
+      state.messages[index] = shell
     },
     appendMessage(message) {
       state.messages.push(message)
@@ -78,16 +95,78 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
 
   SessionEvent.All.match(event, {
     "session.next.agent.switched": (event) => {
-      adapter.appendMessage(SessionMessage.AgentSwitched.fromEvent(event))
+      adapter.appendMessage(
+        new SessionMessage.AgentSwitched({
+          id: event.id,
+          type: "agent-switched",
+          metadata: event.metadata,
+          agent: event.data.agent,
+          time: { created: event.data.timestamp },
+        }),
+      )
     },
     "session.next.model.switched": (event) => {
-      adapter.appendMessage(SessionMessage.ModelSwitched.fromEvent(event))
+      adapter.appendMessage(
+        new SessionMessage.ModelSwitched({
+          id: event.id,
+          type: "model-switched",
+          metadata: event.metadata,
+          model: {
+            id: event.data.id,
+            providerID: event.data.providerID,
+            variant: event.data.variant,
+          },
+          time: { created: event.data.timestamp },
+        }),
+      )
     },
     "session.next.prompted": (event) => {
-      adapter.appendMessage(SessionMessage.User.fromEvent(event))
+      adapter.appendMessage(
+        new SessionMessage.User({
+          id: event.id,
+          type: "user",
+          metadata: event.metadata,
+          text: event.data.prompt.text,
+          files: event.data.prompt.files,
+          agents: event.data.prompt.agents,
+          time: { created: event.data.timestamp },
+        }),
+      )
     },
     "session.next.synthetic": (event) => {
-      adapter.appendMessage(SessionMessage.Synthetic.fromEvent(event))
+      adapter.appendMessage(
+        new SessionMessage.Synthetic({
+          sessionID: event.data.sessionID,
+          text: event.data.text,
+          id: event.id,
+          type: "synthetic",
+          time: { created: event.data.timestamp },
+        }),
+      )
+    },
+    "session.next.shell.started": (event) => {
+      adapter.appendMessage(
+        new SessionMessage.Shell({
+          id: event.id,
+          type: "shell",
+          metadata: event.metadata,
+          callID: event.data.callID,
+          command: event.data.command,
+          output: "",
+          time: { created: event.data.timestamp },
+        }),
+      )
+    },
+    "session.next.shell.ended": (event) => {
+      const currentShell = adapter.getCurrentShell(event.data.callID)
+      if (currentShell) {
+        adapter.updateShell(
+          produce(currentShell, (draft) => {
+            draft.output = event.data.output
+            draft.time.completed = event.data.timestamp
+          }),
+        )
+      }
     },
     "session.next.step.started": (event) => {
       if (currentAssistant) {
@@ -97,7 +176,17 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
           }),
         )
       }
-      adapter.appendMessage(SessionMessage.Assistant.fromEvent(event))
+      adapter.appendMessage(
+        new SessionMessage.Assistant({
+          id: event.id,
+          type: "assistant",
+          agent: event.data.agent,
+          model: event.data.model,
+          time: { created: event.data.timestamp },
+          content: [],
+          snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
+        }),
+      )
     },
     "session.next.step.ended": (event) => {
       if (currentAssistant) {
@@ -282,7 +371,16 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
     },
     "session.next.retried": () => {},
     "session.next.compaction.started": (event) => {
-      adapter.appendMessage(SessionMessage.Compaction.fromEvent(event))
+      adapter.appendMessage(
+        new SessionMessage.Compaction({
+          id: event.id,
+          type: "compaction",
+          metadata: event.metadata,
+          reason: event.data.reason,
+          summary: "",
+          time: { created: event.data.timestamp },
+        }),
+      )
     },
     "session.next.compaction.delta": (event) => {
       const currentCompaction = adapter.getCurrentCompaction()

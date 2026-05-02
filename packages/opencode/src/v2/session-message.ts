@@ -19,17 +19,7 @@ export class AgentSwitched extends Schema.Class<AgentSwitched>("Session.Message.
   ...Base,
   type: Schema.Literal("agent-switched"),
   agent: SessionEvent.AgentSwitched.fields.data.fields.agent,
-}) {
-  static fromEvent(event: SessionEvent.AgentSwitched) {
-    return new AgentSwitched({
-      id: event.id,
-      type: "agent-switched",
-      metadata: event.metadata,
-      agent: event.data.agent,
-      time: { created: event.data.timestamp },
-    })
-  }
-}
+}) {}
 
 export class ModelSwitched extends Schema.Class<ModelSwitched>("Session.Message.ModelSwitched")({
   ...Base,
@@ -39,21 +29,7 @@ export class ModelSwitched extends Schema.Class<ModelSwitched>("Session.Message.
     providerID: SessionEvent.ModelSwitched.fields.data.fields.providerID,
     variant: SessionEvent.ModelSwitched.fields.data.fields.variant,
   }),
-}) {
-  static fromEvent(event: SessionEvent.ModelSwitched) {
-    return new ModelSwitched({
-      id: event.id,
-      type: "model-switched",
-      metadata: event.metadata,
-      model: {
-        id: event.data.id,
-        providerID: event.data.providerID,
-        variant: event.data.variant,
-      },
-      time: { created: event.data.timestamp },
-    })
-  }
-}
+}) {}
 
 export class User extends Schema.Class<User>("Session.Message.User")({
   ...Base,
@@ -64,36 +40,26 @@ export class User extends Schema.Class<User>("Session.Message.User")({
   time: Schema.Struct({
     created: Schema.DateTimeUtcFromMillis,
   }),
-}) {
-  static fromEvent(event: SessionEvent.Prompted) {
-    return new User({
-      id: event.id,
-      type: "user",
-      metadata: event.metadata,
-      text: event.data.prompt.text,
-      files: event.data.prompt.files,
-      agents: event.data.prompt.agents,
-      time: { created: event.data.timestamp },
-    })
-  }
-}
+}) {}
 
 export class Synthetic extends Schema.Class<Synthetic>("Session.Message.Synthetic")({
   ...Base,
   sessionID: SessionEvent.Synthetic.fields.data.fields.sessionID,
   text: SessionEvent.Synthetic.fields.data.fields.text,
   type: Schema.Literal("synthetic"),
-}) {
-  static fromEvent(event: SessionEvent.Synthetic) {
-    return new Synthetic({
-      sessionID: event.data.sessionID,
-      text: event.data.text,
-      id: event.id,
-      type: "synthetic",
-      time: { created: event.data.timestamp },
-    })
-  }
-}
+}) {}
+
+export class Shell extends Schema.Class<Shell>("Session.Message.Shell")({
+  ...Base,
+  type: Schema.Literal("shell"),
+  callID: SessionEvent.Shell.Started.fields.data.fields.callID,
+  command: SessionEvent.Shell.Started.fields.data.fields.command,
+  output: Schema.String,
+  time: Schema.Struct({
+    created: Schema.DateTimeUtcFromMillis,
+    completed: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+  }),
+}) {}
 
 export class ToolStatePending extends Schema.Class<ToolStatePending>("Session.Message.ToolState.Pending")({
   status: Schema.Literal("pending"),
@@ -190,21 +156,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
     created: Schema.DateTimeUtcFromMillis,
     completed: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
-}) {
-  static fromEvent(event: SessionEvent.Step.Started) {
-    return new Assistant({
-      id: event.id,
-      type: "assistant",
-      agent: event.data.agent,
-      model: event.data.model,
-      time: {
-        created: event.data.timestamp,
-      },
-      content: [],
-      snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
-    })
-  }
-}
+}) {}
 
 export class Compaction extends Schema.Class<Compaction>("Session.Message.Compaction")({
   type: Schema.Literal("compaction"),
@@ -212,20 +164,9 @@ export class Compaction extends Schema.Class<Compaction>("Session.Message.Compac
   summary: Schema.String,
   include: Schema.String.pipe(Schema.optional),
   ...Base,
-}) {
-  static fromEvent(event: SessionEvent.Compaction.Started) {
-    return new Compaction({
-      id: event.id,
-      type: "compaction",
-      metadata: event.metadata,
-      reason: event.data.reason,
-      summary: "",
-      time: { created: event.data.timestamp },
-    })
-  }
-}
+}) {}
 
-export const Message = Schema.Union([AgentSwitched, ModelSwitched, User, Synthetic, Assistant, Compaction])
+export const Message = Schema.Union([AgentSwitched, ModelSwitched, User, Synthetic, Shell, Assistant, Compaction])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Session.Message" })
 

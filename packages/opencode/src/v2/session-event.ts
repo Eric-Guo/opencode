@@ -66,6 +66,30 @@ export const Synthetic = Event.define({
 })
 export type Synthetic = Schema.Schema.Type<typeof Synthetic>
 
+export namespace Shell {
+  export const Started = Event.define({
+    type: "session.next.shell.started",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      callID: Schema.String,
+      command: Schema.String,
+    },
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
+
+  export const Ended = Event.define({
+    type: "session.next.shell.ended",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      callID: Schema.String,
+      output: Schema.String,
+    },
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
+}
+
 export namespace Step {
   export const Started = Event.define({
     type: "session.next.step.started",
@@ -330,6 +354,8 @@ export const All = Schema.Union(
     ModelSwitched,
     Prompted,
     Synthetic,
+    Shell.Started,
+    Shell.Ended,
     Step.Started,
     Step.Ended,
     Text.Started,

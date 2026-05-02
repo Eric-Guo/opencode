@@ -24,6 +24,13 @@ function activeCompaction(messages: SessionMessage[]) {
   return compaction?.type === "compaction" ? compaction : undefined
 }
 
+function activeShell(messages: SessionMessage[], callID: string) {
+  const index = messages.findLastIndex((message) => message.type === "shell" && message.callID === callID)
+  if (index < 0) return
+  const shell = messages[index]
+  return shell?.type === "shell" ? shell : undefined
+}
+
 function latestTool(assistant: SessionMessageAssistant | undefined, callID?: string) {
   return assistant?.content.findLast(
     (item): item is SessionMessageAssistantTool => item.type === "tool" && (callID === undefined || item.id === callID),
@@ -87,6 +94,26 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               text: event.properties.text,
               time: { created: event.properties.timestamp },
             })
+          })
+          break
+        case "session.next.shell.started":
+          update(event.properties.sessionID, (draft) => {
+            draft.push({
+              id: event.id,
+              type: "shell",
+              callID: event.properties.callID,
+              command: event.properties.command,
+              output: "",
+              time: { created: event.properties.timestamp },
+            })
+          })
+          break
+        case "session.next.shell.ended":
+          update(event.properties.sessionID, (draft) => {
+            const match = activeShell(draft, event.properties.callID)
+            if (!match) return
+            match.output = event.properties.output
+            match.time.completed = event.properties.timestamp
           })
           break
         case "session.next.step.started":

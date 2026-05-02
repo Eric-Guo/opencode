@@ -4,7 +4,7 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
-import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { SyntaxStyle } from "@opentui/core"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -19,12 +19,13 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageCompaction,
   SessionMessageModelSwitched,
+  SessionMessageShell,
   SessionMessageSynthetic,
   SessionMessageUser,
   ToolFileContent,
   ToolTextContent,
 } from "@opencode-ai/sdk/v2"
-import { createEffect, createMemo, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 
 const id = "internal:session-v2-debug"
 const route = "session.v2.messages"
@@ -86,6 +87,9 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
                   </Match>
                   <Match when={message.type === "synthetic"}>
                     <SyntheticMessage message={message as SessionMessageSynthetic} index={index()} />
+                  </Match>
+                  <Match when={message.type === "shell"}>
+                    <ShellMessage message={message as SessionMessageShell} />
                   </Match>
                   <Match when={message.type === "compaction"}>
                     <CompactionMessage message={message as SessionMessageCompaction} />
@@ -200,6 +204,35 @@ function SyntheticMessage(props: { message: SessionMessageSynthetic; index: numb
       <text fg={theme.textMuted}>Synthetic</text>
       <text fg={theme.text}>{props.message.text}</text>
     </box>
+  )
+}
+
+function ShellMessage(props: { message: SessionMessageShell }) {
+  const { theme } = useTheme()
+  const output = createMemo(() => stripAnsi(props.message.output.trim()))
+  const [expanded, setExpanded] = createSignal(false)
+  const lines = createMemo(() => output().split("\n"))
+  const overflow = createMemo(() => lines().length > 10)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, 10), "…"].join("\n")
+  })
+  return (
+    <BlockTool
+      title="# Shell"
+      spinner={!props.message.time.completed}
+      onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+    >
+      <box gap={1}>
+        <text fg={theme.text}>$ {props.message.command}</text>
+        <Show when={output()}>
+          <text fg={theme.text}>{limited()}</text>
+        </Show>
+        <Show when={overflow()}>
+          <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+        </Show>
+      </box>
+    </BlockTool>
   )
 }
 
@@ -444,17 +477,36 @@ type ToolProps = {
 }
 
 function GenericTool(props: ToolProps) {
+  const { theme } = useTheme()
+  const output = createMemo(() => props.output?.trim() ?? "")
+  const [expanded, setExpanded] = createSignal(false)
+  const lines = createMemo(() => output().split("\n"))
+  const maxLines = 3
+  const overflow = createMemo(() => lines().length > maxLines)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, maxLines), "…"].join("\n")
+  })
   return (
     <Show
-      when={props.output?.trim()}
+      when={output()}
       fallback={
         <InlineTool icon="⚙" pending="Writing command..." complete={toolComplete(props.part)} part={props.part}>
           {props.part.name} {input(props.input)}
         </InlineTool>
       }
     >
-      <BlockTool title={`# ${props.part.name} ${input(props.input)}`} part={props.part}>
-        <text fg={useTheme().theme.text}>{props.output}</text>
+      <BlockTool
+        title={`# ${props.part.name} ${input(props.input)}`}
+        part={props.part}
+        onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+      >
+        <box gap={1}>
+          <text fg={theme.text}>{limited()}</text>
+          <Show when={overflow()}>
+            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+          </Show>
+        </box>
       </BlockTool>
     </Show>
   )
@@ -503,11 +555,14 @@ function InlineTool(props: {
 function BlockTool(props: {
   title: string
   children: JSX.Element
-  part: SessionMessageAssistantTool
+  part?: SessionMessageAssistantTool
+  onClick?: () => void
   spinner?: boolean
 }) {
   const { theme } = useTheme()
-  const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
+  const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
+  const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error.message : undefined))
   return (
     <box
       border={["left"]}
@@ -516,9 +571,15 @@ function BlockTool(props: {
       paddingLeft={2}
       marginTop={1}
       gap={1}
-      backgroundColor={theme.backgroundPanel}
+      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background}
+      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={() => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        props.onClick?.()
+      }}
       flexShrink={0}
     >
       <Show
@@ -544,13 +605,28 @@ function Bash(props: ToolProps) {
   const output = createMemo(() => stripAnsi((stringValue(props.metadata.output) ?? props.output ?? "").trim()))
   const command = createMemo(() => stringValue(props.input.command) ?? pendingInput(props.part))
   const title = createMemo(() => `# ${stringValue(props.input.description) ?? "Shell"}`)
+  const [expanded, setExpanded] = createSignal(false)
+  const lines = createMemo(() => output().split("\n"))
+  const overflow = createMemo(() => lines().length > 10)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, 10), "…"].join("\n")
+  })
   return (
     <Switch>
       <Match when={output()}>
-        <BlockTool title={title()} part={props.part} spinner={props.part.state.status === "running"}>
+        <BlockTool
+          title={title()}
+          part={props.part}
+          spinner={props.part.state.status === "running"}
+          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+        >
           <box gap={1}>
             <text fg={theme.text}>$ {command()}</text>
-            <text fg={theme.text}>{output()}</text>
+            <text fg={theme.text}>{limited()}</text>
+            <Show when={overflow()}>
+              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            </Show>
           </box>
         </BlockTool>
       </Match>

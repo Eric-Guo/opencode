@@ -47,6 +47,16 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
         .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
         .find((message): message is SessionMessage.Compaction => message.type === "compaction")
     },
+    getCurrentShell(callID) {
+      return db
+        .select()
+        .from(SessionMessageTable)
+        .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "shell")))
+        .orderBy(desc(SessionMessageTable.id))
+        .all()
+        .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+        .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
+    },
     updateAssistant(assistant) {
       const { id, type, ...data } = assistant
       db.update(SessionMessageTable)
@@ -62,6 +72,19 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
     },
     updateCompaction(compaction) {
       const { id, type, ...data } = compaction
+      db.update(SessionMessageTable)
+        .set({ data: encodeMessageData(data) })
+        .where(
+          and(
+            eq(SessionMessageTable.id, id),
+            eq(SessionMessageTable.session_id, sessionID),
+            eq(SessionMessageTable.type, type),
+          ),
+        )
+        .run()
+    },
+    updateShell(shell) {
+      const { id, type, ...data } = shell
       db.update(SessionMessageTable)
         .set({ data: encodeMessageData(data) })
         .where(
@@ -125,6 +148,12 @@ export default [
   }),
   SyncEvent.project(SessionEvent.Synthetic.Sync, (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.synthetic", data })
+  }),
+  SyncEvent.project(SessionEvent.Shell.Started.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.shell.started", data })
+  }),
+  SyncEvent.project(SessionEvent.Shell.Ended.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.shell.ended", data })
   }),
   SyncEvent.project(SessionEvent.Step.Started.Sync, (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.started", data })

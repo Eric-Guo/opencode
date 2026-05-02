@@ -792,6 +792,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               providerID: model.providerID,
             }
             yield* sessions.updateMessage(msg)
+            const callID = ulid()
+            const started = Date.now()
             const part: MessageV2.ToolPart = {
               type: "tool",
               id: PartID.ascending(),
@@ -801,11 +803,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               callID: ulid(),
               state: {
                 status: "running",
-                time: { start: Date.now() },
+                time: { start: started },
                 input: { command: input.command },
               },
             }
             yield* sessions.updatePart(part)
+            SyncEvent.run(SessionEvent.Shell.Started.Sync, {
+              sessionID: input.sessionID,
+              timestamp: DateTime.makeUnsafe(started),
+              callID,
+              command: input.command,
+            })
             return { msg, part, cwd: ctx.directory }
           }).pipe(Effect.ensuring(markReady))
 
@@ -820,14 +828,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               if (aborted) {
                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
               }
+              const completed = Date.now()
+              SyncEvent.run(SessionEvent.Shell.Ended.Sync, {
+                sessionID: input.sessionID,
+                timestamp: DateTime.makeUnsafe(completed),
+                callID: part.callID,
+                output,
+              })
               if (!msg.time.completed) {
-                msg.time.completed = Date.now()
+                msg.time.completed = completed
                 yield* sessions.updateMessage(msg)
               }
               if (part.state.status === "running") {
                 part.state = {
                   status: "completed",
-                  time: { ...part.state.time, end: Date.now() },
+                  time: { ...part.state.time, end: completed },
                   input: part.state.input,
                   title: "",
                   metadata: { output, description: "" },
