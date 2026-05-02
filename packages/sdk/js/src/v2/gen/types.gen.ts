@@ -36,6 +36,7 @@ export type EventProjectUpdated = {
   properties: Project
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 >>>>>>> cbb60d3a5 (core: add unique IDs to all events for reliable tracking and debugging)
 export type EventServerInstanceDisposed = {
@@ -45,6 +46,35 @@ export type EventServerInstanceDisposed = {
   }
 }
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+export type EventServerConnected = {
+=======
+
+export type EventServerConnected = {
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+<<<<<<< HEAD
+>>>>>>> 9a1d0085d (sync)
 export type EventFileEdited = {
   type: "file.edited"
   properties: {
@@ -57,10 +87,28 @@ export type EventFileWatcherUpdated = {
   properties: {
     file: string
     event: "add" | "change" | "unlink"
+<<<<<<< HEAD
   }
 }
 
+=======
+=======
+export type EventServerInstanceDisposed = {
+  id: string
+  type: "server.instance.disposed"
+  properties: {
+    directory: string
+>>>>>>> 1a2dc3e57 (sync)
+  }
+}
+
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
 export type EventLspClientDiagnostics = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "lsp.client.diagnostics"
   properties: {
     serverID: string
@@ -69,6 +117,10 @@ export type EventLspClientDiagnostics = {
 }
 
 export type EventLspUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "lsp.updated"
   properties: {
     [key: string]: unknown
@@ -76,6 +128,10 @@ export type EventLspUpdated = {
 }
 
 export type EventMessagePartDelta = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "message.part.delta"
   properties: {
     sessionID: string
@@ -102,11 +158,19 @@ export type PermissionRequest = {
 }
 
 export type EventPermissionAsked = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "permission.asked"
   properties: PermissionRequest
 }
 
 export type EventPermissionReplied = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "permission.replied"
   properties: {
     sessionID: string
@@ -124,6 +188,10 @@ export type SnapshotFileDiff = {
 }
 
 export type EventSessionDiff = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.diff"
   properties: {
     sessionID: string
@@ -193,6 +261,10 @@ export type ApiError = {
 }
 
 export type EventSessionError = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.error"
   properties: {
     sessionID?: string
@@ -208,6 +280,10 @@ export type EventSessionError = {
 }
 
 export type EventInstallationUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "installation.updated"
   properties: {
     version: string
@@ -215,12 +291,97 @@ export type EventInstallationUpdated = {
 }
 
 export type EventInstallationUpdateAvailable = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "installation.update-available"
   properties: {
     version: string
   }
 }
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+export type EventWorkspaceReady = {
+=======
+<<<<<<< HEAD
+=======
+export type EventWorkspaceReady = {
+  id: string
+>>>>>>> d0ca805a7 (sync)
+  type: "workspace.ready"
+  properties: {
+    name: string
+  }
+}
+
+export type EventWorkspaceFailed = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> d0ca805a7 (sync)
+  type: "workspace.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type EventWorkspaceRestore = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> d0ca805a7 (sync)
+  type: "workspace.restore"
+  properties: {
+    workspaceID: string
+    sessionID: string
+    total: number
+    step: number
+  }
+}
+
+export type EventWorkspaceStatus = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> d0ca805a7 (sync)
+  type: "workspace.status"
+  properties: {
+    workspaceID: string
+    status: "connected" | "connecting" | "disconnected" | "error"
+  }
+}
+
+export type EventFileEdited = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> d0ca805a7 (sync)
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> d0ca805a7 (sync)
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+<<<<<<< HEAD
+=======
+>>>>>>> 1a2dc3e57 (sync)
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -271,6 +432,10 @@ export type QuestionRequest = {
 }
 
 export type EventQuestionAsked = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "question.asked"
   properties: QuestionRequest
 }
@@ -284,6 +449,10 @@ export type QuestionReplied = {
 }
 
 export type EventQuestionReplied = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "question.replied"
   properties: QuestionReplied
 }
@@ -294,6 +463,10 @@ export type QuestionRejected = {
 }
 
 export type EventQuestionRejected = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "question.rejected"
   properties: QuestionRejected
 }
@@ -314,6 +487,10 @@ export type Todo = {
 }
 
 export type EventTodoUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "todo.updated"
   properties: {
     sessionID: string
@@ -336,6 +513,10 @@ export type SessionStatus =
     }
 
 export type EventSessionStatus = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.status"
   properties: {
     sessionID: string
@@ -344,6 +525,10 @@ export type EventSessionStatus = {
 }
 
 export type EventSessionIdle = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.idle"
   properties: {
     sessionID: string
@@ -351,6 +536,10 @@ export type EventSessionIdle = {
 }
 
 export type EventSessionCompacted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.compacted"
   properties: {
     sessionID: string
@@ -412,6 +601,10 @@ export type EventTuiSessionSelect = {
 }
 
 export type EventMcpToolsChanged = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "mcp.tools.changed"
   properties: {
     server: string
@@ -419,6 +612,10 @@ export type EventMcpToolsChanged = {
 }
 
 export type EventMcpBrowserOpenFailed = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "mcp.browser.open.failed"
   properties: {
     mcpName: string
@@ -427,6 +624,10 @@ export type EventMcpBrowserOpenFailed = {
 }
 
 export type EventCommandExecuted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "command.executed"
   properties: {
     name: string
@@ -466,12 +667,22 @@ export type EventProjectUpdated = {
 }
 
 export type EventVcsBranchUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "vcs.branch.updated"
   properties: {
     branch?: string
   }
 }
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 9a1d0085d (sync)
 export type EventWorkspaceReady = {
   type: "workspace.ready"
   properties: {
@@ -504,7 +715,15 @@ export type EventWorkspaceStatus = {
   }
 }
 
+<<<<<<< HEAD
+=======
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
 export type EventWorktreeReady = {
+=======
+export type EventWorktreeReady = {
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "worktree.ready"
   properties: {
     name: string
@@ -513,6 +732,10 @@ export type EventWorktreeReady = {
 }
 
 export type EventWorktreeFailed = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "worktree.failed"
   properties: {
     message: string
@@ -530,6 +753,10 @@ export type Pty = {
 }
 
 export type EventPtyCreated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "pty.created"
   properties: {
     info: Pty
@@ -537,6 +764,10 @@ export type EventPtyCreated = {
 }
 
 export type EventPtyUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "pty.updated"
   properties: {
     info: Pty
@@ -544,6 +775,10 @@ export type EventPtyUpdated = {
 }
 
 export type EventPtyExited = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "pty.exited"
   properties: {
     id: string
@@ -552,6 +787,10 @@ export type EventPtyExited = {
 }
 
 export type EventPtyDeleted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "pty.deleted"
   properties: {
     id: string
@@ -644,6 +883,10 @@ export type AssistantMessage = {
 export type Message = UserMessage | AssistantMessage
 
 export type EventMessageUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "message.updated"
   properties: {
     sessionID: string
@@ -652,6 +895,10 @@ export type EventMessageUpdated = {
 }
 
 export type EventMessageRemoved = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "message.removed"
   properties: {
     sessionID: string
@@ -923,6 +1170,10 @@ export type Part =
   | CompactionPart
 
 export type EventMessagePartUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "message.part.updated"
   properties: {
     sessionID: string
@@ -932,6 +1183,10 @@ export type EventMessagePartUpdated = {
 }
 
 export type EventMessagePartRemoved = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "message.part.removed"
   properties: {
     sessionID: string
@@ -968,6 +1223,15 @@ export type Session = {
     url: string
   }
   title: string
+<<<<<<< HEAD
+=======
+  agent?: string
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+>>>>>>> 1a2dc3e57 (sync)
   version: string
   time: {
     created: number
@@ -985,6 +1249,10 @@ export type Session = {
 }
 
 export type EventSessionCreated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.created"
   properties: {
     sessionID: string
@@ -993,6 +1261,10 @@ export type EventSessionCreated = {
 }
 
 export type EventSessionUpdated = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.updated"
   properties: {
     sessionID: string
@@ -1001,6 +1273,10 @@ export type EventSessionUpdated = {
 }
 
 export type EventSessionDeleted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.deleted"
   properties: {
     sessionID: string
@@ -1008,6 +1284,7 @@ export type EventSessionDeleted = {
   }
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 export type EventServerConnected = {
   type: "server.connected"
@@ -1021,6 +1298,32 @@ export type EventGlobalDisposed = {
   properties: {
     [key: string]: unknown
 =======
+=======
+=======
+export type EventSessionNextAgentSwitched = {
+  id: string
+  type: "session.next.agent.switched"
+  properties: {
+    timestamp: number
+    sessionID: string
+    agent: string
+  }
+}
+
+export type EventSessionNextModelSwitched = {
+  id: string
+  type: "session.next.model.switched"
+  properties: {
+    timestamp: number
+    sessionID: string
+    id: string
+    providerID: string
+    variant?: string
+  }
+}
+
+>>>>>>> 1a2dc3e57 (sync)
+>>>>>>> d0ca805a7 (sync)
 export type PromptSource = {
   start: number
   end: number
@@ -1047,31 +1350,75 @@ export type Prompt = {
 }
 
 export type EventSessionNextPrompted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.prompted"
   properties: {
     timestamp: number
     sessionID: string
+<<<<<<< HEAD
     id: string
+=======
+>>>>>>> 1a2dc3e57 (sync)
     prompt: Prompt
   }
 }
 
 export type EventSessionNextSynthetic = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.synthetic"
   properties: {
     timestamp: number
     sessionID: string
+<<<<<<< HEAD
     id: string
+=======
+>>>>>>> 1a2dc3e57 (sync)
     text: string
   }
 }
 
+<<<<<<< HEAD
 export type EventSessionNextStepStarted = {
+=======
+export type EventSessionNextShellStarted = {
+  id: string
+  type: "session.next.shell.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    command: string
+  }
+}
+
+export type EventSessionNextShellEnded = {
+  id: string
+  type: "session.next.shell.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    output: string
+  }
+}
+
+export type EventSessionNextStepStarted = {
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.step.started"
   properties: {
     timestamp: number
     sessionID: string
+<<<<<<< HEAD
     id: string
+=======
+>>>>>>> 1a2dc3e57 (sync)
     agent: string
     model: {
       id: string
@@ -1083,6 +1430,10 @@ export type EventSessionNextStepStarted = {
 }
 
 export type EventSessionNextStepEnded = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.step.ended"
   properties: {
     timestamp: number
@@ -1103,6 +1454,10 @@ export type EventSessionNextStepEnded = {
 }
 
 export type EventSessionNextTextStarted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.text.started"
   properties: {
     timestamp: number
@@ -1111,6 +1466,10 @@ export type EventSessionNextTextStarted = {
 }
 
 export type EventSessionNextTextDelta = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.text.delta"
   properties: {
     timestamp: number
@@ -1120,6 +1479,10 @@ export type EventSessionNextTextDelta = {
 }
 
 export type EventSessionNextTextEnded = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.text.ended"
   properties: {
     timestamp: number
@@ -1129,6 +1492,10 @@ export type EventSessionNextTextEnded = {
 }
 
 export type EventSessionNextReasoningStarted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.reasoning.started"
   properties: {
     timestamp: number
@@ -1138,6 +1505,10 @@ export type EventSessionNextReasoningStarted = {
 }
 
 export type EventSessionNextReasoningDelta = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.reasoning.delta"
   properties: {
     timestamp: number
@@ -1148,6 +1519,10 @@ export type EventSessionNextReasoningDelta = {
 }
 
 export type EventSessionNextReasoningEnded = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.reasoning.ended"
   properties: {
     timestamp: number
@@ -1158,6 +1533,10 @@ export type EventSessionNextReasoningEnded = {
 }
 
 export type EventSessionNextToolInputStarted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.tool.input.started"
   properties: {
     timestamp: number
@@ -1168,6 +1547,10 @@ export type EventSessionNextToolInputStarted = {
 }
 
 export type EventSessionNextToolInputDelta = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.tool.input.delta"
   properties: {
     timestamp: number
@@ -1178,6 +1561,10 @@ export type EventSessionNextToolInputDelta = {
 }
 
 export type EventSessionNextToolInputEnded = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.tool.input.ended"
   properties: {
     timestamp: number
@@ -1188,6 +1575,10 @@ export type EventSessionNextToolInputEnded = {
 }
 
 export type EventSessionNextToolCalled = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.tool.called"
   properties: {
     timestamp: number
@@ -1219,6 +1610,10 @@ export type ToolFileContent = {
 }
 
 export type EventSessionNextToolProgress = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.tool.progress"
   properties: {
     timestamp: number
@@ -1232,6 +1627,10 @@ export type EventSessionNextToolProgress = {
 }
 
 export type EventSessionNextToolSuccess = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.tool.success"
   properties: {
     timestamp: number
@@ -1251,6 +1650,10 @@ export type EventSessionNextToolSuccess = {
 }
 
 export type EventSessionNextToolError = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.tool.error"
   properties: {
     timestamp: number
@@ -1283,6 +1686,10 @@ export type SessionNextRetryError = {
 }
 
 export type EventSessionNextRetried = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.retried"
   properties: {
     timestamp: number
@@ -1293,16 +1700,27 @@ export type EventSessionNextRetried = {
 }
 
 export type EventSessionNextCompactionStarted = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.compaction.started"
   properties: {
     timestamp: number
     sessionID: string
+<<<<<<< HEAD
     id: string
+=======
+>>>>>>> 1a2dc3e57 (sync)
     reason: "auto" | "manual"
   }
 }
 
 export type EventSessionNextCompactionDelta = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.compaction.delta"
   properties: {
     timestamp: number
@@ -1312,6 +1730,10 @@ export type EventSessionNextCompactionDelta = {
 }
 
 export type EventSessionNextCompactionEnded = {
+<<<<<<< HEAD
+=======
+  id: string
+>>>>>>> 1a2dc3e57 (sync)
   type: "session.next.compaction.ended"
   properties: {
     timestamp: number
@@ -1410,6 +1832,15 @@ export type SyncEventSessionUpdated = {
         url?: string | null
       }
       title?: string | null
+<<<<<<< HEAD
+=======
+      agent?: string | null
+      model?: {
+        id: string
+        providerID: string
+        variant?: string
+      } | null
+>>>>>>> 1a2dc3e57 (sync)
       version?: string | null
       time?: {
         created?: number | null
@@ -1440,6 +1871,37 @@ export type SyncEventSessionDeleted = {
   }
 }
 
+<<<<<<< HEAD
+=======
+export type SyncEventSessionNextAgentSwitched = {
+  type: "sync"
+  name: "session.next.agent.switched.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    agent: string
+  }
+}
+
+export type SyncEventSessionNextModelSwitched = {
+  type: "sync"
+  name: "session.next.model.switched.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    id: string
+    providerID: string
+    variant?: string
+  }
+}
+
+>>>>>>> 1a2dc3e57 (sync)
 export type SyncEventSessionNextPrompted = {
   type: "sync"
   name: "session.next.prompted.1"
@@ -1449,7 +1911,10 @@ export type SyncEventSessionNextPrompted = {
   data: {
     timestamp: number
     sessionID: string
+<<<<<<< HEAD
     id: string
+=======
+>>>>>>> 1a2dc3e57 (sync)
     prompt: Prompt
   }
 }
@@ -1463,11 +1928,45 @@ export type SyncEventSessionNextSynthetic = {
   data: {
     timestamp: number
     sessionID: string
+<<<<<<< HEAD
     id: string
+=======
+>>>>>>> 1a2dc3e57 (sync)
     text: string
   }
 }
 
+<<<<<<< HEAD
+=======
+export type SyncEventSessionNextShellStarted = {
+  type: "sync"
+  name: "session.next.shell.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    command: string
+  }
+}
+
+export type SyncEventSessionNextShellEnded = {
+  type: "sync"
+  name: "session.next.shell.ended.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    output: string
+  }
+}
+
+>>>>>>> 1a2dc3e57 (sync)
 export type SyncEventSessionNextStepStarted = {
   type: "sync"
   name: "session.next.step.started.1"
@@ -1477,7 +1976,10 @@ export type SyncEventSessionNextStepStarted = {
   data: {
     timestamp: number
     sessionID: string
+<<<<<<< HEAD
     id: string
+=======
+>>>>>>> 1a2dc3e57 (sync)
     agent: string
     model: {
       id: string
@@ -1742,7 +2244,10 @@ export type SyncEventSessionNextCompactionStarted = {
   data: {
     timestamp: number
     sessionID: string
+<<<<<<< HEAD
     id: string
+=======
+>>>>>>> 1a2dc3e57 (sync)
     reason: "auto" | "manual"
   }
 }
@@ -1779,9 +2284,27 @@ export type GlobalEvent = {
   project?: string
   workspace?: string
   payload:
+<<<<<<< HEAD
     | EventServerInstanceDisposed
     | EventFileEdited
     | EventFileWatcherUpdated
+=======
+    | EventProjectUpdated
+<<<<<<< HEAD
+    | EventServerInstanceDisposed
+<<<<<<< HEAD
+=======
+    | EventServerConnected
+    | EventGlobalDisposed
+    | EventFileEdited
+    | EventFileWatcherUpdated
+=======
+    | EventServerConnected
+    | EventGlobalDisposed
+    | EventServerInstanceDisposed
+>>>>>>> 1a2dc3e57 (sync)
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
     | EventLspClientDiagnostics
     | EventLspUpdated
     | EventMessagePartDelta
@@ -1791,6 +2314,24 @@ export type GlobalEvent = {
     | EventSessionError
     | EventInstallationUpdated
     | EventInstallationUpdateAvailable
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> d0ca805a7 (sync)
+    | EventWorkspaceReady
+    | EventWorkspaceFailed
+    | EventWorkspaceRestore
+    | EventWorkspaceStatus
+    | EventFileEdited
+    | EventFileWatcherUpdated
+<<<<<<< HEAD
+=======
+>>>>>>> 1a2dc3e57 (sync)
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
@@ -1807,10 +2348,22 @@ export type GlobalEvent = {
     | EventCommandExecuted
     | EventProjectUpdated
     | EventVcsBranchUpdated
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 9a1d0085d (sync)
     | EventWorkspaceReady
     | EventWorkspaceFailed
     | EventWorkspaceRestore
     | EventWorkspaceStatus
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 1a2dc3e57 (sync)
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
     | EventWorktreeReady
     | EventWorktreeFailed
     | EventPtyCreated
@@ -1825,11 +2378,22 @@ export type GlobalEvent = {
     | EventSessionUpdated
     | EventSessionDeleted
 <<<<<<< HEAD
+<<<<<<< HEAD
     | EventServerConnected
     | EventGlobalDisposed
 =======
+=======
+>>>>>>> d0ca805a7 (sync)
     | EventSessionNextPrompted
     | EventSessionNextSynthetic
+=======
+    | EventSessionNextAgentSwitched
+    | EventSessionNextModelSwitched
+    | EventSessionNextPrompted
+    | EventSessionNextSynthetic
+    | EventSessionNextShellStarted
+    | EventSessionNextShellEnded
+>>>>>>> 1a2dc3e57 (sync)
     | EventSessionNextStepStarted
     | EventSessionNextStepEnded
     | EventSessionNextTextStarted
@@ -1857,8 +2421,17 @@ export type GlobalEvent = {
     | SyncEventSessionCreated
     | SyncEventSessionUpdated
     | SyncEventSessionDeleted
+<<<<<<< HEAD
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextSynthetic
+=======
+    | SyncEventSessionNextAgentSwitched
+    | SyncEventSessionNextModelSwitched
+    | SyncEventSessionNextPrompted
+    | SyncEventSessionNextSynthetic
+    | SyncEventSessionNextShellStarted
+    | SyncEventSessionNextShellEnded
+>>>>>>> 1a2dc3e57 (sync)
     | SyncEventSessionNextStepStarted
     | SyncEventSessionNextStepEnded
     | SyncEventSessionNextTextStarted
@@ -2614,6 +3187,15 @@ export type GlobalSession = {
     url: string
   }
   title: string
+<<<<<<< HEAD
+=======
+  agent?: string
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+>>>>>>> 1a2dc3e57 (sync)
   version: string
   time: {
     created: number
@@ -2726,14 +3308,70 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+<<<<<<< HEAD
 export type V2SessionsResponse = {
   items: Array<Session>
+=======
+export type SessionInfo = {
+  id: string
+  parentID?: string
+  projectID: string
+  workspaceID?: string
+  path?: string
+  agent?: string
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+  time: {
+    created: number
+    updated: number
+    archived?: number
+  }
+  title: string
+}
+
+export type V2SessionsResponse = {
+  items: Array<SessionInfo>
+>>>>>>> 1a2dc3e57 (sync)
   cursor: {
     previous?: string
     next?: string
   }
 }
 
+<<<<<<< HEAD
+=======
+export type SessionMessageAgentSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "agent-switched"
+  agent: string
+}
+
+export type SessionMessageModelSwitched = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  type: "model-switched"
+  model: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+}
+
+>>>>>>> 1a2dc3e57 (sync)
 export type SessionMessageUser = {
   id: string
   metadata?: {
@@ -2761,6 +3399,24 @@ export type SessionMessageSynthetic = {
   type: "synthetic"
 }
 
+<<<<<<< HEAD
+=======
+export type SessionMessageShell = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    completed?: number
+  }
+  type: "shell"
+  callID: string
+  command: string
+  output: string
+}
+
+>>>>>>> 1a2dc3e57 (sync)
 export type SessionMessageAssistantText = {
   type: "text"
   text: string
@@ -2888,8 +3544,16 @@ export type SessionMessageCompaction = {
 }
 
 export type SessionMessage =
+<<<<<<< HEAD
   | SessionMessageUser
   | SessionMessageSynthetic
+=======
+  | SessionMessageAgentSwitched
+  | SessionMessageModelSwitched
+  | SessionMessageUser
+  | SessionMessageSynthetic
+  | SessionMessageShell
+>>>>>>> 1a2dc3e57 (sync)
   | SessionMessageAssistant
   | SessionMessageCompaction
 
@@ -2948,9 +3612,27 @@ export type File = {
 }
 
 export type Event =
+<<<<<<< HEAD
   | EventServerInstanceDisposed
   | EventFileEdited
   | EventFileWatcherUpdated
+=======
+  | EventProjectUpdated
+<<<<<<< HEAD
+  | EventServerInstanceDisposed
+<<<<<<< HEAD
+=======
+  | EventServerConnected
+  | EventGlobalDisposed
+  | EventFileEdited
+  | EventFileWatcherUpdated
+=======
+  | EventServerConnected
+  | EventGlobalDisposed
+  | EventServerInstanceDisposed
+>>>>>>> 1a2dc3e57 (sync)
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
@@ -2960,6 +3642,24 @@ export type Event =
   | EventSessionError
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> d0ca805a7 (sync)
+  | EventWorkspaceReady
+  | EventWorkspaceFailed
+  | EventWorkspaceRestore
+  | EventWorkspaceStatus
+  | EventFileEdited
+  | EventFileWatcherUpdated
+<<<<<<< HEAD
+=======
+>>>>>>> 1a2dc3e57 (sync)
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -2976,10 +3676,22 @@ export type Event =
   | EventCommandExecuted
   | EventProjectUpdated
   | EventVcsBranchUpdated
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 9a1d0085d (sync)
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventWorkspaceRestore
   | EventWorkspaceStatus
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 1a2dc3e57 (sync)
+>>>>>>> d0ca805a7 (sync)
+>>>>>>> 9a1d0085d (sync)
   | EventWorktreeReady
   | EventWorktreeFailed
   | EventPtyCreated
@@ -2994,11 +3706,22 @@ export type Event =
   | EventSessionUpdated
   | EventSessionDeleted
 <<<<<<< HEAD
+<<<<<<< HEAD
   | EventServerConnected
   | EventGlobalDisposed
 =======
+=======
+>>>>>>> d0ca805a7 (sync)
   | EventSessionNextPrompted
   | EventSessionNextSynthetic
+=======
+  | EventSessionNextAgentSwitched
+  | EventSessionNextModelSwitched
+  | EventSessionNextPrompted
+  | EventSessionNextSynthetic
+  | EventSessionNextShellStarted
+  | EventSessionNextShellEnded
+>>>>>>> 1a2dc3e57 (sync)
   | EventSessionNextStepStarted
   | EventSessionNextStepEnded
   | EventSessionNextTextStarted
@@ -4247,6 +4970,15 @@ export type SessionCreateData = {
   body?: {
     parentID?: string
     title?: string
+<<<<<<< HEAD
+=======
+    agent?: string
+    model?: {
+      id: string
+      providerID: string
+      variant?: string
+    }
+>>>>>>> 1a2dc3e57 (sync)
     permission?: PermissionRuleset
     workspaceID?: string
   }
@@ -6534,5 +7266,8 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
+<<<<<<< HEAD
 =======
 >>>>>>> 13afcef87 (core: add unique IDs to all events for reliable tracking and debugging)
+=======
+>>>>>>> 1a2dc3e57 (sync)
