@@ -113,6 +113,7 @@ const KeybindsSchema = Schema.Struct({
   terminal_suspend: keybind("ctrl+z", "Suspend terminal"),
   terminal_title_toggle: keybind("none", "Toggle terminal title"),
   tips_toggle: keybind("<leader>h", "Toggle tips on home screen"),
+  permission_auto_accept_toggle: keybind("none", "Toggle auto-accept for edit permission requests"),
   plugin_manager: keybind("none", "Open plugin manager dialog"),
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
 }).annotate({ identifier: "KeybindsConfig" })
