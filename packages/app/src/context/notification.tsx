@@ -32,7 +32,7 @@ type TurnCompleteNotification = NotificationBase & {
 
 type ErrorNotification = NotificationBase & {
   type: "error"
-  error: EventSessionError["properties"]["error"]
+  error?: EventSessionError["properties"]["error"]
 }
 
 export type Notification = TurnCompleteNotification | ErrorNotification
@@ -372,14 +372,14 @@ function createServerNotificationState(input: {
         void playSoundById(settings.sounds.errors())
       }
 
-      const error = "error" in event.properties ? event.properties.error : undefined
+      const error = event.properties.error
       append({
         directory,
         time,
         viewed: viewedInCurrentSession(directory, sessionID),
         type: "error",
         session: sessionID ?? "global",
-        error,
+        ...(error === undefined ? {} : { error }),
       })
       const description =
         session?.title ??
