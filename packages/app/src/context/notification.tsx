@@ -32,7 +32,7 @@ type TurnCompleteNotification = NotificationBase & {
 
 type ErrorNotification = NotificationBase & {
   type: "error"
-  error: EventSessionError["properties"]["error"]
+  error?: EventSessionError["properties"]["error"]
 }
 
 export type Notification = TurnCompleteNotification | ErrorNotification
@@ -379,7 +379,7 @@ function createServerNotificationState(input: {
         viewed: viewedInCurrentSession(directory, sessionID),
         type: "error",
         session: sessionID ?? "global",
-        error,
+        ...(error === undefined ? {} : { error }),
       })
       const description =
         session?.title ??
