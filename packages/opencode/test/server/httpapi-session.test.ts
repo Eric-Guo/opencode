@@ -207,7 +207,7 @@ describe("session HttpApi", () => {
         ).toMatchObject({ info: { id: message.info.id } })
 
         yield* Effect.promise(() =>
-          Instance.provide({
+          WithInstance.provide({
             directory: tmp.path,
             fn: async () => {
               const message = new SessionMessage.Assistant({
@@ -232,7 +232,7 @@ describe("session HttpApi", () => {
                         agent: message.agent,
                         model: message.model,
                         content: message.content,
-                      } as NonNullable<typeof SessionMessageTable.$inferInsert["data"]>,
+                      } as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
                     },
                   ])
                   .run(),
@@ -241,9 +241,9 @@ describe("session HttpApi", () => {
           }),
         )
 
-        expect(yield* requestJson<SessionMessage.Message[]>(`/api/session/${parent.id}/message`, { headers })).toMatchObject([
-          { type: "assistant" },
-        ])
+        expect(
+          yield* requestJson<SessionMessage.Message[]>(`/api/session/${parent.id}/message`, { headers }),
+        ).toMatchObject([{ type: "assistant" }])
       }),
     ),
   )
