@@ -46,6 +46,7 @@ export type EventServerInstanceDisposed = {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
@@ -104,6 +105,8 @@ export type EventServerInstanceDisposed = {
 
 >>>>>>> d0ca805a7 (sync)
 >>>>>>> 9a1d0085d (sync)
+=======
+>>>>>>> b967ee6dd (generate types)
 export type EventLspClientDiagnostics = {
   id: string
   type: "lsp.client.diagnostics"
@@ -276,6 +279,7 @@ export type EventInstallationUpdateAvailable = {
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 =======
 >>>>>>> 7b56f08df (fix)
@@ -284,9 +288,10 @@ export type EventWorkspaceReady = {
 =======
 <<<<<<< HEAD
 =======
+=======
+>>>>>>> b967ee6dd (generate types)
 export type EventWorkspaceReady = {
   id: string
->>>>>>> d0ca805a7 (sync)
   type: "workspace.ready"
   properties: {
     name: string
@@ -294,10 +299,7 @@ export type EventWorkspaceReady = {
 }
 
 export type EventWorkspaceFailed = {
-<<<<<<< HEAD
-=======
   id: string
->>>>>>> d0ca805a7 (sync)
   type: "workspace.failed"
   properties: {
     message: string
@@ -305,10 +307,7 @@ export type EventWorkspaceFailed = {
 }
 
 export type EventWorkspaceRestore = {
-<<<<<<< HEAD
-=======
   id: string
->>>>>>> d0ca805a7 (sync)
   type: "workspace.restore"
   properties: {
     workspaceID: string
@@ -319,10 +318,7 @@ export type EventWorkspaceRestore = {
 }
 
 export type EventWorkspaceStatus = {
-<<<<<<< HEAD
-=======
   id: string
->>>>>>> d0ca805a7 (sync)
   type: "workspace.status"
   properties: {
     workspaceID: string
@@ -331,10 +327,7 @@ export type EventWorkspaceStatus = {
 }
 
 export type EventFileEdited = {
-<<<<<<< HEAD
-=======
   id: string
->>>>>>> d0ca805a7 (sync)
   type: "file.edited"
   properties: {
     file: string
@@ -342,10 +335,7 @@ export type EventFileEdited = {
 }
 
 export type EventFileWatcherUpdated = {
-<<<<<<< HEAD
-=======
   id: string
->>>>>>> d0ca805a7 (sync)
   type: "file.watcher.updated"
   properties: {
     file: string
@@ -353,6 +343,7 @@ export type EventFileWatcherUpdated = {
   }
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 >>>>>>> 1a2dc3e57 (sync)
@@ -363,6 +354,8 @@ export type EventFileWatcherUpdated = {
 =======
 >>>>>>> 3e6a37422 (fix)
 >>>>>>> 7b56f08df (fix)
+=======
+>>>>>>> b967ee6dd (generate types)
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -627,6 +620,7 @@ export type EventVcsBranchUpdated = {
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
@@ -676,6 +670,8 @@ export type EventWorkspaceStatus = {
 =======
 >>>>>>> d0ca805a7 (sync)
 >>>>>>> 9a1d0085d (sync)
+=======
+>>>>>>> b967ee6dd (generate types)
 export type EventWorktreeReady = {
   id: string
   type: "worktree.ready"
@@ -1199,25 +1195,6 @@ export type EventSessionDeleted = {
   }
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
-=======
-=======
-=======
-=======
->>>>>>> 3e6a37422 (fix)
 export type EventSessionNextAgentSwitched = {
   id: string
   type: "session.next.agent.switched"
@@ -1240,11 +1217,6 @@ export type EventSessionNextModelSwitched = {
   }
 }
 
-<<<<<<< HEAD
->>>>>>> 1a2dc3e57 (sync)
->>>>>>> d0ca805a7 (sync)
-=======
->>>>>>> 3e6a37422 (fix)
 export type PromptSource = {
   start: number
   end: number
@@ -1581,7 +1553,22 @@ export type EventSessionNextCompactionEnded = {
     sessionID: string
     text: string
     include?: string
->>>>>>> 9d5f5e1ff (refactor(session): define v2 session event schemas)
+  }
+}
+
+export type EventServerConnected = {
+  id: string
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  id: string
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -2108,6 +2095,7 @@ export type GlobalEvent = {
     | EventProjectUpdated
     | EventServerInstanceDisposed
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     | EventServerConnected
     | EventGlobalDisposed
@@ -2126,6 +2114,8 @@ export type GlobalEvent = {
 =======
 >>>>>>> 3e6a37422 (fix)
 >>>>>>> 7b56f08df (fix)
+=======
+>>>>>>> b967ee6dd (generate types)
     | EventLspClientDiagnostics
     | EventLspUpdated
     | EventMessagePartDelta
@@ -2137,18 +2127,22 @@ export type GlobalEvent = {
     | EventInstallationUpdateAvailable
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
 >>>>>>> d0ca805a7 (sync)
+=======
+>>>>>>> b967ee6dd (generate types)
     | EventWorkspaceReady
     | EventWorkspaceFailed
     | EventWorkspaceRestore
     | EventWorkspaceStatus
     | EventFileEdited
     | EventFileWatcherUpdated
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 >>>>>>> 1a2dc3e57 (sync)
@@ -2159,6 +2153,8 @@ export type GlobalEvent = {
 =======
 >>>>>>> 3e6a37422 (fix)
 >>>>>>> 7b56f08df (fix)
+=======
+>>>>>>> b967ee6dd (generate types)
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
@@ -2177,6 +2173,7 @@ export type GlobalEvent = {
     | EventVcsBranchUpdated
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
@@ -2204,6 +2201,8 @@ export type GlobalEvent = {
 =======
 >>>>>>> 3e6a37422 (fix)
 >>>>>>> 7b56f08df (fix)
+=======
+>>>>>>> b967ee6dd (generate types)
     | EventWorktreeReady
     | EventWorktreeFailed
     | EventPtyCreated
@@ -2217,19 +2216,6 @@ export type GlobalEvent = {
     | EventSessionCreated
     | EventSessionUpdated
     | EventSessionDeleted
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-    | EventServerConnected
-    | EventGlobalDisposed
-=======
-=======
->>>>>>> d0ca805a7 (sync)
-    | EventSessionNextPrompted
-    | EventSessionNextSynthetic
-=======
-=======
->>>>>>> 3e6a37422 (fix)
     | EventSessionNextAgentSwitched
     | EventSessionNextModelSwitched
     | EventSessionNextPrompted
@@ -2255,7 +2241,8 @@ export type GlobalEvent = {
     | EventSessionNextCompactionStarted
     | EventSessionNextCompactionDelta
     | EventSessionNextCompactionEnded
->>>>>>> 9d5f5e1ff (refactor(session): define v2 session event schemas)
+    | EventServerConnected
+    | EventGlobalDisposed
     | SyncEventMessageUpdated
     | SyncEventMessageRemoved
     | SyncEventMessagePartUpdated
@@ -3142,247 +3129,6 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
-export type SessionInfo = {
-  id: string
-  parentID?: string
-  projectID: string
-  workspaceID?: string
-  path?: string
-  agent?: string
-  model?: {
-    id: string
-    providerID: string
-    variant?: string
-  }
-  time: {
-    created: number
-    updated: number
-    archived?: number
-  }
-  title: string
-}
-
-export type V2SessionsResponse = {
-  items: Array<SessionInfo>
-  cursor: {
-    previous?: string
-    next?: string
-  }
-}
-
-export type SessionMessageAgentSwitched = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "agent-switched"
-  agent: string
-}
-
-export type SessionMessageModelSwitched = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  type: "model-switched"
-  model: {
-    id: string
-    providerID: string
-    variant?: string
-  }
-}
-
-export type SessionMessageUser = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  text: string
-  files?: Array<PromptFileAttachment>
-  agents?: Array<PromptAgentAttachment>
-  type: "user"
-}
-
-export type SessionMessageSynthetic = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-  sessionID: string
-  text: string
-  type: "synthetic"
-}
-
-export type SessionMessageShell = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    completed?: number
-  }
-  type: "shell"
-  callID: string
-  command: string
-  output: string
-}
-
-export type SessionMessageAssistantText = {
-  type: "text"
-  text: string
-}
-
-export type SessionMessageAssistantReasoning = {
-  type: "reasoning"
-  id: string
-  text: string
-}
-
-export type SessionMessageToolStatePending = {
-  status: "pending"
-  input: string
-}
-
-export type SessionMessageToolStateRunning = {
-  status: "running"
-  input: {
-    [key: string]: unknown
-  }
-  structured: {
-    [key: string]: unknown
-  }
-  content: Array<ToolTextContent | ToolFileContent>
-}
-
-export type SessionMessageToolStateCompleted = {
-  status: "completed"
-  input: {
-    [key: string]: unknown
-  }
-  attachments?: Array<PromptFileAttachment>
-  content: Array<ToolTextContent | ToolFileContent>
-  structured: {
-    [key: string]: unknown
-  }
-}
-
-export type SessionMessageToolStateError = {
-  status: "error"
-  input: {
-    [key: string]: unknown
-  }
-  content: Array<ToolTextContent | ToolFileContent>
-  structured: {
-    [key: string]: unknown
-  }
-  error: {
-    type: string
-    message: string
-  }
-}
-
-export type SessionMessageAssistantTool = {
-  type: "tool"
-  id: string
-  name: string
-  provider?: {
-    executed: boolean
-    metadata?: {
-      [key: string]: unknown
-    }
-  }
-  state:
-    | SessionMessageToolStatePending
-    | SessionMessageToolStateRunning
-    | SessionMessageToolStateCompleted
-    | SessionMessageToolStateError
-  time: {
-    created: number
-    ran?: number
-    completed?: number
-    pruned?: number
-  }
-}
-
-export type SessionMessageAssistant = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    completed?: number
-  }
-  type: "assistant"
-  agent: string
-  model: {
-    id: string
-    providerID: string
-    variant?: string
-  }
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
-  snapshot?: {
-    start?: string
-    end?: string
-  }
-  finish?: string
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  error?: string
-}
-
-export type SessionMessageCompaction = {
-  type: "compaction"
-  reason: "auto" | "manual"
-  summary: string
-  include?: string
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-}
-
-export type SessionMessage =
-  | SessionMessageAgentSwitched
-  | SessionMessageModelSwitched
-  | SessionMessageUser
-  | SessionMessageSynthetic
-  | SessionMessageShell
-  | SessionMessageAssistant
-  | SessionMessageCompaction
-
-export type V2SessionMessagesResponse = {
-  items: Array<SessionMessage>
-  cursor: {
-    previous?: string
-    next?: string
-  }
-}
-
 export type Symbol = {
   name: string
   kind: number
@@ -3438,6 +3184,7 @@ export type Event =
   | EventProjectUpdated
   | EventServerInstanceDisposed
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
   | EventServerConnected
   | EventGlobalDisposed
@@ -3456,6 +3203,8 @@ export type Event =
 =======
 >>>>>>> 3e6a37422 (fix)
 >>>>>>> 7b56f08df (fix)
+=======
+>>>>>>> b967ee6dd (generate types)
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
@@ -3467,18 +3216,22 @@ export type Event =
   | EventInstallationUpdateAvailable
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
 >>>>>>> d0ca805a7 (sync)
+=======
+>>>>>>> b967ee6dd (generate types)
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventWorkspaceRestore
   | EventWorkspaceStatus
   | EventFileEdited
   | EventFileWatcherUpdated
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 >>>>>>> 1a2dc3e57 (sync)
@@ -3489,6 +3242,8 @@ export type Event =
 =======
 >>>>>>> 3e6a37422 (fix)
 >>>>>>> 7b56f08df (fix)
+=======
+>>>>>>> b967ee6dd (generate types)
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -3507,6 +3262,7 @@ export type Event =
   | EventVcsBranchUpdated
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
 =======
@@ -3534,6 +3290,8 @@ export type Event =
 =======
 >>>>>>> 3e6a37422 (fix)
 >>>>>>> 7b56f08df (fix)
+=======
+>>>>>>> b967ee6dd (generate types)
   | EventWorktreeReady
   | EventWorktreeFailed
   | EventPtyCreated
@@ -3547,19 +3305,6 @@ export type Event =
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-  | EventServerConnected
-  | EventGlobalDisposed
-=======
-=======
->>>>>>> d0ca805a7 (sync)
-  | EventSessionNextPrompted
-  | EventSessionNextSynthetic
-=======
-=======
->>>>>>> 3e6a37422 (fix)
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
   | EventSessionNextPrompted
@@ -3585,7 +3330,8 @@ export type Event =
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
->>>>>>> 9d5f5e1ff (refactor(session): define v2 session event schemas)
+  | EventServerConnected
+  | EventGlobalDisposed
 
 export type McpStatusConnected = {
   status: "connected"
@@ -6154,78 +5900,6 @@ export type SyncHistoryListResponses = {
 }
 
 export type SyncHistoryListResponse = SyncHistoryListResponses[keyof SyncHistoryListResponses]
-
-export type V2SessionListData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-    limit?: number
-    cursor?: string
-    order?: "asc" | "desc"
-    path?: string
-    roots?: "true" | "false"
-    start?: number
-    search?: string
-  }
-  url: "/api/session"
-}
-
-export type V2SessionListErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type V2SessionListError = V2SessionListErrors[keyof V2SessionListErrors]
-
-export type V2SessionListResponses = {
-  /**
-   * List of v2 sessions
-   */
-  200: V2SessionsResponse
-}
-
-export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListResponses]
-
-export type V2SessionMessagesData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-    limit?: number
-    cursor?: string
-    order?: "asc" | "desc"
-  }
-  url: "/api/session/{sessionID}/message"
-}
-
-export type V2SessionMessagesErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type V2SessionMessagesError = V2SessionMessagesErrors[keyof V2SessionMessagesErrors]
-
-export type V2SessionMessagesResponses = {
-  /**
-   * List of v2 session messages
-   */
-  200: V2SessionMessagesResponse
-}
-
-export type V2SessionMessagesResponse2 = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
 
 export type FindTextData = {
   body?: never
