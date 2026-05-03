@@ -9,6 +9,7 @@ import SidebarFooter from "../feature-plugins/sidebar/footer"
 import PluginManager from "../feature-plugins/system/plugins"
 import SessionV2Debug from "../feature-plugins/system/session-v2"
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 export type InternalTuiPlugin = TuiPluginModule & {
   id: string
@@ -25,5 +26,5 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   SidebarFiles,
   SidebarFooter,
   PluginManager,
-  SessionV2Debug,
+  ...(Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM ? [SessionV2Debug] : []),
 ]

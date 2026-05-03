@@ -197,9 +197,7 @@ export default [
   SyncEvent.project(SessionEvent.Compaction.Started.Sync, (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.started", data })
   }),
-  SyncEvent.project(SessionEvent.Compaction.Delta.Sync, (db, data, event) => {
-    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.delta", data })
-  }),
+  SyncEvent.project(SessionEvent.Compaction.Delta.Sync, () => {}),
   SyncEvent.project(SessionEvent.Compaction.Ended.Sync, (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.ended", data })
   }),

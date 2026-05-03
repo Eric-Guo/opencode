@@ -244,13 +244,6 @@ export const layer: Layer.Layer<
 
           case "reasoning-delta":
             if (!(value.id in ctx.reasoningMap)) return
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            EventV2.run(SessionEvent.Reasoning.Delta.Sync, {
-              sessionID: ctx.sessionID,
-              reasoningID: value.id,
-              delta: value.text,
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             yield* session.updatePartDelta({
@@ -539,13 +532,6 @@ export const layer: Layer.Layer<
 
           case "text-delta":
             if (!ctx.currentText) return
-            if (ctx.assistantMessage.summary) {
-              EventV2.run(SessionEvent.Compaction.Delta.Sync, {
-                sessionID: ctx.sessionID,
-                text: value.text,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
             ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePartDelta({
