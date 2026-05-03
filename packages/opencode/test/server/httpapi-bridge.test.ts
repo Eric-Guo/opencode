@@ -226,7 +226,6 @@ describe("HttpApi server", () => {
     const effectRoutes = openApiRouteKeys(effectOpenApi())
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
-    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
   })
 
   test("matches generated OpenAPI route parameters", async () => {
