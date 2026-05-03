@@ -9,7 +9,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
-import { EventSessionError } from "@opencode-ai/sdk/v2"
+import type { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
 
@@ -27,7 +27,7 @@ type TurnCompleteNotification = NotificationBase & {
 
 type ErrorNotification = NotificationBase & {
   type: "error"
-  error: EventSessionError["properties"]["error"]
+  error?: EventSessionError["properties"]["error"]
 }
 
 export type Notification = TurnCompleteNotification | ErrorNotification
@@ -266,14 +266,14 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           void playSoundById(settings.sounds.errors())
         }
 
-        const error = "error" in event.properties ? event.properties.error : undefined
+        const error = event.properties.error
         append({
           directory,
           time,
           viewed: viewedInCurrentSession(directory, sessionID),
           type: "error",
           session: sessionID ?? "global",
-          error,
+          ...(error === undefined ? {} : { error }),
         })
         const description =
           session?.title ??
