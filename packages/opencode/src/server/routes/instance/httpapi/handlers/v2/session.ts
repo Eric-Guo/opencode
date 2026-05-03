@@ -8,14 +8,14 @@ const DefaultSessionsLimit = 50
 
 const SessionCursor = Schema.Struct({
   id: SessionV2.Info.fields.id,
-  time: Schema.Number,
+  time: Schema.Finite,
   order: Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")]),
   direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
   directory: Schema.String.pipe(Schema.optional),
   path: Schema.String.pipe(Schema.optional),
   workspaceID: WorkspaceID.pipe(Schema.optional),
   roots: Schema.Boolean.pipe(Schema.optional),
-  start: Schema.Number.pipe(Schema.optional),
+  start: Schema.Finite.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
 })
 type SessionCursor = typeof SessionCursor.Type

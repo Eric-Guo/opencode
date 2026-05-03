@@ -9,7 +9,7 @@ const DefaultMessagesLimit = 50
 
 const Cursor = Schema.Struct({
   id: SessionMessage.ID,
-  time: Schema.Number,
+  time: Schema.Finite,
   order: Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")]),
   direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
 })

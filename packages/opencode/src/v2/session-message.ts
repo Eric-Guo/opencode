@@ -3,6 +3,7 @@ import { Prompt } from "./session-prompt"
 import { SessionEvent } from "./session-event"
 import { EventV2 } from "./event"
 import { ToolOutput } from "./tool-output"
+import { V2Schema } from "./schema"
 
 export const ID = EventV2.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -11,7 +12,7 @@ const Base = {
   id: ID,
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
   time: Schema.Struct({
-    created: Schema.DateTimeUtcFromMillis,
+    created: V2Schema.DateTimeUtcFromMillis,
   }),
 }
 
@@ -38,7 +39,7 @@ export class User extends Schema.Class<User>("Session.Message.User")({
   agents: Prompt.fields.agents,
   type: Schema.Literal("user"),
   time: Schema.Struct({
-    created: Schema.DateTimeUtcFromMillis,
+    created: V2Schema.DateTimeUtcFromMillis,
   }),
 }) {}
 
@@ -56,8 +57,8 @@ export class Shell extends Schema.Class<Shell>("Session.Message.Shell")({
   command: SessionEvent.Shell.Started.fields.data.fields.command,
   output: Schema.String,
   time: Schema.Struct({
-    created: Schema.DateTimeUtcFromMillis,
-    completed: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    created: V2Schema.DateTimeUtcFromMillis,
+    completed: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
 }) {}
 
@@ -107,10 +108,10 @@ export class AssistantTool extends Schema.Class<AssistantTool>("Session.Message.
   }).pipe(Schema.optional),
   state: ToolState,
   time: Schema.Struct({
-    created: Schema.DateTimeUtcFromMillis,
-    ran: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
-    completed: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
-    pruned: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    created: V2Schema.DateTimeUtcFromMillis,
+    ran: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    completed: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    pruned: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
 }) {}
 
@@ -141,20 +142,20 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
     end: Schema.String.pipe(Schema.optional),
   }).pipe(Schema.optional),
   finish: Schema.String.pipe(Schema.optional),
-  cost: Schema.Number.pipe(Schema.optional),
+  cost: Schema.Finite.pipe(Schema.optional),
   tokens: Schema.Struct({
-    input: Schema.Number,
-    output: Schema.Number,
-    reasoning: Schema.Number,
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
     cache: Schema.Struct({
-      read: Schema.Number,
-      write: Schema.Number,
+      read: Schema.Finite,
+      write: Schema.Finite,
     }),
   }).pipe(Schema.optional),
   error: Schema.String.pipe(Schema.optional),
   time: Schema.Struct({
-    created: Schema.DateTimeUtcFromMillis,
-    completed: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    created: V2Schema.DateTimeUtcFromMillis,
+    completed: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
 }) {}
 

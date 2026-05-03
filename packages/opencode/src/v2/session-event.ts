@@ -6,6 +6,7 @@ import { Schema } from "effect"
 export { FileAttachment }
 import { ToolOutput } from "./tool-output"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { V2Schema } from "./schema"
 
 export const Source = Schema.Struct({
   start: NonNegativeInt,
@@ -17,7 +18,7 @@ export const Source = Schema.Struct({
 export type Source = Schema.Schema.Type<typeof Source>
 
 const Base = {
-  timestamp: Schema.DateTimeUtcFromMillis,
+  timestamp: V2Schema.DateTimeUtcFromMillis,
   sessionID: SessionID,
 }
 

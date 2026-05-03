@@ -1,8 +1,8 @@
 import * as Schema from "effect/Schema"
 
 export class Source extends Schema.Class<Source>("Prompt.Source")({
-  start: Schema.Number,
-  end: Schema.Number,
+  start: Schema.Finite,
+  end: Schema.Finite,
   text: Schema.String,
 }) {}
 

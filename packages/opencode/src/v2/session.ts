@@ -10,6 +10,7 @@ import { EventV2 } from "./event"
 import { ProjectID } from "@/project/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { SessionEvent } from "./session-event"
+import { V2Schema } from "./schema"
 
 export const Delivery = Schema.Union([Schema.Literal("immediate"), Schema.Literal("deferred")]).annotate({
   identifier: "Session.Delivery",
@@ -31,9 +32,9 @@ export class Info extends Schema.Class<Info>("Session.Info")({
     variant: Schema.String.pipe(Schema.optional),
   }).pipe(Schema.optional),
   time: Schema.Struct({
-    created: Schema.DateTimeUtcFromMillis,
-    updated: Schema.DateTimeUtcFromMillis,
-    archived: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    created: V2Schema.DateTimeUtcFromMillis,
+    updated: V2Schema.DateTimeUtcFromMillis,
+    archived: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
   title: Schema.String,
   /*
