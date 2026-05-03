@@ -446,7 +446,7 @@ function stripOptionalNull(schema: OpenApiSchema): OpenApiSchema {
   if (isEmptyObjectUnion(schema)) return { type: "object", properties: {} }
   const options = flattenOptions(schema.anyOf ?? schema.oneOf)
   if (options) {
-    const withoutNull = options.filter((item) => item.type !== "null")
+    const withoutNull = stripSpecialNumberStrings(options).filter((item) => item.type !== "null")
     if (withoutNull.length === 1) return stripOptionalNull(withoutNull[0])
     if (schema.anyOf) schema.anyOf = withoutNull.map(stripOptionalNull)
     if (schema.oneOf) schema.oneOf = withoutNull.map(stripOptionalNull)
@@ -488,6 +488,14 @@ function isBareArraySchema(schema: OpenApiSchema) {
 
 function flattenOptions(options: OpenApiSchema[] | undefined): OpenApiSchema[] | undefined {
   return options?.flatMap((item) => flattenOptions(item.anyOf ?? item.oneOf) ?? [item])
+}
+
+function stripSpecialNumberStrings(options: OpenApiSchema[]) {
+  if (!options.some((item) => item.type === "number" || item.type === "integer")) return options
+  return options.filter(
+    (item) =>
+      item.type !== "string" || !item.enum?.every((value) => ["NaN", "Infinity", "-Infinity"].includes(String(value))),
+  )
 }
 
 function normalizeParameter(param: OpenApiParameter, route: string) {
