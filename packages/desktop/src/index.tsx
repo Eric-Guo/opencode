@@ -71,16 +71,11 @@ const createPlatform = (): Platform => {
   })()
 
   const wslHome = async () => {
-    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
-    return commands.wslPath("~", "windows").catch(() => undefined)
+    return undefined
   }
 
   const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
-    if (!result || !window.__OPENCODE__?.wsl) return result
-    if (Array.isArray(result)) {
-      return Promise.all(result.map((path) => commands.wslPath(path, "linux").catch(() => path))) as any
-    }
-    return commands.wslPath(result, "linux").catch(() => result) as any
+    return result
   }
 
   return {
@@ -347,16 +342,6 @@ const createPlatform = (): Platform => {
       } else {
         return tauriFetch(input, init)
       }
-    },
-
-    getWslEnabled: async () => {
-      const next = await commands.getWslConfig().catch(() => null)
-      if (next) return next.enabled
-      return window.__OPENCODE__!.wsl ?? false
-    },
-
-    setWslEnabled: async (enabled) => {
-      await commands.setWslConfig({ enabled })
     },
 
     getDefaultServer: async () => {
