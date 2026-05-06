@@ -194,7 +194,7 @@ const getBase = (appId: string): Configuration => {
         NSRemovableVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.removableVolumesUsage"],
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
       },
-      target: ["dmg", "zip"],
+      target: ["dir"],
     },
     protocols: {
       name: "OpenCode",
