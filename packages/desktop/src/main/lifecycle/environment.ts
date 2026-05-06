@@ -26,7 +26,19 @@ const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 export const configureApplication = Effect.fn("Application.configure")(function* () {
   const path = yield* Path.Path
-  contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+  contextMenu({
+    showSaveImageAs: true,
+    showLookUpSelection: false,
+    showSearchWithGoogle: false,
+    append: (_defaultActions, _parameters, browserWindow) => [
+      {
+        label: "Debug",
+        click: () => {
+          if (browserWindow && "webContents" in browserWindow) browserWindow.webContents.openDevTools()
+        },
+      },
+    ],
+  })
   try {
     process.chdir(homedir())
   } catch {}
