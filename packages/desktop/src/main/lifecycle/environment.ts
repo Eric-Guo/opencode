@@ -16,7 +16,15 @@ export const installContextMenu = Effect.gen(function* () {
     showSaveImageAs: true,
     showLookUpSelection: false,
     showSearchWithGoogle: false,
-    append: (_actions, params) => (params.isEditable ? spellcheckMenuItems() : []),
+    append: (_defaultActions, parameters, browserWindow) => [
+      ...(parameters.isEditable ? spellcheckMenuItems() : []),
+      {
+        label: "Debug",
+        click: () => {
+          if (browserWindow && "webContents" in browserWindow) browserWindow.webContents.openDevTools()
+        },
+      },
+    ],
   })
 })
 
