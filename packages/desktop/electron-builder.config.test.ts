@@ -73,6 +73,7 @@ test("shared packaging defaults", async () => {
   expect(config.extraResources).toEqual([
     { from: "resources/", to: "", filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"] },
     { from: "icons/prod", to: "icons" },
+    { from: "resources/thape-config", to: "thape-config", filter: ["**/*", "!**/.git/**"] },
   ])
 })
 

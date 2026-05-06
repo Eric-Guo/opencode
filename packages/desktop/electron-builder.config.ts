@@ -91,6 +91,7 @@ const getBase = (appId: string): Configuration => ({
     "out/**/*",
     "resources/**/*",
     "!resources/opencode-cli*",
+    "!resources/thape-config/**",
     "!resources/icons/**",
     // Log export imports Zip.js as ESM. Keep index.js and lib, including its inline worker.
     "!**/node_modules/@zip.js/zip.js/dist{,/**/*}",
@@ -116,6 +117,11 @@ const getBase = (appId: string): Configuration => ({
     {
       from: iconDir,
       to: "icons",
+    },
+    {
+      from: "resources/thape-config",
+      to: "thape-config",
+      filter: ["**/*", "!**/.git/**"],
     },
   ],
   afterPack: async (context) => {
