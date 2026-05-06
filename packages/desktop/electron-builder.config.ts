@@ -25,7 +25,6 @@ const channel = (() => {
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 })()
-
 const iconChannel = channel === "dev" ? "prod" : channel
 const iconDir = `icons/${iconChannel}`
 const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
@@ -39,8 +38,17 @@ const getBase = (): Configuration => ({
     output: "dist",
     buildResources: "resources",
   },
-  files: ["out/**/*", "resources/**/*"],
+  files: ["out/**/*", "resources/**/*", "!resources/thape-config/**", "!resources/icons/**"],
   extraResources: [
+    {
+      from: iconDir,
+      to: "icons",
+    },
+    {
+      from: "resources/thape-config",
+      to: "thape-config",
+      filter: ["**/*", "!**/.git/**"],
+    },
     {
       from: "native/",
       to: "native/",
@@ -49,7 +57,7 @@ const getBase = (): Configuration => ({
   ],
   mac: {
     category: "public.app-category.developer-tools",
-    icon: `resources/icons/icon.icns`,
+    icon: `${iconDir}/icon.icns`,
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: "resources/entitlements.plist",
@@ -65,7 +73,7 @@ const getBase = (): Configuration => ({
     schemes: ["opencode"],
   },
   win: {
-    icon: `resources/icons/icon.ico`,
+    icon: `${iconDir}/icon.ico`,
     signtoolOptions: {
       sign: signWindows,
     },
@@ -75,11 +83,11 @@ const getBase = (): Configuration => ({
   nsis: {
     oneClick: true,
     perMachine: false,
-    installerIcon: `resources/icons/icon.ico`,
-    installerHeaderIcon: `resources/icons/icon.ico`,
+    installerIcon: `${iconDir}/icon.ico`,
+    installerHeaderIcon: `${iconDir}/icon.ico`,
   },
   linux: {
-    icon: `resources/icons`,
+    icon: iconDir,
     category: "Development",
     executableName: "opencode-desktop",
     target: ["AppImage", "deb", "rpm"],
