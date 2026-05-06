@@ -97,7 +97,21 @@ function ensureLoopbackNoProxy() {
 }
 
 const main = Effect.gen(function* () {
-  contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+  contextMenu({
+    showSaveImageAs: true,
+    showLookUpSelection: false,
+    showSearchWithGoogle: false,
+    append: (_defaultActions, _parameters, browserWindow) => [
+      {
+        label: "Debug",
+        click: () => {
+          if (browserWindow && "webContents" in browserWindow) {
+            browserWindow.webContents.openDevTools()
+          }
+        },
+      },
+    ],
+  })
 
   // on macOS apps run in `/` which can cause issues with ripgrep
   try {
