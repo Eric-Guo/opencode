@@ -403,15 +403,15 @@ render(() => {
       if (item?.runtime.kind === "ready") return key
       return ServerConnection.Key.make("sidecar")
     })
-    if (!ready()) return splash
-
     return (
-      <Show when={effectiveDefaultServer()} keyed>
-        {(key) => (
-          <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
-            <Inner />
-          </AppInterface>
-        )}
+      <Show when={ready()} fallback={splash}>
+        <Show when={effectiveDefaultServer()} keyed>
+          {(key) => (
+            <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
+              <Inner />
+            </AppInterface>
+          )}
+        </Show>
       </Show>
     )
   }
