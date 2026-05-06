@@ -91,6 +91,9 @@ function linuxExecutableName(appId: string): string {
 
 const getBase = (appId: string): Configuration => {
   const target = getCurrentCli()
+  const channel = resolveChannel()
+  const iconChannel = channel === "dev" ? "prod" : channel
+  const iconDir = `icons/${iconChannel}`
 
   return {
     artifactName: "opencode-desktop-${os}-${arch}.${ext}",
@@ -110,6 +113,7 @@ const getBase = (appId: string): Configuration => {
       "out/**/*",
       "resources/**/*",
       "!resources/opencode-cli*",
+      "!resources/icons/**",
       // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
       ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
         (item) => `!**/node_modules/@lydell/node-pty-${item.os}-${item.cpu}{,/**/*}`,
@@ -134,6 +138,10 @@ const getBase = (appId: string): Configuration => {
         from: "resources/",
         to: "",
         filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
+      },
+      {
+        from: iconDir,
+        to: "icons",
       },
     ],
     afterPack: async (context) => {
@@ -181,7 +189,7 @@ const getBase = (appId: string): Configuration => {
     },
     mac: {
       category: "public.app-category.developer-tools",
-      icon: `resources/icons/icon.icns`,
+      icon: `${iconDir}/icon.icns`,
       extendInfo: {
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
       },
@@ -201,7 +209,7 @@ const getBase = (appId: string): Configuration => {
       schemes: ["opencode"],
     },
     win: {
-      icon: `resources/icons/icon.ico`,
+      icon: `${iconDir}/icon.ico`,
       signtoolOptions: {
         sign: signWindows,
       },
@@ -212,11 +220,11 @@ const getBase = (appId: string): Configuration => {
       include: path.join(packageDir, "resources", "windows", "installer.nsh"),
       oneClick: true,
       perMachine: false,
-      installerIcon: `resources/icons/icon.ico`,
-      installerHeaderIcon: `resources/icons/icon.ico`,
+      installerIcon: `${iconDir}/icon.ico`,
+      installerHeaderIcon: `${iconDir}/icon.ico`,
     },
     linux: {
-      icon: `resources/icons`,
+      icon: iconDir,
       category: "Development",
       executableName: linuxExecutableName(appId),
       // Derive the installed `.desktop` filename from `desktopName`
@@ -237,6 +245,7 @@ const getBase = (appId: string): Configuration => {
 
 export function getConfig() {
   const channel = resolveChannel()
+  const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
   const appId = APP_IDS[channel]
   const base = getBase(appId)
 
