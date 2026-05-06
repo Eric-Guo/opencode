@@ -53,7 +53,7 @@ const getBase = (): Configuration => ({
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
     notarize: true,
-    target: ["dmg", "zip"],
+    target: ["dir"],
   },
   dmg: {
     sign: true,
@@ -91,7 +91,7 @@ function getConfig() {
       return {
         ...base,
         appId: "ai.opencode.desktop.dev",
-        productName: "OpenCode Dev",
+        productName: "SigmaAgents",
         rpm: { packageName: "opencode-dev" },
       }
     }
