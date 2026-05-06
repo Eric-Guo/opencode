@@ -1,6 +1,17 @@
 import { drizzle } from "drizzle-orm/node-sqlite/driver"
+import * as http from "node:http"
+import * as tls from "node:tls"
 
 import { getUserShell, loadShellEnv } from "./shell-env"
+
+type NodeHttpWithEnvProxy = typeof http & {
+  setGlobalProxyFromEnv: () => void
+}
+
+type NodeTlsWithSystemCertificates = typeof tls & {
+  getCACertificates: (type: "default" | "system") => string[]
+  setDefaultCACertificates: (certificates: string[]) => void
+}
 
 type StartCommand = {
   type: "start"
@@ -45,6 +56,8 @@ parentPort.on("message", (event) => {
 async function start(command: StartCommand) {
   try {
     prepareServerEnv(command.password, command.userDataPath)
+    useSystemCertificates()
+    useEnvProxy()
     const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
     await Log.init({ level: "WARN" })
 
@@ -73,6 +86,7 @@ async function start(command: StartCommand) {
     parentPort.postMessage({ type: "ready" })
   } catch (error) {
     parentPort.postMessage({ type: "error", error: serializeError(error) })
+    setImmediate(() => process.exit(1))
   }
 }
 
@@ -99,6 +113,25 @@ function prepareServerEnv(password: string, userDataPath: string) {
     OPENCODE_SERVER_PASSWORD: password,
     XDG_STATE_HOME: userDataPath,
   })
+}
+
+function useSystemCertificates() {
+  try {
+    const nodeTls = tls as NodeTlsWithSystemCertificates
+    nodeTls.setDefaultCACertificates([
+      ...new Set([...nodeTls.getCACertificates("default"), ...nodeTls.getCACertificates("system")]),
+    ])
+  } catch (error) {
+    console.warn("failed to load system certificates", error)
+  }
+}
+
+function useEnvProxy() {
+  try {
+    ;(http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv()
+  } catch (error) {
+    console.warn("failed to load proxy environment", error)
+  }
 }
 
 function parseCommand(value: unknown): SidecarCommand | undefined {
