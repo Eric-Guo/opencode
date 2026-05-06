@@ -121,7 +121,7 @@ const getBase = (appId: string): Configuration => ({
       await sign(macSignOptions(options))
     },
     notarize: true,
-    target: ["dmg", "zip"],
+    target: ["dir"],
   },
   dmg: {
     sign: true,
