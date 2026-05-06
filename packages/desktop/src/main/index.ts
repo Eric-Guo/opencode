@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { existsSync } from "node:fs"
+import { existsSync, mkdirSync, rmSync } from "node:fs"
 import * as http from "node:http"
 import { createServer } from "node:net"
-import { homedir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
@@ -30,10 +30,14 @@ const APP_IDS: Record<string, string> = {
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 }
+const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
+const onboardingTestRoot = setupOnboardingTestEnv()
 app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
 app.setAppUserModelId(appId)
-app.setPath("userData", join(app.getPath("appData"), appId))
+app.setPath("userData", onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId))
+if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
+const logger = initLogging()
 const { autoUpdater } = pkg
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
@@ -46,6 +50,7 @@ import { createMenu } from "./menu"
 import {
   getDefaultServerUrl,
   getWslConfig,
+  preferAppEnv,
   setDefaultServerUrl,
   setWslConfig,
   spawnLocalServer,
@@ -70,13 +75,29 @@ const loadingComplete = defer<void>()
 const pendingDeepLinks: string[] = []
 
 const serverReady = defer<ServerReadyData>()
-const logger = initLogging()
 
 useSystemCertificates()
+
+function setupOnboardingTestEnv() {
+  if (!TEST_ONBOARDING) return
+
+  const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+  rmSync(root, { recursive: true, force: true })
+  ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
+    mkdirSync(join(root, dir), { recursive: true }),
+  )
+  process.env.OPENCODE_DB = ":memory:"
+  process.env.XDG_DATA_HOME = join(root, "data")
+  process.env.XDG_CONFIG_HOME = join(root, "config")
+  process.env.XDG_CACHE_HOME = join(root, "cache")
+  process.env.XDG_STATE_HOME = join(root, "state")
+  return root
+}
 
 logger.log("app starting", {
   version: app.getVersion(),
   packaged: app.isPackaged,
+  onboardingTest: Boolean(onboardingTestRoot),
 })
 
 setupApp()
@@ -91,6 +112,8 @@ function setupApp() {
     app.quit()
     return
   }
+
+  preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
@@ -122,7 +145,7 @@ function setupApp() {
   }
 
   void app.whenReady().then(async () => {
-    migrate()
+    if (!TEST_ONBOARDING) migrate()
     app.setAsDefaultProtocolClient("opencode")
     registerRendererProtocol()
     setDockIcon()
@@ -283,7 +306,7 @@ registerIpcHandlers({
   getDisplayBackend: async () => null,
   setDisplayBackend: async () => undefined,
   parseMarkdown: async (markdown) => parseMarkdown(markdown),
-  checkAppExists: async (appName) => checkAppExists(appName),
+  checkAppExists: (appName) => checkAppExists(appName),
   wslPath: async (path, mode) => wslPath(path, mode),
   resolveAppPath: async (appName) => resolveAppPath(appName),
   loadingWindowComplete: () => loadingComplete.resolve(),
@@ -344,6 +367,8 @@ async function getSidecarPort() {
 }
 
 function sqliteFileExists() {
+  if (process.env.OPENCODE_DB === ":memory:") return true
+
   const xdg = process.env.XDG_DATA_HOME
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".local", "share")
   return existsSync(join(base, "opencode", "opencode.db"))
@@ -356,7 +381,7 @@ function setupAutoUpdater() {
   autoUpdater.allowPrerelease = false
   autoUpdater.allowDowngrade = true
   autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.autoInstallOnAppQuit = false
   logger.log("auto updater configured", {
     channel: autoUpdater.channel,
     allowPrerelease: autoUpdater.allowPrerelease,

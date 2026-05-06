@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
+import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import type { SqliteMigrationProgress } from "../preload/types"
 
@@ -52,6 +53,20 @@ export function getWslConfig(): WslConfig {
 
 export function setWslConfig(config: WslConfig) {
   getStore().set(WSL_ENABLED_KEY, config.enabled)
+}
+
+export function preferAppEnv(userDataPath: string) {
+  const shell = process.platform === "win32" ? null : getUserShell()
+  Object.assign(
+    process.env,
+    mergeShellEnv(shell ? loadShellEnv(shell) : null, {
+      ...process.env,
+      OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
+      OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+      OPENCODE_CLIENT: "desktop",
+      XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
+    }),
+  )
 }
 
 export async function spawnLocalServer(

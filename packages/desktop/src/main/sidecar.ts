@@ -2,8 +2,6 @@ import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import * as http from "node:http"
 import * as tls from "node:tls"
 
-import { getUserShell, loadShellEnv } from "./shell-env"
-
 type NodeHttpWithEnvProxy = typeof http & {
   setGlobalProxyFromEnv: () => void
 }
@@ -55,7 +53,7 @@ parentPort.on("message", (event) => {
 
 async function start(command: StartCommand) {
   try {
-    prepareServerEnv(command.password, command.userDataPath)
+    prepareSidecarEnv(command.password, command.userDataPath)
     ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
@@ -101,18 +99,11 @@ async function stop() {
   }
 }
 
-function prepareServerEnv(password: string, userDataPath: string) {
-  const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
+function prepareSidecarEnv(password: string, userDataPath: string) {
   Object.assign(process.env, {
-    ...process.env,
-    ...shellEnv,
-    OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
-    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
-    OPENCODE_CLIENT: "desktop",
     OPENCODE_SERVER_USERNAME: "opencode",
     OPENCODE_SERVER_PASSWORD: password,
-    XDG_STATE_HOME: userDataPath,
+    XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
 }
 
