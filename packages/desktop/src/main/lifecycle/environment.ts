@@ -11,7 +11,19 @@ import { scoped } from "../native/logging"
 // window is up instead of holding up startup with its dependency tree.
 export const installContextMenu = Effect.gen(function* () {
   const { default: contextMenu } = yield* Effect.promise(() => import("electron-context-menu"))
-  contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+  contextMenu({
+    showSaveImageAs: true,
+    showLookUpSelection: false,
+    showSearchWithGoogle: false,
+    append: (_defaultActions, _parameters, browserWindow) => [
+      {
+        label: "Debug",
+        click: () => {
+          if (browserWindow && "webContents" in browserWindow) browserWindow.webContents.openDevTools()
+        },
+      },
+    ],
+  })
 })
 
 export const prepareApplicationEnvironment = Effect.gen(function* () {
