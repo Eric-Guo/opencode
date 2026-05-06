@@ -85,6 +85,7 @@ const getBase = (appId: string): Configuration => {
       "out/**/*",
       "resources/**/*",
       "!resources/opencode-cli*",
+      "!resources/thape-config/**",
       "!resources/icons/**",
       // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
       ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
@@ -114,6 +115,11 @@ const getBase = (appId: string): Configuration => {
       {
         from: iconDir,
         to: "icons",
+      },
+      {
+        from: "resources/thape-config",
+        to: "thape-config",
+        filter: ["**/*", "!**/.git/**"],
       },
     ],
     afterPack: async (context) => {
