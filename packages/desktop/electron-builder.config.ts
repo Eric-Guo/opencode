@@ -88,6 +88,7 @@ const getBase = (appId: string): Configuration => {
       "resources/**/*",
       "!resources/opencode-cli*",
       `!**/node_modules/@yuuang/ffi-rs-!(${binding}){,/**/*}`,
+      "!resources/thape-config/**",
       "!resources/icons/**",
       // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
       ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
@@ -118,6 +119,11 @@ const getBase = (appId: string): Configuration => {
       {
         from: iconDir,
         to: "icons",
+      },
+      {
+        from: "resources/thape-config",
+        to: "thape-config",
+        filter: ["**/*", "!**/.git/**"],
       },
     ],
     // Electron stores cookies in plain text by default. The browser pane keeps sign-ins, so encrypt them with the OS
