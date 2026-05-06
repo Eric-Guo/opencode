@@ -1,6 +1,8 @@
 export * as TuiConfig from "./tui"
 
-import z from "zod"
+import type z from "zod"
+import type { KeyEvent, Renderable } from "@opentui/core"
+import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
@@ -20,27 +22,54 @@ import { Filesystem } from "@/util/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
+import { LegacyKeymapTransform } from "./legacy-keymap-transform"
+import { KeymapLeaderTimeoutDefault, KeymapSectionNames, type KeymapInfo, type KeymapSection } from "./tui-schema"
+import type { Binding } from "@opentui/keymap"
 
 const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiInfo
+export type Info = z.output<typeof Info>
 
 type Acc = {
   result: Info
+  plugin_origins: ConfigPlugin.Origin[]
 }
 
-type State = {
-  config: Info
-  deps: Array<Fiber.Fiber<void, AppFileSystem.Error>>
-}
+const KeymapSectionGroups = {
+  app: "Global",
+  session: "Session",
+  prompt: "Prompt",
+  prompt_clear: "Prompt",
+  prompt_paste: "Prompt",
+  prompt_history_previous: "Prompt",
+  prompt_history_next: "Prompt",
+  prompt_autocomplete: "Autocomplete",
+  input: "Text Editing",
+  dialog_select: "Dialog",
+  dialog_stash: "Stash",
+  dialog_session_list: "Session",
+  dialog_model: "Agent",
+  dialog_mcp: "Agent",
+  permission_reject: "Permission",
+  permission_prompt_escape: "Permission",
+  permission_prompt_fullscreen: "Permission",
+  question: "Question",
+  question_edit: "Question",
+  plugins: "Plugins",
+  dialog_plugins: "Plugins",
+  home_tips: "Home",
+} satisfies Record<KeymapSection, string>
 
-export type Info = z.output<typeof Info> & {
+export type Resolved = Omit<Info, "keybinds" | "keymap"> & {
+  keybinds: ConfigKeybinds.Keybinds
+  keymap: KeymapInfo
   // Internal resolved plugin list used by runtime loading.
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
 export interface Interface {
-  readonly get: () => Effect.Effect<Info>
+  readonly get: () => Effect.Effect<Resolved>
   readonly waitForDependencies: () => Effect.Effect<void>
 }
 
@@ -66,6 +95,21 @@ function normalize(raw: Record<string, unknown>) {
     ...tui,
     ...data,
   }
+}
+
+function withDefaultGroups(sections: KeymapInfo["sections"]): KeymapInfo["sections"] {
+  return Object.fromEntries(
+    KeymapSectionNames.map((section) => [
+      section,
+      sections[section].map((binding) => {
+        if ((binding as Binding<Renderable, KeyEvent> & { group?: unknown }).group !== undefined) return binding
+        return {
+          ...binding,
+          group: KeymapSectionGroups[section],
+        }
+      }),
+    ]),
+  ) as KeymapInfo["sections"]
 }
 
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
@@ -128,11 +172,11 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
 
       const scope = pluginScope(file, ctx)
       const plugins = ConfigPlugin.deduplicatePluginOrigins([
-        ...(acc.result.plugin_origins ?? []),
+        ...acc.plugin_origins,
         ...data.plugin.map((spec) => ({ spec, scope, source: file })),
       ])
       acc.result.plugin = plugins.map((item) => item.spec)
-      acc.result.plugin_origins = plugins
+      acc.plugin_origins = plugins
     })
 
   // Every config dir we may read from: global config dir, any `.opencode`
@@ -144,6 +188,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
 
   const acc: Acc = {
     result: {},
+    plugin_origins: [],
   }
 
   // 1. Global tui config (lowest precedence).
@@ -184,11 +229,38 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(","),
     ]).join(",")
   }
-  acc.result.keybinds = ConfigKeybinds.Keybinds.parse(keybinds)
+  const parsedKeybinds = ConfigKeybinds.Keybinds.parse(keybinds)
+  const configuredKeymap = acc.result.keymap
+  const keymap = configuredKeymap
+    ? {
+        leader: !configuredKeymap.leader || configuredKeymap.leader === "none" ? "ctrl+x" : configuredKeymap.leader,
+        leader_timeout: configuredKeymap.leader_timeout ?? KeymapLeaderTimeoutDefault,
+        sections: resolveBindingSections<
+          Renderable,
+          KeyEvent,
+          BindingSectionsConfig<Renderable, KeyEvent>,
+          KeymapSection
+        >(configuredKeymap.sections ?? {}, {
+          sections: KeymapSectionNames,
+        }).sections,
+      }
+    : LegacyKeymapTransform.create(parsedKeybinds)
+  const result: Resolved = {
+    ...acc.result,
+    keybinds: parsedKeybinds,
+    plugin_origins: acc.plugin_origins.length ? acc.plugin_origins : undefined,
+    // `keybinds` is deprecated and will be removed in opencode v2.0. Keep it
+    // only as the legacy fallback; once `keymap` is configured, ignore
+    // `keybinds` for keymap resolution.
+    keymap: {
+      ...keymap,
+      sections: withDefaultGroups(keymap.sections),
+    },
+  }
 
   return {
-    config: acc.result,
-    dirs: acc.result.plugin?.length ? dirs : [],
+    config: result,
+    dirs: result.plugin?.length ? dirs : [],
   }
 })
 

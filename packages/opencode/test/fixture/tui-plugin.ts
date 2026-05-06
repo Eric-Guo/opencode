@@ -1,6 +1,5 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { RGBA, type CliRenderer } from "@opentui/core"
-import { createPluginKeybind } from "../../src/cli/cmd/tui/context/plugin-keybinds"
 import type { HostPluginApi } from "../../src/cli/cmd/tui/plugin/slots"
 
 type Count = {
@@ -84,8 +83,8 @@ type Opts = {
   client?: HostPluginApi["client"] | (() => HostPluginApi["client"])
   renderer?: HostPluginApi["renderer"]
   count?: Count
-  keybind?: Partial<HostPluginApi["keybind"]>
-  tuiConfig?: HostPluginApi["tuiConfig"]
+  keymap?: HostPluginApi["keymap"]
+  tuiConfig?: Partial<HostPluginApi["tuiConfig"]>
   app?: Partial<HostPluginApi["app"]>
   state?: {
     ready?: HostPluginApi["state"]["ready"]
@@ -109,6 +108,17 @@ type Opts = {
   }
 }
 
+function tuiConfig(input?: Partial<HostPluginApi["tuiConfig"]>): HostPluginApi["tuiConfig"] {
+  return {
+    ...input,
+    keymap: input?.keymap ?? {
+      leader: "ctrl+x",
+      leader_timeout: 2000,
+      sections: {},
+    },
+  }
+}
+
 export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
   const kv: Record<string, unknown> = {}
   const count = opts.count
@@ -128,10 +138,6 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
   let size: "medium" | "large" | "xlarge" = "medium"
   const has = opts.theme?.has ?? (() => false)
   let selected = opts.theme?.selected ?? "opencode"
-  const key = {
-    match: opts.keybind?.match ?? (() => false),
-    print: opts.keybind?.print ?? ((name: string) => name),
-  }
   const set =
     opts.theme?.set ??
     ((name: string) => {
@@ -145,6 +151,26 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       return this
     },
   }
+  const keymap =
+    opts.keymap ??
+    ({
+      acquireResource(_key: symbol, setup: () => () => void) {
+        const dispose = setup()
+        return () => {
+          dispose()
+        }
+      },
+      registerLayer() {
+        if (count) count.command_add += 1
+        return () => {
+          if (!count) return
+          count.command_drop += 1
+        }
+      },
+      runCommand() {
+        return { ok: true } as const
+      },
+    } as unknown as HostPluginApi["keymap"])
 
   function kvGet(name: string): unknown
   function kvGet<Value>(name: string, fallback: Value): Value
@@ -159,6 +185,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       get version() {
         return opts.app?.version ?? "0.0.0-test"
       },
+    },
+    keys: {
+      formatSequence: () => "",
+      formatBindings: () => undefined,
     },
     get client() {
       return client()
@@ -192,17 +222,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return () => {}
       },
     },
-    command: {
-      register: () => {
-        if (count) count.command_add += 1
-        return () => {
-          if (!count) return
-          count.command_drop += 1
-        }
-      },
-      trigger: () => {},
-      show: () => {},
-    },
+    keymap,
     route: {
       register: () => {
         if (count) count.route_add += 1
@@ -247,15 +267,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         },
       },
     },
-    keybind: {
-      ...key,
-      create:
-        opts.keybind?.create ??
-        ((defaults, over) => {
-          return createPluginKeybind(key, defaults, over)
-        }),
-    },
-    tuiConfig: opts.tuiConfig ?? {},
+    tuiConfig: tuiConfig(opts.tuiConfig),
     kv: {
       get: kvGet,
       set(name, value) {

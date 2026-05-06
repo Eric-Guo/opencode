@@ -3,8 +3,9 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { createMemo, createSignal } from "solid-js"
 import { Locale } from "@/util/locale"
 import { useTheme } from "../context/theme"
-import { useKeybind } from "../context/keybind"
 import { usePromptStash, type StashEntry } from "./prompt/stash"
+import { useTuiConfig } from "../context/tui-config"
+import { useCommandShortcut } from "../keymap"
 
 function getRelativeTime(timestamp: number): string {
   const now = Date.now()
@@ -30,9 +31,13 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const dialog = useDialog()
   const stash = usePromptStash()
   const { theme } = useTheme()
-  const keybind = useKeybind()
+  const tuiConfig = useTuiConfig()
+  const {
+    keymap: { sections },
+  } = tuiConfig
 
   const [toDelete, setToDelete] = createSignal<number>()
+  const deleteHint = useCommandShortcut("dialog.stash.delete")
 
   const options = createMemo(() => {
     const entries = stash.list()
@@ -42,7 +47,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
         const isDeleting = toDelete() === index
         const lineCount = (entry.input.match(/\n/g)?.length ?? 0) + 1
         return {
-          title: isDeleting ? `Press ${keybind.print("stash_delete")} again to confirm` : getStashPreview(entry.input),
+          title: isDeleting ? `Press ${deleteHint()} again to confirm` : getStashPreview(entry.input),
           bg: isDeleting ? theme.error : undefined,
           value: index,
           description: getRelativeTime(entry.timestamp),
@@ -68,9 +73,9 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
         }
         dialog.clear()
       }}
-      keybind={[
+      actions={[
         {
-          keybind: keybind.all.stash_delete?.[0],
+          command: "dialog.stash.delete",
           title: "delete",
           onTrigger: (option) => {
             if (toDelete() === option.value) {
@@ -82,6 +87,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
           },
         },
       ]}
+      bindings={sections.dialog_stash}
     />
   )
 }

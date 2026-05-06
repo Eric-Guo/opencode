@@ -1,8 +1,23 @@
 import { spyOn } from "bun:test"
 import path from "path"
 import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
+import { LegacyKeymapTransform } from "../../src/cli/cmd/tui/config/legacy-keymap-transform"
+import { ConfigKeybinds } from "../../src/config/keybinds"
 
 type PluginSpec = string | [string, Record<string, unknown>]
+type ResolvedInput = Omit<TuiConfig.Resolved, "keybinds" | "keymap"> & {
+  keybinds?: TuiConfig.Resolved["keybinds"]
+  keymap?: TuiConfig.Resolved["keymap"]
+}
+
+export function createTuiResolvedConfig(input: ResolvedInput = {}): TuiConfig.Resolved {
+  const keybinds = input.keybinds ?? ConfigKeybinds.Keybinds.parse({})
+  return {
+    ...input,
+    keybinds,
+    keymap: input.keymap ?? LegacyKeymapTransform.create(keybinds),
+  }
+}
 
 export function mockTuiRuntime(dir: string, plugin: PluginSpec[], opts?: { plugin_enabled?: Record<string, boolean> }) {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(dir, "plugin-meta.json")
@@ -14,11 +29,11 @@ export function mockTuiRuntime(dir: string, plugin: PluginSpec[], opts?: { plugi
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => dir)
 
-  const config: TuiConfig.Info = {
+  const config = createTuiResolvedConfig({
     plugin,
     plugin_origins,
     ...(opts?.plugin_enabled && { plugin_enabled: opts.plugin_enabled }),
-  }
+  })
 
   return {
     config,
