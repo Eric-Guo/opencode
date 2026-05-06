@@ -23,6 +23,7 @@ import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
+import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme"
 
 const root = document.getElementById("root")
@@ -365,6 +366,11 @@ render(() => {
             !windowConfig.loading &&
             !windowCount.loading &&
             !locale.loading
+          }
+          fallback={
+            <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
+              <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+            </div>
           }
         >
           {(_) => {
