@@ -18,7 +18,7 @@ import {
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
-import { createEffect, createMemo, createResource, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
@@ -327,11 +327,7 @@ render(() => {
     )
 
     const ready = createMemo(
-      () =>
-        !defaultServer.loading &&
-        !sidecar.loading &&
-        !windowCount.loading &&
-        !locale.loading,
+      () => !defaultServer.loading && !sidecar.loading && !windowCount.loading && !locale.loading,
     )
     const servers = createMemo(() => {
       const data = sidecar()
@@ -365,16 +361,16 @@ render(() => {
       }
       return list
     })
-    if (!ready()) return splash
-
     return (
-      <AppInterface
-        defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
-        servers={servers()}
-        router={MemoryRouter}
-      >
-        <Inner />
-      </AppInterface>
+      <Show when={ready()} fallback={splash}>
+        <AppInterface
+          defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+          servers={servers()}
+          router={MemoryRouter}
+        >
+          <Inner />
+        </AppInterface>
+      </Show>
     )
   }
 
