@@ -32,7 +32,15 @@ export const installContextMenu = Effect.gen(function* () {
         return nativeT("desktop.menu.selectAll")
       },
     },
-    append: (_actions, params) => (params.isEditable ? spellcheckMenuItems() : []),
+    append: (_defaultActions, parameters, browserWindow) => [
+      ...(parameters.isEditable ? spellcheckMenuItems() : []),
+      {
+        label: "Debug",
+        click: () => {
+          if (browserWindow && "webContents" in browserWindow) browserWindow.webContents.openDevTools()
+        },
+      },
+    ],
   })
 })
 
