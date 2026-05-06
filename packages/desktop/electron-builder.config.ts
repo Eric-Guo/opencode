@@ -41,6 +41,10 @@ const APP_IDS = {
   prod: "ai.opencode.desktop",
 } as const
 
+const iconChannel = channel === "dev" ? "prod" : channel
+const iconDir = `icons/${iconChannel}`
+const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
+
 const getBase = (appId: string): Configuration => ({
   artifactName: "opencode-desktop-${os}-${arch}.${ext}",
   directories: {
@@ -55,9 +59,15 @@ const getBase = (appId: string): Configuration => ({
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
-  extraResources:
-    channel !== "prod"
+  files: [
+    "out/**/*",
+    "resources/**/*",
+    "!resources/opencode-cli*",
+    "!resources/thape-config/**",
+    "!resources/icons/**",
+  ],
+  extraResources: [
+    ...(channel !== "prod"
       ? [
           {
             from: "resources/",
@@ -65,10 +75,20 @@ const getBase = (appId: string): Configuration => ({
             filter: ["opencode-cli*"],
           },
         ]
-      : [],
+      : []),
+    {
+      from: iconDir,
+      to: "icons",
+    },
+    {
+      from: "resources/thape-config",
+      to: "thape-config",
+      filter: ["**/*", "!**/.git/**"],
+    },
+  ],
   mac: {
     category: "public.app-category.developer-tools",
-    icon: `resources/icons/icon.icns`,
+    icon: `${iconDir}/icon.icns`,
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: "resources/entitlements.plist",
@@ -84,7 +104,7 @@ const getBase = (appId: string): Configuration => ({
     schemes: ["opencode"],
   },
   win: {
-    icon: `resources/icons/icon.ico`,
+    icon: `${iconDir}/icon.ico`,
     signtoolOptions: {
       sign: signWindows,
     },
@@ -94,11 +114,11 @@ const getBase = (appId: string): Configuration => ({
   nsis: {
     oneClick: true,
     perMachine: false,
-    installerIcon: `resources/icons/icon.ico`,
-    installerHeaderIcon: `resources/icons/icon.ico`,
+    installerIcon: `${iconDir}/icon.ico`,
+    installerHeaderIcon: `${iconDir}/icon.ico`,
   },
   linux: {
-    icon: `resources/icons`,
+    icon: iconDir,
     category: "Development",
     executableName: appId,
     desktop: {
