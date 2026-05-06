@@ -67,6 +67,12 @@ const APP_IDS = {
   prod: "ai.opencode.desktop",
 } as const
 
+const iconChannel = channel === "dev" ? "prod" : channel
+
+const iconDir = `icons/${iconChannel}`
+
+const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
+
 const getBase = (appId: string): Configuration => ({
   artifactName: "opencode-desktop-${os}-${arch}.${ext}",
   directories: {
@@ -85,6 +91,7 @@ const getBase = (appId: string): Configuration => ({
     "out/**/*",
     "resources/**/*",
     "!resources/opencode-cli*",
+    "!resources/icons/**",
     // Log export imports Zip.js as ESM. Keep index.js and lib, including its inline worker.
     "!**/node_modules/@zip.js/zip.js/dist{,/**/*}",
     "!**/node_modules/@zip.js/zip.js/{index.cjs,index.min.js,index-fflate.js,deno.json,eslint.config.mjs}",
@@ -106,6 +113,10 @@ const getBase = (appId: string): Configuration => ({
       to: "",
       filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
     },
+    {
+      from: iconDir,
+      to: "icons",
+    },
   ],
   afterPack: async (context) => {
     const cli = path.join(
@@ -122,7 +133,7 @@ const getBase = (appId: string): Configuration => ({
   },
   mac: {
     category: "public.app-category.developer-tools",
-    icon: `resources/icons/icon.icns`,
+    icon: `${iconDir}/icon.icns`,
     extendInfo: {
       NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
     },
@@ -142,7 +153,7 @@ const getBase = (appId: string): Configuration => ({
     schemes: ["opencode"],
   },
   win: {
-    icon: `resources/icons/icon.ico`,
+    icon: `${iconDir}/icon.ico`,
     signtoolOptions: {
       sign: signWindows,
     },
@@ -153,11 +164,11 @@ const getBase = (appId: string): Configuration => ({
     include: path.join(packageDir, "resources", "windows", "installer.nsh"),
     oneClick: true,
     perMachine: false,
-    installerIcon: `resources/icons/icon.ico`,
-    installerHeaderIcon: `resources/icons/icon.ico`,
+    installerIcon: `${iconDir}/icon.ico`,
+    installerHeaderIcon: `${iconDir}/icon.ico`,
   },
   linux: {
-    icon: `resources/icons`,
+    icon: iconDir,
     category: "Development",
     executableName: appId,
     desktop: {
