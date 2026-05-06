@@ -158,7 +158,7 @@ const getBase = (appId: string): Configuration => {
         NSMicrophoneUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.microphoneUsage"],
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
       },
-      target: ["dmg", "zip"],
+      target: ["dir"],
     },
     protocols: {
       name: "OpenCode",
