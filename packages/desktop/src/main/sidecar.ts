@@ -56,6 +56,7 @@ parentPort.on("message", (event) => {
 async function start(command: StartCommand) {
   try {
     prepareServerEnv(command.password, command.userDataPath)
+    ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
     const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
@@ -113,6 +114,26 @@ function prepareServerEnv(password: string, userDataPath: string) {
     OPENCODE_SERVER_PASSWORD: password,
     XDG_STATE_HOME: userDataPath,
   })
+}
+
+function ensureLoopbackNoProxy() {
+  const loopback = ["127.0.0.1", "localhost", "::1"]
+  const upsert = (key: string) => {
+    const items = (process.env[key] ?? "")
+      .split(",")
+      .map((value: string) => value.trim())
+      .filter((value: string) => Boolean(value))
+
+    for (const host of loopback) {
+      if (items.some((value: string) => value.toLowerCase() === host)) continue
+      items.push(host)
+    }
+
+    process.env[key] = items.join(",")
+  }
+
+  upsert("NO_PROXY")
+  upsert("no_proxy")
 }
 
 function useSystemCertificates() {
