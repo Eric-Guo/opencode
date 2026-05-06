@@ -80,7 +80,7 @@ const getBase = (appId: string): Configuration => ({
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
     notarize: true,
-    target: ["dmg", "zip"],
+    target: ["dir"],
   },
   dmg: {
     sign: true,
