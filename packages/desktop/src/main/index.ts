@@ -5,7 +5,7 @@ import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { getCACertificates, setDefaultCACertificates } from "node:tls"
+import * as tls from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
@@ -36,6 +36,11 @@ app.setAppUserModelId(appId)
 app.setPath("userData", join(app.getPath("appData"), appId))
 const { autoUpdater } = pkg
 
+type NodeTlsWithSystemCertificates = typeof tls & {
+  getCACertificates: (type: "default" | "system") => string[]
+  setDefaultCACertificates: (certificates: string[]) => void
+}
+
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
@@ -43,7 +48,14 @@ import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigratio
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
-import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
+import {
+  getDefaultServerUrl,
+  getWslConfig,
+  setDefaultServerUrl,
+  setWslConfig,
+  spawnLocalServer,
+  type SidecarListener,
+} from "./server"
 import {
   createLoadingWindow,
   createMainWindow,
@@ -51,15 +63,13 @@ import {
   setBackgroundColor,
   setDockIcon,
 } from "./windows"
-import { drizzle } from "drizzle-orm/node-sqlite/driver"
-import type { Server } from "virtual:opencode-server"
 import { migrate } from "./migrate"
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
 let mainWindow: BrowserWindow | null = null
-let server: Server.Listener | null = null
+let server: SidecarListener | null = null
 const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
@@ -129,7 +139,10 @@ function setupApp() {
 
 function useSystemCertificates() {
   try {
-    setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
+    const nodeTls = tls as NodeTlsWithSystemCertificates
+    nodeTls.setDefaultCACertificates([
+      ...new Set([...nodeTls.getCACertificates("default"), ...nodeTls.getCACertificates("system")]),
+    ])
   } catch (error) {
     logger.warn("failed to load system certificates", error)
   }
@@ -164,7 +177,6 @@ function setInitStep(step: InitStep) {
 
 async function initialize() {
   const needsMigration = !sqliteFileExists()
-  const sqliteDone = needsMigration ? defer<void>() : undefined
   let overlay: BrowserWindow | null = null
 
   const port = await getSidecarPort()
@@ -179,31 +191,26 @@ async function initialize() {
       setInitStep({ phase: "sqlite_waiting" })
       if (overlay) sendSqliteMigrationProgress(overlay, progress)
       if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
-      if (progress.type === "Done") sqliteDone?.resolve()
     })
-
-    if (needsMigration) {
-      const { Database, JsonMigration } = await import("virtual:opencode-server")
-      await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
-        progress: (event: { current: number; total: number }) => {
-          const percent = Math.round(event.current / event.total) * 100
-          initEmitter.emit("sqlite", { type: "InProgress", value: percent })
-        },
-      })
-      initEmitter.emit("sqlite", { type: "Done" })
-
-      sqliteDone?.resolve()
-    }
-
-    if (needsMigration) {
-      await sqliteDone?.promise
-    }
 
     logger.log("spawning sidecar", { url })
-    const { listener, health } = await spawnLocalServer(hostname, port, password, () => {
-      ensureLoopbackNoProxy()
-      useEnvProxy()
-    })
+    const { listener, health } = await spawnLocalServer(
+      hostname,
+      port,
+      password,
+      () => {
+        ensureLoopbackNoProxy()
+        useEnvProxy()
+      },
+      {
+        needsMigration,
+        userDataPath: app.getPath("userData"),
+        onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
+        onStdout: (message) => logger.log("sidecar stdout", { message }),
+        onStderr: (message) => logger.warn("sidecar stderr", { message }),
+        onExit: (code) => logger.warn("sidecar exited", { code }),
+      },
+    )
     server = listener
     serverReady.resolve({
       url,

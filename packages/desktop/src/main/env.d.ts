@@ -5,6 +5,16 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+declare namespace NodeJS {
+  interface Process {
+    readonly parentPort?: {
+      postMessage(message: unknown): void
+      on(event: "message", listener: (event: { data: unknown; ports: unknown[] }) => void): void
+    }
+  }
+}
+
 declare module "virtual:opencode-server" {
   export namespace Server {
     export const listen: typeof import("../../../opencode/dist/types/src/node").Server.listen
