@@ -11,7 +11,22 @@ import { app, BrowserWindow, dialog, session } from "electron"
 import pkg from "electron-updater"
 
 import contextMenu from "electron-context-menu"
-contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+
+contextMenu({
+  showSaveImageAs: true,
+  showLookUpSelection: false,
+  showSearchWithGoogle: false,
+  append: (_defaultActions, _parameters, browserWindow) => [
+    {
+      label: "Debug",
+      click: () => {
+        if (browserWindow && "webContents" in browserWindow) {
+          browserWindow.webContents.openDevTools()
+        }
+      },
+    },
+  ],
+})
 
 // on macOS apps run in `/` which can cause issues with ripgrep
 try {
