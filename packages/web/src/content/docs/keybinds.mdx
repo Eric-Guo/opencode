@@ -7,7 +7,7 @@ OpenCode customizes TUI keyboard shortcuts with `keymap` in `tui.json`.
 
 The older `keybinds` field is still accepted as a migration fallback, but it is deprecated and will be removed in OpenCode v2.0. If `keymap` is present, OpenCode ignores `keybinds` for shortcut resolution.
 
-When you define `keymap`, include every shortcut you want to keep active. It does not merge with the legacy `keybinds` fallback.
+`keymap` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
 
 ---
 
@@ -187,9 +187,11 @@ This example lists the built-in sections, command names, and default fallback bi
         "prompt.submit": "none",
         "prompt.editor": "<leader>e",
         "prompt.editor_context.clear": "none",
+        "prompt.skills": "none",
         "prompt.stash": "none",
         "prompt.stash.pop": "none",
         "prompt.stash.list": "none",
+        "workspace.set": "none",
         "session.interrupt": "escape",
         "prompt.clear": "ctrl+c",
         "prompt.paste": {

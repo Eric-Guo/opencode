@@ -426,6 +426,7 @@ test("resolves semantic keymap sections", async () => {
 
   const config = await getTuiConfig(tmp.path)
   expect(config.keymap.sections.global.find((binding) => binding.cmd === "command.palette.show")?.key).toBe("alt+p")
+  expect(config.keymap.sections.global.find((binding) => binding.cmd === "session.new")?.key).toBe("<leader>n")
   expect(config.keymap.sections.prompt.find((binding) => binding.cmd === "prompt.editor")?.key).toBe("ctrl+e")
   expect(config.keymap.sections.autocomplete.find((binding) => binding.cmd === "prompt.autocomplete.next")?.key).toBe("ctrl+j")
   expect(config.keymap.sections.dialog_actions.find((binding) => binding.cmd === "dialog.action.toggle")?.key).toBe("ctrl+t")
@@ -477,7 +478,7 @@ test("legacy keybinds transform into semantic keymap sections", async () => {
   expect(config.keymap.sections.global.find((binding) => binding.cmd === "command.palette.show")?.key).toBe("alt+p")
   expect(config.keymap.sections.prompt.find((binding) => binding.cmd === "prompt.editor")?.key).toBe("ctrl+e")
   expect(config.keymap.sections.autocomplete.find((binding) => binding.cmd === "prompt.autocomplete.next")?.key).toBe("ctrl+j")
-  expect(config.keymap.sections.dialog_actions.find((binding) => binding.cmd === "dialog.action.toggle")?.key).toBe("ctrl+t,space")
+  expect(config.keymap.sections.dialog_actions.find((binding) => binding.cmd === "dialog.action.toggle")?.key).toBe("ctrl+t")
   expect(config.keymap.sections.model.find((binding) => binding.cmd === "model.dialog.provider")?.key).toBe("ctrl+a")
   expect(config.keymap.sections.model.find((binding) => binding.cmd === "model.dialog.favorite")?.key).toBe("ctrl+f")
   expect(config.keymap.sections.plugins.find((binding) => binding.cmd === "plugin.dialog.install")?.key).toBe("shift+i")
@@ -523,7 +524,19 @@ wintest("ignores terminal suspend bindings on Windows", async () => {
   expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
 })
 
-test("applies Windows keymap adjustments to configured keymap", async () => {
+test("applies Windows keymap defaults", async () => {
+  await withPlatform("win32", async () => {
+    await using tmp = await tmpdir()
+
+    const config = await getTuiConfig(tmp.path)
+    expect(config.keymap.sections.global.find((binding) => binding.cmd === "terminal.suspend")).toBeUndefined()
+    expect(config.keymap.sections.input.find((binding) => binding.cmd === "input.undo")?.key).toBe(
+      "ctrl+z,ctrl+-,super+z",
+    )
+  })
+})
+
+test("keeps explicit configured keymap terminal suspend binding on Windows", async () => {
   await withPlatform("win32", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -541,10 +554,7 @@ test("applies Windows keymap adjustments to configured keymap", async () => {
     })
 
     const config = await getTuiConfig(tmp.path)
-    expect(config.keymap.sections.global.find((binding) => binding.cmd === "terminal.suspend")).toBeUndefined()
-    expect(config.keymap.sections.input.find((binding) => binding.cmd === "input.undo")?.key).toBe(
-      "ctrl+z,ctrl+-,super+z",
-    )
+    expect(config.keymap.sections.global.find((binding) => binding.cmd === "terminal.suspend")?.key).toBe("alt+z")
   })
 })
 

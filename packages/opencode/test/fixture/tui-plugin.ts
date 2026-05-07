@@ -3,6 +3,7 @@ import { RGBA, type CliRenderer } from "@opentui/core"
 import type { HostPluginApi } from "../../src/cli/cmd/tui/plugin/slots"
 import { LegacyKeymapTransform } from "../../src/cli/cmd/tui/config/legacy-keymap-transform"
 import { ConfigKeybinds } from "../../src/config/keybinds"
+import { createTuiResolvedKeymap } from "./tui-runtime"
 
 type Count = {
   event_add: number
@@ -115,7 +116,7 @@ function tuiConfig(input?: Partial<HostPluginApi["tuiConfig"]>): HostPluginApi["
   return {
     ...input,
     keybinds,
-    keymap: input?.keymap ?? LegacyKeymapTransform.create(keybinds),
+    keymap: input?.keymap ?? createTuiResolvedKeymap(LegacyKeymapTransform.create(input?.keybinds ?? {})),
   }
 }
 

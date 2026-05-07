@@ -542,7 +542,7 @@ Customize TUI keyboard shortcuts in `tui.json` with `keymap`.
 }
 ```
 
-When `keymap` is set, include every shortcut you want to keep active. It does not merge with the deprecated `keybinds` fallback.
+`keymap` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
 
 The older `keybinds` field is deprecated and only applies when `keymap` is not present.
 

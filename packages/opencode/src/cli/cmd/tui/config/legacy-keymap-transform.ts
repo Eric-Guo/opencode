@@ -1,16 +1,10 @@
 import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
-import { resolveBindingSections, type BindingSectionsConfig, type BindingValue } from "@opentui/keymap/extras"
+import type { BindingValue } from "@opentui/keymap/extras"
 import { ConfigKeybinds } from "@/config/keybinds"
-import {
-  KeymapLeaderTimeoutDefault,
-  KeymapSectionNames,
-  keymapBindingDefaults,
-  type KeymapInfo,
-  type KeymapSection,
-} from "./tui-schema"
+import { type KeymapConfigInput, type KeymapSection } from "./tui-schema"
 
-type LegacyKeybinds = ConfigKeybinds.Keybinds
+type LegacyKeybinds = Partial<ConfigKeybinds.Keybinds>
 type SectionsConfig = Record<string, Record<string, BindingValue<Renderable, KeyEvent>>>
 
 const inputCommands = {
@@ -53,12 +47,14 @@ const inputCommands = {
 } as const satisfies Partial<Record<keyof LegacyKeybinds, string>>
 
 function add(config: SectionsConfig, section: KeymapSection, command: string, binding: BindingValue<Renderable, KeyEvent> | undefined) {
+  if (binding === undefined) return
   config[section] ??= {}
-  config[section][command] = binding ?? "none"
+  config[section][command] = binding
 }
 
 function bindingWith(key: string | undefined, input: Omit<Binding<Renderable, KeyEvent>, "key" | "cmd">) {
-  if (!key || key === "none") return "none"
+  if (!key) return undefined
+  if (key === "none") return "none"
   return { ...input, key }
 }
 
@@ -74,10 +70,12 @@ function combineBindings(...keys: (string | undefined)[]) {
       }),
     ),
   )
-  return result.length ? result.join(",") : "none"
+  if (result.length) return result.join(",")
+  if (keys.some((key) => key === "none")) return "none"
+  return undefined
 }
 
-export function create(keybinds: LegacyKeybinds): KeymapInfo {
+export function create(keybinds: LegacyKeybinds): KeymapConfigInput {
   const config: SectionsConfig = {}
 
   add(config, "global", "command.palette.show", keybinds.command_list)
@@ -171,12 +169,8 @@ export function create(keybinds: LegacyKeybinds): KeymapInfo {
   add(config, "home_tips", "tips.toggle", keybinds.tips_toggle)
 
   return {
-    leader: !keybinds.leader || keybinds.leader === "none" ? "ctrl+x" : keybinds.leader,
-    leader_timeout: KeymapLeaderTimeoutDefault,
-    ...resolveBindingSections<Renderable, KeyEvent, SectionsConfig, KeymapSection>(config, {
-      sections: KeymapSectionNames,
-      bindingDefaults: keymapBindingDefaults,
-    }),
+    ...(keybinds.leader && keybinds.leader !== "none" && { leader: keybinds.leader }),
+    sections: config,
   }
 }
 

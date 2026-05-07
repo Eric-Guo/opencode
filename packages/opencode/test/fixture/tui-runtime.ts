@@ -1,8 +1,17 @@
 import { spyOn } from "bun:test"
 import path from "path"
+import type { KeyEvent, Renderable } from "@opentui/core"
+import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
 import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { LegacyKeymapTransform } from "../../src/cli/cmd/tui/config/legacy-keymap-transform"
 import { ConfigKeybinds } from "../../src/config/keybinds"
+import {
+  KeymapConfig,
+  KeymapSectionNames,
+  keymapBindingDefaults,
+  type KeymapConfigInput,
+  type KeymapSection,
+} from "../../src/cli/cmd/tui/config/tui-schema"
 
 type PluginSpec = string | [string, Record<string, unknown>]
 type ResolvedInput = Omit<TuiConfig.Resolved, "keybinds" | "keymap"> & {
@@ -10,12 +19,27 @@ type ResolvedInput = Omit<TuiConfig.Resolved, "keybinds" | "keymap"> & {
   keymap?: TuiConfig.Resolved["keymap"]
 }
 
+export function createTuiResolvedKeymap(input: KeymapConfigInput): TuiConfig.Resolved["keymap"] {
+  const config = KeymapConfig.parse(input)
+  return {
+    leader: !config.leader || config.leader === "none" ? "ctrl+x" : config.leader,
+    leader_timeout: config.leader_timeout,
+    ...resolveBindingSections<Renderable, KeyEvent, BindingSectionsConfig<Renderable, KeyEvent>, KeymapSection>(
+      config.sections,
+      {
+        sections: KeymapSectionNames,
+        bindingDefaults: keymapBindingDefaults,
+      },
+    ),
+  }
+}
+
 export function createTuiResolvedConfig(input: ResolvedInput = {}): TuiConfig.Resolved {
   const keybinds = input.keybinds ?? ConfigKeybinds.Keybinds.parse({})
   return {
     ...input,
     keybinds,
-    keymap: input.keymap ?? LegacyKeymapTransform.create(keybinds),
+    keymap: input.keymap ?? createTuiResolvedKeymap(LegacyKeymapTransform.create(input.keybinds ?? {})),
   }
 }
 

@@ -2,13 +2,13 @@ export * as TuiConfig from "./tui"
 
 import type z from "zod"
 import type { KeyEvent, Renderable } from "@opentui/core"
-import { resolveBindingSections, type BindingSectionsConfig, type BindingValue } from "@opentui/keymap/extras"
+import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { TuiInfo } from "./tui-schema"
+import { KeymapConfig, TuiInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@opencode-ai/core/global"
@@ -24,7 +24,6 @@ import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { LegacyKeymapTransform } from "./legacy-keymap-transform"
 import {
-  KeymapLeaderTimeoutDefault,
   KeymapSectionNames,
   keymapBindingDefaults,
   type KeymapInfo,
@@ -75,27 +74,6 @@ function normalize(raw: Record<string, unknown>) {
     ...tui,
     ...data,
   }
-}
-
-function withPlatformKeymapSections(sections: BindingSectionsConfig<Renderable, KeyEvent> | undefined) {
-  const result = Object.fromEntries(
-    Object.entries(sections ?? {}).map(([section, bindings]) => [section, { ...bindings }]),
-  ) as Record<string, Record<string, BindingValue<Renderable, KeyEvent>>>
-
-  if (process.platform !== "win32") return result
-
-  result.global = {
-    ...(result.global ?? {}),
-    "terminal.suspend": "none",
-  }
-  result.input = {
-    ...(result.input ?? {}),
-    ...(result.input?.["input.undo"] === undefined && {
-      "input.undo": unique(["ctrl+z", ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(",")]).join(","),
-    }),
-  }
-
-  return result
 }
 
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
@@ -216,22 +194,19 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     ]).join(",")
   }
   const parsedKeybinds = ConfigKeybinds.Keybinds.parse(keybinds)
-  const configuredKeymap = acc.result.keymap
-  const keymap = configuredKeymap
-    ? {
-        leader: !configuredKeymap.leader || configuredKeymap.leader === "none" ? "ctrl+x" : configuredKeymap.leader,
-        leader_timeout: configuredKeymap.leader_timeout ?? KeymapLeaderTimeoutDefault,
-        ...resolveBindingSections<
-          Renderable,
-          KeyEvent,
-          BindingSectionsConfig<Renderable, KeyEvent>,
-          KeymapSection
-        >(withPlatformKeymapSections(configuredKeymap.sections), {
-          sections: KeymapSectionNames,
-          bindingDefaults: keymapBindingDefaults,
-        }),
-      }
-    : LegacyKeymapTransform.create(parsedKeybinds)
+  const keymapInput = acc.result.keymap ?? LegacyKeymapTransform.create(acc.result.keybinds ?? {})
+  const keymapConfig = KeymapConfig.parse(keymapInput)
+  const keymap = {
+    leader: !keymapConfig.leader || keymapConfig.leader === "none" ? "ctrl+x" : keymapConfig.leader,
+    leader_timeout: keymapConfig.leader_timeout,
+    ...resolveBindingSections<Renderable, KeyEvent, BindingSectionsConfig<Renderable, KeyEvent>, KeymapSection>(
+      keymapConfig.sections,
+      {
+        sections: KeymapSectionNames,
+        bindingDefaults: keymapBindingDefaults,
+      },
+    ),
+  }
   const result: Resolved = {
     ...acc.result,
     keybinds: parsedKeybinds,
