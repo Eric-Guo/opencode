@@ -304,10 +304,10 @@ Only use `keybinds` when `keymap` is not present. If both fields are set, `keyma
 ```
 
 :::note
-When using legacy `keybinds` on Windows, the defaults for `input_undo` and `terminal_suspend` are different:
+On native Windows, the defaults for undo and terminal suspend are different for both `keymap` and legacy `keybinds`:
 
-- `input_undo` defaults to `ctrl+z,ctrl+-,super+z` (the `ctrl+z` binding is added because Windows terminals do not support POSIX suspend).
-- `terminal_suspend` is forced to `none` because native Windows terminals do not support POSIX suspend.
+- `input.undo` defaults to `ctrl+z,ctrl+-,super+z` when it is not explicitly configured (the `ctrl+z` binding is added because Windows terminals do not support POSIX suspend).
+- `terminal.suspend` is disabled because native Windows terminals do not support POSIX suspend.
 :::
 
 ---

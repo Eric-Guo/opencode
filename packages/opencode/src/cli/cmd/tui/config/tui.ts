@@ -2,7 +2,7 @@ export * as TuiConfig from "./tui"
 
 import type z from "zod"
 import type { KeyEvent, Renderable } from "@opentui/core"
-import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
+import { resolveBindingSections, type BindingSectionsConfig, type BindingValue } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
@@ -75,6 +75,27 @@ function normalize(raw: Record<string, unknown>) {
     ...tui,
     ...data,
   }
+}
+
+function withPlatformKeymapSections(sections: BindingSectionsConfig<Renderable, KeyEvent> | undefined) {
+  const result = Object.fromEntries(
+    Object.entries(sections ?? {}).map(([section, bindings]) => [section, { ...bindings }]),
+  ) as Record<string, Record<string, BindingValue<Renderable, KeyEvent>>>
+
+  if (process.platform !== "win32") return result
+
+  result.global = {
+    ...(result.global ?? {}),
+    "terminal.suspend": "none",
+  }
+  result.input = {
+    ...(result.input ?? {}),
+    ...(result.input?.["input.undo"] === undefined && {
+      "input.undo": unique(["ctrl+z", ...ConfigKeybinds.Keybinds.shape.input_undo.parse(undefined).split(",")]).join(","),
+    }),
+  }
+
+  return result
 }
 
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
@@ -205,7 +226,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
           KeyEvent,
           BindingSectionsConfig<Renderable, KeyEvent>,
           KeymapSection
-        >(configuredKeymap.sections ?? {}, {
+        >(withPlatformKeymapSections(configuredKeymap.sections), {
           sections: KeymapSectionNames,
           bindingDefaults: keymapBindingDefaults,
         }),

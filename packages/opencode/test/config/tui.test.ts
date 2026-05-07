@@ -30,6 +30,19 @@ const getTuiConfig = async (directory: string) =>
     ),
   )
 
+async function withPlatform<Value>(platform: typeof process.platform, fn: () => Promise<Value>) {
+  const original = Object.getOwnPropertyDescriptor(process, "platform")
+  Object.defineProperty(process, "platform", {
+    ...original,
+    value: platform,
+  })
+  try {
+    return await fn()
+  } finally {
+    if (original) Object.defineProperty(process, "platform", original)
+  }
+}
+
 afterEach(async () => {
   delete process.env.OPENCODE_CONFIG
   delete process.env.OPENCODE_TUI_CONFIG
@@ -508,6 +521,53 @@ wintest("ignores terminal suspend bindings on Windows", async () => {
   const config = await getTuiConfig(tmp.path)
   expect(config.keybinds?.terminal_suspend).toBe("none")
   expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
+})
+
+test("applies Windows keymap adjustments to configured keymap", async () => {
+  await withPlatform("win32", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "tui.json"),
+          JSON.stringify({
+            keymap: {
+              sections: {
+                global: { "terminal.suspend": "alt+z" },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    const config = await getTuiConfig(tmp.path)
+    expect(config.keymap.sections.global.find((binding) => binding.cmd === "terminal.suspend")).toBeUndefined()
+    expect(config.keymap.sections.input.find((binding) => binding.cmd === "input.undo")?.key).toBe(
+      "ctrl+z,ctrl+-,super+z",
+    )
+  })
+})
+
+test("keeps explicit configured keymap input undo on Windows", async () => {
+  await withPlatform("win32", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "tui.json"),
+          JSON.stringify({
+            keymap: {
+              sections: {
+                input: { "input.undo": "ctrl+y" },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    const config = await getTuiConfig(tmp.path)
+    expect(config.keymap.sections.input.find((binding) => binding.cmd === "input.undo")?.key).toBe("ctrl+y")
+  })
 })
 
 test("OPENCODE_TUI_CONFIG provides settings when no project config exists", async () => {
