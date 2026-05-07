@@ -4,7 +4,6 @@ import { createMemo, createSignal } from "solid-js"
 import { Locale } from "@/util/locale"
 import { useTheme } from "../context/theme"
 import { usePromptStash, type StashEntry } from "./prompt/stash"
-import { useTuiConfig } from "../context/tui-config"
 import { useCommandShortcut } from "../keymap"
 
 function getRelativeTime(timestamp: number): string {
@@ -31,13 +30,9 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const dialog = useDialog()
   const stash = usePromptStash()
   const { theme } = useTheme()
-  const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
 
   const [toDelete, setToDelete] = createSignal<number>()
-  const deleteHint = useCommandShortcut("dialog.stash.delete")
+  const deleteHint = useCommandShortcut("dialog.action.delete")
 
   const options = createMemo(() => {
     const entries = stash.list()
@@ -75,7 +70,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
       }}
       actions={[
         {
-          command: "dialog.stash.delete",
+          command: "dialog.action.delete",
           title: "delete",
           onTrigger: (option) => {
             if (toDelete() === option.value) {
@@ -87,7 +82,6 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
           },
         },
       ]}
-      bindings={sections.dialog_stash}
     />
   )
 }

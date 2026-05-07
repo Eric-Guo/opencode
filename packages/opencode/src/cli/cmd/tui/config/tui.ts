@@ -23,8 +23,13 @@ import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { LegacyKeymapTransform } from "./legacy-keymap-transform"
-import { KeymapLeaderTimeoutDefault, KeymapSectionNames, type KeymapInfo, type KeymapSection } from "./tui-schema"
-import type { Binding } from "@opentui/keymap"
+import {
+  KeymapLeaderTimeoutDefault,
+  KeymapSectionNames,
+  keymapBindingDefaults,
+  type KeymapInfo,
+  type KeymapSection,
+} from "./tui-schema"
 
 const log = Log.create({ service: "tui.config" })
 
@@ -35,31 +40,6 @@ type Acc = {
   result: Info
   plugin_origins: ConfigPlugin.Origin[]
 }
-
-const KeymapSectionGroups = {
-  app: "Global",
-  session: "Session",
-  prompt: "Prompt",
-  prompt_clear: "Prompt",
-  prompt_paste: "Prompt",
-  prompt_history_previous: "Prompt",
-  prompt_history_next: "Prompt",
-  prompt_autocomplete: "Autocomplete",
-  input: "Text Editing",
-  dialog_select: "Dialog",
-  dialog_stash: "Stash",
-  dialog_session_list: "Session",
-  dialog_model: "Agent",
-  dialog_mcp: "Agent",
-  permission_reject: "Permission",
-  permission_prompt_escape: "Permission",
-  permission_prompt_fullscreen: "Permission",
-  question: "Question",
-  question_edit: "Question",
-  plugins: "Plugins",
-  dialog_plugins: "Plugins",
-  home_tips: "Home",
-} satisfies Record<KeymapSection, string>
 
 export type Resolved = Omit<Info, "keybinds" | "keymap"> & {
   keybinds: ConfigKeybinds.Keybinds
@@ -95,21 +75,6 @@ function normalize(raw: Record<string, unknown>) {
     ...tui,
     ...data,
   }
-}
-
-function withDefaultGroups(sections: KeymapInfo["sections"]): KeymapInfo["sections"] {
-  return Object.fromEntries(
-    KeymapSectionNames.map((section) => [
-      section,
-      sections[section].map((binding) => {
-        if ((binding as Binding<Renderable, KeyEvent> & { group?: unknown }).group !== undefined) return binding
-        return {
-          ...binding,
-          group: KeymapSectionGroups[section],
-        }
-      }),
-    ]),
-  ) as KeymapInfo["sections"]
 }
 
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
@@ -235,14 +200,15 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     ? {
         leader: !configuredKeymap.leader || configuredKeymap.leader === "none" ? "ctrl+x" : configuredKeymap.leader,
         leader_timeout: configuredKeymap.leader_timeout ?? KeymapLeaderTimeoutDefault,
-        sections: resolveBindingSections<
+        ...resolveBindingSections<
           Renderable,
           KeyEvent,
           BindingSectionsConfig<Renderable, KeyEvent>,
           KeymapSection
         >(configuredKeymap.sections ?? {}, {
           sections: KeymapSectionNames,
-        }).sections,
+          bindingDefaults: keymapBindingDefaults,
+        }),
       }
     : LegacyKeymapTransform.create(parsedKeybinds)
   const result: Resolved = {
@@ -252,10 +218,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     // `keybinds` is deprecated and will be removed in opencode v2.0. Keep it
     // only as the legacy fallback; once `keymap` is configured, ignore
     // `keybinds` for keymap resolution.
-    keymap: {
-      ...keymap,
-      sections: withDefaultGroups(keymap.sections),
-    },
+    keymap,
   }
 
   return {

@@ -293,6 +293,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       ],
       bindings: [
         ...sections.dialog_select,
+        ...tuiConfig.keymap.pick(
+          "dialog_actions",
+          enabledActions.map((item) => item.command),
+        ),
         ...(props.bindings ?? []).filter((binding) => {
           if (typeof binding.cmd !== "string") return true
           return enabledActions.some((item) => item.command === binding.cmd)

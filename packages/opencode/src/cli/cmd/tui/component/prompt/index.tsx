@@ -145,9 +145,7 @@ export function Prompt(props: PromptProps) {
   const project = useProject()
   const sync = useSync()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
+  const keymapConfig = tuiConfig.keymap
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
@@ -630,7 +628,16 @@ export function Prompt(props: PromptProps) {
 
   useBindings(() => ({
     enabled: command.matcher,
-    bindings: sections.prompt,
+    bindings: keymapConfig.pick("prompt", [
+      "prompt.submit",
+      "prompt.editor",
+      "prompt.editor_context.clear",
+      "prompt.stash",
+      "prompt.stash.pop",
+      "prompt.stash.list",
+      "session.interrupt",
+      "workspace.set",
+    ]),
   }))
 
   const ref: PromptRef = {
@@ -856,7 +863,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled,
-      bindings: sections.prompt_paste,
+      bindings: keymapConfig.pick("prompt", ["prompt.paste"]),
     }
   })
 
@@ -864,7 +871,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
-      bindings: sections.prompt_clear,
+      bindings: keymapConfig.pick("prompt", ["prompt.clear"]),
     }
   })
 
@@ -938,7 +945,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: sections.prompt_history_previous,
+      bindings: keymapConfig.pick("prompt", ["prompt.history.previous"]),
     }
   })
 
@@ -974,7 +981,7 @@ export function Prompt(props: PromptProps) {
           },
         },
       ],
-      bindings: sections.prompt_history_next,
+      bindings: keymapConfig.pick("prompt", ["prompt.history.next"]),
     }
   })
 

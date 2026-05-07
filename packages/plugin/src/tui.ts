@@ -293,6 +293,9 @@ type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plug
       leader: string
       leader_timeout: number
       sections: Record<string, ReadonlyArray<Binding<Renderable, KeyEvent>>>
+      get: (section: string, cmd: string) => ReadonlyArray<Binding<Renderable, KeyEvent>> | undefined
+      pick: (section: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
+      omit: (section: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
     }
   }
 

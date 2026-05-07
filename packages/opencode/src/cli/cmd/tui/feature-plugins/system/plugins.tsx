@@ -148,7 +148,6 @@ function showInstall(api: TuiPluginApi) {
 
 function View(props: { api: TuiPluginApi }) {
   const size = useTerminalDimensions()
-  const sections = props.api.tuiConfig.keymap.sections
   const [list, setList] = createSignal(props.api.plugins.list())
   const [cur, setCur] = createSignal<string | undefined>()
   const [lock, setLock] = createSignal(false)
@@ -207,7 +206,7 @@ function View(props: { api: TuiPluginApi }) {
       actions={[
         {
           title: "toggle",
-          command: "plugins.toggle",
+          command: "dialog.action.toggle",
           disabled: lock(),
           onTrigger: (item) => {
             setCur(item.value)
@@ -216,14 +215,14 @@ function View(props: { api: TuiPluginApi }) {
         },
         {
           title: "install",
-          command: "dialog.plugins.install",
+          command: "plugin.dialog.install",
           disabled: lock(),
           onTrigger: () => {
             showInstall(props.api)
           },
         },
       ]}
-      bindings={sections.dialog_plugins}
+      bindings={props.api.tuiConfig.keymap.pick("plugins", ["plugin.dialog.install"])}
       onSelect={(item) => {
         setCur(item.value)
         flip(item.value)
@@ -258,7 +257,7 @@ const tui: TuiPlugin = async (api) => {
         },
       },
     ],
-    bindings: api.tuiConfig.keymap.sections.plugins,
+    bindings: api.tuiConfig.keymap.omit("plugins", ["plugin.dialog.install"]),
   })
 }
 

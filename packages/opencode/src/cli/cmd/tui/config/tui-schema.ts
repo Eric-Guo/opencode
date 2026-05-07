@@ -1,7 +1,7 @@
 import z from "zod"
 import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
-import type { BindingSectionsConfig, BindingValue } from "@opentui/keymap/extras"
+import type { ResolvedBindingSections } from "@opentui/keymap/extras"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigKeybinds } from "@/config/keybinds"
 
@@ -15,27 +15,17 @@ const KeybindOverride = z
   .strict()
 
 export const KeymapSectionNames = [
-  "app",
+  "global",
   "session",
   "prompt",
-  "prompt_clear",
-  "prompt_paste",
-  "prompt_history_previous",
-  "prompt_history_next",
-  "prompt_autocomplete",
+  "autocomplete",
   "input",
   "dialog_select",
-  "dialog_stash",
-  "dialog_session_list",
-  "dialog_model",
-  "dialog_mcp",
-  "permission_reject",
-  "permission_prompt_escape",
-  "permission_prompt_fullscreen",
+  "dialog_actions",
+  "model",
+  "permission",
   "question",
-  "question_edit",
   "plugins",
-  "dialog_plugins",
   "home_tips",
 ] as const
 
@@ -45,7 +35,27 @@ export const KeymapLeaderTimeoutDefault = 2000
 export type KeymapInfo = {
   leader: string
   leader_timeout: number
-  sections: KeymapSections
+} & ResolvedBindingSections<Renderable, KeyEvent, KeymapSection>
+
+export const KeymapSectionGroups = {
+  global: "Global",
+  session: "Session",
+  prompt: "Prompt",
+  autocomplete: "Autocomplete",
+  input: "Text Editing",
+  dialog_select: "Dialog",
+  dialog_actions: "Dialog",
+  model: "Model",
+  permission: "Permission",
+  question: "Question",
+  plugins: "Plugins",
+  home_tips: "Home",
+} satisfies Record<KeymapSection, string>
+
+export function keymapBindingDefaults(input: { section: string; binding: Readonly<Binding<Renderable, KeyEvent>> }) {
+  if (input.binding.group !== undefined) return
+  if (!Object.hasOwn(KeymapSectionGroups, input.section)) return
+  return { group: KeymapSectionGroups[input.section as KeymapSection] }
 }
 
 const KeyStroke = z

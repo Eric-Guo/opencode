@@ -14,9 +14,7 @@ export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
-  const {
-    keymap: { sections },
-  } = useTuiConfig()
+  const tuiConfig = useTuiConfig()
   const [query, setQuery] = createSignal("")
 
   const connected = useConnected()
@@ -154,14 +152,14 @@ export function DialogModel(props: { providerID?: string }) {
       options={options()}
       actions={[
         {
-          command: "dialog.model.provider.list",
+          command: "model.dialog.provider",
           title: connected() ? "Connect provider" : "View all providers",
           onTrigger() {
             dialog.replace(() => <DialogProvider />)
           },
         },
         {
-          command: "dialog.model.favorite.toggle",
+          command: "model.dialog.favorite",
           title: "Favorite",
           disabled: !connected(),
           onTrigger: (option) => {
@@ -169,7 +167,7 @@ export function DialogModel(props: { providerID?: string }) {
           },
         },
       ]}
-      bindings={sections.dialog_model}
+      bindings={tuiConfig.keymap.sections.model}
       onFilter={setQuery}
       flat={true}
       skipFilter={true}

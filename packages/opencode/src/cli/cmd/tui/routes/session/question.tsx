@@ -16,6 +16,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const {
     keymap: { sections },
   } = tuiConfig
+  const keymapConfig = tuiConfig.keymap
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -145,7 +146,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
           setStore("editing", false)
         },
       },
-      ...sections.question_edit,
+      ...keymapConfig.pick("question", ["question.edit.clear"]),
       {
         key: "return",
         cmd: () => {

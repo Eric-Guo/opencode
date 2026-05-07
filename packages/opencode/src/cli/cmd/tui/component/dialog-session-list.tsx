@@ -16,7 +16,6 @@ import { Spinner } from "./spinner"
 import { errorMessage } from "@/util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { WorkspaceLabel } from "./workspace-label"
-import { useTuiConfig } from "../context/tui-config"
 import { useCommandShortcut } from "../keymap"
 
 export function DialogSessionList() {
@@ -27,13 +26,9 @@ export function DialogSessionList() {
   const { theme } = useTheme()
   const sdk = useSDK()
   const toast = useToast()
-  const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
-  const deleteHint = useCommandShortcut("dialog.session.delete")
+  const deleteHint = useCommandShortcut("dialog.action.delete")
 
   const [searchResults, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
@@ -192,7 +187,7 @@ export function DialogSessionList() {
       }}
       actions={[
         {
-          command: "dialog.session.delete",
+          command: "dialog.action.delete",
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
@@ -240,14 +235,13 @@ export function DialogSessionList() {
           },
         },
         {
-          command: "dialog.session.rename",
+          command: "dialog.action.rename",
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },
         },
       ]}
-      bindings={sections.dialog_session_list}
     />
   )
 }

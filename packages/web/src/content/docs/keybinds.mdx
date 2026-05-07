@@ -30,7 +30,7 @@ You do not need to use a leader key, but we recommend doing so.
     "leader": "ctrl+x",
     "leader_timeout": 2000,
     "sections": {
-      "app": {
+      "global": {
         "command.palette.show": "ctrl+p",
         "session.new": "<leader>n",
         "session.list": "<leader>l"
@@ -53,13 +53,13 @@ You do not need to use a leader key, but we recommend doing so.
 
 ## Keymap structure
 
-`keymap.sections` is grouped by TUI area. Each section contains command names and the key sequence that triggers them.
+`keymap.sections` is grouped by semantic area. Each section contains command names and the key sequence that triggers them.
 
 | Field | Description |
 | ----- | ----------- |
 | `leader` | The key used by `<leader>` sequences. Defaults to `ctrl+x`. |
 | `leader_timeout` | How long OpenCode waits for the next key after the leader key, in milliseconds. Defaults to `2000`. |
-| `sections` | A map of TUI section names to command bindings. |
+| `sections` | A map of TUI areas to command bindings. |
 
 ---
 
@@ -89,7 +89,7 @@ For advanced cases, use an object with `key`, `event`, `preventDefault`, or `fal
   "$schema": "https://opencode.ai/tui.json",
   "keymap": {
     "sections": {
-      "prompt_paste": {
+      "prompt": {
         "prompt.paste": {
           "key": "ctrl+v",
           "preventDefault": false
@@ -113,7 +113,7 @@ This example lists the built-in sections, command names, and default fallback bi
     "leader": "ctrl+x",
     "leader_timeout": 2000,
     "sections": {
-      "app": {
+      "global": {
         "command.palette.show": "ctrl+p",
         "session.list": "<leader>l",
         "session.new": "<leader>n",
@@ -129,7 +129,6 @@ This example lists the built-in sections, command names, and default fallback bi
         "variant.cycle": "ctrl+t",
         "variant.list": "none",
         "provider.connect": "none",
-        "prompt.editor.shortcut": "<leader>e",
         "console.org.switch": "none",
         "opencode.status": "<leader>s",
         "theme.switch": "<leader>t",
@@ -186,29 +185,21 @@ This example lists the built-in sections, command names, and default fallback bi
       },
       "prompt": {
         "prompt.submit": "none",
-        "prompt.editor": "none",
+        "prompt.editor": "<leader>e",
         "prompt.editor_context.clear": "none",
         "prompt.stash": "none",
         "prompt.stash.pop": "none",
         "prompt.stash.list": "none",
-        "session.interrupt": "escape"
-      },
-      "prompt_clear": {
-        "prompt.clear": "ctrl+c"
-      },
-      "prompt_paste": {
+        "session.interrupt": "escape",
+        "prompt.clear": "ctrl+c",
         "prompt.paste": {
           "key": "ctrl+v",
           "preventDefault": false
-        }
-      },
-      "prompt_history_previous": {
-        "prompt.history.previous": "up"
-      },
-      "prompt_history_next": {
+        },
+        "prompt.history.previous": "up",
         "prompt.history.next": "down"
       },
-      "prompt_autocomplete": {
+      "autocomplete": {
         "prompt.autocomplete.prev": "up,ctrl+p",
         "prompt.autocomplete.next": "down,ctrl+n",
         "prompt.autocomplete.hide": "escape",
@@ -262,42 +253,28 @@ This example lists the built-in sections, command names, and default fallback bi
         "dialog.select.end": "end",
         "dialog.select.submit": "return"
       },
-      "dialog_stash": {
-        "dialog.stash.delete": "ctrl+d"
+      "dialog_actions": {
+        "dialog.action.toggle": "space",
+        "dialog.action.delete": "ctrl+d",
+        "dialog.action.rename": "ctrl+r"
       },
-      "dialog_session_list": {
-        "dialog.session.delete": "ctrl+d",
-        "dialog.session.rename": "ctrl+r"
+      "model": {
+        "model.dialog.provider": "ctrl+a",
+        "model.dialog.favorite": "ctrl+f"
       },
-      "dialog_model": {
-        "dialog.model.provider.list": "ctrl+a",
-        "dialog.model.favorite.toggle": "ctrl+f"
-      },
-      "dialog_mcp": {
-        "dialog.mcp.toggle": "space"
-      },
-      "permission_reject": {
-        "permission.reject.cancel": "ctrl+c,ctrl+d,<leader>q"
-      },
-      "permission_prompt_escape": {
-        "permission.prompt.escape": "ctrl+c,ctrl+d,<leader>q"
-      },
-      "permission_prompt_fullscreen": {
+      "permission": {
+        "permission.reject.cancel": "ctrl+c,ctrl+d,<leader>q",
+        "permission.prompt.escape": "ctrl+c,ctrl+d,<leader>q",
         "permission.prompt.fullscreen": "ctrl+f"
       },
       "question": {
-        "question.reject": "ctrl+c,ctrl+d,<leader>q"
-      },
-      "question_edit": {
+        "question.reject": "ctrl+c,ctrl+d,<leader>q",
         "question.edit.clear": "ctrl+c"
       },
       "plugins": {
         "plugins.list": "none",
-        "plugins.install": "none"
-      },
-      "dialog_plugins": {
-        "plugins.toggle": "space",
-        "dialog.plugins.install": "shift+i"
+        "plugins.install": "none",
+        "plugin.dialog.install": "shift+i"
       },
       "home_tips": {
         "tips.toggle": "<leader>h"

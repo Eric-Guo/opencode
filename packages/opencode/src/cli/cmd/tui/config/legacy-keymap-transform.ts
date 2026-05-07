@@ -2,7 +2,13 @@ import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
 import { resolveBindingSections, type BindingSectionsConfig, type BindingValue } from "@opentui/keymap/extras"
 import { ConfigKeybinds } from "@/config/keybinds"
-import { KeymapLeaderTimeoutDefault, KeymapSectionNames, type KeymapInfo, type KeymapSection } from "./tui-schema"
+import {
+  KeymapLeaderTimeoutDefault,
+  KeymapSectionNames,
+  keymapBindingDefaults,
+  type KeymapInfo,
+  type KeymapSection,
+} from "./tui-schema"
 
 type LegacyKeybinds = ConfigKeybinds.Keybinds
 type SectionsConfig = Record<string, Record<string, BindingValue<Renderable, KeyEvent>>>
@@ -56,28 +62,43 @@ function bindingWith(key: string | undefined, input: Omit<Binding<Renderable, Ke
   return { ...input, key }
 }
 
+function combineBindings(...keys: (string | undefined)[]) {
+  const result = Array.from(
+    new Set(
+      keys.flatMap((key) => {
+        if (!key || key === "none") return []
+        return key
+          .split(",")
+          .map((part) => part.trim())
+          .filter((part) => part && part !== "none")
+      }),
+    ),
+  )
+  return result.length ? result.join(",") : "none"
+}
+
 export function create(keybinds: LegacyKeybinds): KeymapInfo {
   const config: SectionsConfig = {}
 
-  add(config, "app", "command.palette.show", keybinds.command_list)
-  add(config, "app", "session.list", keybinds.session_list)
-  add(config, "app", "session.new", keybinds.session_new)
-  add(config, "app", "model.list", keybinds.model_list)
-  add(config, "app", "model.cycle_recent", keybinds.model_cycle_recent)
-  add(config, "app", "model.cycle_recent_reverse", keybinds.model_cycle_recent_reverse)
-  add(config, "app", "model.cycle_favorite", keybinds.model_cycle_favorite)
-  add(config, "app", "model.cycle_favorite_reverse", keybinds.model_cycle_favorite_reverse)
-  add(config, "app", "agent.list", keybinds.agent_list)
-  add(config, "app", "agent.cycle", keybinds.agent_cycle)
-  add(config, "app", "agent.cycle.reverse", keybinds.agent_cycle_reverse)
-  add(config, "app", "variant.cycle", keybinds.variant_cycle)
-  add(config, "app", "variant.list", keybinds.variant_list)
-  add(config, "app", "prompt.editor.shortcut", keybinds.editor_open)
-  add(config, "app", "opencode.status", keybinds.status_view)
-  add(config, "app", "theme.switch", keybinds.theme_list)
-  add(config, "app", "app.exit", keybinds.app_exit)
-  add(config, "app", "terminal.suspend", keybinds.terminal_suspend)
-  add(config, "app", "terminal.title.toggle", keybinds.terminal_title_toggle)
+  add(config, "global", "command.palette.show", keybinds.command_list)
+  add(config, "global", "session.list", keybinds.session_list)
+  add(config, "global", "session.new", keybinds.session_new)
+  add(config, "global", "model.list", keybinds.model_list)
+  add(config, "global", "model.cycle_recent", keybinds.model_cycle_recent)
+  add(config, "global", "model.cycle_recent_reverse", keybinds.model_cycle_recent_reverse)
+  add(config, "global", "model.cycle_favorite", keybinds.model_cycle_favorite)
+  add(config, "global", "model.cycle_favorite_reverse", keybinds.model_cycle_favorite_reverse)
+  add(config, "global", "agent.list", keybinds.agent_list)
+  add(config, "global", "agent.cycle", keybinds.agent_cycle)
+  add(config, "global", "agent.cycle.reverse", keybinds.agent_cycle_reverse)
+  add(config, "global", "variant.cycle", keybinds.variant_cycle)
+  add(config, "global", "variant.list", keybinds.variant_list)
+  add(config, "prompt", "prompt.editor", keybinds.editor_open)
+  add(config, "global", "opencode.status", keybinds.status_view)
+  add(config, "global", "theme.switch", keybinds.theme_list)
+  add(config, "global", "app.exit", keybinds.app_exit)
+  add(config, "global", "terminal.suspend", keybinds.terminal_suspend)
+  add(config, "global", "terminal.title.toggle", keybinds.terminal_title_toggle)
 
   add(config, "session", "session.share", keybinds.session_share)
   add(config, "session", "session.rename", keybinds.session_rename)
@@ -111,16 +132,16 @@ export function create(keybinds: LegacyKeybinds): KeymapInfo {
   add(config, "session", "session.child.previous", keybinds.session_child_cycle_reverse)
 
   add(config, "prompt", "session.interrupt", keybinds.session_interrupt)
-  add(config, "prompt_clear", "prompt.clear", keybinds.input_clear)
-  add(config, "prompt_paste", "prompt.paste", bindingWith(keybinds.input_paste, { preventDefault: false }))
-  add(config, "prompt_history_previous", "prompt.history.previous", keybinds.history_previous)
-  add(config, "prompt_history_next", "prompt.history.next", keybinds.history_next)
+  add(config, "prompt", "prompt.clear", keybinds.input_clear)
+  add(config, "prompt", "prompt.paste", bindingWith(keybinds.input_paste, { preventDefault: false }))
+  add(config, "prompt", "prompt.history.previous", keybinds.history_previous)
+  add(config, "prompt", "prompt.history.next", keybinds.history_next)
 
-  add(config, "prompt_autocomplete", "prompt.autocomplete.prev", keybinds["prompt.autocomplete.prev"])
-  add(config, "prompt_autocomplete", "prompt.autocomplete.next", keybinds["prompt.autocomplete.next"])
-  add(config, "prompt_autocomplete", "prompt.autocomplete.hide", keybinds["prompt.autocomplete.hide"])
-  add(config, "prompt_autocomplete", "prompt.autocomplete.select", keybinds["prompt.autocomplete.select"])
-  add(config, "prompt_autocomplete", "prompt.autocomplete.complete", keybinds["prompt.autocomplete.complete"])
+  add(config, "autocomplete", "prompt.autocomplete.prev", keybinds["prompt.autocomplete.prev"])
+  add(config, "autocomplete", "prompt.autocomplete.next", keybinds["prompt.autocomplete.next"])
+  add(config, "autocomplete", "prompt.autocomplete.hide", keybinds["prompt.autocomplete.hide"])
+  add(config, "autocomplete", "prompt.autocomplete.select", keybinds["prompt.autocomplete.select"])
+  add(config, "autocomplete", "prompt.autocomplete.complete", keybinds["prompt.autocomplete.complete"])
 
   for (const [legacy, command] of Object.entries(inputCommands) as [keyof typeof inputCommands, string][]) {
     add(config, "input", command, keybinds[legacy])
@@ -133,31 +154,29 @@ export function create(keybinds: LegacyKeybinds): KeymapInfo {
   add(config, "dialog_select", "dialog.select.home", keybinds["dialog.select.home"])
   add(config, "dialog_select", "dialog.select.end", keybinds["dialog.select.end"])
   add(config, "dialog_select", "dialog.select.submit", keybinds["dialog.select.submit"])
+  add(config, "dialog_actions", "dialog.action.delete", combineBindings(keybinds.stash_delete, keybinds.session_delete))
+  add(config, "dialog_actions", "dialog.action.rename", keybinds.session_rename)
+  add(config, "dialog_actions", "dialog.action.toggle", combineBindings(keybinds["dialog.mcp.toggle"], keybinds["plugins.toggle"]))
+  add(config, "model", "model.dialog.provider", keybinds.model_provider_list)
+  add(config, "model", "model.dialog.favorite", keybinds.model_favorite_toggle)
 
-  add(config, "dialog_stash", "dialog.stash.delete", keybinds.stash_delete)
-  add(config, "dialog_session_list", "dialog.session.delete", keybinds.session_delete)
-  add(config, "dialog_session_list", "dialog.session.rename", keybinds.session_rename)
-  add(config, "dialog_model", "dialog.model.provider.list", keybinds.model_provider_list)
-  add(config, "dialog_model", "dialog.model.favorite.toggle", keybinds.model_favorite_toggle)
-  add(config, "dialog_mcp", "dialog.mcp.toggle", keybinds["dialog.mcp.toggle"])
-
-  add(config, "permission_reject", "permission.reject.cancel", keybinds.app_exit)
-  add(config, "permission_prompt_escape", "permission.prompt.escape", keybinds.app_exit)
-  add(config, "permission_prompt_fullscreen", "permission.prompt.fullscreen", keybinds["permission.prompt.fullscreen"])
+  add(config, "permission", "permission.reject.cancel", keybinds.app_exit)
+  add(config, "permission", "permission.prompt.escape", keybinds.app_exit)
+  add(config, "permission", "permission.prompt.fullscreen", keybinds["permission.prompt.fullscreen"])
   add(config, "question", "question.reject", keybinds.app_exit)
-  add(config, "question_edit", "question.edit.clear", keybinds.input_clear)
+  add(config, "question", "question.edit.clear", keybinds.input_clear)
 
   add(config, "plugins", "plugins.list", keybinds.plugin_manager)
-  add(config, "dialog_plugins", "plugins.toggle", keybinds["plugins.toggle"])
-  add(config, "dialog_plugins", "dialog.plugins.install", keybinds["dialog.plugins.install"])
+  add(config, "plugins", "plugin.dialog.install", keybinds["dialog.plugins.install"])
   add(config, "home_tips", "tips.toggle", keybinds.tips_toggle)
 
   return {
     leader: !keybinds.leader || keybinds.leader === "none" ? "ctrl+x" : keybinds.leader,
     leader_timeout: KeymapLeaderTimeoutDefault,
-    sections: resolveBindingSections<Renderable, KeyEvent, SectionsConfig, KeymapSection>(config, {
+    ...resolveBindingSections<Renderable, KeyEvent, SectionsConfig, KeymapSection>(config, {
       sections: KeymapSectionNames,
-    }).sections,
+      bindingDefaults: keymapBindingDefaults,
+    }),
   }
 }
 

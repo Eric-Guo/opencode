@@ -539,15 +539,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
         category: "Provider",
       },
-      {
-        name: "prompt.editor.shortcut",
-        title: "Open editor shortcut",
-        category: "Session",
-        hidden: true,
-        run: () => {
-          command.run("prompt.editor")
-        },
-      },
       ...(sync.data.console_state.switchableOrgCount > 1
         ? [
             {
@@ -668,7 +659,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         title: "Suspend terminal",
         category: "System",
         hidden: true,
-        enabled: sections.app.some((binding) => binding.cmd === "terminal.suspend"),
+        enabled: process.platform !== "win32",
         run: () => {
           process.once("SIGCONT", () => {
             renderer.resume()
@@ -757,7 +748,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useBindings(() => ({
     enabled: command.matcher,
-    bindings: sections.app,
+    bindings: sections.global,
   }))
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {

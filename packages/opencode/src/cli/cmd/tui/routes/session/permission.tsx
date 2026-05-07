@@ -462,9 +462,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   let input: TextareaRenderable
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
+  const keymapConfig = tuiConfig.keymap
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   const dialog = useDialog()
@@ -480,7 +478,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
     ],
     bindings: [
       { key: "escape", cmd: () => props.onCancel() },
-      ...sections.permission_reject,
+      ...keymapConfig.pick("permission", ["permission.reject.cancel"]),
       { key: "return", cmd: () => props.onConfirm(input.plainText) },
     ],
   }))
@@ -547,9 +545,7 @@ function Prompt<const T extends Record<string, string>>(props: {
 }) {
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
+  const keymapConfig = tuiConfig.keymap
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
@@ -613,8 +609,8 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       { key: "return", cmd: () => props.onSelect(store.selected) },
       ...(props.escapeKey ? [{ key: "escape", cmd: () => props.onSelect(props.escapeKey!) }] : []),
-      ...(props.escapeKey ? sections.permission_prompt_escape : []),
-      ...(props.fullscreen ? sections.permission_prompt_fullscreen : []),
+      ...(props.escapeKey ? keymapConfig.pick("permission", ["permission.prompt.escape"]) : []),
+      ...(props.fullscreen ? keymapConfig.pick("permission", ["permission.prompt.fullscreen"]) : []),
     ],
   }))
 

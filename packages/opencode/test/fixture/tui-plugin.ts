@@ -1,6 +1,8 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { RGBA, type CliRenderer } from "@opentui/core"
 import type { HostPluginApi } from "../../src/cli/cmd/tui/plugin/slots"
+import { LegacyKeymapTransform } from "../../src/cli/cmd/tui/config/legacy-keymap-transform"
+import { ConfigKeybinds } from "../../src/config/keybinds"
 
 type Count = {
   event_add: number
@@ -109,13 +111,11 @@ type Opts = {
 }
 
 function tuiConfig(input?: Partial<HostPluginApi["tuiConfig"]>): HostPluginApi["tuiConfig"] {
+  const keybinds = ConfigKeybinds.Keybinds.parse(input?.keybinds ?? {})
   return {
     ...input,
-    keymap: input?.keymap ?? {
-      leader: "ctrl+x",
-      leader_timeout: 2000,
-      sections: {},
-    },
+    keybinds,
+    keymap: input?.keymap ?? LegacyKeymapTransform.create(keybinds),
   }
 }
 

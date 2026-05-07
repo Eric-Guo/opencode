@@ -565,7 +565,7 @@ export function Autocomplete(props: {
         },
       },
     ],
-    bindings: sections.prompt_autocomplete,
+    bindings: sections.autocomplete,
   }))
 
   function show(mode: "@" | "/") {
