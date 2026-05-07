@@ -8,7 +8,7 @@ import { Context, Effect, Fiber, Layer } from "effect"
 import { ConfigParse } from "@/config/parse"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { KeymapConfig, TuiInfo } from "./tui-schema"
+import { KeymapConfig, TuiInfo, TuiJsonSchemaInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@opencode-ai/core/global"
@@ -33,6 +33,7 @@ import {
 const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiInfo
+export const JsonSchemaInfo = TuiJsonSchemaInfo
 export type Info = z.output<typeof Info>
 
 type Acc = {
