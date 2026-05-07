@@ -2,15 +2,12 @@ import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync, mkdirSync, rmSync } from "node:fs"
 import * as http from "node:http"
-import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
-import { drizzle } from "drizzle-orm/node-sqlite/driver"
-import type { Server } from "virtual:opencode-server"
 
 import contextMenu from "electron-context-menu"
 contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
@@ -49,7 +46,15 @@ import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigratio
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
-import { allocatePort, getDefaultServerUrl, setDefaultServerUrl, spawnLocalServer, spawnWslSidecar } from "./server"
+import {
+  allocatePort,
+  getDefaultServerUrl,
+  preferAppEnv,
+  setDefaultServerUrl,
+  spawnLocalServer,
+  spawnWslSidecar,
+  type SidecarListener,
+} from "./server"
 import { createWslServersController } from "./wsl-servers"
 import {
   createLoadingWindow,
@@ -64,7 +69,7 @@ const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
 let mainWindow: BrowserWindow | null = null
-let server: Server.Listener | null = null
+let server: SidecarListener | null = null
 const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
@@ -121,6 +126,8 @@ function setupApp() {
     return
   }
 
+  preferAppEnv(app.getPath("userData"))
+
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
     if (urls.length) {
@@ -137,20 +144,21 @@ function setupApp() {
   })
 
   app.on("before-quit", () => {
-    killSidecar()
+    void killSidecar()
     wslServers.stopAll()
   })
 
   app.on("will-quit", () => {
-    killSidecar()
+    void killSidecar()
     wslServers.stopAll()
   })
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      killSidecar()
-      wslServers.stopAll()
-      app.exit(0)
+      void killSidecar().finally(() => {
+        wslServers.stopAll()
+        app.exit(0)
+      })
     })
   }
 
@@ -217,22 +225,24 @@ async function initialize() {
       if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
     })
 
-    if (needsMigration) {
-      const { Database, JsonMigration } = await import("virtual:opencode-server")
-      await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
-        progress: (event: { current: number; total: number }) => {
-          const percent = Math.round((event.current / event.total) * 100)
-          initEmitter.emit("sqlite", { type: "InProgress", value: percent })
-        },
-      })
-      initEmitter.emit("sqlite", { type: "Done" })
-    }
-
     logger.log("spawning sidecar", { url })
-    const { listener, health } = await spawnLocalServer(hostname, port, password, () => {
-      ensureLoopbackNoProxy()
-      useEnvProxy()
-    })
+    const { listener, health } = await spawnLocalServer(
+      hostname,
+      port,
+      password,
+      () => {
+        ensureLoopbackNoProxy()
+        useEnvProxy()
+      },
+      {
+        needsMigration,
+        userDataPath: app.getPath("userData"),
+        onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
+        onStdout: (message) => logger.log("sidecar stdout", { message }),
+        onStderr: (message) => logger.warn("sidecar stderr", { message }),
+        onExit: (code) => logger.warn("sidecar exited", { code }),
+      },
+    )
     server = listener
     serverReady.resolve({
       url,
@@ -334,19 +344,21 @@ registerIpcHandlers({
   setBackgroundColor: (color) => setBackgroundColor(color),
 })
 
-function killSidecar() {
+async function killSidecar() {
   if (!server) return
-  server.stop()
+  const current = server
   server = null
+  await current.stop()
 }
 
 function relaunchApp() {
   // app.exit() skips before-quit / will-quit, so relaunch callers must
   // explicitly stop sidecars here rather than relying on process hooks.
-  killSidecar()
-  wslServers.stopAll()
-  app.relaunch()
-  app.exit(0)
+  void killSidecar().finally(() => {
+    wslServers.stopAll()
+    app.relaunch()
+    app.exit(0)
+  })
 }
 
 function ensureLoopbackNoProxy() {
@@ -446,7 +458,7 @@ async function installUpdate() {
   logger.log("installing downloaded update", {
     version: downloadedUpdateVersion,
   })
-  killSidecar()
+  await killSidecar()
   wslServers.stopAll()
   autoUpdater.quitAndInstall()
 }
