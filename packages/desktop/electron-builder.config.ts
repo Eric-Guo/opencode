@@ -125,6 +125,11 @@ const getBase = (appId: string): Configuration => {
         to: "thape-config",
         filter: ["**/*", "!**/.git/**"],
       },
+      {
+        from: "resources/thape-config/node_modules",
+        to: "thape-config/node_modules",
+        filter: ["**/*"],
+      },
     ],
     // Electron stores cookies in plain text by default. The browser pane keeps sign-ins, so encrypt them with the OS
     // key store (Keychain, DPAPI, libsecret or kwallet). This is one-way: turning it off again loses every cookie.
