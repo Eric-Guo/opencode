@@ -86,6 +86,11 @@ const getBase = (appId: string): Configuration => ({
       filter: ["**/*", "!**/.git/**"],
     },
     {
+      from: "resources/thape-config/node_modules",
+      to: "thape-config/node_modules",
+      filter: ["**/*"],
+    },
+    {
       from: "native/",
       to: "native/",
       filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
