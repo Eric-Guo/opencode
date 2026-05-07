@@ -110,6 +110,11 @@ const getBase = (appId: string): Configuration => ({
       to: "thape-config",
       filter: ["**/*", "!**/.git/**"],
     },
+    {
+      from: "resources/thape-config/node_modules",
+      to: "thape-config/node_modules",
+      filter: ["**/*"],
+    },
   ],
   afterPack: async (context) => {
     const cli = path.join(
