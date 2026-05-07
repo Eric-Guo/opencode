@@ -7,6 +7,7 @@ import type { Configuration } from "electron-builder"
 
 const execFileAsync = promisify(execFile)
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
+const thapeConfigDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "resources/thape-config")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 async function signWindows(configuration: { path: string }) {
@@ -48,6 +49,11 @@ const getBase = (): Configuration => ({
       from: "resources/thape-config",
       to: "thape-config",
       filter: ["**/*", "!**/.git/**"],
+    },
+    {
+      from: "resources/thape-config/node_modules",
+      to: "thape-config/node_modules",
+      filter: ["**/*"],
     },
     {
       from: "native/",
