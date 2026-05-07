@@ -7,6 +7,7 @@ import type { Configuration } from "electron-builder"
 
 const execFileAsync = promisify(execFile)
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
+const thapeConfigDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "resources/thape-config")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 async function signWindows(configuration: { path: string }) {
@@ -30,6 +31,9 @@ const iconDir = `icons/${iconChannel}`
 
 const getBase = (): Configuration => ({
   artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  beforePack: async () => {
+    await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
+  },
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -44,6 +48,11 @@ const getBase = (): Configuration => ({
       from: "resources/thape-config",
       to: "thape-config",
       filter: ["**/*", "!**/.git/**"],
+    },
+    {
+      from: "resources/thape-config/node_modules",
+      to: "thape-config/node_modules",
+      filter: ["**/*"],
     },
     {
       from: "native/",
@@ -96,9 +105,9 @@ function getConfig() {
     case "dev": {
       return {
         ...base,
-        appId: "ai.opencode.desktop.dev",
+        appId: "ai.opencode.desktop",
         productName: "SigmaAgents",
-        rpm: { packageName: "opencode-dev" },
+        rpm: { packageName: "sigma-agents" },
       }
     }
     case "beta": {
