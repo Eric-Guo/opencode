@@ -28,7 +28,7 @@
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*",
     "effect": "catalog:",
-    "zod": "catalog:"
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.2.6",
