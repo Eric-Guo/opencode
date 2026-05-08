@@ -1,8 +1,10 @@
 import windowState from "electron-window-state"
-import { app, BrowserWindow, net, nativeImage, nativeTheme, protocol } from "electron"
+import log from "electron-log/main.js"
+import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
+import { exportDebugLogs, write as writeLog } from "./logging"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -22,8 +24,16 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let backgroundColor: string | undefined
+let relaunchHandler = () => {
+  app.relaunch()
+  app.exit(0)
+}
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const titlebarHeight = 40
+
+export function setRelaunchHandler(handler: () => void) {
+  relaunchHandler = handler
+}
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
@@ -109,6 +119,7 @@ export function createMainWindow() {
   })
 
   allowClipboardWrite(win)
+  wireWindowRecovery(win, "main")
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -161,6 +172,7 @@ export function createLoadingWindow() {
   })
 
   allowClipboardWrite(win)
+  wireWindowRecovery(win, "loading")
 
   loadWindow(win, "loading.html")
 
@@ -170,19 +182,44 @@ export function createLoadingWindow() {
 export function registerRendererProtocol() {
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
-  protocol.handle(rendererProtocol, (request) => {
+  protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
     if (url.host !== rendererHost) {
+      log.warn("renderer protocol rejected host", { url: request.url })
+      writeLog("protocol", "rejected host", { url: request.url })
       return new Response("Not found", { status: 404 })
     }
 
     const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
     const rel = relative(rendererRoot, file)
     if (rel.startsWith("..") || isAbsolute(rel)) {
+      log.warn("renderer protocol rejected path", { url: request.url, file })
+      writeLog("protocol", "rejected path", { url: request.url, file })
       return new Response("Not found", { status: 404 })
     }
 
-    return net.fetch(pathToFileURL(file).toString())
+    try {
+      const response = await net.fetch(pathToFileURL(file).toString())
+      if (response.status >= 400) {
+        log.error("renderer protocol fetch failed", {
+          url: request.url,
+          file,
+          status: response.status,
+          statusText: response.statusText,
+        })
+        writeLog("protocol", "fetch failed", {
+          url: request.url,
+          file,
+          status: response.status,
+          statusText: response.statusText,
+        })
+      }
+      return response
+    } catch (error) {
+      log.error("renderer protocol fetch error", { url: request.url, file, error })
+      writeLog("protocol", "fetch error", { url: request.url, file, error })
+      return new Response("Not found", { status: 404 })
+    }
   })
 }
 
@@ -195,6 +232,105 @@ function loadWindow(win: BrowserWindow, html: string) {
   }
 
   void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
+}
+
+function wireWindowRecovery(win: BrowserWindow, name: string) {
+  let showing = false
+
+  const show = async (message: string, detail: string, wait: boolean) => {
+    if (showing || win.isDestroyed()) return
+    showing = true
+    try {
+      while (!win.isDestroyed()) {
+        const buttons = wait ? ["Relaunch", "Export Logs", "Keep Waiting"] : ["Relaunch", "Export Logs", "Quit"]
+        const result = await dialog.showMessageBox(win, {
+          type: "warning",
+          buttons,
+          defaultId: 0,
+          cancelId: 2,
+          message,
+          detail,
+        })
+        if (result.response === 1) {
+          await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }))
+          continue
+        }
+        if (result.response === 0) relaunchHandler()
+        if (!wait && result.response === 2) app.quit()
+        return
+      }
+    } finally {
+      showing = false
+    }
+  }
+
+  const failed = (
+    event: string,
+    errorCode: number,
+    errorDescription: string,
+    validatedURL: string,
+    isMainFrame: boolean,
+  ) => {
+    log.error("renderer load failed", {
+      window: name,
+      event,
+      errorCode,
+      errorDescription,
+      validatedURL,
+      currentURL: win.webContents.getURL(),
+      isMainFrame,
+    })
+    writeLog("window", "renderer load failed", {
+      window: name,
+      event,
+      errorCode,
+      errorDescription,
+      validatedURL,
+      currentURL: win.webContents.getURL(),
+      isMainFrame,
+    })
+
+    if (!isMainFrame || errorCode === -3) return
+    void show(
+      "OpenCode failed to load",
+      [`Window: ${name}`, `URL: ${validatedURL}`, `Error: ${errorCode} ${errorDescription}`].join("\n"),
+      false,
+    )
+  }
+
+  win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    failed("did-fail-load", errorCode, errorDescription, validatedURL, isMainFrame)
+  })
+  win.webContents.on("did-fail-provisional-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    failed("did-fail-provisional-load", errorCode, errorDescription, validatedURL, isMainFrame)
+  })
+  win.webContents.on("render-process-gone", (_event, details) => {
+    log.error("renderer process gone", { window: name, currentURL: win.webContents.getURL(), details })
+    writeLog("window", "renderer process gone", { window: name, currentURL: win.webContents.getURL(), details })
+    void show(
+      "OpenCode window terminated unexpectedly",
+      [`Window: ${name}`, `Reason: ${details.reason}`, `Code: ${details.exitCode ?? "<unknown>"}`].join("\n"),
+      false,
+    )
+  })
+  win.on("unresponsive", () => {
+    log.error("renderer unresponsive", { window: name, currentURL: win.webContents.getURL() })
+    writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() })
+    void show("OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
+  })
+  win.on("responsive", () => {
+    log.error("renderer responsive", { window: name, currentURL: win.webContents.getURL() })
+    writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() })
+  })
+  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    writeLog("renderer", "console", { window: name, level, message, line, sourceId })
+    if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
+      writeLog("pty", "console", { window: name, level, message, line, sourceId })
+    }
+  })
+  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+    writeLog("preload", "preload error", { window: name, preloadPath, error })
+  })
 }
 
 function allowClipboardWrite(win: BrowserWindow) {

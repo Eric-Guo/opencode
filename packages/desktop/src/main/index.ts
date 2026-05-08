@@ -38,13 +38,14 @@ app.setAppUserModelId(appId)
 app.setPath("userData", onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId))
 if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
 const logger = initLogging()
+initCrashReporter()
 const { autoUpdater } = pkg
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
-import { initLogging } from "./logging"
+import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import {
@@ -60,6 +61,7 @@ import {
   createLoadingWindow,
   createMainWindow,
   registerRendererProtocol,
+  setRelaunchHandler,
   setBackgroundColor,
   setDockIcon,
 } from "./windows"
@@ -138,6 +140,23 @@ function setupApp() {
     void killSidecar()
   })
 
+  app.on("child-process-gone", (_event, details) => {
+    logger.error("child process gone", details)
+    writeLog("utility", "child process gone", { details })
+  })
+
+  app.on("render-process-gone", (_event, webContents, details) => {
+    logger.error("render process gone", { url: webContents.getURL(), details })
+    writeLog("window", "app render process gone", { url: webContents.getURL(), details })
+  })
+
+  setRelaunchHandler(() => {
+    void killSidecar().finally(() => {
+      app.relaunch()
+      app.exit(0)
+    })
+  })
+
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       void killSidecar().finally(() => app.exit(0))
@@ -150,6 +169,7 @@ function setupApp() {
     registerRendererProtocol()
     setDockIcon()
     setupAutoUpdater()
+    await startNetLog().catch((error) => logger.warn("failed to start net log", error))
     await initialize()
   })
 }
@@ -220,9 +240,18 @@ async function initialize() {
         needsMigration,
         userDataPath: app.getPath("userData"),
         onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
-        onStdout: (message) => logger.log("sidecar stdout", { message }),
-        onStderr: (message) => logger.warn("sidecar stderr", { message }),
-        onExit: (code) => logger.warn("sidecar exited", { code }),
+        onStdout: (message) => {
+          logger.log("sidecar stdout", { message })
+          writeLog("server", "stdout", { message })
+        },
+        onStderr: (message) => {
+          logger.warn("sidecar stderr", { message })
+          writeLog("server", "stderr", { message })
+        },
+        onExit: (code) => {
+          logger.warn("sidecar exited", { code })
+          writeLog("utility", "sidecar exited", { code })
+        },
       },
     )
     server = listener
@@ -279,6 +308,9 @@ function wireMenu() {
         app.exit(0)
       })
     },
+    exportDebugLogs: () => {
+      void exportDebugLogs().catch((error) => logger.error("failed to export debug logs", error))
+    },
   })
 }
 
@@ -314,6 +346,7 @@ registerIpcHandlers({
   checkUpdate: async () => checkUpdate(),
   installUpdate: async () => installUpdate(),
   setBackgroundColor: (color) => setBackgroundColor(color),
+  exportDebugLogs: () => exportDebugLogs(),
 })
 
 async function killSidecar() {
