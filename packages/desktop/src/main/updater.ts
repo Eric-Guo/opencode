@@ -6,6 +6,7 @@ import { initLogging } from "./logging"
 const logger = initLogging()
 const { autoUpdater } = pkg
 
+let availableUpdateVersion: string | undefined
 let downloadedUpdateVersion: string | undefined
 
 export function setupAutoUpdater() {
@@ -32,6 +33,12 @@ export async function checkUpdate() {
     })
     return { updateAvailable: true, version: downloadedUpdateVersion }
   }
+  if (availableUpdateVersion) {
+    logger.log("returning cached available update", {
+      version: availableUpdateVersion,
+    })
+    return { updateAvailable: true, version: availableUpdateVersion }
+  }
   logger.log("checking for updates", {
     currentVersion: app.getVersion(),
     channel: autoUpdater.channel,
@@ -55,22 +62,33 @@ export async function checkUpdate() {
       return { updateAvailable: false }
     }
     logger.log("update available", { version })
-    await autoUpdater.downloadUpdate()
-    logger.log("update download completed", { version })
-    downloadedUpdateVersion = version
+    availableUpdateVersion = version
     return { updateAvailable: true, version }
   } catch (error) {
     logger.error("update check failed", error)
-    return { updateAvailable: false, failed: true }
+    throw error instanceof Error ? error : new Error(String(error))
   }
 }
 
 export async function installUpdate(killSidecar: () => Promise<void>) {
   if (!downloadedUpdateVersion) {
-    logger.log("install update skipped", {
-      reason: "no downloaded update ready",
+    if (!availableUpdateVersion) {
+      const result = await checkUpdate()
+      if (!result.updateAvailable) {
+        logger.log("install update skipped", {
+          reason: "no update available",
+        })
+        return
+      }
+    }
+    logger.log("downloading update before install", {
+      version: availableUpdateVersion ?? null,
     })
-    return
+    await autoUpdater.downloadUpdate()
+    downloadedUpdateVersion = availableUpdateVersion
+    logger.log("update download completed", {
+      version: downloadedUpdateVersion ?? null,
+    })
   }
   logger.log("installing downloaded update", {
     version: downloadedUpdateVersion,
@@ -82,19 +100,19 @@ export async function installUpdate(killSidecar: () => Promise<void>) {
 export async function checkForUpdates(alertOnFail: boolean, killSidecar: () => Promise<void>) {
   if (!UPDATER_ENABLED) return
   logger.log("checkForUpdates invoked", { alertOnFail })
-  const result = await checkUpdate()
-  if (!result.updateAvailable) {
-    if (result.failed) {
-      logger.log("no update decision", { reason: "update check failed" })
-      if (!alertOnFail) return
+  const result = await checkUpdate().catch(async () => {
+    logger.log("no update decision", { reason: "update check failed" })
+    if (alertOnFail) {
       await dialog.showMessageBox({
         type: "error",
         message: "Update check failed.",
         title: "Update Error",
       })
-      return
     }
-
+    return undefined
+  })
+  if (!result) return
+  if (!result.updateAvailable) {
     logger.log("no update decision", { reason: "already up to date" })
     if (!alertOnFail) return
     await dialog.showMessageBox({
@@ -107,7 +125,7 @@ export async function checkForUpdates(alertOnFail: boolean, killSidecar: () => P
 
   const response = await dialog.showMessageBox({
     type: "info",
-    message: `Update ${result.version ?? ""} downloaded. Restart now?`,
+    message: `Update ${result.version ?? ""} is available. Download and restart now?`,
     title: "Update Ready",
     buttons: ["Restart", "Later"],
     defaultId: 0,
