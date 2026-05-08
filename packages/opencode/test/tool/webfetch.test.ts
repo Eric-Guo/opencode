@@ -101,4 +101,27 @@ describe("tool.webfetch", () => {
       },
     )
   })
+
+  test("extracts text from html without scripts or styles", async () => {
+    await withFetch(
+      () =>
+        new Response(
+          "<html><head><style>.hidden{}</style><script>alert('x')</script></head><body>Hello <b>world</b></body></html>",
+          {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          },
+        ),
+      async (url) => {
+        await WithInstance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const result = await exec({ url: new URL("/page.html", url).toString(), format: "text" })
+            expect(result.output).toBe("Hello world")
+            expect(result.attachments).toBeUndefined()
+          },
+        })
+      },
+    )
+  })
 })
