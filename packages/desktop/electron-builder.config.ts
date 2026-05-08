@@ -13,6 +13,8 @@ const packageDir = path.dirname(fileURLToPath(import.meta.url))
 
 const rootDir = path.resolve(packageDir, "../..")
 
+const thapeConfigDir = path.join(packageDir, "resources", "thape-config")
+
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
@@ -75,6 +77,9 @@ const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel
 
 const getBase = (appId: string): Configuration => ({
   artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  beforePack: async () => {
+    await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
+  },
   directories: {
     output: "dist",
     buildResources: "resources",
