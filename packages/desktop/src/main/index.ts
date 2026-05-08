@@ -144,13 +144,11 @@ function setupApp() {
   })
 
   app.on("child-process-gone", (_event, details) => {
-    logger.error("child process gone", details)
-    writeLog("utility", "child process gone", { details })
+    writeLog("utility", "child process gone", { details }, "error")
   })
 
   app.on("render-process-gone", (_event, webContents, details) => {
-    logger.error("render process gone", { url: webContents.getURL(), details })
-    writeLog("window", "app render process gone", { url: webContents.getURL(), details })
+    writeLog("window", "app render process gone", { url: webContents.getURL(), details }, "error")
   })
 
   setRelaunchHandler(() => {
@@ -243,18 +241,9 @@ async function initialize() {
         needsMigration,
         userDataPath: app.getPath("userData"),
         onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
-        onStdout: (message) => {
-          logger.log("sidecar stdout", { message })
-          writeLog("server", "stdout", { message })
-        },
-        onStderr: (message) => {
-          logger.warn("sidecar stderr", { message })
-          writeLog("server", "stderr", { message })
-        },
-        onExit: (code) => {
-          logger.warn("sidecar exited", { code })
-          writeLog("utility", "sidecar exited", { code })
-        },
+        onStdout: (message) => writeLog("server", "stdout", { message }),
+        onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
+        onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
       },
     )
     server = listener

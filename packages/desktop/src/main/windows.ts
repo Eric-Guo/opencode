@@ -1,5 +1,4 @@
 import windowState from "electron-window-state"
-import log from "electron-log/main.js"
 import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -132,9 +131,7 @@ export function createMainWindow() {
 
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const { responseHeaders = {} } = details
-    upsertKeyValue(responseHeaders, "Access-Control-Allow-Origin", ["*"])
-    upsertKeyValue(responseHeaders, "Access-Control-Allow-Headers", ["*"])
-    if (isRendererDocumentUrl(details.url)) upsertKeyValue(responseHeaders, documentPolicyHeader, [jsCallStacksDocumentPolicy])
+    addRendererHeaders(details.url, responseHeaders)
     callback({ responseHeaders })
   })
 
@@ -189,39 +186,30 @@ export function registerRendererProtocol() {
   protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
     if (url.host !== rendererHost) {
-      log.warn("renderer protocol rejected host", { url: request.url })
-      writeLog("protocol", "rejected host", { url: request.url })
+      writeLog("protocol", "rejected host", { url: request.url }, "warn")
       return new Response("Not found", { status: 404 })
     }
 
     const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
     const rel = relative(rendererRoot, file)
     if (rel.startsWith("..") || isAbsolute(rel)) {
-      log.warn("renderer protocol rejected path", { url: request.url, file })
-      writeLog("protocol", "rejected path", { url: request.url, file })
+      writeLog("protocol", "rejected path", { url: request.url, file }, "warn")
       return new Response("Not found", { status: 404 })
     }
 
     try {
       const response = await net.fetch(pathToFileURL(file).toString())
       if (response.status >= 400) {
-        log.error("renderer protocol fetch failed", {
-          url: request.url,
-          file,
-          status: response.status,
-          statusText: response.statusText,
-        })
         writeLog("protocol", "fetch failed", {
           url: request.url,
           file,
           status: response.status,
           statusText: response.statusText,
-        })
+        }, "error")
       }
-      return withDocumentPolicy(response, file)
+      return addDocumentPolicy(response, file)
     } catch (error) {
-      log.error("renderer protocol fetch error", { url: request.url, file, error })
-      writeLog("protocol", "fetch error", { url: request.url, file, error })
+      writeLog("protocol", "fetch error", { url: request.url, file, error }, "error")
       return new Response("Not found", { status: 404 })
     }
   })
@@ -242,6 +230,25 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
   let showing = false
   const sampler = createUnresponsiveSampler(win, name)
 
+  const handle = async (button: string | undefined, wait: boolean) => {
+    if (button === "Export Logs") {
+      const sampling = sampler.stopAndFlush()
+      await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }, "error"))
+      if (wait && sampling) sampler.start()
+      return true
+    }
+    if (button === "Relaunch") {
+      sampler.stopAndFlush()
+      relaunchHandler()
+      return false
+    }
+    if (button === "Quit") {
+      sampler.stopAndFlush()
+      app.quit()
+    }
+    return false
+  }
+
   const show = async (message: string, detail: string, wait: boolean) => {
     if (showing || win.isDestroyed()) return
     showing = true
@@ -256,20 +263,7 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
           message,
           detail,
         })
-        if (result.response === 1) {
-          const sampling = sampler.stop()
-          await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }))
-          if (wait && sampling) sampler.start()
-          continue
-        }
-        if (result.response === 0) {
-          sampler.stop()
-          relaunchHandler()
-        }
-        if (!wait && result.response === 2) {
-          sampler.stop()
-          app.quit()
-        }
+        if (await handle(buttons[result.response], wait)) continue
         return
       }
     } finally {
@@ -284,15 +278,6 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     validatedURL: string,
     isMainFrame: boolean,
   ) => {
-    log.error("renderer load failed", {
-      window: name,
-      event,
-      errorCode,
-      errorDescription,
-      validatedURL,
-      currentURL: win.webContents.getURL(),
-      isMainFrame,
-    })
     writeLog("window", "renderer load failed", {
       window: name,
       event,
@@ -301,7 +286,7 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
       validatedURL,
       currentURL: win.webContents.getURL(),
       isMainFrame,
-    })
+    }, "error")
 
     if (!isMainFrame || errorCode === -3) return
     void show(
@@ -318,9 +303,8 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     failed("did-fail-provisional-load", errorCode, errorDescription, validatedURL, isMainFrame)
   })
   win.webContents.on("render-process-gone", (_event, details) => {
-    sampler.stop()
-    log.error("renderer process gone", { window: name, currentURL: win.webContents.getURL(), details })
-    writeLog("window", "renderer process gone", { window: name, currentURL: win.webContents.getURL(), details })
+    sampler.stopAndFlush()
+    writeLog("window", "renderer process gone", { window: name, currentURL: win.webContents.getURL(), details }, "error")
     void show(
       "OpenCode window terminated unexpectedly",
       [`Window: ${name}`, `Reason: ${details.reason}`, `Code: ${details.exitCode ?? "<unknown>"}`].join("\n"),
@@ -328,15 +312,13 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     )
   })
   win.on("unresponsive", () => {
-    log.error("renderer unresponsive", { window: name, currentURL: win.webContents.getURL() })
-    writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() })
+    writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() }, "error")
     sampler.start()
     void show("OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
   })
   win.on("responsive", () => {
-    log.error("renderer responsive", { window: name, currentURL: win.webContents.getURL() })
-    writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() })
-    sampler.stop()
+    writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+    sampler.stopAndFlush()
   })
   win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
     if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
@@ -344,11 +326,11 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     }
   })
   win.webContents.on("preload-error", (_event, preloadPath, error) => {
-    writeLog("preload", "preload error", { window: name, preloadPath, error })
+    writeLog("preload", "preload error", { window: name, preloadPath, error }, "error")
   })
 }
 
-function withDocumentPolicy(response: Response, file: string) {
+function addDocumentPolicy(response: Response, file: string) {
   if (!file.toLowerCase().endsWith(".html")) return response
   const headers = new Headers(response.headers)
   headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
@@ -371,21 +353,23 @@ function allowClipboardWrite(win: BrowserWindow) {
 }
 
 function isTrustedRendererUrl(value?: string) {
+  return isRendererUrl(value)
+}
+
+function addRendererHeaders(value: string, headers: Record<string, any>) {
+  upsertKeyValue(headers, "Access-Control-Allow-Origin", ["*"])
+  upsertKeyValue(headers, "Access-Control-Allow-Headers", ["*"])
+  if (isRendererUrl(value, true)) upsertKeyValue(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
+}
+
+function isRendererUrl(value?: string, html = false) {
   if (!value || !URL.canParse(value)) return false
   const url = new URL(value)
+  if (html && !url.pathname.endsWith(".html")) return false
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (!devUrl || !URL.canParse(devUrl)) return false
   return url.origin === new URL(devUrl).origin
-}
-
-function isRendererDocumentUrl(value: string) {
-  if (!URL.canParse(value)) return false
-  const url = new URL(value)
-  if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost && url.pathname.endsWith(".html")) return true
-  const devUrl = process.env.ELECTRON_RENDERER_URL
-  if (!devUrl || !URL.canParse(devUrl)) return false
-  return url.origin === new URL(devUrl).origin && url.pathname.endsWith(".html")
 }
 
 function wireZoom(win: BrowserWindow) {

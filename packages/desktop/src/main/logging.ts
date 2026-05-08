@@ -68,14 +68,19 @@ export async function exportDebugLogs() {
   }
 }
 
-export function write(name: string, message: string, extra?: Record<string, unknown>) {
+export function write(
+  name: string,
+  message: string,
+  extra?: Record<string, unknown>,
+  level: "info" | "warn" | "error" = "info",
+) {
   if (!run) return
   const scoped = log.scope(safeLogName(name))
   if (extra !== undefined) {
-    scoped.info(message, extra)
+    scoped[level](message, extra)
     return
   }
-  scoped.info(message)
+  scoped[level](message)
 }
 
 export function tail(): string {
@@ -87,10 +92,6 @@ export function tail(): string {
   } catch {
     return ""
   }
-}
-
-export function runDirectory() {
-  return run
 }
 
 function initRunDirectory() {
@@ -176,9 +177,11 @@ function collect(dir: string, prefix: string): Entry[] {
 async function writeZip(output: string, entries: Entry[]) {
   const writer = new ZipWriter(new BlobWriter("application/zip"))
   for (const entry of entries) {
-    await writer.add(entry.name, new BlobReader(new Blob([new Uint8Array(entry.data ?? readFileSync(entry.path!))])))
+    const data = entry.data ?? readFileSync(entry.path!)
+    await writer.add(entry.name, new BlobReader(new Blob([new Uint8Array(data)])))
   }
-  writeFileSync(output, Buffer.from(await (await writer.close()).arrayBuffer()))
+  const zip = await writer.close()
+  writeFileSync(output, Buffer.from(await zip.arrayBuffer()))
 }
 
 function initConsoleTransport() {

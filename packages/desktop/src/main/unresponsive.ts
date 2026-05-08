@@ -1,5 +1,4 @@
 import type { BrowserWindow } from "electron"
-import log from "electron-log/main.js"
 import { write as writeLog } from "./logging"
 
 const sampleInterval = 1000
@@ -28,7 +27,7 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
   const collect = async () => {
     if (!active()) return
     const stack = await win.webContents.mainFrame.collectJavaScriptCallStack().catch((error) => {
-      writeLog("window", "failed to collect unresponsive sample", { window: name, error })
+      writeLog("window", "failed to collect unresponsive sample", { window: name, error }, "error")
       return undefined
     })
     if (!active()) return
@@ -36,7 +35,7 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
     schedule()
   }
 
-  const stop = () => {
+  const stopAndFlush = () => {
     const wasSampling = sampling
     sampling = false
     clearTimers()
@@ -51,8 +50,7 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
       ...entries.map((entry) => `<${entry[1]}> ${entry[0]}`),
       `Total Samples: ${total}`,
     ].join("\n")
-    log.error(message)
-    writeLog("window", message)
+    writeLog("window", message, undefined, "error")
     samples.clear()
     return wasSampling
   }
@@ -62,10 +60,10 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
     sampling = true
     samples.clear()
     schedule()
-    stopTimer = setTimeout(stop, samplePeriod)
+    stopTimer = setTimeout(stopAndFlush, samplePeriod)
   }
 
-  win.on("closed", stop)
+  win.on("closed", stopAndFlush)
 
-  return { start, stop }
+  return { start, stopAndFlush }
 }
