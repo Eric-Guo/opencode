@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { readdir, stat } from "node:fs/promises"
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -16,6 +16,8 @@ const packageDir = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(packageDir, "../..")
 
 const thapeConfigDir = path.join(packageDir, "resources", "thape-config")
+
+const generatedDir = path.join(packageDir, "out", "generated")
 
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
@@ -76,11 +78,18 @@ const getBase = (appId: string): Configuration => {
   const channel = resolveChannel()
   const iconChannel = channel === "dev" ? "prod" : channel
   const iconDir = `icons/${iconChannel}`
+  const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
 
   return {
     artifactName: "opencode-desktop-${os}-${arch}.${ext}",
     beforePack: async () => {
       await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
+      await mkdir(generatedDir, { recursive: true })
+      await writeFile(
+        path.join(generatedDir, "app-update.yml"),
+        `provider: generic\nurl: ${updateUrl}\nchannel: latest\n`,
+        "utf8",
+      )
     },
     directories: {
       output: "dist",
@@ -138,6 +147,10 @@ const getBase = (appId: string): Configuration => {
         from: "resources/thape-config/node_modules",
         to: "thape-config/node_modules",
         filter: ["**/*"],
+      },
+      {
+        from: "out/generated/app-update.yml",
+        to: "app-update.yml",
       },
     ],
     afterPack: async (context) => {
