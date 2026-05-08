@@ -678,7 +678,7 @@ export const dict = {
   "settings.updates.action.checkNow": "立即检查",
   "settings.updates.action.checking": "正在检查...",
   "settings.updates.toast.latest.title": "已是最新版本",
-  "settings.updates.toast.latest.description": "你正在使用最新版本的 OpenCode。",
+  "settings.updates.toast.latest.description": "你正在使用最新版本的 SigmaAgents。",
 
   "sound.option.none": "无",
   "sound.option.alert01": "警报 01",
