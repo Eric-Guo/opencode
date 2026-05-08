@@ -5,12 +5,15 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 import { exportDebugLogs, write as writeLog } from "./logging"
+import { createUnresponsiveSampler } from "./unresponsive"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
 const clipboardWritePermission = "clipboard-sanitized-write"
+const documentPolicyHeader = "Document-Policy"
+const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -131,6 +134,7 @@ export function createMainWindow() {
     const { responseHeaders = {} } = details
     upsertKeyValue(responseHeaders, "Access-Control-Allow-Origin", ["*"])
     upsertKeyValue(responseHeaders, "Access-Control-Allow-Headers", ["*"])
+    if (isRendererDocumentUrl(details.url)) upsertKeyValue(responseHeaders, documentPolicyHeader, [jsCallStacksDocumentPolicy])
     callback({ responseHeaders })
   })
 
@@ -214,7 +218,7 @@ export function registerRendererProtocol() {
           statusText: response.statusText,
         })
       }
-      return response
+      return withDocumentPolicy(response, file)
     } catch (error) {
       log.error("renderer protocol fetch error", { url: request.url, file, error })
       writeLog("protocol", "fetch error", { url: request.url, file, error })
@@ -236,6 +240,7 @@ function loadWindow(win: BrowserWindow, html: string) {
 
 function wireWindowRecovery(win: BrowserWindow, name: string) {
   let showing = false
+  const sampler = createUnresponsiveSampler(win, name)
 
   const show = async (message: string, detail: string, wait: boolean) => {
     if (showing || win.isDestroyed()) return
@@ -252,11 +257,19 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
           detail,
         })
         if (result.response === 1) {
+          const sampling = sampler.stop()
           await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }))
+          if (wait && sampling) sampler.start()
           continue
         }
-        if (result.response === 0) relaunchHandler()
-        if (!wait && result.response === 2) app.quit()
+        if (result.response === 0) {
+          sampler.stop()
+          relaunchHandler()
+        }
+        if (!wait && result.response === 2) {
+          sampler.stop()
+          app.quit()
+        }
         return
       }
     } finally {
@@ -305,6 +318,7 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     failed("did-fail-provisional-load", errorCode, errorDescription, validatedURL, isMainFrame)
   })
   win.webContents.on("render-process-gone", (_event, details) => {
+    sampler.stop()
     log.error("renderer process gone", { window: name, currentURL: win.webContents.getURL(), details })
     writeLog("window", "renderer process gone", { window: name, currentURL: win.webContents.getURL(), details })
     void show(
@@ -316,11 +330,13 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
   win.on("unresponsive", () => {
     log.error("renderer unresponsive", { window: name, currentURL: win.webContents.getURL() })
     writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() })
+    sampler.start()
     void show("OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
   })
   win.on("responsive", () => {
     log.error("renderer responsive", { window: name, currentURL: win.webContents.getURL() })
     writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() })
+    sampler.stop()
   })
   win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
     if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
@@ -330,6 +346,13 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
   win.webContents.on("preload-error", (_event, preloadPath, error) => {
     writeLog("preload", "preload error", { window: name, preloadPath, error })
   })
+}
+
+function withDocumentPolicy(response: Response, file: string) {
+  if (!file.toLowerCase().endsWith(".html")) return response
+  const headers = new Headers(response.headers)
+  headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
 function allowClipboardWrite(win: BrowserWindow) {
@@ -354,6 +377,15 @@ function isTrustedRendererUrl(value?: string) {
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (!devUrl || !URL.canParse(devUrl)) return false
   return url.origin === new URL(devUrl).origin
+}
+
+function isRendererDocumentUrl(value: string) {
+  if (!URL.canParse(value)) return false
+  const url = new URL(value)
+  if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost && url.pathname.endsWith(".html")) return true
+  const devUrl = process.env.ELECTRON_RENDERER_URL
+  if (!devUrl || !URL.canParse(devUrl)) return false
+  return url.origin === new URL(devUrl).origin && url.pathname.endsWith(".html")
 }
 
 function wireZoom(win: BrowserWindow) {

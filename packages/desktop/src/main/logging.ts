@@ -70,7 +70,12 @@ export async function exportDebugLogs() {
 
 export function write(name: string, message: string, extra?: Record<string, unknown>) {
   if (!run) return
-  log.scope(safeLogName(name)).info(message, extra ?? {})
+  const scoped = log.scope(safeLogName(name))
+  if (extra !== undefined) {
+    scoped.info(message, extra)
+    return
+  }
+  scoped.info(message)
 }
 
 export function tail(): string {
