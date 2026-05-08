@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs"
+import path from "node:path"
 import { dialog } from "electron"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { MainApp, MainStorage, Menubar, type Setup } from "../sdk/main"
@@ -7,7 +9,7 @@ import { make } from "./machine"
 
 const setup: Setup = async (ctx) => {
   const app = ctx.use(MainApp)
-  const enabled = app.packaged && app.channel !== "dev"
+  const enabled = app.packaged && existsSync(path.join(process.resourcesPath, "app-update.yml"))
   // Holds no resources, so the restart handoff can still log after this extension is disposed.
   const context = logContext(app.log)
   const runPromise = Effect.runPromiseWith(context)
