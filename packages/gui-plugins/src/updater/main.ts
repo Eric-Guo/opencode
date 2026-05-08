@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs"
+import path from "node:path"
 import { dialog } from "electron"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
@@ -10,7 +12,7 @@ const setup: Plugin.MainSetup = async (ctx) => {
   const builtin = builtinMainContext(ctx)
   const build = ctx.app
   const lifecycle = builtin.lifecycle
-  const enabled = build.packaged
+  const enabled = build.packaged && existsSync(path.join(process.resourcesPath, "app-update.yml"))
   // Holds no resources, so it needs no cleanup.
   const context = logContext(ctx.log.write)
   const runPromise = Effect.runPromiseWith(context)
