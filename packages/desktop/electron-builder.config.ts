@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process"
 import { copyFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
 
 import { Arch, type Configuration } from "electron-builder"
 import { NativeArch } from "../../script/native-arch"
@@ -8,7 +10,11 @@ import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
 import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
 import { previewBinding, verifyPreviewBinding } from "./script/preview-binding"
 
+const execFileAsync = promisify(execFile)
+
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
+
+const thapeConfigDir = path.join(packageDir, "resources", "thape-config")
 
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
 // "opencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
@@ -70,6 +76,9 @@ const getBase = (appId: string): Configuration => {
 
   return {
     artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+    beforePack: async () => {
+      await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
+    },
     directories: {
       output: "dist",
       buildResources: "resources",
