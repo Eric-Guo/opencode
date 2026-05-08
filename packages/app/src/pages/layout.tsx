@@ -385,7 +385,10 @@ export default function Layout(props: ParentProps) {
               {
                 label: language.t("toast.update.action.installRestart"),
                 onClick: async () => {
-                  await platform.updateAndRestart!()
+                  await platform.updateAndRestart!().catch((err: unknown) => {
+                    const message = err instanceof Error ? err.message : String(err)
+                    showToast({ title: language.t("common.requestFailed"), description: message })
+                  })
                 },
               },
               {
@@ -394,7 +397,7 @@ export default function Layout(props: ParentProps) {
               },
             ],
           })
-        })
+        }).catch(() => undefined)
 
       createEffect(() => {
         if (!settings.ready()) return
