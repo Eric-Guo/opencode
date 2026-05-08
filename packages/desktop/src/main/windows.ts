@@ -323,7 +323,6 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() })
   })
   win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    writeLog("renderer", "console", { window: name, level, message, line, sourceId })
     if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
       writeLog("pty", "console", { window: name, level, message, line, sourceId })
     }

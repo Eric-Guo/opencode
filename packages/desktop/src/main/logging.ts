@@ -18,7 +18,12 @@ let netLogPath: string | undefined
 export function initLogging() {
   initRunDirectory()
   log.transports.file.maxSize = 5 * 1024 * 1024
-  log.transports.file.resolvePathFn = (_vars, message) => join(run, `${safeLogName(message?.scope ?? "main")}.log`)
+  log.transports.file.resolvePathFn = (_vars, message) =>
+    join(
+      run,
+      `${safeLogName(message?.scope ?? (message?.variables?.processType === "renderer" ? "renderer" : "main"))}.log`,
+    )
+  log.initialize({ preload: false, spyRendererConsole: true })
   initConsoleTransport()
   cleanup()
   return log
