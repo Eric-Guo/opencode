@@ -38,18 +38,25 @@ export function useServerSync() {
         setStore("todo", sessionID, todos)
       },
     },
+    queryOptions: useQueryOptions(),
   }
 }
 
 export function useQueryOptions() {
   return {
-    agents: (directory: string) => ({
-      queryKey: [directory, "agents"],
-      queryFn: async () => [],
-    }),
+    globalConfig: () => ({ queryKey: ["globalConfig"] }),
+    projects: () => ({ queryKey: ["projects"] }),
     providers: (directory: string | null) => ({
       queryKey: [directory, "providers"],
       queryFn: async () => provider,
     }),
+    path: (_directory: any) => ({ queryKey: ["path"] }),
+    agents: (directory: string) => ({
+      queryKey: [directory, "agents"],
+      queryFn: async () => [],
+    }),
+    mcp: (_directory: any) => ({ queryKey: ["mcp"] }),
+    lsp: (_directory: any) => ({ queryKey: ["lsp"] }),
+    sessions: (_directory: any) => ({ queryKey: ["sessions"] }),
   }
 }
