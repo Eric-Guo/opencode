@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -8,6 +9,7 @@ import type { Configuration } from "electron-builder"
 const execFileAsync = promisify(execFile)
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const thapeConfigDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "resources/thape-config")
+const generatedDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "out/generated")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 async function signWindows(configuration: { path: string }) {
@@ -34,6 +36,12 @@ const getBase = (): Configuration => ({
   artifactName: "SigmaAgents-${os}-${arch}-${buildVersion}.${ext}",
   beforePack: async () => {
     await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
+    await mkdir(generatedDir, { recursive: true })
+    await writeFile(
+      path.join(generatedDir, "app-update.yml"),
+      `provider: generic\nurl: ${updateUrl}\nchannel: latest\n`,
+      "utf8",
+    )
   },
   directories: {
     output: "dist",
@@ -59,6 +67,10 @@ const getBase = (): Configuration => ({
       from: "native/",
       to: "native/",
       filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
+    },
+    {
+      from: "out/generated/app-update.yml",
+      to: "app-update.yml",
     },
   ],
   mac: {
