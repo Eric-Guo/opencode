@@ -38,5 +38,19 @@ export function useGlobalSync() {
         setStore("todo", sessionID, todos)
       },
     },
+    queryOptions: useQueryOptions(),
+  }
+}
+
+export function useQueryOptions() {
+  return {
+    globalConfig: () => ({ queryKey: ["globalConfig"] }),
+    projects: () => ({ queryKey: ["projects"] }),
+    providers: (_directory: any) => ({ queryKey: ["providers"] }),
+    path: (_directory: any) => ({ queryKey: ["path"] }),
+    agents: (_directory: any) => ({ queryKey: ["agents"] }),
+    mcp: (_directory: any) => ({ queryKey: ["mcp"] }),
+    lsp: (_directory: any) => ({ queryKey: ["lsp"] }),
+    sessions: (_directory: any) => ({ queryKey: ["sessions"] }),
   }
 }
