@@ -81,7 +81,7 @@ const getBase = (): Configuration => ({
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
     notarize: true,
-    target: ["dir", "zip"],
+    target: ["dir"],
   },
   dmg: {
     sign: true,
