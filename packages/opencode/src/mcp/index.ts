@@ -6,6 +6,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv"
+import type { JsonSchemaType, jsonSchemaValidator } from "@modelcontextprotocol/sdk/validation"
 import {
   CallToolResultSchema,
   ListToolsResultSchema,
@@ -35,6 +37,29 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
+const HEX_CODE_PATTERN = "^#(?:[\\da-fA-F]{3}|[\\da-fA-F]{6})$"
+
+type JsonObject = Record<string, unknown>
+
+export const mcpJsonSchemaValidator = (() => {
+  const validator = new AjvJsonSchemaValidator()
+  const normalize = (value: unknown): unknown => {
+    if (!value || typeof value !== "object") return value
+    if (Array.isArray(value)) return value.map(normalize)
+    const schema = Object.fromEntries(
+      Object.entries(value as JsonObject).map(([key, child]) => [key, normalize(child)]),
+    )
+    if ((value as JsonObject).format !== "hex-code") return schema
+    const { format: _format, ...rest } = schema
+    return {
+      ...rest,
+      pattern: typeof schema.pattern === "string" ? schema.pattern : HEX_CODE_PATTERN,
+    }
+  }
+  return {
+    getValidator: <T>(schema: JsonSchemaType) => validator.getValidator<T>(normalize(schema) as JsonSchemaType),
+  } satisfies jsonSchemaValidator
+})()
 
 const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
@@ -293,7 +318,10 @@ export const layer = Layer.effect(
         (t) =>
           Effect.tryPromise({
             try: () => {
-              const client = new Client({ name: "opencode", version: InstallationVersion })
+              const client = new Client(
+                { name: "opencode", version: InstallationVersion },
+                { jsonSchemaValidator: mcpJsonSchemaValidator },
+              )
               return withTimeout(client.connect(t), timeout).then(() => client)
             },
             catch: (e) => (e instanceof Error ? e : new Error(String(e))),
@@ -823,7 +851,10 @@ export const layer = Layer.effect(
 
       return yield* Effect.tryPromise({
         try: () => {
-          const client = new Client({ name: "opencode", version: InstallationVersion })
+          const client = new Client(
+            { name: "opencode", version: InstallationVersion },
+            { jsonSchemaValidator: mcpJsonSchemaValidator },
+          )
           return client
             .connect(transport)
             .then(() => ({ authorizationUrl: "", oauthState, client }) satisfies AuthResult)
