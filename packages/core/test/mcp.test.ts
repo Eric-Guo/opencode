@@ -427,6 +427,27 @@ test("retains output schemas across paginated MCP discovery", async () => {
   ])
 })
 
+test("validates non-standard hex-code MCP output formats", async () => {
+  await expect(
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const connection = yield* MCPClient.connect(
+            "hex-code",
+            new ConfigMCP.Local({
+              type: "local",
+              command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-hex-code.ts")],
+            }),
+            import.meta.dir,
+          )
+          yield* connection.tools()
+          return yield* connection.callTool({ name: "color" })
+        }),
+      ),
+    ),
+  ).rejects.toThrow("Structured content does not match the tool's output schema")
+})
+
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
