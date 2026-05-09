@@ -2,31 +2,33 @@ import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync, mkdirSync, rmSync } from "node:fs"
 import * as http from "node:http"
-import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow } from "electron"
-
 import contextMenu from "electron-context-menu"
+import { Deferred, Effect, Fiber } from "effect"
 
-import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
+import type { InitStep, ServerReadyData, SqliteMigrationProgress } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
+import { migrate } from "./migrate"
 import { createMenu } from "./menu"
 import {
+  allocatePort,
   getDefaultServerUrl,
-  getWslConfig,
   preferAppEnv,
   setDefaultServerUrl,
-  setWslConfig,
   spawnLocalServer,
+  spawnWslSidecar,
   type SidecarListener,
 } from "./server"
+import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
+import { createWslServersController } from "./wsl-servers"
 import {
   createLoadingWindow,
   createMainWindow,
@@ -34,25 +36,25 @@ import {
   setBackgroundColor,
   setDockIcon,
 } from "./windows"
-import { migrate } from "./migrate"
-import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
-import { Deferred, Effect, Fiber } from "effect"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
   beta: "OpenCode Beta",
   prod: "OpenCode",
 }
+
 const APP_IDS: Record<string, string> = {
   dev: "ai.opencode.desktop.dev",
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 }
+
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 
 let logger: ReturnType<typeof initLogging>
 let mainWindow: BrowserWindow | null = null
 let server: SidecarListener | null = null
+let wslServers: ReturnType<typeof createWslServersController> | null = null
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
@@ -87,6 +89,18 @@ async function killSidecar() {
   await current.stop()
 }
 
+async function killAllSidecars() {
+  await killSidecar()
+  wslServers?.stopAll()
+}
+
+function relaunchApp() {
+  void killAllSidecars().finally(() => {
+    app.relaunch()
+    app.exit(0)
+  })
+}
+
 function ensureLoopbackNoProxy() {
   const loopback = ["127.0.0.1", "localhost", "::1"]
   const upsert = (key: string) => {
@@ -107,10 +121,15 @@ function ensureLoopbackNoProxy() {
   upsert("no_proxy")
 }
 
+function sqliteFileExists() {
+  const xdg = process.env.XDG_DATA_HOME
+  const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".local", "share")
+  return existsSync(join(base, "opencode", "opencode.db"))
+}
+
 const main = Effect.gen(function* () {
   contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
 
-  // on macOS apps run in `/` which can cause issues with ripgrep
   try {
     process.chdir(homedir())
   } catch {}
@@ -133,6 +152,7 @@ const main = Effect.gen(function* () {
     process.env.XDG_STATE_HOME = join(root, "state")
     return root
   })()
+
   app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
   app.setAppUserModelId(appId)
   app.setPath(
@@ -140,7 +160,21 @@ const main = Effect.gen(function* () {
     onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
   )
   if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
+
   logger = initLogging()
+  wslServers = createWslServersController(
+    app.getVersion(),
+    async (distro) => {
+      logger.log("spawning wsl sidecar", { distro })
+      return spawnWslSidecar(distro, {
+        onLine: (line) => logger.log("wsl sidecar", { distro, stream: line.stream, text: line.text }),
+      })
+    },
+    {
+      log: (message, meta) => logger.log(message, meta),
+      error: (message, meta) => logger.error(message, meta),
+    },
+  )
 
   try {
     setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
@@ -185,24 +219,26 @@ const main = Effect.gen(function* () {
   })
 
   app.on("before-quit", () => {
-    void killSidecar()
+    void killAllSidecars()
   })
 
   app.on("will-quit", () => {
-    void killSidecar()
+    void killAllSidecars()
   })
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      void killSidecar().finally(() => app.exit(0))
+      void killAllSidecars().finally(() => app.exit(0))
     })
   }
 
   const serverReady = Deferred.makeUnsafe<ServerReadyData>()
   const loadingComplete = Deferred.makeUnsafe<void>()
 
+  const controller = wslServers
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
+    relaunch: () => relaunchApp(),
     awaitInitialization: Effect.fnUntraced(
       function* (sendStep) {
         sendStep(initStep)
@@ -219,22 +255,33 @@ const main = Effect.gen(function* () {
       },
       (e) => Effect.runPromise(e),
     ),
+    getWslServersState: () => controller.getState(),
+    onWslServersEvent: (listener) => controller.subscribe(listener),
+    wslServersProbeRuntime: () => controller.probeRuntime(),
+    wslServersRefreshDistros: () => controller.refreshDistros(),
+    wslServersInstallWsl: () => controller.installWsl(),
+    wslServersInstallDistro: (name) => controller.installDistro(name),
+    wslServersProbeDistro: (name) => controller.probeDistro(name),
+    wslServersProbeOpencode: (name) => controller.probeOpencode(name),
+    wslServersInstallOpencode: (name) => controller.installOpencode(name),
+    wslServersOpenTerminal: (name) => controller.openTerminal(name),
+    wslServersAddServer: (distro) => controller.addServer(distro),
+    wslServersRemoveServer: (id) => controller.removeServer(id),
+    wslServersStartServer: (id) => controller.startServer(id),
     getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
     consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
     getDefaultServerUrl: () => getDefaultServerUrl(),
     setDefaultServerUrl: (url) => setDefaultServerUrl(url),
-    getWslConfig: () => Promise.resolve(getWslConfig()),
-    setWslConfig: (config: WslConfig) => setWslConfig(config),
     getDisplayBackend: async () => null,
     setDisplayBackend: async () => undefined,
     parseMarkdown: async (markdown) => parseMarkdown(markdown),
     checkAppExists: (appName) => checkAppExists(appName),
-    wslPath: async (path, mode) => wslPath(path, mode),
+    wslPath: async (path, mode, distro) => wslPath(path, mode, distro),
     resolveAppPath: async (appName) => resolveAppPath(appName),
     loadingWindowComplete: () => Deferred.doneUnsafe(loadingComplete, Effect.void),
-    runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, killSidecar),
+    runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, killAllSidecars),
     checkUpdate: async () => checkUpdate(),
-    installUpdate: async () => installUpdate(killSidecar),
+    installUpdate: async () => installUpdate(killAllSidecars),
     setBackgroundColor: (color) => setBackgroundColor(color),
   })
 
@@ -246,38 +293,10 @@ const main = Effect.gen(function* () {
   setDockIcon()
   setupAutoUpdater()
 
-  const needsMigration = ((): boolean => {
-    if (process.env.OPENCODE_DB === ":memory:") return false
-
-    const xdg = process.env.XDG_DATA_HOME
-    const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".local", "share")
-    return !existsSync(join(base, "opencode", "opencode.db"))
-  })()
+  const needsMigration = !sqliteFileExists() && process.env.OPENCODE_DB !== ":memory:"
   let overlay: BrowserWindow | null = null
 
-  const port = yield* Effect.gen(function* () {
-    const fromEnv = process.env.OPENCODE_PORT
-    if (fromEnv) {
-      const parsed = Number.parseInt(fromEnv, 10)
-      if (!Number.isNaN(parsed)) return parsed
-    }
-
-    const res = yield* Deferred.make<number, unknown>()
-    const server = createServer()
-    server.on("error", (e) => Deferred.failSync(res, () => e))
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address()
-      if (typeof address !== "object" || !address) {
-        server.close()
-        Deferred.failSync(res, () => new Error("Failed to get port"))
-        return
-      }
-      const port = address.port
-      server.close(() => Effect.runSync(Deferred.succeed(res, port)))
-    })
-
-    return yield* Deferred.await(res)
-  })
+  const port = yield* Effect.promise(() => allocatePort())
   const hostname = "127.0.0.1"
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
@@ -318,6 +337,8 @@ const main = Effect.gen(function* () {
       password,
     })
 
+    void controller.initialize().catch((error) => logger.error("wsl server initialization failed", error))
+
     yield* Effect.promise(() => health.wait).pipe(
       Effect.timeout("30 seconds"),
       Effect.catch((e) =>
@@ -353,15 +374,10 @@ const main = Effect.gen(function* () {
     createMenu({
       trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
       checkForUpdates: () => {
-        void checkForUpdates(true, killSidecar)
+        void checkForUpdates(true, killAllSidecars)
       },
       reload: () => mainWindow?.reload(),
-      relaunch: () => {
-        void killSidecar().finally(() => {
-          app.relaunch()
-          app.exit(0)
-        })
-      },
+      relaunch: () => relaunchApp(),
     })
   }
 
