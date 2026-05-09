@@ -8,6 +8,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv"
+import type { JsonSchemaType, jsonSchemaValidator } from "@modelcontextprotocol/sdk/validation"
 import {
   ListRootsRequestSchema,
   type LoggingMessageNotification,
@@ -36,6 +38,30 @@ import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 
 const DEFAULT_TIMEOUT = 30_000
+const HEX_CODE_PATTERN = "^#(?:[\\da-fA-F]{3}|[\\da-fA-F]{6})$"
+
+type JsonObject = Record<string, unknown>
+
+export const mcpJsonSchemaValidator = (() => {
+  const validator = new AjvJsonSchemaValidator()
+  const normalize = (value: unknown): unknown => {
+    if (!value || typeof value !== "object") return value
+    if (Array.isArray(value)) return value.map(normalize)
+    const schema = Object.fromEntries(
+      Object.entries(value as JsonObject).map(([key, child]) => [key, normalize(child)]),
+    )
+    if ((value as JsonObject).format !== "hex-code") return schema
+    const { format: _format, ...rest } = schema
+    return {
+      ...rest,
+      pattern: typeof schema.pattern === "string" ? schema.pattern : HEX_CODE_PATTERN,
+    }
+  }
+  return {
+    getValidator: <T>(schema: JsonSchemaType) => validator.getValidator<T>(normalize(schema) as JsonSchemaType),
+  } satisfies jsonSchemaValidator
+})()
+
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
@@ -47,6 +73,7 @@ const CLIENT_OPTIONS = {
     // https://github.com/anomalyco/opencode/issues/28567
     // tasks: {},
   },
+  jsonSchemaValidator: mcpJsonSchemaValidator,
 } satisfies ClientOptions
 
 export const Resource = Schema.Struct({
