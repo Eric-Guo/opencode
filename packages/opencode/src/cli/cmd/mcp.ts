@@ -8,7 +8,7 @@ import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { MCP } from "../../mcp"
+import { MCP, mcpJsonSchemaValidator } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
@@ -798,10 +798,15 @@ export const McpDebugCommand = effectCmd({
           })
 
           try {
-            const client = new Client({
-              name: "opencode-debug",
-              version: InstallationVersion,
-            })
+            const client = new Client(
+              {
+                name: "opencode-debug",
+                version: InstallationVersion,
+              },
+              {
+                jsonSchemaValidator: mcpJsonSchemaValidator,
+              },
+            )
             await client.connect(transport)
             prompts.log.success("Connection successful (already authenticated)")
             await client.close()
