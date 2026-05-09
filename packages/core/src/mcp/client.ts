@@ -3,10 +3,12 @@ export * as MCPClient from "./client"
 import path from "node:path"
 import { execFile } from "node:child_process"
 import { pathToFileURL } from "node:url"
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv"
+import type { JsonSchemaType, jsonSchemaValidator } from "@modelcontextprotocol/sdk/validation"
 import {
   CallToolResultSchema,
   ElicitationCompleteNotificationSchema,
@@ -34,6 +36,29 @@ import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
+const HEX_CODE_PATTERN = "^#(?:[\\da-fA-F]{3}|[\\da-fA-F]{6})$"
+
+type JsonObject = Record<string, unknown>
+
+const jsonSchemaValidator = (() => {
+  const validator = new AjvJsonSchemaValidator()
+  const normalize = (value: unknown): unknown => {
+    if (!value || typeof value !== "object") return value
+    if (Array.isArray(value)) return value.map(normalize)
+    const schema = Object.fromEntries(
+      Object.entries(value as JsonObject).map(([key, child]) => [key, normalize(child)]),
+    )
+    if ((value as JsonObject).format !== "hex-code") return schema
+    const { format: _format, ...rest } = schema
+    return {
+      ...rest,
+      pattern: typeof schema.pattern === "string" ? schema.pattern : HEX_CODE_PATTERN,
+    }
+  }
+  return {
+    getValidator: <T>(schema: JsonSchemaType) => validator.getValidator<T>(normalize(schema) as JsonSchemaType),
+  } satisfies jsonSchemaValidator
+})()
 
 type Transport = StdioClientTransport | StreamableHTTPClientTransport
 
@@ -217,7 +242,8 @@ export const connect = Effect.fnUntraced(function* (
         // https://github.com/anomalyco/opencode/issues/2308
         roots: {},
       },
-    },
+      jsonSchemaValidator,
+    } satisfies ClientOptions,
   )
   client.setRequestHandler(ListRootsRequestSchema, () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
