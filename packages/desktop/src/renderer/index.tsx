@@ -13,16 +13,18 @@ import {
   PlatformProvider,
   ServerConnection,
   useCommand,
+  useWslServers,
 } from "@opencode-ai/app"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
-import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup, onMount } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
+import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme"
 
 const root = document.getElementById("root")
@@ -79,25 +81,26 @@ const createPlatform = (): Platform => {
     return undefined
   })()
 
-  const isWslEnabled = async () => {
-    if (os !== "windows") return false
-    return window.api
-      .getWslConfig()
-      .then((config) => config.enabled)
-      .catch(() => false)
+  const activeWslDistro = () => {
+    const key = window.__OPENCODE__?.activeServer
+    if (!key || !key.startsWith("wsl:")) return undefined
+    return key.slice("wsl:".length)
   }
 
   const wslHome = async () => {
-    if (!(await isWslEnabled())) return undefined
-    return window.api.wslPath("~", "windows").catch(() => undefined)
+    const distro = activeWslDistro()
+    if (!distro) return undefined
+    return window.api.wslPath("~", "windows", distro)
   }
 
-  const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
-    if (!result || !(await isWslEnabled())) return result
+  const handleWslPicker = async <T extends string | string[] | null>(result: T): Promise<T> => {
+    const distro = activeWslDistro()
+    if (!result || !distro) return result
+    const convert = (path: string) => window.api.wslPath(path, "linux", distro)
     if (Array.isArray(result)) {
-      return Promise.all(result.map((path) => window.api.wslPath(path, "linux").catch(() => path))) as any
+      return (await Promise.all(result.map(convert))) as T
     }
-    return window.api.wslPath(result, "linux").catch(() => result) as any
+    return (await convert(result)) as T
   }
 
   const storage = (() => {
@@ -126,6 +129,8 @@ const createPlatform = (): Platform => {
       return api
     }
   })()
+
+  const wslServersApi = os === "windows" ? window.api.wslServers : undefined
 
   return {
     platform: "desktop",
@@ -167,10 +172,8 @@ const createPlatform = (): Platform => {
       if (os === "windows") {
         const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
         const resolvedPath = await (async () => {
-          if (await isWslEnabled()) {
-            const converted = await window.api.wslPath(path, "windows").catch(() => null)
-            if (converted) return converted
-          }
+          const distro = activeWslDistro()
+          if (distro) return window.api.wslPath(path, "windows", distro)
           return path
         })()
         return window.api.openPath(resolvedPath, resolvedApp ?? undefined)
@@ -221,16 +224,7 @@ const createPlatform = (): Platform => {
       }
     },
 
-    fetch: (input, init) => {
-      if (input instanceof Request) return fetch(input)
-      return fetch(input, init)
-    },
-
-    getWslEnabled: () => isWslEnabled(),
-
-    setWslEnabled: async (enabled) => {
-      await window.api.setWslConfig({ enabled })
-    },
+    fetch,
 
     getDefaultServer: async () => {
       const url = await window.api.getDefaultServerUrl().catch(() => null)
@@ -241,6 +235,8 @@ const createPlatform = (): Platform => {
     setDefaultServer: async (url: string | null) => {
       await window.api.setDefaultServerUrl(url)
     },
+
+    wslServers: wslServersApi,
 
     getDisplayBackend: async () => {
       return window.api.getDisplayBackend().catch(() => null)
@@ -277,7 +273,6 @@ listenForDeepLinks()
 
 render(() => {
   const platform = createPlatform()
-  const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false })))
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -292,31 +287,10 @@ render(() => {
 
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
-  // Fetch sidecar credentials (available immediately, before health check)
   const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
 
-  const [defaultServer] = createResource(() =>
-    platform.getDefaultServer?.().then((url) => {
-      if (url) return ServerConnection.key({ type: "http", http: { url } })
-    }),
-  )
+  const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
-
-  const servers = () => {
-    const data = sidecar()
-    if (!data) return []
-    const server: ServerConnection.Sidecar = {
-      displayName: "Local Server",
-      type: "sidecar",
-      variant: "base",
-      http: {
-        url: data.url,
-        username: data.username ?? undefined,
-        password: data.password ?? undefined,
-      },
-    }
-    return [server] as ServerConnection.Any[]
-  }
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -344,6 +318,66 @@ render(() => {
     return null
   }
 
+  function App() {
+    const wslServers = useWslServers()
+    const splash = (
+      <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
+        <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+      </div>
+    )
+
+    const ready = createMemo(
+      () =>
+        !defaultServer.loading &&
+        !sidecar.loading &&
+        !windowCount.loading &&
+        !locale.loading,
+    )
+    const servers = createMemo(() => {
+      const data = sidecar()
+      const list: ServerConnection.Any[] = []
+      if (data) {
+        list.push({
+          displayName: "Local Server",
+          type: "sidecar",
+          variant: "base",
+          http: {
+            url: data.url,
+            username: data.username ?? undefined,
+            password: data.password ?? undefined,
+          },
+        })
+      }
+      for (const item of wslServers.data?.servers ?? []) {
+        const runtime = item.runtime
+        if (runtime.kind !== "ready") continue
+        list.push({
+          displayName: item.config.distro,
+          type: "sidecar",
+          variant: "wsl",
+          distro: item.config.distro,
+          http: {
+            url: runtime.url,
+            username: runtime.username ?? undefined,
+            password: runtime.password ?? undefined,
+          },
+        })
+      }
+      return list
+    })
+    if (!ready()) return splash
+
+    return (
+      <AppInterface
+        defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+        servers={servers()}
+        router={MemoryRouter}
+      >
+        <Inner />
+      </AppInterface>
+    )
+  }
+
   onMount(() => {
     document.addEventListener("click", handleClick)
     onCleanup(() => {
@@ -354,27 +388,7 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders locale={locale.latest}>
-        <Show
-          when={
-            !defaultServer.loading &&
-            !sidecar.loading &&
-            !windowConfig.loading &&
-            !windowCount.loading &&
-            !locale.loading
-          }
-        >
-          {(_) => {
-            return (
-              <AppInterface
-                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
-                servers={servers()}
-                router={MemoryRouter}
-              >
-                <Inner />
-              </AppInterface>
-            )
-          }}
-        </Show>
+        <App />
       </AppBaseProviders>
     </PlatformProvider>
   )

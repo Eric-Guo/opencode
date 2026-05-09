@@ -149,6 +149,7 @@ export default function Layout(props: ParentProps) {
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => route().dir)
+  const useWebDirectoryPicker = createMemo(() => server.current?.type === "sidecar" && server.current.variant === "wsl")
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -1207,7 +1208,7 @@ export default function Layout(props: ParentProps) {
     const run = ++dialogRun
     void import("@/components/dialog-select-server").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSelectServer />)
+      dialog.show(() => <x.DialogSelectServer onNavigateHome={() => navigate("/")} />)
     })
   }
 
@@ -1459,7 +1460,7 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+    if (platform.openDirectoryPickerDialog && server.isLocal() && !useWebDirectoryPicker()) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: language.t("command.project.open"),
         multiple: true,
