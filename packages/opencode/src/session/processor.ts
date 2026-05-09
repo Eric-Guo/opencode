@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Layer, Context, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -9,6 +9,7 @@ import { Snapshot } from "@/snapshot"
 import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
+import { Image } from "@/image/image"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
@@ -108,6 +109,7 @@ export const layer: Layer.Layer<
     const summary = yield* SessionSummary.Service
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
+    const image = yield* Image.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -183,16 +185,30 @@ export const layer: Layer.Layer<
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return
+        const normalized = output.attachments
+          ? yield* Effect.forEach(output.attachments, (attachment) =>
+              attachment.mime.startsWith("image/")
+                ? image.normalize(attachment).pipe(Effect.exit)
+                : Effect.succeed(Exit.succeed(attachment)),
+            )
+          : undefined
+        const omitted = normalized?.filter(Exit.isFailure).length ?? 0
+        const attachments = normalized
+          ?.filter(Exit.isSuccess)
+          .map((item) => item.value)
         yield* session.updatePart({
           ...match.part,
           state: {
             status: "completed",
             input: match.part.state.input,
-            output: output.output,
+            output:
+              omitted === 0
+                ? output.output
+                : `${output.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the inline image size limit.]`,
             metadata: output.metadata,
             title: output.title,
             time: { start: match.part.state.time.start, end: Date.now() },
-            attachments: output.attachments,
+            attachments: attachments?.length ? attachments : undefined,
           },
         })
         yield* settleToolCall(toolCallID)
@@ -746,7 +762,7 @@ export const layer: Layer.Layer<
 
     return Service.of({ create })
   }),
-)
+).pipe(Layer.provide(Image.layer))
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
