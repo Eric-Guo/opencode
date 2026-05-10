@@ -23,7 +23,7 @@ let backgroundColor: string | undefined
 export function windowAppearance() {
   const mode = tone()
   return {
-    title: "OpenCode",
+    title: "SigmaAgents",
     icon: iconPath(),
     backgroundColor: backgroundColor ?? oc2Background[mode],
     ...(process.platform === "darwin"
