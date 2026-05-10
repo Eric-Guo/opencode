@@ -52,7 +52,7 @@ const initialChunk: Plugin = {
 
 export default defineConfig(({ command }) => {
   const channel = resolveChannel()
-  const nodePtyPkg = nodePtyPackage()
+  const nodePtyPkg = nodePtyPackage(process.env.RUST_TARGET)
 
   return {
     main: {
