@@ -131,6 +131,34 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    function partUsage(part: Part) {
+      if (part.type !== "step-finish") return
+      return { cost: part.cost, tokens: part.tokens }
+    }
+
+    function applySessionUsage(sessionID: string, part: Part, sign = 1) {
+      const usage = partUsage(part)
+      if (!usage) return
+      const result = Binary.search(store.session, sessionID, (s) => s.id)
+      if (!result.found) return
+      setStore(
+        "session",
+        result.index,
+        produce((draft) => {
+          draft.cost = (draft.cost ?? 0) + usage.cost * sign
+          draft.tokens = {
+            input: (draft.tokens?.input ?? 0) + usage.tokens.input * sign,
+            output: (draft.tokens?.output ?? 0) + usage.tokens.output * sign,
+            reasoning: (draft.tokens?.reasoning ?? 0) + usage.tokens.reasoning * sign,
+            cache: {
+              read: (draft.tokens?.cache.read ?? 0) + usage.tokens.cache.read * sign,
+              write: (draft.tokens?.cache.write ?? 0) + usage.tokens.cache.write * sign,
+            },
+          }
+        }),
+      )
+    }
+
     event.subscribe((event) => {
       switch (event.type) {
         case "server.instance.disposed":
@@ -294,6 +322,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const messages = store.message[event.properties.sessionID]
           const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
           if (result.found) {
+            for (const part of store.part[event.properties.messageID] ?? []) {
+              applySessionUsage(event.properties.sessionID, part, -1)
+            }
             setStore(
               "message",
               event.properties.sessionID,
@@ -307,14 +338,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         case "message.part.updated": {
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
+            applySessionUsage(event.properties.part.sessionID, event.properties.part)
             setStore("part", event.properties.part.messageID, [event.properties.part])
             break
           }
           const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
           if (result.found) {
+            applySessionUsage(event.properties.part.sessionID, parts[result.index], -1)
+            applySessionUsage(event.properties.part.sessionID, event.properties.part)
             setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
             break
           }
+          applySessionUsage(event.properties.part.sessionID, event.properties.part)
           setStore(
             "part",
             event.properties.part.messageID,
@@ -346,7 +381,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         case "message.part.removed": {
           const parts = store.part[event.properties.messageID]
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (result.found)
+          if (result.found) {
+            applySessionUsage(event.properties.sessionID, parts[result.index], -1)
             setStore(
               "part",
               event.properties.messageID,
@@ -354,6 +390,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.splice(result.index, 1)
               }),
             )
+          }
           break
         }
 
