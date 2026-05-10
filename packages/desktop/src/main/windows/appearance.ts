@@ -26,7 +26,7 @@ export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) 
   const mode = tone()
   const storedBackground = getStore().get(BACKGROUND_COLOR_KEY)
   return {
-    title: "OpenCode",
+    title: "SigmaAgents",
     icon: iconPath(path, paths),
     backgroundColor:
       backgroundColor ?? (typeof storedBackground === "string" ? storedBackground : undefined) ?? oc2Background[mode],
