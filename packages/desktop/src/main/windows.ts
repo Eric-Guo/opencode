@@ -178,7 +178,7 @@ export function createMainWindow(id: string = randomUUID()) {
     height: state.height,
     show: false,
     autoHideMenuBar: true,
-    title: "OpenCode",
+    title: "SigmaAgents",
     icon: iconPath(),
     backgroundColor: backgroundColor ?? defaultBackgroundColor(),
     ...(process.platform === "darwin"
