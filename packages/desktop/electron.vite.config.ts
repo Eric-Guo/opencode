@@ -36,7 +36,7 @@ const initialChunk: Plugin = {
 
 export default defineConfig(async ({ command }) => {
   const channel = resolveChannel()
-  const nodePtyPkg = nodePtyPackage()
+  const nodePtyPkg = nodePtyPackage(process.env.RUST_TARGET)
 
   // Beta builds carry their commit and recent history for the updater's "What's new in beta"; the dev server carries
   // them without asking GitHub, so the page can be tried; other channels none.
