@@ -9,7 +9,15 @@ const channel = (() => {
   return "dev"
 })()
 
-const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+const nodePtyPkg = (() => {
+  if (process.env.RUST_TARGET === "aarch64-apple-darwin") return "@lydell/node-pty-darwin-arm64"
+  if (process.env.RUST_TARGET === "x86_64-apple-darwin") return "@lydell/node-pty-darwin-x64"
+  if (process.env.RUST_TARGET === "aarch64-pc-windows-msvc") return "@lydell/node-pty-win32-arm64"
+  if (process.env.RUST_TARGET === "x86_64-pc-windows-msvc") return "@lydell/node-pty-win32-x64"
+  if (process.env.RUST_TARGET === "aarch64-unknown-linux-gnu") return "@lydell/node-pty-linux-arm64"
+  if (process.env.RUST_TARGET === "x86_64-unknown-linux-gnu") return "@lydell/node-pty-linux-x64"
+  return `@lydell/node-pty-${process.platform}-${process.arch}`
+})()
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
