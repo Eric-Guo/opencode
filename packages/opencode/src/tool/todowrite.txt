@@ -5,9 +5,9 @@ Use proactively when:
 - The task requires 3+ distinct steps or actions (not just 3 tool calls for a single conceptual step)
 - The work is non-trivial and benefits from planning
 - The user provides multiple tasks (numbered or comma-separated) or explicitly asks for a todo list
-- New instructions arrive — capture them as todos
-- You start a task — mark it `in_progress` (only one at a time) before working
-- You finish a task — mark it `completed` and add any follow-ups discovered during the work
+- New instructions arrive - capture them as todos
+- You start a task - mark it `in_progress` (only one at a time) before working
+- You finish a task - mark it `completed` and add any follow-ups discovered during the work
 
 ## When NOT to use
 Skip when:
@@ -16,10 +16,10 @@ Skip when:
 - Tracking adds no organizational value
 
 ## States
-- `pending` — not started
-- `in_progress` — actively working (exactly ONE at a time)
-- `completed` — finished successfully
-- `cancelled` — no longer needed
+- `pending` - not started
+- `in_progress` - actively working (exactly ONE at a time)
+- `completed` - finished successfully
+- `cancelled` - no longer needed
 
 ## Rules
 - Update status in real time; don't batch completions
@@ -32,13 +32,13 @@ Skip when:
 ## Examples
 
 Use it:
-- "Add a dark mode toggle and run the tests" → multi-step feature + explicit verification
-- "Rename getCwd → getCurrentWorkingDirectory across the repo" → grep reveals 15 occurrences in 8 files
-- "Implement registration, catalog, cart, checkout" → multiple complex features
+- "Add a dark mode toggle and run the tests" -> multi-step feature + explicit verification
+- "Rename getCwd -> getCurrentWorkingDirectory across the repo" -> grep reveals 15 occurrences in 8 files
+- "Implement registration, catalog, cart, checkout" -> multiple complex features
 
 Skip it:
-- "How do I print Hello World in Python?" → informational
-- "Add a comment to calculateTotal" → single edit
-- "Run npm install and tell me what happened" → one command
+- "How do I print Hello World in Python?" -> informational
+- "Add a comment to calculateTotal" -> single edit
+- "Run npm install and tell me what happened" -> one command
 
 When in doubt, use it.
