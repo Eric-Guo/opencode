@@ -23,25 +23,27 @@ export const layer = Layer.effect(
     const migrations: Migration[] = [
       {
         name: "session_usage_from_messages",
-        run: Effect.sync(() =>
-          {
-            type Usage = {
-              cost: number
-              tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
-            }
+        run: Effect.gen(function* () {
+          type Usage = {
+            cost: number
+            tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
+          }
 
-            for (let cursor: SessionID | undefined; ; ) {
-              const sessions = Database.use((db) =>
+          for (let cursor: SessionID | undefined; ; ) {
+            const sessions = yield* Effect.sync(() =>
+              Database.use((db) =>
                 db
                   .select({ id: SessionTable.id })
                   .from(SessionTable)
                   .where(cursor ? gt(SessionTable.id, cursor) : undefined)
                   .orderBy(asc(SessionTable.id))
-                  .limit(500)
+                  .limit(100)
                   .all(),
-              )
-              if (sessions.length === 0) return
+              ),
+            )
+            if (sessions.length === 0) return
 
+            yield* Effect.sync(() =>
               Database.transaction((db) => {
                 const usageBySession = new Map<SessionID, Usage>(
                   sessions.map((session) => [
@@ -80,12 +82,13 @@ export const layer = Layer.effect(
                     .where(eq(SessionTable.id, sessionID))
                     .run()
                 }
-              })
+              }),
+            )
 
-              cursor = sessions.at(-1)?.id
-            }
-          },
-        ),
+            cursor = sessions.at(-1)?.id
+            yield* Effect.sleep("10 millis")
+          }
+        }),
       },
     ]
 
