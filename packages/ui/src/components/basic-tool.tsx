@@ -48,16 +48,15 @@ function flushDeferredMounts() {
     // Timeline tools are mounted top-to-bottom, but the viewport starts at the latest turn.
     // Pop from the end so heavy default-open bodies near the bottom become interactive first.
     const item = deferredMounts.pop()!
-    if (!item.active) continue
-
-    item.fn()
-    if (deferredMounts.length === 0) {
-      deferredFrame = undefined
+    if (item.active) {
+      if (deferredMounts.length > 0) {
+        deferredFrame = requestAnimationFrame(flushDeferredMounts)
+      } else {
+        deferredFrame = undefined
+      }
+      item.fn()
       return
     }
-
-    deferredFrame = requestAnimationFrame(flushDeferredMounts)
-    return
   }
   deferredFrame = undefined
 }
@@ -79,14 +78,8 @@ function scheduleDeferredMount(fn: () => void) {
 }
 
 function scheduleFrameMount(fn: () => void) {
-  let active = true
-  const frame = requestAnimationFrame(() => {
-    if (active) fn()
-  })
-  return () => {
-    active = false
-    cancelAnimationFrame(frame)
-  }
+  const frame = requestAnimationFrame(fn)
+  return () => cancelAnimationFrame(frame)
 }
 
 export function BasicTool(props: BasicToolProps) {
