@@ -189,7 +189,8 @@ export const TuiThreadCommand = cmd({
       const prompt = await input(args.prompt)
       const config = await TuiConfig.get()
 
-      const network = resolveNetworkOptionsNoConfig(args)
+      const network = await resolveNetworkOptionsNoConfig(args)
+
       const external =
         process.argv.includes("--port") ||
         process.argv.includes("--hostname") ||
