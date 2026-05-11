@@ -188,6 +188,10 @@ for (const item of targets) {
   const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
   const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
   const parserWorker = fs.realpathSync(fs.existsSync(localPath) ? localPath : rootPath)
+  const photonWasm = path.relative(
+    dir,
+    fileURLToPath(import.meta.resolve("@silvia-odwyer/photon-node/photon_rs_bg.wasm")),
+  ).replaceAll("\\", "/")
   const workerPath = "./src/cli/cmd/tui/worker.ts"
 
   // Use platform-specific bunfs root path based on target OS
@@ -214,7 +218,13 @@ for (const item of targets) {
       windows: {},
     },
     files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
-    entrypoints: ["./src/index.ts", parserWorker, workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
+    entrypoints: [
+      "./src/index.ts",
+      parserWorker,
+      workerPath,
+      photonWasm,
+      ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : []),
+    ],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_MIGRATIONS: JSON.stringify(migrations),

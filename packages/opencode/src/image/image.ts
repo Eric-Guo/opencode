@@ -1,6 +1,7 @@
 import { Config } from "@/config/config"
 import type { MessageV2 } from "@/session/message-v2"
 import * as Log from "@opencode-ai/core/util/log"
+import photonWasm from "@silvia-odwyer/photon-node/photon_rs_bg.wasm" with { type: "file" }
 import { Context, Effect, Layer, Schema } from "effect"
 
 const MAX_BASE64_BYTES = 4.5 * 1024 * 1024
@@ -61,13 +62,12 @@ export const layer = Layer.effect(
     const loadPhoton = yield* Effect.cached(
       Effect.promise(async () => {
         try {
-          const photonWasm = (await import("@silvia-odwyer/photon-node/photon_rs_bg.wasm", { with: { type: "file" } }))
-            .default
           // Patched photon-node reads this during module init so Bun compiled binaries use the embedded wasm path.
           ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
             photonWasm
           return await import("@silvia-odwyer/photon-node")
-        } catch {
+        } catch (error) {
+          log.warn("failed to load photon", { error })
           return null
         }
       }),
@@ -86,16 +86,23 @@ export const layer = Layer.effect(
 
       const base64 = input.url.slice(input.url.indexOf(";base64,") + ";base64,".length)
       const photon = yield* loadPhoton
-      if (!photon) return yield* new PhotonUnavailableError()
+      if (!photon) {
+        if (Buffer.byteLength(base64, "utf8") <= info.maxBase64Bytes) return input
+        return yield* new PhotonUnavailableError()
+      }
 
       const decoded = yield* Effect.sync(() => {
         try {
           return photon.PhotonImage.new_from_byteslice(Buffer.from(base64, "base64"))
-        } catch {
+        } catch (error) {
+          log.warn("failed to decode image", { error })
           return undefined
         }
       })
-      if (!decoded) return yield* new DecodeError()
+      if (!decoded) {
+        if (Buffer.byteLength(base64, "utf8") <= info.maxBase64Bytes) return input
+        return yield* new DecodeError()
+      }
 
       try {
         const originalWidth = decoded.get_width()
