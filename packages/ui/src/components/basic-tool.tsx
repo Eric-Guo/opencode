@@ -49,11 +49,7 @@ function flushDeferredMounts() {
     // Pop from the end so heavy default-open bodies near the bottom become interactive first.
     const item = deferredMounts.pop()!
     if (item.active) {
-      if (deferredMounts.length > 0) {
-        deferredFrame = requestAnimationFrame(flushDeferredMounts)
-      } else {
-        deferredFrame = undefined
-      }
+      deferredFrame = deferredMounts.length > 0 ? requestAnimationFrame(flushDeferredMounts) : undefined
       item.fn()
       return
     }
