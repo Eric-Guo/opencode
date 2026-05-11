@@ -85,24 +85,19 @@ export const layer = Layer.effect(
         return yield* new InvalidDataUrlError({ url: input.url })
 
       const base64 = input.url.slice(input.url.indexOf(";base64,") + ";base64,".length)
-      const photon = yield* loadPhoton
-      if (!photon) {
-        if (Buffer.byteLength(base64, "utf8") <= info.maxBase64Bytes) return input
-        return yield* new PhotonUnavailableError()
-      }
+      const bytes = Buffer.byteLength(base64, "utf8")
+      if (bytes <= info.maxBase64Bytes) return input
 
-      const decoded = yield* Effect.sync(() => {
-        try {
-          return photon.PhotonImage.new_from_byteslice(Buffer.from(base64, "base64"))
-        } catch (error) {
+      const photon = yield* loadPhoton
+      if (!photon) return yield* new PhotonUnavailableError()
+
+      const decoded = yield* Effect.try({
+        try: () => photon.PhotonImage.new_from_byteslice(Buffer.from(base64, "base64")),
+        catch: (error) => {
           log.warn("failed to decode image", { error })
-          return undefined
-        }
+          return new DecodeError()
+        },
       })
-      if (!decoded) {
-        if (Buffer.byteLength(base64, "utf8") <= info.maxBase64Bytes) return input
-        return yield* new DecodeError()
-      }
 
       try {
         const originalWidth = decoded.get_width()
@@ -110,12 +105,12 @@ export const layer = Layer.effect(
         if (
           originalWidth <= info.maxWidth &&
           originalHeight <= info.maxHeight &&
-          Buffer.byteLength(base64, "utf8") <= info.maxBase64Bytes
+          bytes <= info.maxBase64Bytes
         )
           return input
         if (!info.autoResize)
           return yield* new SizeError({
-            bytes: Buffer.byteLength(base64, "utf8"),
+            bytes,
             max: info.maxBase64Bytes,
             width: originalWidth,
             height: originalHeight,
@@ -166,7 +161,7 @@ export const layer = Layer.effect(
         }
 
         return yield* new SizeError({
-          bytes: Buffer.byteLength(base64, "utf8"),
+          bytes,
           max: info.maxBase64Bytes,
           width: originalWidth,
           height: originalHeight,
