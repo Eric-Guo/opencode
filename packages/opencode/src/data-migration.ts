@@ -3,7 +3,7 @@ import { Database } from "./storage/db"
 import { DataMigrationTable } from "./data-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { asc, eq, gt, inArray } from "drizzle-orm"
-import { PartTable, SessionTable } from "./session/session.sql"
+import { MessageTable, SessionTable } from "./session/session.sql"
 import type { SessionID } from "./session/schema"
 
 export type Migration<R = never> = {
@@ -22,79 +22,78 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const migrations: Migration[] = [
       {
-        name: "session_usage_from_parts",
+        name: "session_usage_from_messages",
         run: Effect.sync(() =>
-          Database.transaction((db) => {
+          {
             type Usage = {
               cost: number
-              tokens: {
-                input: number
-                output: number
-                reasoning: number
-                cache: { read: number; write: number }
-              }
+              tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
             }
 
             for (let cursor: SessionID | undefined; ; ) {
-              const sessions = db
-                .select({ id: SessionTable.id })
-                .from(SessionTable)
-                .where(cursor ? gt(SessionTable.id, cursor) : undefined)
-                .orderBy(asc(SessionTable.id))
-                .limit(500)
-                .all()
+              const sessions = Database.use((db) =>
+                db
+                  .select({ id: SessionTable.id })
+                  .from(SessionTable)
+                  .where(cursor ? gt(SessionTable.id, cursor) : undefined)
+                  .orderBy(asc(SessionTable.id))
+                  .limit(500)
+                  .all(),
+              )
               if (sessions.length === 0) return
 
-              const usageBySession = new Map<SessionID, Usage>(
-                sessions.map((session) => [
-                  session.id,
-                  { cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
-                ]),
-              )
+              Database.transaction((db) => {
+                const usageBySession = new Map<SessionID, Usage>(
+                  sessions.map((session) => [
+                    session.id,
+                    { cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
+                  ]),
+                )
 
-              for (const row of db
-                .select({ session_id: PartTable.session_id, data: PartTable.data })
-                .from(PartTable)
-                .where(inArray(PartTable.session_id, sessions.map((session) => session.id)))
-                .all()) {
-                const part = row.data
-                if (part.type !== "step-finish") continue
-                if (!("cost" in part) || typeof part.cost !== "number") continue
-                if (!("tokens" in part) || typeof part.tokens !== "object" || part.tokens === null) continue
-                if (!("input" in part.tokens) || typeof part.tokens.input !== "number") continue
-                if (!("output" in part.tokens) || typeof part.tokens.output !== "number") continue
-                if (!("reasoning" in part.tokens) || typeof part.tokens.reasoning !== "number") continue
-                if (!("cache" in part.tokens) || typeof part.tokens.cache !== "object" || part.tokens.cache === null) continue
-                if (!("read" in part.tokens.cache) || typeof part.tokens.cache.read !== "number") continue
-                if (!("write" in part.tokens.cache) || typeof part.tokens.cache.write !== "number") continue
+                for (const row of db
+                  .select({ session_id: MessageTable.session_id, data: MessageTable.data })
+                  .from(MessageTable)
+                  .where(inArray(MessageTable.session_id, sessions.map((session) => session.id)))
+                  .all()) {
+                  if (row.data.role !== "assistant") continue
+                  if (!("cost" in row.data) || typeof row.data.cost !== "number") continue
+                  if (!("tokens" in row.data) || typeof row.data.tokens !== "object" || row.data.tokens === null) continue
+                  if (!("input" in row.data.tokens) || typeof row.data.tokens.input !== "number") continue
+                  if (!("output" in row.data.tokens) || typeof row.data.tokens.output !== "number") continue
+                  if (!("reasoning" in row.data.tokens) || typeof row.data.tokens.reasoning !== "number") continue
+                  if (!("cache" in row.data.tokens) || typeof row.data.tokens.cache !== "object" || row.data.tokens.cache === null)
+                    continue
+                  if (!("read" in row.data.tokens.cache) || typeof row.data.tokens.cache.read !== "number") continue
+                  if (!("write" in row.data.tokens.cache) || typeof row.data.tokens.cache.write !== "number") continue
 
-                const current = usageBySession.get(row.session_id)
-                if (!current) continue
-                current.cost += part.cost
-                current.tokens.input += part.tokens.input
-                current.tokens.output += part.tokens.output
-                current.tokens.reasoning += part.tokens.reasoning
-                current.tokens.cache.read += part.tokens.cache.read
-                current.tokens.cache.write += part.tokens.cache.write
-              }
+                  const current = usageBySession.get(row.session_id)
+                  if (!current) continue
+                  current.cost += row.data.cost
+                  current.tokens.input += row.data.tokens.input
+                  current.tokens.output += row.data.tokens.output
+                  current.tokens.reasoning += row.data.tokens.reasoning
+                  current.tokens.cache.read += row.data.tokens.cache.read
+                  current.tokens.cache.write += row.data.tokens.cache.write
+                }
 
-              for (const [sessionID, value] of usageBySession) {
-                db.update(SessionTable)
-                  .set({
-                    cost: value.cost,
-                    tokens_input: value.tokens.input,
-                    tokens_output: value.tokens.output,
-                    tokens_reasoning: value.tokens.reasoning,
-                    tokens_cache_read: value.tokens.cache.read,
-                    tokens_cache_write: value.tokens.cache.write,
-                  })
-                  .where(eq(SessionTable.id, sessionID))
-                  .run()
-              }
+                for (const [sessionID, value] of usageBySession) {
+                  db.update(SessionTable)
+                    .set({
+                      cost: value.cost,
+                      tokens_input: value.tokens.input,
+                      tokens_output: value.tokens.output,
+                      tokens_reasoning: value.tokens.reasoning,
+                      tokens_cache_read: value.tokens.cache.read,
+                      tokens_cache_write: value.tokens.cache.write,
+                    })
+                    .where(eq(SessionTable.id, sessionID))
+                    .run()
+                }
+              })
 
               cursor = sessions.at(-1)?.id
             }
-          }),
+          },
         ),
       },
     ]
