@@ -64,8 +64,16 @@ import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
 import { FormatError, FormatUnknownError } from "@/cli/error"
-import { CommandPaletteProvider, useCommandPalette } from "./context/command-palette"
-import { OpencodeKeymapProvider, registerOpencodeKeymap, useBindings, useOpencodeKeymap } from "./keymap"
+import { CommandPaletteDialog } from "./component/command-palette"
+import {
+  COMMAND_PALETTE_COMMAND,
+  OPENCODE_BASE_MODE,
+  OpencodeKeymapProvider,
+  createOpencodeModeStack,
+  registerOpencodeKeymap,
+  useBindings,
+  useOpencodeKeymap,
+} from "./keymap"
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
@@ -168,6 +176,7 @@ export function tui(input: {
 
     const onBeforeExit = async () => {
       offKeymap()
+      modeStack.dispose()
       await TuiPluginRuntime.dispose()
     }
 
@@ -177,6 +186,7 @@ export function tui(input: {
     const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
 
     const keymap = createDefaultOpenTuiKeymap(renderer)
+    const modeStack = createOpencodeModeStack(keymap)
     const offKeymap = registerOpencodeKeymap(keymap, renderer, input.config)
 
     await render(() => {
@@ -216,17 +226,15 @@ export function tui(input: {
                                   <LocalProvider>
                                     <PromptStashProvider>
                                       <DialogProvider>
-                                        <CommandPaletteProvider>
-                                          <FrecencyProvider>
-                                            <PromptHistoryProvider>
-                                              <PromptRefProvider>
-                                                <EditorContextProvider>
-                                                  <App onSnapshot={input.onSnapshot} />
-                                                </EditorContextProvider>
-                                              </PromptRefProvider>
-                                            </PromptHistoryProvider>
-                                          </FrecencyProvider>
-                                        </CommandPaletteProvider>
+                                        <FrecencyProvider>
+                                          <PromptHistoryProvider>
+                                            <PromptRefProvider>
+                                              <EditorContextProvider>
+                                                <App onSnapshot={input.onSnapshot} />
+                                              </EditorContextProvider>
+                                            </PromptRefProvider>
+                                          </PromptHistoryProvider>
+                                        </FrecencyProvider>
                                       </DialogProvider>
                                     </PromptStashProvider>
                                   </LocalProvider>
@@ -256,7 +264,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const dialog = useDialog()
   const local = useLocal()
   const kv = useKV()
-  const command = useCommandPalette()
   const keymap = useOpencodeKeymap()
   const event = useEvent()
   const sdk = useSDK()
@@ -429,12 +436,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const appCommands = createMemo(() =>
     [
       {
-        name: "command.palette.show",
+        name: COMMAND_PALETTE_COMMAND,
         title: "Show command palette",
         category: "System",
         hidden: true,
         run: () => {
-          command.show()
+          dialog.replace(() => <CommandPaletteDialog />)
         },
       },
       {
@@ -786,14 +793,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }))
 
   useBindings(() => ({
-    enabled: command.matcher,
+    opencodeMode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
   }))
 
   useBindings(() => ({
+    opencodeMode: OPENCODE_BASE_MODE,
     enabled: () => {
-      const ok = command.matcher.get()
-      if (!ok) return false
       const current = promptRef.current
       if (!current?.focused) return true
       return current.current.input === ""
@@ -802,7 +808,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }))
 
   event.on(TuiEvent.CommandExecute.type, (evt) => {
-    command.run(evt.properties.command)
+    keymap.dispatchCommand(evt.properties.command)
   })
 
   event.on(TuiEvent.ToastShow.type, (evt) => {
