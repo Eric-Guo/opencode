@@ -86,6 +86,7 @@ export function BasicTool(props: BasicToolProps) {
   const open = () => state.open
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
+  const hasChildren = () => (props.defer ? "children" in props : props.children)
 
   let cancelReady: (() => void) | undefined
 
@@ -233,7 +234,7 @@ export function BasicTool(props: BasicToolProps) {
           </Switch>
         </div>
       </div>
-      <Show when={props.children && !props.hideDetails && !props.locked && !pending()}>
+      <Show when={hasChildren() && !props.hideDetails && !props.locked && !pending()}>
         <Collapsible.Arrow />
       </Show>
     </div>
@@ -263,7 +264,7 @@ export function BasicTool(props: BasicToolProps) {
           </Collapsible.Trigger>
         )}
       </Show>
-      <Show when={props.animated && props.children && !props.hideDetails}>
+      <Show when={props.animated && hasChildren() && !props.hideDetails}>
         <div
           ref={contentRef}
           data-slot="collapsible-content"
@@ -273,10 +274,10 @@ export function BasicTool(props: BasicToolProps) {
             overflow: initialOpen ? "visible" : "hidden",
           }}
         >
-          {props.children}
+          <Show when={!props.defer || ready()}>{props.children}</Show>
         </div>
       </Show>
-      <Show when={!props.animated && props.children && !props.hideDetails}>
+      <Show when={!props.animated && hasChildren() && !props.hideDetails}>
         <Collapsible.Content>
           <Show when={!props.defer || ready()}>{props.children}</Show>
         </Collapsible.Content>

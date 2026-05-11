@@ -1836,7 +1836,7 @@ export default function Page() {
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
-                <Show when={messagesReady()}>
+                <Show when={!store.deferRender && messagesReady()}>
                   <MessageTimeline
                     mobileChanges={mobileChanges()}
                     mobileFallback={reviewContent({
