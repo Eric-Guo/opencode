@@ -44,20 +44,22 @@ const deferredMounts: Array<{ active: boolean; fn: () => void }> = []
 let deferredFrame: number | undefined
 
 function flushDeferredMounts() {
-  deferredFrame = undefined
   while (deferredMounts.length > 0) {
-    const item = deferredMounts.shift()!
-    if (item.active) {
-      try {
-        item.fn()
-      } finally {
-        if (deferredMounts.length > 0 && deferredFrame === undefined) {
-          deferredFrame = requestAnimationFrame(flushDeferredMounts)
-        }
-      }
-      break
+    // Timeline tools are mounted top-to-bottom, but the viewport starts at the latest turn.
+    // Pop from the end so heavy default-open bodies near the bottom become interactive first.
+    const item = deferredMounts.pop()!
+    if (!item.active) continue
+
+    item.fn()
+    if (deferredMounts.length === 0) {
+      deferredFrame = undefined
+      return
     }
+
+    deferredFrame = requestAnimationFrame(flushDeferredMounts)
+    return
   }
+  deferredFrame = undefined
 }
 
 function scheduleDeferredFlush() {
