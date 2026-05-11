@@ -2,7 +2,7 @@ import { Context, Effect, Layer } from "effect"
 import { Database } from "./storage/db"
 import { DataMigrationTable } from "./data-migration.sql"
 import * as Log from "@opencode-ai/core/util/log"
-import { asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { MessageTable, SessionTable } from "./session/session.sql"
 import type { SessionID } from "./session/schema"
 
@@ -54,20 +54,32 @@ export const layer = Layer.effect(
                   )
 
                   for (const row of db
-                    .select({ session_id: MessageTable.session_id, data: MessageTable.data })
+                    .select({
+                      session_id: MessageTable.session_id,
+                      cost: sql<number>`coalesce(sum(coalesce(json_extract(${MessageTable.data}, '$.cost'), 0)), 0)`,
+                      tokens_input: sql<number>`coalesce(sum(coalesce(json_extract(${MessageTable.data}, '$.tokens.input'), 0)), 0)`,
+                      tokens_output: sql<number>`coalesce(sum(coalesce(json_extract(${MessageTable.data}, '$.tokens.output'), 0)), 0)`,
+                      tokens_reasoning: sql<number>`coalesce(sum(coalesce(json_extract(${MessageTable.data}, '$.tokens.reasoning'), 0)), 0)`,
+                      tokens_cache_read: sql<number>`coalesce(sum(coalesce(json_extract(${MessageTable.data}, '$.tokens.cache.read'), 0)), 0)`,
+                      tokens_cache_write: sql<number>`coalesce(sum(coalesce(json_extract(${MessageTable.data}, '$.tokens.cache.write'), 0)), 0)`,
+                    })
                     .from(MessageTable)
-                    .where(inArray(MessageTable.session_id, sessions.map((session) => session.id)))
+                    .where(
+                      and(
+                        inArray(MessageTable.session_id, sessions.map((session) => session.id)),
+                        sql`json_extract(${MessageTable.data}, '$.role') = 'assistant'`,
+                      ),
+                    )
+                    .groupBy(MessageTable.session_id)
                     .all()) {
-                    if (row.data.role !== "assistant") continue
-
                     const current = usageBySession.get(row.session_id)
                     if (!current) continue
-                    current.cost += row.data.cost
-                    current.tokens.input += row.data.tokens.input
-                    current.tokens.output += row.data.tokens.output
-                    current.tokens.reasoning += row.data.tokens.reasoning
-                    current.tokens.cache.read += row.data.tokens.cache.read
-                    current.tokens.cache.write += row.data.tokens.cache.write
+                    current.cost = row.cost
+                    current.tokens.input = row.tokens_input
+                    current.tokens.output = row.tokens_output
+                    current.tokens.reasoning = row.tokens_reasoning
+                    current.tokens.cache.read = row.tokens_cache_read
+                    current.tokens.cache.write = row.tokens_cache_write
                   }
 
                   for (const [sessionID, value] of usageBySession) {
