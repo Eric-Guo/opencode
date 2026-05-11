@@ -74,6 +74,13 @@ function soundVolume(input: TuiAttentionNotifyInput, config: Pick<TuiConfig.Reso
   return clampVolume(input.sound.volume ?? config.attention.volume)
 }
 
+function focusSkip(when: TuiAttentionNotifyInput["when"], focus: FocusState) {
+  if ((when ?? "always") === "always") return
+  if (focus === "unknown") return "focus_unknown"
+  if (when === "blurred" && focus === "focused") return "focused"
+  if (when === "focused" && focus === "blurred") return "blurred"
+}
+
 export function createTuiAttention(input: {
   renderer: AttentionRenderer
   config: Pick<TuiConfig.Resolved, "attention">
@@ -144,8 +151,8 @@ export function createTuiAttention(input: {
         const message = normalizeText(request.message, "", MESSAGE_LIMIT)
         if (!message) return skipped("empty_message")
 
-        if (focus === "focused") return skipped("focused")
-        if (focus === "unknown") return skipped("focus_unknown")
+        const skip = focusSkip(request.when, focus)
+        if (skip) return skipped(skip)
 
         const notification = input.config.attention.notifications
           ? (() => {

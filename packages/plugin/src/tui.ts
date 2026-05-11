@@ -225,7 +225,7 @@ export type TuiToast = {
   duration?: number
 }
 
-export type TuiAttentionWhen = "blurred"
+export type TuiAttentionWhen = "always" | "focused" | "blurred"
 
 export type TuiAttentionSound =
   | boolean
@@ -244,6 +244,7 @@ export type TuiAttentionNotifyInput = {
 export type TuiAttentionNotifySkipReason =
   | "attention_disabled"
   | "empty_message"
+  | "blurred"
   | "focused"
   | "focus_unknown"
   | "renderer_destroyed"
