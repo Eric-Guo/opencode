@@ -1293,7 +1293,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )
 
       const parts = yield* Effect.forEach(resolvedParts, (part) =>
-        part.type === "file" && part.mime.startsWith("image/") ? image.normalize(part) : Effect.succeed(part),
+        part.type === "file" && part.mime.startsWith("image/")
+          ? image.normalize(part).pipe(
+              Effect.catchIf(
+                (error) => error instanceof Image.PhotonUnavailableError,
+                () => Effect.succeed(part),
+              ),
+            )
+          : Effect.succeed(part),
       )
 
       const parsed = MessageV2.Info.zod.safeParse(info)
