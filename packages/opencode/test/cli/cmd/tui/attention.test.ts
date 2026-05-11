@@ -122,33 +122,86 @@ function config(attention: Partial<AttentionConfig["attention"]> = {}): Attentio
 }
 
 describe("createTuiAttention", () => {
-  test("skips blurred-only requests until focus is known blurred", async () => {
+  test("defaults to always and delivers before focus is known", async () => {
     const renderer = new FakeRenderer()
     const audio = new FakeAudio()
     const attention = createTuiAttention({ renderer, config: config(), audio })
 
     expect(await attention.notify({ message: "hello", sound: true })).toEqual({
+      ok: true,
+      notification: true,
+      sound: true,
+    })
+    expect(renderer.notifications).toEqual([{ title: "opencode", message: "hello" }])
+    expect(audio.createCalls).toBe(1)
+  })
+
+  test("supports blurred-only requests", async () => {
+    const renderer = new FakeRenderer()
+    const audio = new FakeAudio()
+    const attention = createTuiAttention({ renderer, config: config(), audio })
+
+    expect(await attention.notify({ message: "unknown", sound: true, when: "blurred" })).toEqual({
       ok: false,
       notification: false,
       sound: false,
       skipped: "focus_unknown",
     })
-    expect(renderer.notifications).toHaveLength(0)
-    expect(audio.createCalls).toBe(0)
-  })
-
-  test("skips focused requests", async () => {
-    const renderer = new FakeRenderer()
-    const attention = createTuiAttention({ renderer, config: config(), audio: new FakeAudio() })
     renderer.emit("focus")
-
-    expect(await attention.notify({ message: "hello", sound: true })).toEqual({
+    expect(await attention.notify({ message: "focused", sound: true, when: "blurred" })).toEqual({
       ok: false,
       notification: false,
       sound: false,
       skipped: "focused",
     })
-    expect(renderer.notifications).toHaveLength(0)
+    renderer.emit("blur")
+    expect(await attention.notify({ message: "blurred", sound: true, when: "blurred" })).toEqual({
+      ok: true,
+      notification: true,
+      sound: true,
+    })
+    expect(audio.createCalls).toBe(1)
+  })
+
+  test("supports focused-only requests", async () => {
+    const renderer = new FakeRenderer()
+    const attention = createTuiAttention({ renderer, config: config(), audio: new FakeAudio() })
+
+    expect(await attention.notify({ message: "unknown", when: "focused" })).toEqual({
+      ok: false,
+      notification: false,
+      sound: false,
+      skipped: "focus_unknown",
+    })
+    renderer.emit("blur")
+    expect(await attention.notify({ message: "blurred", when: "focused" })).toEqual({
+      ok: false,
+      notification: false,
+      sound: false,
+      skipped: "blurred",
+    })
+    renderer.emit("focus")
+    expect(await attention.notify({ message: "focused", when: "focused" })).toEqual({
+      ok: true,
+      notification: true,
+      sound: false,
+    })
+    expect(renderer.notifications).toEqual([{ title: "opencode", message: "focused" }])
+  })
+
+  test("always requests still deliver while focused", async () => {
+    const renderer = new FakeRenderer()
+    const audio = new FakeAudio()
+    const attention = createTuiAttention({ renderer, config: config(), audio })
+    renderer.emit("focus")
+
+    expect(await attention.notify({ message: "hello", sound: true })).toEqual({
+      ok: true,
+      notification: true,
+      sound: true,
+    })
+    expect(audio.createCalls).toBe(1)
+    expect(renderer.notifications).toEqual([{ title: "opencode", message: "hello" }])
   })
 
   test("notifies while blurred", async () => {
@@ -162,6 +215,22 @@ describe("createTuiAttention", () => {
       sound: false,
     })
     expect(renderer.notifications).toEqual([{ title: "opencode", message: "hello" }])
+  })
+
+  test("when requested, blurred-only calls do not notify or play sound while focused", async () => {
+    const renderer = new FakeRenderer()
+    const audio = new FakeAudio()
+    const attention = createTuiAttention({ renderer, config: config(), audio })
+    renderer.emit("focus")
+
+    expect(await attention.notify({ message: "hello", sound: true, when: "blurred" })).toEqual({
+      ok: false,
+      notification: false,
+      sound: false,
+      skipped: "focused",
+    })
+    expect(renderer.notifications).toHaveLength(0)
+    expect(audio.createCalls).toBe(0)
   })
 
   test("skips empty messages and disabled attention", async () => {
@@ -222,7 +291,7 @@ describe("createTuiAttention", () => {
     const audio = new FakeAudio()
     const attention = createTuiAttention({ renderer, config: config(), audio })
 
-    await attention.notify({ message: "unknown", sound: true })
+    await attention.notify({ message: "unknown", sound: true, when: "blurred" })
     expect(audio.createCalls).toBe(0)
 
     renderer.emit("blur")

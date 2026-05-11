@@ -259,8 +259,9 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 ### Attention
 
 - `api.attention.notify({ title?, message, sound?, when? })` requests user attention while keeping terminal focus, notifications, and audio owned by the host.
-- `message` is required; `title` defaults to `"opencode"`; `when` defaults to `"blurred"`; `sound` defaults to `false`.
-- `when: "blurred"` is the only supported mode. Calls are skipped while the terminal is focused or before any focus/blur event has been observed.
+- `message` is required; `title` defaults to `"opencode"`; `when` defaults to `"always"`; `sound` defaults to `false`.
+- `when: "always"` requests delivery regardless of terminal focus state.
+- `when: "focused"` only requests delivery after the terminal is known focused; `when: "blurred"` only requests delivery after the terminal is known blurred.
 - The host strips ANSI/control characters and collapses newlines before sending text to the terminal notification API.
 - `sound: true` plays the built-in attention sound at `attention.volume`; `sound: { volume }` overrides it for that call; `sound: { enabled: false }` disables sound for that call.
 - Terminal and OS settings decide whether a requested notification is visibly displayed.
