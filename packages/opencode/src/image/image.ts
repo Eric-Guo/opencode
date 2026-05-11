@@ -60,17 +60,15 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config.Service
     const loadPhoton = yield* Effect.cached(
-      Effect.promise(async () => {
-        try {
-          // Patched photon-node reads this during module init so Bun compiled binaries use the embedded wasm path.
-          ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
-            photonWasm
-          return await import("@silvia-odwyer/photon-node")
-        } catch (error) {
-          log.warn("failed to load photon", { error })
-          return null
-        }
-      }),
+      Effect.sync(() => {
+        // Patched photon-node reads this during module init so Bun compiled binaries use the embedded wasm path.
+        ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
+          photonWasm
+      }).pipe(
+        Effect.andThen(() => Effect.tryPromise(() => import("@silvia-odwyer/photon-node"))),
+        Effect.tapError((error) => Effect.sync(() => log.warn("failed to load photon", { error }))),
+        Effect.mapError(() => new ResizerUnavailableError()),
+      ),
     )
 
     const normalize = Effect.fn("Image.normalize")(function* (input: MessageV2.FilePart) {
@@ -89,7 +87,6 @@ export const layer = Layer.effect(
       if (bytes <= info.maxBase64Bytes) return input
 
       const photon = yield* loadPhoton
-      if (!photon) return yield* new ResizerUnavailableError()
 
       const decoded = yield* Effect.try({
         try: () => photon.PhotonImage.new_from_byteslice(Buffer.from(base64, "base64")),
