@@ -40,14 +40,24 @@ export interface BasicToolProps {
 }
 
 const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
-const deferredMounts: Array<() => void> = []
+const deferredMounts: Array<{ active: boolean; fn: () => void }> = []
 let deferredFrame: number | undefined
 
 function flushDeferredMounts() {
   deferredFrame = undefined
-  deferredMounts.shift()?.()
-  if (deferredMounts.length === 0) return
-  deferredFrame = requestAnimationFrame(flushDeferredMounts)
+  while (deferredMounts.length > 0) {
+    const item = deferredMounts.shift()!
+    if (item.active) {
+      try {
+        item.fn()
+      } finally {
+        if (deferredMounts.length > 0 && deferredFrame === undefined) {
+          deferredFrame = requestAnimationFrame(flushDeferredMounts)
+        }
+      }
+      break
+    }
+  }
 }
 
 function scheduleDeferredFlush() {
@@ -58,13 +68,11 @@ function scheduleDeferredFlush() {
 }
 
 function scheduleDeferredMount(fn: () => void) {
-  let active = true
-  deferredMounts.push(() => {
-    if (active) fn()
-  })
+  const item = { active: true, fn }
+  deferredMounts.push(item)
   scheduleDeferredFlush()
   return () => {
-    active = false
+    item.active = false
   }
 }
 
