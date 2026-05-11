@@ -1296,7 +1296,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         part.type === "file" && part.mime.startsWith("image/")
           ? image.normalize(part).pipe(
               Effect.catchIf(
-                (error) => error instanceof Image.PhotonUnavailableError,
+                (error) => error instanceof Image.ResizerUnavailableError,
                 () => Effect.succeed(part),
               ),
             )

@@ -408,7 +408,7 @@ export const layer: Layer.Layer<
                     .normalize(attachment)
                     .pipe(
                       Effect.catchIf(
-                        (error) => error instanceof Image.PhotonUnavailableError,
+                        (error) => error instanceof Image.ResizerUnavailableError,
                         () => Effect.succeed(attachment),
                       ),
                       Effect.exit,

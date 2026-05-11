@@ -11,12 +11,12 @@ const AUTO_RESIZE = true
 const JPEG_QUALITIES = [80, 85, 70, 55, 40]
 const log = Log.create({ service: "image" })
 
-export class PhotonUnavailableError extends Schema.TaggedErrorClass<PhotonUnavailableError>()(
-  "ImagePhotonUnavailableError",
+export class ResizerUnavailableError extends Schema.TaggedErrorClass<ResizerUnavailableError>()(
+  "ImageResizerUnavailableError",
   {},
 ) {
   override get message() {
-    return "Photon image processor is unavailable"
+    return "Image resizer is unavailable"
   }
 }
 
@@ -47,7 +47,7 @@ export class SizeError extends Schema.TaggedErrorClass<SizeError>()("ImageSizeEr
   }
 }
 
-export type Error = PhotonUnavailableError | InvalidDataUrlError | DecodeError | SizeError
+export type Error = ResizerUnavailableError | InvalidDataUrlError | DecodeError | SizeError
 
 export interface Interface {
   readonly normalize: (input: MessageV2.FilePart) => Effect.Effect<MessageV2.FilePart, Error>
@@ -89,7 +89,7 @@ export const layer = Layer.effect(
       if (bytes <= info.maxBase64Bytes) return input
 
       const photon = yield* loadPhoton
-      if (!photon) return yield* new PhotonUnavailableError()
+      if (!photon) return yield* new ResizerUnavailableError()
 
       const decoded = yield* Effect.try({
         try: () => photon.PhotonImage.new_from_byteslice(Buffer.from(base64, "base64")),
