@@ -27,6 +27,9 @@ const cacheRequest = LLM.request({
   model,
   system: [{ type: "text", text: LARGE_CACHEABLE_SYSTEM, cache: new CacheHint({ type: "ephemeral" }) }],
   prompt: "Say hi.",
+  // Manual hint on the system part is the only marker we want here — skip the
+  // auto-policy's latest-user-message breakpoint so the cassette body matches.
+  cache: "none",
   generation: { maxTokens: 16, temperature: 0 },
 })
 
@@ -35,6 +38,9 @@ const recorded = recordedTests({
   provider: "amazon-bedrock",
   protocol: "bedrock-converse",
   requires: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+  // Two identical requests in one cassette — match by recording order so the
+  // second call replays the cached-hit interaction.
+  options: { dispatch: "sequential" },
 })
 
 describe("Bedrock Converse cache recorded", () => {

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMError } from "../../src"
+import { CacheHint, LLM, LLMError, Usage } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
@@ -18,6 +18,9 @@ const request = LLM.request({
   model,
   system: { type: "text", text: "You are concise.", cache: new CacheHint({ type: "ephemeral" }) },
   prompt: "Say hello.",
+  // This fixture predates the `cache: "auto"` default; pin the policy off so
+  // existing wire-shape assertions only see the manual hint on the system part.
+  cache: "none",
   generation: { maxTokens: 20, temperature: 0 },
 })
 
@@ -48,6 +51,7 @@ describe("Anthropic Messages route", () => {
             LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
             LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
+          cache: "none",
         }),
       )
 
@@ -110,10 +114,11 @@ describe("Anthropic Messages route", () => {
       expect(response.text).toBe("Hello!")
       expect(response.reasoning).toBe("thinking")
       expect(response.usage).toMatchObject({
-        inputTokens: 5,
+        inputTokens: 6,
         outputTokens: 2,
+        nonCachedInputTokens: 5,
         cacheReadInputTokens: 1,
-        totalTokens: 7,
+        totalTokens: 8,
       })
       expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
         providerMetadata: { anthropic: { signature: "sig_1" } },
@@ -152,7 +157,13 @@ describe("Anthropic Messages route", () => {
         {
           type: "request-finish",
           reason: "tool-calls",
-          usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6, native: { input_tokens: 5, output_tokens: 1 } },
+          usage: new Usage({
+            inputTokens: 5,
+            outputTokens: 1,
+            nonCachedInputTokens: 5,
+            totalTokens: 6,
+            providerMetadata: { anthropic: { input_tokens: 5, output_tokens: 1 } },
+          }),
         },
       ])
     }),
