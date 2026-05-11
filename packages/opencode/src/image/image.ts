@@ -84,7 +84,6 @@ export const layer = Layer.effect(
 
       const base64 = input.url.slice(input.url.indexOf(";base64,") + ";base64,".length)
       const bytes = Buffer.byteLength(base64, "utf8")
-      if (bytes <= info.maxBase64Bytes) return input
 
       const photon = yield* loadPhoton
 
@@ -99,11 +98,7 @@ export const layer = Layer.effect(
       try {
         const originalWidth = decoded.get_width()
         const originalHeight = decoded.get_height()
-        if (
-          originalWidth <= info.maxWidth &&
-          originalHeight <= info.maxHeight &&
-          bytes <= info.maxBase64Bytes
-        )
+        if (originalWidth <= info.maxWidth && originalHeight <= info.maxHeight && bytes <= info.maxBase64Bytes)
           return input
         if (!info.autoResize)
           return yield* new SizeError({
