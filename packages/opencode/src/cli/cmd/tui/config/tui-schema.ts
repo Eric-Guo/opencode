@@ -17,6 +17,13 @@ export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
 
+export const Attention = Schema.Struct({
+  enabled: Schema.optional(Schema.Boolean),
+  notifications: Schema.optional(Schema.Boolean),
+  sound: Schema.optional(Schema.Boolean),
+  volume: Schema.optional(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))),
+}).annotate({ description: "Attention notification and sound settings" })
+
 export const TuiInfo = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -24,6 +31,7 @@ export const TuiInfo = Schema.Struct({
   plugin: Schema.optional(Schema.Array(ConfigPlugin.Spec)),
   plugin_enabled: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   leader_timeout: Schema.optional(KeymapLeaderTimeout),
+  attention: Schema.optional(Attention),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({
     description: "TUI scroll speed",
   }),
