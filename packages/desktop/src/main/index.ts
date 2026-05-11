@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync, mkdirSync, rmSync } from "node:fs"
 import * as http from "node:http"
-import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
@@ -11,7 +10,7 @@ import { app, BrowserWindow } from "electron"
 
 import contextMenu from "electron-context-menu"
 
-import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
+import type { InitStep, ServerReadyData, SqliteMigrationProgress } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
@@ -19,14 +18,15 @@ import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import {
+  allocatePort,
   getDefaultServerUrl,
-  getWslConfig,
   preferAppEnv,
   setDefaultServerUrl,
-  setWslConfig,
   spawnLocalServer,
+  spawnWslSidecar,
   type SidecarListener,
 } from "./server"
+import { createWslServersController } from "./wsl-servers"
 import {
   createLoadingWindow,
   createMainWindow,
@@ -153,6 +153,31 @@ const main = Effect.gen(function* () {
     packaged: app.isPackaged,
     onboardingTest: Boolean(onboardingTestRoot),
   })
+  const wslServers = createWslServersController(
+    app.getVersion(),
+    async (distro) => {
+      logger.log("spawning wsl sidecar", { distro })
+      return spawnWslSidecar(distro, {
+        onLine: (line) => logger.log("wsl sidecar", { distro, stream: line.stream, text: line.text }),
+      })
+    },
+    {
+      log: (message, meta) => logger.log(message, meta),
+      error: (message, meta) => logger.error(message, meta),
+    },
+  )
+
+  const stopAllSidecars = async () => {
+    await killSidecar()
+    wslServers.stopAll()
+  }
+
+  const relaunch = () => {
+    void stopAllSidecars().finally(() => {
+      app.relaunch()
+      app.exit(0)
+    })
+  }
 
   ensureLoopbackNoProxy()
   useEnvProxy()
@@ -185,16 +210,16 @@ const main = Effect.gen(function* () {
   })
 
   app.on("before-quit", () => {
-    void killSidecar()
+    void stopAllSidecars()
   })
 
   app.on("will-quit", () => {
-    void killSidecar()
+    void stopAllSidecars()
   })
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
-      void killSidecar().finally(() => app.exit(0))
+      void stopAllSidecars().finally(() => app.exit(0))
     })
   }
 
@@ -203,6 +228,7 @@ const main = Effect.gen(function* () {
 
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
+    relaunch,
     awaitInitialization: Effect.fnUntraced(
       function* (sendStep) {
         sendStep(initStep)
@@ -220,21 +246,32 @@ const main = Effect.gen(function* () {
       (e) => Effect.runPromise(e),
     ),
     getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
+    getWslServersState: () => wslServers.getState(),
+    onWslServersEvent: (listener) => wslServers.subscribe(listener),
+    wslServersProbeRuntime: () => wslServers.probeRuntime(),
+    wslServersRefreshDistros: () => wslServers.refreshDistros(),
+    wslServersInstallWsl: () => wslServers.installWsl(),
+    wslServersInstallDistro: (name) => wslServers.installDistro(name),
+    wslServersProbeDistro: (name) => wslServers.probeDistro(name),
+    wslServersProbeOpencode: (name) => wslServers.probeOpencode(name),
+    wslServersInstallOpencode: (name) => wslServers.installOpencode(name),
+    wslServersOpenTerminal: (name) => wslServers.openTerminal(name),
+    wslServersAddServer: (distro) => wslServers.addServer(distro),
+    wslServersRemoveServer: (id) => wslServers.removeServer(id),
+    wslServersStartServer: (id) => wslServers.startServer(id),
     consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
     getDefaultServerUrl: () => getDefaultServerUrl(),
     setDefaultServerUrl: (url) => setDefaultServerUrl(url),
-    getWslConfig: () => Promise.resolve(getWslConfig()),
-    setWslConfig: (config: WslConfig) => setWslConfig(config),
     getDisplayBackend: async () => null,
     setDisplayBackend: async () => undefined,
     parseMarkdown: async (markdown) => parseMarkdown(markdown),
     checkAppExists: (appName) => checkAppExists(appName),
-    wslPath: async (path, mode) => wslPath(path, mode),
+    wslPath: async (path, mode, distro) => wslPath(path, mode, distro),
     resolveAppPath: async (appName) => resolveAppPath(appName),
     loadingWindowComplete: () => Deferred.doneUnsafe(loadingComplete, Effect.void),
-    runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, killSidecar),
+    runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, stopAllSidecars),
     checkUpdate: async () => checkUpdate(),
-    installUpdate: async () => installUpdate(killSidecar),
+    installUpdate: async () => installUpdate(stopAllSidecars),
     setBackgroundColor: (color) => setBackgroundColor(color),
   })
 
@@ -255,29 +292,7 @@ const main = Effect.gen(function* () {
   })()
   let overlay: BrowserWindow | null = null
 
-  const port = yield* Effect.gen(function* () {
-    const fromEnv = process.env.OPENCODE_PORT
-    if (fromEnv) {
-      const parsed = Number.parseInt(fromEnv, 10)
-      if (!Number.isNaN(parsed)) return parsed
-    }
-
-    const res = yield* Deferred.make<number, unknown>()
-    const server = createServer()
-    server.on("error", (e) => Deferred.failSync(res, () => e))
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address()
-      if (typeof address !== "object" || !address) {
-        server.close()
-        Deferred.failSync(res, () => new Error("Failed to get port"))
-        return
-      }
-      const port = address.port
-      server.close(() => Effect.runSync(Deferred.succeed(res, port)))
-    })
-
-    return yield* Deferred.await(res)
-  })
+  const port = yield* Effect.promise(() => allocatePort())
   const hostname = "127.0.0.1"
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
@@ -318,6 +333,8 @@ const main = Effect.gen(function* () {
       password,
     })
 
+    void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
+
     yield* Effect.promise(() => health.wait).pipe(
       Effect.timeout("30 seconds"),
       Effect.catch((e) =>
@@ -353,15 +370,10 @@ const main = Effect.gen(function* () {
     createMenu({
       trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
       checkForUpdates: () => {
-        void checkForUpdates(true, killSidecar)
+        void checkForUpdates(true, stopAllSidecars)
       },
       reload: () => mainWindow?.reload(),
-      relaunch: () => {
-        void killSidecar().finally(() => {
-          app.relaunch()
-          app.exit(0)
-        })
-      },
+      relaunch,
     })
   }
 
