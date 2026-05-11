@@ -39,11 +39,6 @@ npm run dev
 </example>
 
 <example>
-user: How many golf balls fit inside a jetta?
-assistant: 150000
-</example>
-
-<example>
 user: what files are in the directory src/?
 assistant: [runs ls and sees foo.c, bar.c, baz.c]
 user: which file contains the implementation of foo?
