@@ -93,6 +93,12 @@ function config(input?: {
     ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
   })
   return {
+    attention: {
+      enabled: true,
+      notifications: true,
+      sound: true,
+      volume: 0.4,
+    },
     diff_style: input?.diff_style,
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
       commandMap: TuiKeybind.CommandMap,

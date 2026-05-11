@@ -225,6 +225,40 @@ export type TuiToast = {
   duration?: number
 }
 
+export type TuiAttentionWhen = "blurred"
+
+export type TuiAttentionSound =
+  | boolean
+  | {
+      enabled?: boolean
+      volume?: number
+    }
+
+export type TuiAttentionNotifyInput = {
+  title?: string
+  message: string
+  sound?: TuiAttentionSound
+  when?: TuiAttentionWhen
+}
+
+export type TuiAttentionNotifySkipReason =
+  | "attention_disabled"
+  | "empty_message"
+  | "focused"
+  | "focus_unknown"
+  | "renderer_destroyed"
+
+export type TuiAttentionNotifyResult = {
+  ok: boolean
+  notification: boolean
+  sound: boolean
+  skipped?: TuiAttentionNotifySkipReason
+}
+
+export type TuiAttention = {
+  notify(input: TuiAttentionNotifyInput): Promise<TuiAttentionNotifyResult>
+}
+
 export type TuiThemeCurrent = {
   readonly primary: RGBA
   readonly secondary: RGBA
@@ -331,9 +365,17 @@ type TuiBindingLookupView = {
   omit: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
 }
 
+type TuiAttentionConfigView = {
+  enabled: boolean
+  notifications: boolean
+  sound: boolean
+  volume: number
+}
+
 type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
   NonNullable<PluginConfig["tui"]> & {
     leader_timeout: number
+    attention: TuiAttentionConfigView
     plugin_enabled?: Record<string, boolean>
     keybinds: TuiBindingLookupView
   }
@@ -497,6 +539,7 @@ export type TuiWorkspace = {
 
 export type TuiPluginApi = {
   app: TuiApp
+  attention: TuiAttention
   /**
    * Legacy `api.command` API kept so v1 plugins can initialize. Remove in v2.
    *

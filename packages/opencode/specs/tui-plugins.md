@@ -29,6 +29,12 @@ Example:
   "plugin": ["@acme/opencode-plugin@1.2.3", ["./plugins/demo.tsx", { "label": "demo" }]],
   "plugin_enabled": {
     "acme.demo": false
+  },
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4
   }
 }
 ```
@@ -45,6 +51,9 @@ Example:
 - Internal plugins can declare `enabled: false` to be registered but inactive by default; `plugin_enabled` and runtime KV can still enable them by id.
 - `plugin_enabled` is merged across config layers.
 - Runtime enable/disable state is also stored in KV under `plugin_enabled`; that KV state overrides config on startup.
+- `attention.enabled` disables all `api.attention.notify(...)` delivery when set to `false`.
+- `attention.notifications` and `attention.sound` independently control terminal-mediated desktop notifications and built-in sounds.
+- `attention.volume` sets the default built-in sound volume from `0` to `1`.
 - `leader_timeout` is a top-level TUI setting.
 - `keybinds` is a flat object keyed by command id; values are key binding values (`false`, `"none"`, a key string/object, a binding object, or an array of key strings/objects/binding objects).
 - `keybinds.leader` sets the key used by `<leader>` shortcuts.
@@ -212,6 +221,7 @@ That is what makes local config-scoped plugins able to import `@opencode-ai/plug
 Top-level API groups exposed to `tui(api, options, meta)`:
 
 - `api.app.version`
+- `api.attention.notify(input)`
 - `api.keys.formatSequence(parts)`, `formatBindings(bindings)`
 - `api.keymap`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
@@ -245,6 +255,16 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `formatSequence(parts)` formats parsed key sequence parts using the host's display policy.
 - `formatBindings(bindings)` formats binding lists and returns `undefined` when there is nothing to show.
 - For generic config-to-bindings helpers, import `createBindingLookup` from `@opencode-ai/plugin/tui`.
+
+### Attention
+
+- `api.attention.notify({ title?, message, sound?, when? })` requests user attention while keeping terminal focus, notifications, and audio owned by the host.
+- `message` is required; `title` defaults to `"opencode"`; `when` defaults to `"blurred"`; `sound` defaults to `false`.
+- `when: "blurred"` is the only supported mode. Calls are skipped while the terminal is focused or before any focus/blur event has been observed.
+- The host strips ANSI/control characters and collapses newlines before sending text to the terminal notification API.
+- `sound: true` plays the built-in attention sound at `attention.volume`; `sound: { volume }` overrides it for that call; `sound: { enabled: false }` disables sound for that call.
+- Terminal and OS settings decide whether a requested notification is visibly displayed.
+- Prefer privacy-safe messages such as `"A question needs your input"`; avoid full commands, paths, prompts, errors, secrets, or file contents unless the plugin intentionally exposes them.
 
 ### Routes
 
