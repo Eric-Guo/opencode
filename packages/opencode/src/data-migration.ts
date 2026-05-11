@@ -29,63 +29,75 @@ export const layer = Layer.effect(
             tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
           }
 
-          for (let cursor: SessionID | undefined; ; ) {
-            const sessions = yield* Effect.sync(() =>
-              Database.use((db) =>
-                db
-                  .select({ id: SessionTable.id })
-                  .from(SessionTable)
-                  .where(cursor ? gt(SessionTable.id, cursor) : undefined)
-                  .orderBy(asc(SessionTable.id))
-                  .limit(100)
-                  .all(),
-              ),
-            )
-            if (sessions.length === 0) return
+          for (let cursor: SessionID | undefined, page = 1; ; page++) {
+            const next = yield* Effect.gen(function* () {
+              const sessions = yield* Effect.sync(() =>
+                Database.use((db) =>
+                  db
+                    .select({ id: SessionTable.id })
+                    .from(SessionTable)
+                    .where(cursor ? gt(SessionTable.id, cursor) : undefined)
+                    .orderBy(asc(SessionTable.id))
+                    .limit(100)
+                    .all(),
+                ),
+              )
+              if (sessions.length === 0) return
 
-            yield* Effect.sync(() =>
-              Database.transaction((db) => {
-                const usageBySession = new Map<SessionID, Usage>(
-                  sessions.map((session) => [
-                    session.id,
-                    { cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
-                  ]),
-                )
+              yield* Effect.sync(() =>
+                Database.transaction((db) => {
+                  const usageBySession = new Map<SessionID, Usage>(
+                    sessions.map((session) => [
+                      session.id,
+                      { cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
+                    ]),
+                  )
 
-                for (const row of db
-                  .select({ session_id: MessageTable.session_id, data: MessageTable.data })
-                  .from(MessageTable)
-                  .where(inArray(MessageTable.session_id, sessions.map((session) => session.id)))
-                  .all()) {
-                  if (row.data.role !== "assistant") continue
+                  for (const row of db
+                    .select({ session_id: MessageTable.session_id, data: MessageTable.data })
+                    .from(MessageTable)
+                    .where(inArray(MessageTable.session_id, sessions.map((session) => session.id)))
+                    .all()) {
+                    if (row.data.role !== "assistant") continue
 
-                  const current = usageBySession.get(row.session_id)
-                  if (!current) continue
-                  current.cost += row.data.cost
-                  current.tokens.input += row.data.tokens.input
-                  current.tokens.output += row.data.tokens.output
-                  current.tokens.reasoning += row.data.tokens.reasoning
-                  current.tokens.cache.read += row.data.tokens.cache.read
-                  current.tokens.cache.write += row.data.tokens.cache.write
-                }
+                    const current = usageBySession.get(row.session_id)
+                    if (!current) continue
+                    current.cost += row.data.cost
+                    current.tokens.input += row.data.tokens.input
+                    current.tokens.output += row.data.tokens.output
+                    current.tokens.reasoning += row.data.tokens.reasoning
+                    current.tokens.cache.read += row.data.tokens.cache.read
+                    current.tokens.cache.write += row.data.tokens.cache.write
+                  }
 
-                for (const [sessionID, value] of usageBySession) {
-                  db.update(SessionTable)
-                    .set({
-                      cost: value.cost,
-                      tokens_input: value.tokens.input,
-                      tokens_output: value.tokens.output,
-                      tokens_reasoning: value.tokens.reasoning,
-                      tokens_cache_read: value.tokens.cache.read,
-                      tokens_cache_write: value.tokens.cache.write,
-                    })
-                    .where(eq(SessionTable.id, sessionID))
-                    .run()
-                }
+                  for (const [sessionID, value] of usageBySession) {
+                    db.update(SessionTable)
+                      .set({
+                        cost: value.cost,
+                        tokens_input: value.tokens.input,
+                        tokens_output: value.tokens.output,
+                        tokens_reasoning: value.tokens.reasoning,
+                        tokens_cache_read: value.tokens.cache.read,
+                        tokens_cache_write: value.tokens.cache.write,
+                      })
+                      .where(eq(SessionTable.id, sessionID))
+                      .run()
+                  }
+                }),
+              )
+
+              return sessions.at(-1)?.id
+            }).pipe(
+              Effect.withSpan("DataMigration.sessionUsage.page", {
+                attributes: {
+                  "data_migration.name": "session_usage_from_messages",
+                  "data_migration.page": page,
+                  "data_migration.cursor": cursor ?? "",
+                },
               }),
             )
-
-            cursor = sessions.at(-1)?.id
+            if (!next) return
+            cursor = next
             yield* Effect.sleep("10 millis")
           }
         }),
