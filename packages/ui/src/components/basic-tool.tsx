@@ -1,4 +1,4 @@
-import { createEffect, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
 import { createStore } from "solid-js/store"
@@ -40,25 +40,75 @@ export interface BasicToolProps {
 }
 
 const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
+const deferredMounts: Array<() => void> = []
+let deferredFrame: number | undefined
+
+function flushDeferredMounts() {
+  deferredFrame = undefined
+  deferredMounts.shift()?.()
+  if (deferredMounts.length === 0) return
+  deferredFrame = requestAnimationFrame(flushDeferredMounts)
+}
+
+function scheduleDeferredFlush() {
+  if (deferredFrame !== undefined) return
+  deferredFrame = requestAnimationFrame(() => {
+    deferredFrame = requestAnimationFrame(flushDeferredMounts)
+  })
+}
+
+function scheduleDeferredMount(fn: () => void) {
+  let active = true
+  deferredMounts.push(() => {
+    if (active) fn()
+  })
+  scheduleDeferredFlush()
+  return () => {
+    active = false
+  }
+}
+
+function scheduleFrameMount(fn: () => void) {
+  let active = true
+  const frame = requestAnimationFrame(() => {
+    if (active) fn()
+  })
+  return () => {
+    active = false
+    cancelAnimationFrame(frame)
+  }
+}
 
 export function BasicTool(props: BasicToolProps) {
   const [state, setState] = createStore({
     open: props.defaultOpen ?? false,
-    ready: props.defaultOpen ?? false,
+    ready: !props.defer && (props.defaultOpen ?? false),
   })
   const open = () => state.open
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
 
-  let frame: number | undefined
+  let cancelReady: (() => void) | undefined
 
   const cancel = () => {
-    if (frame === undefined) return
-    cancelAnimationFrame(frame)
-    frame = undefined
+    cancelReady?.()
+    cancelReady = undefined
+  }
+
+  const scheduleReady = (initial = false) => {
+    cancel()
+    cancelReady = (initial ? scheduleDeferredMount : scheduleFrameMount)(() => {
+      cancelReady = undefined
+      if (!open()) return
+      setState("ready", true)
+    })
   }
 
   onCleanup(cancel)
+
+  onMount(() => {
+    if (props.defer && open()) scheduleReady(true)
+  })
 
   createEffect(() => {
     if (props.forceOpen) setState("open", true)
@@ -75,12 +125,7 @@ export function BasicTool(props: BasicToolProps) {
           return
         }
 
-        cancel()
-        frame = requestAnimationFrame(() => {
-          frame = undefined
-          if (!open()) return
-          setState("ready", true)
-        })
+        scheduleReady()
       },
       { defer: true },
     ),
