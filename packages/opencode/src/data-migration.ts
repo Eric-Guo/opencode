@@ -56,15 +56,6 @@ export const layer = Layer.effect(
                   .where(inArray(MessageTable.session_id, sessions.map((session) => session.id)))
                   .all()) {
                   if (row.data.role !== "assistant") continue
-                  if (!("cost" in row.data) || typeof row.data.cost !== "number") continue
-                  if (!("tokens" in row.data) || typeof row.data.tokens !== "object" || row.data.tokens === null) continue
-                  if (!("input" in row.data.tokens) || typeof row.data.tokens.input !== "number") continue
-                  if (!("output" in row.data.tokens) || typeof row.data.tokens.output !== "number") continue
-                  if (!("reasoning" in row.data.tokens) || typeof row.data.tokens.reasoning !== "number") continue
-                  if (!("cache" in row.data.tokens) || typeof row.data.tokens.cache !== "object" || row.data.tokens.cache === null)
-                    continue
-                  if (!("read" in row.data.tokens.cache) || typeof row.data.tokens.cache.read !== "number") continue
-                  if (!("write" in row.data.tokens.cache) || typeof row.data.tokens.cache.write !== "number") continue
 
                   const current = usageBySession.get(row.session_id)
                   if (!current) continue

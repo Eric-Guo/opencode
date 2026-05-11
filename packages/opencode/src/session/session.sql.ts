@@ -10,7 +10,7 @@ import type { WorkspaceID } from "../control-plane/schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
-type InfoData = Omit<MessageV2.Info, "id" | "sessionID">
+type InfoData<T extends MessageV2.Info = MessageV2.Info> = T extends unknown ? Omit<T, "id" | "sessionID"> : never
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 
 export const SessionTable = sqliteTable(
