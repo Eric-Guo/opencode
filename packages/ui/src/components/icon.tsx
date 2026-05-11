@@ -115,6 +115,8 @@ function viewBox(name: keyof typeof icons) {
 function ensureSprite() {
   if (typeof document === "undefined") return
   if (document.getElementById(spriteID)) return
+  const body = document.body as HTMLElement | null
+  if (!body) return
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
   svg.id = spriteID
@@ -129,7 +131,7 @@ function ensureSprite() {
       return `<symbol id="${symbol(key)}" viewBox="${viewBox(key)}">${path}</symbol>`
     })
     .join("")
-  document.body.prepend(svg)
+  body.insertBefore(svg, body.firstChild)
 }
 
 export interface IconProps extends ComponentProps<"svg"> {
