@@ -106,7 +106,7 @@ export interface SessionReviewProps {
   focusedFile?: string
   open?: string[]
   onOpenChange?: (open: string[]) => void
-  scrollRef?: (el: HTMLDivElement) => void
+  scrollRef?: (el: HTMLDivElement | undefined) => void
   onScroll?: JSX.EventHandlerUnion<HTMLDivElement, Event>
   class?: string
   classList?: Record<string, boolean | undefined>

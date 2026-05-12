@@ -135,12 +135,13 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       empty={props.empty}
       scrollRef={(el) => {
         scroll = el
+        props.onScrollRef?.(el)
+        if (!el) return
         makeEventListener(el, "wheel", handleInteraction, { passive: true, capture: true })
         makeEventListener(el, "mousewheel", handleInteraction, { passive: true, capture: true })
         makeEventListener(el, "pointerdown", handleInteraction, { passive: true, capture: true })
         makeEventListener(el, "touchstart", handleInteraction, { passive: true, capture: true })
         makeEventListener(el, "keydown", handleInteraction, { capture: true })
-        props.onScrollRef?.(el)
         queueRestore()
       }}
       onScroll={handleScroll}

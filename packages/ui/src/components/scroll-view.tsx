@@ -1,10 +1,10 @@
-import { onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { useI18n } from "../context/i18n"
 
 export interface ScrollViewProps extends ComponentProps<"div"> {
-  viewportRef?: (el: HTMLDivElement) => void
+  viewportRef?: (el: HTMLDivElement | undefined) => void
   orientation?: "vertical" | "horizontal" // currently only vertical is fully implemented for thumb
 }
 
@@ -101,6 +101,10 @@ export function ScrollView(props: ScrollViewProps) {
     createResizeObserver([viewportRef, viewportRef.firstElementChild], updateThumb)
 
     updateThumb()
+
+    onCleanup(() => {
+      local.viewportRef?.(undefined)
+    })
   })
 
   let startY = 0
