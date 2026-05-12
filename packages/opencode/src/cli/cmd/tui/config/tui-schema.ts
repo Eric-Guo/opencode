@@ -7,6 +7,17 @@ const KeymapLeaderTimeout = Schema.Int.check(Schema.isGreaterThan(0)).annotate({
   description: "Leader key timeout in milliseconds",
 })
 
+export const TuiAttentionSoundNames = ["default", "question", "permission", "error", "done"] as const
+export type TuiAttentionSoundName = (typeof TuiAttentionSoundNames)[number]
+
+const TuiAttentionSounds = Schema.Struct({
+  default: Schema.optional(Schema.String),
+  question: Schema.optional(Schema.String),
+  permission: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+  done: Schema.optional(Schema.String),
+})
+
 export const ScrollSpeed = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0.001))
 
 export const ScrollAcceleration = Schema.Struct({
@@ -22,6 +33,8 @@ export const Attention = Schema.Struct({
   notifications: Schema.optional(Schema.Boolean),
   sound: Schema.optional(Schema.Boolean),
   volume: Schema.optional(Schema.Number.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(1))),
+  sound_pack: Schema.optional(Schema.String),
+  sounds: Schema.optional(TuiAttentionSounds),
 }).annotate({ description: "Attention notification and sound settings" })
 
 export const TuiInfo = Schema.Struct({

@@ -98,6 +98,8 @@ function config(input?: {
       notifications: true,
       sound: true,
       volume: 0.4,
+      sound_pack: "opencode.default",
+      sounds: {},
     },
     diff_style: input?.diff_style,
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {

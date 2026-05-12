@@ -194,6 +194,12 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
             sound: false,
           }
         },
+        soundboard: {
+          registerPack: () => () => {},
+          activate: () => false,
+          current: () => "opencode.default",
+          list: () => [],
+        },
       },
     keys: {
       formatSequence: () => "",

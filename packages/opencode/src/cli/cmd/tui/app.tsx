@@ -63,7 +63,7 @@ import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
-import { createTuiAttention, type TuiAttentionHost } from "@/cli/cmd/tui/attention"
+import { createTuiAttention } from "@/cli/cmd/tui/attention"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 import { CommandPaletteProvider, useCommandPalette } from "./context/command-palette"
 import { OpencodeKeymapProvider, registerOpencodeKeymap, useBindings, useOpencodeKeymap } from "./keymap"
@@ -177,15 +177,12 @@ export function tui(input: {
       unguard?.()
       resolve()
     }
-
     const onBeforeExit = async () => {
       offKeymap()
       await TuiPluginRuntime.dispose()
-      attention.dispose()
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
-    const attention = createTuiAttention({ renderer, config: input.config })
     // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
     void renderer.getPalette({ size: 16 }).catch(() => undefined)
     const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
@@ -235,7 +232,7 @@ export function tui(input: {
                                             <PromptHistoryProvider>
                                               <PromptRefProvider>
                                                 <EditorContextProvider>
-                                                  <App onSnapshot={input.onSnapshot} attention={attention} />
+                                                  <App onSnapshot={input.onSnapshot} />
                                                 </EditorContextProvider>
                                               </PromptRefProvider>
                                             </PromptHistoryProvider>
@@ -262,7 +259,7 @@ export function tui(input: {
   })
 }
 
-function App(props: { onSnapshot?: () => Promise<string[]>; attention: TuiAttentionHost }) {
+function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const tuiConfig = useTuiConfig()
   const route = useRoute()
   const dimensions = useTerminalDimensions()
@@ -286,6 +283,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; attention: TuiAttent
     routeRev()
     return routes.get(name)?.at(-1)?.render
   }
+  const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
 
   const api = createTuiApi({
     tuiConfig,
@@ -301,12 +299,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; attention: TuiAttent
     theme: themeState,
     toast,
     renderer,
-    attention: props.attention,
+    attention,
   })
   const [ready, setReady] = createSignal(false)
   TuiPluginRuntime.init({
     api,
     config: tuiConfig,
+    attention,
   })
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
