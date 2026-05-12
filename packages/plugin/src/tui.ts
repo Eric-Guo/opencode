@@ -231,11 +231,16 @@ export type TuiAttentionSoundName = "default" | "question" | "permission" | "err
 
 export type TuiAttentionSound =
   | boolean
-  | TuiAttentionSoundName
   | {
-      enabled?: boolean
       name?: TuiAttentionSoundName
       volume?: number
+      when?: TuiAttentionWhen
+    }
+
+export type TuiAttentionNotification =
+  | boolean
+  | {
+      when?: TuiAttentionWhen
     }
 
 export type TuiAttentionSoundPack = {
@@ -265,8 +270,8 @@ export type TuiAttentionSoundboard = {
 export type TuiAttentionNotifyInput = {
   title?: string
   message: string
+  notification?: TuiAttentionNotification
   sound?: TuiAttentionSound
-  when?: TuiAttentionWhen
 }
 
 export type TuiAttentionNotifySkipReason =

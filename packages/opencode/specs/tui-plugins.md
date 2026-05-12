@@ -264,13 +264,14 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 
 ### Attention
 
-- `api.attention.notify({ title?, message, sound?, when? })` requests user attention while keeping terminal focus, notifications, and audio owned by the host.
-- `message` is required; `title` defaults to `"opencode"`; `when` defaults to `"always"`; `sound` defaults to `false`.
+- `api.attention.notify({ title?, message, notification?, sound? })` requests user attention while keeping terminal focus, notifications, and audio owned by the host.
+- `message` is required; `title` defaults to `"opencode"`; `notification` defaults to enabled with `when: "blurred"`; `sound` defaults to enabled with `when: "always"`.
 - `when: "always"` requests delivery regardless of terminal focus state.
 - `when: "focused"` only requests delivery after the terminal is known focused; `when: "blurred"` only requests delivery after the terminal is known blurred.
+- Example: `notification: { when: "blurred" }, sound: { name: "question", when: "always" }` plays sound while focused but only triggers system notifications when blurred.
 - Semantic sound names are `"default"`, `"question"`, `"permission"`, `"error"`, and `"done"`.
-- `sound: true` plays the `"default"` sound; `sound: "question"` or `sound: { name: "question" }` plays a named semantic sound.
-- `sound: { volume }` overrides volume for that call; `sound: { enabled: false }` disables sound for that call.
+- `sound: true` plays the `"default"` sound; `sound: { name: "question" }` plays a named semantic sound.
+- `sound: { volume }` overrides volume for that call; `sound: false` disables sound for that call; `notification: false` disables system notification for that call.
 - `api.attention.soundboard.registerPack({ id, name?, sounds })` registers a sound pack and returns a disposer. Relative paths resolve from the plugin root and are cleaned up on plugin deactivation.
 - `api.attention.soundboard.activate(id, { persist })` selects the active pack. `persist: true` writes the selected pack id to TUI KV state, not `tui.json`.
 - `api.attention.soundboard.current()` and `list()` expose the active/registered packs for plugin UX.
