@@ -758,6 +758,7 @@ export function MessageTimeline(props: {
   let listFrame: number | undefined
   let contentFrame: number | undefined
   const [scrollRoot, setScrollRoot] = createSignal<HTMLDivElement>()
+  const [virtualListReady, setVirtualListReady] = createSignal(false)
 
   const updateTitleMetrics = () => {
     if (!head || head.clientWidth <= 0) return
@@ -785,7 +786,8 @@ export function MessageTimeline(props: {
 
   const connectListRoot = (root: HTMLDivElement) => {
     if (listRoot !== root) return
-    if (!root.isConnected || !root.ownerDocument.defaultView) {
+    const view = root.ownerDocument.defaultView
+    if (!root.isConnected || !view) {
       listFrame = requestAnimationFrame(() => {
         listFrame = undefined
         connectListRoot(root)
@@ -795,16 +797,27 @@ export function MessageTimeline(props: {
 
     props.setScrollRef(root)
     setScrollRoot(root)
+    setVirtualListReady(typeof view.ResizeObserver === "function")
     scheduleContentRoot(root)
   }
 
-  const bindListRoot = (root: HTMLDivElement) => {
+  const bindListRoot = (root: HTMLDivElement | undefined) => {
+    if (!root) {
+      if (listFrame !== undefined) cancelAnimationFrame(listFrame)
+      if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
+      listRoot = undefined
+      setScrollRoot(undefined)
+      setVirtualListReady(false)
+      props.setScrollRef(undefined)
+      return
+    }
     if (root === listRoot) return
 
     if (listFrame !== undefined) cancelAnimationFrame(listFrame)
     if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
     listRoot = root
     setScrollRoot(undefined)
+    setVirtualListReady(false)
     connectListRoot(root)
   }
 
@@ -858,6 +871,7 @@ export function MessageTimeline(props: {
     if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
     setScrollRoot(undefined)
     props.setScrollRef(undefined)
+    setVirtualListReady(false)
   })
 
   const viewShare = () => {
@@ -1666,26 +1680,35 @@ export function MessageTimeline(props: {
           >
             <Show when={scrollRoot()}>
               {(root) => (
-                <Virtualizer
-                  data={timelineRowKeys()}
-                  cache={virtualCache()}
-                  scrollRef={root()}
-                  shift={props.historyShift}
-                  keepMounted={keepMounted()}
-                  ref={(handle) => {
-                    if (!handle) {
-                      writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
-                      virtualizer = undefined
-                      return
-                    }
-                    virtualizer = handle
-                    virtualizerSessionKey = cacheSessionKey
-                    virtualizerRowKeys = cacheRowKeys
-                    scheduleContentRoot(root())
-                  }}
+                <Show
+                  when={virtualListReady()}
+                  fallback={
+                    <div class="relative min-w-0 w-full">
+                      <For each={timelineRowKeys()}>{(key) => <TimelineRowView rowKey={key} />}</For>
+                    </div>
+                  }
                 >
-                  {(key) => <TimelineRowView rowKey={key} />}
-                </Virtualizer>
+                  <Virtualizer
+                    data={timelineRowKeys()}
+                    cache={virtualCache()}
+                    scrollRef={root()}
+                    shift={props.historyShift}
+                    keepMounted={keepMounted()}
+                    ref={(handle) => {
+                      if (!handle) {
+                        writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
+                        virtualizer = undefined
+                        return
+                      }
+                      virtualizer = handle
+                      virtualizerSessionKey = cacheSessionKey
+                      virtualizerRowKeys = cacheRowKeys
+                      scheduleContentRoot(root())
+                    }}
+                  >
+                    {(key) => <TimelineRowView rowKey={key} />}
+                  </Virtualizer>
+                </Show>
               )}
             </Show>
           </ScrollView>
