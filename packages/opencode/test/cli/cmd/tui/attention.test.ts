@@ -53,6 +53,9 @@ class FakeAudioEngine {
   playCalls = 0
   disposeCalls = 0
   volumes: (number | undefined)[] = []
+  loadPaths: string[] = []
+  rejectLoad = false
+  rejectPaths = new Set<string>()
   errorListenerCount = 0
 
   on(_event: "error", _listener: (error: Error, context: AudioErrorContext) => void) {
@@ -75,8 +78,10 @@ class FakeAudioEngine {
     return true
   }
 
-  loadSound(_data: Uint8Array | ArrayBuffer) {
+  async loadSoundFile(path: string) {
     this.loadCalls += 1
+    this.loadPaths.push(path)
+    if (this.rejectLoad || this.rejectPaths.has(path)) throw new Error("decode failed")
     return this.loadResult
   }
 
@@ -94,21 +99,10 @@ class FakeAudioEngine {
 class FakeAudio {
   engine = new FakeAudioEngine()
   createCalls = 0
-  bytesCalls = 0
-  bytesPaths: string[] = []
-  rejectBytes = false
-  rejectPaths = new Set<string>()
 
   create() {
     this.createCalls += 1
     return this.engine
-  }
-
-  async bytes(path: string) {
-    this.bytesCalls += 1
-    this.bytesPaths.push(path)
-    if (this.rejectBytes || this.rejectPaths.has(path)) throw new Error("decode failed")
-    return new Uint8Array([1, 2, 3])
   }
 }
 
@@ -431,7 +425,7 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: true,
     })
-    expect(audio.bytesPaths).toEqual(["/tmp/question.mp3"])
+    expect(audio.engine.loadPaths).toEqual(["/tmp/question.mp3"])
 
     dispose()
     expect(attention.soundboard.current()).toBe("opencode.default")
@@ -440,7 +434,7 @@ describe("createTuiAttention", () => {
   test("uses config sound overrides before active pack sounds and falls back on load failure", async () => {
     const renderer = new FakeRenderer()
     const audio = new FakeAudio()
-    audio.rejectPaths.add("/tmp/bad-question.mp3")
+    audio.engine.rejectPaths.add("/tmp/bad-question.mp3")
     const attention = createTuiAttention({
       renderer,
       config: config({ sounds: { question: "/tmp/bad-question.mp3" } }),
@@ -461,7 +455,7 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: true,
     })
-    expect(audio.bytesPaths).toEqual(["/tmp/bad-question.mp3", "/tmp/good-question.mp3"])
+    expect(audio.engine.loadPaths).toEqual(["/tmp/bad-question.mp3", "/tmp/good-question.mp3"])
   })
 
   test("persists activated sound pack in KV", () => {
@@ -485,7 +479,7 @@ describe("createTuiAttention", () => {
     const renderer = new FakeRenderer()
     const audio = new FakeAudio()
     renderer.notificationThrows = true
-    audio.rejectBytes = true
+    audio.engine.rejectLoad = true
     const attention = createTuiAttention({ renderer, config: config(), audio })
     renderer.emit("blur")
 

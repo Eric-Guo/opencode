@@ -32,14 +32,13 @@ type AttentionAudioEngine = {
   on(event: "error", listener: (error: Error, context: AudioErrorContext) => void): unknown
   isStarted(): boolean
   start(): boolean
-  loadSound(data: Uint8Array | ArrayBuffer): AudioSound | null
+  loadSoundFile(file: string): Promise<AudioSound | null>
   play(sound: AudioSound, options?: { volume?: number }): unknown | null
   dispose(): void
 }
 
 type AttentionAudio = {
   create(): AttentionAudioEngine
-  bytes(path: string): Promise<Uint8Array>
 }
 
 type RegisteredSoundPack = TuiAttentionSoundPack & {
@@ -57,13 +56,13 @@ const DEFAULT_PACK_ID = "opencode.default"
 const KV_SOUND_PACK = "attention_sound_pack"
 const TITLE_LIMIT = 80
 const MESSAGE_LIMIT = 240
-const SOUND_NAMES = [
+const SOUND_NAMES: readonly TuiAttentionSoundName[] = [
   "default",
   "question",
   "permission",
   "error",
   "done",
-] as const satisfies readonly TuiAttentionSoundName[]
+]
 const BUILTIN_PACK: RegisteredSoundPack = {
   id: DEFAULT_PACK_ID,
   name: "OpenCode Default",
@@ -169,9 +168,8 @@ export function createTuiAttention(input: {
   const packs = new Map<string, RegisteredSoundPack>([[BUILTIN_PACK.id, BUILTIN_PACK]])
   const sounds = new Map<string, Promise<AudioSound | null>>()
 
-  const audioInput =
-    input.audio ??
-    ({
+  const audioInput: AttentionAudio =
+    input.audio ?? {
       create: () => {
         const engine = Audio.create({ autoStart: false })
         engine.on("error", (error, context) => {
@@ -179,8 +177,7 @@ export function createTuiAttention(input: {
         })
         return engine
       },
-      bytes: (file) => Bun.file(file).bytes(),
-    } satisfies AttentionAudio)
+    }
 
   const onFocus = () => {
     focus = "focused"
@@ -211,13 +208,10 @@ export function createTuiAttention(input: {
     if (!audio) return null
     const cached = sounds.get(file)
     if (cached) return cached
-    const task = audioInput
-      .bytes(file)
-      .then((bytes) => audio?.loadSound(bytes) ?? null)
-      .catch((error) => {
-        log.debug("failed to load attention sound", { file, error })
-        return null
-      })
+    const task = audio.loadSoundFile(file).catch((error) => {
+      log.debug("failed to load attention sound", { file, error })
+      return null
+    })
     sounds.set(file, task)
     return task
   }
