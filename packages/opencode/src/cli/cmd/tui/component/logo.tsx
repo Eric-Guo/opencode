@@ -1,16 +1,15 @@
 import {
-  Audio,
   BoxRenderable,
   MouseButton,
   MouseEvent,
   RGBA,
   TextAttributes,
-  type AudioSound,
   type AudioVoice,
 } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { For, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
+import * as TuiAudio from "@tui/util/audio"
 import { go, logo } from "@/cli/logo"
 import pulseA from "../asset/pulse-a.wav" with { type: "file" }
 import pulseB from "../asset/pulse-b.wav" with { type: "file" }
@@ -102,41 +101,18 @@ const GLOW_OUT = 1600
 const PEAK = RGBA.fromInts(255, 255, 255)
 const PULSE_SOUNDS = [pulseA, pulseB, pulseC]
 
-let logoAudio: Audio | undefined
-let logoAudioSounds: Promise<{ charge: AudioSound | null; pulse: (AudioSound | null)[] }> | undefined
 let logoAudioVoice: AudioVoice | undefined
 let logoAudioTail: ReturnType<typeof setTimeout> | undefined
 let logoAudioSeq = 0
 let logoAudioShot = 0
 
-function createLogoAudio() {
-  if (logoAudio) return logoAudio
-  try {
-    logoAudio = Audio.create({ autoStart: false })
-    logoAudio.on("error", () => undefined)
-    return logoAudio
-  } catch {
-    return
-  }
-}
-
-function loadLogoSounds(audio: Audio) {
-  logoAudioSounds ??= Promise.all([
-    audio.loadSoundFile(charge).catch(() => null),
-    Promise.all(PULSE_SOUNDS.map((file) => audio.loadSoundFile(file).catch(() => null))),
-  ]).then(([charge, pulse]) => ({ charge, pulse }))
-  return logoAudioSounds
-}
-
 function startLogoSound() {
   stopLogoSound()
   const id = ++logoAudioSeq
-  const audio = createLogoAudio()
-  if (!audio || (!audio.isStarted() && !audio.start())) return
-  void loadLogoSounds(audio)
-    .then((sounds) => {
-      if (id !== logoAudioSeq || sounds.charge == null) return
-      const voice = audio.play(sounds.charge, { volume: 0.24, loop: true })
+  void TuiAudio.loadSoundFile(charge)
+    .then((sound) => {
+      if (id !== logoAudioSeq || sound == null) return
+      const voice = TuiAudio.play(sound, { volume: 0.24, loop: true })
       if (voice == null) return
       logoAudioVoice = voice
     })
@@ -156,37 +132,32 @@ function stopLogoSound(delay = 0) {
   const voice = logoAudioVoice
   if (delay <= 0) {
     logoAudioVoice = undefined
-    logoAudio?.stopVoice(voice)
+    TuiAudio.stopVoice(voice)
     return
   }
   logoAudioTail = setTimeout(() => {
     logoAudioTail = undefined
     if (logoAudioVoice !== voice) return
     logoAudioVoice = undefined
-    logoAudio?.stopVoice(voice)
+    TuiAudio.stopVoice(voice)
   }, delay)
 }
 
 function pulseLogoSound(scale = 1) {
   stopLogoSound(140)
   const id = logoAudioSeq
-  const audio = createLogoAudio()
-  if (!audio || (!audio.isStarted() && !audio.start())) return
-  void loadLogoSounds(audio)
-    .then((sounds) => {
+  const file = PULSE_SOUNDS[logoAudioShot++ % PULSE_SOUNDS.length]
+  void TuiAudio.loadSoundFile(file)
+    .then((sound) => {
       if (id !== logoAudioSeq) return
-      const sound = sounds.pulse[logoAudioShot++ % PULSE_SOUNDS.length]
       if (sound == null) return
-      audio.play(sound, { volume: 0.26 + 0.14 * scale })
+      TuiAudio.play(sound, { volume: 0.26 + 0.14 * scale })
     })
     .catch(() => undefined)
 }
 
 function disposeLogoSound() {
   stopLogoSound()
-  logoAudio?.dispose()
-  logoAudio = undefined
-  logoAudioSounds = undefined
 }
 
 type Ring = {

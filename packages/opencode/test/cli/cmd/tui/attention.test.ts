@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AudioErrorContext, AudioSound } from "@opentui/core"
+import type { AudioPlayOptions, AudioSound } from "@opentui/core"
 import { createTuiAttention } from "@/cli/cmd/tui/attention"
 import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
 
@@ -43,40 +43,14 @@ class FakeRenderer {
 }
 
 class FakeAudioEngine {
-  started = false
-  startResult = true
   loadResult: AudioSound | null = 1
   playResult: number | null = 1
-  startCalls = 0
-  startMixerCalls = 0
   loadCalls = 0
   playCalls = 0
-  disposeCalls = 0
   volumes: (number | undefined)[] = []
   loadPaths: string[] = []
   rejectLoad = false
   rejectPaths = new Set<string>()
-  errorListenerCount = 0
-
-  on(_event: "error", _listener: (error: Error, context: AudioErrorContext) => void) {
-    this.errorListenerCount += 1
-    return this
-  }
-
-  isStarted() {
-    return this.started
-  }
-
-  start() {
-    this.startCalls += 1
-    this.started = this.startResult
-    return this.startResult
-  }
-
-  startMixer() {
-    this.startMixerCalls += 1
-    return true
-  }
 
   async loadSoundFile(path: string) {
     this.loadCalls += 1
@@ -90,19 +64,17 @@ class FakeAudioEngine {
     this.volumes.push(options?.volume)
     return this.playResult
   }
-
-  dispose() {
-    this.disposeCalls += 1
-  }
 }
 
 class FakeAudio {
   engine = new FakeAudioEngine()
-  createCalls = 0
 
-  create() {
-    this.createCalls += 1
-    return this.engine
+  loadSoundFile(path: string) {
+    return this.engine.loadSoundFile(path)
+  }
+
+  play(sound: AudioSound, options?: AudioPlayOptions) {
+    return this.engine.play(sound, options)
   }
 }
 
@@ -148,7 +120,7 @@ describe("createTuiAttention", () => {
       sound: true,
     })
     expect(renderer.notifications).toHaveLength(0)
-    expect(audio.createCalls).toBe(1)
+    expect(audio.engine.playCalls).toBe(1)
   })
 
   test("supports blurred-only requests", async () => {
@@ -175,7 +147,7 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: true,
     })
-    expect(audio.createCalls).toBe(1)
+    expect(audio.engine.playCalls).toBe(1)
   })
 
   test("supports focused-only requests", async () => {
@@ -215,7 +187,7 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: true,
     })
-    expect(audio.createCalls).toBe(1)
+    expect(audio.engine.playCalls).toBe(1)
     expect(renderer.notifications).toEqual([{ title: "opencode", message: "hello" }])
   })
 
@@ -245,7 +217,7 @@ describe("createTuiAttention", () => {
       skipped: "focused",
     })
     expect(renderer.notifications).toHaveLength(0)
-    expect(audio.createCalls).toBe(0)
+    expect(audio.engine.loadCalls).toBe(0)
   })
 
   test("can play sound always while notification is blurred-only", async () => {
@@ -265,7 +237,7 @@ describe("createTuiAttention", () => {
       sound: true,
     })
     expect(renderer.notifications).toHaveLength(0)
-    expect(audio.createCalls).toBe(1)
+    expect(audio.engine.playCalls).toBe(1)
 
     renderer.emit("blur")
     expect(
@@ -292,7 +264,7 @@ describe("createTuiAttention", () => {
       sound: true,
     })
     expect(renderer.notifications).toHaveLength(0)
-    expect(audio.createCalls).toBe(1)
+    expect(audio.engine.playCalls).toBe(1)
   })
 
   test("skips empty messages and disabled attention", async () => {
@@ -345,16 +317,16 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: false,
     })
-    expect(soundDisabledAudio.createCalls).toBe(0)
+    expect(soundDisabledAudio.engine.loadCalls).toBe(0)
   })
 
-  test("initializes audio lazily only for eligible sound requests", async () => {
+  test("loads audio lazily only for eligible sound requests", async () => {
     const renderer = new FakeRenderer()
     const audio = new FakeAudio()
     const attention = createTuiAttention({ renderer, config: config(), audio })
 
     await attention.notify({ message: "unknown", sound: { when: "blurred" } })
-    expect(audio.createCalls).toBe(0)
+    expect(audio.engine.loadCalls).toBe(0)
 
     renderer.emit("blur")
     expect(await attention.notify({ message: "blurred", sound: { volume: 2 } })).toEqual({
@@ -362,17 +334,14 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: true,
     })
-    expect(audio.createCalls).toBe(1)
-    expect(audio.engine.startCalls).toBe(1)
-    expect(audio.engine.startMixerCalls).toBe(0)
     expect(audio.engine.loadCalls).toBe(1)
     expect(audio.engine.volumes).toEqual([1])
   })
 
-  test("handles unavailable or already-started audio correctly", async () => {
+  test("handles unavailable playback and cached audio correctly", async () => {
     const unavailableRenderer = new FakeRenderer()
     const unavailableAudio = new FakeAudio()
-    unavailableAudio.engine.startResult = false
+    unavailableAudio.engine.playResult = null
     const unavailable = createTuiAttention({ renderer: unavailableRenderer, config: config(), audio: unavailableAudio })
     unavailableRenderer.emit("blur")
 
@@ -381,20 +350,18 @@ describe("createTuiAttention", () => {
       notification: true,
       sound: false,
     })
-    expect(unavailableAudio.engine.loadCalls).toBe(0)
-    expect(unavailableAudio.engine.playCalls).toBe(0)
+    expect(unavailableAudio.engine.loadCalls).toBe(1)
+    expect(unavailableAudio.engine.playCalls).toBe(1)
 
-    const startedRenderer = new FakeRenderer()
-    const startedAudio = new FakeAudio()
-    startedAudio.engine.started = true
-    const started = createTuiAttention({ renderer: startedRenderer, config: config(), audio: startedAudio })
-    startedRenderer.emit("blur")
+    const cachedRenderer = new FakeRenderer()
+    const cachedAudio = new FakeAudio()
+    const cached = createTuiAttention({ renderer: cachedRenderer, config: config(), audio: cachedAudio })
+    cachedRenderer.emit("blur")
 
-    await started.notify({ message: "one", sound: true })
-    await started.notify({ message: "two", sound: true })
-    expect(startedAudio.engine.startCalls).toBe(0)
-    expect(startedAudio.engine.loadCalls).toBe(1)
-    expect(startedAudio.engine.playCalls).toBe(2)
+    await cached.notify({ message: "one", sound: true })
+    await cached.notify({ message: "two", sound: true })
+    expect(cachedAudio.engine.loadCalls).toBe(1)
+    expect(cachedAudio.engine.playCalls).toBe(2)
   })
 
   test("plays named sounds from the active sound pack", async () => {
@@ -503,7 +470,7 @@ describe("createTuiAttention", () => {
     expect(renderer.notifications).toEqual([{ title: "danger title", message: "hello world" }])
   })
 
-  test("disposes renderer listeners and audio", async () => {
+  test("disposes renderer listeners", async () => {
     const renderer = new FakeRenderer()
     const audio = new FakeAudio()
     const attention = createTuiAttention({ renderer, config: config(), audio })
@@ -518,7 +485,7 @@ describe("createTuiAttention", () => {
 
     expect(renderer.listenerCount("focus")).toBe(0)
     expect(renderer.listenerCount("blur")).toBe(0)
-    expect(audio.engine.disposeCalls).toBe(1)
+    expect(audio.engine.loadCalls).toBe(1)
     expect(await attention.notify({ message: "hello" })).toEqual({
       ok: false,
       notification: false,

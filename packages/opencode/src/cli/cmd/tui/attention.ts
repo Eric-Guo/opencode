@@ -1,4 +1,4 @@
-import { Audio, type AudioErrorContext, type AudioSound } from "@opentui/core"
+import type { AudioSound } from "@opentui/core"
 import type {
   TuiAttention,
   TuiAttentionNotifyInput,
@@ -12,6 +12,7 @@ import type {
 } from "@opencode-ai/plugin/tui"
 import stripAnsi from "strip-ansi"
 import type { TuiConfig } from "./config/tui"
+import * as TuiAudio from "@tui/util/audio"
 import defaultSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
 import questionSoundPath from "@opencode-ai/ui/audio/bip-bop-03.mp3" with { type: "file" }
 import permissionSoundPath from "@opencode-ai/ui/audio/staplebops-06.mp3" with { type: "file" }
@@ -26,19 +27,6 @@ type AttentionRenderer = {
   on(event: "focus" | "blur", listener: () => void): unknown
   off(event: "focus" | "blur", listener: () => void): unknown
   triggerNotification(message: string, title?: string): boolean
-}
-
-type AttentionAudioEngine = {
-  on(event: "error", listener: (error: Error, context: AudioErrorContext) => void): unknown
-  isStarted(): boolean
-  start(): boolean
-  loadSoundFile(file: string): Promise<AudioSound | null>
-  play(sound: AudioSound, options?: { volume?: number }): unknown | null
-  dispose(): void
-}
-
-type AttentionAudio = {
-  create(): AttentionAudioEngine
 }
 
 type RegisteredSoundPack = TuiAttentionSoundPack & {
@@ -159,25 +147,14 @@ export function createTuiAttention(input: {
   renderer: AttentionRenderer
   config: Pick<TuiConfig.Resolved, "attention">
   kv?: TuiKV
-  audio?: AttentionAudio
+  audio?: Pick<typeof TuiAudio, "loadSoundFile" | "play">
 }): TuiAttentionHost {
   let focus: FocusState = "unknown"
   let disposed = false
-  let audio: AttentionAudioEngine | undefined
   let activePackID: string | undefined
   const packs = new Map<string, RegisteredSoundPack>([[BUILTIN_PACK.id, BUILTIN_PACK]])
   const sounds = new Map<string, Promise<AudioSound | null>>()
-
-  const audioInput: AttentionAudio =
-    input.audio ?? {
-      create: () => {
-        const engine = Audio.create({ autoStart: false })
-        engine.on("error", (error, context) => {
-          log.debug("attention audio error", { error, context })
-        })
-        return engine
-      },
-    }
+  const audio = input.audio ?? TuiAudio
 
   const onFocus = () => {
     focus = "focused"
@@ -205,7 +182,6 @@ export function createTuiAttention(input: {
   }
 
   async function loadSound(file: string) {
-    if (!audio) return null
     const cached = sounds.get(file)
     if (cached) return cached
     const task = audio.loadSoundFile(file).catch((error) => {
@@ -218,10 +194,9 @@ export function createTuiAttention(input: {
 
   async function playSound(name: TuiAttentionSoundName, volume: number) {
     try {
-      audio ??= audioInput.create()
-      if (!audio.isStarted() && !audio.start()) return false
       for (const file of soundCandidates(name)) {
         const current = await loadSound(file)
+        if (disposed) return false
         if (current == null) continue
         if (audio.play(current, { volume }) != null) return true
       }
@@ -316,8 +291,6 @@ export function createTuiAttention(input: {
       disposed = true
       input.renderer.off("focus", onFocus)
       input.renderer.off("blur", onBlur)
-      audio?.dispose()
-      audio = undefined
       sounds.clear()
     },
   }

@@ -2,6 +2,7 @@ import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@op
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
+import * as TuiAudio from "@tui/util/audio"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
@@ -180,6 +181,7 @@ export function tui(input: {
     const onBeforeExit = async () => {
       offKeymap()
       await TuiPluginRuntime.dispose()
+      TuiAudio.dispose()
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
