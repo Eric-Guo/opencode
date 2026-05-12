@@ -12,11 +12,11 @@ import type {
 } from "@opencode-ai/plugin/tui"
 import stripAnsi from "strip-ansi"
 import type { TuiConfig } from "./config/tui"
-import defaultSoundPath from "@opencode-ai/ui/audio/alert-01.mp3" with { type: "file" }
-import questionSoundPath from "@opencode-ai/ui/audio/alert-02.mp3" with { type: "file" }
-import permissionSoundPath from "@opencode-ai/ui/audio/alert-03.mp3" with { type: "file" }
-import errorSoundPath from "@opencode-ai/ui/audio/nope-01.mp3" with { type: "file" }
-import doneSoundPath from "@opencode-ai/ui/audio/yup-01.mp3" with { type: "file" }
+import defaultSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
+import questionSoundPath from "@opencode-ai/ui/audio/bip-bop-03.mp3" with { type: "file" }
+import permissionSoundPath from "@opencode-ai/ui/audio/staplebops-06.mp3" with { type: "file" }
+import errorSoundPath from "@opencode-ai/ui/audio/nope-03.mp3" with { type: "file" }
+import doneSoundPath from "@opencode-ai/ui/audio/bip-bop-01.mp3" with { type: "file" }
 import * as Log from "@opencode-ai/core/util/log"
 
 type FocusState = "unknown" | "focused" | "blurred"
@@ -57,7 +57,13 @@ const DEFAULT_PACK_ID = "opencode.default"
 const KV_SOUND_PACK = "attention_sound_pack"
 const TITLE_LIMIT = 80
 const MESSAGE_LIMIT = 240
-const SOUND_NAMES = ["default", "question", "permission", "error", "done"] as const satisfies readonly TuiAttentionSoundName[]
+const SOUND_NAMES = [
+  "default",
+  "question",
+  "permission",
+  "error",
+  "done",
+] as const satisfies readonly TuiAttentionSoundName[]
 const BUILTIN_PACK: RegisteredSoundPack = {
   id: DEFAULT_PACK_ID,
   name: "OpenCode Default",
@@ -103,7 +109,8 @@ function soundVolume(input: TuiAttentionNotifyInput, config: Pick<TuiConfig.Reso
 }
 
 function soundName(input: TuiAttentionNotifyInput): TuiAttentionSoundName {
-  if (typeof input.sound === "object") return input.sound.name && isSoundName(input.sound.name) ? input.sound.name : "default"
+  if (typeof input.sound === "object")
+    return input.sound.name && isSoundName(input.sound.name) ? input.sound.name : "default"
   return "default"
 }
 
@@ -134,8 +141,9 @@ function normalizePack(pack: TuiAttentionSoundPack): RegisteredSoundPack | undef
     name: pack.name?.trim() || undefined,
     builtin: false,
     sounds: Object.fromEntries(
-      Object.entries(pack.sounds).filter((item): item is [TuiAttentionSoundName, string] =>
-        isSoundName(item[0]) && typeof item[1] === "string" && item[1].trim().length > 0,
+      Object.entries(pack.sounds).filter(
+        (item): item is [TuiAttentionSoundName, string] =>
+          isSoundName(item[0]) && typeof item[1] === "string" && item[1].trim().length > 0,
       ),
     ),
   }
@@ -245,7 +253,10 @@ export function createTuiAttention(input: {
         const notification = shouldNotify
           ? (() => {
               try {
-                return input.renderer.triggerNotification(message, normalizeText(request.title, DEFAULT_TITLE, TITLE_LIMIT))
+                return input.renderer.triggerNotification(
+                  message,
+                  normalizeText(request.title, DEFAULT_TITLE, TITLE_LIMIT),
+                )
               } catch (error) {
                 log.debug("failed to trigger attention notification", { error })
                 return false
