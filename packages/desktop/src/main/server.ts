@@ -57,8 +57,8 @@ export function setWslConfig(config: WslConfig) {
 
 export function preferAppEnv(userDataPath: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? loadShellEnv(shell) : null
-  const configDir = (shellEnv?.OPENCODE_CONFIG_DIR ?? process.env.OPENCODE_CONFIG_DIR)?.trim()
+  const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
+  const configDir = (shellEnv.OPENCODE_CONFIG_DIR ?? process.env.OPENCODE_CONFIG_DIR)?.trim()
   Object.assign(process.env, {
     ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
