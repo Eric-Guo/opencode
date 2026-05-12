@@ -1,9 +1,21 @@
-import { BoxRenderable, MouseButton, MouseEvent, RGBA, TextAttributes } from "@opentui/core"
+import {
+  Audio,
+  BoxRenderable,
+  MouseButton,
+  MouseEvent,
+  RGBA,
+  TextAttributes,
+  type AudioSound,
+  type AudioVoice,
+} from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { For, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
-import * as Sound from "@tui/util/sound"
 import { go, logo } from "@/cli/logo"
+import pulseA from "../asset/pulse-a.wav" with { type: "file" }
+import pulseB from "../asset/pulse-b.wav" with { type: "file" }
+import pulseC from "../asset/pulse-c.wav" with { type: "file" }
+import charge from "../asset/charge.wav" with { type: "file" }
 
 export type LogoShape = {
   left: string[]
@@ -88,6 +100,94 @@ const TAIL = 1.8
 const TRACE_IN = 200
 const GLOW_OUT = 1600
 const PEAK = RGBA.fromInts(255, 255, 255)
+const PULSE_SOUNDS = [pulseA, pulseB, pulseC]
+
+let logoAudio: Audio | undefined
+let logoAudioSounds: Promise<{ charge: AudioSound | null; pulse: (AudioSound | null)[] }> | undefined
+let logoAudioVoice: AudioVoice | undefined
+let logoAudioTail: ReturnType<typeof setTimeout> | undefined
+let logoAudioSeq = 0
+let logoAudioShot = 0
+
+function createLogoAudio() {
+  if (logoAudio) return logoAudio
+  try {
+    logoAudio = Audio.create({ autoStart: false })
+    logoAudio.on("error", () => undefined)
+    return logoAudio
+  } catch {
+    return
+  }
+}
+
+function loadLogoSounds(audio: Audio) {
+  logoAudioSounds ??= Promise.all([
+    audio.loadSoundFile(charge).catch(() => null),
+    Promise.all(PULSE_SOUNDS.map((file) => audio.loadSoundFile(file).catch(() => null))),
+  ]).then(([charge, pulse]) => ({ charge, pulse }))
+  return logoAudioSounds
+}
+
+function startLogoSound() {
+  stopLogoSound()
+  const id = ++logoAudioSeq
+  const audio = createLogoAudio()
+  if (!audio || (!audio.isStarted() && !audio.start())) return
+  void loadLogoSounds(audio)
+    .then((sounds) => {
+      if (id !== logoAudioSeq || sounds.charge == null) return
+      const voice = audio.play(sounds.charge, { volume: 0.24, loop: true })
+      if (voice == null) return
+      logoAudioVoice = voice
+    })
+    .catch(() => undefined)
+}
+
+function clearLogoSoundTail() {
+  if (!logoAudioTail) return
+  clearTimeout(logoAudioTail)
+  logoAudioTail = undefined
+}
+
+function stopLogoSound(delay = 0) {
+  logoAudioSeq++
+  clearLogoSoundTail()
+  if (logoAudioVoice === undefined) return
+  const voice = logoAudioVoice
+  if (delay <= 0) {
+    logoAudioVoice = undefined
+    logoAudio?.stopVoice(voice)
+    return
+  }
+  logoAudioTail = setTimeout(() => {
+    logoAudioTail = undefined
+    if (logoAudioVoice !== voice) return
+    logoAudioVoice = undefined
+    logoAudio?.stopVoice(voice)
+  }, delay)
+}
+
+function pulseLogoSound(scale = 1) {
+  stopLogoSound(140)
+  const id = logoAudioSeq
+  const audio = createLogoAudio()
+  if (!audio || (!audio.isStarted() && !audio.start())) return
+  void loadLogoSounds(audio)
+    .then((sounds) => {
+      if (id !== logoAudioSeq) return
+      const sound = sounds.pulse[logoAudioShot++ % PULSE_SOUNDS.length]
+      if (sound == null) return
+      audio.play(sound, { volume: 0.26 + 0.14 * scale })
+    })
+    .catch(() => undefined)
+}
+
+function disposeLogoSound() {
+  stopLogoSound()
+  logoAudio?.dispose()
+  logoAudio = undefined
+  logoAudioSounds = undefined
+}
 
 type Ring = {
   x: number
@@ -577,7 +677,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     const item = hold()
     if (item && !hum && t - item.at >= HOLD) {
       hum = true
-      Sound.start()
+      startLogoSound()
     }
     if (item && t - item.at >= CHARGE) {
       burst(item.x, item.y)
@@ -606,7 +706,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   onCleanup(() => {
     stop()
     hum = false
-    Sound.dispose()
+    disposeLogoSound()
   })
 
   onMount(() => {
@@ -655,7 +755,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     ])
     setNow(t)
     start()
-    Sound.pulse(lerp(0.8, 1, level))
+    pulseLogoSound(lerp(0.8, 1, level))
   }
 
   const frame = createMemo(() => {
