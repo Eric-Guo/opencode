@@ -274,8 +274,8 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   setupAutoUpdater()
-  await ensureSsoUsername()
-  
+  yield* Effect.promise(() => ensureSsoUsername())
+
   const needsMigration = ((): boolean => {
     if (process.env.OPENCODE_DB === ":memory:") return false
 
