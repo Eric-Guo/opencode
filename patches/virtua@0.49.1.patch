@@ -1,0 +1,26 @@
+diff --git a/lib/index.js b/lib/index.js
+index 487630fa12ca562296c707705c511c63ef31487d..8efe5bbd76fe102eabbb654e695cae9575d49f8f 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -43,7 +43,7 @@ const n = Math.min, r = Math.max, i = Math.abs, s = Math.floor, l = (e, t,
+     const n = t - e.l;
+     return e.i = o ? -1 : a(t - 1, e.i), e.l = t, n > 0 ? ($(e.u, n), $(e.t, n, o), 
+     e.o * n) : (e.u.splice(n), (o ? e.t.splice(0, -n) : e.t.splice(n)).reduce((t, o) => t - (-1 === o ? e.o : o), 0));
+-}, k = "undefined" != typeof window, R = e => e.documentElement, T = e => e.ownerDocument, C = e => e.defaultView, M = /*#__PURE__*/ S(() => !!/iP(hone|od|ad)/.test(navigator.userAgent) || "MacIntel" === navigator.platform && navigator.maxTouchPoints > 0), O = /*#__PURE__*/ S(() => "scrollBehavior" in R(document).style), E = e => h(e.h(), e.p()), H = (e, t = 40, o = 0, n, r = !1) => {
++}, k = "undefined" != typeof window, R = e => e.documentElement, T = e => e.ownerDocument, C = e => e.defaultView ?? globalThis.window, M = /*#__PURE__*/ S(() => !!/iP(hone|od|ad)/.test(navigator.userAgent) || "MacIntel" === navigator.platform && navigator.maxTouchPoints > 0), O = /*#__PURE__*/ S(() => "scrollBehavior" in R(document).style), E = e => h(e.h(), e.p()), H = (e, t = 40, o = 0, n, r = !1) => {
+     let i = !!o, s = 1, l = 0, c = 0, f = 0, u = 0, g = 0, v = 0, _ = 0, w = 0, S = d, k = [ 0, i ? h(o - 1, 0) : -1 ], R = 0, T = !1;
+     const C = ((e, t, o) => ({
+         o: t,
+diff --git a/lib/solid/index.jsx b/lib/solid/index.jsx
+index a340e5dd205961994c680db292a1c2a0a0cabf51..37172897fbe412e164c5767918efcd3f338dd9e9 100644
+--- a/lib/solid/index.jsx
++++ b/lib/solid/index.jsx
+@@ -223,7 +223,7 @@ const getCurrentDocument = (node) => node.ownerDocument;
+ /**
+  * @internal
+  */
+-const getCurrentWindow = (doc) => doc.defaultView;
++const getCurrentWindow = (doc) => doc.defaultView ?? globalThis.window;
+ /**
+  * Currently, all browsers on iOS/iPadOS are WebKit, including WebView.
+  * @internal
