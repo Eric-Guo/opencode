@@ -154,7 +154,7 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
     for (const item of code()) makeEventListener(item, "scroll", onCodeScroll)
   })
 
-  const setViewport = (el: HTMLDivElement) => {
+  const setViewport = (el: HTMLDivElement | undefined) => {
     scroll = el
     restore()
   }
