@@ -95,17 +95,36 @@ class FakeAudio {
   engine = new FakeAudioEngine()
   createCalls = 0
   bytesCalls = 0
+  bytesPaths: string[] = []
   rejectBytes = false
+  rejectPaths = new Set<string>()
 
   create() {
     this.createCalls += 1
     return this.engine
   }
 
-  async bytes() {
+  async bytes(path: string) {
     this.bytesCalls += 1
-    if (this.rejectBytes) throw new Error("decode failed")
+    this.bytesPaths.push(path)
+    if (this.rejectBytes || this.rejectPaths.has(path)) throw new Error("decode failed")
     return new Uint8Array([1, 2, 3])
+  }
+}
+
+class FakeKV {
+  store: Record<string, unknown> = {}
+
+  get ready() {
+    return true
+  }
+
+  get<Value = unknown>(key: string, fallback?: Value) {
+    return (this.store[key] ?? fallback) as Value
+  }
+
+  set(key: string, value: unknown) {
+    this.store[key] = value
   }
 }
 
@@ -116,6 +135,8 @@ function config(attention: Partial<AttentionConfig["attention"]> = {}): Attentio
       notifications: true,
       sound: true,
       volume: 0.4,
+      sound_pack: "opencode.default",
+      sounds: {},
       ...attention,
     },
   }
@@ -333,6 +354,84 @@ describe("createTuiAttention", () => {
     expect(startedAudio.engine.startCalls).toBe(0)
     expect(startedAudio.engine.loadCalls).toBe(1)
     expect(startedAudio.engine.playCalls).toBe(2)
+  })
+
+  test("plays named sounds from the active sound pack", async () => {
+    const renderer = new FakeRenderer()
+    const audio = new FakeAudio()
+    const attention = createTuiAttention({ renderer, config: config(), audio })
+    renderer.emit("blur")
+
+    const dispose = attention.soundboard.registerPack({
+      id: "acme.soft",
+      name: "Soft Alerts",
+      sounds: {
+        question: "/tmp/question.mp3",
+      },
+    })
+
+    expect(attention.soundboard.activate("acme.soft")).toBe(true)
+    expect(attention.soundboard.current()).toBe("acme.soft")
+    expect(attention.soundboard.list()).toContainEqual({
+      id: "acme.soft",
+      name: "Soft Alerts",
+      active: true,
+      builtin: false,
+    })
+
+    expect(await attention.notify({ message: "question", sound: { name: "question" } })).toEqual({
+      ok: true,
+      notification: true,
+      sound: true,
+    })
+    expect(audio.bytesPaths).toEqual(["/tmp/question.mp3"])
+
+    dispose()
+    expect(attention.soundboard.current()).toBe("opencode.default")
+  })
+
+  test("uses config sound overrides before active pack sounds and falls back on load failure", async () => {
+    const renderer = new FakeRenderer()
+    const audio = new FakeAudio()
+    audio.rejectPaths.add("/tmp/bad-question.mp3")
+    const attention = createTuiAttention({
+      renderer,
+      config: config({ sounds: { question: "/tmp/bad-question.mp3" } }),
+      audio,
+    })
+    renderer.emit("blur")
+
+    attention.soundboard.registerPack({
+      id: "acme.soft",
+      sounds: {
+        question: "/tmp/good-question.mp3",
+      },
+    })
+    attention.soundboard.activate("acme.soft")
+
+    expect(await attention.notify({ message: "question", sound: "question" })).toEqual({
+      ok: true,
+      notification: true,
+      sound: true,
+    })
+    expect(audio.bytesPaths).toEqual(["/tmp/bad-question.mp3", "/tmp/good-question.mp3"])
+  })
+
+  test("persists activated sound pack in KV", () => {
+    const kv = new FakeKV()
+    const renderer = new FakeRenderer()
+    const attention = createTuiAttention({ renderer, config: config(), kv })
+
+    attention.soundboard.registerPack({ id: "acme.soft", sounds: { done: "/tmp/done.mp3" } })
+
+    expect(attention.soundboard.activate("missing", { persist: true })).toBe(false)
+    expect(kv.store.attention_sound_pack).toBeUndefined()
+    expect(attention.soundboard.activate("acme.soft", { persist: true })).toBe(true)
+    expect(kv.store.attention_sound_pack).toBe("acme.soft")
+
+    const next = createTuiAttention({ renderer: new FakeRenderer(), config: config(), kv })
+    next.soundboard.registerPack({ id: "acme.soft", sounds: { done: "/tmp/done.mp3" } })
+    expect(next.soundboard.current()).toBe("acme.soft")
   })
 
   test("does not throw for notification or sound failures", async () => {

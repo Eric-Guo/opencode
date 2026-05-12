@@ -4,10 +4,18 @@ import type {
   TuiAttentionNotifyInput,
   TuiAttentionNotifyResult,
   TuiAttentionNotifySkipReason,
+  TuiKV,
+  TuiAttentionSoundName,
+  TuiAttentionSoundPack,
+  TuiAttentionSoundPackInfo,
 } from "@opencode-ai/plugin/tui"
 import stripAnsi from "strip-ansi"
 import type { TuiConfig } from "./config/tui"
-import attentionSoundPath from "./asset/pulse-a.wav" with { type: "file" }
+import defaultSoundPath from "@opencode-ai/ui/audio/alert-01.mp3" with { type: "file" }
+import questionSoundPath from "@opencode-ai/ui/audio/alert-02.mp3" with { type: "file" }
+import permissionSoundPath from "@opencode-ai/ui/audio/alert-03.mp3" with { type: "file" }
+import errorSoundPath from "@opencode-ai/ui/audio/nope-01.mp3" with { type: "file" }
+import doneSoundPath from "@opencode-ai/ui/audio/yup-01.mp3" with { type: "file" }
 import * as Log from "@opencode-ai/core/util/log"
 
 type FocusState = "unknown" | "focused" | "blurred"
@@ -30,7 +38,11 @@ type AttentionAudioEngine = {
 
 type AttentionAudio = {
   create(): AttentionAudioEngine
-  bytes(): Promise<Uint8Array>
+  bytes(path: string): Promise<Uint8Array>
+}
+
+type RegisteredSoundPack = TuiAttentionSoundPack & {
+  builtin: boolean
 }
 
 export type TuiAttentionHost = TuiAttention & {
@@ -40,8 +52,23 @@ export type TuiAttentionHost = TuiAttention & {
 const log = Log.create({ service: "tui.attention" })
 
 const DEFAULT_TITLE = "opencode"
+const DEFAULT_PACK_ID = "opencode.default"
+const KV_SOUND_PACK = "attention_sound_pack"
 const TITLE_LIMIT = 80
 const MESSAGE_LIMIT = 240
+const SOUND_NAMES = ["default", "question", "permission", "error", "done"] as const satisfies readonly TuiAttentionSoundName[]
+const BUILTIN_PACK: RegisteredSoundPack = {
+  id: DEFAULT_PACK_ID,
+  name: "OpenCode Default",
+  builtin: true,
+  sounds: {
+    default: defaultSoundPath,
+    question: questionSoundPath,
+    permission: permissionSoundPath,
+    error: errorSoundPath,
+    done: doneSoundPath,
+  },
+}
 
 function skipped(reason: TuiAttentionNotifySkipReason): TuiAttentionNotifyResult {
   return {
@@ -70,8 +97,34 @@ function soundVolume(input: TuiAttentionNotifyInput, config: Pick<TuiConfig.Reso
   if (!config.attention.sound) return
   if (input.sound === undefined || input.sound === false) return
   if (input.sound === true) return clampVolume(config.attention.volume)
+  if (typeof input.sound === "string") return clampVolume(config.attention.volume)
   if (input.sound.enabled === false) return
   return clampVolume(input.sound.volume ?? config.attention.volume)
+}
+
+function soundName(input: TuiAttentionNotifyInput): TuiAttentionSoundName {
+  if (typeof input.sound === "string") return isSoundName(input.sound) ? input.sound : "default"
+  if (typeof input.sound === "object") return input.sound.name && isSoundName(input.sound.name) ? input.sound.name : "default"
+  return "default"
+}
+
+function isSoundName(value: string): value is TuiAttentionSoundName {
+  return SOUND_NAMES.includes(value as TuiAttentionSoundName)
+}
+
+function normalizePack(pack: TuiAttentionSoundPack): RegisteredSoundPack | undefined {
+  const id = pack.id.trim()
+  if (!id) return
+  return {
+    id,
+    name: pack.name?.trim() || undefined,
+    builtin: false,
+    sounds: Object.fromEntries(
+      Object.entries(pack.sounds).filter((item): item is [TuiAttentionSoundName, string] =>
+        isSoundName(item[0]) && typeof item[1] === "string" && item[1].trim().length > 0,
+      ),
+    ),
+  }
 }
 
 function focusSkip(when: TuiAttentionNotifyInput["when"], focus: FocusState) {
@@ -84,13 +137,15 @@ function focusSkip(when: TuiAttentionNotifyInput["when"], focus: FocusState) {
 export function createTuiAttention(input: {
   renderer: AttentionRenderer
   config: Pick<TuiConfig.Resolved, "attention">
+  kv?: TuiKV
   audio?: AttentionAudio
 }): TuiAttentionHost {
   let focus: FocusState = "unknown"
   let disposed = false
   let audio: AttentionAudioEngine | undefined
-  let sound: AudioSound | null | undefined
-  let soundTask: Promise<AudioSound | null> | undefined
+  let activePackID: string | undefined
+  const packs = new Map<string, RegisteredSoundPack>([[BUILTIN_PACK.id, BUILTIN_PACK]])
+  const sounds = new Map<string, Promise<AudioSound | null>>()
 
   const audioInput =
     input.audio ??
@@ -102,7 +157,7 @@ export function createTuiAttention(input: {
         })
         return engine
       },
-      bytes: () => Bun.file(attentionSoundPath).bytes(),
+      bytes: (file) => Bun.file(file).bytes(),
     } satisfies AttentionAudio)
 
   const onFocus = () => {
@@ -115,27 +170,46 @@ export function createTuiAttention(input: {
   input.renderer.on("focus", onFocus)
   input.renderer.on("blur", onBlur)
 
-  async function loadSound() {
-    if (!audio) return null
-    if (sound !== undefined) return sound
-    soundTask ??= audioInput
-      .bytes()
-      .then((bytes) => audio?.loadSound(bytes) ?? null)
-      .catch((error) => {
-        log.debug("failed to load attention sound", { error })
-        return null
-      })
-    sound = await soundTask
-    return sound
+  function configuredPackID() {
+    const stored = input.kv?.get<string | undefined>(KV_SOUND_PACK, undefined)
+    return activePackID ?? stored ?? input.config.attention.sound_pack
   }
 
-  async function playSound(volume: number) {
+  function currentPack() {
+    return packs.get(configuredPackID()) ?? BUILTIN_PACK
+  }
+
+  function soundCandidates(name: TuiAttentionSoundName) {
+    return [input.config.attention.sounds[name], currentPack().sounds[name], BUILTIN_PACK.sounds[name]].filter(
+      (item, index, list): item is string => typeof item === "string" && list.indexOf(item) === index,
+    )
+  }
+
+  async function loadSound(file: string) {
+    if (!audio) return null
+    const cached = sounds.get(file)
+    if (cached) return cached
+    const task = audioInput
+      .bytes(file)
+      .then((bytes) => audio?.loadSound(bytes) ?? null)
+      .catch((error) => {
+        log.debug("failed to load attention sound", { file, error })
+        return null
+      })
+    sounds.set(file, task)
+    return task
+  }
+
+  async function playSound(name: TuiAttentionSoundName, volume: number) {
     try {
       audio ??= audioInput.create()
       if (!audio.isStarted() && !audio.start()) return false
-      const current = await loadSound()
-      if (current == null) return false
-      return audio.play(current, { volume }) != null
+      for (const file of soundCandidates(name)) {
+        const current = await loadSound(file)
+        if (current == null) continue
+        if (audio.play(current, { volume }) != null) return true
+      }
+      return false
     } catch (error) {
       log.debug("failed to play attention sound", { error })
       return false
@@ -165,7 +239,7 @@ export function createTuiAttention(input: {
             })()
           : false
         const volume = soundVolume(request, input.config)
-        const sound = volume === undefined ? false : await playSound(volume)
+        const sound = volume === undefined ? false : await playSound(soundName(request), volume)
 
         return {
           ok: notification || sound,
@@ -181,14 +255,45 @@ export function createTuiAttention(input: {
         }
       }
     },
+    soundboard: {
+      registerPack(pack) {
+        const next = normalizePack(pack)
+        if (!next) return () => {}
+        packs.set(next.id, next)
+        let disposed = false
+        return () => {
+          if (disposed) return
+          disposed = true
+          if (packs.get(next.id) === next) packs.delete(next.id)
+        }
+      },
+      activate(id, options) {
+        const pack = packs.get(id)
+        if (!pack) return false
+        activePackID = pack.id
+        if (options?.persist) input.kv?.set(KV_SOUND_PACK, pack.id)
+        return true
+      },
+      current() {
+        return currentPack().id
+      },
+      list(): TuiAttentionSoundPackInfo[] {
+        const current = currentPack().id
+        return Array.from(packs.values()).map((pack) => ({
+          id: pack.id,
+          name: pack.name,
+          active: pack.id === current,
+          builtin: pack.builtin,
+        }))
+      },
+    },
     dispose() {
       disposed = true
       input.renderer.off("focus", onFocus)
       input.renderer.off("blur", onBlur)
       audio?.dispose()
       audio = undefined
-      sound = undefined
-      soundTask = undefined
+      sounds.clear()
     },
   }
 }

@@ -854,6 +854,75 @@ test("plugin keymap proxy preserves real keymap receiver", async () => {
   }
 })
 
+test("auto-disposes plugin attention sound packs and resolves relative paths", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "attention-soundpack-plugin.ts")
+      const spec = pathToFileURL(file).href
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.attention.soundpack",
+  tui: async (api) => {
+    api.attention.soundboard.registerPack({
+      id: "demo.pack",
+      sounds: { question: "sounds/question.mp3" },
+    })
+  },
+}
+`,
+      )
+
+      return { spec }
+    },
+  })
+
+  const packs: Array<{ id: string; sounds: Record<string, string> }> = []
+  let dropped = 0
+  const attention = {
+    async notify() {
+      return { ok: false, notification: false, sound: false }
+    },
+    soundboard: {
+      registerPack(pack: { id: string; sounds: Record<string, string> }) {
+        packs.push(pack)
+        return () => {
+          dropped += 1
+        }
+      },
+      activate: () => false,
+      current: () => "opencode.default",
+      list: () => [],
+    },
+  } as NonNullable<Parameters<typeof createTuiPluginApi>[0]>["attention"]
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ attention }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+
+    expect(packs).toEqual([
+      {
+        id: "demo.pack",
+        sounds: { question: path.join(tmp.path, "sounds", "question.mp3") },
+      },
+    ])
+    expect(dropped).toBe(0)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(dropped).toBe(1)
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
 test("auto-disposes plugin keymap transformers", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

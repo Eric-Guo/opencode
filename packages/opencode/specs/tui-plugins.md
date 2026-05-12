@@ -34,7 +34,11 @@ Example:
     "enabled": true,
     "notifications": true,
     "sound": true,
-    "volume": 0.4
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "/Users/me/sounds/error.mp3"
+    }
   }
 }
 ```
@@ -54,6 +58,8 @@ Example:
 - `attention.enabled` disables all `api.attention.notify(...)` delivery when set to `false`.
 - `attention.notifications` and `attention.sound` independently control terminal-mediated desktop notifications and built-in sounds.
 - `attention.volume` sets the default built-in sound volume from `0` to `1`.
+- `attention.sound_pack` selects the initial semantic sound pack. Persisted runtime selection in KV can override it.
+- `attention.sounds` overrides individual semantic sound slots such as `error` or `done`.
 - `leader_timeout` is a top-level TUI setting.
 - `keybinds` is a flat object keyed by command id; values are key binding values (`false`, `"none"`, a key string/object, a binding object, or an array of key strings/objects/binding objects).
 - `keybinds.leader` sets the key used by `<leader>` shortcuts.
@@ -262,8 +268,14 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `message` is required; `title` defaults to `"opencode"`; `when` defaults to `"always"`; `sound` defaults to `false`.
 - `when: "always"` requests delivery regardless of terminal focus state.
 - `when: "focused"` only requests delivery after the terminal is known focused; `when: "blurred"` only requests delivery after the terminal is known blurred.
+- Semantic sound names are `"default"`, `"question"`, `"permission"`, `"error"`, and `"done"`.
+- `sound: true` plays the `"default"` sound; `sound: "question"` or `sound: { name: "question" }` plays a named semantic sound.
+- `sound: { volume }` overrides volume for that call; `sound: { enabled: false }` disables sound for that call.
+- `api.attention.soundboard.registerPack({ id, name?, sounds })` registers a sound pack and returns a disposer. Relative paths resolve from the plugin root and are cleaned up on plugin deactivation.
+- `api.attention.soundboard.activate(id, { persist })` selects the active pack. `persist: true` writes the selected pack id to TUI KV state, not `tui.json`.
+- `api.attention.soundboard.current()` and `list()` expose the active/registered packs for plugin UX.
+- Config `attention.sounds` overrides active-pack sounds by slot. Failed loads fall back to the active pack and then `opencode.default`.
 - The host strips ANSI/control characters and collapses newlines before sending text to the terminal notification API.
-- `sound: true` plays the built-in attention sound at `attention.volume`; `sound: { volume }` overrides it for that call; `sound: { enabled: false }` disables sound for that call.
 - Terminal and OS settings decide whether a requested notification is visibly displayed.
 - Prefer privacy-safe messages such as `"A question needs your input"`; avoid full commands, paths, prompts, errors, secrets, or file contents unless the plugin intentionally exposes them.
 

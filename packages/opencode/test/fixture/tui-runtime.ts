@@ -28,6 +28,8 @@ export function createTuiResolvedConfig(input: ResolvedInput = {}): TuiConfig.Re
       notifications: true,
       sound: true,
       volume: 0.4,
+      sound_pack: "opencode.default",
+      sounds: {},
       ...input.attention,
     },
     keybinds: createTuiResolvedKeybinds(keybinds),

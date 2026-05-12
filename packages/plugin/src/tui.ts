@@ -228,12 +228,40 @@ export type TuiToast = {
 
 export type TuiAttentionWhen = "always" | "focused" | "blurred"
 
+export type TuiAttentionSoundName = "default" | "question" | "permission" | "error" | "done"
+
 export type TuiAttentionSound =
   | boolean
+  | TuiAttentionSoundName
   | {
       enabled?: boolean
+      name?: TuiAttentionSoundName
       volume?: number
     }
+
+export type TuiAttentionSoundPack = {
+  id: string
+  name?: string
+  sounds: Partial<Record<TuiAttentionSoundName, string>>
+}
+
+export type TuiAttentionSoundPackInfo = {
+  id: string
+  name?: string
+  active: boolean
+  builtin: boolean
+}
+
+export type TuiAttentionSoundboardActivateOptions = {
+  persist?: boolean
+}
+
+export type TuiAttentionSoundboard = {
+  registerPack(pack: TuiAttentionSoundPack): () => void
+  activate(id: string, options?: TuiAttentionSoundboardActivateOptions): boolean
+  current(): string
+  list(): ReadonlyArray<TuiAttentionSoundPackInfo>
+}
 
 export type TuiAttentionNotifyInput = {
   title?: string
@@ -259,6 +287,7 @@ export type TuiAttentionNotifyResult = {
 
 export type TuiAttention = {
   notify(input: TuiAttentionNotifyInput): Promise<TuiAttentionNotifyResult>
+  soundboard: TuiAttentionSoundboard
 }
 
 export type TuiThemeCurrent = {
@@ -373,6 +402,8 @@ type TuiAttentionConfigView = {
   notifications: boolean
   sound: boolean
   volume: number
+  sound_pack: string
+  sounds: Partial<Record<TuiAttentionSoundName, string>>
 }
 
 type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &

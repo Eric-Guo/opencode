@@ -149,13 +149,28 @@ test("resolves attention config defaults and overrides", async () => {
     notifications: true,
     sound: true,
     volume: 0.4,
+    sound_pack: "opencode.default",
+    sounds: {},
   })
 
   await using overridden = await tmpdir({
     init: async (dir) => {
       await Bun.write(
         path.join(dir, "tui.json"),
-        JSON.stringify({ attention: { enabled: false, notifications: false, sound: false, volume: 0.7 } }, null, 2),
+        JSON.stringify(
+          {
+            attention: {
+              enabled: false,
+              notifications: false,
+              sound: false,
+              volume: 0.7,
+              sound_pack: "acme.soft",
+              sounds: { error: "./error.mp3" },
+            },
+          },
+          null,
+          2,
+        ),
       )
     },
   })
@@ -165,6 +180,8 @@ test("resolves attention config defaults and overrides", async () => {
     notifications: false,
     sound: false,
     volume: 0.7,
+    sound_pack: "acme.soft",
+    sounds: { error: path.join(overridden.path, "error.mp3") },
   })
 })
 
