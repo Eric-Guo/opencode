@@ -11,6 +11,45 @@ index 487630fa12ca562296c707705c511c63ef31487d..8efe5bbd76fe102eabbb654e695cae95
      let i = !!o, s = 1, l = 0, c = 0, f = 0, u = 0, g = 0, v = 0, _ = 0, w = 0, S = d, k = [ 0, i ? h(o - 1, 0) : -1 ], R = 0, T = !1;
      const C = ((e, t, o) => ({
          o: t,
+diff --git a/lib/index.cjs b/lib/index.cjs
+index 691f13ba1a1a20e6a1824cadc950f0504f425e1d..6c9022ba053e10638d9f74809662e203a2b59a3c 100644
+--- a/lib/index.cjs
++++ b/lib/index.cjs
+@@ -39,7 +39,7 @@ const t = Math.min, r = Math.max, s = Math.abs, i = Math.floor, a = (e, t,
+     const n = t - e.l;
+     return e.i = o ? -1 : r(t - 1, e.i), e.l = t, n > 0 ? (h(e.u, n), h(e.t, n, o), 
+     e.o * n) : (e.u.splice(n), (o ? e.t.splice(0, -n) : e.t.splice(n)).reduce((t, o) => t - (-1 === o ? e.o : o), 0));
+-}, S = "undefined" != typeof window, m = e => e.documentElement, $ = e => e.ownerDocument, z = e => e.defaultView, y = /*#__PURE__*/ a(() => !!/iP(hone|od|ad)/.test(navigator.userAgent) || "MacIntel" === navigator.platform && navigator.maxTouchPoints > 0), b = /*#__PURE__*/ a(() => "scrollBehavior" in m(document).style), x = e => s(e.h(), e.p()), I = (e, t = 40, o = 0, l, c = !1) => {
++}, S = "undefined" != typeof window, m = e => e.documentElement, $ = e => e.ownerDocument, z = e => e.defaultView ?? globalThis.window, y = /*#__PURE__*/ a(() => !!/iP(hone|od|ad)/.test(navigator.userAgent) || "MacIntel" === navigator.platform && navigator.maxTouchPoints > 0), b = /*#__PURE__*/ a(() => "scrollBehavior" in m(document).style), x = e => s(e.h(), e.p()), I = (e, t = 40, o = 0, l, c = !1) => {
+     let u = !!o, d = 1, a = 0, S = 0, m = 0, $ = 0, z = 0, b = 0, x = 0, I = 0, k = n, R = [ 0, u ? s(o - 1, 0) : -1 ], T = 0, C = !1;
+     const M = ((e, t, o) => ({
+         o: t,
+diff --git a/lib/solid/index.js b/lib/solid/index.js
+index 295fd5dc8747554f88c0b038e50aff1d76248c73..034818de348b7e47db16e2d3ce5b53ea516d35ff 100644
+--- a/lib/solid/index.js
++++ b/lib/solid/index.js
+@@ -40,7 +40,7 @@ const b = null, z = Math.min, w = Math.max, N = Math.abs, P = Math.floor, M
+     const n = t - e.u;
+     return e.l = r ? -1 : z(t - 1, e.l), e.u = t, n > 0 ? (O(e.h, n), O(e.o, n, r), 
+     e.i * n) : (e.h.splice(n), (r ? e.o.splice(0, -n) : e.o.splice(n)).reduce((t, r) => t - (-1 === r ? e.i : r), 0));
+-}, E = e => e.documentElement, H = e => e.ownerDocument, L = e => e.defaultView, W = /*#__PURE__*/ M(() => !!/iP(hone|od|ad)/.test(navigator.userAgent) || "MacIntel" === navigator.platform && navigator.maxTouchPoints > 0), j = /*#__PURE__*/ M(() => "scrollBehavior" in E(document).style), q = (e, t = 40, r = 0, n, o = !1) => {
++}, E = e => e.documentElement, H = e => e.ownerDocument, L = e => e.defaultView ?? globalThis.window, W = /*#__PURE__*/ M(() => !!/iP(hone|od|ad)/.test(navigator.userAgent) || "MacIntel" === navigator.platform && navigator.maxTouchPoints > 0), j = /*#__PURE__*/ M(() => "scrollBehavior" in E(document).style), q = (e, t = 40, r = 0, n, o = !1) => {
+     let s = !!r, i = 1, c = 0, l = 0, u = 0, f = 0, a = 0, d = 0, g = 0, h = 0, p = b, v = [ 0, s ? w(r - 1, 0) : -1 ], m = 0, S = !1;
+     const $ = ((e, t, r) => ({
+         i: t,
+diff --git a/lib/solid/index.cjs b/lib/solid/index.cjs
+index 93a8e295d6f45327c9b3f2c72161ec32eaa72402..2174fef91f087bbf02412b1a7af2706779db5d30 100644
+--- a/lib/solid/index.cjs
++++ b/lib/solid/index.cjs
+@@ -38,7 +38,7 @@ const u = null, n = Math.min, o = Math.max, k = Math.abs, y = Math.floor, a
+     const o = t - e.u;
+     return e.l = r ? -1 : n(t - 1, e.l), e.u = t, o > 0 ? (d(e.h, o), d(e.o, o, r), 
+     e.i * o) : (e.h.splice(o), (r ? e.o.splice(0, -o) : e.o.splice(o)).reduce((t, r) => t - (-1 === r ? e.i : r), 0));
+-}, S = e => e.documentElement, $ = e => e.ownerDocument, b = e => e.defaultView, x = /*#__PURE__*/ a(() => !!/iP(hone|od|ad)/.test(navigator.userAgent) || "MacIntel" === navigator.platform && navigator.maxTouchPoints > 0), z = /*#__PURE__*/ a(() => "scrollBehavior" in S(document).style), w = (e, t = 40, i = 0, c, u = !1) => {
++}, S = e => e.documentElement, $ = e => e.ownerDocument, b = e => e.defaultView ?? globalThis.window, x = /*#__PURE__*/ a(() => !!/iP(hone|od|ad)/.test(navigator.userAgent) || "MacIntel" === navigator.platform && navigator.maxTouchPoints > 0), z = /*#__PURE__*/ a(() => "scrollBehavior" in S(document).style), w = (e, t = 40, i = 0, c, u = !1) => {
+     let f = !!i, a = 1, S = 0, $ = 0, b = 0, z = 0, w = 0, y = 0, _ = 0, I = 0, k = r, T = [ 0, f ? o(i - 1, 0) : -1 ], M = 0, O = !1;
+     const R = ((e, t, r) => ({
+         i: t,
 diff --git a/lib/solid/index.jsx b/lib/solid/index.jsx
 index a340e5dd205961994c680db292a1c2a0a0cabf51..37172897fbe412e164c5767918efcd3f338dd9e9 100644
 --- a/lib/solid/index.jsx
