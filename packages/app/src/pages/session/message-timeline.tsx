@@ -406,6 +406,11 @@ export function MessageTimeline(props: {
   const platform = usePlatform()
 
   const [viewport, setViewport] = createSignal<HTMLDivElement>()
+  const liveViewport = createMemo(() => {
+    const el = viewport()
+    if (!el?.ownerDocument.defaultView) return
+    return el
+  })
   let virtualizer: VirtualizerHandle | undefined
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
@@ -1519,7 +1524,7 @@ export function MessageTimeline(props: {
                 "mt-0": !props.centered,
               }}
             >
-              <Show when={viewport()}>
+              <Show when={liveViewport()}>
                 {(root) => (
                   <Virtualizer
                     data={timelineRowKeys()}

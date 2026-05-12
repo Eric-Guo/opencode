@@ -32,7 +32,7 @@ export interface SessionReviewTabProps {
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
-  onScrollRef?: (el: HTMLDivElement) => void
+  onScrollRef?: (el: HTMLDivElement | undefined) => void
   commentMentions?: {
     items: (query: string) => string[] | Promise<string[]>
   }
@@ -134,12 +134,13 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       empty={props.empty}
       scrollRef={(el) => {
         scroll = el
+        props.onScrollRef?.(el)
+        if (!el) return
         makeEventListener(el, "wheel", handleInteraction, { passive: true, capture: true })
         makeEventListener(el, "mousewheel", handleInteraction, { passive: true, capture: true })
         makeEventListener(el, "pointerdown", handleInteraction, { passive: true, capture: true })
         makeEventListener(el, "touchstart", handleInteraction, { passive: true, capture: true })
         makeEventListener(el, "keydown", handleInteraction, { capture: true })
-        props.onScrollRef?.(el)
         queueRestore()
       }}
       onScroll={handleScroll}
