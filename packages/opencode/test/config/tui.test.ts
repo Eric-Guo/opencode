@@ -142,6 +142,49 @@ test("loads tui config with the same precedence order as server config paths", a
   expect(config.diff_style).toBe("stacked")
 })
 
+test("resolves attention config defaults and overrides", async () => {
+  await using defaults = await tmpdir()
+  expect((await getTuiConfig(defaults.path)).attention).toEqual({
+    enabled: true,
+    notifications: true,
+    sound: true,
+    volume: 0.4,
+    sound_pack: "opencode.default",
+    sounds: {},
+  })
+
+  await using overridden = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify(
+          {
+            attention: {
+              enabled: false,
+              notifications: false,
+              sound: false,
+              volume: 0.7,
+              sound_pack: "acme.soft",
+              sounds: { error: "./error.mp3" },
+            },
+          },
+          null,
+          2,
+        ),
+      )
+    },
+  })
+
+  expect((await getTuiConfig(overridden.path)).attention).toEqual({
+    enabled: false,
+    notifications: false,
+    sound: false,
+    volume: 0.7,
+    sound_pack: "acme.soft",
+    sounds: { error: path.join(overridden.path, "error.mp3") },
+  })
+})
+
 test("migrates tui-specific keys from opencode.json when tui.json does not exist", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
