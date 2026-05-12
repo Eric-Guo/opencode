@@ -83,6 +83,7 @@ function themeCurrent(): HostPluginApi["theme"]["current"] {
 type Opts = {
   client?: HostPluginApi["client"] | (() => HostPluginApi["client"])
   renderer?: HostPluginApi["renderer"]
+  attention?: HostPluginApi["attention"]
   count?: Count
   keymap?: HostPluginApi["keymap"]
   tuiConfig?: Partial<HostPluginApi["tuiConfig"]>
@@ -183,6 +184,23 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return opts.app?.version ?? "0.0.0-test"
       },
     },
+    attention:
+      opts.attention ??
+      {
+        async notify() {
+          return {
+            ok: false,
+            notification: false,
+            sound: false,
+          }
+        },
+        soundboard: {
+          registerPack: () => () => {},
+          activate: () => false,
+          current: () => "opencode.default",
+          list: () => [],
+        },
+      },
     keys: {
       formatSequence: () => "",
       formatBindings: () => undefined,

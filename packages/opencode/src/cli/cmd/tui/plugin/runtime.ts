@@ -37,6 +37,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
+import type { TuiAttentionHost } from "../attention"
 import { ConfigPlugin } from "@/config/plugin"
 import { createCommandShim } from "./command-shim"
 
@@ -106,6 +107,7 @@ const ScopedKeymapMethods = new Set<PropertyKey>([
 type RuntimeState = {
   directory: string
   api: Api
+  attention?: TuiAttentionHost
   slots: HostSlots
   plugins: PluginEntry[]
   plugins_by_id: Map<string, PluginEntry>
@@ -156,6 +158,39 @@ function createScopedKeymap(keymap: TuiPluginApi["keymap"], scope: PluginScope):
   })
 }
 
+function createScopedAttention(
+  attention: TuiPluginApi["attention"],
+  scope: PluginScope,
+  root: string,
+): TuiPluginApi["attention"] {
+  return {
+    notify(input) {
+      return attention.notify(input)
+    },
+    soundboard: {
+      registerPack(pack) {
+        return scope.track(
+          attention.soundboard.registerPack({
+            ...pack,
+            sounds: Object.fromEntries(
+              Object.entries(pack.sounds).map(([name, file]) => [name, resolvePluginFile(root, file)]),
+            ),
+          }),
+        )
+      },
+      activate(id, options) {
+        return attention.soundboard.activate(id, options)
+      },
+      current() {
+        return attention.soundboard.current()
+      },
+      list() {
+        return attention.soundboard.list()
+      },
+    },
+  }
+}
+
 type CleanupResult = { type: "ok" } | { type: "error"; error: unknown } | { type: "timeout" }
 
 function runCleanup(fn: () => unknown, ms: number): Promise<CleanupResult> {
@@ -195,6 +230,12 @@ function resolveRoot(root: string) {
   }
   if (path.isAbsolute(root)) return root
   return path.resolve(process.cwd(), root)
+}
+
+function resolvePluginFile(root: string, file: string) {
+  const raw = file.startsWith("file://") ? fileURLToPath(file) : file
+  if (path.isAbsolute(raw)) return raw
+  return path.resolve(root, raw)
 }
 
 function createThemeInstaller(
@@ -576,6 +617,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
 
   return {
     app: api.app,
+    attention: createScopedAttention(api.attention, scope, load.theme_root),
     // Keep deprecated `api.command` working for v1 plugins; remove in v2.
     command: createCommandShim(keymap, api.ui.dialog, api.tuiConfig.keybinds),
     keys: api.keys,
@@ -967,7 +1009,7 @@ let loaded: Promise<void> | undefined
 let runtime: RuntimeState | undefined
 export const Slot = View
 
-export async function init(input: { api: HostPluginApi; config: TuiConfig.Resolved }) {
+export async function init(input: { api: HostPluginApi; config: TuiConfig.Resolved; attention?: TuiAttentionHost }) {
   const cwd = process.cwd()
   if (loaded) {
     if (dir !== cwd) {
@@ -1014,15 +1056,17 @@ export async function dispose() {
   for (const plugin of queue) {
     await deactivatePluginEntry(state, plugin, false)
   }
+  state.attention?.dispose()
 }
 
-async function load(input: { api: Api; config: TuiConfig.Resolved }) {
+async function load(input: { api: Api; config: TuiConfig.Resolved; attention?: TuiAttentionHost }) {
   const { api, config } = input
   const cwd = process.cwd()
   const slots = setupSlots(api)
   const next: RuntimeState = {
     directory: cwd,
     api,
+    attention: input.attention,
     slots,
     plugins: [],
     plugins_by_id: new Map(),
