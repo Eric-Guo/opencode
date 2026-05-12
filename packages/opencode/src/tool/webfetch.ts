@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { Parser } from "htmlparser2"
 import * as Tool from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
@@ -156,27 +155,17 @@ export const WebFetchTool = Tool.define(
 )
 
 function extractTextFromHTML(html: string) {
-  let text = ""
-  let skipDepth = 0
-
-  const parser = new Parser({
-    onopentag(name) {
-      if (skipDepth > 0 || ["script", "style", "noscript", "iframe", "object", "embed"].includes(name)) {
-        skipDepth++
-      }
-    },
-    ontext(input) {
-      if (skipDepth === 0) text += input
-    },
-    onclosetag() {
-      if (skipDepth > 0) skipDepth--
-    },
-  })
-
-  parser.write(html)
-  parser.end()
-
-  return text.trim()
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<iframe[\s\S]*?<\/iframe>/gi, " ")
+    .replace(/<object[\s\S]*?<\/object>/gi, " ")
+    .replace(/<embed[\s\S]*?<\/embed>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function convertHTMLToMarkdown(html: string): string {
