@@ -1,8 +1,24 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, Show, mapArray, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
+import { VList, type VListHandle } from "virtua/solid"
+import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
+import { Card } from "@opencode-ai/ui/card"
+import {
+  ContextToolGroup,
+  groupParts,
+  Message,
+  MessageDivider,
+  Part as MessagePart,
+  partDefaultOpen,
+  renderable,
+  type PartGroup,
+  type UserActions,
+} from "@opencode-ai/ui/message-part"
+import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -10,14 +26,26 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { SessionRetry } from "@opencode-ai/ui/session-retry"
+import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
-import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
+import { TextReveal } from "@opencode-ai/ui/text-reveal"
+import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import type {
+  AssistantMessage,
+  Message as MessageType,
+  Part as PartType,
+  SnapshotFileDiff,
+  TextPart,
+  ToolPart,
+  UserMessage,
+} from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/core/util/binary"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
+import { normalize } from "@opencode-ai/ui/session-diff"
+import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -44,13 +72,196 @@ type MessageComment = {
 }
 
 const emptyMessages: MessageType[] = []
+const emptyParts: PartType[] = []
+const emptyAssistantMessages: AssistantMessage[] = []
 const idle = { type: "idle" as const }
-type UserActions = {
-  fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
-  revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+
+type SummaryDiff = SnapshotFileDiff & { file: string }
+
+type TimelineRow =
+  | { key: string; type: "comment-strip"; userMessageID: string; previousUserMessage: boolean }
+  | { key: string; type: "user-message"; userMessageID: string; anchor: boolean; previousUserMessage: boolean }
+  | { key: string; type: "turn-divider"; userMessageID: string; label: "compaction" | "interrupted" }
+  | {
+      key: string
+      type: "assistant-part"
+      userMessageID: string
+      group: PartGroup
+      previousAssistantPart: boolean
+      lastAssistantPart: boolean
+    }
+  | { key: string; type: "thinking"; userMessageID: string; reasoningHeading?: string }
+  | { key: string; type: "retry"; userMessageID: string }
+  | { key: string; type: "diff-summary"; userMessageID: string; diffs: SummaryDiff[] }
+  | { key: string; type: "error"; userMessageID: string; text: string }
+  | { key: string; type: "bottom-spacer" }
+
+type FramedTimelineRow = Exclude<TimelineRow, { type: "bottom-spacer" }>
+
+function sameKeys(a: readonly string[] | undefined, b: readonly string[] | undefined) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((key, index) => key === b[index])
 }
 
-const messageComments = (parts: Part[]): MessageComment[] =>
+function samePartGroup(a: PartGroup, b: PartGroup) {
+  if (a === b) return true
+  if (a.key !== b.key) return false
+  if (a.type !== b.type) return false
+  if (a.type === "part") {
+    if (b.type !== "part") return false
+    return a.ref.messageID === b.ref.messageID && a.ref.partID === b.ref.partID
+  }
+  if (b.type !== "context") return false
+  if (a.refs.length !== b.refs.length) return false
+  return a.refs.every((ref, index) => ref.messageID === b.refs[index]?.messageID && ref.partID === b.refs[index]?.partID)
+}
+
+function sameSummaryDiff(a: SummaryDiff, b: SummaryDiff) {
+  return a.file === b.file && a.patch === b.patch && a.additions === b.additions && a.deletions === b.deletions && a.status === b.status
+}
+
+function sameSummaryDiffs(a: readonly SummaryDiff[], b: readonly SummaryDiff[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((diff, index) => sameSummaryDiff(diff, b[index]!))
+}
+
+function sameTimelineRow(a: TimelineRow, b: TimelineRow) {
+  if (a === b) return true
+  if (a.key !== b.key) return false
+  if (a.type !== b.type) return false
+  if (a.type === "bottom-spacer") return b.type === "bottom-spacer"
+  if (b.type === "bottom-spacer") return false
+  if (a.userMessageID !== b.userMessageID) return false
+
+  switch (a.type) {
+    case "comment-strip":
+      return b.type === "comment-strip" && a.previousUserMessage === b.previousUserMessage
+    case "user-message":
+      return b.type === "user-message" && a.anchor === b.anchor && a.previousUserMessage === b.previousUserMessage
+    case "turn-divider":
+      return b.type === "turn-divider" && a.label === b.label
+    case "assistant-part":
+      return (
+        b.type === "assistant-part" &&
+        a.previousAssistantPart === b.previousAssistantPart &&
+        a.lastAssistantPart === b.lastAssistantPart &&
+        samePartGroup(a.group, b.group)
+      )
+    case "thinking":
+      return b.type === "thinking" && a.reasoningHeading === b.reasoningHeading
+    case "retry":
+      return b.type === "retry"
+    case "diff-summary":
+      return b.type === "diff-summary" && sameSummaryDiffs(a.diffs, b.diffs)
+    case "error":
+      return b.type === "error" && a.text === b.text
+  }
+}
+
+function reuseTimelineRows(previous: TimelineRow[] | undefined, rows: TimelineRow[]) {
+  if (!previous?.length) return rows
+  const byKey = new Map(previous.map((row) => [row.key, row] as const))
+  return rows.map((row) => {
+    const existing = byKey.get(row.key)
+    if (!existing) return row
+    return sameTimelineRow(existing, row) ? existing : row
+  })
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function unwrapErrorMessage(message: string) {
+  const text = message.replace(/^Error:\s*/, "").trim()
+
+  const parse = (value: string) => {
+    try {
+      return JSON.parse(value) as unknown
+    } catch {
+      return undefined
+    }
+  }
+
+  const read = (value: string) => {
+    const first = parse(value)
+    if (typeof first !== "string") return first
+    return parse(first.trim())
+  }
+
+  let json = read(text)
+
+  if (json === undefined) {
+    const start = text.indexOf("{")
+    const end = text.lastIndexOf("}")
+    if (start !== -1 && end > start) json = read(text.slice(start, end + 1))
+  }
+
+  if (!record(json)) return message
+
+  const err = record(json.error) ? json.error : undefined
+  if (err) {
+    const type = typeof err.type === "string" ? err.type : undefined
+    const msg = typeof err.message === "string" ? err.message : undefined
+    if (type && msg) return `${type}: ${msg}`
+    if (msg) return msg
+    if (type) return type
+    const code = typeof err.code === "string" ? err.code : undefined
+    if (code) return code
+  }
+
+  const msg = typeof json.message === "string" ? json.message : undefined
+  if (msg) return msg
+
+  const reason = typeof json.error === "string" ? json.error : undefined
+  if (reason) return reason
+
+  return message
+}
+
+function cleanHeading(value: string) {
+  return value
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_~]+/g, "")
+    .trim()
+}
+
+function reasoningHeading(text: string) {
+  const markdown = text.replace(/\r\n?/g, "\n")
+  const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
+  if (html?.[1]) {
+    const value = cleanHeading(html[1].replace(/<[^>]+>/g, " "))
+    if (value) return value
+  }
+
+  const atx = markdown.match(/^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/m)
+  if (atx?.[1]) {
+    const value = cleanHeading(atx[1])
+    if (value) return value
+  }
+
+  const setext = markdown.match(/^([^\n]+)\n(?:=+|-+)\s*$/m)
+  if (setext?.[1]) {
+    const value = cleanHeading(setext[1])
+    if (value) return value
+  }
+
+  const strong = markdown.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/m)
+  if (strong?.[1]) {
+    const value = cleanHeading(strong[1])
+    if (value) return value
+  }
+}
+
+function summaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
+  return typeof value.file === "string"
+}
+
+const messageComments = (parts: PartType[]): MessageComment[] =>
   parts.flatMap((part) => {
     if (part.type !== "text" || !(part as TextPart).synthetic) return []
     const next = readCommentMetadata(part.metadata) ?? parseCommentNote(part.text)
@@ -69,7 +280,7 @@ const messageComments = (parts: Part[]): MessageComment[] =>
     ]
   })
 
-const taskDescription = (part: Part, sessionID: string) => {
+const taskDescription = (part: PartType, sessionID: string) => {
   if (part.type !== "tool" || part.tool !== "task") return
   const metadata = "metadata" in part.state ? part.state.metadata : undefined
   if (metadata?.sessionId !== sessionID) return
@@ -110,101 +321,102 @@ const markBoundaryGesture = (input: {
   }
 }
 
-type StageConfig = {
-  init: number
-  batch: number
-}
+function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSummaries: boolean }) {
+  const language = useLanguage()
 
-type TimelineStageInput = {
-  sessionKey: () => string
-  turnStart: () => number
-  messages: () => UserMessage[]
-  config: StageConfig
-}
-
-/**
- * Defer-mounts small timeline windows so revealing older turns does not
- * block first paint with a large DOM mount.
- *
- * Once staging completes for a session it never re-stages — backfill and
- * new messages render immediately.
- */
-function createTimelineStaging(input: TimelineStageInput) {
-  const [state, setState] = createStore({
-    activeSession: "",
-    completedSession: "",
-    count: 0,
-  })
-
-  const stagedCount = createMemo(() => {
-    const total = input.messages().length
-    if (input.turnStart() <= 0) return total
-    if (state.completedSession === input.sessionKey()) return total
-    const init = Math.min(total, input.config.init)
-    if (state.count <= init) return init
-    if (state.count >= total) return total
-    return state.count
-  })
-
-  const stagedUserMessages = createMemo(() => {
-    const list = input.messages()
-    const count = stagedCount()
-    if (count >= list.length) return list
-    return list.slice(Math.max(0, list.length - count))
-  })
-
-  let frame: number | undefined
-  const cancel = () => {
-    if (frame === undefined) return
-    cancelAnimationFrame(frame)
-    frame = undefined
-  }
-
-  createEffect(
-    on(
-      () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
-      ([sessionKey, isWindowed, total]) => {
-        cancel()
-        const shouldStage =
-          isWindowed &&
-          total > input.config.init &&
-          state.completedSession !== sessionKey &&
-          state.activeSession !== sessionKey
-        if (!shouldStage) {
-          setState({ activeSession: "", count: total })
-          return
-        }
-
-        let count = Math.min(total, input.config.init)
-        setState({ activeSession: sessionKey, count })
-
-        const step = () => {
-          if (input.sessionKey() !== sessionKey) {
-            frame = undefined
-            return
-          }
-          const currentTotal = input.messages().length
-          count = Math.min(currentTotal, count + input.config.batch)
-          setState("count", count)
-          if (count >= currentTotal) {
-            setState({ completedSession: sessionKey, activeSession: "" })
-            frame = undefined
-            return
-          }
-          frame = requestAnimationFrame(step)
-        }
-        frame = requestAnimationFrame(step)
-      },
-    ),
+  return (
+    <div data-slot="session-turn-thinking">
+      <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} />
+      <Show when={!props.showReasoningSummaries}>
+        <TextReveal
+          text={props.reasoningHeading}
+          class="session-turn-thinking-heading"
+          travel={25}
+          duration={700}
+        />
+      </Show>
+    </div>
   )
+}
 
-  const isStaging = createMemo(() => {
-    const key = input.sessionKey()
-    return state.activeSession === key && state.completedSession !== key
+function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
+  const language = useLanguage()
+  const fileComponent = useFileComponent()
+  const maxFiles = 10
+  const [state, setState] = createStore({
+    showAll: false,
+    expanded: [] as string[],
   })
+  const showAll = () => state.showAll
+  const expanded = () => state.expanded
+  const overflow = createMemo(() => Math.max(0, props.diffs.length - maxFiles))
+  const visible = createMemo(() => (showAll() ? props.diffs : props.diffs.slice(0, maxFiles)))
 
-  onCleanup(cancel)
-  return { messages: stagedUserMessages, isStaging }
+  return (
+    <div data-slot="session-turn-diffs" data-component="session-turn-diffs-group" data-show-all={showAll() || undefined}>
+      <div data-slot="session-turn-diffs-header">
+        <span data-slot="session-turn-diffs-label">
+          {props.diffs.length} {language.t("ui.sessionTurn.diffs.changed")} {" "}
+          {language.t(props.diffs.length === 1 ? "ui.common.file.one" : "ui.common.file.other")}
+        </span>
+        <DiffChanges changes={props.diffs} />
+        <Show when={overflow() > 0}>
+          <span data-slot="session-turn-diffs-toggle" onClick={() => setState("showAll", !showAll())}>
+            {showAll() ? language.t("ui.sessionTurn.diffs.showLess") : language.t("ui.sessionTurn.diffs.showAll")}
+          </span>
+        </Show>
+      </div>
+      <div data-component="session-turn-diffs-content">
+        <Accordion
+          multiple
+          style={{ "--sticky-accordion-offset": "44px" }}
+          value={expanded()}
+          onChange={(value) => setState("expanded", Array.isArray(value) ? value : value ? [value] : [])}
+        >
+          <For each={visible()}>
+            {(diff) => {
+              const view = normalize(diff)
+
+              return (
+                <Accordion.Item value={diff.file}>
+                  <StickyAccordionHeader>
+                    <Accordion.Trigger>
+                      <div data-slot="session-turn-diff-trigger">
+                        <span data-slot="session-turn-diff-path">
+                          <Show when={diff.file.includes("/")}>
+                            <span data-slot="session-turn-diff-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
+                          </Show>
+                          <span data-slot="session-turn-diff-filename">{getFilename(diff.file)}</span>
+                        </span>
+                        <div data-slot="session-turn-diff-meta">
+                          <span data-slot="session-turn-diff-changes">
+                            <DiffChanges changes={diff} />
+                          </span>
+                          <span data-slot="session-turn-diff-chevron">
+                            <Icon name="chevron-down" size="small" />
+                          </span>
+                        </div>
+                      </div>
+                    </Accordion.Trigger>
+                  </StickyAccordionHeader>
+                  <Accordion.Content>
+                    <div data-slot="session-turn-diff-view" data-scrollable>
+                      <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
+                    </div>
+                  </Accordion.Content>
+                </Accordion.Item>
+              )
+            }}
+          </For>
+        </Accordion>
+        <Show when={!showAll() && overflow() > 0}>
+          <div data-slot="session-turn-diffs-more" onClick={() => setState("showAll", true)}>
+            {language.t("ui.sessionTurn.diffs.more", { count: String(overflow()) })}
+          </div>
+        </Show>
+      </div>
+    </div>
+  )
 }
 
 export function MessageTimeline(props: {
@@ -219,16 +431,14 @@ export function MessageTimeline(props: {
   onMarkScrollGesture: (target?: EventTarget | null) => void
   hasScrollGesture: () => boolean
   onUserScroll: () => void
-  onTurnBackfillScroll: () => void
+  onHistoryScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
-  turnStart: number
-  historyMore: boolean
-  historyLoading: boolean
-  onLoadEarlier: () => void
-  renderedUserMessages: UserMessage[]
+  historyShift: boolean
+  userMessages: UserMessage[]
   anchor: (id: string) => string
+  setRevealMessage?: (fn: (id: string) => void) => void
 }) {
   let touchGesture: number | undefined
 
@@ -242,12 +452,26 @@ export function MessageTimeline(props: {
   const { params, sessionKey } = useSessionKey()
   const platform = usePlatform()
 
-  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
+  let virtualizer: VListHandle | undefined
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return emptyMessages
     return sync.data.message[id] ?? emptyMessages
+  })
+  const messageByID = createMemo(() => new Map(sessionMessages().map((message) => [message.id, message] as const)))
+  const assistantMessagesByParent = createMemo(() => {
+    const result = new Map<string, AssistantMessage[]>()
+    for (const message of sessionMessages()) {
+      if (message.role !== "assistant") continue
+      const messages = result.get(message.parentID)
+      if (messages) {
+        messages.push(message)
+        continue
+      }
+      result.set(message.parentID, [message])
+    }
+    return result
   })
   const pending = createMemo(() =>
     sessionMessages().findLast(
@@ -333,12 +557,141 @@ export function MessageTimeline(props: {
     return language.t("command.session.new")
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
-  const stageCfg = { init: 1, batch: 3 }
-  const staging = createTimelineStaging({
-    sessionKey,
-    turnStart: () => props.turnStart,
-    messages: () => props.renderedUserMessages,
-    config: stageCfg,
+
+  const messageRowMemos = createMemo(
+    mapArray(
+      () => props.userMessages,
+      (userMessage, indexAccessor) => {
+        return createMemo((previous: TimelineRow[] | undefined) => {
+          const rows: TimelineRow[] = []
+          const status = sessionStatus()
+          const active = activeMessageID()
+          const showReasoning = settings.general.showReasoningSummaries()
+
+          const userParts = sync.data.part[userMessage.id] ?? emptyParts
+          const comments = messageComments(userParts)
+          const assistantMessages = assistantMessagesByParent().get(userMessage.id) ?? emptyAssistantMessages
+          const compaction = userParts.find((part) => part.type === "compaction")
+          const interrupted = assistantMessages.some((message) => message.error?.name === "MessageAbortedError")
+          const error = assistantMessages.find((message) => message.error?.name !== "MessageAbortedError")?.error
+          const workingTurn = status.type !== "idle" && active === userMessage.id
+          const assistantPartRefs = assistantMessages.flatMap((message) =>
+            (sync.data.part[message.id] ?? emptyParts)
+              .filter((part) => renderable(part, showReasoning))
+              .map((part) => ({ messageID: message.id, part })),
+          )
+          const assistantGroups = groupParts(assistantPartRefs)
+          const diffs = (userMessage.summary?.diffs ?? [])
+            .reduceRight<SummaryDiff[]>((result, diff) => {
+              if (!summaryDiff(diff)) return result
+              if (result.some((item) => item.file === diff.file)) return result
+              result.push(diff)
+              return result
+            }, [])
+            .reverse()
+          const heading = assistantMessages
+            .flatMap((message) => sync.data.part[message.id] ?? emptyParts)
+            .map((part) => (part.type === "reasoning" && part.text ? reasoningHeading(part.text) : undefined))
+            .find((value): value is string => !!value)
+
+          const previousUserMessage = indexAccessor() > 0
+          if (comments.length > 0)
+            rows.push({
+              key: `comment-strip:${userMessage.id}`,
+              type: "comment-strip",
+              userMessageID: userMessage.id,
+              previousUserMessage,
+            })
+
+          rows.push({
+            key: `user-message:${userMessage.id}`,
+            type: "user-message",
+            userMessageID: userMessage.id,
+            anchor: comments.length === 0,
+            previousUserMessage: comments.length === 0 && previousUserMessage,
+          })
+
+          if (compaction || interrupted) {
+            rows.push({
+              key: `turn-divider:${userMessage.id}:${compaction ? "compaction" : "interrupted"}`,
+              type: "turn-divider",
+              userMessageID: userMessage.id,
+              label: compaction ? "compaction" : "interrupted",
+            })
+          }
+
+          assistantGroups.forEach((group, index) =>
+            rows.push({
+              key: `assistant-part:${userMessage.id}:${group.key}`,
+              type: "assistant-part",
+              userMessageID: userMessage.id,
+              group,
+              previousAssistantPart: index > 0,
+              lastAssistantPart: index === assistantGroups.length - 1,
+            }),
+          )
+
+          if (workingTurn && !error && status.type !== "retry" && (showReasoning ? assistantPartRefs.length === 0 : true)) {
+            rows.push({ key: `thinking:${userMessage.id}`, type: "thinking", userMessageID: userMessage.id, reasoningHeading: heading })
+          }
+
+          if (workingTurn && status.type === "retry") rows.push({ key: `retry:${userMessage.id}`, type: "retry", userMessageID: userMessage.id })
+
+          if (diffs.length > 0 && !workingTurn) {
+            rows.push({ key: `diff-summary:${userMessage.id}`, type: "diff-summary", userMessageID: userMessage.id, diffs })
+          }
+
+          if (error) {
+            const data = error.data?.message
+            rows.push({
+              key: `error:${userMessage.id}`,
+              type: "error",
+              userMessageID: userMessage.id,
+              text: unwrapErrorMessage(typeof data === "string" ? data : data === undefined || data === null ? "" : String(data)),
+            })
+          }
+
+          return reuseTimelineRows(previous, rows)
+        })
+      }
+    )
+  )
+
+  const timelineRows = createMemo((previous: TimelineRow[] | undefined) => {
+    const rows = messageRowMemos().flatMap((memo) => memo())
+    if (rows.length === 0) return rows
+    return reuseTimelineRows(previous, [...rows, { key: "bottom-spacer", type: "bottom-spacer" }])
+  })
+  const timelineRowKeys = createMemo(() => timelineRows().map((row) => row.key), [] as string[], { equals: sameKeys })
+  const timelineRowByKey = createMemo(() => new Map(timelineRows().map((row) => [row.key, row] as const)))
+  const messageRowIndex = createMemo(() => {
+    const result = new Map<string, number>()
+    timelineRows().forEach((row, index) => {
+      if (!("userMessageID" in row)) return
+      if (result.has(row.userMessageID)) return
+      result.set(row.userMessageID, index)
+    })
+    return result
+  })
+  const keepMounted = createMemo(() => {
+    const id = activeMessageID()
+    if (!id) return
+    const rows = timelineRows()
+    const index = rows.findLastIndex((row) => "userMessageID" in row && row.userMessageID === id)
+    if (index < 0) return
+    return [index]
+  })
+
+  createEffect(() => {
+    props.setRevealMessage?.((id) => {
+      const index = messageRowIndex().get(id)
+      if (index === undefined) return
+      virtualizer?.scrollToIndex(index, { align: "center" })
+    })
+  })
+
+  onCleanup(() => {
+    props.setRevealMessage?.(() => {})
   })
 
   const [title, setTitle] = createStore({
@@ -360,14 +713,95 @@ export function MessageTimeline(props: {
 
   let more: HTMLButtonElement | undefined
   let head: HTMLDivElement | undefined
+  let listHost: HTMLDivElement | undefined
+  let listRoot: HTMLDivElement | undefined
+  let listCleanup = () => {}
+  let listFrame: number | undefined
+
+  const updateTitleMetrics = () => {
+    if (!head || head.clientWidth <= 0) return
+    setBar("ms", pace(head.clientWidth))
+  }
 
   createResizeObserver(
     () => head,
-    () => {
-      if (!head || head.clientWidth <= 0) return
-      setBar("ms", pace(head.clientWidth))
-    },
+    updateTitleMetrics,
   )
+
+  const bindListRoot = () => {
+    const root = listHost?.firstElementChild
+    if (!(root instanceof HTMLDivElement)) return
+    if (root === listRoot) return
+
+    listCleanup()
+    listRoot = root
+    props.setScrollRef(root)
+    props.setContentRef(root.firstElementChild instanceof HTMLDivElement ? root.firstElementChild : root)
+
+    const onWheel = (event: WheelEvent) => {
+      const delta = normalizeWheelDelta({
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode,
+        rootHeight: root.clientHeight,
+      })
+      if (!delta) return
+      markBoundaryGesture({ root, target: event.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
+    }
+    const onTouchStart = (event: TouchEvent) => {
+      touchGesture = event.touches[0]?.clientY
+    }
+    const onTouchMove = (event: TouchEvent) => {
+      const next = event.touches[0]?.clientY
+      const prev = touchGesture
+      touchGesture = next
+      if (next === undefined || prev === undefined) return
+
+      const delta = prev - next
+      if (!delta) return
+
+      markBoundaryGesture({ root, target: event.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
+    }
+    const onTouchEnd = () => {
+      touchGesture = undefined
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target !== root) return
+      props.onMarkScrollGesture(root)
+    }
+    const onClick = (event: MouseEvent) => props.onAutoScrollInteraction(event)
+
+    root.addEventListener("wheel", onWheel, { passive: true })
+    root.addEventListener("touchstart", onTouchStart, { passive: true })
+    root.addEventListener("touchmove", onTouchMove, { passive: true })
+    root.addEventListener("touchend", onTouchEnd)
+    root.addEventListener("touchcancel", onTouchEnd)
+    root.addEventListener("pointerdown", onPointerDown)
+    root.addEventListener("click", onClick)
+    listCleanup = () => {
+      root.removeEventListener("wheel", onWheel)
+      root.removeEventListener("touchstart", onTouchStart)
+      root.removeEventListener("touchmove", onTouchMove)
+      root.removeEventListener("touchend", onTouchEnd)
+      root.removeEventListener("touchcancel", onTouchEnd)
+      root.removeEventListener("pointerdown", onPointerDown)
+      root.removeEventListener("click", onClick)
+    }
+  }
+
+  const bindListHost = (el: HTMLDivElement) => {
+    listHost = el
+    if (listFrame !== undefined) cancelAnimationFrame(listFrame)
+    listFrame = requestAnimationFrame(() => {
+      listFrame = undefined
+      bindListRoot()
+    })
+  }
+
+  onCleanup(() => {
+    if (listFrame !== undefined) cancelAnimationFrame(listFrame)
+    listCleanup()
+    props.setScrollRef(undefined)
+  })
 
   const viewShare = () => {
     const url = shareUrl()
@@ -623,6 +1057,219 @@ export function MessageTimeline(props: {
     )
   }
 
+  const workingTurn = (userMessageID: string) => sessionStatus().type !== "idle" && activeMessageID() === userMessageID
+
+  const turnDurationMs = (userMessageID: string) => {
+    const message = messageByID().get(userMessageID)
+    if (!message || message.role !== "user") return
+    const end = (assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages).reduce<number | undefined>(
+      (max, item) => {
+        const completed = item.time.completed
+        if (typeof completed !== "number") return max
+        if (max === undefined) return completed
+        return Math.max(max, completed)
+      },
+      undefined,
+    )
+    if (typeof end !== "number") return
+    if (end < message.time.created) return
+    return end - message.time.created
+  }
+
+  const assistantCopyPartID = (userMessageID: string) => {
+    if (workingTurn(userMessageID)) return null
+    const messages = assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]
+      if (!message) continue
+
+      const parts = sync.data.part[message.id] ?? emptyParts
+      for (let j = parts.length - 1; j >= 0; j--) {
+        const part = parts[j]
+        if (!part || part.type !== "text" || !part.text?.trim()) continue
+        return part.id
+      }
+    }
+  }
+
+  const partByRef = (messageID: string, partID: string) =>
+    (sync.data.part[messageID] ?? emptyParts).find((part) => part.id === partID)
+
+  const renderAssistantPartGroup = (row: Extract<TimelineRow, { type: "assistant-part" }>) => {
+    if (row.group.type === "context") {
+      const parts = row.group.refs
+        .map((ref) => partByRef(ref.messageID, ref.partID))
+        .filter((part): part is ToolPart => part?.type === "tool")
+
+      return <ContextToolGroup parts={parts} busy={workingTurn(row.userMessageID) && row.lastAssistantPart} />
+    }
+
+    const message = messageByID().get(row.group.ref.messageID)
+    const part = partByRef(row.group.ref.messageID, row.group.ref.partID)
+    if (!message || !part) return null
+
+    return (
+      <MessagePart
+        part={part}
+        message={message}
+        showAssistantCopyPartID={assistantCopyPartID(row.userMessageID)}
+        turnDurationMs={turnDurationMs(row.userMessageID)}
+        defaultOpen={partDefaultOpen(part, settings.general.shellToolPartsExpanded(), settings.general.editToolPartsExpanded())}
+        deferToolContent={false}
+      />
+    )
+  }
+
+  function TimelineRowFrame(input: { row: FramedTimelineRow; children: JSX.Element }) {
+    const anchor = () => input.row.type === "comment-strip" || (input.row.type === "user-message" && input.row.anchor)
+
+    return (
+      <div
+        id={anchor() ? props.anchor(input.row.userMessageID) : undefined}
+        data-message-id={input.row.userMessageID}
+        data-timeline-row={input.row.type}
+        classList={{
+          "min-w-0 w-full max-w-full": true,
+          "md:max-w-200 2xl:max-w-[1000px]": props.centered,
+          "md:mx-auto": props.centered,
+          "pt-6":
+            (input.row.type === "comment-strip" || input.row.type === "user-message") && input.row.previousUserMessage,
+          "pt-3": input.row.type === "assistant-part" && input.row.previousAssistantPart,
+        }}
+      >
+        <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>
+          {input.children}
+        </div>
+      </div>
+    )
+  }
+
+  const renderTimelineRow = (row: TimelineRow) => {
+    switch (row.type) {
+      case "comment-strip":
+        return (
+          <TimelineRowFrame row={row}>
+            <div class="w-full px-4 md:px-5 pb-2">
+              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+                <div class="flex w-max min-w-full justify-end gap-2">
+                  <Index each={messageComments(sync.data.part[row.userMessageID] ?? emptyParts)}>
+                    {(commentAccessor: () => MessageComment) => {
+                      const comment = createMemo(() => commentAccessor())
+                      return (
+                        <Show when={comment()}>
+                          {(c) => (
+                            <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                              <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                <FileIcon node={{ path: c().path, type: "file" }} class="size-3.5 shrink-0" />
+                                <span class="truncate">{getFilename(c().path)}</span>
+                                <Show when={c().selection}>
+                                  {(selection) => (
+                                    <span class="shrink-0 text-text-weak">
+                                      {selection().startLine === selection().endLine
+                                        ? `:${selection().startLine}`
+                                        : `:${selection().startLine}-${selection().endLine}`}
+                                    </span>
+                                  )}
+                                </Show>
+                              </div>
+                              <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                {c().comment}
+                              </div>
+                            </div>
+                          )}
+                        </Show>
+                      )
+                    }}
+                  </Index>
+                </div>
+              </div>
+            </div>
+          </TimelineRowFrame>
+        )
+      case "user-message": {
+        const message = messageByID().get(row.userMessageID)
+        if (!message || message.role !== "user") return null
+        return (
+          <TimelineRowFrame row={row}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <div data-slot="session-turn-message-content" aria-live="off">
+                <Message message={message} parts={sync.data.part[row.userMessageID] ?? emptyParts} actions={props.actions} />
+              </div>
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "turn-divider":
+        return (
+          <TimelineRowFrame row={row}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <div data-slot="session-turn-compaction">
+                <MessageDivider
+                  label={language.t(row.label === "compaction" ? "ui.messagePart.compaction" : "ui.message.interrupted")}
+                />
+              </div>
+            </div>
+          </TimelineRowFrame>
+        )
+      case "assistant-part":
+        return (
+          <TimelineRowFrame row={row}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <div data-slot="session-turn-assistant-content" aria-hidden={workingTurn(row.userMessageID)}>
+                {renderAssistantPartGroup(row)}
+              </div>
+            </div>
+          </TimelineRowFrame>
+        )
+      case "thinking":
+        return (
+          <TimelineRowFrame row={row}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <TimelineThinkingRow
+                reasoningHeading={row.reasoningHeading}
+                showReasoningSummaries={settings.general.showReasoningSummaries()}
+              />
+            </div>
+          </TimelineRowFrame>
+        )
+      case "retry":
+        return (
+          <TimelineRowFrame row={row}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <SessionRetry status={sessionStatus()} show={activeMessageID() === row.userMessageID} />
+            </div>
+          </TimelineRowFrame>
+        )
+      case "diff-summary":
+        return (
+          <TimelineRowFrame row={row}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <TimelineDiffSummaryRow diffs={row.diffs} />
+            </div>
+          </TimelineRowFrame>
+        )
+      case "error":
+        return (
+          <TimelineRowFrame row={row}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <Card variant="error" class="error-card">
+                {row.text}
+              </Card>
+            </div>
+          </TimelineRowFrame>
+        )
+      case "bottom-spacer":
+        return <div data-timeline-row="bottom-spacer" aria-hidden="true" class="h-16" />
+    }
+  }
+
+  function TimelineRowView(props: { rowKey: string }) {
+    const row = createMemo(() => timelineRowByKey().get(props.rowKey))
+
+    return <Show when={row()} keyed>{(item) => renderTimelineRow(item)}</Show>
+  }
+
   return (
     <Show
       when={!props.mobileChanges}
@@ -632,9 +1279,8 @@ export function MessageTimeline(props: {
         <div
           class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
-            "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump && !staging.isStaging(),
-            "opacity-0 translate-y-2 scale-95 pointer-events-none":
-              !props.scroll.overflow || !props.scroll.jump || staging.isStaging(),
+            "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
+            "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
           }}
         >
           <button
@@ -652,64 +1298,18 @@ export function MessageTimeline(props: {
             </div>
           </button>
         </div>
-        <ScrollView
-          viewportRef={props.setScrollRef}
-          onWheel={(e) => {
-            const root = e.currentTarget
-            const delta = normalizeWheelDelta({
-              deltaY: e.deltaY,
-              deltaMode: e.deltaMode,
-              rootHeight: root.clientHeight,
-            })
-            if (!delta) return
-            markBoundaryGesture({ root, target: e.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
-          }}
-          onTouchStart={(e) => {
-            touchGesture = e.touches[0]?.clientY
-          }}
-          onTouchMove={(e) => {
-            const next = e.touches[0]?.clientY
-            const prev = touchGesture
-            touchGesture = next
-            if (next === undefined || prev === undefined) return
-
-            const delta = prev - next
-            if (!delta) return
-
-            const root = e.currentTarget
-            markBoundaryGesture({ root, target: e.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
-          }}
-          onTouchEnd={() => {
-            touchGesture = undefined
-          }}
-          onTouchCancel={() => {
-            touchGesture = undefined
-          }}
-          onPointerDown={(e) => {
-            if (e.target !== e.currentTarget) return
-            props.onMarkScrollGesture(e.currentTarget)
-          }}
-          onScroll={(e) => {
-            props.onScheduleScrollState(e.currentTarget)
-            props.onTurnBackfillScroll()
-            if (!props.hasScrollGesture()) return
-            props.onUserScroll()
-            props.onAutoScrollHandleScroll()
-            props.onMarkScrollGesture(e.currentTarget)
-          }}
-          onClick={props.onAutoScrollInteraction}
-          class="relative min-w-0 w-full h-full"
+        <div
+          class="relative min-w-0 w-full h-full flex flex-col"
           style={{
             "--session-title-height": showHeader() ? "40px" : "0px",
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
-          <div ref={props.setContentRef} class="min-w-0 w-full">
-            <Show when={showHeader()}>
+          <Show when={showHeader()}>
               <div
                 ref={(el) => {
                   head = el
-                  setBar("ms", pace(el.clientWidth))
+                  updateTitleMetrics()
                 }}
                 data-session-title
                 classList={{
@@ -994,124 +1594,31 @@ export function MessageTimeline(props: {
                   </Show>
                 </div>
               </div>
-            </Show>
-            <div
-              role="log"
-              data-slot="session-turn-list"
-              class="flex flex-col items-start justify-start pb-16 transition-[margin]"
-              classList={{
-                "w-full": true,
-                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
-                "mt-0.5": props.centered,
-                "mt-0": !props.centered,
+          </Show>
+          <div ref={bindListHost} class="min-h-0 flex-1">
+            <VList
+              data={timelineRowKeys()}
+              shift={props.historyShift}
+              keepMounted={keepMounted()}
+              ref={(handle) => {
+                virtualizer = handle
+              }}
+              class="relative min-w-0 w-full h-full"
+              onScroll={() => {
+                const root = listRoot
+                if (!root) return
+                props.onScheduleScrollState(root)
+                props.onHistoryScroll()
+                if (!props.hasScrollGesture()) return
+                props.onUserScroll()
+                props.onAutoScrollHandleScroll()
+                props.onMarkScrollGesture(root)
               }}
             >
-              <Show when={props.turnStart > 0 || props.historyMore}>
-                <div class="w-full flex justify-center">
-                  <Button
-                    variant="ghost"
-                    size="large"
-                    class="text-12-medium opacity-50"
-                    disabled={props.historyLoading}
-                    onClick={props.onLoadEarlier}
-                  >
-                    {props.historyLoading
-                      ? language.t("session.messages.loadingEarlier")
-                      : language.t("session.messages.loadEarlier")}
-                  </Button>
-                </div>
-              </Show>
-              <For each={rendered()}>
-                {(messageID) => {
-                  const active = createMemo(() => activeMessageID() === messageID)
-                  const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
-                    equals: (a, b) =>
-                      a.length === b.length &&
-                      a.every(
-                        (c, i) =>
-                          c.path === b[i].path &&
-                          c.comment === b[i].comment &&
-                          c.selection?.startLine === b[i].selection?.startLine &&
-                          c.selection?.endLine === b[i].selection?.endLine,
-                      ),
-                  })
-                  const commentCount = createMemo(() => comments().length)
-                  return (
-                    <div
-                      id={props.anchor(messageID)}
-                      data-message-id={messageID}
-                      classList={{
-                        "min-w-0 w-full max-w-full": true,
-                        "md:max-w-200 2xl:max-w-[1000px]": props.centered,
-                      }}
-                      style={{
-                        "content-visibility": active() ? undefined : "auto",
-                        "contain-intrinsic-size": active() ? undefined : "auto 500px",
-                      }}
-                    >
-                      <Show when={commentCount() > 0}>
-                        <div class="w-full px-4 md:px-5 pb-2">
-                          <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                            <div class="flex w-max min-w-full justify-end gap-2">
-                              <Index each={comments()}>
-                                {(commentAccessor: () => MessageComment) => {
-                                  const comment = createMemo(() => commentAccessor())
-                                  return (
-                                    <Show when={comment()}>
-                                      {(c) => (
-                                        <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                          <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                            <FileIcon
-                                              node={{ path: c().path, type: "file" }}
-                                              class="size-3.5 shrink-0"
-                                            />
-                                            <span class="truncate">{getFilename(c().path)}</span>
-                                            <Show when={c().selection}>
-                                              {(selection) => (
-                                                <span class="shrink-0 text-text-weak">
-                                                  {selection().startLine === selection().endLine
-                                                    ? `:${selection().startLine}`
-                                                    : `:${selection().startLine}-${selection().endLine}`}
-                                                </span>
-                                              )}
-                                            </Show>
-                                          </div>
-                                          <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                            {c().comment}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </Show>
-                                  )
-                                }}
-                              </Index>
-                            </div>
-                          </div>
-                        </div>
-                      </Show>
-                      <SessionTurn
-                        sessionID={sessionID() ?? ""}
-                        messageID={messageID}
-                        messages={sessionMessages()}
-                        actions={props.actions}
-                        active={active()}
-                        status={active() ? sessionStatus() : undefined}
-                        showReasoningSummaries={settings.general.showReasoningSummaries()}
-                        shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
-                        editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-                        classes={{
-                          root: "min-w-0 w-full relative",
-                          content: "flex flex-col justify-between !overflow-visible",
-                          container: "w-full px-4 md:px-5",
-                        }}
-                      />
-                    </div>
-                  )
-                }}
-              </For>
-            </div>
+              {(key) => <TimelineRowView rowKey={key} />}
+            </VList>
           </div>
-        </ScrollView>
+        </div>
       </div>
     </Show>
   )
