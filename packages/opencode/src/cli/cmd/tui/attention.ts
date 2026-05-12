@@ -4,6 +4,7 @@ import type {
   TuiAttentionNotifyInput,
   TuiAttentionNotifyResult,
   TuiAttentionNotifySkipReason,
+  TuiAttentionWhen,
   TuiKV,
   TuiAttentionSoundName,
   TuiAttentionSoundPack,
@@ -95,17 +96,30 @@ function clampVolume(volume: number) {
 
 function soundVolume(input: TuiAttentionNotifyInput, config: Pick<TuiConfig.Resolved, "attention">) {
   if (!config.attention.sound) return
-  if (input.sound === undefined || input.sound === false) return
+  if (input.sound === false) return
+  if (input.sound === undefined) return clampVolume(config.attention.volume)
   if (input.sound === true) return clampVolume(config.attention.volume)
-  if (typeof input.sound === "string") return clampVolume(config.attention.volume)
-  if (input.sound.enabled === false) return
   return clampVolume(input.sound.volume ?? config.attention.volume)
 }
 
 function soundName(input: TuiAttentionNotifyInput): TuiAttentionSoundName {
-  if (typeof input.sound === "string") return isSoundName(input.sound) ? input.sound : "default"
   if (typeof input.sound === "object") return input.sound.name && isSoundName(input.sound.name) ? input.sound.name : "default"
   return "default"
+}
+
+function notificationEnabled(input: TuiAttentionNotifyInput) {
+  if (input.notification === false) return false
+  return true
+}
+
+function notificationWhen(input: TuiAttentionNotifyInput) {
+  if (typeof input.notification === "object" && input.notification.when) return input.notification.when
+  return "blurred"
+}
+
+function soundWhen(input: TuiAttentionNotifyInput) {
+  if (typeof input.sound === "object" && input.sound.when) return input.sound.when
+  return "always"
 }
 
 function isSoundName(value: string): value is TuiAttentionSoundName {
@@ -127,8 +141,8 @@ function normalizePack(pack: TuiAttentionSoundPack): RegisteredSoundPack | undef
   }
 }
 
-function focusSkip(when: TuiAttentionNotifyInput["when"], focus: FocusState) {
-  if ((when ?? "always") === "always") return
+function focusSkip(when: TuiAttentionWhen, focus: FocusState) {
+  if (when === "always") return
   if (focus === "unknown") return "focus_unknown"
   if (when === "blurred" && focus === "focused") return "focused"
   if (when === "focused" && focus === "blurred") return "blurred"
@@ -225,10 +239,10 @@ export function createTuiAttention(input: {
         const message = normalizeText(request.message, "", MESSAGE_LIMIT)
         if (!message) return skipped("empty_message")
 
-        const skip = focusSkip(request.when, focus)
-        if (skip) return skipped(skip)
-
-        const notification = input.config.attention.notifications
+        const notificationSkip = focusSkip(notificationWhen(request), focus)
+        const notificationRequested = input.config.attention.notifications && notificationEnabled(request)
+        const shouldNotify = notificationRequested && !notificationSkip
+        const notification = shouldNotify
           ? (() => {
               try {
                 return input.renderer.triggerNotification(message, normalizeText(request.title, DEFAULT_TITLE, TITLE_LIMIT))
@@ -239,7 +253,13 @@ export function createTuiAttention(input: {
             })()
           : false
         const volume = soundVolume(request, input.config)
-        const sound = volume === undefined ? false : await playSound(soundName(request), volume)
+        const soundSkip = volume === undefined ? undefined : focusSkip(soundWhen(request), focus)
+        const sound = volume === undefined || soundSkip ? false : await playSound(soundName(request), volume)
+
+        if (!notification && !sound) {
+          if (notificationRequested && notificationSkip) return skipped(notificationSkip)
+          if (soundSkip) return skipped(soundSkip)
+        }
 
         return {
           ok: notification || sound,
