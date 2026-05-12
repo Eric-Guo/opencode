@@ -717,6 +717,7 @@ export function MessageTimeline(props: {
   let listRoot: HTMLDivElement | undefined
   let listCleanup = () => {}
   let listFrame: number | undefined
+  const [virtualListReady, setVirtualListReady] = createSignal(false)
 
   const updateTitleMetrics = () => {
     if (!head || head.clientWidth <= 0) return
@@ -790,6 +791,7 @@ export function MessageTimeline(props: {
 
   const bindListHost = (el: HTMLDivElement) => {
     listHost = el
+    setVirtualListReady(typeof el.ownerDocument.defaultView?.ResizeObserver === "function")
     if (listFrame !== undefined) cancelAnimationFrame(listFrame)
     listFrame = requestAnimationFrame(() => {
       listFrame = undefined
@@ -797,10 +799,22 @@ export function MessageTimeline(props: {
     })
   }
 
+  const handleListScroll = () => {
+    const root = listRoot
+    if (!root) return
+    props.onScheduleScrollState(root)
+    props.onHistoryScroll()
+    if (!props.hasScrollGesture()) return
+    props.onUserScroll()
+    props.onAutoScrollHandleScroll()
+    props.onMarkScrollGesture(root)
+  }
+
   onCleanup(() => {
     if (listFrame !== undefined) cancelAnimationFrame(listFrame)
     listCleanup()
     props.setScrollRef(undefined)
+    setVirtualListReady(false)
   })
 
   const viewShare = () => {
@@ -1596,27 +1610,33 @@ export function MessageTimeline(props: {
               </div>
           </Show>
           <div ref={bindListHost} class="min-h-0 flex-1">
-            <VList
-              data={timelineRowKeys()}
-              shift={props.historyShift}
-              keepMounted={keepMounted()}
-              ref={(handle) => {
-                virtualizer = handle
-              }}
-              class="relative min-w-0 w-full h-full"
-              onScroll={() => {
-                const root = listRoot
-                if (!root) return
-                props.onScheduleScrollState(root)
-                props.onHistoryScroll()
-                if (!props.hasScrollGesture()) return
-                props.onUserScroll()
-                props.onAutoScrollHandleScroll()
-                props.onMarkScrollGesture(root)
-              }}
+            <Show
+              when={virtualListReady()}
+              fallback={
+                <div
+                  class="relative min-w-0 w-full h-full"
+                  style={{ "overflow-anchor": "none", "overflow-y": "auto", contain: "strict" }}
+                  onScroll={handleListScroll}
+                >
+                  <div class="relative min-w-0 w-full">
+                    <For each={timelineRowKeys()}>{(key) => <TimelineRowView rowKey={key} />}</For>
+                  </div>
+                </div>
+              }
             >
-              {(key) => <TimelineRowView rowKey={key} />}
-            </VList>
+              <VList
+                data={timelineRowKeys()}
+                shift={props.historyShift}
+                keepMounted={keepMounted()}
+                ref={(handle) => {
+                  virtualizer = handle
+                }}
+                class="relative min-w-0 w-full h-full"
+                onScroll={handleListScroll}
+              >
+                {(key) => <TimelineRowView rowKey={key} />}
+              </VList>
+            </Show>
           </div>
         </div>
       </div>
