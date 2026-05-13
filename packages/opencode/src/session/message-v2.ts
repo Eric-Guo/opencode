@@ -34,6 +34,7 @@ import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
+import { isRecord } from "@/util/record"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
@@ -88,13 +89,28 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) => {
-  const data = row.data as typeof row.data & { agent?: unknown; mode?: unknown }
+function infoModel(input: unknown): User["model"] | undefined {
+  if (!isRecord(input) || typeof input.providerID !== "string") return
+  const modelID = typeof input.modelID === "string" ? input.modelID : typeof input.id === "string" ? input.id : undefined
+  if (!modelID) return
+  return {
+    providerID: ProviderV2.ID.make(input.providerID),
+    modelID: ProviderV2.ModelID.make(modelID),
+    ...(typeof input.variant === "string" ? { variant: input.variant } : {}),
+  }
+}
+
+const legacyModel = (input: unknown, fallback?: User["model"]) =>
+  infoModel(input) ?? fallback ?? { providerID: ProviderV2.ID.make("unknown"), modelID: ProviderV2.ModelID.make("unknown") }
+
+const info = (row: typeof MessageTable.$inferSelect, fallbackModel?: User["model"]) => {
+  const data = row.data as typeof row.data & { agent?: unknown; mode?: unknown; model?: unknown }
   return {
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
     ...(typeof data.agent === "string" ? {} : { agent: typeof data.mode === "string" ? data.mode : "build" }),
+    ...(data.role === "user" ? { model: legacyModel(data.model, fallbackModel) } : {}),
   } as Info
 }
 
@@ -112,6 +128,20 @@ const older = (row: Cursor) =>
 function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$inferSelect)[]) {
   const ids = rows.map((row) => row.id)
   const partByMessage = new Map<string, Part[]>()
+  const modelByParent = new Map<string, User["model"]>()
+  for (const row of rows) {
+    const data = row.data as typeof row.data & {
+      modelID?: unknown
+      parentID?: unknown
+      providerID?: unknown
+      variant?: unknown
+    }
+    if (data.role !== "assistant" || typeof data.parentID !== "string") continue
+    modelByParent.set(
+      data.parentID,
+      legacyModel({ providerID: data.providerID, modelID: data.modelID, variant: data.variant }),
+    )
+  }
   return Effect.gen(function* () {
     if (ids.length > 0) {
       const partRows = yield* db
@@ -130,7 +160,7 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
     }
 
     return rows.map((row) => ({
-      info: info(row),
+      info: info(row, modelByParent.get(row.id)),
       parts: partByMessage.get(row.id) ?? [],
     }))
   })
