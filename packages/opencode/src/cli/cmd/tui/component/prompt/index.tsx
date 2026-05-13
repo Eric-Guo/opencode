@@ -161,6 +161,7 @@ export function Prompt(props: PromptProps) {
   const { theme, syntax } = useTheme()
   const kv = useKV()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
+  const [autoaccept, setAutoaccept] = kv.signal<"none" | "edit">("permission_auto_accept", "edit")
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
@@ -408,6 +409,15 @@ export function Prompt(props: PromptProps) {
 
   const promptCommands = createMemo(() =>
     [
+      {
+        name: "permission.auto_accept.toggle",
+        title: autoaccept() === "none" ? "Enable autoedit" : "Disable autoedit",
+        category: "Agent",
+        run: () => {
+          setAutoaccept(() => (autoaccept() === "none" ? "edit" : "none"))
+          dialog.clear()
+        },
+      },
       {
         title: "Clear prompt",
         name: "prompt.clear",
@@ -1597,6 +1607,11 @@ export function Prompt(props: PromptProps) {
                 <box flexDirection="row" gap={1} alignItems="center">
                   {props.right}
                 </box>
+              </Show>
+              <Show when={autoaccept() === "edit"}>
+                <text>
+                  <span style={{ fg: theme.warning }}>autoedit</span>
+                </text>
               </Show>
             </box>
           </box>
