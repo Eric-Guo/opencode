@@ -207,11 +207,12 @@ const insertLegacyMessageV2Assistant = (sessionID: SessionIDType, parentID: Mess
 
 const insertLegacyMessageV2User = (sessionID: SessionIDType) =>
   Effect.sync(() => {
+    const id = MessageID.ascending()
     Database.use((db) =>
       db
         .insert(MessageTable)
         .values({
-          id: MessageID.ascending(),
+          id,
           session_id: sessionID,
           time_created: 1,
           time_updated: 1,
@@ -223,6 +224,7 @@ const insertLegacyMessageV2User = (sessionID: SessionIDType) =>
         })
         .run(),
     )
+    return id
   })
 
 const setLegacySummaryDiff = (sessionID: SessionIDType) =>
@@ -772,31 +774,23 @@ describe("session HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        const userSession = yield* createSession({ title: "legacy user" })
-        const assistantSession = yield* createSession({ title: "legacy assistant" })
-        const message = yield* createTextMessage(assistantSession.id, "hello")
-        yield* insertLegacyMessageV2User(userSession.id)
-        yield* insertLegacyMessageV2Assistant(assistantSession.id, message.info.id)
+        const session = yield* createSession({ title: "legacy messages" })
+        const userID = yield* insertLegacyMessageV2User(session.id)
+        yield* insertLegacyMessageV2Assistant(session.id, userID)
 
         const headers = { "x-opencode-directory": test.directory }
-        const userResponse = yield* request(
-          `${pathFor(SessionPaths.messages, { sessionID: userSession.id })}?limit=80`,
-          { headers },
-        )
-        const assistantResponse = yield* request(
-          `${pathFor(SessionPaths.messages, { sessionID: assistantSession.id })}?limit=80`,
-          { headers },
-        )
+        const response = yield* request(`${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=80`, {
+          headers,
+        })
+        const messages = yield* json<SessionLegacy.WithParts[]>(response)
 
-        expect(userResponse.status).toBe(200)
-        expect((yield* json<MessageV2.WithParts[]>(userResponse))[0]?.info).toMatchObject({
+        expect(response.status).toBe(200)
+        expect(messages.find((item) => item.info.role === "user")?.info).toMatchObject({
           role: "user",
           agent: "build",
+          model: { providerID: "test", modelID: "test" },
         })
-        expect(assistantResponse.status).toBe(200)
-        expect(
-          (yield* json<MessageV2.WithParts[]>(assistantResponse)).find((item) => item.info.role === "assistant")?.info,
-        ).toMatchObject({
+        expect(messages.find((item) => item.info.role === "assistant")?.info).toMatchObject({
           role: "assistant",
           agent: "build",
         })
