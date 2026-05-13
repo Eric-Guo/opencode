@@ -209,7 +209,8 @@ export function createChildStoreManager(input: {
             sessionTotal: 0,
             session_status: {},
             session_working(id: string) {
-              return this.session_status[id].type !== "idle"
+              const status = this.session_status[id]
+              return !!status && status.type !== "idle"
             },
             session_diff: {},
             todo: {},

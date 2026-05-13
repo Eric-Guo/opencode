@@ -44,7 +44,7 @@ export type State = {
   session: Session[]
   sessionTotal: number
   session_status: {
-    [sessionID: string]: SessionStatus
+    [sessionID: string]: SessionStatus | undefined
   }
   session_working(id: string): boolean
   session_diff: {

@@ -11,7 +11,7 @@ type Data = {
   config?: Config
   session: Session[]
   session_status: {
-    [sessionID: string]: SessionStatus
+    [sessionID: string]: SessionStatus | undefined
   }
   session_diff: {
     [sessionID: string]: SnapshotFileDiff[]
