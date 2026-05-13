@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import { Database } from "../../src/storage/db"
+import { MessageTable, SessionTable } from "../../src/session/session.sql"
+import { eq } from "drizzle-orm"
 import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
 
@@ -179,6 +182,49 @@ describe("MessageV2.page", () => {
         expect(result.items).toEqual([])
         expect(result.more).toBe(false)
         expect(result.cursor).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.instance("hydrates legacy user messages missing agent from the session", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const id = MessageID.ascending()
+        Database.use((db) => {
+          db.update(SessionTable)
+            .set({
+              agent: "plan",
+              model: {
+                providerID: ProviderID.make("test-provider"),
+                id: ModelID.make("test-model"),
+                variant: "default",
+              },
+            })
+            .where(eq(SessionTable.id, sessionID))
+            .run()
+          db.insert(MessageTable)
+            .values({
+              id,
+              session_id: sessionID,
+              time_created: Date.now(),
+              time_updated: Date.now(),
+              data: {
+                role: "user",
+                time: { created: Date.now() },
+              } as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
+            })
+            .run()
+        })
+
+        const result = MessageV2.page({ sessionID, limit: 10 })
+        expect(() => Schema.decodeUnknownSync(MessageV2.WithParts)(result.items[0])).not.toThrow()
+        expect(result.items[0].info.role).toBe("user")
+        if (result.items[0].info.role !== "user") throw new Error("expected user message")
+        expect(result.items[0].info.agent).toBe("plan")
+        expect(result.items[0].info.model).toEqual({
+          providerID: ProviderID.make("test-provider"),
+          modelID: ModelID.make("test-model"),
+        })
       }),
     ),
   )

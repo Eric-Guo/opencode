@@ -577,12 +577,45 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) =>
-  ({
-    ...row.data,
+type RawInfo =
+  | (Partial<Omit<User, "role">> & { role: "user" })
+  | (Partial<Omit<Assistant, "role">> & { role: "assistant" })
+
+const info = (row: typeof MessageTable.$inferSelect) => {
+  const data = row.data as RawInfo
+  if (data.role === "user" && (!data.agent || !data.model)) {
+    const session = Database.use((db) =>
+      db
+        .select({ agent: SessionTable.agent, model: SessionTable.model })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, row.session_id))
+        .get(),
+    )
+    return {
+      ...data,
+      id: row.id,
+      sessionID: row.session_id,
+      agent: data.agent ?? session?.agent ?? "build",
+      model:
+        data.model ??
+        (session?.model
+          ? {
+              providerID: ProviderID.make(session.model.providerID),
+              modelID: ModelID.make(session.model.id),
+              variant: session.model.variant === "default" ? undefined : session.model.variant,
+            }
+          : {
+              providerID: ProviderID.make("unknown"),
+              modelID: ModelID.make("unknown"),
+            }),
+    } as Info
+  }
+  return {
+    ...data,
     id: row.id,
     sessionID: row.session_id,
-  }) as Info
+  } as Info
+}
 
 const part = (row: typeof PartTable.$inferSelect) =>
   ({
