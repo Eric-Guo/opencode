@@ -583,7 +583,7 @@ type RawInfo =
 
 const info = (row: typeof MessageTable.$inferSelect) => {
   const data = row.data as RawInfo
-  if (data.role === "user" && (!data.agent || !data.model)) {
+  if ((data.role === "user" && (!data.agent || !data.model)) || (data.role === "assistant" && !data.agent)) {
     const session = Database.use((db) =>
       db
         .select({ agent: SessionTable.agent, model: SessionTable.model })
@@ -591,6 +591,14 @@ const info = (row: typeof MessageTable.$inferSelect) => {
         .where(eq(SessionTable.id, row.session_id))
         .get(),
     )
+    if (data.role === "assistant") {
+      return {
+        ...data,
+        id: row.id,
+        sessionID: row.session_id,
+        agent: data.agent ?? data.mode ?? session?.agent ?? "build",
+      } as Info
+    }
     return {
       ...data,
       id: row.id,

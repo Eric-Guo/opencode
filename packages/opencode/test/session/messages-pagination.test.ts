@@ -229,6 +229,42 @@ describe("MessageV2.page", () => {
     ),
   )
 
+  it.instance("hydrates legacy assistant messages missing agent from mode", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const id = MessageID.ascending()
+        Database.use((db) => {
+          db.update(SessionTable).set({ agent: "plan" }).where(eq(SessionTable.id, sessionID)).run()
+          db.insert(MessageTable)
+            .values({
+              id,
+              session_id: sessionID,
+              time_created: Date.now(),
+              time_updated: Date.now(),
+              data: {
+                role: "assistant",
+                time: { created: Date.now() },
+                parentID: MessageID.ascending(),
+                modelID: ModelID.make("test-model"),
+                providerID: ProviderID.make("test-provider"),
+                mode: "build",
+                path: { cwd: "/", root: "/" },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              } as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
+            })
+            .run()
+        })
+
+        const result = MessageV2.page({ sessionID, limit: 10 })
+        expect(() => Schema.decodeUnknownSync(MessageV2.WithParts)(result.items[0])).not.toThrow()
+        expect(result.items[0].info.role).toBe("assistant")
+        if (result.items[0].info.role !== "assistant") throw new Error("expected assistant message")
+        expect(result.items[0].info.agent).toBe("build")
+      }),
+    ),
+  )
+
   it.instance("throws NotFoundError for non-existent session", () =>
     Effect.gen(function* () {
       const fake = "non-existent-session" as SessionID
