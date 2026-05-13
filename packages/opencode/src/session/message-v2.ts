@@ -92,12 +92,12 @@ export const cursor = {
 }
 
 const info = (row: typeof MessageTable.$inferSelect) => {
-  const data = row.data as typeof row.data & { agent?: string; mode?: string }
+  const data = row.data as typeof row.data & { agent?: unknown; mode?: unknown }
   return {
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
-    ...(data.role === "assistant" && data.agent === undefined ? { agent: data.mode ?? "build" } : {}),
+    ...(typeof data.agent === "string" ? {} : { agent: typeof data.mode === "string" ? data.mode : "build" }),
   } as Info
 }
 
