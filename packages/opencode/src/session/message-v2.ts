@@ -77,12 +77,15 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) =>
-  ({
+const info = (row: typeof MessageTable.$inferSelect) => {
+  const data = row.data as typeof row.data & { agent?: string; mode?: string }
+  return {
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
-  }) as Info
+    ...(data.role === "assistant" && data.agent === undefined ? { agent: data.mode ?? "build" } : {}),
+  } as Info
+}
 
 const part = (row: typeof PartTable.$inferSelect) =>
   ({
