@@ -24,7 +24,7 @@ import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@opencode-ai/core/database/database"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -180,6 +180,37 @@ const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
       ])
       .run()
       .pipe(Effect.orDie)
+  })
+
+const insertLegacyMessageV2Assistant = (sessionID: SessionIDType, parentID: MessageID) =>
+  Effect.sync(() => {
+    Database.use((db) =>
+      db
+        .insert(MessageTable)
+        .values({
+          id: MessageID.ascending(),
+          session_id: sessionID,
+          time_created: 1,
+          time_updated: 1,
+          data: {
+            role: "assistant",
+            time: { created: 1, completed: 1 },
+            parentID,
+            modelID: ModelID.make("test"),
+            providerID: ProviderID.make("test"),
+            mode: "build",
+            path: { cwd: "/tmp", root: "/tmp" },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+          } as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
+        })
+        .run(),
+    )
   })
 
 const setLegacySummaryDiff = (sessionID: SessionIDType) =>
@@ -704,6 +735,30 @@ describe("session HttpApi", () => {
 
         expect(response.status).toBe(200)
         expect((yield* json<Session.Info>(response)).summary?.diffs).toEqual([{ additions: 1, deletions: 0 }])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "serves legacy assistant messages missing agent",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "legacy assistant" })
+        const message = yield* createTextMessage(session.id, "hello")
+        yield* insertLegacyMessageV2Assistant(session.id, message.info.id)
+
+        const response = yield* request(`${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=80`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+
+        expect(response.status).toBe(200)
+        expect(
+          (yield* json<MessageV2.WithParts[]>(response)).find((item) => item.info.role === "assistant")?.info,
+        ).toMatchObject({
+          role: "assistant",
+          agent: "build",
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
