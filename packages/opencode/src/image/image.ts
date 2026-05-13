@@ -3,6 +3,8 @@ import type { MessageV2 } from "@/session/message-v2"
 import * as Log from "@opencode-ai/core/util/log"
 import photonWasm from "@silvia-odwyer/photon-node/photon_rs_bg.wasm" with { type: "file" }
 import { Context, Effect, Layer, Schema } from "effect"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 const MAX_BASE64_BYTES = 4.5 * 1024 * 1024
 const MAX_WIDTH = 2000
@@ -63,7 +65,7 @@ export const layer = Layer.effect(
       Effect.sync(() => {
         // Patched photon-node reads this during module init so Bun compiled binaries use the embedded wasm path.
         ;(globalThis as typeof globalThis & { __OPENCODE_PHOTON_WASM_PATH?: string }).__OPENCODE_PHOTON_WASM_PATH =
-          photonWasm
+          path.isAbsolute(photonWasm) ? photonWasm : fileURLToPath(new URL(photonWasm, import.meta.url))
       }).pipe(
         Effect.andThen(() => Effect.tryPromise(() => import("@silvia-odwyer/photon-node"))),
         Effect.tapError((error) => Effect.sync(() => log.warn("failed to load photon", { error }))),
