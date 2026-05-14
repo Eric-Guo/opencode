@@ -15,7 +15,7 @@ import {
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ServerAuth } from "../../src/server/auth"
 import { authorizationRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/authorization"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
 import { Server } from "../../src/server/server"
 import { testEffect } from "../lib/effect"
@@ -56,7 +56,7 @@ function restoreEnv(key: string, value: string | undefined) {
 
 function app(input?: { password?: string; username?: string }) {
   const handler = HttpRouter.toWebHandler(
-    ExperimentalHttpApiServer.routes.pipe(
+    HttpApiApp.routes.pipe(
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
@@ -74,7 +74,7 @@ function app(input?: { password?: string; username?: string }) {
         Promise.resolve(
           handler(
             input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init),
-            ExperimentalHttpApiServer.context,
+            HttpApiApp.context,
           ),
         ),
       )
@@ -112,7 +112,7 @@ function uiApp(input?: { password?: string; username?: string; client?: Layer.La
         Promise.resolve(
           handler(
             input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init),
-            ExperimentalHttpApiServer.context,
+            HttpApiApp.context,
           ),
         ),
       )
@@ -135,7 +135,7 @@ function responseText(response: Response) {
 }
 
 describe("HttpApi UI fallback", () => {
-  it.live("serves the web UI through the experimental backend", () =>
+  it.live("serves the web UI through the HTTP API app", () =>
     Effect.gen(function* () {
       Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
       let proxiedUrl: string | undefined
