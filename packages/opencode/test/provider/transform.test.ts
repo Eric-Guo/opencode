@@ -1067,6 +1067,71 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
   })
 
+  test("Kimi For Coding interleaved tool calls include empty reasoning_content", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "bash",
+            input: { command: "echo hello" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: ModelID.make("kimi-for-coding/k2p6"),
+        providerID: ProviderID.make("kimi-for-coding"),
+        api: {
+          id: "k2p6",
+          url: "https://api.kimi.com/coding/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        name: "Kimi K2.6",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: false,
+          toolcall: true,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: {
+            field: "reasoning_content",
+          },
+        },
+        cost: {
+          input: 0,
+          output: 0,
+          cache: { read: 0, write: 0 },
+        },
+        limit: {
+          context: 262144,
+          output: 32768,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-04",
+      },
+      {},
+    )
+
+    expect(result[0].content).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "test",
+        toolName: "bash",
+        input: { command: "echo hello" },
+      },
+    ])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("")
+  })
+
   test("Non-DeepSeek providers leave reasoning content unchanged", () => {
     const msgs = [
       {
@@ -1120,6 +1185,92 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       { type: "text", text: "Answer" },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.kimiForCodingRequestBody", () => {
+  const model = {
+    id: ModelID.make("kimi-for-coding/k2p6"),
+    providerID: ProviderID.make("kimi-for-coding"),
+    api: {
+      id: "k2p6",
+      url: "https://api.kimi.com/coding/v1",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Kimi K2.6",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: true, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0,
+      output: 0,
+      cache: { read: 0, write: 0 },
+    },
+    limit: {
+      context: 262144,
+      output: 32768,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-04",
+  } as any
+
+  test("adds reasoning_content to assistant tool_use messages", () => {
+    const result = ProviderTransform.kimiForCodingRequestBody(model, {
+      messages: [
+        { role: "user", content: [{ type: "text", text: "run it" }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Need a shell command.", signature: "sig" },
+            { type: "tool_use", id: "toolu_1", name: "bash", input: { command: "pwd" } },
+          ],
+        },
+      ],
+    }) as any
+
+    expect(result.messages[1].reasoning_content).toBe("Need a shell command.")
+  })
+
+  test("adds empty reasoning_content when assistant tool_use has no thinking block", () => {
+    const result = ProviderTransform.kimiForCodingRequestBody(model, {
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "toolu_1", name: "bash", input: { command: "pwd" } }],
+        },
+      ],
+    }) as any
+
+    expect(result.messages[0].reasoning_content).toBe("")
+  })
+
+  test("leaves non-Kimi request bodies unchanged", () => {
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "toolu_1", name: "bash", input: { command: "pwd" } }],
+        },
+      ],
+    }
+
+    expect(
+      ProviderTransform.kimiForCodingRequestBody(
+        {
+          ...model,
+          providerID: ProviderID.make("anthropic"),
+        },
+        body,
+      ),
+    ).toBe(body)
   })
 })
 

@@ -1586,6 +1586,12 @@ const layer = Layer.effect(
             }
           }
 
+          if (model.providerID === "kimi-for-coding" && opts.body && opts.method === "POST") {
+            opts.body = JSON.stringify(
+              ProviderTransform.kimiForCodingRequestBody(model, JSON.parse(opts.body as string)),
+            )
+          }
+
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682

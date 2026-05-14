@@ -283,8 +283,12 @@ function normalizeMessages(
     return result
   }
 
-  // Deepseek requires all assistant messages to have reasoning on them
-  if (model.api.id.toLowerCase().includes("deepseek")) {
+  // Some OpenAI-compatible reasoning APIs require assistant turns to carry the
+  // reasoning field even when the previous response returned an empty value.
+  if (
+    model.api.id.toLowerCase().includes("deepseek") ||
+    (model.providerID === "kimi-for-coding" && typeof model.capabilities.interleaved === "object")
+  ) {
     msgs = msgs.map((msg) => {
       if (msg.role !== "assistant") return msg
       if (Array.isArray(msg.content)) {
@@ -472,6 +476,40 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   }
 
   return msgs
+}
+
+export function kimiForCodingRequestBody(model: Provider.Model, body: unknown) {
+  if (model.providerID !== "kimi-for-coding" || model.api.npm !== "@ai-sdk/anthropic") return body
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return body
+
+  const record = body as Record<string, unknown>
+  if (!Array.isArray(record.messages)) return body
+
+  return {
+    ...record,
+    messages: record.messages.map((message) => {
+      if (message === null || typeof message !== "object" || Array.isArray(message)) return message
+
+      const item = message as Record<string, unknown>
+      if (item.role !== "assistant") return message
+      if (typeof item.reasoning_content === "string") return message
+      if (!Array.isArray(item.content)) return message
+
+      const content = item.content.filter(
+        (part): part is Record<string, unknown> =>
+          part !== null && typeof part === "object" && !Array.isArray(part),
+      )
+      if (!content.some((part) => part.type === "tool_use")) return message
+
+      return {
+        ...item,
+        reasoning_content: content
+          .filter((part) => part.type === "thinking" && typeof part.thinking === "string")
+          .map((part) => part.thinking)
+          .join(""),
+      }
+    }),
+  }
 }
 
 export function temperature(model: Provider.Model) {
