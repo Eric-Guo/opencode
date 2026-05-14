@@ -1586,7 +1586,7 @@ const layer = Layer.effect(
             }
           }
 
-          if (model.providerID === "kimi-for-coding" && opts.body && opts.method === "POST") {
+          if (model.providerID === "kimi-for-coding" && typeof opts.body === "string") {
             opts.body = JSON.stringify(
               ProviderTransform.kimiForCodingRequestBody(model, JSON.parse(opts.body as string)),
             )

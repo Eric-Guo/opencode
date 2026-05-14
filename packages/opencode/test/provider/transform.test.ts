@@ -1237,6 +1237,27 @@ describe("ProviderTransform.kimiForCodingRequestBody", () => {
     }) as any
 
     expect(result.messages[1].reasoning_content).toBe("Need a shell command.")
+    expect(result.messages[1].content).toEqual([
+      { type: "tool_use", id: "toolu_1", name: "bash", input: { command: "pwd" } },
+    ])
+  })
+
+  test("keeps unsigned reasoning available for the Anthropic converter", () => {
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "Need a shell command." },
+            { type: "tool-call", toolCallId: "toolu_1", toolName: "bash", input: { command: "pwd" } },
+          ],
+        },
+      ] as any[],
+      model,
+      {},
+    ) as any[]
+
+    expect(result[0].content[0].providerOptions.anthropic.signature).toBe("kimi-for-coding")
   })
 
   test("adds empty reasoning_content when assistant tool_use has no thinking block", () => {

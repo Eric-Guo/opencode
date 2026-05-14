@@ -152,6 +152,28 @@ function normalizeMessages(
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
+  if (model.providerID === "kimi-for-coding" && model.api.npm === "@ai-sdk/anthropic") {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+      return {
+        ...msg,
+        content: msg.content.map((part) => {
+          if (part.type !== "reasoning" || part.providerOptions?.anthropic?.signature) return part
+          return {
+            ...part,
+            providerOptions: {
+              ...part.providerOptions,
+              anthropic: {
+                ...part.providerOptions?.anthropic,
+                signature: "kimi-for-coding",
+              },
+            },
+          }
+        }),
+      }
+    })
+  }
+
   // Bedrock specific transforms
   if (model.api.npm === "@ai-sdk/amazon-bedrock") {
     msgs = msgs
@@ -503,6 +525,13 @@ export function kimiForCodingRequestBody(model: Provider.Model, body: unknown) {
 
       return {
         ...item,
+        content: item.content.filter(
+          (part) =>
+            part === null ||
+            typeof part !== "object" ||
+            Array.isArray(part) ||
+            (part as Record<string, unknown>).type !== "thinking",
+        ),
         reasoning_content: content
           .filter((part) => part.type === "thinking" && typeof part.thinking === "string")
           .map((part) => part.thinking)
