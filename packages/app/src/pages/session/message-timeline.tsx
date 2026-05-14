@@ -10,6 +10,7 @@ import {
   onCleanup,
   Show,
   mapArray,
+  untrack,
   type Accessor,
   type JSX,
 } from "solid-js"
@@ -79,6 +80,7 @@ const emptyAssistantMessages: AssistantMessage[] = []
 const idle = { type: "idle" as const }
 
 type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "BottomSpacer" }>
+type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 function sameKeys(a: readonly string[] | undefined, b: readonly string[] | undefined) {
   if (a === b) return true
@@ -916,7 +918,7 @@ export function MessageTimeline(props: {
   const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
 
   const renderAssistantPartGroup = (row: Accessor<TimelineRowMap["AssistantPart"]>) => {
-    if (row().group.type === "context") {
+    if (untrack(row).group.type === "context") {
       const parts = createMemo(() => {
         const group = row().group
         if (group.type !== "context") return emptyTools
@@ -966,7 +968,7 @@ export function MessageTimeline(props: {
   function TimelineRowFrame(input: { row: Accessor<FramedTimelineRow>; children: JSX.Element }) {
     const anchor = () => {
       const row = input.row()
-      return row._tag === "CommentStrip" || (row._tag === "UserMessage" && props.anchor)
+      return row._tag === "CommentStrip" || (row._tag === "UserMessage" && row.anchor)
     }
     const previousUserMessage = () => {
       const row = input.row()
@@ -997,143 +999,147 @@ export function MessageTimeline(props: {
     )
   }
 
-  const renderTimelineRow = (row: TimelineRow.TimelineRow) => {
-    return (
-      <Show
-        when={row._tag !== "BottomSpacer" && row}
-        fallback={<div data-timeline-row="bottom-spacer" aria-hidden="true" class="h-16" />}
-        keyed
-      >
-        {(row) => (
-          <TimelineRowFrame row={() => row}>
-            <Switch>
-              <Match when={row._tag === "CommentStrip" && row} keyed>
-                {(row) => {
-                  const comments = createMemo(() =>
-                    getMsgParts(row.userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? []),
-                  )
-                  return (
-                    <TimelineRowFrame row={() => row}>
-                      <div class="w-full px-4 md:px-5 pb-2">
-                        <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                          <div class="flex w-max min-w-full justify-end gap-2">
-                            <Index each={comments()}>
-                              {(comment) => (
-                                <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                  <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                    <FileIcon node={{ path: comment().path, type: "file" }} class="size-3.5 shrink-0" />
-                                    <span class="truncate">{getFilename(comment().path)}</span>
-                                    <Show when={comment().selection}>
-                                      {(selection) => (
-                                        <span class="shrink-0 text-text-weak">
-                                          {selection().startLine === selection().endLine
-                                            ? `:${selection().startLine}`
-                                            : `:${selection().startLine}-${selection().endLine}`}
-                                        </span>
-                                      )}
-                                    </Show>
-                                  </div>
-                                  <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                    {comment().comment}
-                                  </div>
-                                </div>
-                              )}
-                            </Index>
-                          </div>
+  const renderTimelineRow = (row: Accessor<TimelineRow.TimelineRow>) => {
+    switch (row()._tag) {
+      case "CommentStrip": {
+        const commentStripRow = row as Accessor<TimelineRowByTag<"CommentStrip">>
+        const comments = createMemo(() =>
+          getMsgParts(commentStripRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? []),
+        )
+        return (
+          <TimelineRowFrame row={commentStripRow}>
+            <div class="w-full px-4 md:px-5 pb-2">
+              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+                <div class="flex w-max min-w-full justify-end gap-2">
+                  <Index each={comments()}>
+                    {(comment) => (
+                      <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                        <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                          <FileIcon node={{ path: comment().path, type: "file" }} class="size-3.5 shrink-0" />
+                          <span class="truncate">{getFilename(comment().path)}</span>
+                          <Show when={comment().selection}>
+                            {(selection) => (
+                              <span class="shrink-0 text-text-weak">
+                                {selection().startLine === selection().endLine
+                                  ? `:${selection().startLine}`
+                                  : `:${selection().startLine}-${selection().endLine}`}
+                              </span>
+                            )}
+                          </Show>
+                        </div>
+                        <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                          {comment().comment}
                         </div>
                       </div>
-                    </TimelineRowFrame>
-                  )
-                }}
-              </Match>
-              <Match when={row._tag === "UserMessage" && row} keyed>
-                {(row) => {
-                  const message = createMemo(() => {
-                    const m = messageByID().get(row.userMessageID)
-                    if (m?.role === "user") return m
-                  })
-                  return (
-                    <Show when={message()}>
-                      {(message) => (
-                        <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                          <div data-slot="session-turn-message-content" aria-live="off">
-                            <Message
-                              message={message()}
-                              parts={getMsgParts(row.userMessageID)}
-                              actions={props.actions}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </Show>
-                  )
-                }}
-              </Match>
-              <Match when={row._tag === "TurnDivider" && row} keyed>
-                {(row) => (
-                  <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                    <div data-slot="session-turn-compaction">
-                      <MessageDivider
-                        label={language.t(
-                          row.label === "compaction" ? "ui.messagePart.compaction" : "ui.message.interrupted",
-                        )}
-                      />
-                    </div>
-                  </div>
-                )}
-              </Match>
-              <Match when={row._tag === "AssistantPart" && row} keyed>
-                {(row) => (
-                  <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                    <div data-slot="session-turn-assistant-content" aria-hidden={workingTurn(row.userMessageID)}>
-                      {renderAssistantPartGroup(() => row)}
-                    </div>
-                  </div>
-                )}
-              </Match>
-              <Match when={row._tag === "Thinking" && row} keyed>
-                {(row) => (
-                  <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                    <TimelineThinkingRow
-                      reasoningHeading={row.reasoningHeading}
-                      showReasoningSummaries={settings.general.showReasoningSummaries()}
-                    />
-                  </div>
-                )}
-              </Match>
-              <Match when={row._tag === "Retry" && row} keyed>
-                {(row) => (
-                  <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                    <SessionRetry status={sessionStatus()} show={activeMessageID() === row.userMessageID} />
-                  </div>
-                )}
-              </Match>
-              <Match when={row._tag === "DiffSummary" && row} keyed>
-                {(row) => (
-                  <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                    <TimelineDiffSummaryRow diffs={row.diffs} />
-                  </div>
-                )}
-              </Match>
-              <Match when={row._tag === "Error" && row} keyed>
-                {(row) => (
-                  <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                    <Card variant="error" class="error-card">
-                      {row.text}
-                    </Card>
-                  </div>
-                )}
-              </Match>
-            </Switch>
+                    )}
+                  </Index>
+                </div>
+              </div>
+            </div>
           </TimelineRowFrame>
-        )}
-      </Show>
-    )
+        )
+      }
+      case "UserMessage": {
+        const userMessageRow = row as Accessor<TimelineRowByTag<"UserMessage">>
+        const message = createMemo(() => {
+          const m = messageByID().get(userMessageRow().userMessageID)
+          if (m?.role === "user") return m
+        })
+        return (
+          <TimelineRowFrame row={userMessageRow}>
+            <Show when={message()}>
+              {(message) => (
+                <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+                  <div data-slot="session-turn-message-content" aria-live="off">
+                    <Message message={message()} parts={getMsgParts(userMessageRow().userMessageID)} actions={props.actions} />
+                  </div>
+                </div>
+              )}
+            </Show>
+          </TimelineRowFrame>
+        )
+      }
+      case "TurnDivider": {
+        const turnDividerRow = row as Accessor<TimelineRowByTag<"TurnDivider">>
+        return (
+          <TimelineRowFrame row={turnDividerRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <div data-slot="session-turn-compaction">
+                <MessageDivider
+                  label={language.t(
+                    turnDividerRow().label === "compaction" ? "ui.messagePart.compaction" : "ui.message.interrupted",
+                  )}
+                />
+              </div>
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "AssistantPart": {
+        const assistantPartRow = row as Accessor<TimelineRowByTag<"AssistantPart">>
+        return (
+          <TimelineRowFrame row={assistantPartRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <div data-slot="session-turn-assistant-content" aria-hidden={workingTurn(assistantPartRow().userMessageID)}>
+                {renderAssistantPartGroup(assistantPartRow)}
+              </div>
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "Thinking": {
+        const thinkingRow = row as Accessor<TimelineRowByTag<"Thinking">>
+        return (
+          <TimelineRowFrame row={thinkingRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <TimelineThinkingRow
+                reasoningHeading={thinkingRow().reasoningHeading}
+                showReasoningSummaries={settings.general.showReasoningSummaries()}
+              />
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "Retry": {
+        const retryRow = row as Accessor<TimelineRowByTag<"Retry">>
+        return (
+          <TimelineRowFrame row={retryRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <SessionRetry status={sessionStatus()} show={activeMessageID() === retryRow().userMessageID} />
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "DiffSummary": {
+        const diffSummaryRow = row as Accessor<TimelineRowByTag<"DiffSummary">>
+        return (
+          <TimelineRowFrame row={diffSummaryRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <TimelineDiffSummaryRow diffs={diffSummaryRow().diffs} />
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "Error": {
+        const errorRow = row as Accessor<TimelineRowByTag<"Error">>
+        return (
+          <TimelineRowFrame row={errorRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <Card variant="error" class="error-card">
+                {errorRow().text}
+              </Card>
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "BottomSpacer":
+        return <div data-timeline-row="bottom-spacer" aria-hidden="true" class="h-16" />
+    }
   }
 
   function TimelineRowView(props: { rowKey: string }) {
     return (
-      <Show when={timelineRowByKey().get(props.rowKey)} keyed>
+      <Show when={timelineRowByKey().get(props.rowKey)}>
         {(item) => renderTimelineRow(item)}
       </Show>
     )
