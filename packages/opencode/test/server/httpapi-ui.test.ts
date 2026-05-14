@@ -161,7 +161,7 @@ function routeOrderingApp() {
         Promise.resolve(
           handler(
             input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init),
-            ExperimentalHttpApiServer.context,
+            HttpApiApp.context,
           ),
         ),
       )
