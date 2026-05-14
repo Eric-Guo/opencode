@@ -135,7 +135,7 @@ function responseText(response: Response) {
 }
 
 describe("HttpApi UI fallback", () => {
-  it.live("serves the web UI through the experimental backend", () =>
+  it.live("serves the web UI through the HTTP API app", () =>
     Effect.gen(function* () {
       Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
       let proxiedUrl: string | undefined
