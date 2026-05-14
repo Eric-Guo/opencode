@@ -25,6 +25,10 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalPlanMode: enabledByExperimental("OPENCODE_EXPERIMENTAL_PLAN_MODE"),
   experimentalEventSystem: enabledByExperimental("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
   experimentalWorkspaces: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),
+  experimentalNativeLlm: Config.all({
+    enabled: bool("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
+    legacy: Config.string("OPENCODE_LLM_RUNTIME").pipe(Config.withDefault("")),
+  }).pipe(Config.map((flags) => flags.enabled || flags.legacy === "native")),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
 }) {}
 
