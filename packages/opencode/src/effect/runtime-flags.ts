@@ -42,6 +42,10 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalWorkspaces: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),
   experimentalIconDiscovery: enabledByExperimental("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY"),
   bashDefaultTimeoutMs: positiveInteger("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
+  experimentalNativeLlm: Config.all({
+    enabled: bool("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
+    legacy: Config.string("OPENCODE_LLM_RUNTIME").pipe(Config.withDefault("")),
+  }).pipe(Config.map((flags) => flags.enabled || flags.legacy === "native")),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
 }) {}
 
