@@ -523,6 +523,11 @@ export function kimiForCodingRequestBody(model: Provider.Model, body: unknown) {
       )
       if (!content.some((part) => part.type === "tool_use")) return message
 
+      const reasoningContent = content
+        .filter((part) => part.type === "thinking" && typeof part.thinking === "string")
+        .map((part) => part.thinking)
+        .join("")
+
       return {
         ...item,
         content: item.content.filter(
@@ -532,10 +537,7 @@ export function kimiForCodingRequestBody(model: Provider.Model, body: unknown) {
             Array.isArray(part) ||
             (part as Record<string, unknown>).type !== "thinking",
         ),
-        reasoning_content: content
-          .filter((part) => part.type === "thinking" && typeof part.thinking === "string")
-          .map((part) => part.thinking)
-          .join(""),
+        reasoning_content: reasoningContent.length ? reasoningContent : " ",
       }
     }),
   }

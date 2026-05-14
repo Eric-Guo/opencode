@@ -1260,7 +1260,7 @@ describe("ProviderTransform.kimiForCodingRequestBody", () => {
     expect(result[0].content[0].providerOptions.anthropic.signature).toBe("kimi-for-coding")
   })
 
-  test("adds empty reasoning_content when assistant tool_use has no thinking block", () => {
+  test("adds non-empty reasoning_content when assistant tool_use has no thinking block", () => {
     const result = ProviderTransform.kimiForCodingRequestBody(model, {
       messages: [
         {
@@ -1270,7 +1270,7 @@ describe("ProviderTransform.kimiForCodingRequestBody", () => {
       ],
     }) as any
 
-    expect(result.messages[0].reasoning_content).toBe("")
+    expect(result.messages[0].reasoning_content).toBe(" ")
   })
 
   test("leaves non-Kimi request bodies unchanged", () => {
