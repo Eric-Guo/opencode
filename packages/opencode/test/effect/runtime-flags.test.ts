@@ -35,7 +35,18 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalPlanMode).toBe(true)
       expect(flags.experimentalEventSystem).toBe(true)
       expect(flags.experimentalWorkspaces).toBe(true)
+      expect(flags.experimentalNativeLlm).toBe(false)
       expect(flags.client).toBe("desktop")
+    }),
+  )
+
+  it.effect("requires explicit native LLM opt-in", () =>
+    Effect.gen(function* () {
+      const explicit = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true" })))
+      const legacy = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_LLM_RUNTIME: "native" })))
+
+      expect(explicit.experimentalNativeLlm).toBe(true)
+      expect(legacy.experimentalNativeLlm).toBe(true)
     }),
   )
 
