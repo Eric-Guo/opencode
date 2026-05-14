@@ -236,6 +236,7 @@ export const routes = createRoutes()
 
 export const webHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {
+    disableLogger: true,
     memoMap,
     middleware: disposeMiddleware,
   }),
