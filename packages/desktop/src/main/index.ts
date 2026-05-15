@@ -339,6 +339,7 @@ registerIpcHandlers({
   installUpdate: async () => installUpdate(),
   setBackgroundColor: (color) => setBackgroundColor(color),
   exportDebugLogs: () => exportDebugLogs(),
+  recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
 })
 
 async function killSidecar() {

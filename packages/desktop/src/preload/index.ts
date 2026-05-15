@@ -67,6 +67,7 @@ const api: ElectronAPI = {
   installUpdate: () => ipcRenderer.invoke("install-update"),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
+  recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
 }
 
 contextBridge.exposeInMainWorld("api", api)

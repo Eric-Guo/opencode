@@ -1059,14 +1059,14 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
-      ...(window.api?.exportDebugLogs
+      ...(platform.platform === "desktop" && platform.exportDebugLogs
         ? [
             {
               id: "logs.export",
               title: "Export logs",
               category: language.t("command.category.settings"),
               onSelect: () => {
-                void window.api?.exportDebugLogs?.()
+                void platform.exportDebugLogs?.()
               },
             },
           ]
