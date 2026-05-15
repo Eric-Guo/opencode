@@ -16,7 +16,7 @@ import { webSearchProviderLabel } from "@/tool/websearch"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
-import { useBindings, useCommandShortcut } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 
 type PermissionStage = "permission" | "always" | "reject"
@@ -450,6 +450,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   const narrow = createMemo(() => dimensions().width < 80)
   const dialog = useDialog()
   useBindings(() => ({
+    opencodeMode: OPENCODE_BASE_MODE,
     enabled: dialog.stack.length === 0,
     commands: [
       {
@@ -546,6 +547,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
 
   useBindings(() => ({
+    opencodeMode: OPENCODE_BASE_MODE,
     enabled: dialog.stack.length === 0,
     commands: [
       {
