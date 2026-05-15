@@ -1,15 +1,19 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
-import { Cause, Effect, Exit, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import z from "zod"
-import { makeRuntime } from "../../src/effect/run-service"
+import { attach, makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
-import { Instance } from "../../src/project/instance"
+import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { WithInstance } from "../../src/project/with-instance"
+import { Auth } from "@/auth"
+import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@opencode-ai/core/models"
+import { Plugin } from "@/plugin"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
@@ -17,6 +21,33 @@ import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Permission } from "@/permission"
+import { LLMAISDK } from "@/session/llm/ai-sdk"
+import { Session as SessionNs } from "@/session/session"
+
+const openAIConfig = (model: ModelsDev.Provider["models"][string], baseURL: string): Partial<Config.Info> => {
+  const { experimental: _experimental, ...configModel } = model
+  type ConfigModel = NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
+  return {
+    enabled_providers: ["openai"],
+    provider: {
+      openai: {
+        name: "OpenAI",
+        env: ["OPENAI_API_KEY"],
+        npm: "@ai-sdk/openai",
+        api: "https://api.openai.com/v1",
+        models: {
+          [model.id]: JSON.parse(JSON.stringify(configModel)) as ConfigModel,
+        },
+        options: {
+          apiKey: "test-openai-key",
+          baseURL,
+        },
+      },
+    },
+  }
+}
 
 async function getModel(providerID: ProviderID, modelID: ModelID) {
   return AppRuntime.runPromise(
@@ -31,6 +62,23 @@ const llm = makeRuntime(LLM.Service, LLM.defaultLayer)
 
 async function drain(input: LLM.StreamInput) {
   return llm.runPromise((svc) => svc.stream(input).pipe(Stream.runDrain))
+}
+
+async function drainWith(layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) {
+  return Effect.runPromise(
+    attach(LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain))).pipe(Effect.provide(layer)),
+  )
+}
+
+function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, flags: Partial<RuntimeFlags.Info> = {}) {
+  return LLM.layer.pipe(
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(LLMClient.layer.pipe(Layer.provide(executor))),
+    Layer.provide(RuntimeFlags.layer(flags)),
+  )
 }
 
 describe("session.llm.hasToolCalls", () => {
@@ -117,6 +165,245 @@ describe("session.llm.hasToolCalls", () => {
       },
     ] as ModelMessage[]
     expect(LLM.hasToolCalls(messages)).toBe(true)
+  })
+})
+
+describe("session.llm.ai-sdk adapter", () => {
+  type AISDKAdapterEvent = Parameters<typeof LLMAISDK.toLLMEvents>[1]
+
+  const adapt = (events: ReadonlyArray<AISDKAdapterEvent>) => {
+    const state = LLMAISDK.adapterState()
+    return Effect.runPromise(
+      Effect.forEach(events, (event) => LLMAISDK.toLLMEvents(state, event)).pipe(Effect.map((items) => items.flat())),
+    )
+  }
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- tests defensive adapter branches outside AI SDK's current typed surface
+  const uncheckedAdapterEvent = (input: unknown) => input as AISDKAdapterEvent
+
+  test("maps AI SDK stream chunks without losing session-visible fields", async () => {
+    const metadata = { openai: { itemID: "item-1" } }
+    const events = await adapt([
+      { type: "start" },
+      { type: "start-step", request: {}, warnings: [] },
+      { type: "text-start", id: "text-1", providerMetadata: metadata },
+      { type: "text-delta", id: "text-1", text: "Hel", providerMetadata: { openai: { delta: 1 } } },
+      { type: "text-delta", id: "text-1", text: "lo", providerMetadata: { openai: { delta: 2 } } },
+      { type: "text-end", id: "text-1", providerMetadata: { openai: { done: true } } },
+      { type: "reasoning-start", id: "reasoning-1", providerMetadata: metadata },
+      { type: "reasoning-delta", id: "reasoning-1", text: "Think", providerMetadata: { openai: { delta: 3 } } },
+      { type: "reasoning-end", id: "reasoning-1", providerMetadata: { openai: { done: true } } },
+      { type: "tool-input-start", id: "call-1", toolName: "lookup", providerMetadata: metadata },
+      { type: "tool-input-delta", id: "call-1", delta: '{"query":' },
+      { type: "tool-input-delta", id: "call-1", delta: '"weather"}' },
+      { type: "tool-input-end", id: "call-1", providerMetadata: { openai: { inputDone: true } } },
+      {
+        type: "tool-call",
+        toolCallId: "call-1",
+        toolName: "lookup",
+        input: { query: "weather" },
+        providerExecuted: true,
+        providerMetadata: { openai: { called: true } },
+      },
+      {
+        type: "tool-result",
+        toolCallId: "call-1",
+        toolName: "lookup",
+        input: { query: "weather" },
+        output: { title: "Lookup", output: "sunny", metadata: { ok: true } },
+        providerExecuted: true,
+        providerMetadata: { openai: { result: true } },
+      },
+      {
+        type: "finish-step",
+        response: { id: "response-1", timestamp: new Date(0), modelId: "gpt-test" },
+        finishReason: "other",
+        rawFinishReason: "other",
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          inputTokenDetails: { noCacheTokens: 5, cacheReadTokens: 3, cacheWriteTokens: 2 },
+          outputTokenDetails: { textTokens: 4, reasoningTokens: 1 },
+        },
+        providerMetadata: { openai: { step: true } },
+      },
+      {
+        type: "finish",
+        finishReason: "other",
+        rawFinishReason: "other",
+        totalUsage: {
+          inputTokens: 11,
+          outputTokens: 6,
+          totalTokens: 17,
+          cachedInputTokens: 4,
+          reasoningTokens: 2,
+          inputTokenDetails: { noCacheTokens: 7, cacheReadTokens: 4, cacheWriteTokens: undefined },
+          outputTokenDetails: { textTokens: 4, reasoningTokens: 2 },
+        },
+      },
+    ])
+
+    expect(events).toMatchObject([
+      { type: "step-start", index: 0 },
+      { type: "text-start", id: "text-1", providerMetadata: metadata },
+      { type: "text-delta", id: "text-1", text: "Hel", providerMetadata: { openai: { delta: 1 } } },
+      { type: "text-delta", id: "text-1", text: "lo", providerMetadata: { openai: { delta: 2 } } },
+      { type: "text-end", id: "text-1", providerMetadata: { openai: { done: true } } },
+      { type: "reasoning-start", id: "reasoning-1", providerMetadata: metadata },
+      { type: "reasoning-delta", id: "reasoning-1", text: "Think", providerMetadata: { openai: { delta: 3 } } },
+      { type: "reasoning-end", id: "reasoning-1", providerMetadata: { openai: { done: true } } },
+      { type: "tool-input-start", id: "call-1", name: "lookup", providerMetadata: metadata },
+      { type: "tool-input-delta", id: "call-1", name: "lookup", text: '{"query":' },
+      { type: "tool-input-delta", id: "call-1", name: "lookup", text: '"weather"}' },
+      { type: "tool-input-end", id: "call-1", name: "lookup", providerMetadata: { openai: { inputDone: true } } },
+      {
+        type: "tool-call",
+        id: "call-1",
+        name: "lookup",
+        input: { query: "weather" },
+        providerExecuted: true,
+        providerMetadata: { openai: { called: true } },
+      },
+      {
+        type: "tool-result",
+        id: "call-1",
+        name: "lookup",
+        result: { type: "json", value: { title: "Lookup", output: "sunny", metadata: { ok: true } } },
+        providerExecuted: true,
+        providerMetadata: { openai: { result: true } },
+      },
+      {
+        type: "step-finish",
+        index: 0,
+        reason: "other",
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15,
+          reasoningTokens: 1,
+          cacheReadInputTokens: 3,
+          cacheWriteInputTokens: 2,
+        },
+        providerMetadata: { openai: { step: true } },
+      },
+      {
+        type: "finish",
+        reason: "other",
+        usage: {
+          inputTokens: 11,
+          outputTokens: 6,
+          totalTokens: 17,
+          reasoningTokens: 2,
+          cacheReadInputTokens: 4,
+        },
+      },
+    ])
+  })
+
+  test("creates stable block ids when AI SDK omits them", async () => {
+    const events = await adapt([
+      uncheckedAdapterEvent({ type: "text-delta", text: "implicit text" }),
+      uncheckedAdapterEvent({ type: "text-end" }),
+      uncheckedAdapterEvent({ type: "reasoning-delta", text: "implicit reasoning" }),
+      uncheckedAdapterEvent({ type: "reasoning-end" }),
+    ])
+
+    expect(events).toMatchObject([
+      { type: "text-delta", id: "text-0", text: "implicit text" },
+      { type: "text-end", id: "text-0" },
+      { type: "reasoning-delta", id: "reasoning-0", text: "implicit reasoning" },
+      { type: "reasoning-end", id: "reasoning-0" },
+    ])
+  })
+
+  test("explicitly ignores non-session-visible AI SDK chunks", async () => {
+    expect(
+      await adapt([
+        uncheckedAdapterEvent({ type: "abort" }),
+        uncheckedAdapterEvent({ type: "source" }),
+        uncheckedAdapterEvent({ type: "file" }),
+        uncheckedAdapterEvent({ type: "raw" }),
+        uncheckedAdapterEvent({ type: "tool-output-denied" }),
+        uncheckedAdapterEvent({ type: "tool-approval-request" }),
+      ]),
+    ).toEqual([])
+  })
+
+  test("preserves tool-error cause", async () => {
+    const error = new Permission.RejectedError()
+    const events = await Effect.runPromise(
+      LLMAISDK.toLLMEvents(LLMAISDK.adapterState(), {
+        type: "tool-error",
+        toolCallId: "call_123",
+        toolName: "bash",
+        input: {},
+        error,
+      }),
+    )
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: "tool-error",
+      id: "call_123",
+      name: "bash",
+      message: error.message,
+      error,
+    })
+  })
+
+  // Anthropic emits cache write counts in providerMetadata.anthropic.cacheCreationInputTokens
+  // rather than usage.inputTokenDetails.cacheWriteTokens. Session.getUsage falls back to the
+  // metadata path — but only if the adapter preserves providerMetadata on step-finish.
+  test("preserves providerMetadata on step-finish so Anthropic cache writes survive getUsage", async () => {
+    const events = await adapt([
+      {
+        type: "finish-step",
+        response: { id: "msg_test", timestamp: new Date(0), modelId: "claude-3-5-sonnet" },
+        finishReason: "stop",
+        rawFinishReason: "stop",
+        // Anthropic's AI SDK shape: cacheWriteTokens is NOT in usage, it arrives via providerMetadata.
+        usage: {
+          inputTokens: 1000,
+          outputTokens: 500,
+          totalTokens: 1500,
+          inputTokenDetails: { noCacheTokens: 800, cacheReadTokens: 200, cacheWriteTokens: undefined },
+          outputTokenDetails: { textTokens: 500, reasoningTokens: undefined },
+        },
+        providerMetadata: { anthropic: { cacheCreationInputTokens: 300 } },
+      },
+    ])
+
+    expect(events).toHaveLength(1)
+    const stepFinish = events[0]
+    if (stepFinish.type !== "step-finish") throw new Error("expected step-finish")
+    expect(stepFinish.providerMetadata).toEqual({ anthropic: { cacheCreationInputTokens: 300 } })
+    expect(stepFinish.usage?.cacheWriteInputTokens).toBeUndefined()
+    expect(stepFinish.usage?.cacheReadInputTokens).toBe(200)
+
+    // End-to-end: with the metadata preserved, getUsage extracts cache.write from the fallback path.
+    const result = SessionNs.getUsage({
+      model: {
+        id: "claude-3-5-sonnet",
+        providerID: "anthropic",
+        name: "Claude",
+        limit: { context: 200_000, output: 8_000 },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        capabilities: {
+          toolcall: true,
+          attachment: false,
+          reasoning: false,
+          temperature: true,
+          input: { text: true, image: false, audio: false, video: false },
+          output: { text: true, image: false, audio: false, video: false },
+        },
+        api: { npm: "@ai-sdk/anthropic" },
+        options: {},
+      } as never,
+      usage: stepFinish.usage!,
+      metadata: stepFinish.providerMetadata,
+    })
+    expect(result.tokens.cache.write).toBe(300)
+    expect(result.tokens.cache.read).toBe(200)
   })
 })
 
@@ -601,6 +888,18 @@ describe("session.llm.stream", () => {
         },
       },
       {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { type: "message", id: "item-1", status: "in_progress", role: "assistant", content: [] },
+      },
+      {
+        type: "response.content_part.added",
+        item_id: "item-1",
+        output_index: 0,
+        content_index: 0,
+        part: { type: "output_text", text: "", annotations: [] },
+      },
+      {
         type: "response.output_text.delta",
         item_id: "item-1",
         delta: "Hello",
@@ -622,32 +921,7 @@ describe("session.llm.stream", () => {
     ]
     const request = waitRequest("/responses", createEventResponse(responseChunks, true))
 
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            enabled_providers: ["openai"],
-            provider: {
-              openai: {
-                name: "OpenAI",
-                env: ["OPENAI_API_KEY"],
-                npm: "@ai-sdk/openai",
-                api: "https://api.openai.com/v1",
-                models: {
-                  [model.id]: configModel(model),
-                },
-                options: {
-                  apiKey: "test-openai-key",
-                  baseURL: `${server.url.origin}/v1`,
-                },
-              },
-            },
-          }),
-        )
-      },
-    })
+    await using tmp = await tmpdir({ config: openAIConfig(model, `${server.url.origin}/v1`) })
 
     await WithInstance.provide({
       directory: tmp.path,
@@ -695,6 +969,425 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("keeps supported OpenAI models on AI SDK path when native flag is off", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("openai", "gpt-5.2")
+    const model = source.model
+    const request = waitRequest(
+      "/responses",
+      createEventResponse(
+        [
+          {
+            type: "response.created",
+            response: {
+              id: "resp-flag-off",
+              created_at: Math.floor(Date.now() / 1000),
+              model: model.id,
+              service_tier: null,
+            },
+          },
+          {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "message", id: "item-flag-off", status: "in_progress", role: "assistant", content: [] },
+          },
+          {
+            type: "response.content_part.added",
+            item_id: "item-flag-off",
+            output_index: 0,
+            content_index: 0,
+            part: { type: "output_text", text: "", annotations: [] },
+          },
+          {
+            type: "response.output_text.delta",
+            item_id: "item-flag-off",
+            delta: "Flag off",
+            logprobs: null,
+          },
+          {
+            type: "response.completed",
+            response: {
+              incomplete_details: null,
+              usage: {
+                input_tokens: 1,
+                input_tokens_details: null,
+                output_tokens: 1,
+                output_tokens_details: null,
+              },
+              service_tier: null,
+            },
+          },
+        ],
+        true,
+      ),
+    )
+    const failingNativeClient = Layer.succeed(
+      LLMClient.Service,
+      LLMClient.Service.of({
+        prepare: () => Effect.die(new Error("native LLM client should not be used when the flag is off")),
+        stream: () => Stream.die(new Error("native LLM client should not be used when the flag is off")),
+        generate: () => Effect.die(new Error("native LLM client should not be used when the flag is off")),
+      }),
+    )
+
+    await using tmp = await tmpdir({ config: openAIConfig(model, `${server.url.origin}/v1`) })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-native-flag-off")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        await drainWith(
+          LLM.layer.pipe(
+            Layer.provide(Auth.defaultLayer),
+            Layer.provide(Config.defaultLayer),
+            Layer.provide(Provider.defaultLayer),
+            Layer.provide(Plugin.defaultLayer),
+            Layer.provide(failingNativeClient),
+            Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: false })),
+          ),
+          {
+            user: {
+              id: MessageID.make("msg_user-native-flag-off"),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: agent.name,
+              model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
+            } satisfies MessageV2.User,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          },
+        )
+
+        const capture = await request
+        expect(capture.url.pathname.endsWith("/responses")).toBe(true)
+        expect(capture.body.model).toBe(resolved.api.id)
+      },
+    })
+  })
+
+  test("streams OpenAI through native runtime when opted in", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("openai", "gpt-5.2")
+    const model = source.model
+    const chunks = [
+      {
+        type: "response.created",
+        response: {
+          id: "resp-native",
+        },
+      },
+      {
+        type: "response.output_item.added",
+        item: { type: "message", id: "item-native", status: "in_progress" },
+      },
+      {
+        type: "response.output_text.delta",
+        item_id: "item-native",
+        delta: "Hello native",
+      },
+      {
+        type: "response.completed",
+        response: {
+          incomplete_details: null,
+          usage: {
+            input_tokens: 1,
+            input_tokens_details: null,
+            output_tokens: 1,
+            output_tokens_details: null,
+          },
+        },
+      },
+    ]
+    const request = waitRequest("/responses", createEventResponse(chunks, true))
+
+    await using tmp = await tmpdir({ config: openAIConfig(model, `${server.url.origin}/v1`) })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-native")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.2,
+        } satisfies Agent.Info
+
+        await drainWith(llmLayerWithExecutor(RequestExecutor.defaultLayer, { experimentalNativeLlm: true }), {
+          user: {
+            id: MessageID.make("msg_user-native"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
+          } satisfies MessageV2.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = await request
+        expect(capture.url.pathname.endsWith("/responses")).toBe(true)
+        expect(capture.headers.get("Authorization")).toBe("Bearer test-openai-key")
+        expect(capture.body.model).toBe(model.id)
+        expect(capture.body.stream).toBe(true)
+        expect((capture.body.reasoning as { effort?: string } | undefined)?.effort).toBe("high")
+        expect(JSON.stringify(capture.body.input)).toContain("You are a helpful assistant.")
+        expect(capture.body.input).toContainEqual({ role: "user", content: [{ type: "input_text", text: "Hello" }] })
+      },
+    })
+  })
+
+  test("uses injected native request executor for tool calls", async () => {
+    const source = await loadFixture("openai", "gpt-5.2")
+    const model = source.model
+    const chunks = [
+      {
+        type: "response.output_item.added",
+        item: { type: "function_call", id: "item-injected-tool", call_id: "call-injected-tool", name: "lookup" },
+      },
+      {
+        type: "response.function_call_arguments.delta",
+        item_id: "item-injected-tool",
+        delta: '{"query":"weather"}',
+      },
+      {
+        type: "response.output_item.done",
+        item: {
+          type: "function_call",
+          id: "item-injected-tool",
+          call_id: "call-injected-tool",
+          name: "lookup",
+          arguments: '{"query":"weather"}',
+        },
+      },
+      {
+        type: "response.completed",
+        response: { incomplete_details: null, usage: { input_tokens: 1, output_tokens: 1 } },
+      },
+    ]
+    let captured: Record<string, unknown> | undefined
+    let executed: unknown
+    const executor = Layer.succeed(
+      RequestExecutor.Service,
+      RequestExecutor.Service.of({
+        execute: (request) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
+            captured = (yield* Effect.promise(() => web.json())) as Record<string, unknown>
+            return HttpClientResponse.fromWeb(request, createEventResponse(chunks, true))
+          }),
+      }),
+    )
+
+    await using tmp = await tmpdir({ config: openAIConfig(model, "https://injected-openai.test/v1") })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-native-injected-tool")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        await drainWith(llmLayerWithExecutor(executor, { experimentalNativeLlm: true }), {
+          user: {
+            id: MessageID.make("msg_user-native-injected-tool"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
+          } satisfies MessageV2.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: [],
+          messages: [{ role: "user", content: "Use lookup" }],
+          tools: {
+            lookup: tool({
+              description: "Lookup data",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async (args, options) => {
+                executed = { args, toolCallId: options.toolCallId }
+                return { output: "looked up" }
+              },
+            }),
+          },
+        })
+
+        expect(captured?.model).toBe(model.id)
+        expect(captured?.tools).toEqual([
+          {
+            type: "function",
+            name: "lookup",
+            description: "Lookup data",
+            parameters: {
+              type: "object",
+              properties: { query: { type: "string" } },
+              required: ["query"],
+              additionalProperties: false,
+              $schema: "http://json-schema.org/draft-07/schema#",
+            },
+          },
+        ])
+        expect(executed).toEqual({ args: { query: "weather" }, toolCallId: "call-injected-tool" })
+      },
+    })
+  })
+
+  test("executes OpenAI tool calls through native runtime", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("openai", "gpt-5.2")
+    const model = source.model
+    const chunks = [
+      {
+        type: "response.output_item.added",
+        item: { type: "function_call", id: "item-native-tool", call_id: "call-native-tool", name: "lookup" },
+      },
+      {
+        type: "response.function_call_arguments.delta",
+        item_id: "item-native-tool",
+        delta: '{"query":"weather"}',
+      },
+      {
+        type: "response.output_item.done",
+        item: {
+          type: "function_call",
+          id: "item-native-tool",
+          call_id: "call-native-tool",
+          name: "lookup",
+          arguments: '{"query":"weather"}',
+        },
+      },
+      {
+        type: "response.completed",
+        response: { incomplete_details: null, usage: { input_tokens: 1, output_tokens: 1 } },
+      },
+    ]
+    const request = waitRequest("/responses", createEventResponse(chunks, true))
+    let executed: unknown
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["openai"],
+            provider: {
+              openai: {
+                name: "OpenAI",
+                env: ["OPENAI_API_KEY"],
+                npm: "@ai-sdk/openai",
+                api: "https://api.openai.com/v1",
+                models: {
+                  [model.id]: model,
+                },
+                options: {
+                  apiKey: "test-openai-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-native-tool")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        await drainWith(llmLayerWithExecutor(RequestExecutor.defaultLayer, { experimentalNativeLlm: true }), {
+          user: {
+            id: MessageID.make("msg_user-native-tool"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
+          } satisfies MessageV2.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: [],
+          messages: [{ role: "user", content: "Use lookup" }],
+          tools: {
+            lookup: tool({
+              description: "Lookup data",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async (args, options) => {
+                executed = { args, toolCallId: options.toolCallId }
+                return { output: "looked up" }
+              },
+            }),
+          },
+        })
+
+        const capture = await request
+        expect(capture.body.tools).toEqual([
+          {
+            type: "function",
+            name: "lookup",
+            description: "Lookup data",
+            parameters: {
+              type: "object",
+              properties: { query: { type: "string" } },
+              required: ["query"],
+              additionalProperties: false,
+              $schema: "http://json-schema.org/draft-07/schema#",
+            },
+          },
+        ])
+        expect(executed).toEqual({ args: { query: "weather" }, toolCallId: "call-native-tool" })
+      },
+    })
+  })
+
   test("accepts user image attachments as data URLs for OpenAI models", async () => {
     const server = state.server
     if (!server) {
@@ -712,6 +1405,18 @@ describe("session.llm.stream", () => {
           model: model.id,
           service_tier: null,
         },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { type: "message", id: "item-data-url", status: "in_progress", role: "assistant", content: [] },
+      },
+      {
+        type: "response.content_part.added",
+        item_id: "item-data-url",
+        output_index: 0,
+        content_index: 0,
+        part: { type: "output_text", text: "", annotations: [] },
       },
       {
         type: "response.output_text.delta",
