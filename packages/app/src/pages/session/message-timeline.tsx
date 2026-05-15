@@ -450,10 +450,13 @@ export function MessageTimeline(props: {
     if (index < 0) return
     return [index]
   })
-  const activeAssistantContentVersion = createMemo(() => {
+  const activeAssistantMessages = createMemo(() => {
     const id = activeMessageID() ?? props.userMessages[props.userMessages.length - 1]?.id
-    if (!id) return ""
-    return (assistantMessagesByParent().get(id) ?? emptyAssistantMessages)
+    if (!id) return emptyAssistantMessages
+    return assistantMessagesByParent().get(id) ?? emptyAssistantMessages
+  })
+  const activeAssistantContentVersion = createMemo(() =>
+    activeAssistantMessages()
       .flatMap((message) => [
         `${message.id}:${message.time.completed ?? ""}:${message.error?.name ?? ""}`,
         ...getMsgParts(message.id).map((part) => {
@@ -470,18 +473,19 @@ export function MessageTimeline(props: {
           return `${part.id}:${part.type}`
         }),
       ])
-      .join("|")
-  })
+      .join("|"),
+  )
 
   createEffect(
     on(
       () => [timelineRowKeys(), activeAssistantContentVersion(), sessionStatus().type] as const,
       () => {
         if (!virtualizer) return
-        if (!props.shouldAnchorBottom()) return
+        if (!props.shouldAnchorBottom() && !measuredBottomAnchored) return
         const keys = timelineRowKeys()
         if (keys.length === 0) return
         virtualizer.scrollToIndex(keys.length - 1, { align: "end" })
+        scheduleMeasuredBottomAnchor()
       },
       { defer: true },
     ),
@@ -556,6 +560,9 @@ export function MessageTimeline(props: {
   let listRoot: HTMLDivElement | undefined
   let listFrame: number | undefined
   let contentFrame: number | undefined
+  let bottomAnchorFrame: number | undefined
+  let bottomAnchorFrames = 0
+  let measuredBottomAnchored = true
   const [scrollRoot, setScrollRoot] = createSignal<HTMLDivElement>()
 
   const updateTitleMetrics = () => {
@@ -564,6 +571,37 @@ export function MessageTimeline(props: {
   }
 
   createResizeObserver(() => head, updateTitleMetrics)
+
+  const isMeasuredBottom = (root: HTMLDivElement) => root.scrollHeight - root.clientHeight - root.scrollTop <= 4
+
+  function anchorMeasuredBottom() {
+    if (!listRoot) return false
+    if (!measuredBottomAnchored) return false
+    listRoot.scrollTop = listRoot.scrollHeight
+    return true
+  }
+
+  function scheduleMeasuredBottomAnchor() {
+    // Workaround for virtua issue #301: virtua does not expose a synchronous item-resize hook for
+    // "stay at bottom if already at bottom". Tool rows can briefly outgrow the measured virtual
+    // height, so keep the scroll container bottom-locked for a few frames while measurement settles.
+    bottomAnchorFrames = 90
+    if (bottomAnchorFrame !== undefined) return
+
+    const tick = () => {
+      bottomAnchorFrame = undefined
+      if (!anchorMeasuredBottom()) {
+        bottomAnchorFrames = 0
+        return
+      }
+
+      bottomAnchorFrames = working() ? 12 : bottomAnchorFrames - 1
+      if (bottomAnchorFrames <= 0) return
+      bottomAnchorFrame = requestAnimationFrame(tick)
+    }
+
+    bottomAnchorFrame = requestAnimationFrame(tick)
+  }
 
   const bindContentRoot = (root: HTMLDivElement) => {
     const child = root.firstElementChild
@@ -590,6 +628,7 @@ export function MessageTimeline(props: {
     }
 
     props.setScrollRef(root)
+    measuredBottomAnchored = isMeasuredBottom(root)
     setScrollRoot(root)
     scheduleContentRoot(root)
   }
@@ -646,6 +685,7 @@ export function MessageTimeline(props: {
   }
 
   const handleListScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+    measuredBottomAnchored = isMeasuredBottom(event.currentTarget)
     props.onScheduleScrollState(event.currentTarget)
     props.onHistoryScroll()
     if (!props.hasScrollGesture()) return
@@ -657,6 +697,7 @@ export function MessageTimeline(props: {
   onCleanup(() => {
     if (listFrame !== undefined) cancelAnimationFrame(listFrame)
     if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
+    if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
     setScrollRoot(undefined)
     props.setScrollRef(undefined)
   })
