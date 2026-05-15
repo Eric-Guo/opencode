@@ -10,11 +10,17 @@ export type Event =
   | EventFileWatcherUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
+  | EventMessageUpdated
+  | EventMessageRemoved
   | EventMessagePartDelta
+  | EventMessagePartUpdated
+  | EventMessagePartRemoved
   | EventPermissionAsked
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
+  | EventSessionUpdated
+  | EventSessionDeleted
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -788,11 +794,17 @@ export type GlobalEvent = {
     | EventFileWatcherUpdated
     | EventLspClientDiagnostics
     | EventLspUpdated
+    | EventMessageUpdated
+    | EventMessageRemoved
     | EventMessagePartDelta
+    | EventMessagePartUpdated
+    | EventMessagePartRemoved
     | EventPermissionAsked
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
+    | EventSessionUpdated
+    | EventSessionDeleted
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
@@ -2443,6 +2455,44 @@ export type EventMessagePartDelta = {
   }
 }
 
+export type EventMessageUpdated = {
+  id: string
+  type: "message.updated"
+  properties: {
+    sessionID: string
+    info: Message
+  }
+}
+
+export type EventMessageRemoved = {
+  id: string
+  type: "message.removed"
+  properties: {
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type EventMessagePartUpdated = {
+  id: string
+  type: "message.part.updated"
+  properties: {
+    sessionID: string
+    part: Part
+    time: number
+  }
+}
+
+export type EventMessagePartRemoved = {
+  id: string
+  type: "message.part.removed"
+  properties: {
+    sessionID: string
+    messageID: string
+    partID: string
+  }
+}
+
 export type EventPermissionAsked = {
   id: string
   type: "permission.asked"
@@ -2481,6 +2531,24 @@ export type EventSessionError = {
       | StructuredOutputError
       | ContextOverflowError
       | ApiError
+  }
+}
+
+export type EventSessionUpdated = {
+  id: string
+  type: "session.updated"
+  properties: {
+    sessionID: string
+    info: Session
+  }
+}
+
+export type EventSessionDeleted = {
+  id: string
+  type: "session.deleted"
+  properties: {
+    sessionID: string
+    info: Session
   }
 }
 
