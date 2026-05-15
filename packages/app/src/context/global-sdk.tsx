@@ -1,15 +1,23 @@
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import {
+  createOpencodeClient as createEventClient,
+  type Event as LegacyEvent,
+  type GlobalEvent as LegacyGlobalEvent,
+} from "@opencode-ai/sdk/client"
+import type { Event as CurrentEvent, GlobalEvent as CurrentGlobalEvent } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { batch, onCleanup, onMount } from "solid-js"
-import { createSdkForServer } from "@/utils/server"
+import { authTokenFromCredentials, createSdkForServer } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
 
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
+
+export type GlobalSDKEvent = CurrentEvent | LegacyEvent
+type StreamEvent = CurrentGlobalEvent | LegacyGlobalEvent
 
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
@@ -33,16 +41,25 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const currentServer = server.current
     if (!currentServer) throw new Error(language.t("error.globalSDK.noServerAvailable"))
 
-    const eventSdk = createSdkForServer({
+    // Keep /global/event on the legacy SDK until the EventV2 stream contract is stable.
+    const eventSdk = createEventClient({
       signal: abort.signal,
       fetch: eventFetch,
-      server: currentServer.http,
+      baseUrl: currentServer.http.url,
+      headers: currentServer.http.password
+        ? {
+            Authorization: `Basic ${authTokenFromCredentials({
+              username: currentServer.http.username,
+              password: currentServer.http.password,
+            })}`,
+          }
+        : undefined,
     })
     const emitter = createGlobalEmitter<{
-      [key: string]: Event
+      [key: string]: GlobalSDKEvent
     }>()
 
-    type Queued = { directory: string; payload: Event }
+    type Queued = { directory: string; payload: GlobalSDKEvent }
     const FLUSH_FRAME_MS = 16
     const STREAM_YIELD_MS = 8
     const RECONNECT_DELAY_MS = 250
@@ -56,7 +73,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
 
-    const key = (directory: string, payload: Event) => {
+    const key = (directory: string, payload: GlobalSDKEvent) => {
       if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
       if (payload.type === "lsp.updated") return `lsp.updated:${directory}`
       if (payload.type === "message.part.updated") {
@@ -150,7 +167,8 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
             })
             let yielded = Date.now()
             resetHeartbeat()
-            for await (const event of events.stream) {
+            const stream: AsyncIterable<StreamEvent> = events.stream
+            for await (const event of stream) {
               resetHeartbeat()
               streamErrorLogged = false
               const directory = event.directory ?? "global"
@@ -158,7 +176,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
                 continue
               }
 
-              const payload = event.payload as Event
+              const payload = event.payload
 
               const k = key(directory, payload)
               if (k) {
