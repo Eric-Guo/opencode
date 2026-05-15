@@ -450,6 +450,42 @@ export function MessageTimeline(props: {
     if (index < 0) return
     return [index]
   })
+  const activeAssistantContentVersion = createMemo(() => {
+    const id = activeMessageID() ?? props.userMessages[props.userMessages.length - 1]?.id
+    if (!id) return ""
+    return (assistantMessagesByParent().get(id) ?? emptyAssistantMessages)
+      .flatMap((message) => [
+        `${message.id}:${message.time.completed ?? ""}:${message.error?.name ?? ""}`,
+        ...getMsgParts(message.id).map((part) => {
+          if (part.type === "text" || part.type === "reasoning") return `${part.id}:${part.type}:${part.text.length}`
+          if (part.type === "tool") {
+            const metadata = "metadata" in part.state ? part.state.metadata : undefined
+            const output = "output" in part.state && typeof part.state.output === "string" ? part.state.output.length : 0
+            const metadataOutput =
+              metadata && typeof metadata === "object" && "output" in metadata && typeof metadata.output === "string"
+                ? metadata.output.length
+                : 0
+            return `${part.id}:${part.tool}:${part.state.status}:${output}:${metadataOutput}`
+          }
+          return `${part.id}:${part.type}`
+        }),
+      ])
+      .join("|")
+  })
+
+  createEffect(
+    on(
+      () => [timelineRowKeys(), activeAssistantContentVersion(), sessionStatus().type] as const,
+      () => {
+        if (!virtualizer) return
+        if (!props.shouldAnchorBottom()) return
+        const keys = timelineRowKeys()
+        if (keys.length === 0) return
+        virtualizer.scrollToIndex(keys.length - 1, { align: "end" })
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => {
     props.setRevealMessage?.((id) => {
