@@ -62,6 +62,7 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalEventSystem).toBe(true)
       expect(flags.experimentalWorkspaces).toBe(true)
       expect(flags.experimentalIconDiscovery).toBe(true)
+      expect(flags.experimentalNativeLlm).toBe(false)
       expect(flags.client).toBe("desktop")
     }),
   )
@@ -79,6 +80,17 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalLspTy).toBe(true)
     }),
   )
+
+  it.effect("requires explicit native LLM opt-in", () =>
+    Effect.gen(function* () {
+      const explicit = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true" })))
+      const legacy = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_LLM_RUNTIME: "native" })))
+
+      expect(explicit.experimentalNativeLlm).toBe(true)
+      expect(legacy.experimentalNativeLlm).toBe(true)
+    }),
+  )
+
 
   it.effect("layer accepts partial test overrides and fills defaults from Config definitions", () =>
     Effect.gen(function* () {
