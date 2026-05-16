@@ -110,7 +110,8 @@ export const Definitions = {
   console_org_switch: keybind("none", "Switch console organization"),
   agent_list: keybind("<leader>a", "List agents"),
   agent_cycle: keybind("tab", "Next agent"),
-  agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
+  agent_cycle_reverse: keybind("none", "Previous agent"),
+  permission_auto_accept_toggle: keybind("shift+tab", "Toggle auto-accept mode for permissions"),
   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
   variant_list: keybind("none", "List model variants"),
 
@@ -293,6 +294,7 @@ export const CommandMap = {
   agent_list: "agent.list",
   agent_cycle: "agent.cycle",
   agent_cycle_reverse: "agent.cycle.reverse",
+  permission_auto_accept_toggle: "permission.auto_accept.toggle",
   variant_cycle: "variant.cycle",
   variant_list: "variant.list",
   messages_page_up: "session.page.up",
