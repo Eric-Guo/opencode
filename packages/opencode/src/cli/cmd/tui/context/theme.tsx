@@ -18,6 +18,7 @@ import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
 import material from "./theme/material.json" with { type: "json" }
 import matrix from "./theme/matrix.json" with { type: "json" }
+import opencraft from "./theme/opencraft.json" with { type: "json" }
 import mercury from "./theme/mercury.json" with { type: "json" }
 import monokai from "./theme/monokai.json" with { type: "json" }
 import nightowl from "./theme/nightowl.json" with { type: "json" }
@@ -101,6 +102,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   kanagawa,
   material,
   matrix,
+  opencraft,
   mercury,
   monokai,
   nightowl,
