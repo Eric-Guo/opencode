@@ -6,8 +6,6 @@ import { initLogging } from "./logging"
 const logger = initLogging()
 const { autoUpdater } = pkg
 
-let downloadedUpdateVersion: string | undefined
-
 export function setupAutoUpdater() {
   if (!UPDATER_ENABLED) return
   autoUpdater.logger = logger
@@ -28,7 +26,6 @@ export async function checkUpdate() {
   if (!UPDATER_ENABLED) return { updateAvailable: false }
   logger.log("checking for updates", {
     currentVersion: app.getVersion(),
-    downloadedUpdateVersion: downloadedUpdateVersion ?? null,
     channel: autoUpdater.channel,
     allowPrerelease: autoUpdater.allowPrerelease,
     allowDowngrade: autoUpdater.allowDowngrade,
@@ -44,7 +41,6 @@ export async function checkUpdate() {
     })
     const version = result?.updateInfo?.version
     if (result?.isUpdateAvailable === false || !version) {
-      downloadedUpdateVersion = undefined
       logger.log("no update available", {
         reason: "provider returned no newer version",
       })
@@ -53,7 +49,6 @@ export async function checkUpdate() {
     logger.log("update available", { version })
     await autoUpdater.downloadUpdate()
     logger.log("update download completed", { version })
-    downloadedUpdateVersion = version
     return { updateAvailable: true, version }
   } catch (error) {
     logger.error("update check failed", error)
@@ -62,14 +57,15 @@ export async function checkUpdate() {
 }
 
 export async function installUpdate(killSidecar: () => Promise<void>) {
-  if (!downloadedUpdateVersion) {
+  const result = await checkUpdate()
+  if (!result.updateAvailable) {
     logger.log("install update skipped", {
-      reason: "no downloaded update ready",
+      reason: result.failed ? "update check failed" : "no update available",
     })
     return
   }
   logger.log("installing downloaded update", {
-    version: downloadedUpdateVersion,
+    version: result.version ?? null,
   })
   await killSidecar()
   autoUpdater.quitAndInstall()
