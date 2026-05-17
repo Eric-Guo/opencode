@@ -59,12 +59,8 @@ export async function checkUpdate() {
 export async function installUpdate(killSidecar: () => Promise<void>) {
   const result = await checkUpdate()
   if (!result.updateAvailable) {
-    const failed = result.failed === true
-    logger.log("install update skipped", { reason: failed ? "update check failed" : "no update available" })
-    await dialog.showMessageBox({
-      type: failed ? "error" : "info",
-      message: failed ? "Update check failed." : "You're up to date.",
-      title: failed ? "Update Error" : "No Updates",
+    logger.log("install update skipped", {
+      reason: result.failed ? "update check failed" : "no update available",
     })
     return
   }
