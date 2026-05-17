@@ -44,6 +44,7 @@ export async function checkUpdate() {
     })
     const version = result?.updateInfo?.version
     if (result?.isUpdateAvailable === false || !version) {
+      downloadedUpdateVersion = undefined
       logger.log("no update available", {
         reason: "provider returned no newer version",
       })
