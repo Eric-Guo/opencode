@@ -26,14 +26,9 @@ export function setupAutoUpdater() {
 
 export async function checkUpdate() {
   if (!UPDATER_ENABLED) return { updateAvailable: false }
-  if (downloadedUpdateVersion) {
-    logger.log("returning cached downloaded update", {
-      version: downloadedUpdateVersion,
-    })
-    return { updateAvailable: true, version: downloadedUpdateVersion }
-  }
   logger.log("checking for updates", {
     currentVersion: app.getVersion(),
+    downloadedUpdateVersion: downloadedUpdateVersion ?? null,
     channel: autoUpdater.channel,
     allowPrerelease: autoUpdater.allowPrerelease,
     allowDowngrade: autoUpdater.allowDowngrade,
