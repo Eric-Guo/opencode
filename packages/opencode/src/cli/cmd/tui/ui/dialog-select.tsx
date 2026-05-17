@@ -38,6 +38,11 @@ export interface DialogSelectProps<T> {
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
+  footerHints?: {
+    title: string
+    label: string
+    side?: "left" | "right"
+  }[]
   bindings?: readonly Binding<Renderable, KeyEvent>[]
   current?: T
 }
@@ -65,9 +70,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   const [store, setStore] = createStore({
@@ -237,6 +239,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       commands: [
         {
           name: "dialog.select.prev",
+          title: "Previous item",
+          category: "Dialog",
           run() {
             setStore("input", "keyboard")
             move(-1)
@@ -244,6 +248,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.next",
+          title: "Next item",
+          category: "Dialog",
           run() {
             setStore("input", "keyboard")
             move(1)
@@ -251,6 +257,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.page_up",
+          title: "Page up",
+          category: "Dialog",
           run() {
             setStore("input", "keyboard")
             move(-10)
@@ -258,6 +266,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.page_down",
+          title: "Page down",
+          category: "Dialog",
           run() {
             setStore("input", "keyboard")
             move(10)
@@ -265,6 +275,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.home",
+          title: "First item",
+          category: "Dialog",
           run() {
             setStore("input", "keyboard")
             moveTo(0)
@@ -272,6 +284,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.end",
+          title: "Last item",
+          category: "Dialog",
           run() {
             setStore("input", "keyboard")
             moveTo(flat().length - 1)
@@ -279,10 +293,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.submit",
+          title: "Select item",
+          category: "Dialog",
           run: submit,
         },
         ...enabledActions.map((item) => ({
           name: item.command,
+          title: item.title,
+          category: "Dialog",
           run() {
             setStore("input", "keyboard")
             const option = selected()
@@ -292,11 +310,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         })),
       ],
       bindings: [
-        ...sections.dialog_select,
-        ...tuiConfig.keymap.pick(
-          "dialog_actions",
-          enabledActions.map((item) => item.command),
-        ),
+        ...tuiConfig.keybinds.gather("dialog.select", [
+          "dialog.select.prev",
+          "dialog.select.next",
+          "dialog.select.page_up",
+          "dialog.select.page_down",
+          "dialog.select.home",
+          "dialog.select.end",
+          "dialog.select.submit",
+        ]),
+        ...enabledActions.flatMap((item) => tuiConfig.keybinds.get(item.command)),
         ...(props.bindings ?? []).filter((binding) => {
           if (typeof binding.cmd !== "string") return true
           return enabledActions.some((item) => item.command === binding.cmd)
@@ -316,11 +339,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
-  const visibleActions = createMemo(() =>
-    actions()
+  const visibleActions = createMemo(() => [
+    ...actions()
       .map((item) => ({ ...item, label: actionLabels().get(item.command) ?? "" }))
       .filter((item) => !item.disabled && item.label),
-  )
+    ...(props.footerHints ?? []),
+  ])
   const left = createMemo(() => visibleActions().filter((item) => item.side !== "right"))
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 

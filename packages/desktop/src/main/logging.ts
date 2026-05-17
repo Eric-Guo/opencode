@@ -1,3 +1,4 @@
+import { MainLogger } from "electron-log"
 import log from "electron-log/main.js"
 import { app, crashReporter, netLog, shell } from "electron"
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
@@ -15,6 +16,9 @@ let root = ""
 let run = ""
 let netLogPath: string | undefined
 
+let logger: MainLogger
+export const getLogger = () => logger
+
 export function initLogging() {
   initRunDirectory()
   log.transports.file.maxSize = 5 * 1024 * 1024
@@ -26,7 +30,7 @@ export function initLogging() {
   log.initialize({ preload: false, spyRendererConsole: true })
   initConsoleTransport()
   cleanup()
-  return log
+  return (logger = log)
 }
 
 export function initCrashReporter() {

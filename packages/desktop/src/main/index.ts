@@ -7,40 +7,9 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow, dialog } from "electron"
-import pkg from "electron-updater"
+import { app, BrowserWindow } from "electron"
 
 import contextMenu from "electron-context-menu"
-contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
-
-// on macOS apps run in `/` which can cause issues with ripgrep
-try {
-  process.chdir(homedir())
-} catch {}
-
-process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
-
-const APP_NAMES: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
-}
-const APP_IDS: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
-}
-const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
-const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
-const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
-const onboardingTestRoot = setupOnboardingTestEnv()
-app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
-app.setAppUserModelId(appId)
-app.setPath("userData", onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId))
-if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
-const logger = initLogging()
-initCrashReporter()
-const { autoUpdater } = pkg
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
@@ -67,45 +36,127 @@ import {
   setDockIcon,
 } from "./windows"
 import { migrate } from "./migrate"
+import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
+import { Deferred, Effect, Fiber } from "effect"
+
+const APP_NAMES: Record<string, string> = {
+  dev: "OpenCode Dev",
+  beta: "OpenCode Beta",
+  prod: "OpenCode",
+}
+const APP_IDS: Record<string, string> = {
+  dev: "ai.opencode.desktop.dev",
+  beta: "ai.opencode.desktop.beta",
+  prod: "ai.opencode.desktop",
+}
+const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
+const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
+
+let logger: ReturnType<typeof initLogging>
+let mainWindow: BrowserWindow | null = null
+let server: SidecarListener | null = null
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
-let mainWindow: BrowserWindow | null = null
-let server: SidecarListener | null = null
-const loadingComplete = defer<void>()
-
 const pendingDeepLinks: string[] = []
 
-const serverReady = defer<ServerReadyData>()
-
-useSystemCertificates()
-
-function setupOnboardingTestEnv() {
-  if (!TEST_ONBOARDING) return
-
-  const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
-  rmSync(root, { recursive: true, force: true })
-  ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
-    mkdirSync(join(root, dir), { recursive: true }),
-  )
-  process.env.OPENCODE_DB = ":memory:"
-  process.env.XDG_DATA_HOME = join(root, "data")
-  process.env.XDG_CONFIG_HOME = join(root, "config")
-  process.env.XDG_CACHE_HOME = join(root, "cache")
-  process.env.XDG_STATE_HOME = join(root, "state")
-  return root
+function useEnvProxy() {
+  try {
+    // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
+    ;(http as any).setGlobalProxyFromEnv()
+  } catch (error) {
+    logger.warn("failed to load proxy environment", error)
+  }
 }
 
-logger.log("app starting", {
-  version: app.getVersion(),
-  packaged: app.isPackaged,
-  onboardingTest: Boolean(onboardingTestRoot),
-})
+function emitDeepLinks(urls: string[]) {
+  if (urls.length === 0) return
+  pendingDeepLinks.push(...urls)
+  if (mainWindow) sendDeepLinks(mainWindow, urls)
+}
 
-setupApp()
+function setInitStep(step: InitStep) {
+  initStep = step
+  logger.log("init step", { step })
+  initEmitter.emit("step", step)
+}
 
-function setupApp() {
+async function killSidecar() {
+  if (!server) return
+  const current = server
+  server = null
+  await current.stop()
+}
+
+function ensureLoopbackNoProxy() {
+  const loopback = ["127.0.0.1", "localhost", "::1"]
+  const upsert = (key: string) => {
+    const items = (process.env[key] ?? "")
+      .split(",")
+      .map((value: string) => value.trim())
+      .filter((value: string) => Boolean(value))
+
+    for (const host of loopback) {
+      if (items.some((value: string) => value.toLowerCase() === host)) continue
+      items.push(host)
+    }
+
+    process.env[key] = items.join(",")
+  }
+
+  upsert("NO_PROXY")
+  upsert("no_proxy")
+}
+
+const main = Effect.gen(function* () {
+  contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+
+  // on macOS apps run in `/` which can cause issues with ripgrep
+  try {
+    process.chdir(homedir())
+  } catch {}
+
+  process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
+
+  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
+  const onboardingTestRoot = ((): string | undefined => {
+    if (!TEST_ONBOARDING) return
+
+    const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+    rmSync(root, { recursive: true, force: true })
+    ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
+      mkdirSync(join(root, dir), { recursive: true }),
+    )
+    process.env.OPENCODE_DB = ":memory:"
+    process.env.XDG_DATA_HOME = join(root, "data")
+    process.env.XDG_CONFIG_HOME = join(root, "config")
+    process.env.XDG_CACHE_HOME = join(root, "cache")
+    process.env.XDG_STATE_HOME = join(root, "state")
+    return root
+  })()
+  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
+  app.setAppUserModelId(appId)
+  app.setPath(
+    "userData",
+    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
+  )
+  if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
+  logger = initLogging()
+  initCrashReporter()
+
+  try {
+    setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
+  } catch (error) {
+    logger.warn("failed to load system certificates", error)
+  }
+
+  logger.log("app starting", {
+    version: app.getVersion(),
+    packaged: app.isPackaged,
+    onboardingTest: Boolean(onboardingTestRoot),
+  })
+
   ensureLoopbackNoProxy()
   useEnvProxy()
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
@@ -126,7 +177,10 @@ function setupApp() {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)
     }
-    focusMainWindow()
+    if (mainWindow) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
   })
 
   app.on("open-url", (event: Event, url: string) => {
@@ -164,62 +218,100 @@ function setupApp() {
     })
   }
 
-  void app.whenReady().then(async () => {
-    if (!TEST_ONBOARDING) migrate()
-    app.setAsDefaultProtocolClient("opencode")
-    registerRendererProtocol()
-    setDockIcon()
-    setupAutoUpdater()
-    await startNetLog().catch((error) => logger.warn("failed to start net log", error))
-    await initialize()
+  const serverReady = Deferred.makeUnsafe<ServerReadyData>()
+  const loadingComplete = Deferred.makeUnsafe<void>()
+
+  registerIpcHandlers({
+    killSidecar: () => killSidecar(),
+    awaitInitialization: Effect.fnUntraced(
+      function* (sendStep) {
+        sendStep(initStep)
+        const listener = (step: InitStep) => sendStep(step)
+        initEmitter.on("step", listener)
+        try {
+          logger.log("awaiting server ready")
+          const res = yield* Deferred.await(serverReady)
+          logger.log("server ready", { url: res.url })
+          return res
+        } finally {
+          initEmitter.off("step", listener)
+        }
+      },
+      (e) => Effect.runPromise(e),
+    ),
+    getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
+    consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
+    getDefaultServerUrl: () => getDefaultServerUrl(),
+    setDefaultServerUrl: (url) => setDefaultServerUrl(url),
+    getWslConfig: () => Promise.resolve(getWslConfig()),
+    setWslConfig: (config: WslConfig) => setWslConfig(config),
+    getDisplayBackend: async () => null,
+    setDisplayBackend: async () => undefined,
+    parseMarkdown: async (markdown) => parseMarkdown(markdown),
+    checkAppExists: (appName) => checkAppExists(appName),
+    wslPath: async (path, mode) => wslPath(path, mode),
+    resolveAppPath: async (appName) => resolveAppPath(appName),
+    loadingWindowComplete: () => Deferred.doneUnsafe(loadingComplete, Effect.void),
+    runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, killSidecar),
+    checkUpdate: async () => checkUpdate(),
+    installUpdate: async () => installUpdate(killSidecar),
+    setBackgroundColor: (color) => setBackgroundColor(color),
+    exportDebugLogs: () => exportDebugLogs(),
+    recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
   })
-}
 
-function useSystemCertificates() {
-  try {
-    setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
-  } catch (error) {
-    logger.warn("failed to load system certificates", error)
-  }
-}
+  yield* Effect.promise(() => app.whenReady())
 
-function useEnvProxy() {
-  try {
-    // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
-    ;(http as any).setGlobalProxyFromEnv()
-  } catch (error) {
-    logger.warn("failed to load proxy environment", error)
-  }
-}
+  if (!TEST_ONBOARDING) migrate()
+  app.setAsDefaultProtocolClient("opencode")
+  registerRendererProtocol()
+  setDockIcon()
+  setupAutoUpdater()
+  yield* Effect.promise(() => startNetLog()).pipe(
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        logger.warn("failed to start net log", error)
+      }),
+    ),
+  )
 
-function emitDeepLinks(urls: string[]) {
-  if (urls.length === 0) return
-  pendingDeepLinks.push(...urls)
-  if (mainWindow) sendDeepLinks(mainWindow, urls)
-}
+  const needsMigration = ((): boolean => {
+    if (process.env.OPENCODE_DB === ":memory:") return false
 
-function focusMainWindow() {
-  if (!mainWindow) return
-  mainWindow.show()
-  mainWindow.focus()
-}
-
-function setInitStep(step: InitStep) {
-  initStep = step
-  logger.log("init step", { step })
-  initEmitter.emit("step", step)
-}
-
-async function initialize() {
-  const needsMigration = !sqliteFileExists()
+    const xdg = process.env.XDG_DATA_HOME
+    const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".local", "share")
+    return !existsSync(join(base, "opencode", "opencode.db"))
+  })()
   let overlay: BrowserWindow | null = null
 
-  const port = await getSidecarPort()
+  const port = yield* Effect.gen(function* () {
+    const fromEnv = process.env.OPENCODE_PORT
+    if (fromEnv) {
+      const parsed = Number.parseInt(fromEnv, 10)
+      if (!Number.isNaN(parsed)) return parsed
+    }
+
+    const res = yield* Deferred.make<number, unknown>()
+    const server = createServer()
+    server.on("error", (e) => Deferred.failSync(res, () => e))
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address()
+      if (typeof address !== "object" || !address) {
+        server.close()
+        Deferred.failSync(res, () => new Error("Failed to get port"))
+        return
+      }
+      const port = address.port
+      server.close(() => Effect.runSync(Deferred.succeed(res, port)))
+    })
+
+    return yield* Deferred.await(res)
+  })
   const hostname = "127.0.0.1"
   const url = `http://${hostname}:${port}`
   const password = randomUUID()
 
-  const loadingTask = (async () => {
+  const loadingTask = yield* Effect.gen(function* () {
     logger.log("sidecar connection started", { url })
 
     initEmitter.on("sqlite", (progress: SqliteMigrationProgress) => {
@@ -228,304 +320,78 @@ async function initialize() {
       if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
     })
 
+    ensureLoopbackNoProxy()
+    useEnvProxy()
+
     logger.log("spawning sidecar", { url })
-    const { listener, health } = await spawnLocalServer(
-      hostname,
-      port,
-      password,
-      () => {
-        ensureLoopbackNoProxy()
-        useEnvProxy()
-      },
-      {
+    const { listener, health } = yield* Effect.promise(() =>
+      spawnLocalServer(hostname, port, password, {
         needsMigration,
         userDataPath: app.getPath("userData"),
         onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
         onStdout: (message) => writeLog("server", "stdout", { message }),
         onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
         onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
-      },
+      }),
     )
     server = listener
-    serverReady.resolve({
+    yield* Deferred.succeed(serverReady, {
       url,
       username: "opencode",
       password,
     })
 
-    await Promise.race([
-      health.wait,
-      delay(30_000).then(() => {
-        throw new Error("Sidecar health check timed out")
-      }),
-    ]).catch((error) => {
-      logger.error("sidecar health check failed", error)
-    })
+    yield* Effect.promise(() => health.wait).pipe(
+      Effect.timeout("30 seconds"),
+      Effect.catch((e) =>
+        Effect.sync(() => {
+          logger.error("sidecar health check failed", e.toString())
+        }),
+      ),
+    )
 
     logger.log("loading task finished")
-  })()
+  }).pipe(Effect.forkChild)
 
   if (needsMigration) {
-    const show = await Promise.race([loadingTask.then(() => false), delay(1_000).then(() => true)])
+    const show = yield* loadingTask.pipe(
+      Fiber.await,
+      Effect.timeout("1 second"),
+      Effect.as(false),
+      Effect.catch(() => Effect.succeed(true)),
+    )
     if (show) {
       overlay = createLoadingWindow()
-      await delay(1_000)
+      yield* Effect.sleep("1 second")
     }
   }
 
-  await loadingTask
+  yield* Fiber.await(loadingTask)
   setInitStep({ phase: "done" })
 
-  if (overlay) {
-    await loadingComplete.promise
-  }
+  if (overlay) yield* Deferred.await(loadingComplete)
 
   mainWindow = createMainWindow()
-  wireMenu()
+  if (mainWindow) {
+    createMenu({
+      trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
+      checkForUpdates: () => {
+        void checkForUpdates(true, killSidecar)
+      },
+      reload: () => mainWindow?.reload(),
+      relaunch: () => {
+        void killSidecar().finally(() => {
+          app.relaunch()
+          app.exit(0)
+        })
+      },
+      exportDebugLogs: () => {
+        void exportDebugLogs().catch((error) => logger.error("failed to export debug logs", error))
+      },
+    })
+  }
 
   overlay?.close()
-}
-
-function wireMenu() {
-  if (!mainWindow) return
-  createMenu({
-    trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
-    checkForUpdates: () => {
-      void checkForUpdates(true)
-    },
-    reload: () => mainWindow?.reload(),
-    relaunch: () => {
-      void killSidecar().finally(() => {
-        app.relaunch()
-        app.exit(0)
-      })
-    },
-    exportDebugLogs: () => {
-      void exportDebugLogs().catch((error) => logger.error("failed to export debug logs", error))
-    },
-  })
-}
-
-registerIpcHandlers({
-  killSidecar: () => killSidecar(),
-  awaitInitialization: async (sendStep) => {
-    sendStep(initStep)
-    const listener = (step: InitStep) => sendStep(step)
-    initEmitter.on("step", listener)
-    try {
-      logger.log("awaiting server ready")
-      const res = await serverReady.promise
-      logger.log("server ready", { url: res.url })
-      return res
-    } finally {
-      initEmitter.off("step", listener)
-    }
-  },
-  getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
-  consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
-  getDefaultServerUrl: () => getDefaultServerUrl(),
-  setDefaultServerUrl: (url) => setDefaultServerUrl(url),
-  getWslConfig: () => Promise.resolve(getWslConfig()),
-  setWslConfig: (config: WslConfig) => setWslConfig(config),
-  getDisplayBackend: async () => null,
-  setDisplayBackend: async () => undefined,
-  parseMarkdown: async (markdown) => parseMarkdown(markdown),
-  checkAppExists: (appName) => checkAppExists(appName),
-  wslPath: async (path, mode) => wslPath(path, mode),
-  resolveAppPath: async (appName) => resolveAppPath(appName),
-  loadingWindowComplete: () => loadingComplete.resolve(),
-  runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail),
-  checkUpdate: async () => checkUpdate(),
-  installUpdate: async () => installUpdate(),
-  setBackgroundColor: (color) => setBackgroundColor(color),
-  exportDebugLogs: () => exportDebugLogs(),
-  recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
 })
 
-async function killSidecar() {
-  if (!server) return
-  const current = server
-  server = null
-  await current.stop()
-}
-
-function ensureLoopbackNoProxy() {
-  const loopback = ["127.0.0.1", "localhost", "::1"]
-  const upsert = (key: string) => {
-    const items = (process.env[key] ?? "")
-      .split(",")
-      .map((value: string) => value.trim())
-      .filter((value: string) => Boolean(value))
-
-    for (const host of loopback) {
-      if (items.some((value: string) => value.toLowerCase() === host)) continue
-      items.push(host)
-    }
-
-    process.env[key] = items.join(",")
-  }
-
-  upsert("NO_PROXY")
-  upsert("no_proxy")
-}
-
-async function getSidecarPort() {
-  const fromEnv = process.env.OPENCODE_PORT
-  if (fromEnv) {
-    const parsed = Number.parseInt(fromEnv, 10)
-    if (!Number.isNaN(parsed)) return parsed
-  }
-
-  return await new Promise<number>((resolve, reject) => {
-    const server = createServer()
-    server.on("error", reject)
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address()
-      if (typeof address !== "object" || !address) {
-        server.close()
-        reject(new Error("Failed to get port"))
-        return
-      }
-      const port = address.port
-      server.close(() => resolve(port))
-    })
-  })
-}
-
-function sqliteFileExists() {
-  if (process.env.OPENCODE_DB === ":memory:") return true
-
-  const xdg = process.env.XDG_DATA_HOME
-  const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".local", "share")
-  return existsSync(join(base, "opencode", "opencode.db"))
-}
-
-function setupAutoUpdater() {
-  if (!UPDATER_ENABLED) return
-  autoUpdater.logger = logger
-  autoUpdater.channel = "latest"
-  autoUpdater.allowPrerelease = false
-  autoUpdater.allowDowngrade = true
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = false
-  logger.log("auto updater configured", {
-    channel: autoUpdater.channel,
-    allowPrerelease: autoUpdater.allowPrerelease,
-    allowDowngrade: autoUpdater.allowDowngrade,
-    currentVersion: app.getVersion(),
-  })
-}
-
-let downloadedUpdateVersion: string | undefined
-
-async function checkUpdate() {
-  if (!UPDATER_ENABLED) return { updateAvailable: false }
-  if (downloadedUpdateVersion) {
-    logger.log("returning cached downloaded update", {
-      version: downloadedUpdateVersion,
-    })
-    return { updateAvailable: true, version: downloadedUpdateVersion }
-  }
-  logger.log("checking for updates", {
-    currentVersion: app.getVersion(),
-    channel: autoUpdater.channel,
-    allowPrerelease: autoUpdater.allowPrerelease,
-    allowDowngrade: autoUpdater.allowDowngrade,
-  })
-  try {
-    const result = await autoUpdater.checkForUpdates()
-    const updateInfo = result?.updateInfo
-    logger.log("update metadata fetched", {
-      releaseVersion: updateInfo?.version ?? null,
-      releaseDate: updateInfo?.releaseDate ?? null,
-      releaseName: updateInfo?.releaseName ?? null,
-      files: updateInfo?.files?.map((file) => file.url) ?? [],
-    })
-    const version = result?.updateInfo?.version
-    if (result?.isUpdateAvailable === false || !version) {
-      logger.log("no update available", {
-        reason: "provider returned no newer version",
-      })
-      return { updateAvailable: false }
-    }
-    logger.log("update available", { version })
-    await autoUpdater.downloadUpdate()
-    logger.log("update download completed", { version })
-    downloadedUpdateVersion = version
-    return { updateAvailable: true, version }
-  } catch (error) {
-    logger.error("update check failed", error)
-    return { updateAvailable: false, failed: true }
-  }
-}
-
-async function installUpdate() {
-  if (!downloadedUpdateVersion) {
-    logger.log("install update skipped", {
-      reason: "no downloaded update ready",
-    })
-    return
-  }
-  logger.log("installing downloaded update", {
-    version: downloadedUpdateVersion,
-  })
-  await killSidecar()
-  autoUpdater.quitAndInstall(true, true)
-}
-
-async function checkForUpdates(alertOnFail: boolean) {
-  if (!UPDATER_ENABLED) return
-  logger.log("checkForUpdates invoked", { alertOnFail })
-  const result = await checkUpdate()
-  if (!result.updateAvailable) {
-    if (result.failed) {
-      logger.log("no update decision", { reason: "update check failed" })
-      if (!alertOnFail) return
-      await dialog.showMessageBox({
-        type: "error",
-        message: "Update check failed.",
-        title: "Update Error",
-      })
-      return
-    }
-
-    logger.log("no update decision", { reason: "already up to date" })
-    if (!alertOnFail) return
-    await dialog.showMessageBox({
-      type: "info",
-      message: "You're up to date.",
-      title: "No Updates",
-    })
-    return
-  }
-
-  const response = await dialog.showMessageBox({
-    type: "info",
-    message: `Update ${result.version ?? ""} downloaded. Restart now?`,
-    title: "Update Ready",
-    buttons: ["Restart", "Later"],
-    defaultId: 0,
-    cancelId: 1,
-  })
-  logger.log("update prompt response", {
-    version: result.version ?? null,
-    restartNow: response.response === 0,
-  })
-  if (response.response === 0) {
-    await installUpdate()
-  }
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function defer<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: Error) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
+Effect.runFork(main)
