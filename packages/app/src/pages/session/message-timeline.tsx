@@ -1246,8 +1246,17 @@ export function MessageTimeline(props: {
           </div>
         </button>
       </div>
-      <div
-        class="relative min-w-0 w-full h-full flex flex-col"
+      <ScrollView
+        viewportRef={bindListRoot}
+        onWheel={handleListWheel}
+        onTouchStart={handleListTouchStart}
+        onTouchMove={handleListTouchMove}
+        onTouchEnd={handleListTouchEnd}
+        onTouchCancel={handleListTouchEnd}
+        onPointerDown={handleListPointerDown}
+        onScroll={handleListScroll}
+        onClick={props.onAutoScrollInteraction}
+        class="relative min-w-0 w-full h-full"
         style={{
           "--session-title-height": showHeader() ? "40px" : "0px",
           "--sticky-accordion-top": showHeader() ? "48px" : "0px",
@@ -1262,7 +1271,6 @@ export function MessageTimeline(props: {
             data-session-title
             classList={{
               "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
-              relative: true,
               "w-full": true,
               "pb-4": true,
               "pl-2 pr-3 md:pl-4 md:pr-3": true,
@@ -1543,46 +1551,33 @@ export function MessageTimeline(props: {
             </div>
           </div>
         </Show>
-        <ScrollView
-          viewportRef={bindListRoot}
-          onWheel={handleListWheel}
-          onTouchStart={handleListTouchStart}
-          onTouchMove={handleListTouchMove}
-          onTouchEnd={handleListTouchEnd}
-          onTouchCancel={handleListTouchEnd}
-          onPointerDown={handleListPointerDown}
-          onScroll={handleListScroll}
-          onClick={props.onAutoScrollInteraction}
-          class="relative min-w-0 w-full h-full"
-        >
-          <Show when={scrollRoot()}>
-            {(root) => (
-              <Virtualizer
-                data={timelineRowKeys()}
-                cache={virtualCache()}
-                itemSize={virtualCache() ? undefined : timelineFallbackItemSize}
-                scrollRef={root()}
-                shift={props.historyShift}
-                keepMounted={keepMounted()}
-                ref={(handle) => {
-                  if (!handle) {
-                    writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
-                    virtualizer = undefined
-                    return
-                  }
-                  virtualizer = handle
-                  virtualizerSessionKey = cacheSessionKey
-                  virtualizerRowKeys = cacheRowKeys
-                  maybeAnchorBottom()
-                  scheduleContentRoot(root())
-                }}
-              >
-                {(key) => <TimelineRowView rowKey={key} />}
-              </Virtualizer>
-            )}
-          </Show>
-        </ScrollView>
-      </div>
+        <Show when={scrollRoot()}>
+          {(root) => (
+            <Virtualizer
+              data={timelineRowKeys()}
+              cache={virtualCache()}
+              itemSize={virtualCache() ? undefined : timelineFallbackItemSize}
+              scrollRef={root()}
+              shift={props.historyShift}
+              keepMounted={keepMounted()}
+              ref={(handle) => {
+                if (!handle) {
+                  writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
+                  virtualizer = undefined
+                  return
+                }
+                virtualizer = handle
+                virtualizerSessionKey = cacheSessionKey
+                virtualizerRowKeys = cacheRowKeys
+                maybeAnchorBottom()
+                scheduleContentRoot(root())
+              }}
+            >
+              {(key) => <TimelineRowView rowKey={key} />}
+            </Virtualizer>
+          )}
+        </Show>
+      </ScrollView>
     </div>
   )
 }
