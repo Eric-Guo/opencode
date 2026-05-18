@@ -275,6 +275,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
       return key
     },
     onSuccess: async (key) => {
+      if (defaultServer.defaultKey() === key) await defaultServer.setDefault(null)
       server.remove(key)
     },
     onError: (err) => showRequestError(language, err),
@@ -610,6 +611,11 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
                           <span class="text-11-regular text-text-weak border border-border-weak-base bg-surface-base px-1.5 py-0.5 rounded-md shrink-0">
                             WSL
                           </span>
+                          <Show when={defaultServer.defaultKey() === key}>
+                            <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs shrink-0">
+                              {language.t("dialog.server.status.default")}
+                            </span>
+                          </Show>
                           <span class="text-12-regular text-text-weak truncate">
                             {wslRuntimeLabel(item.runtime.kind)}
                           </span>
@@ -630,7 +636,21 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
                                   <DropdownMenu.ItemLabel>Retry start</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                               </Show>
-                              <Show when={retryable()}>
+                              <Show when={defaultServer.canDefault() && defaultServer.defaultKey() !== key}>
+                                <DropdownMenu.Item onSelect={() => void defaultServer.setDefault(key)}>
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("dialog.server.menu.default")}
+                                  </DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                              </Show>
+                              <Show when={defaultServer.canDefault() && defaultServer.defaultKey() === key}>
+                                <DropdownMenu.Item onSelect={() => void defaultServer.setDefault(null)}>
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("dialog.server.menu.defaultRemove")}
+                                  </DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                              </Show>
+                              <Show when={retryable() || defaultServer.canDefault()}>
                                 <DropdownMenu.Separator />
                               </Show>
                               <DropdownMenu.Item
@@ -671,7 +691,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
               const wsl = isWslSidecar(i)
               const wslDistro = wsl ? i.distro : undefined
               const blocked = () => health(key)?.healthy === false
-              const canChangeDefault = () => defaultServer.canDefault() && i.type === "http"
+              const canChangeDefault = () => defaultServer.canDefault() && (i.type === "http" || wsl)
               const canRemove = () => i.type === "http" || wsl
               const opencodeAction = () => {
                 const check = wslCheck(i)

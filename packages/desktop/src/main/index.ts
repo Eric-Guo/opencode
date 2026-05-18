@@ -348,7 +348,9 @@ const main = Effect.gen(function* () {
       password,
     })
 
-    void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
+    void wslServers
+      .initialize({ defaultServer: getDefaultServerUrl() })
+      .catch((error) => logger.error("wsl server initialization failed", error))
 
     yield* Effect.promise(() => health.wait).pipe(
       Effect.timeout("30 seconds"),

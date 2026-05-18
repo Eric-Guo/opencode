@@ -226,9 +226,9 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
       return () => listeners.delete(listener)
     },
 
-    async initialize() {
+    async initialize(opts?: { defaultServer?: string | null }) {
       refreshFromStore()
-      await Promise.all(state.servers.map((item) => startServer(item.config.id)))
+      if (opts?.defaultServer?.startsWith("wsl:")) void startServer(opts.defaultServer)
     },
 
     async probeRuntime() {
