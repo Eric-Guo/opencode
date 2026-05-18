@@ -1,15 +1,23 @@
-import { execFileSync } from "node:child_process"
-import { existsSync, readFileSync, readdirSync } from "node:fs"
+import { execFile } from "node:child_process"
+import { access, readFile, readdir } from "node:fs/promises"
 import { dirname, extname, join } from "node:path"
+import util from "node:util"
 import { resolveWslHome, runWslInDistro } from "./wsl"
 
-export function checkAppExists(appName: string): boolean {
+const execFilePromise = util.promisify(execFile)
+
+const exists = (path: string) =>
+  access(path)
+    .then(() => true)
+    .catch(() => false)
+
+export function checkAppExists(appName: string) {
   if (process.platform === "win32") return true
   if (process.platform === "linux") return true
   return checkMacosApp(appName)
 }
 
-export function resolveAppPath(appName: string): string | null {
+export function resolveAppPath(appName: string) {
   if (process.platform !== "win32") return appName
   return resolveWindowsAppPath(appName)
 }
@@ -57,26 +65,25 @@ export async function wslPath(path: string, mode: "windows" | "linux" | null, di
   }
 }
 
-function checkMacosApp(appName: string) {
+async function checkMacosApp(appName: string) {
   const locations = [`/Applications/${appName}.app`, `/System/Applications/${appName}.app`]
 
   const home = process.env.HOME
   if (home) locations.push(`${home}/Applications/${appName}.app`)
 
-  if (locations.some((location) => existsSync(location))) return true
-
-  try {
-    execFileSync("which", [appName])
-    return true
-  } catch {
-    return false
+  for (const location of locations) {
+    if (await exists(location)) return true
   }
+
+  return execFilePromise("which", [appName])
+    .then(() => true)
+    .catch(() => false)
 }
 
-function resolveWindowsAppPath(appName: string): string | null {
+async function resolveWindowsAppPath(appName: string): Promise<string | null> {
   let output: string
   try {
-    output = execFileSync("where", [appName]).toString()
+    output = await execFilePromise("where", [appName]).then((r) => r.stdout.toString())
   } catch {
     return null
   }
@@ -91,8 +98,8 @@ function resolveWindowsAppPath(appName: string): string | null {
   const exe = paths.find((path) => hasExt(path, "exe"))
   if (exe) return exe
 
-  const resolveCmd = (path: string) => {
-    const content = readFileSync(path, "utf8")
+  const resolveCmd = async (path: string) => {
+    const content = await readFile(path, "utf8")
     for (const token of content.split('"').map((value: string) => value.trim())) {
       const lower = token.toLowerCase()
       if (!lower.includes(".exe")) continue
@@ -110,10 +117,10 @@ function resolveWindowsAppPath(appName: string): string | null {
             return join(current, part)
           }, base)
 
-        if (existsSync(resolved)) return resolved
+        if (await exists(resolved)) return resolved
       }
 
-      if (existsSync(token)) return token
+      if (await exists(token)) return token
     }
 
     return null
@@ -121,20 +128,20 @@ function resolveWindowsAppPath(appName: string): string | null {
 
   for (const path of paths) {
     if (hasExt(path, "cmd") || hasExt(path, "bat")) {
-      const resolved = resolveCmd(path)
+      const resolved = await resolveCmd(path)
       if (resolved) return resolved
     }
 
     if (!extname(path)) {
       const cmd = `${path}.cmd`
-      if (existsSync(cmd)) {
-        const resolved = resolveCmd(cmd)
+      if (await exists(cmd)) {
+        const resolved = await resolveCmd(cmd)
         if (resolved) return resolved
       }
 
       const bat = `${path}.bat`
-      if (existsSync(bat)) {
-        const resolved = resolveCmd(bat)
+      if (await exists(bat)) {
+        const resolved = await resolveCmd(bat)
         if (resolved) return resolved
       }
     }
@@ -151,7 +158,7 @@ function resolveWindowsAppPath(appName: string): string | null {
       const dirs = [dirname(path), dirname(dirname(path)), dirname(dirname(dirname(path)))]
       for (const dir of dirs) {
         try {
-          for (const entry of readdirSync(dir)) {
+          for (const entry of await readdir(dir)) {
             const candidate = join(dir, entry)
             if (!hasExt(candidate, "exe")) continue
             const stem = entry.replace(/\.exe$/i, "")
