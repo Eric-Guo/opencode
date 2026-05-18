@@ -3,7 +3,7 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
 import * as TuiAudio from "@tui/util/audio"
-import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
+import { createCliRenderer, MouseButton, type CliRenderer, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
   Switch,
@@ -116,7 +116,7 @@ const appBindingCommands = [
   "app.toggle.session_directory_filter",
 ] as const
 
-function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
+export function tuiRendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
 
   return {
@@ -137,6 +137,10 @@ function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
       },
     },
   }
+}
+
+export function createTuiRenderer(config: TuiConfig.Resolved) {
+  return createCliRenderer(tuiRendererConfig(config))
 }
 
 function errorMessage(error: unknown) {
@@ -160,6 +164,7 @@ export function tui(input: {
   url: string
   args: Args
   config: TuiConfig.Resolved
+  renderer: CliRenderer
   onSnapshot?: () => Promise<string[]>
   directory?: string
   fetch?: typeof fetch
@@ -182,7 +187,7 @@ export function tui(input: {
       TuiAudio.dispose()
     }
 
-    const renderer = await createCliRenderer(rendererConfig(input.config))
+    const renderer = input.renderer
     // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
     void renderer.getPalette({ size: 16 }).catch(() => undefined)
     const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"

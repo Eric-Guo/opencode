@@ -67,7 +67,6 @@ export const AttachCommand = cmd({
       })()
       const headers = ServerAuth.headers({ password: args.password, username: args.username })
       const config = await TuiConfig.get()
-      const { tui } = await import("./app")
 
       try {
         await validateSession({
@@ -82,9 +81,12 @@ export const AttachCommand = cmd({
         return
       }
 
+      const { createTuiRenderer, tui } = await import("./app")
+      const renderer = await createTuiRenderer(config)
       await tui({
         url: args.url,
         config,
+        renderer,
         args: {
           continue: args.continue,
           sessionID: args.session,

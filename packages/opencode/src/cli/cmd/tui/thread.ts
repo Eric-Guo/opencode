@@ -228,9 +228,11 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
-        const { tui } = await import("./app")
+        const { createTuiRenderer, tui } = await import("./app")
+        const renderer = await createTuiRenderer(config)
         await tui({
           url: transport.url,
+          renderer,
           async onSnapshot() {
             const tui = writeHeapSnapshot("tui.heapsnapshot")
             const server = await client.call("snapshot", undefined)
