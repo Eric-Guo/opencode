@@ -83,7 +83,7 @@ export const AttachCommand = cmd({
 
       const { createTuiRenderer, tui } = await import("./app")
       const renderer = await createTuiRenderer(config)
-      await tui({
+      const handle = tui({
         url: args.url,
         config,
         renderer,
@@ -95,6 +95,7 @@ export const AttachCommand = cmd({
         directory,
         headers,
       })
+      await handle.done
     } finally {
       unguard?.()
     }

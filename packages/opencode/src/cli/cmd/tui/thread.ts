@@ -230,7 +230,7 @@ export const TuiThreadCommand = cmd({
       try {
         const { createTuiRenderer, tui } = await import("./app")
         const renderer = await createTuiRenderer(config)
-        await tui({
+        const handle = tui({
           url: transport.url,
           renderer,
           async onSnapshot() {
@@ -251,6 +251,7 @@ export const TuiThreadCommand = cmd({
             fork: args.fork,
           },
         })
+        await handle.done
       } finally {
         await stop()
       }

@@ -2,7 +2,7 @@
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { ArgsProvider } from "../../../../src/cli/cmd/tui/context/args"
-import { ExitProvider } from "../../../../src/cli/cmd/tui/context/exit"
+import { createExit, ExitProvider } from "../../../../src/cli/cmd/tui/context/exit"
 import { KVProvider, useKV } from "../../../../src/cli/cmd/tui/context/kv"
 import { ProjectProvider, useProject } from "../../../../src/cli/cmd/tui/context/project"
 import { SDKProvider, type EventSource } from "../../../../src/cli/cmd/tui/context/sdk"
@@ -123,7 +123,7 @@ export async function mount(override?: FetchHandler) {
 
   const app = await testRender(() => (
     <ArgsProvider>
-      <ExitProvider>
+      <ExitProvider exit={createExit(async () => {})}>
         <KVProvider>
           <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
             <ProjectProvider>
