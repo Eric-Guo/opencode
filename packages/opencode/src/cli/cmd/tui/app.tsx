@@ -302,8 +302,8 @@ function createTuiLifecycle(input: {
     if (!input.renderer.isDestroyed) {
       input.renderer.setTerminalTitle("")
       input.renderer.destroy()
-      win32FlushInputBuffer()
     }
+    win32FlushInputBuffer()
     if (reason) {
       const formatted = FormatError(reason) ?? FormatUnknownError(reason)
       if (formatted) process.stderr.write(formatted + "\n")
@@ -318,7 +318,10 @@ function createTuiLifecycle(input: {
 
   input.renderer.once("destroy", () => {
     if (exiting) return
-    void cleanup().finally(complete)
+    void cleanup().finally(() => {
+      win32FlushInputBuffer()
+      complete()
+    })
   })
   process.on("SIGHUP", onSighup)
 
