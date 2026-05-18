@@ -12,15 +12,14 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import { useCommandPalette } from "../../context/command-palette"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
-import { useBindings } from "../../keymap"
 import { Reference } from "@/reference/reference"
 import type { Config } from "@/config/config"
 import { displayCharAt, mentionTriggerIndex } from "@/cli/cmd/prompt-display"
+import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -85,7 +84,8 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
-  const command = useCommandPalette()
+  const slashes = useCommandSlashes()
+  const modeStack = useOpencodeModeStack()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
@@ -98,6 +98,12 @@ export function Autocomplete(props: {
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
+
+  createEffect(() => {
+    if (!store.visible) return
+    const popMode = modeStack.push("autocomplete")
+    onCleanup(popMode)
+  })
 
   createEffect(() => {
     if (store.visible) {
@@ -365,7 +371,6 @@ export function Autocomplete(props: {
     const { filename, part } = createFilePart(item, lineRange)
     const index = store.visible === "@" ? store.index : props.input().cursorOffset
 
-    command.suspend(false)
     setStore("visible", false)
     setStore("index", index)
     insertPart(filename, part)
@@ -536,7 +541,7 @@ export function Autocomplete(props: {
   )
 
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = [...command.slashes()]
+    const results: AutocompleteOption[] = [...slashes()]
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
@@ -727,7 +732,6 @@ export function Autocomplete(props: {
   }))
 
   function show(mode: "@" | "/") {
-    command.suspend(true)
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
@@ -744,7 +748,6 @@ export function Autocomplete(props: {
         draft.input = props.input().plainText
       })
     }
-    command.suspend(false)
     setStore("visible", false)
   }
 
