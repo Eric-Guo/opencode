@@ -8,6 +8,8 @@ import { TuiPluginRuntime } from "../../../src/cli/cmd/tui/plugin/runtime"
 import { tui, type TuiHandle } from "../../../src/cli/cmd/tui/app"
 import { Global } from "@opencode-ai/core/global"
 import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
+import * as TuiAudio from "../../../src/cli/cmd/tui/util/audio"
+import * as TuiKeymap from "../../../src/cli/cmd/tui/keymap"
 
 type TestRendererSetup = Awaited<ReturnType<typeof createTestRenderer>>
 type TmpDir = Awaited<ReturnType<typeof tmpdir>>
@@ -122,6 +124,63 @@ test("direct renderer destruction still cleans up and resolves done", async () =
   await app.handle.done
 
   expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+})
+
+test("SIGHUP exits before ready and removes its listener", async () => {
+  const beforeSighup = process.listenerCount("SIGHUP")
+  const app = await startTui()
+
+  process.emit("SIGHUP")
+  await app.handle.done
+
+  expect(app.setup.renderer.isDestroyed).toBe(true)
+  expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+})
+
+test("SIGHUP exits after ready and removes its listener", async () => {
+  const beforeSighup = process.listenerCount("SIGHUP")
+  const app = await startTui()
+
+  app.theme.resolve("dark")
+  await app.handle.ready
+  process.emit("SIGHUP")
+  await app.handle.done
+
+  expect(app.setup.renderer.isDestroyed).toBe(true)
+  expect(process.listenerCount("SIGHUP")).toBe(beforeSighup)
+})
+
+test("plugin, audio, and keymap cleanup run exactly once", async () => {
+  const originalRegister = TuiKeymap.registerOpencodeKeymap
+  let unregisterKeymapCalls = 0
+  const registerKeymap = spyOn(TuiKeymap, "registerOpencodeKeymap").mockImplementation((...args) => {
+    const unregister = originalRegister(...args)
+    return () => {
+      unregisterKeymapCalls++
+      unregister()
+    }
+  })
+  const disposePlugins = spyOn(TuiPluginRuntime, "dispose")
+  const disposeAudio = spyOn(TuiAudio, "dispose")
+
+  try {
+    const app = await startTui()
+    app.theme.resolve("dark")
+    await app.handle.ready
+
+    app.setup.renderer.destroy()
+    await Promise.all([app.handle.exit(), app.handle.exit()])
+    await app.handle.done
+
+    expect(registerKeymap).toHaveBeenCalledTimes(1)
+    expect(unregisterKeymapCalls).toBe(1)
+    expect(disposePlugins).toHaveBeenCalledTimes(1)
+    expect(disposeAudio).toHaveBeenCalledTimes(1)
+  } finally {
+    registerKeymap.mockRestore()
+    disposePlugins.mockRestore()
+    disposeAudio.mockRestore()
+  }
 })
 
 async function startTui(options: { rejectTheme?: Error } = {}) {
