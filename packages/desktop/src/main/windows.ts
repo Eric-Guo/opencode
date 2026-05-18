@@ -1,8 +1,11 @@
 import windowState from "electron-window-state"
+import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import { app, BrowserWindow, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
+import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
+import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -11,6 +14,11 @@ const rendererHost = "renderer"
 const clipboardWritePermission = "clipboard-sanitized-write"
 const notificationPermission = "notifications"
 const rendererPermissions = new Set([clipboardWritePermission, notificationPermission])
+const oc2Theme = oc2ThemeJson as DesktopTheme
+const oc2Background = {
+  light: resolveThemeVariant(oc2Theme.light, false)["background-base"],
+  dark: resolveThemeVariant(oc2Theme.dark, true)["background-base"],
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -50,8 +58,7 @@ function tone() {
 }
 
 function defaultBackgroundColor() {
-  // Match OC-2 --background-base so native paints before the renderer theme loads do not flash white.
-  return tone() === "dark" ? "#101010" : "#f8f8f8"
+  return oc2Background[tone()]
 }
 
 function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
