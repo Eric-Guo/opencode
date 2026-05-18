@@ -29,6 +29,7 @@ const titlebarHeight = 40
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
+  BrowserWindow.getAllWindows().forEach((win) => win.setBackgroundColor(color))
 }
 
 export function getBackgroundColor(): string | undefined {
@@ -46,6 +47,11 @@ function iconPath() {
 
 function tone() {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light"
+}
+
+function defaultBackgroundColor() {
+  // Match OC-2 --background-base so native paints before the renderer theme loads do not flash white.
+  return tone() === "dark" ? "#101010" : "#f8f8f8"
 }
 
 function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
@@ -89,7 +95,7 @@ export function createMainWindow() {
     autoHideMenuBar: true,
     title: "OpenCode",
     icon: iconPath(),
-    backgroundColor,
+    backgroundColor: backgroundColor ?? defaultBackgroundColor(),
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
@@ -147,7 +153,7 @@ export function createLoadingWindow() {
     show: true,
     autoHideMenuBar: true,
     icon: iconPath(),
-    backgroundColor,
+    backgroundColor: backgroundColor ?? defaultBackgroundColor(),
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
     ...(process.platform === "win32"
       ? {
