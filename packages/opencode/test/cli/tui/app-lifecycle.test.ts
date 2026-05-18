@@ -34,6 +34,7 @@ afterEach(async () => {
   active = undefined
   await current?.handle?.exit().catch(() => {})
   await current?.handle?.done.catch(() => {})
+  await current?.handle?.ready.catch(() => {})
   if (current?.setup && !current.setup.renderer.isDestroyed) current.setup.renderer.destroy()
   current?.restore?.()
   await Bun.sleep(20)

@@ -284,18 +284,32 @@ function createTuiLifecycle(input: {
   unguard?: () => void
   cleanup: () => Promise<void>
 }): TuiLifecycle {
-  const exitDeferred = deferred<void>()
-  const complete = onceSync(() => exitDeferred.resolve())
-  const exited = exitDeferred.promise
-  const cleanup = once(async () => {
-    process.off("SIGHUP", onSighup)
-    try {
-      await input.cleanup()
-    } finally {
-      input.unguard?.()
-    }
+  let resolveExited!: () => void
+  const exited = new Promise<void>((resolve) => {
+    resolveExited = resolve
   })
+  let exitCompleted = false
   let exiting = false
+  let cleanupTask: Promise<void> | undefined
+
+  const completeExit = () => {
+    if (exitCompleted) return
+    exitCompleted = true
+    resolveExited()
+  }
+
+  const cleanup = () => {
+    cleanupTask ??= (async () => {
+      process.off("SIGHUP", onSighup)
+      try {
+        await input.cleanup()
+      } finally {
+        input.unguard?.()
+      }
+    })()
+    return cleanupTask
+  }
+
   const exit = createExit(async (reason, message) => {
     exiting = true
     await cleanup()
@@ -310,7 +324,7 @@ function createTuiLifecycle(input: {
     }
     const text = message()
     if (text) process.stdout.write(text + "\n")
-    complete()
+    completeExit()
   })
   const onSighup = () => {
     void exit()
@@ -320,7 +334,7 @@ function createTuiLifecycle(input: {
     if (exiting) return
     void cleanup().finally(() => {
       win32FlushInputBuffer()
-      complete()
+      completeExit()
     })
   })
   process.on("SIGHUP", onSighup)
@@ -332,7 +346,7 @@ function createTuiLifecycle(input: {
       exiting = true
       await cleanup().catch(() => {})
       if (!input.renderer.isDestroyed) input.renderer.destroy()
-      complete()
+      completeExit()
       throw error
     },
   }
@@ -341,28 +355,6 @@ function createTuiLifecycle(input: {
 async function waitUntilDone(ready: Promise<void>, exited: Promise<void>) {
   await ready
   await exited
-}
-
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  const promise = new Promise<T>((done) => {
-    resolve = done
-  })
-  return { promise, resolve }
-}
-
-function once<T>(fn: () => Promise<T>) {
-  let task: Promise<T> | undefined
-  return () => (task ??= fn())
-}
-
-function onceSync(fn: () => void) {
-  let done = false
-  return () => {
-    if (done) return
-    done = true
-    fn()
-  }
 }
 
 function App(props: { onSnapshot?: () => Promise<string[]> }) {
