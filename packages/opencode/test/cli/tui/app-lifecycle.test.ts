@@ -7,7 +7,7 @@ import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { TuiPluginRuntime } from "../../../src/cli/cmd/tui/plugin/runtime"
 import { tui, type TuiHandle } from "../../../src/cli/cmd/tui/app"
 import { Global } from "@opencode-ai/core/global"
-import { createEventSource, createFetch, directory } from "../cmd/tui/sync-fixture"
+import { createEventSource, createFetch, directory } from "../../fixture/tui-sdk"
 
 type TestRendererSetup = Awaited<ReturnType<typeof createTestRenderer>>
 type TmpDir = Awaited<ReturnType<typeof tmpdir>>
@@ -25,7 +25,6 @@ const disabledInternalPlugins = {
   "internal:session-v2-debug": false,
   "which-key": false,
 }
-
 let active: { handle?: TuiHandle; setup?: TestRendererSetup; restore?: () => void; tmp?: TmpDir } | undefined
 
 afterEach(async () => {
