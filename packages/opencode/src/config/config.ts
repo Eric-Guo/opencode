@@ -7,7 +7,8 @@ import { Global } from "@opencode-ai/core/global"
 import fsNode from "fs/promises"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Auth } from "../auth"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
+import { Substitution } from "@opencode-ai/core/substitution"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -38,7 +39,6 @@ import { ConfigProvider } from "./provider"
 import { ConfigReference } from "./reference"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
-import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "config" })
@@ -67,36 +67,6 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   delete copy.tui
   log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
   return copy
-}
-
-async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: string; source: string }) {
-  if (!isRecord(input.value) || typeof input.value.url !== "string") return
-
-  const url = await ConfigVariable.substitute({
-    text: input.value.url,
-    type: "virtual",
-    dir: input.dir,
-    source: input.source,
-  })
-  const headers = isRecord(input.value.headers)
-    ? Object.fromEntries(
-        await Promise.all(
-          Object.entries(input.value.headers)
-            .filter((entry): entry is [string, string] => typeof entry[1] === "string")
-            .map(async ([key, value]) => [
-              key,
-              await ConfigVariable.substitute({
-                text: value,
-                type: "virtual",
-                dir: input.dir,
-                source: input.source,
-              }),
-            ]),
-        ),
-      )
-    : undefined
-
-  return { url, headers }
 }
 
 async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(config: T, filepath: string) {
@@ -365,7 +335,8 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    const authSvc = yield* Auth.Service
+    const authWellKnown = yield* AuthWellKnown.Service
+    const substitution = yield* Substitution.Service
     const accountSvc = yield* Account.Service
     const env = yield* Env.Service
     const npmSvc = yield* Npm.Service
@@ -377,11 +348,9 @@ export const layer = Layer.effect(
       options: { path: string } | { dir: string; source: string },
     ) {
       const source = "path" in options ? options.path : options.source
-      const expanded = yield* Effect.promise(() =>
-        ConfigVariable.substitute(
-          "path" in options ? { text, type: "path", path: options.path } : { text, type: "virtual", ...options },
-        ),
-      )
+      const expanded = yield* substitution.substitute(
+        "path" in options ? { text, type: "path", path: options.path } : { text, type: "virtual", ...options },
+      ).pipe(Effect.orDie)
       const parsed = ConfigParse.jsonc(expanded, source)
       const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
       if (!("path" in options)) return data
@@ -471,8 +440,6 @@ export const layer = Layer.effect(
 
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(
       function* (ctx: InstanceContext) {
-        const auth = yield* authSvc.all().pipe(Effect.orDie)
-
         let result: Info = {}
         const consoleManagedProviders = new Set<string>()
         let activeOrgName: string | undefined
@@ -510,46 +477,13 @@ export const layer = Layer.effect(
           return mergePluginOrigins(source, next.plugin, kind)
         }
 
-        for (const [key, value] of Object.entries(auth)) {
-          if (value.type === "wellknown") {
-            const url = key.replace(/\/+$/, "")
-            process.env[value.key] = value.token
-            log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
-            const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
-            if (!response.ok) {
-              throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
-            }
-            const wellknown = (yield* Effect.promise(() => response.json())) as {
-              config?: Record<string, unknown>
-              remote_config?: unknown
-            }
-            const remote = yield* Effect.promise(() =>
-              substituteWellKnownRemoteConfig({
-                value: wellknown.remote_config,
-                dir: url,
-                source: `${url}/.well-known/opencode`,
-              }),
-            )
-            const fetchedConfig = remote
-              ? ((yield* Effect.promise(async () => {
-                  log.debug("fetching remote config", { url: remote.url })
-                  const response = await fetch(remote.url, { headers: remote.headers })
-                  if (!response.ok)
-                    throw new Error(`failed to fetch remote config from ${remote.url}: ${response.status}`)
-                  const data = await response.json()
-                  return isRecord(data) && isRecord(data.config) ? data.config : data
-                })) as Record<string, unknown>)
-              : {}
-            const remoteConfig = mergeConfig(wellknown.config ?? {}, fetchedConfig as Info)
-            if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-            const source = `${url}/.well-known/opencode`
-            const next = yield* loadConfig(JSON.stringify(remoteConfig), {
-              dir: path.dirname(source),
-              source,
-            })
-            yield* merge(source, next, "global")
-            log.debug("loaded remote config from well-known", { url })
-          }
+        for (const item of yield* authWellKnown.configs().pipe(Effect.orDie)) {
+          yield* merge(
+            item.source,
+            yield* loadConfig(JSON.stringify(item.content), { dir: item.dir, source: item.source }),
+            "global",
+          )
+          log.debug("loaded well-known config", { url: item.url })
         }
 
         const global = yield* getGlobal()
@@ -825,7 +759,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Env.defaultLayer),
-  Layer.provide(Auth.defaultLayer),
+  Layer.provide(AuthWellKnown.defaultLayer),
+  Layer.provide(Substitution.defaultLayer),
   Layer.provide(Account.defaultLayer),
   Layer.provide(Npm.defaultLayer),
 )
