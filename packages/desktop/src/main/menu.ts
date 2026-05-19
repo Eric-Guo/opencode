@@ -8,6 +8,7 @@ type Deps = {
   checkForUpdates: () => void
   reload: () => void
   relaunch: () => void
+  exportDebugLogs: () => void
 }
 
 export function createMenu(deps: Deps) {
@@ -35,6 +36,10 @@ export function createMenu(deps: Deps) {
         {
           label: "Restart",
           click: () => deps.relaunch(),
+        },
+        {
+          label: "Export Logs...",
+          click: () => deps.exportDebugLogs(),
         },
         { type: "separator" },
         { role: "hide" },
@@ -122,6 +127,7 @@ export function createMenu(deps: Deps) {
       submenu: [
         { label: "OpenCode Documentation", click: () => shell.openExternal("https://opencode.ai/docs") },
         { label: "Support Forum", click: () => shell.openExternal("https://discord.com/invite/opencode") },
+        { label: "Export Logs...", click: () => deps.exportDebugLogs() },
         { type: "separator" },
         { type: "separator" },
         {
