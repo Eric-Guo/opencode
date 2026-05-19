@@ -5,6 +5,7 @@ export { loadLocaleDict, normalizeLocale, type Locale } from "./context/language
 export { useWslServers } from "./context/wsl-servers"
 export {
   type DisplayBackend,
+  type FatalRendererErrorLog,
   type Platform,
   PlatformProvider,
   type WslInstalledDistro,
