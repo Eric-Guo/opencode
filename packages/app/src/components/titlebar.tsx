@@ -19,6 +19,7 @@ import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useGlobalSync } from "@/context/global-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -196,6 +197,21 @@ export function Titlebar() {
             const globalSync = useGlobalSync()
             const navigate = useNavigate()
 
+            const openNewSession = () => {
+              if (params.dir) {
+                navigate(`/${params.dir}/session`)
+                return
+              }
+
+              const project = layout.projects.list()[0]
+              if (!project) {
+                navigate("/")
+                return
+              }
+
+              navigate(`/${base64Encode(project.worktree)}/session`)
+            }
+
             type Tab = { dir: string; sessionId: string; params: any; href: string }
 
             const [tabsStore, tabsStoreActions] = iife(() => {
@@ -298,7 +314,7 @@ export function Titlebar() {
                     )}
                   </For>
                 </div>
-                <button>
+                <button type="button" onClick={openNewSession} aria-label={language.t("command.session.new")}>
                   <div class="p-1.5">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
