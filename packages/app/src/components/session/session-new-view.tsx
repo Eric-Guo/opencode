@@ -4,7 +4,7 @@ import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Mark } from "@opencode-ai/ui/logo"
+import { Logo } from "@opencode-ai/ui/logo"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 
 const MAIN_WORKTREE = "main"
@@ -52,7 +52,7 @@ export function NewSessionView(props: NewSessionViewProps) {
       <div class="w-full max-w-xl flex flex-col items-center justify-center text-center gap-8 px-6 py-12">
         {/* Figma aligned centered Logo & Title */}
         <div class="flex flex-col items-center gap-6">
-          <Mark class="w-16 h-16 opacity-85 hover:opacity-100 transition-opacity duration-200" />
+          <Logo class="w-48 opacity-85 hover:opacity-100 transition-opacity duration-200" />
           <div class="text-28-medium text-text-strong font-semibold tracking-tight">
             {language.t("session.new.title")}
           </div>

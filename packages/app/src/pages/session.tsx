@@ -1682,7 +1682,6 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
-            "justify-center items-center py-16 gap-6 overflow-y-auto": !params.id,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
@@ -1690,12 +1689,7 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div
-            classList={{
-              "flex-1 min-h-0 overflow-hidden": !!params.id,
-              "w-full max-w-xl shrink-0 flex flex-col items-center justify-center": !params.id,
-            }}
-          >
+          <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id && mobileChanges()}>
                 <div class="relative h-full overflow-hidden">
@@ -1751,62 +1745,55 @@ export default function Page() {
             </Switch>
           </div>
 
-          <div
-            classList={{
-              "w-full": true,
-              "max-w-xl shrink-0": !params.id,
+          <SessionComposerRegion
+            state={composer}
+            ready={!store.deferRender && messagesReady()}
+            centered={centered()}
+            inputRef={(el) => {
+              inputRef = el
             }}
-          >
-            <SessionComposerRegion
-              state={composer}
-              ready={!store.deferRender && messagesReady()}
-              centered={centered() || !params.id}
-              inputRef={(el) => {
-                inputRef = el
-              }}
-              newSessionWorktree={newSessionWorktree()}
-              onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-              onSubmit={() => {
-                comments.clear()
-                resumeScroll()
-              }}
-              onResponseSubmit={resumeScroll}
-              followup={
-                params.id && !isChildSession()
-                  ? {
-                      queue: queueEnabled,
-                      items: followupDock(),
-                      sending: sendingFollowup(),
-                      edit: editingFollowup(),
-                      onQueue: queueFollowup,
-                      onAbort: () => {
-                        const id = params.id
-                        if (!id) return
-                        setFollowup("paused", id, true)
-                      },
-                      onSend: (id) => {
-                        void sendFollowup(params.id!, id, { manual: true })
-                      },
-                      onEdit: editFollowup,
-                      onEditLoaded: clearFollowupEdit,
-                    }
-                  : undefined
-              }
-              revert={
-                rolled().length > 0
-                  ? {
-                      items: rolled(),
-                      restoring: restoring(),
-                      disabled: reverting(),
-                      onRestore: restore,
-                    }
-                  : undefined
-              }
-              setPromptDockRef={(el) => {
-                promptDock = el
-              }}
-            />
-          </div>
+            newSessionWorktree={newSessionWorktree()}
+            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+            onSubmit={() => {
+              comments.clear()
+              resumeScroll()
+            }}
+            onResponseSubmit={resumeScroll}
+            followup={
+              params.id && !isChildSession()
+                ? {
+                    queue: queueEnabled,
+                    items: followupDock(),
+                    sending: sendingFollowup(),
+                    edit: editingFollowup(),
+                    onQueue: queueFollowup,
+                    onAbort: () => {
+                      const id = params.id
+                      if (!id) return
+                      setFollowup("paused", id, true)
+                    },
+                    onSend: (id) => {
+                      void sendFollowup(params.id!, id, { manual: true })
+                    },
+                    onEdit: editFollowup,
+                    onEditLoaded: clearFollowupEdit,
+                  }
+                : undefined
+            }
+            revert={
+              rolled().length > 0
+                ? {
+                    items: rolled(),
+                    restoring: restoring(),
+                    disabled: reverting(),
+                    onRestore: restore,
+                  }
+                : undefined
+            }
+            setPromptDockRef={(el) => {
+              promptDock = el
+            }}
+          />
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
