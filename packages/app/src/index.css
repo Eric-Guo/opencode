@@ -82,4 +82,123 @@
       opacity: 1;
     }
   }
+
+  [data-component="session-new-design"] {
+    --fill-0: var(--icon-strong-base, #161616);
+    --session-new-background-deep: var(--background-stronger, #fafafa);
+    --session-new-background-base: var(--surface-raised-stronger-non-alpha, #ffffff);
+    --session-new-background-contrast: var(--button-primary-base, #242424);
+    --session-new-text-faint: var(--text-weak, #808080);
+    --session-new-icon-muted: var(--icon-base, #808080);
+    --session-new-radius-sm: 4px;
+    --session-new-radius-md: 6px;
+    --session-new-radius-xl: 12px;
+    --session-new-size-base: 13px;
+    --session-new-line-height-base: 20px;
+    --session-new-weight-normal: 440;
+    --session-new-tracking-base: -0.04px;
+    --session-new-elevation-raised: var(
+      --shadow-xs-border-base,
+      0 0 0 0 #00000000,
+      0 0 0 0.5px #0000001f,
+      0 1px 2px -1px #00000014,
+      0 2px 4px 0 #0000000a
+    );
+    --session-new-elevation-button-contrast: var(
+      --shadow-xs-border-base,
+      0 0 0 0 #00000000,
+      0 0 0 0.5px #3a3a3a,
+      0 1px 1.5px 0 #00000033,
+      inset 0 -1px 2px 0 #0000000f,
+      inset 0 1px 2px 0 #ffffff24
+    );
+    --session-composer-background-base: var(--session-new-background-base);
+    --session-composer-background-contrast: var(--session-new-background-contrast);
+    --session-composer-text-faint: var(--session-new-text-faint);
+    --session-composer-icon-muted: var(--session-new-icon-muted);
+    --session-composer-radius-md: var(--session-new-radius-md);
+    --session-composer-radius-xl: var(--session-new-radius-xl);
+    --session-composer-size-base: var(--session-new-size-base);
+    --session-composer-line-height-base: var(--session-new-line-height-base);
+    --session-composer-weight-normal: var(--session-new-weight-normal);
+    --session-composer-tracking-base: var(--session-new-tracking-base);
+    --session-composer-elevation-raised: var(--session-new-elevation-raised);
+    --session-composer-elevation-button-contrast: var(--session-new-elevation-button-contrast);
+    background: var(--session-new-background-deep);
+  }
+
+  [data-component="session-composer"] {
+    --session-composer-background-base: var(--surface-raised-stronger-non-alpha, #ffffff);
+    --session-composer-background-contrast: var(--button-primary-base, #242424);
+    --session-composer-text-faint: var(--text-weak, #808080);
+    --session-composer-icon-muted: var(--icon-base, #808080);
+    --session-composer-radius-md: 6px;
+    --session-composer-radius-xl: 12px;
+    --session-composer-size-base: 13px;
+    --session-composer-line-height-base: 20px;
+    --session-composer-weight-normal: 440;
+    --session-composer-tracking-base: -0.04px;
+    --session-composer-elevation-raised: var(
+      --shadow-xs-border-base,
+      0 0 0 0 #00000000,
+      0 0 0 0.5px #0000001f,
+      0 1px 2px -1px #00000014,
+      0 2px 4px 0 #0000000a
+    );
+    --session-composer-elevation-button-contrast: var(
+      --shadow-xs-border-base,
+      0 0 0 0 #00000000,
+      0 0 0 0.5px #3a3a3a,
+      0 1px 1.5px 0 #00000033,
+      inset 0 -1px 2px 0 #0000000f,
+      inset 0 1px 2px 0 #ffffff24
+    );
+  }
+
+  [data-component="session-new-design-text"],
+  [data-component="session-composer-text"] {
+    color: var(--session-composer-text-faint);
+    font-family: Inter, var(--font-family-sans);
+    font-size: var(--session-composer-size-base);
+    font-weight: var(--session-composer-weight-normal);
+    letter-spacing: var(--session-composer-tracking-base);
+  }
+
+  [data-component="session-new-composer"],
+  [data-component="session-composer"] {
+    background-color: var(--session-composer-background-base);
+    border-radius: var(--session-composer-radius-xl);
+    box-shadow: var(--session-composer-elevation-raised);
+  }
+
+  [data-component="session-new-composer"] [data-component="icon"],
+  [data-component="session-composer"] [data-component="icon"],
+  [data-component="session-new-design"] [data-component="select"] [data-component="icon"] {
+    color: var(--session-composer-icon-muted);
+  }
+
+  [data-component="session-new-composer"] [data-component="prompt-input"],
+  [data-component="session-composer"] [data-component="prompt-input"] {
+    color: var(--session-composer-text-faint);
+    font-family: Inter, var(--font-family-sans);
+    font-size: var(--session-composer-size-base);
+    font-weight: var(--session-composer-weight-normal);
+    letter-spacing: var(--session-composer-tracking-base);
+  }
+
+  [data-component="session-new-composer"] [data-action="prompt-submit"],
+  [data-component="session-composer"] [data-action="prompt-submit"] {
+    width: 28px;
+    height: 28px;
+    padding: 6px;
+    border-radius: var(--session-composer-radius-md);
+    background-image: linear-gradient(180deg, color-mix(in srgb, var(--icon-invert-base) 20%, transparent) 0%, transparent 100%),
+      linear-gradient(90deg, var(--session-composer-background-contrast) 0%, var(--session-composer-background-contrast) 100%);
+    box-shadow: var(--session-composer-elevation-button-contrast);
+  }
+
+  [data-component="session-new-composer"] [data-action="prompt-submit"]:disabled,
+  [data-component="session-composer"] [data-action="prompt-submit"]:disabled {
+    opacity: 0.5;
+  }
 }
