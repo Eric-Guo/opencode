@@ -202,6 +202,7 @@ export function Prompt(props: PromptProps) {
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
   const defaultWorkspaceID = createMemo(() => props.workspaceID ?? project.workspace.current())
+  const [autoaccept, setAutoaccept] = kv.signal<"none" | "edit">("permission_auto_accept", "edit")
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {
     setWorkspaceSelection(selection)
@@ -406,6 +407,17 @@ export function Prompt(props: PromptProps) {
 
   const promptCommands = createMemo(() =>
     [
+      {
+        title: autoaccept() === "none" ? "Enable autoedit" : "Disable autoedit",
+        name: "permission.auto_accept.toggle",
+        search: "toggle permissions",
+        keybind: "permission_auto_accept_toggle",
+        category: "Agent",
+        run: () => {
+          setAutoaccept(() => (autoaccept() === "none" ? "edit" : "none"))
+          dialog.clear()
+        },
+      },
       {
         title: "Clear prompt",
         name: "prompt.clear",
@@ -1594,11 +1606,14 @@ export function Prompt(props: PromptProps) {
                   )}
                 </Show>
               </box>
-              <Show when={hasRightContent()}>
-                <box flexDirection="row" gap={1} alignItems="center">
-                  {props.right}
-                </box>
-              </Show>
+              <box flexDirection="row" gap={1} alignItems="center">
+                <Show when={autoaccept() === "edit"}>
+                  <text>
+                    <span style={{ fg: theme.warning }}>autoedit</span>
+                  </text>
+                </Show>
+                <Show when={hasRightContent()}>{props.right}</Show>
+              </box>
             </box>
           </box>
         </box>
