@@ -1354,187 +1354,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     </Show>
   )
 
-  if (props.variant === "new-session") {
-    const worktrees = createMemo(() => [MAIN_WORKTREE, ...(sync.project?.sandboxes ?? []), CREATE_WORKTREE])
-    const currentWorktree = createMemo(() => {
-      if (worktrees().includes(props.newSessionWorktree ?? MAIN_WORKTREE)) return props.newSessionWorktree ?? MAIN_WORKTREE
-      return MAIN_WORKTREE
-    })
-    const worktreeLabel = (value: string) => {
-      if (value === MAIN_WORKTREE) return MAIN_WORKTREE
-      if (value === CREATE_WORKTREE) return language.t("session.new.worktree.create")
-      return getFilename(value)
-    }
-
-    return (
-      <div class="relative size-full flex flex-col gap-0">
-        {(promptReady(), null)}
-        <PromptPopover
-          popover={store.popover}
-          setSlashPopoverRef={(el) => (slashPopoverRef = el)}
-          atFlat={atFlat()}
-          atActive={atActive() ?? undefined}
-          atKey={atKey}
-          setAtActive={setAtActive}
-          onAtSelect={handleAtSelect}
-          slashFlat={slashFlat()}
-          slashActive={slashActive() ?? undefined}
-          setSlashActive={setSlashActive}
-          onSlashSelect={handleSlashSelect}
-          commandKeybind={command.keybind}
-          t={(key) => language.t(key as Parameters<typeof language.t>[0])}
-        />
-        <DockShellForm
-          data-component="session-new-composer"
-          onSubmit={handleSubmit}
-          classList={{
-            "group/prompt-input min-h-[96px]": true,
-            "border-icon-info-active border-dashed": store.draggingType !== null,
-            [props.class ?? ""]: !!props.class,
-          }}
-        >
-          <PromptDragOverlay
-            type={store.draggingType}
-            label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
-          />
-          <PromptContextItems
-            items={contextItems()}
-            active={(item) => {
-              const active = comments.active()
-              return !!item.commentID && item.commentID === active?.id && item.path === active?.file
-            }}
-            openComment={openComment}
-            remove={(item) => {
-              if (item.commentID) comments.remove(item.path, item.commentID)
-              prompt.context.remove(item.key)
-            }}
-            t={(key) => language.t(key as Parameters<typeof language.t>[0])}
-          />
-          <PromptImageAttachments
-            attachments={imageAttachments()}
-            onOpen={(attachment) =>
-              dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
-            }
-            onRemove={removeAttachment}
-            removeLabel={language.t("prompt.attachment.remove")}
-          />
-          <div
-            class="relative min-h-[52px]"
-            onMouseDown={(e) => {
-              const target = e.target
-              if (!(target instanceof HTMLElement)) return
-              if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) return
-              editorRef?.focus()
-            }}
-          >
-            <div class="relative max-h-[180px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
-              <div
-                data-component="prompt-input"
-                ref={(el) => {
-                  editorRef = el
-                  props.ref?.(el)
-                }}
-                role="textbox"
-                aria-multiline="true"
-                aria-label={designPlaceholder()}
-                contenteditable="true"
-                autocapitalize={store.mode === "normal" ? "sentences" : "off"}
-                autocorrect={store.mode === "normal" ? "on" : "off"}
-                spellcheck={store.mode === "normal"}
-                inputMode="text"
-                // @ts-expect-error
-                autocomplete="off"
-                onInput={handleInput}
-                onPaste={handlePaste}
-                onCompositionStart={handleCompositionStart}
-                onCompositionEnd={handleCompositionEnd}
-                onBlur={handleBlur}
-                onKeyDown={handleKeyDown}
-                classList={{
-                  "select-text": true,
-                  "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap":
-                    true,
-                  "[&_[data-type=file]]:text-syntax-property": true,
-                  "[&_[data-type=agent]]:text-syntax-type": true,
-                  "font-mono!": store.mode === "shell",
-                }}
-                style={{ "line-height": "var(--session-new-line-height-base)" }}
-              />
-              <div
-                data-component="session-new-design-text"
-                class="absolute top-0 inset-x-0 px-4 pt-4 pointer-events-none whitespace-nowrap truncate"
-                classList={{ "font-mono!": store.mode === "shell" }}
-                style={{ "line-height": "var(--session-new-line-height-base)", display: prompt.dirty() ? "none" : undefined }}
-              >
-                {designPlaceholder()}
-              </div>
-            </div>
-          </div>
-          <div class="flex h-11 items-center px-2">
-            <div class="flex min-w-0 flex-1 items-center gap-0">
-              {fileAttachmentInput()}
-              <TooltipKeybind
-                placement="top"
-                title={language.t("prompt.action.attachFile")}
-                keybind={command.keybind("file.attach")}
-              >
-                <IconButton
-                  data-action="prompt-attach"
-                  type="button"
-                  icon="plus"
-                  variant="ghost"
-                  class="size-7 rounded-md"
-                  style={{ width: "28px", height: "28px", padding: "6px", ...buttons() }}
-                  onClick={pick}
-                  disabled={store.mode !== "normal"}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  aria-label={language.t("prompt.action.attachFile")}
-                />
-              </TooltipKeybind>
-              <div class="relative">
-                <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center">
-                  <Icon name="sliders" size="small" />
-                </div>
-                <Select
-                  size="normal"
-                  options={worktrees()}
-                  current={currentWorktree()}
-                  label={worktreeLabel}
-                  onSelect={(value) => {
-                    if (value) props.onNewSessionWorktreeChange?.(value)
-                    restoreFocus()
-                  }}
-                  class="max-w-[175px] justify-start text-text-base"
-                  valueClass="truncate pl-5 text-[length:var(--session-new-size-base)] font-[var(--session-new-weight-normal)] leading-4 tracking-[var(--session-new-tracking-base)] text-[color:var(--session-new-text-faint)]"
-                  triggerStyle={control()}
-                  triggerProps={{ "data-action": "prompt-workspace" }}
-                  variant="ghost"
-                />
-              </div>
-              {modelControl()}
-            </div>
-            <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
-              <IconButton
-                data-action="prompt-submit"
-                type="submit"
-                disabled={!working() && blank()}
-                tabIndex={store.mode === "normal" ? undefined : -1}
-                icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
-                variant="primary"
-                class="size-7 rounded-md"
-                style={{
-                  width: "28px",
-                  height: "28px",
-                  padding: "6px",
-                }}
-                aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-              />
-            </Tooltip>
-          </div>
-        </DockShellForm>
-      </div>
-    )
+  const newSession = () => props.variant === "new-session"
+  const worktrees = createMemo(() => [MAIN_WORKTREE, ...(sync.project?.sandboxes ?? []), CREATE_WORKTREE])
+  const currentWorktree = createMemo(() => {
+    if (worktrees().includes(props.newSessionWorktree ?? MAIN_WORKTREE)) return props.newSessionWorktree ?? MAIN_WORKTREE
+    return MAIN_WORKTREE
+  })
+  const worktreeLabel = (value: string) => {
+    if (value === MAIN_WORKTREE) return MAIN_WORKTREE
+    if (value === CREATE_WORKTREE) return language.t("session.new.worktree.create")
+    return getFilename(value)
   }
+  const lineHeight = () => (newSession() ? "var(--session-new-line-height-base)" : "var(--session-composer-line-height-base)")
 
   return (
     <div class="relative size-full flex flex-col gap-0">
@@ -1555,7 +1386,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <DockShellForm
-        data-component="session-composer"
+        data-component={newSession() ? "session-new-composer" : "session-composer"}
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input min-h-[96px] w-full": true,
@@ -1627,13 +1458,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
               }}
-              style={{ "line-height": "var(--session-composer-line-height-base)" }}
+              style={{ "line-height": lineHeight() }}
             />
             <div
-              data-component="session-composer-text"
+              data-component={newSession() ? "session-new-design-text" : "session-composer-text"}
               class="absolute top-0 inset-x-0 px-4 pt-4 pointer-events-none whitespace-nowrap truncate"
               classList={{ "font-mono!": store.mode === "shell" }}
-              style={{ "line-height": "var(--session-composer-line-height-base)", display: prompt.dirty() ? "none" : undefined }}
+              style={{ "line-height": lineHeight(), display: prompt.dirty() ? "none" : undefined }}
             >
               {designPlaceholder()}
             </div>
@@ -1660,6 +1491,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 aria-label={language.t("prompt.action.attachFile")}
               />
             </TooltipKeybind>
+            <Show when={newSession()}>
+              <div class="relative">
+                <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center">
+                  <Icon name="sliders" size="small" />
+                </div>
+                <Select
+                  size="normal"
+                  options={worktrees()}
+                  current={currentWorktree()}
+                  label={worktreeLabel}
+                  onSelect={(value) => {
+                    if (value) props.onNewSessionWorktreeChange?.(value)
+                    restoreFocus()
+                  }}
+                  class="max-w-[175px] justify-start text-text-base"
+                  valueClass="truncate pl-5 text-[length:var(--session-new-size-base)] font-[var(--session-new-weight-normal)] leading-4 tracking-[var(--session-new-tracking-base)] text-[color:var(--session-new-text-faint)]"
+                  triggerStyle={control()}
+                  triggerProps={{ "data-action": "prompt-workspace" }}
+                  variant="ghost"
+                />
+              </div>
+            </Show>
             {modelControl()}
           </div>
           <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
