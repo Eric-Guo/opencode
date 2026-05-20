@@ -1,5 +1,5 @@
-import type { GlobalSession } from "@opencode-ai/sdk/v2/client"
-import { createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import type { Session } from "@opencode-ai/sdk/v2/client"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
@@ -18,11 +18,10 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
-import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { displayName } from "@/pages/layout/helpers"
+import { displayName, sortedRootSessions } from "@/pages/layout/helpers"
 import { getProjectAvatarSource } from "@/pages/layout/sidebar-items"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { sessionTitle } from "@/utils/session-title"
@@ -32,10 +31,9 @@ import { sessionPermissionRequest } from "@/pages/session/composer/session-reque
 
 const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 const HOME_SESSION_LIMIT = 15
-const HOME_SESSION_FETCH_LIMIT = 50
 
 type HomeSessionRecord = {
-  session: GlobalSession
+  session: Session
   project: LocalProject
   projectName: string
 }
@@ -53,7 +51,6 @@ export default function Home() {
 
 function HomeDesign() {
   const sync = useGlobalSync()
-  const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -65,37 +62,26 @@ function HomeDesign() {
   const projects = createMemo(() => layout.projects.list())
   const projectDirectories = createMemo(() => projects().flatMap((project) => [project.worktree, ...(project.sandboxes ?? [])]))
   const search = createMemo(() => state.search.trim())
-  const sessions = useQuery(() => ({
+  const sessionLoad = useQuery(() => ({
     queryKey: ["home", "sessions", ...projectDirectories()] as const,
     queryFn: async () => {
-      const results = await Promise.all(
-        projectDirectories().map((directory) =>
-          globalSDK.client.experimental.session.list({ directory, roots: true, limit: HOME_SESSION_FETCH_LIMIT }),
-        ),
-      )
-      return [...new Map(results.flatMap((result) => result.data ?? []).map((session) => [session.id, session])).values()]
-        .filter((session) => !session.time.archived)
-        .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+      await Promise.all(projectDirectories().map((directory) => sync.project.loadSessions(directory)))
+      return null
     },
   }))
-
-  onCleanup(
-    globalSDK.event.listen((event) => {
-      if (
-        event.details.type === "session.created" ||
-        event.details.type === "session.updated" ||
-        event.details.type === "session.deleted"
-      ) {
-        void sessions.refetch()
-      }
-    }),
-  )
 
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
   const records = createMemo(() =>
-    (sessions.data ?? [])
+    [
+      ...new Map(
+        projectDirectories()
+          .flatMap((directory) => sortedRootSessions(sync.child(directory, { bootstrap: false })[0], Date.now()))
+          .map((session) => [`${pathKey(session.directory)}:${session.id}`, session] as const),
+      ).values(),
+    ]
+      .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
       .flatMap((session) => {
         const project = projectForSession(session, projects(), projectByID())
         if (!project) return []
@@ -131,7 +117,7 @@ function HomeDesign() {
     navigate(`/${base64Encode(project.worktree)}/session`)
   }
 
-  function openSession(session: GlobalSession) {
+  function openSession(session: Session) {
     const project = projectForSession(session, projects(), projectByID())
     layout.projects.open(project?.worktree ?? session.directory)
     server.projects.touch(project?.worktree ?? session.directory)
@@ -188,7 +174,7 @@ function HomeDesign() {
           />
           <div data-component="home-session-groups">
             <Show
-              when={!sessions.isLoading}
+              when={!sessionLoad.isLoading}
               fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}
             >
               <Show
@@ -323,11 +309,11 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
   )
 }
 
-function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (session: GlobalSession) => void }) {
+function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (session: Session) => void }) {
   const globalSync = useGlobalSync()
   const notification = useNotification()
   const permission = usePermission()
-  const [sessionStore] = globalSync.child(props.record.session.directory)
+  const [sessionStore] = globalSync.child(props.record.session.directory, { bootstrap: false })
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const unseenCount = createMemo(() => notification.session.unseenCount(props.record.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.record.session.id))
@@ -390,15 +376,13 @@ function HomeSessionSkeleton(props: { label: string }) {
   )
 }
 
-function projectForSession(session: GlobalSession, projects: LocalProject[], byID: Map<string, LocalProject>) {
+function projectForSession(session: Session, projects: LocalProject[], byID: Map<string, LocalProject>) {
   const direct = byID.get(session.projectID)
   if (direct) return direct
   const directory = pathKey(session.directory)
-  const root = session.project?.worktree ? pathKey(session.project.worktree) : undefined
   return projects.find(
     (project) =>
       pathKey(project.worktree) === directory ||
-      pathKey(project.worktree) === root ||
       project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
   )
 }
