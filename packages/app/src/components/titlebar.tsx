@@ -308,10 +308,9 @@ export function Titlebar() {
                   variant="ghost-muted"
                   size="large"
                   class="!w-9"
+                  icon={<IconV2 name="grid-plus" />}
                   state={!!useMatch(() => "/")() ? "pressed" : undefined}
-                >
-                  <IconV2 name="grid-plus" />
-                </IconButtonV2>
+                />
                 <div class="flex flex-row items-center gap-2">
                   <For each={tabsEnriched()}>
                     {(tab, i) => (
@@ -327,24 +326,25 @@ export function Titlebar() {
                     )}
                   </For>
                 </div>
-                <button type="button" onClick={openNewSession} aria-label={language.t("command.session.new")}>
-                  <div class="p-1.5">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      class="size-4"
-                    >
-                      <path
-                        d="M7.99978 2.88867V13.1109M2.88867 7.99978H13.1109"
-                        stroke="#808080"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </button>
+                <Show
+                  when={creating() && params.dir}
+                  fallback={
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      icon={<IconV2 name="plus" />}
+                      onClick={openNewSession}
+                      aria-label={language.t("command.session.new")}
+                    />
+                  }
+                >
+                  <NewSessionTabItem
+                    href={`/${params.dir}/session`}
+                    title={language.t("command.session.new")}
+                    onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
+                  />
+                </Show>
 
                 <div class="flex-1" />
                 {/*<button class="px-2.5 py-1.5 bg-[rgba(0,0,0,0.08)] rounded-[6px]">
@@ -570,6 +570,49 @@ function TabNavItem(props: { href: string; title: string; hideClose?: boolean; o
     </div>
   )
 }
+
+function NewSessionTabItem(props: { href: string; title: string; onClose: () => void }) {
+  return (
+    <div class="group relative flex h-7 w-[135px] min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]">
+      <a href={props.href} aria-current="page" class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none tracking-[-0.04px] text-[var(--v2-text-text-base)]">
+        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
+          <IconV2 name="edit" />
+        </span>
+        <span class="truncate">{props.title}</span>
+      </a>
+      <div class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
+        <IconButtonV2
+          size="small"
+          variant="ghost-muted"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            props.onClose()
+          }}
+          icon={
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              class="size-4"
+              aria-hidden="true"
+            >
+              <path d="M4.25 11.75L11.75 4.25M11.75 11.75L4.25 4.25" stroke="currentColor" />
+            </svg>
+          }
+          aria-label="Close tab"
+        />
+      </div>
+    </div>
+  )
+}
+
 function ChannelIndicator() {
   return (
     <>

@@ -240,11 +240,10 @@ function HomeProjectColumn(props: {
           variant="ghost-muted"
           size="large"
           class="titlebar-icon"
+          icon={<IconV2 name="folder-add-left" />}
           onClick={props.chooseProject}
           aria-label={props.language.t("home.project.add")}
-        >
-          <IconV2 name="folder-add-left" />
-        </IconButtonV2>
+        />
       </div>
       <div data-component="home-project-list">
         <Show
