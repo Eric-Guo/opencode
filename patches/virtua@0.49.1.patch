@@ -57,9 +57,9 @@ index 029201a2c8..e3c4c0ca3a 100644
 @@ -1430,5 +1449,7 @@ const Virtualizer = (props) => {
          else {
              for (let [i, j] = range(); i <= j; i++) {
-+                if (i >= 0 && i < count) {
 -                items.push(props.data[i]);
 -                indexes.push(i);
++                if (i >= 0 && i < count) {
 +                    items.push(props.data[i]);
 +                    indexes.push(i);
 +                }
@@ -68,8 +68,8 @@ index 029201a2c8..e3c4c0ca3a 100644
          });
          const items = [];
          for (let [i, j] = range(); i <= j; i++) {
-+            if (i >= 0 && i < count) {
 -            items.push(props.data[i]);
++            if (i >= 0 && i < count) {
 +                items.push(props.data[i]);
 +            }
          }
