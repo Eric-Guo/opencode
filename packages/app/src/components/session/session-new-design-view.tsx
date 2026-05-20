@@ -9,8 +9,8 @@ import { useSync } from "@/context/sync"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Wordmark } from "@opencode-ai/ui/logo"
 import { Select } from "@opencode-ai/ui/select"
+import { WordmarkV2 } from "@opencode-ai/ui/v2/components/wordmark-v2.jsx"
 
 const MAIN_WORKTREE = "main"
 
@@ -45,7 +45,7 @@ export function NewSessionDesignView(props: {
     <div data-component="session-new-design" class="relative size-full overflow-hidden bg-[var(--session-new-background-deep)]">
       <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
         <div class="w-full max-w-[720px]">
-          <Wordmark class="h-auto w-full" />
+          <WordmarkV2 class="h-auto w-full text-[var(--v2-icon-icon-base)]" />
           <div class="mt-8">
             {props.children}
             <div class="mt-3 flex h-7 items-center gap-0 pl-2">
