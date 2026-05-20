@@ -15,6 +15,15 @@ type EventPayload = {
   payload: Record<string, unknown>
 }
 
+declare global {
+  interface Window {
+    __timelineDiffProbe: {
+      reset: () => void
+      shadowRoots: () => number
+    }
+  }
+}
+
 const userMessage = {
   info: {
     id: userMessageID,
@@ -124,6 +133,44 @@ test.describe("regression: session timeline local row state", () => {
       streamedTextVisible: true,
     })
   })
+
+  test("does not remount an edit diff when sibling parts or diff counts update", async ({ page }) => {
+    const events: EventPayload[] = []
+    await installDiffProbe(page)
+    await mockServer(page, events)
+    await configurePage(page)
+
+    await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+    await expect(page.getByRole("heading", { name: title })).toBeVisible()
+
+    const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
+    await expect(wrapper).toBeVisible()
+    await expect(wrapper.locator('[data-component="file"][data-mode="diff"]').first()).toBeVisible()
+    await markDiffProbe(page)
+
+    events.push({
+      directory,
+      payload: {
+        type: "message.part.updated",
+        properties: { part: streamedTextPart },
+      },
+    })
+
+    await expect(page.locator(`[data-timeline-part-id="${textPartID}"]`).first()).toBeVisible({ timeout: 10_000 })
+    expect(await readDiffProbe(page)).toEqual({ fileMarker: "before", shadowRoots: 0, toolMarker: "before" })
+
+    await markDiffProbe(page)
+    events.push({
+      directory,
+      payload: {
+        type: "message.part.updated",
+        properties: { part: editPartWithAdditions(2) },
+      },
+    })
+
+    await expect(wrapper.locator('[data-slot="diff-changes-additions"]').filter({ hasText: "+2" }).first()).toBeVisible({ timeout: 10_000 })
+    expect(await readDiffProbe(page)).toEqual({ fileMarker: "before", shadowRoots: 0, toolMarker: "before" })
+  })
 })
 
 async function configurePage(page: Page) {
@@ -164,6 +211,63 @@ async function readToolState(page: Page) {
     row: element.closest("[data-timeline-row]")?.getAttribute("data-timeline-row"),
     streamedTextVisible: !!document.querySelector(`[data-timeline-part-id="${textPartID}"]`),
   }), textPartID)
+}
+
+async function installDiffProbe(page: Page) {
+  await page.addInitScript(() => {
+    let shadowRootCount = 0
+    const attachShadow = Element.prototype.attachShadow
+    Element.prototype.attachShadow = function (init) {
+      shadowRootCount += 1
+      return attachShadow.call(this, init)
+    }
+    window.__timelineDiffProbe = {
+      reset: () => {
+        shadowRootCount = 0
+      },
+      shadowRoots: () => shadowRootCount,
+    }
+  })
+}
+
+async function markDiffProbe(page: Page) {
+  await page.locator(`[data-timeline-part-id="${editPartID}"]`).first().evaluate((element) => {
+    const tool = element as HTMLElement
+    const file = tool.querySelector<HTMLElement>('[data-component="file"][data-mode="diff"]')
+    if (!file) throw new Error("missing edit diff file")
+
+    tool.dataset.timelineProbe = "before"
+    file.dataset.timelineProbe = "before"
+    window.__timelineDiffProbe.reset()
+  })
+}
+
+async function readDiffProbe(page: Page) {
+  return page.locator(`[data-timeline-part-id="${editPartID}"]`).first().evaluate((element) => {
+    const tool = element as HTMLElement
+    const file = tool.querySelector<HTMLElement>('[data-component="file"][data-mode="diff"]')
+    return {
+      fileMarker: file?.dataset.timelineProbe,
+      shadowRoots: window.__timelineDiffProbe.shadowRoots(),
+      toolMarker: tool.dataset.timelineProbe,
+    }
+  })
+}
+
+function editPartWithAdditions(additions: number) {
+  return {
+    ...editPart,
+    state: {
+      ...editPart.state,
+      metadata: {
+        ...editPart.state.metadata,
+        filediff: {
+          ...editPart.state.metadata.filediff,
+          additions,
+        },
+      },
+    },
+  }
 }
 
 function readExpanded(element: Element) {

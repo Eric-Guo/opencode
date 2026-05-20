@@ -257,7 +257,7 @@ function TimelineDiffView(props: { diff: SummaryDiff }) {
 
   return (
     <div data-slot="session-turn-diff-view" data-scrollable>
-      <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
+      <Dynamic component={fileComponent} mode="diff" virtualize={false} fileDiff={view.fileDiff} />
     </div>
   )
 }
@@ -435,6 +435,14 @@ export function MessageTimeline(props: {
       if (!("userMessageID" in row)) return
       if (result.has(row.userMessageID)) return
       result.set(row.userMessageID, index)
+    })
+    return result
+  })
+  const lastAssistantGroupKey = createMemo(() => {
+    const result = new Map<string, string>()
+    timelineRows().forEach((row) => {
+      if (row._tag !== "AssistantPart") return
+      result.set(row.userMessageID, row.group.key)
     })
     return result
   })
@@ -1010,7 +1018,7 @@ export function MessageTimeline(props: {
       return (
         <ContextToolGroup
           parts={parts()}
-          busy={workingTurn(row().userMessageID) && row().lastAssistantPart}
+          busy={workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key}
           onSizeChange={measureTimeline}
         />
       )
@@ -1046,6 +1054,7 @@ export function MessageTimeline(props: {
                 toolOpen={toolOpen[part().id] ?? defaultOpen()}
                 onToolOpenChange={(open) => setToolOpen(part().id, open)}
                 deferToolContent={false}
+                virtualizeDiff={false}
               />
             )}
           </Show>
