@@ -14,8 +14,7 @@ type LegacyDiff = {
 
 type SnapshotDiff = SnapshotFileDiff & { file: string }
 type ReviewDiff = SnapshotDiff | VcsFileDiff | LegacyDiff
-export type DiffSource = Pick<LegacyDiff, "file" | "patch" | "before" | "after"> &
-  Partial<Pick<LegacyDiff, "additions" | "deletions">>
+export type DiffSource = Pick<LegacyDiff, "file" | "patch" | "before" | "after">
 type PatchData = {
   before: string
   after: string
@@ -34,9 +33,6 @@ export type ViewDiff = {
 }
 
 const diffCacheLimit = 16
-// Legacy before/after payloads do not include a patch. Bound exact diffing so pathological
-// replacements cannot freeze the UI; oversized payloads still render as one coarse change hunk.
-const contentDiffMaxEditLength = 5_000
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 const contentPatchCache: { file: string; before: string; after: string; value: PatchData }[] = []
 
@@ -82,46 +78,50 @@ function patchFromContent(diff: DiffSource): PatchData {
     return entry.value
   }
 
-  const value = contentPatch(file, before, after, (diff.additions ?? 0) + (diff.deletions ?? 0))
+  const value = contentPatch(file, before, after)
 
   contentPatchCache.push({ file, before, after, value })
   while (contentPatchCache.length > diffCacheLimit) contentPatchCache.shift()
   return value
 }
 
-function contentPatch(file: string, before: string, after: string, changes: number): PatchData {
-  const exact = changes > contentDiffMaxEditLength
-    ? undefined
-    : structuredPatch(file, file, before, after, "", "", {
-        context: Number.MAX_SAFE_INTEGER,
-        maxEditLength: contentDiffMaxEditLength,
-      })
+function contentPatch(file: string, before: string, after: string): PatchData {
+  const replacement = replacementPatch(file, before, after)
+  if (replacement) return replacement
 
-  if (exact) {
-    const patch = formatPatch(exact)
-    const fileDiff = parsePatchFiles(patch)[0]?.files[0]
-    return {
-      before,
-      after,
-      patch,
-      patchIsPartial: false,
-      fileDiff: fileDiff ? { ...fileDiff, isPartial: false } : coarseFileDiff(file, before, after),
-    }
-  }
+  const exact = structuredPatch(file, file, before, after, "", "", {
+    context: Number.MAX_SAFE_INTEGER,
+  })!
 
-  const fileDiff = coarseFileDiff(file, before, after)
+  const patch = formatPatch(exact)
+  const fileDiff = parsePatchFiles(patch)[0]?.files[0]
   return {
     before,
     after,
-    patch: coarsePatch(file, fileDiff),
+    patch,
+    patchIsPartial: false,
+    fileDiff: fileDiff ? { ...fileDiff, isPartial: false } : parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after }),
+  }
+}
+
+function replacementPatch(file: string, before: string, after: string): PatchData | undefined {
+  const deletionLines = patchLines(before).map((line) => line.value + (line.newline ? "\n" : ""))
+  const additionLines = patchLines(after).map((line) => line.value + (line.newline ? "\n" : ""))
+  if (hasCommonLine(deletionLines, additionLines)) return
+
+  const fileDiff = replacementFileDiff(file, before, after, deletionLines, additionLines)
+  return {
+    before,
+    after,
+    patch: replacementPatchText(file, fileDiff),
     patchIsPartial: false,
     fileDiff,
   }
 }
 
-function coarseFileDiff(file: string, before: string, after: string): FileDiffMetadata {
-  const deletionLines = patchLines(before).map((line) => line.value + (line.newline ? "\n" : ""))
-  const additionLines = patchLines(after).map((line) => line.value + (line.newline ? "\n" : ""))
+function replacementFileDiff(file: string, before: string, after: string, deleted?: string[], added?: string[]): FileDiffMetadata {
+  const deletionLines = deleted ?? patchLines(before).map((line) => line.value + (line.newline ? "\n" : ""))
+  const additionLines = added ?? patchLines(after).map((line) => line.value + (line.newline ? "\n" : ""))
   const deletionCount = deletionLines.length
   const additionCount = additionLines.length
 
@@ -168,7 +168,7 @@ function coarseFileDiff(file: string, before: string, after: string): FileDiffMe
   }
 }
 
-function coarsePatch(file: string, diff: FileDiffMetadata) {
+function replacementPatchText(file: string, diff: FileDiffMetadata) {
   const hunk = diff.hunks[0]
   if (!hunk) return `Index: ${file}\n===================================================================\n--- ${file}\t\n+++ ${file}\t\n`
   return (
@@ -182,6 +182,14 @@ function coarsePatch(file: string, diff: FileDiffMetadata) {
       ...diff.additionLines.flatMap((line) => patchLine("+", line)),
     ].join("\n") + "\n"
   )
+}
+
+function hasCommonLine(a: string[], b: string[]) {
+  if (a.length === 0 || b.length === 0) return false
+  const small = a.length < b.length ? a : b
+  const large = small === a ? b : a
+  const seen = new Set(small)
+  return large.some((line) => seen.has(line))
 }
 
 function patchLine(prefix: "-" | "+", line: string) {
