@@ -4,8 +4,11 @@ import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
-import { Avatar } from "@opencode-ai/ui/avatar"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
+import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
 import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -218,21 +221,23 @@ function HomeProjectColumn(props: {
     <aside data-component="home-project-column" aria-label={props.language.t("home.projects")}>
       <div data-component="home-project-header">
         <div data-component="home-section-label">{props.language.t("home.projects")}</div>
-        <Button
+        <IconButtonV2
           data-action="home-add-project"
-          variant="ghost"
-          icon="folder-add-left"
-          class="titlebar-icon h-7 w-7 p-0 box-border"
+          variant="ghost-muted"
+          size="large"
+          class="titlebar-icon"
           onClick={props.chooseProject}
           aria-label={props.language.t("home.project.add")}
-        />
+        >
+          <IconV2 name="folder-add-left" />
+        </IconButtonV2>
       </div>
       <div data-component="home-project-list">
         <Show
           when={props.projects.length > 0}
           fallback={
             <button type="button" data-component="home-nav-row" onClick={props.chooseProject}>
-              <Icon name="folder-add-left" size="small" />
+              <IconV2 name="folder-add-left" size="small" />
               <span>{props.language.t("home.project.add")}</span>
             </button>
           }
@@ -249,11 +254,11 @@ function HomeProjectColumn(props: {
       </div>
       <div data-component="home-project-footer">
         <button type="button" data-component="home-nav-row" onClick={props.openSettings}>
-          <Icon name="settings-gear" size="small" />
+          <IconV2 name="settings-gear" size="small" />
           <span>{props.language.t("sidebar.settings")}</span>
         </button>
         <button type="button" data-component="home-nav-row" onClick={props.openHelp}>
-          <Icon name="help" size="small" />
+          <IconV2 name="help" size="small" />
           <span>{props.language.t("sidebar.help")}</span>
         </button>
       </div>
@@ -264,9 +269,11 @@ function HomeProjectColumn(props: {
 function HomeProjectAvatar(props: { project: LocalProject }) {
   const name = createMemo(() => displayName(props.project))
   return (
-    <Avatar
+    <AvatarV2
       fallback={name()}
       src={getProjectAvatarSource(props.project.id, props.project.icon)}
+      kind="org"
+      size="small"
       {...getAvatarColors(props.project.icon?.color)}
       class="size-4 rounded"
     />
@@ -276,7 +283,7 @@ function HomeProjectAvatar(props: { project: LocalProject }) {
 function HomeSessionSearch(props: { value: string; placeholder: string; onInput: (value: string) => void }) {
   return (
     <label data-component="home-search">
-      <Icon name="magnifying-glass" size="small" />
+      <IconV2 name="magnifying-glass" size="small" />
       <input
         value={props.value}
         placeholder={props.placeholder}
@@ -294,15 +301,16 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
       <div data-component="home-section-label">{props.title}</div>
       <Show when={props.onNewSession}>
         {(onNewSession) => (
-          <Button
+          <ButtonV2
             data-action="home-new-session"
             variant="ghost"
+            size="normal"
             icon="edit"
             class="h-7 px-2"
             onClick={onNewSession()}
           >
             {language.t("command.session.new")}
-          </Button>
+          </ButtonV2>
         )}
       </Show>
     </div>
