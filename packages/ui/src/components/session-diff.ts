@@ -36,7 +36,7 @@ export type ViewDiff = {
 const diffCacheLimit = 16
 // Legacy before/after payloads do not include a patch. Bound exact diffing so pathological
 // replacements cannot freeze the UI; oversized payloads still render as one coarse change hunk.
-const contentDiffMaxEditLength = 2_000
+const contentDiffMaxEditLength = 5_000
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 const contentPatchCache: { file: string; before: string; after: string; value: PatchData }[] = []
 
