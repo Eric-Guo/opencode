@@ -174,6 +174,8 @@ export interface MessagePartProps {
   message: MessageType
   hideDetails?: boolean
   defaultOpen?: boolean
+  toolOpen?: boolean
+  onToolOpenChange?: (open: boolean) => void
   deferToolContent?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
@@ -1260,6 +1262,8 @@ export function Part(props: MessagePartProps) {
         message={props.message}
         hideDetails={props.hideDetails}
         defaultOpen={props.defaultOpen}
+        toolOpen={props.toolOpen}
+        onToolOpenChange={props.onToolOpenChange}
         deferToolContent={props.deferToolContent}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
@@ -1277,6 +1281,8 @@ export interface ToolProps {
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   deferContent?: boolean
   forceOpen?: boolean
   locked?: boolean
@@ -1375,6 +1381,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   })
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
+  const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
+  const handleToolOpenChange = (open: boolean) => props.onToolOpenChange?.(open)
 
   return (
     <Show when={!hideQuestion()}>
@@ -1398,6 +1406,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   error={error()}
                   title={part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider) : undefined}
                   defaultOpen={props.defaultOpen}
+                  open={controlledOpen()}
+                  onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
                 />
@@ -1416,6 +1426,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               status={part().state.status}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
+              open={controlledOpen()}
+              onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
               deferContent={props.deferToolContent}
             />
           </Match>
