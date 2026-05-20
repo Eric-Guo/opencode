@@ -38,6 +38,7 @@ const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWin
 const titlebarHeight = 40
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
+const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 export function Titlebar() {
   const layout = useLayout()
@@ -217,6 +218,16 @@ export function Titlebar() {
             </div>
           </Show>
           <div class="flex items-center gap-1 shrink-0">
+            <Show when={USE_HOME_DESIGN}>
+              <Button
+                variant="ghost"
+                icon="grid-plus"
+                class="xl:hidden titlebar-icon w-8 h-6 p-0 box-border"
+                onClick={() => navigate("/")}
+                aria-label={language.t("home.title")}
+                aria-current={!params.dir ? "page" : undefined}
+              />
+            </Show>
             <TooltipKeybind
               class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
               placement="bottom"
@@ -234,6 +245,20 @@ export function Titlebar() {
               </Button>
             </TooltipKeybind>
             <div class="hidden xl:flex items-center shrink-0">
+              <Show when={USE_HOME_DESIGN}>
+                <div class="flex items-center shrink-0 w-8 mr-1">
+                  <Tooltip placement="bottom" value={language.t("home.title")} openDelay={2000}>
+                    <Button
+                      variant="ghost"
+                      icon="grid-plus"
+                      class="titlebar-icon w-8 h-6 p-0 box-border"
+                      onClick={() => navigate("/")}
+                      aria-label={language.t("home.title")}
+                      aria-current={!params.dir ? "page" : undefined}
+                    />
+                  </Tooltip>
+                </div>
+              </Show>
               <Show when={params.dir}>
                 <div
                   class="flex items-center shrink-0 w-8 mr-1"
