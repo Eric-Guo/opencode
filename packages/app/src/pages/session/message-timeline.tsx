@@ -427,8 +427,7 @@ export function MessageTimeline(props: {
     if (rows.length === 0) return rows
     return reuseTimelineRows(previous, [...rows, new TimelineRow.BottomSpacer()])
   })
-  const timelineRowByKey = createMemo(() => new Map(timelineRows().map((row) => [TimelineRow.key(row), row] as const)))
-  const timelineRowKeys = createMemo(() => [...timelineRowByKey().keys()], [] as string[], { equals: sameKeys })
+  const timelineRowKeys = createMemo(() => timelineRows().map(TimelineRow.key), [] as string[], { equals: sameKeys })
   const virtualCache = createMemo(() => readTimelineCache(sessionKey(), timelineRowKeys()))
   const messageRowIndex = createMemo(() => {
     const result = new Map<string, number>()
@@ -1227,10 +1226,8 @@ export function MessageTimeline(props: {
     }
   }
 
-  function TimelineRowView(props: { rowKey: string }) {
-    const row = () => timelineRowByKey().get(props.rowKey)!
-
-    return renderTimelineRow(row)
+  function TimelineRowView(props: { row: TimelineRow.TimelineRow }) {
+    return renderTimelineRow(() => props.row)
   }
 
   return (
@@ -1565,7 +1562,7 @@ export function MessageTimeline(props: {
         <Show when={scrollRoot()}>
           {(root) => (
             <Virtualizer
-              data={timelineRowKeys()}
+              data={timelineRows()}
               cache={virtualCache()}
               itemSize={virtualCache() ? undefined : timelineFallbackItemSize}
               scrollRef={root()}
@@ -1585,7 +1582,7 @@ export function MessageTimeline(props: {
                 scheduleContentRoot(root())
               }}
             >
-              {(key) => <TimelineRowView rowKey={key} />}
+              {(row) => <TimelineRowView row={row} />}
             </Virtualizer>
           )}
         </Show>
