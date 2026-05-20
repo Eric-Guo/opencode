@@ -1,0 +1,63 @@
+diff --git a/lib/solid/index.jsx b/lib/solid/index.jsx
+index 029201a2c8..e3c4c0ca3a 100644
+--- a/lib/solid/index.jsx
++++ b/lib/solid/index.jsx
+@@ -1085,6 +1085,7 @@ const createResizer = (store, isHorizontal) => {
+     let viewportElement;
+     const sizeKey = isHorizontal ? "width" : "height";
+     const mountedIndexes = new WeakMap();
++    const mountedItems = new Map();
+     const resizeObserver = createResizeObserver((entries) => {
+         const resizes = [];
+         for (const { target, contentRect } of entries) {
+@@ -1111,12 +1112,27 @@ const createResizer = (store, isHorizontal) => {
+         },
+         $observeItem: (el, i) => {
+             mountedIndexes.set(el, i);
++            mountedItems.set(i, el);
+             resizeObserver._observe(el);
+             return () => {
+                 mountedIndexes.delete(el);
++                if (mountedItems.get(i) === el) {
++                    mountedItems.delete(i);
++                }
+                 resizeObserver._unobserve(el);
+             };
+         },
++        $measureItems: () => {
++            const resizes = [];
++            mountedItems.forEach((el, index) => {
++                if (!el.offsetParent)
++                    return;
++                resizes.push([index, el.getBoundingClientRect()[sizeKey]]);
++            });
++            if (resizes.length) {
++                store.$update(ACTION_ITEM_RESIZE, resizes);
++            }
++        },
+         $dispose: resizeObserver._dispose,
+     };
+ };
+@@ -1380,6 +1396,7 @@ const Virtualizer = (props) => {
+                 findItemIndex: store.$findItemIndex,
+                 getItemOffset: store.$getItemOffset,
+                 getItemSize: store.$getItemSize,
++                measure: resizer.$measureItems,
+                 scrollToIndex: scroller.$scrollToIndex,
+                 scrollTo: scroller.$scrollTo,
+                 scrollBy: scroller.$scrollBy,
+diff --git a/lib/solid/Virtualizer.d.ts b/lib/solid/Virtualizer.d.ts
+index 144dd7fba8..819aab92c5 100644
+--- a/lib/solid/Virtualizer.d.ts
++++ b/lib/solid/Virtualizer.d.ts
+@@ -38,6 +38,10 @@ export interface VirtualizerHandle {
+      * @param index index of item
+      */
+     getItemSize(index: number): number;
++    /**
++     * Synchronously measure currently mounted items and update cached item sizes.
++     */
++    measure(): void;
+     /**
+      * Scroll to the item specified by index.
+      * @param index index of item

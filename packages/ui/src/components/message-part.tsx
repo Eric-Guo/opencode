@@ -931,7 +931,7 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
-export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
+export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onSizeChange?: () => void }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const pending = createMemo(
@@ -939,11 +939,15 @@ export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
+  const handleOpenChange = (value: boolean) => {
+    setOpen(value)
+    props.onSizeChange?.()
+  }
 
   return (
     <Collapsible
       open={open()}
-      onOpenChange={setOpen}
+      onOpenChange={handleOpenChange}
       variant="ghost"
       class="tool-collapsible"
       data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}

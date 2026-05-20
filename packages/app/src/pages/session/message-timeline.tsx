@@ -573,6 +573,11 @@ export function MessageTimeline(props: {
 
   const isMeasuredBottom = (root: HTMLDivElement) => root.scrollHeight - root.clientHeight - root.scrollTop <= 4
 
+  const measureTimeline = () => {
+    virtualizer?.measure()
+    anchorMeasuredBottom()
+  }
+
   function anchorMeasuredBottom() {
     if (!listRoot) return false
     if (!measuredBottomAnchored) return false
@@ -1003,7 +1008,13 @@ export function MessageTimeline(props: {
           .filter((part): part is ToolPart => part?.type === "tool")
       })
 
-      return <ContextToolGroup parts={parts()} busy={workingTurn(row().userMessageID) && row().lastAssistantPart} />
+      return (
+        <ContextToolGroup
+          parts={parts()}
+          busy={workingTurn(row().userMessageID) && row().lastAssistantPart}
+          onSizeChange={measureTimeline}
+        />
+      )
     }
 
     const message = createMemo(() => {
