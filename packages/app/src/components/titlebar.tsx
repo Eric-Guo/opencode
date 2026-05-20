@@ -7,6 +7,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -18,6 +19,7 @@ import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useGlobalSync } from "@/context/global-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -40,9 +42,11 @@ type TauriApi = {
 const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
 const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
 const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
-const titlebarHeight = 40
+const legacyTitlebarHeight = 40
+const v2TitlebarHeight = 44
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
+const USE_V2_TITLEBAR = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 const makeSessionHref = (b64Dir: string, sessionId: string) => `/${b64Dir}/session/${sessionId}`
 
@@ -65,8 +69,9 @@ export function Titlebar() {
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
   const minHeight = () => {
-    if (mac()) return `${titlebarHeight / zoom()}px`
-    if (windows()) return `${titlebarHeight / Math.min(titlebarZoom(), 1)}px`
+    const height = USE_V2_TITLEBAR ? v2TitlebarHeight : legacyTitlebarHeight
+    if (mac()) return `${height / zoom()}px`
+    if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
     return undefined
   }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
@@ -183,17 +188,36 @@ export function Titlebar() {
 
   return (
     <header
-      class="h-10 shrink-0 bg-background-base relative overflow-hidden flex flex-row"
+      classList={{
+        "shrink-0 bg-background-base relative overflow-hidden flex flex-row": true,
+        "h-11": USE_V2_TITLEBAR,
+        "h-10": !USE_V2_TITLEBAR,
+      }}
       style={{ "min-height": minHeight(), "padding-left": mac() ? `${84 / zoom()}px` : 0 }}
       data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
     >
       <Switch>
-        <Match when={import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+        <Match when={USE_V2_TITLEBAR}>
           {(_) => {
             const globalSync = useGlobalSync()
             const navigate = useNavigate()
+
+            const openNewSession = () => {
+              if (params.dir) {
+                navigate(`/${params.dir}/session`)
+                return
+              }
+
+              const project = layout.projects.list()[0]
+              if (!project) {
+                navigate("/")
+                return
+              }
+
+              navigate(`/${base64Encode(project.worktree)}/session`)
+            }
 
             type Tab = { dir: string; sessionId: string; params: any; href: string }
 
@@ -267,7 +291,13 @@ export function Titlebar() {
             })
 
             return (
-              <div class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3">
+              <div
+                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 py-2"
+                classList={{
+                  "pl-2": mac(),
+                  "pl-4": !mac(),
+                }}
+              >
                 <ChannelIndicator />
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
@@ -277,18 +307,10 @@ export function Titlebar() {
                   href="/"
                   variant="ghost-muted"
                   size="large"
-                  class="!w-8"
+                  class="!w-9"
+                  icon={<IconV2 name="grid-plus" />}
                   state={!!useMatch(() => "/")() ? "pressed" : undefined}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M13.9948 11.668H9.32812M11.6641 9.33203V13.9987M6.66667 9.33203V13.9987H2V9.33203H6.66667ZM6.66667 2V6.66667H2V2H6.66667ZM13.9948 2V6.66667H9.32812V2H13.9948Z"
-                      stroke="currentColor"
-                      stroke-miterlimit="10"
-                      stroke-linecap="square"
-                    />
-                  </svg>
-                </IconButtonV2>
+                />
                 <div class="flex flex-row items-center gap-2">
                   <For each={tabsEnriched()}>
                     {(tab, i) => (
@@ -304,24 +326,25 @@ export function Titlebar() {
                     )}
                   </For>
                 </div>
-                <button>
-                  <div class="p-1.5">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      class="size-4"
-                    >
-                      <path
-                        d="M7.99978 2.88867V13.1109M2.88867 7.99978H13.1109"
-                        stroke="#808080"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </button>
+                <Show
+                  when={creating() && params.dir}
+                  fallback={
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      icon={<IconV2 name="plus" />}
+                      onClick={openNewSession}
+                      aria-label={language.t("command.session.new")}
+                    />
+                  }
+                >
+                  <NewSessionTabItem
+                    href={`/${params.dir}/session`}
+                    title={language.t("command.session.new")}
+                    onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
+                  />
+                </Show>
 
                 <div class="flex-1" />
                 {/*<button class="px-2.5 py-1.5 bg-[rgba(0,0,0,0.08)] rounded-[6px]">
@@ -547,6 +570,49 @@ function TabNavItem(props: { href: string; title: string; hideClose?: boolean; o
     </div>
   )
 }
+
+function NewSessionTabItem(props: { href: string; title: string; onClose: () => void }) {
+  return (
+    <div class="group relative flex h-7 w-[135px] min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]">
+      <a href={props.href} aria-current="page" class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none tracking-[-0.04px] text-[var(--v2-text-text-base)]">
+        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
+          <IconV2 name="edit" />
+        </span>
+        <span class="truncate">{props.title}</span>
+      </a>
+      <div class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
+        <IconButtonV2
+          size="small"
+          variant="ghost-muted"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            props.onClose()
+          }}
+          icon={
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              class="size-4"
+              aria-hidden="true"
+            >
+              <path d="M4.25 11.75L11.75 4.25M11.75 11.75L4.25 4.25" stroke="currentColor" />
+            </svg>
+          }
+          aria-label="Close tab"
+        />
+      </div>
+    </div>
+  )
+}
+
 function ChannelIndicator() {
   return (
     <>

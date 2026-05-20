@@ -88,6 +88,8 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 
+const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
@@ -152,7 +154,7 @@ export default function Layout(props: ParentProps) {
   const useWebDirectoryPicker = createMemo(() => server.current?.type === "sidecar" && server.current.variant === "wsl")
 
   const [state, setState] = createStore({
-    autoselect: !initialDirectory,
+    autoselect: !initialDirectory && !USE_HOME_DESIGN,
     busyWorkspaces: {} as Record<string, boolean>,
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
@@ -1839,8 +1841,10 @@ export default function Layout(props: ParentProps) {
   )
 
   createEffect(() => {
-    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
-    document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
+    document.documentElement.style.setProperty(
+      "--dialog-left-margin",
+      USE_HOME_DESIGN ? "0px" : `${layout.sidebar.opened() ? layout.sidebar.width() : 48}px`,
+    )
   })
 
   const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
@@ -2380,6 +2384,24 @@ export default function Layout(props: ParentProps) {
       }
     />
   )
+
+  if (USE_HOME_DESIGN) {
+    return (
+      <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+        {autoselecting() ?? ""}
+        <Titlebar />
+        <div class="flex-1 min-h-0 min-w-0 flex">
+          <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict bg-background-base">
+            <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
+              {props.children}
+            </Show>
+          </main>
+          {import.meta.env.DEV && <DebugBar />}
+        </div>
+        <Toast.Region />
+      </div>
+    )
+  }
 
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
