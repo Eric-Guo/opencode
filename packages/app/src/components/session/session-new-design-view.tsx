@@ -11,6 +11,7 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { WordmarkV2 } from "@opencode-ai/ui/v2/components/wordmark-v2.jsx"
+import "./session-new-design-view.css"
 
 const MAIN_WORKTREE = "main"
 

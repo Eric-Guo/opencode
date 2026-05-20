@@ -58,6 +58,7 @@ import { useQueries } from "@tanstack/solid-query"
 import { useQueryOptions } from "@/context/global-sync"
 import { pathKey } from "@/utils/path-key"
 import { getFilename } from "@opencode-ai/core/util/path"
+import "./prompt-input.css"
 
 interface PromptInputProps {
   class?: string

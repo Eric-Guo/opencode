@@ -31,6 +31,7 @@ import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
+import "./home.css"
 
 const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 const HOME_SESSION_LIMIT = 15
