@@ -20,6 +20,8 @@ type PatchData = {
   after: string
   patch: string
   patchIsPartial: boolean
+  valid: boolean
+  fileDiff?: FileDiffMetadata
 }
 
 export type ViewDiff = {
@@ -32,9 +34,11 @@ export type ViewDiff = {
 }
 
 const diffCacheLimit = 16
-const fileDiffCache = new Map<string, FileDiffMetadata>()
+// Legacy before/after payloads do not include a patch. Bound exact diffing so pathological
+// replacements cannot freeze the UI; oversized payloads still render as one coarse change hunk.
+const contentDiffMaxEditLength = 2_000
+const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 const patchTextCache = new Map<string, PatchData>()
-// Keep this before structuredPatch/formatPatch; those dominate huge diff metadata updates.
 const contentPatchCache: { file: string; before: string; after: string; value: PatchData }[] = []
 
 function mapCache<K, V>(cache: Map<K, V>, key: K) {
@@ -114,9 +118,10 @@ function parsePatchText(value: string): PatchData {
       after: afterLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
       patch: value,
       patchIsPartial,
+      valid: true,
     }
   } catch {
-    return { before: "", after: "", patch: value, patchIsPartial: false }
+    return { before: "", after: "", patch: value, patchIsPartial: false, valid: false }
   }
 }
 
@@ -131,53 +136,167 @@ function patchFromContent(file: string, before: string, after: string): PatchDat
     return entry.value
   }
 
-  const value = {
-    before,
-    after,
-    patch: formatPatch(
-      structuredPatch(
-        file,
-        file,
-        before,
-        after,
-        "",
-        "",
-        { context: Number.MAX_SAFE_INTEGER },
-      ),
-    ),
-    patchIsPartial: false,
-  }
+  const value = contentPatch(file, before, after)
 
   contentPatchCache.push({ file, before, after, value })
   while (contentPatchCache.length > diffCacheLimit) contentPatchCache.shift()
   return value
 }
 
-function fileDiff(file: string, patch: string, before: string, after: string, partial = false) {
-  const hit = mapCache(fileDiffCache, patch)
+function contentPatch(file: string, before: string, after: string): PatchData {
+  const exact = structuredPatch(file, file, before, after, "", "", {
+    context: Number.MAX_SAFE_INTEGER,
+    maxEditLength: contentDiffMaxEditLength,
+  })
+
+  if (exact) {
+    const patch = formatPatch(exact)
+    const fileDiff = parsePatchFiles(patch)[0]?.files[0]
+    return {
+      before,
+      after,
+      patch,
+      patchIsPartial: false,
+      valid: true,
+      fileDiff: fileDiff ? { ...fileDiff, isPartial: false } : coarseFileDiff(file, before, after),
+    }
+  }
+
+  const fileDiff = coarseFileDiff(file, before, after)
+  return {
+    before,
+    after,
+    patch: coarsePatch(file, fileDiff),
+    patchIsPartial: false,
+    valid: true,
+    fileDiff,
+  }
+}
+
+function coarseFileDiff(file: string, before: string, after: string): FileDiffMetadata {
+  const deletionLines = patchLines(before).map((line) => line.value + (line.newline ? "\n" : ""))
+  const additionLines = patchLines(after).map((line) => line.value + (line.newline ? "\n" : ""))
+  const deletionCount = deletionLines.length
+  const additionCount = additionLines.length
+
+  return {
+    name: file,
+    type: deletionCount === 0 ? "new" : additionCount === 0 ? "deleted" : "change",
+    hunks:
+      deletionCount === 0 && additionCount === 0
+        ? []
+        : [
+            {
+              collapsedBefore: 0,
+              splitLineCount: Math.max(deletionCount, additionCount),
+              splitLineStart: 0,
+              unifiedLineCount: deletionCount + additionCount,
+              unifiedLineStart: 0,
+              additionCount,
+              additionStart: additionCount === 0 ? 0 : 1,
+              additionLines: additionCount,
+              deletionCount,
+              deletionStart: deletionCount === 0 ? 0 : 1,
+              deletionLines: deletionCount,
+              deletionLineIndex: 0,
+              additionLineIndex: 0,
+              hunkContent: [
+                {
+                  type: "change",
+                  additions: additionCount,
+                  deletions: deletionCount,
+                  additionLineIndex: 0,
+                  deletionLineIndex: 0,
+                },
+              ],
+              hunkSpecs: `@@ -${deletionCount === 0 ? 0 : 1},${deletionCount} +${additionCount === 0 ? 0 : 1},${additionCount} @@\n`,
+              noEOFCRAdditions: additionCount > 0 && !after.endsWith("\n"),
+              noEOFCRDeletions: deletionCount > 0 && !before.endsWith("\n"),
+            },
+          ],
+    splitLineCount: Math.max(deletionCount, additionCount),
+    unifiedLineCount: deletionCount + additionCount,
+    isPartial: false,
+    deletionLines,
+    additionLines,
+  }
+}
+
+function coarsePatch(file: string, diff: FileDiffMetadata) {
+  const hunk = diff.hunks[0]
+  if (!hunk) return `Index: ${file}\n===================================================================\n--- ${file}\t\n+++ ${file}\t\n`
+  return (
+    [
+      `Index: ${file}`,
+      "===================================================================",
+      `--- ${file}\t`,
+      `+++ ${file}\t`,
+      hunk.hunkSpecs?.trimEnd() ?? `@@ -1,${diff.deletionLines.length} +1,${diff.additionLines.length} @@`,
+      ...patchLines(diff.deletionLines.join("")).flatMap((line) => [
+        "-" + line.value,
+        ...(line.newline ? [] : ["\\ No newline at end of file"]),
+      ]),
+      ...patchLines(diff.additionLines.join("")).flatMap((line) => [
+        "+" + line.value,
+        ...(line.newline ? [] : ["\\ No newline at end of file"]),
+      ]),
+    ].join("\n") + "\n"
+  )
+}
+
+function patchLines(value: string) {
+  if (!value) return []
+  const parts = value.split("\n")
+  const trailing = value.endsWith("\n")
+  if (trailing) parts.pop()
+  return parts.map((line, index) => ({
+    value: line,
+    newline: trailing || index < parts.length - 1,
+  }))
+}
+
+function fileDiffFromPatch(patch: string) {
+  const hit = mapCache(patchFileDiffCache, patch)
   if (hit) return hit
 
+  const parsed = patchFromText(patch)
   let value: FileDiffMetadata | undefined
-  if (partial) value = parsePatchFiles(patch)[0]?.files[0]
-  if (value === undefined) value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  if (parsed.valid) {
+    const file = parsePatchFiles(patch)[0]?.files[0]
+    if (file) value = { ...file, isPartial: parsed.patchIsPartial }
+  }
+  if (value === undefined) value = parseDiffFromFile({ name: "", contents: parsed.before }, { name: "", contents: parsed.after })
 
-  return setMapCache(fileDiffCache, patch, value)
+  return setMapCache(patchFileDiffCache, patch, value)
+}
+
+function fileDiffFromContent(file: string, before: string, after: string) {
+  return patchFromContent(file, before, after).fileDiff!
+}
+
+function fileDiff(diff: DiffSource) {
+  if (typeof diff.patch === "string") return fileDiffFromPatch(diff.patch)
+  return fileDiffFromContent(
+    diff.file,
+    typeof diff.before === "string" ? diff.before : "",
+    typeof diff.after === "string" ? diff.after : "",
+  )
 }
 
 export function resolveFileDiff(diff: DiffSource) {
-  const next = patch(diff)
-  return fileDiff(diff.file, next.patch, next.before, next.after, next.patchIsPartial)
+  return fileDiff(diff)
 }
 
 export function normalize(diff: ReviewDiff): ViewDiff {
-  const next = patch(diff)
   return {
     file: diff.file,
-    patch: next.patch,
+    get patch() {
+      return patch(diff).patch
+    },
     additions: diff.additions,
     deletions: diff.deletions,
     status: diff.status,
-    fileDiff: fileDiff(diff.file, next.patch, next.before, next.after, next.patchIsPartial),
+    fileDiff: fileDiff(diff),
   }
 }
 
