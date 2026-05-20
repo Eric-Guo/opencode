@@ -46,28 +46,22 @@ index 029201a2c8..e3c4c0ca3a 100644
                  scrollToIndex: scroller.$scrollToIndex,
                  scrollTo: scroller.$scrollTo,
                  scrollBy: scroller.$scrollBy,
-@@ -1423,5 +1440,7 @@ const Virtualizer = (props) => {
+@@ -1423,5 +1440,5 @@ const Virtualizer = (props) => {
              }
              sort([...mounted]).forEach((index) => {
-+                if (index < 0 || index >= count)
-+                    return;
                  items.push(props.data[index]);
                  indexes.push(index);
              });
-@@ -1430,5 +1449,7 @@ const Virtualizer = (props) => {
+@@ -1430,5 +1449,5 @@ const Virtualizer = (props) => {
          else {
              for (let [i, j] = range(); i <= j; i++) {
-+                if (i < 0 || i >= count)
-+                    continue;
                  items.push(props.data[i]);
                  indexes.push(i);
              }
-@@ -1579,6 +1600,8 @@ const VList = (props) => {
+@@ -1579,6 +1600,6 @@ const VList = (props) => {
          });
          const items = [];
          for (let [i, j] = range(); i <= j; i++) {
-+            if (i < 0 || i >= count)
-+                continue;
              items.push(props.data[i]);
          }
          return items;

@@ -573,7 +573,9 @@ export function MessageTimeline(props: {
   const isMeasuredBottom = (root: HTMLDivElement) => root.scrollHeight - root.clientHeight - root.scrollTop <= 4
 
   const measureTimeline = () => {
-    virtualizer?.measure()
+    if (virtualizer && "measure" in virtualizer && typeof virtualizer.measure === "function") {
+      virtualizer.measure()
+    }
     anchorMeasuredBottom()
   }
 
