@@ -142,12 +142,11 @@
   }
 
   [data-component="session-new-design"] {
-    --fill-0: var(--icon-strong-base, #161616);
-    --session-new-background-deep: var(--background-stronger, #fafafa);
-    --session-new-background-base: var(--surface-raised-stronger-non-alpha, #ffffff);
-    --session-new-background-contrast: var(--button-primary-base, #242424);
-    --session-new-text-faint: var(--text-weak, #808080);
-    --session-new-icon-muted: var(--icon-base, #808080);
+    --session-new-background-deep: var(--v2-background-bg-deep);
+    --session-new-background-base: var(--v2-background-bg-base);
+    --session-new-background-contrast: var(--v2-background-bg-contrast);
+    --session-new-text-faint: var(--v2-text-text-faint);
+    --session-new-icon-muted: var(--v2-icon-icon-muted);
     --session-new-radius-sm: 4px;
     --session-new-radius-md: 6px;
     --session-new-radius-xl: 12px;
@@ -155,21 +154,8 @@
     --session-new-line-height-base: 20px;
     --session-new-weight-normal: 440;
     --session-new-tracking-base: -0.04px;
-    --session-new-elevation-raised: var(
-      --shadow-xs-border-base,
-      0 0 0 0 #00000000,
-      0 0 0 0.5px #0000001f,
-      0 1px 2px -1px #00000014,
-      0 2px 4px 0 #0000000a
-    );
-    --session-new-elevation-button-contrast: var(
-      --shadow-xs-border-base,
-      0 0 0 0 #00000000,
-      0 0 0 0.5px #3a3a3a,
-      0 1px 1.5px 0 #00000033,
-      inset 0 -1px 2px 0 #0000000f,
-      inset 0 1px 2px 0 #ffffff24
-    );
+    --session-new-elevation-raised: var(--v2-elevation-raised);
+    --session-new-elevation-button-contrast: var(--v2-elevation-button-contrast);
     --session-composer-background-base: var(--session-new-background-base);
     --session-composer-background-contrast: var(--session-new-background-contrast);
     --session-composer-text-faint: var(--session-new-text-faint);
@@ -186,31 +172,18 @@
   }
 
   [data-component="session-composer"] {
-    --session-composer-background-base: var(--surface-raised-stronger-non-alpha, #ffffff);
-    --session-composer-background-contrast: var(--button-primary-base, #242424);
-    --session-composer-text-faint: var(--text-weak, #808080);
-    --session-composer-icon-muted: var(--icon-base, #808080);
+    --session-composer-background-base: var(--v2-background-bg-base);
+    --session-composer-background-contrast: var(--v2-background-bg-contrast);
+    --session-composer-text-faint: var(--v2-text-text-faint);
+    --session-composer-icon-muted: var(--v2-icon-icon-muted);
     --session-composer-radius-md: 6px;
     --session-composer-radius-xl: 12px;
     --session-composer-size-base: 13px;
     --session-composer-line-height-base: 20px;
     --session-composer-weight-normal: 440;
     --session-composer-tracking-base: -0.04px;
-    --session-composer-elevation-raised: var(
-      --shadow-xs-border-base,
-      0 0 0 0 #00000000,
-      0 0 0 0.5px #0000001f,
-      0 1px 2px -1px #00000014,
-      0 2px 4px 0 #0000000a
-    );
-    --session-composer-elevation-button-contrast: var(
-      --shadow-xs-border-base,
-      0 0 0 0 #00000000,
-      0 0 0 0.5px #3a3a3a,
-      0 1px 1.5px 0 #00000033,
-      inset 0 -1px 2px 0 #0000000f,
-      inset 0 1px 2px 0 #ffffff24
-    );
+    --session-composer-elevation-raised: var(--v2-elevation-raised);
+    --session-composer-elevation-button-contrast: var(--v2-elevation-button-contrast);
   }
 
   [data-component="session-new-design-text"],
@@ -250,7 +223,7 @@
     height: 28px;
     padding: 6px;
     border-radius: var(--session-composer-radius-md);
-    background-image: linear-gradient(180deg, color-mix(in srgb, var(--icon-invert-base) 20%, transparent) 0%, transparent 100%),
+    background-image: linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%),
       linear-gradient(90deg, var(--session-composer-background-contrast) 0%, var(--session-composer-background-contrast) 100%);
     box-shadow: var(--session-composer-elevation-button-contrast);
   }
@@ -280,15 +253,15 @@
     --home-weight-normal: 440;
     --home-weight-medium: 530;
     --home-tracking-base: -0.04px;
-    --home-background-layer: var(--background-stronger, #fafafa);
-    --home-background-base: var(--surface-raised-stronger-non-alpha, #ffffff);
-    --home-background-hover: var(--surface-raised-base-hover, #0000000d);
-    --home-text-base: var(--text-strong, #161616);
-    --home-text-muted: var(--text-base, #5c5c5c);
-    --home-text-faint: var(--text-weak, #808080);
-    --home-icon-muted: var(--icon-base, #808080);
-    --home-icon-accent: var(--icon-interactive-base, #3b5cf6);
-    --home-border-focus: var(--border-focus, #7698fd);
+    --home-background-layer: var(--v2-background-bg-deep);
+    --home-background-base: var(--v2-background-bg-base);
+    --home-background-hover: var(--v2-overlay-simple-overlay-hover);
+    --home-text-base: var(--v2-text-text-base);
+    --home-text-muted: var(--v2-text-text-muted);
+    --home-text-faint: var(--v2-text-text-faint);
+    --home-icon-muted: var(--v2-icon-icon-muted);
+    --home-icon-accent: var(--v2-icon-icon-accent);
+    --home-border-focus: var(--v2-border-border-focus);
   }
 
   [data-component="home-design-layout"] {
@@ -338,7 +311,7 @@
 
   [data-component="home-search"]:focus-within {
     background: var(--home-background-base);
-    box-shadow: 0 0 0 0.5px var(--home-border-focus), var(--shadow-xs-border-base);
+    box-shadow: 0 0 0 0.5px var(--home-border-focus), var(--v2-elevation-raised);
   }
 
   [data-component="home-search"] input {
