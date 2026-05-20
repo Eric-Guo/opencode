@@ -11,6 +11,8 @@ const rendererRoot = join(root, "../renderer")
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
 const clipboardWritePermission = "clipboard-sanitized-write"
+const notificationPermission = "notifications"
+const rendererPermissions = new Set([clipboardWritePermission, notificationPermission])
 const documentPolicyHeader = "Document-Policy"
 const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 
@@ -121,7 +123,7 @@ export function createMainWindow() {
     },
   })
 
-  allowClipboardWrite(win)
+  allowRendererPermissions(win)
   wireWindowRecovery(win, "main")
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
@@ -174,7 +176,7 @@ export function createLoadingWindow() {
     },
   })
 
-  allowClipboardWrite(win)
+  allowRendererPermissions(win)
   wireWindowRecovery(win, "loading")
 
   loadWindow(win, "loading.html")
@@ -339,16 +341,16 @@ function addDocumentPolicy(response: Response, file: string) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-function allowClipboardWrite(win: BrowserWindow) {
+function allowRendererPermissions(win: BrowserWindow) {
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
-      permission === clipboardWritePermission &&
+      rendererPermissions.has(permission) &&
         isTrustedRendererUrl(details.requestingUrl) &&
         webContents.id === win.webContents.id,
     )
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-    if (permission !== clipboardWritePermission) return false
+    if (!rendererPermissions.has(permission)) return false
     if (webContents && webContents.id !== win.webContents.id) return false
     return isTrustedRendererUrl(details.requestingUrl) || isTrustedRendererUrl(requestingOrigin)
   })

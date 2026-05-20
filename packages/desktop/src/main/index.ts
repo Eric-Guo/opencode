@@ -374,19 +374,18 @@ const main = Effect.gen(function* () {
   mainWindow = createMainWindow()
   if (mainWindow) {
     createMenu({
-      trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
+      trigger: (id) => {
+        const win = BrowserWindow.getFocusedWindow() ?? mainWindow
+        if (win) sendMenuCommand(win, id)
+      },
       checkForUpdates: () => {
         void checkForUpdates(true, killSidecar)
       },
-      reload: () => mainWindow?.reload(),
       relaunch: () => {
         void killSidecar().finally(() => {
           app.relaunch()
           app.exit(0)
         })
-      },
-      exportDebugLogs: () => {
-        void exportDebugLogs().catch((error) => logger.error("failed to export debug logs", error))
       },
     })
   }
