@@ -8,7 +8,7 @@ import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
-import { Auth } from "../../src/auth"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -31,14 +31,12 @@ import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
 import { Npm } from "@opencode-ai/core/npm"
+import { Substitution } from "@opencode-ai/core/substitution"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),
   activeOrg: () => Effect.succeed(Option.none()),
-})
-
-const emptyAuth = Layer.mock(Auth.Service)({
-  all: () => Effect.succeed({}),
 })
 
 const testFlock = EffectFlock.defaultLayer
@@ -49,11 +47,15 @@ const noopNpm = Layer.mock(Npm.Service)({
   which: () => Effect.succeed(Option.none()),
 })
 
+const runSubstitution = <A, E>(effect: Effect.Effect<A, E, Substitution.Service>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(Substitution.defaultLayer)))
+
 const layer = Config.layer.pipe(
   Layer.provide(testFlock),
   Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Substitution.defaultLayer),
   Layer.provide(Env.defaultLayer),
-  Layer.provide(emptyAuth),
+  Layer.provide(AuthWellKnownTest.empty),
   Layer.provide(emptyAccount),
   Layer.provideMerge(infra),
   Layer.provide(noopNpm),
@@ -420,25 +422,45 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
+test("environment variable substitution accepts an env overlay", async () => {
+  const originalEnv = process.env["TEST_VAR"]
+  delete process.env["TEST_VAR"]
+
+  try {
+    expect(
+      await runSubstitution(
+        Substitution.Service.use((substitution) =>
+          substitution.substitute({
+          text: "{env:TEST_VAR}",
+          type: "virtual",
+          dir: "/tmp",
+          source: "test",
+          env: { TEST_VAR: "overlay" },
+        }),
+        ),
+      ),
+    ).toBe("overlay")
+  } finally {
+    if (originalEnv === undefined) delete process.env["TEST_VAR"]
+    else process.env["TEST_VAR"] = originalEnv
+  }
+})
+
 it.instance("preserves env variables when adding $schema to config", () =>
   withProcessEnv(
     "PRESERVE_VAR",
     "secret_value",
     Effect.gen(function* () {
       const test = yield* TestInstance
-      // Config without $schema - should trigger auto-add
-      yield* Effect.promise(() =>
-        Filesystem.write(
-          path.join(test.directory, "opencode.json"),
-          JSON.stringify({
-            username: "{env:PRESERVE_VAR}",
-          }),
-        ),
+      yield* writeTextEffect(
+        path.join(test.directory, "opencode.json"),
+        JSON.stringify({
+          username: "{env:PRESERVE_VAR}",
+        }),
       )
       const config = yield* Config.Service.use((svc) => svc.get())
       expect(config.username).toBe("secret_value")
 
-      // Read the file to verify the env variable was preserved
       const content = yield* Effect.promise(() => Filesystem.readText(path.join(test.directory, "opencode.json")))
       expect(content).toContain("{env:PRESERVE_VAR}")
       expect(content).not.toContain("secret_value")
@@ -515,8 +537,9 @@ test("resolves env templates in account config with account token", async () => 
   const layer = Config.layer.pipe(
     Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Substitution.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(emptyAuth),
+    Layer.provide(AuthWellKnownTest.empty),
     Layer.provide(fakeAccount),
     Layer.provideMerge(infra),
     Layer.provide(noopNpm),
@@ -887,8 +910,9 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   const testLayer = Config.layer.pipe(
     Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Substitution.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(emptyAuth),
+    Layer.provide(AuthWellKnownTest.empty),
     Layer.provide(emptyAccount),
     Layer.provideMerge(infra),
     Layer.provide(noopNpm),
@@ -1543,192 +1567,44 @@ it.instance("local .opencode config can override MCP from project config", () =>
 )
 
 test("project config overrides remote well-known config", async () => {
-  const originalFetch = globalThis.fetch
-  let fetchedUrl: string | undefined
-  globalThis.fetch = mock((url: string | URL | Request) => {
-    const urlStr = url instanceof Request ? url.url : url instanceof URL ? url.href : url
-    if (urlStr.includes(".well-known/opencode")) {
-      fetchedUrl = urlStr
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            config: {
-              mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false } },
-            },
-          }),
-          { status: 200 },
-        ),
-      )
-    }
-    return originalFetch(url)
-  }) as unknown as typeof fetch
-
-  const fakeAuth = Layer.mock(Auth.Service)({
-    all: () =>
-      Effect.succeed({
-        "https://example.com": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
-      }),
+  const fakeAuthWellKnown = Layer.mock(AuthWellKnown.Service)({
+    configs: () =>
+      Effect.succeed([
+        {
+          url: "https://example.com",
+          source: "https://example.com/.well-known/opencode",
+          dir: "https://example.com/.well-known",
+          content: {
+            mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false } },
+          },
+        },
+      ]),
   })
 
   const layer = Config.layer.pipe(
     Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Substitution.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(fakeAuth),
+    Layer.provide(fakeAuthWellKnown),
     Layer.provide(emptyAccount),
     Layer.provideMerge(infra),
     Layer.provide(noopNpm),
   )
 
-  try {
-    await provideTmpdirInstance(
-      () =>
-        Config.Service.use((svc) =>
-          Effect.gen(function* () {
-            const config = yield* svc.get()
-            expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
-            expect(config.mcp?.jira?.enabled).toBe(true)
-          }),
-        ),
-      {
-        git: true,
-        config: { mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true } } },
-      },
-    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-})
-
-test("wellknown URL with trailing slash is normalized", async () => {
-  const originalFetch = globalThis.fetch
-  let fetchedUrl: string | undefined
-  globalThis.fetch = mock((url: string | URL | Request) => {
-    const urlStr = url instanceof Request ? url.url : url instanceof URL ? url.href : url
-    if (urlStr.includes(".well-known/opencode")) {
-      fetchedUrl = urlStr
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            config: {
-              mcp: { slack: { type: "remote", url: "https://slack.example.com/mcp", enabled: true } },
-            },
-          }),
-          { status: 200 },
-        ),
-      )
-    }
-    return originalFetch(url)
-  }) as unknown as typeof fetch
-
-  const fakeAuth = Layer.mock(Auth.Service)({
-    all: () =>
-      Effect.succeed({
-        "https://example.com/": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
-      }),
-  })
-
-  const layer = Config.layer.pipe(
-    Layer.provide(testFlock),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Env.defaultLayer),
-    Layer.provide(fakeAuth),
-    Layer.provide(emptyAccount),
-    Layer.provideMerge(infra),
-    Layer.provide(noopNpm),
-  )
-
-  try {
-    await provideTmpdirInstance(
-      () =>
-        Config.Service.use((svc) =>
-          Effect.gen(function* () {
-            yield* svc.get()
-            expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
-          }),
-        ),
-      { git: true },
-    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-})
-
-test("wellknown remote_config supports templated env vars in headers", async () => {
-  const originalFetch = globalThis.fetch
-  const originalToken = process.env.TEST_TOKEN
-  let wellknownFetchedUrl: string | undefined
-  let remoteFetchedUrl: string | undefined
-  let remoteHeaders: HeadersInit | undefined
-  globalThis.fetch = mock((url: string | URL | Request, init?: RequestInit) => {
-    const urlStr = url instanceof Request ? url.url : url instanceof URL ? url.href : url
-    if (urlStr.includes(".well-known/opencode")) {
-      wellknownFetchedUrl = urlStr
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            remote_config: {
-              url: "https://config.example.com/opencode.json",
-              headers: {
-                Authorization: "Bearer {env:TEST_TOKEN}",
-              },
-            },
-          }),
-          { status: 200 },
-        ),
-      )
-    }
-    if (urlStr.includes("config.example.com")) {
-      remoteFetchedUrl = urlStr
-      remoteHeaders = init?.headers
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            mcp: { confluence: { type: "remote", url: "https://confluence.example.com/mcp", enabled: true } },
-          }),
-          { status: 200 },
-        ),
-      )
-    }
-    return originalFetch(url, init)
-  }) as unknown as typeof fetch
-
-  const fakeAuth = Layer.mock(Auth.Service)({
-    all: () =>
-      Effect.succeed({
-        "https://example.com": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
-      }),
-  })
-
-  const layer = Config.layer.pipe(
-    Layer.provide(testFlock),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Env.defaultLayer),
-    Layer.provide(fakeAuth),
-    Layer.provide(emptyAccount),
-    Layer.provideMerge(infra),
-    Layer.provide(noopNpm),
-  )
-
-  try {
-    await provideTmpdirInstance(
-      () =>
-        Config.Service.use((svc) =>
-          Effect.gen(function* () {
-            const config = yield* svc.get()
-            expect(wellknownFetchedUrl).toBe("https://example.com/.well-known/opencode")
-            expect(remoteFetchedUrl).toBe("https://config.example.com/opencode.json")
-            expect(remoteHeaders).toEqual({ Authorization: "Bearer test-token" })
-            expect(config.mcp?.confluence?.enabled).toBe(true)
-          }),
-        ),
-      { git: true },
-    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
-  } finally {
-    globalThis.fetch = originalFetch
-    if (originalToken === undefined) delete process.env.TEST_TOKEN
-    else process.env.TEST_TOKEN = originalToken
-  }
+  await provideTmpdirInstance(
+    () =>
+      Config.Service.use((svc) =>
+        Effect.gen(function* () {
+          const config = yield* svc.get()
+          expect(config.mcp?.jira?.enabled).toBe(true)
+        }),
+      ),
+    {
+      git: true,
+      config: { mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true } } },
+    },
+  ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
 })
 
 describe("resolvePluginSpec", () => {
