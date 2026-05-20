@@ -14,13 +14,13 @@ type LegacyDiff = {
 
 type SnapshotDiff = SnapshotFileDiff & { file: string }
 type ReviewDiff = SnapshotDiff | VcsFileDiff | LegacyDiff
-export type DiffSource = Pick<LegacyDiff, "file" | "patch" | "before" | "after">
+export type DiffSource = Pick<LegacyDiff, "file" | "patch" | "before" | "after"> &
+  Partial<Pick<LegacyDiff, "additions" | "deletions">>
 type PatchData = {
   before: string
   after: string
   patch: string
   patchIsPartial: boolean
-  valid: boolean
   fileDiff?: FileDiffMetadata
 }
 
@@ -38,7 +38,6 @@ const diffCacheLimit = 16
 // replacements cannot freeze the UI; oversized payloads still render as one coarse change hunk.
 const contentDiffMaxEditLength = 2_000
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
-const patchTextCache = new Map<string, PatchData>()
 const contentPatchCache: { file: string; before: string; after: string; value: PatchData }[] = []
 
 function mapCache<K, V>(cache: Map<K, V>, key: K) {
@@ -58,74 +57,21 @@ function setMapCache<K, V>(cache: Map<K, V>, key: K, value: V) {
 
 function patch(diff: DiffSource) {
   if (typeof diff.patch === "string") {
-    return patchFromText(diff.patch)
-  }
-
-  return patchFromContent(
-    diff.file,
-    typeof diff.before === "string" ? diff.before : "",
-    typeof diff.after === "string" ? diff.after : "",
-  )
-}
-
-function patchFromText(value: string): PatchData {
-  const cached = mapCache(patchTextCache, value)
-  if (cached) return cached
-
-  return setMapCache(patchTextCache, value, parsePatchText(value))
-}
-
-function parsePatchText(value: string): PatchData {
-  try {
-    const [patch] = parsePatch(value)
-    const beforeLines: Array<{ text: string; newline: boolean }> = []
-    const afterLines: Array<{ text: string; newline: boolean }> = []
-    let previous: "-" | "+" | " " | undefined
-
-    const patchIsPartial = patch.hunks.every((h) => h.oldStart > 1)
-
-    for (const hunk of patch.hunks) {
-      for (const line of hunk.lines) {
-        if (line.startsWith("\\")) {
-          if (previous === "-" || previous === " ") {
-            const before = beforeLines.at(-1)
-            if (before) before.newline = false
-          }
-          if (previous === "+" || previous === " ") {
-            const after = afterLines.at(-1)
-            if (after) after.newline = false
-          }
-          continue
-        }
-
-        if (line.startsWith("-")) {
-          beforeLines.push({ text: line.slice(1), newline: true })
-          previous = "-"
-        } else if (line.startsWith("+")) {
-          afterLines.push({ text: line.slice(1), newline: true })
-          previous = "+"
-        } else {
-          // context line (starts with ' ')
-          beforeLines.push({ text: line.slice(1), newline: true })
-          afterLines.push({ text: line.slice(1), newline: true })
-          previous = " "
-        }
-      }
-    }
-
     return {
-      before: beforeLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
-      after: afterLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
-      patch: value,
-      patchIsPartial,
-      valid: true,
+      before: "",
+      after: "",
+      patch: diff.patch,
+      patchIsPartial: false,
     }
-  } catch {
-    return { before: "", after: "", patch: value, patchIsPartial: false, valid: false }
   }
+
+  return patchFromContent(diff)
 }
 
-function patchFromContent(file: string, before: string, after: string): PatchData {
+function patchFromContent(diff: DiffSource): PatchData {
+  const file = diff.file
+  const before = typeof diff.before === "string" ? diff.before : ""
+  const after = typeof diff.after === "string" ? diff.after : ""
   const index = contentPatchCache.findIndex(
     (entry) => entry.file === file && entry.before === before && entry.after === after,
   )
@@ -136,18 +82,20 @@ function patchFromContent(file: string, before: string, after: string): PatchDat
     return entry.value
   }
 
-  const value = contentPatch(file, before, after)
+  const value = contentPatch(file, before, after, (diff.additions ?? 0) + (diff.deletions ?? 0))
 
   contentPatchCache.push({ file, before, after, value })
   while (contentPatchCache.length > diffCacheLimit) contentPatchCache.shift()
   return value
 }
 
-function contentPatch(file: string, before: string, after: string): PatchData {
-  const exact = structuredPatch(file, file, before, after, "", "", {
-    context: Number.MAX_SAFE_INTEGER,
-    maxEditLength: contentDiffMaxEditLength,
-  })
+function contentPatch(file: string, before: string, after: string, changes: number): PatchData {
+  const exact = changes > contentDiffMaxEditLength
+    ? undefined
+    : structuredPatch(file, file, before, after, "", "", {
+        context: Number.MAX_SAFE_INTEGER,
+        maxEditLength: contentDiffMaxEditLength,
+      })
 
   if (exact) {
     const patch = formatPatch(exact)
@@ -157,7 +105,6 @@ function contentPatch(file: string, before: string, after: string): PatchData {
       after,
       patch,
       patchIsPartial: false,
-      valid: true,
       fileDiff: fileDiff ? { ...fileDiff, isPartial: false } : coarseFileDiff(file, before, after),
     }
   }
@@ -168,7 +115,6 @@ function contentPatch(file: string, before: string, after: string): PatchData {
     after,
     patch: coarsePatch(file, fileDiff),
     patchIsPartial: false,
-    valid: true,
     fileDiff,
   }
 }
@@ -232,16 +178,15 @@ function coarsePatch(file: string, diff: FileDiffMetadata) {
       `--- ${file}\t`,
       `+++ ${file}\t`,
       hunk.hunkSpecs?.trimEnd() ?? `@@ -1,${diff.deletionLines.length} +1,${diff.additionLines.length} @@`,
-      ...patchLines(diff.deletionLines.join("")).flatMap((line) => [
-        "-" + line.value,
-        ...(line.newline ? [] : ["\\ No newline at end of file"]),
-      ]),
-      ...patchLines(diff.additionLines.join("")).flatMap((line) => [
-        "+" + line.value,
-        ...(line.newline ? [] : ["\\ No newline at end of file"]),
-      ]),
+      ...diff.deletionLines.flatMap((line) => patchLine("-", line)),
+      ...diff.additionLines.flatMap((line) => patchLine("+", line)),
     ].join("\n") + "\n"
   )
+}
+
+function patchLine(prefix: "-" | "+", line: string) {
+  if (line.endsWith("\n")) return [prefix + line.slice(0, -1)]
+  return [prefix + line, "\\ No newline at end of file"]
 }
 
 function patchLines(value: string) {
@@ -259,28 +204,30 @@ function fileDiffFromPatch(patch: string) {
   const hit = mapCache(patchFileDiffCache, patch)
   if (hit) return hit
 
-  const parsed = patchFromText(patch)
   let value: FileDiffMetadata | undefined
-  if (parsed.valid) {
+  const info = patchInfo(patch)
+  if (info) {
     const file = parsePatchFiles(patch)[0]?.files[0]
-    if (file) value = { ...file, isPartial: parsed.patchIsPartial }
+    if (file) value = { ...file, isPartial: info.patchIsPartial }
   }
-  if (value === undefined) value = parseDiffFromFile({ name: "", contents: parsed.before }, { name: "", contents: parsed.after })
+  if (value === undefined) value = parseDiffFromFile({ name: "", contents: "" }, { name: "", contents: "" })
 
   return setMapCache(patchFileDiffCache, patch, value)
 }
 
-function fileDiffFromContent(file: string, before: string, after: string) {
-  return patchFromContent(file, before, after).fileDiff!
+function patchInfo(value: string) {
+  try {
+    return {
+      patchIsPartial: parsePatch(value).every((file) => file.hunks.every((hunk) => hunk.oldStart > 1)),
+    }
+  } catch {
+    return undefined
+  }
 }
 
 function fileDiff(diff: DiffSource) {
   if (typeof diff.patch === "string") return fileDiffFromPatch(diff.patch)
-  return fileDiffFromContent(
-    diff.file,
-    typeof diff.before === "string" ? diff.before : "",
-    typeof diff.after === "string" ? diff.after : "",
-  )
+  return patchFromContent(diff).fileDiff!
 }
 
 export function resolveFileDiff(diff: DiffSource) {
