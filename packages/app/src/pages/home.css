@@ -187,6 +187,7 @@
   [data-component="home-session-row"]:focus-visible,
   [data-component="home-project-row"]:hover,
   [data-component="home-project-row"]:focus-visible,
+  [data-component="home-project-row"][data-selected],
   [data-component="home-nav-row"]:hover,
   [data-component="home-nav-row"]:focus-visible {
     background: var(--home-background-hover);

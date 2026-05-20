@@ -61,10 +61,15 @@ function HomeDesign() {
   const navigate = useNavigate()
   const server = useServer()
   const language = useLanguage()
-  const [state, setState] = createStore({ search: "" })
+  const [state, setState] = createStore({ search: "", project: undefined as string | undefined })
 
   const projects = createMemo(() => layout.projects.list())
-  const projectDirectories = createMemo(() => projects().flatMap((project) => [project.worktree, ...(project.sandboxes ?? [])]))
+  const selectedProject = createMemo(() => projects().find((project) => project.worktree === state.project) ?? projects()[0])
+  const projectDirectories = createMemo(() => {
+    const project = selectedProject()
+    if (!project) return []
+    return [project.worktree, ...(project.sandboxes ?? [])]
+  })
   const search = createMemo(() => state.search.trim())
   const sessionLoad = useQuery(() => ({
     queryKey: ["home", "sessions", ...projectDirectories()] as const,
@@ -104,14 +109,19 @@ function HomeDesign() {
   )
   const groups = createMemo(() => groupSessions(records(), language))
 
-  function openProject(directory: string) {
+  function selectProject(directory: string) {
+    if (!projects().some((project) => project.worktree === directory)) return
+    setState("project", directory)
+  }
+
+  function addProject(directory: string) {
     layout.projects.open(directory)
     server.projects.touch(directory)
-    navigate(`/${base64Encode(directory)}`)
+    setState("project", directory)
   }
 
   function openNewSession() {
-    const project = projects()[0]
+    const project = selectedProject()
     if (!project) {
       void chooseProject()
       return
@@ -131,10 +141,11 @@ function HomeDesign() {
   async function chooseProject() {
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
-        result.forEach(openProject)
+        result.forEach(addProject)
+        if (result[0]) setState("project", result[0])
         return
       }
-      if (result) openProject(result)
+      if (result) addProject(result)
     }
 
     if (platform.openDirectoryPickerDialog && server.isLocal()) {
@@ -163,7 +174,8 @@ function HomeDesign() {
       <div data-component="home-design-layout">
         <HomeProjectColumn
           projects={projects()}
-          openProject={openProject}
+          selected={selectedProject()?.worktree}
+          selectProject={selectProject}
           chooseProject={() => void chooseProject()}
           openSettings={openSettings}
           openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
@@ -212,7 +224,8 @@ function HomeDesign() {
 
 function HomeProjectColumn(props: {
   projects: LocalProject[]
-  openProject: (directory: string) => void
+  selected?: string
+  selectProject: (directory: string) => void
   chooseProject: () => void
   openSettings: () => void
   openHelp: () => void
@@ -245,7 +258,13 @@ function HomeProjectColumn(props: {
         >
           <For each={props.projects}>
             {(project) => (
-              <button type="button" data-component="home-project-row" onClick={() => props.openProject(project.worktree)}>
+              <button
+                type="button"
+                data-component="home-project-row"
+                data-selected={props.selected === project.worktree ? "" : undefined}
+                aria-current={props.selected === project.worktree ? "page" : undefined}
+                onClick={() => props.selectProject(project.worktree)}
+              >
                 <HomeProjectAvatar project={project} />
                 <span>{displayName(project)}</span>
               </button>
