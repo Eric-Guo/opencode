@@ -7,6 +7,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -280,14 +281,7 @@ export function Titlebar() {
                   class="!w-8"
                   state={!!useMatch(() => "/")() ? "pressed" : undefined}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M13.9948 11.668H9.32812M11.6641 9.33203V13.9987M6.66667 9.33203V13.9987H2V9.33203H6.66667ZM6.66667 2V6.66667H2V2H6.66667ZM13.9948 2V6.66667H9.32812V2H13.9948Z"
-                      stroke="currentColor"
-                      stroke-miterlimit="10"
-                      stroke-linecap="square"
-                    />
-                  </svg>
+                  <IconV2 name="grid-plus" />
                 </IconButtonV2>
                 <div class="flex flex-row items-center gap-2">
                   <For each={tabsEnriched()}>
