@@ -39,7 +39,7 @@ const tools: readonly ToolFixture[] = [
   },
 ] as const
 
-function InlineToolRow(props: { item: ToolFixture }) {
+function InlineToolRow(props: { item: ToolFixture; errorExpanded?: boolean }) {
   const [margin, setMargin] = createSignal(0)
 
   return (
@@ -56,7 +56,7 @@ function InlineToolRow(props: { item: ToolFixture }) {
         <text width={INLINE_TOOL_ICON_WIDTH}>{props.item.icon}</text>
         <text flexGrow={1}>{props.item.label}</text>
       </box>
-      {props.item.error && (
+      {props.item.error && props.errorExpanded && (
         <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
           <text>{props.item.error}</text>
         </box>
@@ -65,11 +65,11 @@ function InlineToolRow(props: { item: ToolFixture }) {
   )
 }
 
-function Fixture() {
+function Fixture(props: { errorExpanded?: boolean }) {
   return (
     <box flexDirection="column" width={72}>
       <box flexDirection="column">
-        <For each={tools}>{(item) => <InlineToolRow item={item} />}</For>
+        <For each={tools}>{(item) => <InlineToolRow item={item} errorExpanded={props.errorExpanded} />}</For>
       </box>
     </box>
   )
@@ -78,6 +78,21 @@ function Fixture() {
 describe("TUI inline tool wrapping", () => {
   test("snapshots consecutive grep, glob, and read rows at a narrow width", async () => {
     testSetup = await testRender(() => <Fixture />, { width: 72, height: 12 })
+    await testSetup.renderOnce()
+    await testSetup.renderOnce()
+
+    expect(
+      testSetup
+        .captureCharFrame()
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .join("\n")
+        .trimEnd(),
+    ).toMatchSnapshot()
+  })
+
+  test("snapshots expanded tool errors under the tool text", async () => {
+    testSetup = await testRender(() => <Fixture errorExpanded />, { width: 72, height: 12 })
     await testSetup.renderOnce()
     await testSetup.renderOnce()
 

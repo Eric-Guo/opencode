@@ -1742,18 +1742,12 @@ function InlineTool(props: {
   const sync = useSync()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
+  const [errorExpanded, setErrorExpanded] = createSignal(false)
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
     if (!callID) return false
     return callID === props.part.callID
-  })
-
-  const fg = createMemo(() => {
-    if (permission()) return theme.warning
-    if (hover() && props.onClick) return theme.text
-    if (props.complete) return theme.textMuted
-    return theme.text
   })
 
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
@@ -1766,14 +1760,28 @@ function InlineTool(props: {
       error()?.includes("user dismissed"),
   )
 
+  const failed = createMemo(() => Boolean(error() && !denied()))
+  const clickable = createMemo(() => Boolean(props.onClick || failed()))
+  const fg = createMemo(() => {
+    if (permission()) return theme.warning
+    if (failed()) return theme.error
+    if (hover() && props.onClick) return theme.text
+    if (props.complete) return theme.textMuted
+    return theme.text
+  })
+
   return (
     <box
       marginTop={margin()}
       paddingLeft={3}
-      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
+        if (failed()) {
+          setErrorExpanded((value) => !value)
+          return
+        }
         props.onClick?.()
       }}
       renderBefore={function () {
@@ -1804,19 +1812,23 @@ function InlineTool(props: {
             <box flexDirection="row">
               <text
                 width={INLINE_TOOL_ICON_WIDTH}
-                fg={props.iconColor ?? fg()}
+                fg={failed() ? theme.error : (props.iconColor ?? fg())}
                 attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
               >
                 {props.icon}
               </text>
-              <text flexGrow={1} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+              <text
+                flexGrow={1}
+                fg={failed() ? theme.error : fg()}
+                attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
+              >
                 {props.children}
               </text>
             </box>
           </Show>
         </Match>
       </Switch>
-      <Show when={error() && !denied()}>
+      <Show when={failed() && errorExpanded()}>
         <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
           <text fg={theme.error}>{error()}</text>
         </box>
