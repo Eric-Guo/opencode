@@ -1,58 +1,11 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`TUI inline tool wrapping snapshots consecutive grep, glob, and read rows at a narrow width 1`] = `
-"CURRENT: measured height adds top margin after wrapped rows
-
-   * Grep "OPENCODE.*DB|database|sqlite|drizzle|dev.*db|data.
-   *dir|xdg|APPDATA" in packages/opencode/src (151 matches)
-
-   * Glob "**/*db*" in packages/opencode (6 matches)
-   -> Read packages/opencode/src/storage/db.ts [offset=1, limit=130]
-   -> Read packages/opencode/src/index.ts [offset=1, limit=100]
-
-   * Grep "export const OPENCODE_DB|OPENCODE_DB|OPENCODE_DEV|Global\\.
-   Path\\.data|data =" in packages/opencode/src (115 matches)
-
-
-STABLE WRAP: no height-coupled margin
-   * Grep "OPENCODE.*DB|database|sqlite|drizzle|dev.*db|data.
-   *dir|xdg|APPDATA" in packages/opencode/src (151 matches)
-   * Glob "**/*db*" in packages/opencode (6 matches)
-   -> Read packages/opencode/src/storage/db.ts [offset=1, limit=130]
-   -> Read packages/opencode/src/index.ts [offset=1, limit=100]
-   * Grep "export const OPENCODE_DB|OPENCODE_DB|OPENCODE_DEV|Global\\.
-   Path\\.data|data =" in packages/opencode/src (115 matches)
-
-
-HANGING INDENT: wrap aligns with tool text
-   * Grep "OPENCODE.*DB|database|sqlite|drizzle|dev.*db|data.
+"   * Grep "OPENCODE.*DB|database|sqlite|drizzle|dev.*db|data.
      *dir|xdg|APPDATA" in packages/opencode/src (151 matches)
    * Glob "**/*db*" in packages/opencode (6 matches)
    -> Read packages/opencode/src/storage/db.ts [offset=1, limit=130]
    -> Read packages/opencode/src/index.ts [offset=1, limit=100]
    * Grep "export const OPENCODE_DB|OPENCODE_DB|OPENCODE_DEV|Global\\.
-     Path\\.data|data =" in packages/opencode/src (115 matches)
-
-
-DETAIL ROWS: split identity from metadata
-   * Grep "OPENCODE.*DB|database|sqlite|drizzle|dev.*db|data.
-   *dir|xdg|APPDATA"
-   packages/opencode/src - 151 matches
-   * Glob "**/*db*"
-   packages/opencode - 6 matches
-   -> Read packages/opencode/src/storage/db.ts
-   offset=1, limit=130
-   -> Read packages/opencode/src/index.ts
-   offset=1, limit=100
-   * Grep "export const OPENCODE_DB|OPENCODE_DB|OPENCODE_DEV|Global\\.
-   Path\\.data|data ="
-   packages/opencode/src - 115 matches
-
-
-COMPACT: truncate middle, never wrap
-   * Grep "OPENCODE.*DB|d...dir|xdg|APPDATA" - packages/openc...c - 151
-   * Glob "**/*db*" - packages/opencode - 6 matches
-   -> Read packages/openco...rc/storage/db.ts - offset=1, limit=130
-   -> Read packages/opencode/src/index.ts - offset=1, limit=100
-   * Grep "export const O...th\\.data|data =" - packages/openc...c - 115"
+     Path\\.data|data =" in packages/opencode/src (115 matches)"
 `;
