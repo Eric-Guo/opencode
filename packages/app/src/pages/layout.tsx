@@ -1059,6 +1059,18 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
+      ...(platform.platform === "desktop" && platform.exportDebugLogs
+        ? [
+            {
+              id: "logs.export",
+              title: "Export logs",
+              category: language.t("command.category.settings"),
+              onSelect: () => {
+                void platform.exportDebugLogs?.()
+              },
+            },
+          ]
+        : []),
       {
         id: "session.previous",
         title: language.t("command.session.previous"),
