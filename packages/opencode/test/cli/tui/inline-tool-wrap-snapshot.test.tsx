@@ -9,7 +9,9 @@ afterEach(() => {
   testSetup = undefined
 })
 
-const tools = [
+type ToolFixture = { icon: string; label: string; error?: string }
+
+const tools: readonly ToolFixture[] = [
   {
     icon: "*",
     label:
@@ -26,6 +28,7 @@ const tools = [
   {
     icon: "->",
     label: "Read packages/opencode/src/index.ts [offset=1, limit=100]",
+    error: "No LSP server available for this file type.",
   },
   {
     icon: "*",
@@ -34,13 +37,18 @@ const tools = [
   },
 ] as const
 
-function InlineToolRow(props: { item: (typeof tools)[number] }) {
+function InlineToolRow(props: { item: ToolFixture }) {
   return (
     <box paddingLeft={3}>
-      <box paddingLeft={3} flexDirection="row">
+      <box flexDirection="row">
         <text width={props.item.icon.length + 1}>{props.item.icon}</text>
         <text flexGrow={1}>{props.item.label}</text>
       </box>
+      {props.item.error && (
+        <box paddingLeft={props.item.icon.length + 1}>
+          <text>{props.item.error}</text>
+        </box>
+      )}
     </box>
   )
 }

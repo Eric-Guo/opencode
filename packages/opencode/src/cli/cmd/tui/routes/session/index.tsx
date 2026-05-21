@@ -1810,7 +1810,7 @@ function InlineTool(props: {
             }
             when={props.complete}
           >
-            <box flexDirection="row" paddingLeft={3}>
+            <box flexDirection="row">
               <text
                 width={props.icon.length + 1}
                 fg={props.iconColor ?? fg()}
@@ -1826,7 +1826,9 @@ function InlineTool(props: {
         </Match>
       </Switch>
       <Show when={error() && !denied()}>
-        <text fg={theme.error}>{error()}</text>
+        <box paddingLeft={props.icon.length + 1}>
+          <text fg={theme.error}>{error()}</text>
+        </box>
       </Show>
     </box>
   )
