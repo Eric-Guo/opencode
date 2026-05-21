@@ -36,9 +36,11 @@ const tools = [
 
 function InlineToolRow(props: { item: (typeof tools)[number] }) {
   return (
-    <box paddingLeft={3} flexDirection="row">
-      <text width={props.item.icon.length + 1}>{props.item.icon}</text>
-      <text flexGrow={1}>{props.item.label}</text>
+    <box paddingLeft={3}>
+      <box paddingLeft={3} flexDirection="row">
+        <text width={props.item.icon.length + 1}>{props.item.icon}</text>
+        <text flexGrow={1}>{props.item.label}</text>
+      </box>
     </box>
   )
 }
