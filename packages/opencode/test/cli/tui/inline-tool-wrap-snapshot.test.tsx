@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { For } from "solid-js"
+import { createSignal, For } from "solid-js"
 import { testRender } from "@opentui/solid"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
@@ -38,8 +38,18 @@ const tools: readonly ToolFixture[] = [
 ] as const
 
 function InlineToolRow(props: { item: ToolFixture }) {
+  const [margin, setMargin] = createSignal(0)
+
   return (
-    <box paddingLeft={3}>
+    <box
+      marginTop={margin()}
+      paddingLeft={3}
+      renderBefore={function () {
+        const parent = this.parent
+        if (!parent) return
+        setMargin(parent.getChildren()[parent.getChildren().indexOf(this) - 1]?.id.startsWith("text-") ? 1 : 0)
+      }}
+    >
       <box flexDirection="row">
         <text width={props.item.icon.length + 1}>{props.item.icon}</text>
         <text flexGrow={1}>{props.item.label}</text>

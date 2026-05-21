@@ -1780,21 +1780,10 @@ function InlineTool(props: {
         if (!parent) {
           return
         }
-        if (el.height > 1) {
-          setMargin(1)
-          return
-        }
         const children = parent.getChildren()
         const index = children.indexOf(el)
         const previous = children[index - 1]
-        if (!previous) {
-          setMargin(0)
-          return
-        }
-        if (previous.height > 1 || previous.id.startsWith("text-")) {
-          setMargin(1)
-          return
-        }
+        setMargin(previous?.id.startsWith("text-") ? 1 : 0)
       }}
     >
       <Switch>
