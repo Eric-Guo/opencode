@@ -206,7 +206,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
         "min-height": minHeight(),
         "padding-left": mac() ? `${84 / zoom()}px` : 0,
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
-        "max-width": electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
+        "max-width": electronWindows()
+          ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))`
+          : undefined,
         "align-self": electronWindows() ? "flex-start" : undefined,
       }}
       data-tauri-drag-region
@@ -317,33 +319,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   "pl-4": !mac(),
                 }}
               >
-                <Show
-                  when={windows() || linux()}
-                  fallback={
-                    <DesktopTitlebarIconButton
-                      as="a"
-                      href="/"
-                      icon={<IconV2 name="grid-plus" />}
-                      state={!!homeMatch() ? "pressed" : undefined}
-                    />
-                  }
-                >
-                  <div class="flex h-7 shrink-0 items-center gap-1">
-                    <WindowsAppMenu command={command} platform={platform} variant="v2" />
-                    <DesktopTitlebarIconButton
-                      as="a"
-                      href="/"
-                      icon={<IconV2 name="grid-plus" />}
-                      state={!!homeMatch() ? "pressed" : undefined}
-                    />
-                  </div>
+                <ChannelIndicator />
+                <Show when={windows() || linux()}>
+                  <WindowsAppMenu command={command} platform={platform} variant="v2" />
                 </Show>
+                <IconButtonV2
+                  variant="ghost-muted"
+                  size="large"
+                  as="a"
+                  href="/"
+                  class="!w-9"
+                  icon={<IconV2 name="grid-plus" />}
+                  state={!!homeMatch() ? "pressed" : undefined}
+                />
+
                 <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
                   <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
                     <For each={tabsEnriched()}>
                       {(tab, i) => (
                         <>
-                          {i() !== 0 && <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />}
+                          {i() !== 0 && (
+                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                          )}
                           <TabNavItem
                             href={tab.href}
                             title={tab.info.title}
@@ -566,11 +563,7 @@ function TitlebarUpdatePill(props: { update?: TitlebarUpdate }) {
 }
 
 function DesktopTitlebarIconButton(props: Parameters<typeof IconButtonV2>[0]) {
-  return (
-    <div data-component="desktop-icon-button" class="flex h-7 w-9 shrink-0 items-center justify-center rounded-[6px] px-1">
-      <IconButtonV2 {...props} variant={props.variant ?? "ghost-muted"} size="large" />
-    </div>
-  )
+  return
 }
 
 function TabNavItem(props: {
@@ -617,10 +610,9 @@ function TabNavItem(props: {
 }
 
 function ProjectTabAvatar(props: { project?: LocalProject; directory: string }) {
-  const name = createMemo(() => displayName(props.project ?? { worktree: props.directory }))
   return (
     <AvatarV2
-      fallback={name()}
+      fallback={displayName(props.project ?? { worktree: props.directory })}
       src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
       kind="org"
       size="small"

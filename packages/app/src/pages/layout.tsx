@@ -170,7 +170,8 @@ export default function Layout(props: ParentProps) {
   })
   const updateQuery = useQuery(() => ({
     queryKey: ["desktop", "update"] as const,
-    enabled: () => !!platform.checkUpdate && !!platform.updateAndRestart && settings.ready() && settings.updates.startup(),
+    enabled: () =>
+      !!platform.checkUpdate && !!platform.updateAndRestart && settings.ready() && settings.updates.startup(),
     queryFn: () => platform.checkUpdate?.() ?? Promise.resolve({ updateAvailable: false, version: undefined }),
     refetchInterval: (query) => (query.state.data?.updateAvailable ? false : 10 * 60 * 1000),
   }))
@@ -2350,11 +2351,11 @@ export default function Layout(props: ParentProps) {
 
   if (USE_HOME_DESIGN) {
     return (
-      <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+      <div class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
         {autoselecting() ?? ""}
         <Titlebar update={titlebarUpdate} />
         <div class="flex-1 min-h-0 min-w-0 flex">
-          <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict bg-background-base">
+          <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict p-2 pt-0">
             <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
               {props.children}
             </Show>
