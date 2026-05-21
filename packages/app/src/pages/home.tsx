@@ -33,7 +33,8 @@ import { sessionPermissionRequest } from "@/pages/session/composer/session-reque
 
 const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 const HOME_SESSION_LIMIT = 15
-const HOME_ROW = "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] border-0 bg-transparent text-left [font-weight:530] text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+const HOME_ROW =
+  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] border-0 bg-transparent text-left [font-weight:530] text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
 const HOME_PROJECT_NAV_ROW = `${HOME_ROW} h-8 gap-1.5 px-3 [&>span]:min-w-0 [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap`
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 
@@ -65,7 +66,9 @@ function HomeDesign() {
   const [state, setState] = createStore({ search: "", project: undefined as string | undefined })
 
   const projects = createMemo(() => layout.projects.list())
-  const selectedProject = createMemo(() => projects().find((project) => project.worktree === state.project) ?? projects()[0])
+  const selectedProject = createMemo(
+    () => projects().find((project) => project.worktree === state.project) ?? projects()[0],
+  )
   const projectDirectories = createMemo(() => {
     const project = selectedProject()
     if (!project) return []
@@ -171,7 +174,7 @@ function HomeDesign() {
   }
 
   return (
-    <div data-component="home-design" class="size-full overflow-y-auto bg-background-base">
+    <div class="size-full overflow-y-auto bg-background-base rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden">
       <div class="mx-auto grid w-full max-w-[1080px] gap-8 px-6 pb-16 pt-12 lg:grid-cols-[280px_minmax(0,720px)]">
         <HomeProjectColumn
           projects={projects()}
@@ -190,10 +193,7 @@ function HomeDesign() {
             onInput={(value) => setState("search", value)}
           />
           <div class="mt-6 flex flex-col gap-6">
-            <Show
-              when={!sessionLoad.isLoading}
-              fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}
-            >
+            <Show when={!sessionLoad.isLoading} fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}>
               <Show
                 when={groups().length > 0}
                 fallback={
@@ -205,7 +205,10 @@ function HomeDesign() {
                 <For each={groups()}>
                   {(group, index) => (
                     <div class="flex min-w-0 flex-col gap-4">
-                      <HomeSessionGroupHeader title={group.title} onNewSession={index() === 0 ? openNewSession : undefined} />
+                      <HomeSessionGroupHeader
+                        title={group.title}
+                        onNewSession={index() === 0 ? openNewSession : undefined}
+                      />
                       <div class="flex min-w-0 flex-col gap-px">
                         <For each={group.sessions}>
                           {(record) => <HomeSessionRow record={record} openSession={openSession} />}
@@ -381,7 +384,10 @@ function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (sessio
       onClick={() => props.openSession(props.record.session)}
     >
       <Show when={showStatus()}>
-        <div class="flex size-4 shrink-0 items-center justify-center" style={{ color: tint() ?? "var(--icon-interactive-base)" }}>
+        <div
+          class="flex size-4 shrink-0 items-center justify-center"
+          style={{ color: tint() ?? "var(--icon-interactive-base)" }}
+        >
           <Switch>
             <Match when={isWorking()}>
               <Spinner class="size-[15px]" />

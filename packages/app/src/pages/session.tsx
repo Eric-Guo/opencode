@@ -1746,7 +1746,7 @@ export default function Page() {
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
-            "rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": USE_NEW_LAYOUT,
+            "rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": USE_NEW_LAYOUT && !!params.id,
           }}
           style={{
             width: sessionPanelWidth(),
