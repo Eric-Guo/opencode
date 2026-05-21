@@ -1497,6 +1497,8 @@ const PART_MAPPING = {
   reasoning: ReasoningPart,
 }
 
+const INLINE_TOOL_ICON_WIDTH = 2
+
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
@@ -1801,7 +1803,7 @@ function InlineTool(props: {
           >
             <box flexDirection="row">
               <text
-                width={props.icon.length + 1}
+                width={INLINE_TOOL_ICON_WIDTH}
                 fg={props.iconColor ?? fg()}
                 attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
               >
@@ -1815,7 +1817,7 @@ function InlineTool(props: {
         </Match>
       </Switch>
       <Show when={error() && !denied()}>
-        <box paddingLeft={props.icon.length + 1}>
+        <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
           <text fg={theme.error}>{error()}</text>
         </box>
       </Show>

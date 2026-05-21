@@ -11,27 +11,29 @@ afterEach(() => {
 
 type ToolFixture = { icon: string; label: string; error?: string }
 
+const INLINE_TOOL_ICON_WIDTH = 2
+
 const tools: readonly ToolFixture[] = [
   {
-    icon: "*",
+    icon: "✱",
     label:
       'Grep "OPENCODE.*DB|database|sqlite|drizzle|dev.*db|data.*dir|xdg|APPDATA" in packages/opencode/src (151 matches)',
   },
   {
-    icon: "*",
+    icon: "✱",
     label: 'Glob "**/*db*" in packages/opencode (6 matches)',
   },
   {
-    icon: "->",
+    icon: "→",
     label: "Read packages/opencode/src/storage/db.ts [offset=1, limit=130]",
   },
   {
-    icon: "->",
+    icon: "→",
     label: "Read packages/opencode/src/index.ts [offset=1, limit=100]",
     error: "No LSP server available for this file type.",
   },
   {
-    icon: "*",
+    icon: "✱",
     label:
       'Grep "export const OPENCODE_DB|OPENCODE_DB|OPENCODE_DEV|Global\\.Path\\.data|data =" in packages/opencode/src (115 matches)',
   },
@@ -51,11 +53,11 @@ function InlineToolRow(props: { item: ToolFixture }) {
       }}
     >
       <box flexDirection="row">
-        <text width={props.item.icon.length + 1}>{props.item.icon}</text>
+        <text width={INLINE_TOOL_ICON_WIDTH}>{props.item.icon}</text>
         <text flexGrow={1}>{props.item.label}</text>
       </box>
       {props.item.error && (
-        <box paddingLeft={props.item.icon.length + 1}>
+        <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
           <text>{props.item.error}</text>
         </box>
       )}
