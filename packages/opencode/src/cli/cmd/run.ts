@@ -350,6 +350,7 @@ export const RunCommand = effectCmd({
             filename: path.basename(resolvedPath),
             mime,
           })
+ 
         }
       }
 
