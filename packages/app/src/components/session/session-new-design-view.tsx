@@ -11,14 +11,10 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { WordmarkV2 } from "@opencode-ai/ui/v2/components/wordmark-v2.jsx"
-import "./session-new-design-view.css"
 
 const MAIN_WORKTREE = "main"
 
-export function NewSessionDesignView(props: {
-  worktree: string
-  children: JSX.Element
-}) {
+export function NewSessionDesignView(props: { worktree: string; children: JSX.Element }) {
   const globalSync = useGlobalSync()
   const layout = useLayout()
   const navigate = useNavigate()
@@ -43,10 +39,10 @@ export function NewSessionDesignView(props: {
   }
 
   return (
-    <div data-component="session-new-design" class="relative size-full overflow-hidden bg-[var(--session-new-background-deep)]">
+    <div data-component="session-new-design" class="relative size-full overflow-hidden bg-v2-background-bg-deep">
       <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
         <div class="w-full max-w-[720px]">
-          <WordmarkV2 class="h-auto w-full text-[var(--v2-icon-icon-base)]" />
+          <WordmarkV2 class="h-auto w-full text-v2-icon-icon-base" />
           <div class="mt-8">
             {props.children}
             <div class="mt-3 flex h-7 items-center gap-0 pl-2">
@@ -57,8 +53,8 @@ export function NewSessionDesignView(props: {
                 current={projectRoot()}
                 label={getFilename}
                 onSelect={openProject}
-                class="max-w-[203px] justify-start text-text-base"
-                valueClass="truncate text-[length:var(--session-new-size-base)] font-[var(--session-new-weight-normal)] leading-4 tracking-[var(--session-new-tracking-base)] text-[color:var(--session-new-text-faint)]"
+                class="max-w-[203px] justify-start text-text-base [&_[data-component=icon]]:text-v2-icon-icon-muted"
+                valueClass="truncate text-[length:13px] font-[440] text-v2-text-text-faint"
               />
               <div class="relative">
                 <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center">
@@ -69,8 +65,8 @@ export function NewSessionDesignView(props: {
                   variant="ghost"
                   options={[branch()]}
                   current={branch()}
-                  class="max-w-[240px] justify-start text-text-base"
-                  valueClass="truncate pl-5 text-[length:var(--session-new-size-base)] font-[var(--session-new-weight-normal)] leading-4 tracking-[var(--session-new-tracking-base)] text-[color:var(--session-new-text-faint)]"
+                  class="max-w-[240px] justify-start text-text-base [&_[data-component=icon]]:text-v2-icon-icon-muted"
+                  valueClass="truncate pl-5 font-[440] text-v2-text-text-faint"
                 />
               </div>
             </div>

@@ -58,7 +58,6 @@ import { useQueries } from "@tanstack/solid-query"
 import { useQueryOptions } from "@/context/global-sync"
 import { pathKey } from "@/utils/path-key"
 import { getFilename } from "@opencode-ai/core/util/path"
-import "./prompt-input.css"
 
 interface PromptInputProps {
   class?: string
@@ -1266,10 +1265,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const [globalProvidersQuery, providersQuery] = useQueries(() => ({
-    queries: [
-      queryOptions.providers(null),
-      queryOptions.providers(pathKey(sdk.directory)),
-    ],
+    queries: [queryOptions.providers(null), queryOptions.providers(pathKey(sdk.directory))],
   }))
 
   const providersLoading = () => providersQuery.isLoading || globalProvidersQuery.isLoading
@@ -1300,7 +1296,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               as="div"
               variant="ghost"
               size="normal"
-              class="min-w-0 max-w-[220px] justify-start text-[length:var(--session-composer-size-base)] font-[var(--session-composer-weight-normal)] leading-4 tracking-[var(--session-composer-tracking-base)] text-[color:var(--session-composer-text-faint)] group"
+              class="min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group"
               style={control()}
               onClick={() => {
                 void import("@/components/dialog-select-model-unpaid").then((x) => {
@@ -1316,7 +1312,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 />
               </Show>
               <span class="truncate">{local.model.current()?.name ?? language.t("dialog.model.select.title")}</span>
-              <Icon name="chevron-down" size="small" class="shrink-0" />
+              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
             </Button>
           </TooltipKeybind>
         }
@@ -1335,7 +1331,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               size: "normal",
               style: control(),
               class:
-                "min-w-0 max-w-[220px] justify-start text-[length:var(--session-composer-size-base)] font-[var(--session-composer-weight-normal)] leading-4 tracking-[var(--session-composer-tracking-base)] text-[color:var(--session-composer-text-faint)] group",
+                "min-w-0 max-w-[220px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group",
               "data-action": "prompt-model",
             }}
             onClose={restoreFocus}
@@ -1348,7 +1344,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               />
             </Show>
             <span class="truncate">{local.model.current()?.name ?? language.t("dialog.model.select.title")}</span>
-            <Icon name="chevron-down" size="small" class="shrink-0" />
+            <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
           </ModelSelectorPopover>
         </TooltipKeybind>
       </Show>
@@ -1358,7 +1354,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const newSession = () => props.variant === "new-session"
   const worktrees = createMemo(() => [MAIN_WORKTREE, ...(sync.project?.sandboxes ?? []), CREATE_WORKTREE])
   const currentWorktree = createMemo(() => {
-    if (worktrees().includes(props.newSessionWorktree ?? MAIN_WORKTREE)) return props.newSessionWorktree ?? MAIN_WORKTREE
+    if (worktrees().includes(props.newSessionWorktree ?? MAIN_WORKTREE))
+      return props.newSessionWorktree ?? MAIN_WORKTREE
     return MAIN_WORKTREE
   })
   const worktreeLabel = (value: string) => {
@@ -1366,8 +1363,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (value === CREATE_WORKTREE) return language.t("session.new.worktree.create")
     return getFilename(value)
   }
-  const lineHeight = () => (newSession() ? "var(--session-new-line-height-base)" : "var(--session-composer-line-height-base)")
-
   return (
     <div class="relative size-full flex flex-col gap-0">
       {(promptReady(), null)}
@@ -1390,7 +1385,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         data-component={newSession() ? "session-new-composer" : "session-composer"}
         onSubmit={handleSubmit}
         classList={{
-          "group/prompt-input min-h-[96px] w-full": true,
+          "group/prompt-input min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1454,18 +1449,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onKeyDown={handleKeyDown}
               classList={{
                 "select-text": true,
-                "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap": true,
+                "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
               }}
-              style={{ "line-height": lineHeight() }}
             />
             <div
               data-component={newSession() ? "session-new-design-text" : "session-composer-text"}
-              class="absolute top-0 inset-x-0 px-4 pt-4 pointer-events-none whitespace-nowrap truncate"
-              classList={{ "font-mono!": store.mode === "shell" }}
-              style={{ "line-height": lineHeight(), display: prompt.dirty() ? "none" : undefined }}
+              class="absolute top-0 inset-x-0 px-4 pt-4 pointer-events-none whitespace-nowrap truncate leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]"
+              classList={{ "font-mono!": store.mode === "shell", hidden: prompt.dirty() }}
             >
               {designPlaceholder()}
             </div>
@@ -1484,8 +1477,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 type="button"
                 icon="plus"
                 variant="ghost"
-                class="size-7 rounded-md"
-                style={{ width: "28px", height: "28px", padding: "6px", ...buttons() }}
+                class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted"
+                style={buttons()}
                 onClick={pick}
                 disabled={store.mode !== "normal"}
                 tabIndex={store.mode === "normal" ? undefined : -1}
@@ -1506,8 +1499,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     if (value) props.onNewSessionWorktreeChange?.(value)
                     restoreFocus()
                   }}
-                  class="max-w-[175px] justify-start text-text-base"
-                  valueClass="truncate pl-5 text-[length:var(--session-new-size-base)] font-[var(--session-new-weight-normal)] leading-4 tracking-[var(--session-new-tracking-base)] text-[color:var(--session-new-text-faint)]"
+                  class="max-w-[175px] justify-start text-text-base [&_[data-component=icon]]:text-v2-icon-icon-muted"
+                  valueClass="truncate pl-5 text-[13px] font-[440] leading-4 text-v2-text-text-faint"
                   triggerStyle={control()}
                   triggerProps={{ "data-action": "prompt-workspace" }}
                   variant="ghost"
@@ -1524,11 +1517,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               tabIndex={store.mode === "normal" ? undefined : -1}
               icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
               variant="primary"
-              class="size-7 rounded-md"
+              class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
               style={{
-                width: "28px",
-                height: "28px",
-                padding: "6px",
+                "background-image":
+                  "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
               }}
               aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
             />

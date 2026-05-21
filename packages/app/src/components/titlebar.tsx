@@ -530,7 +530,7 @@ function TabNavItem(props: { href: string; title: string; hideClose?: boolean; o
   const isActive = () => !!match()
   return (
     <div
-      class="group flex flex-row items-center max-w-60 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] bg-[var(--tab-bg)] h-7 rounded-[6px] relative overflow-hidden"
+      class="group bg-[var(--tab-bg)] [--tab-bg:var(--v2-background-bg-deep)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] flex flex-row items-center max-w-60 whitespace-nowrap h-7 rounded-[6px] relative overflow-hidden"
       data-active={isActive()}
     >
       <a
@@ -574,7 +574,11 @@ function TabNavItem(props: { href: string; title: string; hideClose?: boolean; o
 function NewSessionTabItem(props: { href: string; title: string; onClose: () => void }) {
   return (
     <div class="group relative flex h-7 w-[135px] min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]">
-      <a href={props.href} aria-current="page" class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none tracking-[-0.04px] text-[var(--v2-text-text-base)]">
+      <a
+        href={props.href}
+        aria-current="page"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none text-[var(--v2-text-text-base)]"
+      >
         <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
           <IconV2 name="edit" />
         </span>
