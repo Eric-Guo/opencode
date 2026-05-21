@@ -14,6 +14,7 @@ import {
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { useQuery } from "@tanstack/solid-query"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -61,7 +62,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
-import { Titlebar } from "@/components/titlebar"
+import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import { pathKey } from "@/utils/path-key"
@@ -163,6 +164,34 @@ export default function Layout(props: ParentProps) {
     peek: undefined as string | undefined,
     peeked: false,
   })
+
+  const [update, setUpdate] = createStore({
+    installing: false,
+  })
+  const updateQuery = useQuery(() => ({
+    queryKey: ["desktop", "update"] as const,
+    enabled: () => !!platform.checkUpdate && !!platform.updateAndRestart && settings.ready() && settings.updates.startup(),
+    queryFn: () => platform.checkUpdate?.() ?? Promise.resolve({ updateAvailable: false, version: undefined }),
+    refetchInterval: (query) => (query.state.data?.updateAvailable ? false : 10 * 60 * 1000),
+  }))
+  const updateVersion = () => {
+    if (!settings.ready()) return
+    if (!settings.updates.startup()) return
+    if (!updateQuery.data?.updateAvailable) return
+    return updateQuery.data.version ?? ""
+  }
+  const installUpdate = () => {
+    if (!platform.updateAndRestart) return
+    setUpdate("installing", true)
+    void platform.updateAndRestart().catch(() => {
+      setUpdate("installing", false)
+    })
+  }
+  const titlebarUpdate: TitlebarUpdate = {
+    version: updateVersion,
+    installing: () => update.installing,
+    install: installUpdate,
+  }
 
   const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
@@ -366,58 +395,6 @@ export default function Layout(props: ParentProps) {
     setLocale(next)
   }
 
-  const useUpdatePolling = () =>
-    onMount(() => {
-      if (!platform.checkUpdate || !platform.updateAndRestart) return
-
-      let toastId: number | undefined
-      let interval: ReturnType<typeof setInterval> | undefined
-
-      const pollUpdate = () =>
-        platform.checkUpdate!().then(({ updateAvailable, version }) => {
-          if (!updateAvailable) return
-          if (toastId !== undefined) return
-          toastId = showToast({
-            persistent: true,
-            icon: "download",
-            title: language.t("toast.update.title"),
-            description: language.t("toast.update.description", { version: version ?? "" }),
-            actions: [
-              {
-                label: language.t("toast.update.action.installRestart"),
-                onClick: async () => {
-                  await platform.updateAndRestart!()
-                },
-              },
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss",
-              },
-            ],
-          })
-        })
-
-      createEffect(() => {
-        if (!settings.ready()) return
-
-        if (!settings.updates.startup()) {
-          if (interval === undefined) return
-          clearInterval(interval)
-          interval = undefined
-          return
-        }
-
-        if (interval !== undefined) return
-        void pollUpdate()
-        interval = setInterval(pollUpdate, 10 * 60 * 1000)
-      })
-
-      onCleanup(() => {
-        if (interval === undefined) return
-        clearInterval(interval)
-      })
-    })
-
   const useSDKNotificationToasts = () =>
     onMount(() => {
       const toastBySession = new Map<string, number>()
@@ -537,7 +514,6 @@ export default function Layout(props: ParentProps) {
       })
     })
 
-  useUpdatePolling()
   useSDKNotificationToasts()
 
   function scrollToSession(sessionId: string, sessionKey: string) {
@@ -2376,7 +2352,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
         {autoselecting() ?? ""}
-        <Titlebar />
+        <Titlebar update={titlebarUpdate} />
         <div class="flex-1 min-h-0 min-w-0 flex">
           <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict bg-background-base">
             <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
@@ -2393,7 +2369,10 @@ export default function Layout(props: ParentProps) {
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       {autoselecting() ?? ""}
-      <Titlebar />
+      <Titlebar update={titlebarUpdate} />
+      <Show when={updateVersion() !== undefined}>
+        <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
+      </Show>
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
           <div class="size-full relative overflow-x-hidden">
@@ -2540,4 +2519,38 @@ export default function Layout(props: ParentProps) {
       <Toast.Region />
     </div>
   )
+}
+
+function UpdateAvailableToast(props: {
+  version: string
+  install: () => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  let toastId: number | undefined
+
+  onMount(() => {
+    toastId = showToast({
+      persistent: true,
+      icon: "download",
+      title: props.language.t("toast.update.title"),
+      description: props.language.t("toast.update.description", { version: props.version }),
+      actions: [
+        {
+          label: props.language.t("toast.update.action.installRestart"),
+          onClick: props.install,
+        },
+        {
+          label: props.language.t("toast.update.action.notYet"),
+          onClick: "dismiss",
+        },
+      ],
+    })
+  })
+
+  onCleanup(() => {
+    if (toastId === undefined) return
+    toaster.dismiss(toastId)
+  })
+
+  return null
 }

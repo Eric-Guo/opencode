@@ -24,8 +24,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { displayName, sortedRootSessions } from "@/pages/layout/helpers"
-import { getProjectAvatarSource } from "@/pages/layout/sidebar-items"
+import { displayName, getProjectAvatarSource, projectForSession, sortedRootSessions } from "@/pages/layout/helpers"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
@@ -265,6 +264,7 @@ function HomeProjectColumn(props: {
             {(project) => (
               <button
                 type="button"
+                data-component="home-project-row"
                 class={HOME_PROJECT_NAV_ROW}
                 classList={{ "bg-v2-overlay-simple-overlay-hover": props.selected === project.worktree }}
                 data-selected={props.selected === project.worktree ? "" : undefined}
@@ -376,6 +376,7 @@ function HomeSessionRow(props: { record: HomeSessionRecord; openSession: (sessio
   return (
     <button
       type="button"
+      data-component="home-session-row"
       class={`${HOME_ROW} h-10 gap-2 px-6 py-3 pl-4`}
       onClick={() => props.openSession(props.record.session)}
     >
@@ -421,17 +422,6 @@ function HomeSessionSkeleton(props: { label: string }) {
         <For each={[0, 1, 2, 3]}>{() => <div class="h-10 rounded-[6px] bg-v2-background-bg-deep opacity-70" />}</For>
       </div>
     </div>
-  )
-}
-
-function projectForSession(session: Session, projects: LocalProject[], byID: Map<string, LocalProject>) {
-  const direct = byID.get(session.projectID)
-  if (direct) return direct
-  const directory = pathKey(session.directory)
-  return projects.find(
-    (project) =>
-      pathKey(project.worktree) === directory ||
-      project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
   )
 }
 

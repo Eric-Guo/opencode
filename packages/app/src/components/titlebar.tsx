@@ -9,7 +9,7 @@ import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 
-import { useLayout } from "@/context/layout"
+import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -20,6 +20,8 @@ import { useGlobalSync } from "@/context/global-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
+import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -50,7 +52,13 @@ const USE_V2_TITLEBAR = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 const makeSessionHref = (b64Dir: string, sessionId: string) => `/${b64Dir}/session/${sessionId}`
 
-export function Titlebar() {
+export type TitlebarUpdate = {
+  version: () => string | undefined
+  installing: () => boolean
+  install: () => void
+}
+
+export function Titlebar(props: { update?: TitlebarUpdate }) {
   const layout = useLayout()
   const platform = usePlatform()
   const command = useCommand()
@@ -63,6 +71,7 @@ export function Titlebar() {
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
+  const electronWindows = createMemo(() => windows() && !tauriApi())
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const web = createMemo(() => platform.platform === "web")
   const zoom = () => platform.webviewZoom?.() ?? 1
@@ -193,7 +202,13 @@ export function Titlebar() {
         "h-11 bg-v2-background-bg-deep": USE_V2_TITLEBAR,
         "h-10 bg-background-base": !USE_V2_TITLEBAR,
       }}
-      style={{ "min-height": minHeight(), "padding-left": mac() ? `${84 / zoom()}px` : 0 }}
+      style={{
+        "min-height": minHeight(),
+        "padding-left": mac() ? `${84 / zoom()}px` : 0,
+        width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
+        "max-width": electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
+        "align-self": electronWindows() ? "flex-start" : undefined,
+      }}
       data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
@@ -203,6 +218,7 @@ export function Titlebar() {
           {(_) => {
             const globalSync = useGlobalSync()
             const navigate = useNavigate()
+            const homeMatch = useMatch(() => "/")
 
             const openNewSession = () => {
               if (params.dir) {
@@ -219,7 +235,7 @@ export function Titlebar() {
               navigate(`/${base64Encode(project.worktree)}/session`)
             }
 
-            type Tab = { dir: string; sessionId: string; params: any; href: string }
+            type Tab = { dir: string; sessionId: string; href: string }
 
             const [tabsStore, tabsStoreActions] = iife(() => {
               const [store, setStore] = createStore<Tab[]>(
@@ -229,7 +245,6 @@ export function Titlebar() {
                     {
                       dir: decodeDirectory(params.dir) ?? "",
                       sessionId: params.id,
-                      params: { id: params.id, dir: params.dir },
                       href: makeSessionHref(params.dir, params.id),
                     },
                   ]
@@ -272,10 +287,14 @@ export function Titlebar() {
               tabsStoreActions.addTab({
                 dir: decodeDirectory(params.dir) ?? "",
                 sessionId: params.id,
-                params: { id: params.id, dir: params.dir },
                 href: makeSessionHref(params.dir, params.id),
               })
             })
+
+            const projects = createMemo(() => layout.projects.list())
+            const projectByID = createMemo(
+              () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
+            )
 
             const tabsEnriched = iife(() => {
               const base = mapArray(
@@ -298,70 +317,71 @@ export function Titlebar() {
                   "pl-4": !mac(),
                 }}
               >
-                <ChannelIndicator />
-                <Show when={windows() || linux()}>
-                  <WindowsAppMenu command={command} platform={platform} />
-                </Show>
-                <IconButtonV2
-                  as="a"
-                  href="/"
-                  variant="ghost-muted"
-                  size="large"
-                  class="!w-9"
-                  icon={<IconV2 name="grid-plus" />}
-                  state={!!useMatch(() => "/")() ? "pressed" : undefined}
-                />
-                <div class="flex flex-row items-center gap-2">
-                  <For each={tabsEnriched()}>
-                    {(tab, i) => (
-                      <>
-                        {i() !== 0 && <div class="w-[1.5px] h-3 rounded-full bg-[var(--v2-background-bg-layer-02)]" />}
-                        <TabNavItem
-                          href={tab.href}
-                          title={tab.info.title}
-                          onClose={() => tabsStoreActions.removeTab(tab.href)}
-                          hideClose={tabsEnriched().length < 2}
-                        />
-                      </>
-                    )}
-                  </For>
-                </div>
                 <Show
-                  when={creating() && params.dir}
+                  when={windows() || linux()}
                   fallback={
-                    <IconButtonV2
-                      type="button"
-                      variant="ghost-muted"
-                      size="large"
-                      icon={<IconV2 name="plus" />}
-                      onClick={openNewSession}
-                      aria-label={language.t("command.session.new")}
+                    <DesktopTitlebarIconButton
+                      as="a"
+                      href="/"
+                      icon={<IconV2 name="grid-plus" />}
+                      state={!!homeMatch() ? "pressed" : undefined}
                     />
                   }
                 >
-                  <NewSessionTabItem
-                    href={`/${params.dir}/session`}
-                    title={language.t("command.session.new")}
-                    onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
-                  />
-                </Show>
-
-                <div class="flex-1" />
-                {/*<button class="px-2.5 py-1.5 bg-[rgba(0,0,0,0.08)] rounded-[6px]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    class="size-4"
-                  >
-                    <path
-                      d="M10.4443 2.44436V13.5555M1.55546 13.5554H14.4443V2.44434H1.55542L1.55546 13.5554Z"
-                      stroke="#3A3A3A"
+                  <div class="flex h-7 shrink-0 items-center gap-1">
+                    <WindowsAppMenu command={command} platform={platform} variant="v2" />
+                    <DesktopTitlebarIconButton
+                      as="a"
+                      href="/"
+                      icon={<IconV2 name="grid-plus" />}
+                      state={!!homeMatch() ? "pressed" : undefined}
                     />
-                  </svg>
-                </button>*/}
+                  </div>
+                </Show>
+                <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
+                  <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
+                    <For each={tabsEnriched()}>
+                      {(tab, i) => (
+                        <>
+                          {i() !== 0 && <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />}
+                          <TabNavItem
+                            href={tab.href}
+                            title={tab.info.title}
+                            project={projectForSession(tab.info, projects(), projectByID())}
+                            directory={tab.dir}
+                            onClose={() => tabsStoreActions.removeTab(tab.href)}
+                            hideClose={tabsEnriched().length < 2}
+                          />
+                        </>
+                      )}
+                    </For>
+                  </div>
+                  <Show
+                    when={creating() && params.dir}
+                    fallback={
+                      <IconButtonV2
+                        type="button"
+                        variant="ghost-muted"
+                        size="large"
+                        class="shrink-0"
+                        icon={<IconV2 name="plus" />}
+                        onClick={openNewSession}
+                        aria-label={language.t("command.session.new")}
+                      />
+                    }
+                  >
+                    <NewSessionTabItem
+                      href={`/${params.dir}/session`}
+                      title={language.t("command.session.new")}
+                      onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
+                    />
+                  </Show>
+                  <div class="min-w-0 flex-1" />
+                </div>
+                <TitlebarUpdatePill update={props.update} />
+                <Show when={windows() && !electronWindows()}>
+                  <div data-tauri-decorum-tb class="flex flex-row" />
+                </Show>
               </div>
             )
           }}
@@ -525,19 +545,55 @@ export function Titlebar() {
   )
 }
 
-function TabNavItem(props: { href: string; title: string; hideClose?: boolean; onClose: () => void }) {
+function TitlebarUpdatePill(props: { update?: TitlebarUpdate }) {
+  const language = useLanguage()
+  const version = () => props.update?.version()
+
+  return (
+    <Show when={version() !== undefined}>
+      <button
+        type="button"
+        class="h-5 shrink-0 rounded-[27px] bg-[var(--v2-background-bg-accent)] px-2.5 text-[11px] font-[530] leading-[1.1] tracking-[-0.04px] text-[var(--v2-text-text-contrast)] disabled:opacity-60"
+        onClick={() => props.update?.install()}
+        disabled={props.update?.installing()}
+        aria-label={language.t("toast.update.action.installRestart")}
+        title={version() ? `Update ${version()}` : undefined}
+      >
+        Update
+      </button>
+    </Show>
+  )
+}
+
+function DesktopTitlebarIconButton(props: Parameters<typeof IconButtonV2>[0]) {
+  return (
+    <div data-component="desktop-icon-button" class="flex h-7 w-9 shrink-0 items-center justify-center rounded-[6px] px-1">
+      <IconButtonV2 {...props} variant={props.variant ?? "ghost-muted"} size="large" />
+    </div>
+  )
+}
+
+function TabNavItem(props: {
+  href: string
+  title: string
+  project?: LocalProject
+  directory: string
+  hideClose?: boolean
+  onClose: () => void
+}) {
   const match = useMatch(() => props.href)
   const isActive = () => !!match()
   return (
     <div
-      class="group bg-[var(--tab-bg)] [--tab-bg:var(--v2-background-bg-deep)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] flex flex-row items-center max-w-60 whitespace-nowrap h-7 rounded-[6px] relative overflow-hidden"
+      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={isActive()}
     >
       <a
         href={props.href}
-        class="w-full h-full pl-1.5 flex-1 max-w-full flex flex-row items-center overflow-hidden font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none tracking-[-0.04px] text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
       >
-        {props.title}
+        <ProjectTabAvatar project={props.project} directory={props.directory} />
+        <span class="truncate">{props.title}</span>
       </a>
 
       <div class="absolute right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
@@ -553,21 +609,24 @@ function TabNavItem(props: { href: string; title: string; hideClose?: boolean; o
           variant="ghost-muted"
           class="opacity-0 group-hover:opacity-100 group-data-[active='true']:opacity-100"
           onClick={props.onClose}
-          icon={
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              class="size-4"
-            >
-              <path d="M4.25 11.75L11.75 4.25M11.75 11.75L4.25 4.25" stroke="currentColor" />
-            </svg>
-          }
+          icon={<IconV2 name="xmark-small" />}
         />
       </div>
     </div>
+  )
+}
+
+function ProjectTabAvatar(props: { project?: LocalProject; directory: string }) {
+  const name = createMemo(() => displayName(props.project ?? { worktree: props.directory }))
+  return (
+    <AvatarV2
+      fallback={name()}
+      src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
+      kind="org"
+      size="small"
+      {...getAvatarColors(props.project?.icon?.color)}
+      class="size-4 rounded"
+    />
   )
 }
 
@@ -597,19 +656,7 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
             event.stopPropagation()
             props.onClose()
           }}
-          icon={
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              class="size-4"
-              aria-hidden="true"
-            >
-              <path d="M4.25 11.75L11.75 4.25M11.75 11.75L4.25 4.25" stroke="currentColor" />
-            </svg>
-          }
+          icon={<IconV2 name="xmark-small" />}
           aria-label="Close tab"
         />
       </div>
