@@ -1802,11 +1802,27 @@ function InlineTool(props: {
           <Spinner color={fg()} children={props.children} />
         </Match>
         <Match when={true}>
-          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
-            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-              <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
-            </Show>
-          </text>
+          <Show
+            fallback={
+              <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+                ~ {props.pending}
+              </text>
+            }
+            when={props.complete}
+          >
+            <box flexDirection="row" paddingLeft={3}>
+              <text
+                width={props.icon.length + 1}
+                fg={props.iconColor ?? fg()}
+                attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
+              >
+                {props.icon}
+              </text>
+              <text flexGrow={1} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+                {props.children}
+              </text>
+            </box>
+          </Show>
         </Match>
       </Switch>
       <Show when={error() && !denied()}>
