@@ -189,9 +189,9 @@ export function Titlebar() {
   return (
     <header
       classList={{
-        "shrink-0 bg-background-base relative overflow-hidden flex flex-row": true,
-        "h-11": USE_V2_TITLEBAR,
-        "h-10": !USE_V2_TITLEBAR,
+        "shrink-0 relative overflow-hidden flex flex-row": true,
+        "h-11 bg-v2-background-bg-deep": USE_V2_TITLEBAR,
+        "h-10 bg-background-base": !USE_V2_TITLEBAR,
       }}
       style={{ "min-height": minHeight(), "padding-left": mac() ? `${84 / zoom()}px` : 0 }}
       data-tauri-drag-region
@@ -381,7 +381,7 @@ export function Titlebar() {
                 <WindowsAppMenu command={command} platform={platform} />
               </Show>
               <Show when={mac()}>
-                <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
+                {/*<div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />*/}
                 <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
                   <IconButton
                     icon="menu"
@@ -535,7 +535,7 @@ function TabNavItem(props: { href: string; title: string; hideClose?: boolean; o
     >
       <a
         href={props.href}
-        class="w-full h-full pl-1.5 flex-1 max-w-full flex flex-row items-center overflow-hidden font-medium"
+        class="w-full h-full pl-1.5 flex-1 max-w-full flex flex-row items-center overflow-hidden font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
       >
         {props.title}
       </a>
