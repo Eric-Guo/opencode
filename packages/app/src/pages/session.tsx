@@ -73,7 +73,7 @@ const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
-const USE_NEW_SESSION_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const USE_NEW_SESSION_DESIGN = false
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -1703,7 +1703,7 @@ export default function Page() {
     />
   )
 
-  const USE_NEW_LAYOUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+  const USE_NEW_LAYOUT = false
 
   return (
     <div
