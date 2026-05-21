@@ -1,9 +1,8 @@
 import { app, dialog } from "electron"
 import pkg from "electron-updater"
 import { UPDATER_ENABLED } from "./constants"
-import { initLogging } from "./logging"
+import { getLogger } from "./logging"
 
-const logger = initLogging()
 const { autoUpdater } = pkg
 type UpdateCheckResult = { updateAvailable: boolean; version?: string; failed?: boolean }
 let downloadedVersion: string | undefined
@@ -11,6 +10,7 @@ let pendingCheck: Promise<UpdateCheckResult> | undefined
 
 export function setupAutoUpdater() {
   if (!UPDATER_ENABLED) return
+  const logger = getLogger()
   autoUpdater.logger = logger
   autoUpdater.channel = "latest"
   autoUpdater.allowPrerelease = false
@@ -37,6 +37,7 @@ export async function checkUpdate(): Promise<UpdateCheckResult> {
 }
 
 async function checkAndDownloadUpdate(): Promise<UpdateCheckResult> {
+  const logger = getLogger()
   logger.log("checking for updates", {
     currentVersion: app.getVersion(),
     channel: autoUpdater.channel,
@@ -72,6 +73,7 @@ async function checkAndDownloadUpdate(): Promise<UpdateCheckResult> {
 
 export async function installUpdate(killSidecar: () => Promise<void>) {
   const result = downloadedVersion ? { updateAvailable: true, version: downloadedVersion } : await checkUpdate()
+  const logger = getLogger()
   if (!result.updateAvailable || !downloadedVersion) {
     logger.log("install update skipped", {
       reason: result.failed ? "update check failed" : "no update available",
@@ -87,6 +89,7 @@ export async function installUpdate(killSidecar: () => Promise<void>) {
 
 export async function checkForUpdates(alertOnFail: boolean, killSidecar: () => Promise<void>) {
   if (!UPDATER_ENABLED) return
+  const logger = getLogger()
   logger.log("checkForUpdates invoked", { alertOnFail })
   const result = await checkUpdate()
   if (!result.updateAvailable) {
