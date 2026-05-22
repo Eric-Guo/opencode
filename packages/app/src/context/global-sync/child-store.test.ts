@@ -20,6 +20,7 @@ describe("createChildStoreManager", () => {
       isBooting: () => false,
       isLoadingSessions: () => false,
       onBootstrap() {},
+      onCreate() {},
       onDispose() {},
       translate: (key) => key,
       queryOptions: {} as any,

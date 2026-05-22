@@ -166,6 +166,166 @@ const useMcpToggleMutation = () => {
   }))
 }
 
+type ServerStatusState = {
+  servers: () => ServerStatusItem[]
+  defaultKey: () => ServerConnection.Key | undefined
+  ariaLabel: string
+  serversLabel: string
+  defaultLabel: string
+  manageLabel: string
+  onManage: () => void
+}
+
+type ServerStatusItem = {
+  key: ServerConnection.Key
+  conn: ServerConnection.Any
+  health?: ServerHealth
+  blocked: boolean
+  active: boolean
+  onSelect: () => void
+}
+
+export function StatusPopoverServerBody(props: { shown: Accessor<boolean> }) {
+  const server = useServer()
+  const platform = usePlatform()
+  const dialog = useDialog()
+  const language = useLanguage()
+  const navigate = useNavigate()
+
+  let dialogRun = 0
+  let dialogDead = false
+  onCleanup(() => {
+    dialogDead = true
+    dialogRun += 1
+  })
+
+  const servers = createMemo(() => {
+    const current = server.current
+    const list = server.list
+    if (!current) return list
+    if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
+    return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
+  })
+  const health = useServerHealth(servers, props.shown)
+  const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
+  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
+  const serverItems = createMemo(() =>
+    sortedServers().map((conn) => {
+      const key = ServerConnection.key(conn)
+      return {
+        key,
+        conn,
+        health: health[key],
+        blocked: health[key]?.healthy === false,
+        active: !!server.current && key === ServerConnection.key(server.current),
+        onSelect: () => {
+          navigate("/")
+          queueMicrotask(() => server.setActive(key))
+        },
+      }
+    }),
+  )
+
+  return (
+    <ServerStatusPopoverView
+      state={{
+        servers: serverItems,
+        defaultKey: defaultServer.key,
+        ariaLabel: language.t("status.popover.ariaLabel"),
+        serversLabel: language.t("status.popover.tab.servers"),
+        defaultLabel: language.t("common.default"),
+        manageLabel: language.t("status.popover.action.manageServers"),
+        onManage: () => {
+          const run = ++dialogRun
+          void import("./dialog-select-server").then((x) => {
+            if (dialogDead || dialogRun !== run) return
+            dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
+          })
+        },
+      }}
+    />
+  )
+}
+
+function ServerStatusPopoverView(props: { state: ServerStatusState }) {
+  return (
+    <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
+      <Tabs
+        aria-label={props.state.ariaLabel}
+        class="tabs bg-background-strong rounded-xl overflow-hidden"
+        data-component="tabs"
+        data-active="servers"
+        defaultValue="servers"
+        variant="alt"
+      >
+        <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
+          <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
+            {props.state.servers().length > 0 ? `${props.state.servers().length} ` : ""}
+            {props.state.serversLabel}
+          </Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="servers">
+          <ServerStatusList state={props.state} />
+        </Tabs.Content>
+      </Tabs>
+    </div>
+  )
+}
+
+function ServerStatusList(props: { state: ServerStatusState }) {
+  return (
+    <div class="flex flex-col px-2 pb-2">
+      <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+        <For each={props.state.servers()}>
+          {(item) => {
+            return (
+              <button
+                type="button"
+                class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
+                classList={{
+                  "hover:bg-surface-raised-base-hover": !item.blocked,
+                  "cursor-not-allowed": item.blocked,
+                }}
+                aria-disabled={item.blocked}
+                onClick={() => {
+                  if (item.blocked) return
+                  item.onSelect()
+                }}
+              >
+                <ServerHealthIndicator health={item.health} />
+                <ServerRow
+                  conn={item.conn}
+                  dimmed={item.blocked}
+                  status={item.health}
+                  class="flex items-center gap-2 w-full min-w-0"
+                  nameClass="text-14-regular text-text-base truncate"
+                  versionClass="text-12-regular text-text-weak truncate"
+                  badge={
+                    <Show when={item.key === props.state.defaultKey()}>
+                      <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
+                        {props.state.defaultLabel}
+                      </span>
+                    </Show>
+                  }
+                >
+                  <div class="flex-1" />
+                  <Show when={item.active}>
+                    <Icon name="check" size="small" class="text-icon-weak shrink-0" />
+                  </Show>
+                </ServerRow>
+              </button>
+            )
+          }}
+        </For>
+
+        <Button variant="secondary" class="mt-3 self-start h-8 px-3 py-1.5" onClick={props.state.onManage}>
+          {props.state.manageLabel}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const sync = useSync()
   const server = useServer()
@@ -203,6 +363,22 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
   const toggleMcp = useMcpToggleMutation()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
+  const serverItems = createMemo(() =>
+    sortedServers().map((conn) => {
+      const key = ServerConnection.key(conn)
+      return {
+        key,
+        conn,
+        health: health[key],
+        blocked: health[key]?.healthy === false,
+        active: !!server.current && key === ServerConnection.key(server.current),
+        onSelect: () => {
+          navigate("/")
+          queueMicrotask(() => server.setActive(key))
+        },
+      }
+    }),
+  )
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
@@ -213,6 +389,21 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
+  const serverState: ServerStatusState = {
+    servers: serverItems,
+    defaultKey: defaultServer.key,
+    ariaLabel: language.t("status.popover.ariaLabel"),
+    serversLabel: language.t("status.popover.tab.servers"),
+    defaultLabel: language.t("common.default"),
+    manageLabel: language.t("status.popover.action.manageServers"),
+    onManage: () => {
+      const run = ++dialogRun
+      void import("./dialog-select-server").then((x) => {
+        if (dialogDead || dialogRun !== run) return
+        dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
+      })
+    },
+  }
 
   return (
     <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
@@ -244,68 +435,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
         </Tabs.List>
 
         <Tabs.Content value="servers">
-          <div class="flex flex-col px-2 pb-2">
-            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-              <For each={sortedServers()}>
-                {(s) => {
-                  const key = ServerConnection.key(s)
-                  const blocked = () => health[key]?.healthy === false
-                  return (
-                    <button
-                      type="button"
-                      class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
-                      classList={{
-                        "hover:bg-surface-raised-base-hover": !blocked(),
-                        "cursor-not-allowed": blocked(),
-                      }}
-                      aria-disabled={blocked()}
-                      onClick={() => {
-                        if (blocked()) return
-                        navigate("/")
-                        queueMicrotask(() => server.setActive(key))
-                      }}
-                    >
-                      <ServerHealthIndicator health={health[key]} />
-                      <ServerRow
-                        conn={s}
-                        dimmed={blocked()}
-                        status={health[key]}
-                        class="flex items-center gap-2 w-full min-w-0"
-                        nameClass="text-14-regular text-text-base truncate"
-                        versionClass="text-12-regular text-text-weak truncate"
-                        badge={
-                          <Show when={key === defaultServer.key()}>
-                            <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
-                              {language.t("common.default")}
-                            </span>
-                          </Show>
-                        }
-                      >
-                        <div class="flex-1" />
-                        <Show when={server.current && key === ServerConnection.key(server.current)}>
-                          <Icon name="check" size="small" class="text-icon-weak shrink-0" />
-                        </Show>
-                      </ServerRow>
-                    </button>
-                  )
-                }}
-              </For>
-
-              <Button
-                variant="secondary"
-                class="mt-3 self-start h-8 px-3 py-1.5"
-                onClick={() => {
-                  const run = ++dialogRun
-                  void import("./dialog-select-server").then((x) => {
-                    if (dialogDead || dialogRun !== run) return
-                    dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
-                  })
-                }}
-              >
-                {language.t("status.popover.action.manageServers")}
-              </Button>
-            </div>
-          </div>
+          <ServerStatusList state={serverState} />
         </Tabs.Content>
 
         <Tabs.Content value="mcp">
@@ -321,15 +451,17 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                   {(name) => {
                     const status = () => mcpStatus(name)
                     const enabled = () => status() === "connected"
+                    const connecting = () => status() === "connecting"
                     return (
                       <button
                         type="button"
                         class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                         onClick={() => {
+                          if (connecting()) return
                           if (toggleMcp.isPending) return
                           toggleMcp.mutate(name)
                         }}
-                        disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                        disabled={connecting() || (toggleMcp.isPending && toggleMcp.variables === name)}
                       >
                         <div
                           classList={{
@@ -337,6 +469,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                             "bg-icon-success-base": status() === "connected",
                             "bg-icon-critical-base": status() === "failed",
                             "bg-border-weak-base": status() === "disabled",
+                            "bg-icon-warning-base animate-pulse": status() === "connecting",
                             "bg-icon-warning-base":
                               status() === "needs_auth" || status() === "needs_client_registration",
                           }}
@@ -354,8 +487,9 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                         <div onClick={(event) => event.stopPropagation()}>
                           <Switch
                             checked={enabled()}
-                            disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                            disabled={connecting() || (toggleMcp.isPending && toggleMcp.variables === name)}
                             onChange={() => {
+                              if (connecting()) return
                               if (toggleMcp.isPending) return
                               toggleMcp.mutate(name)
                             }}

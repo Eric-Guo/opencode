@@ -1,7 +1,17 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import {
+  batch,
+  createContext,
+  createSignal,
+  getOwner,
+  onCleanup,
+  onMount,
+  type ParentProps,
+  untrack,
+  useContext,
+} from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
@@ -49,6 +59,8 @@ export const loadMcpQuery = (directory: string, sdk: OpencodeClient) =>
   queryOptions({
     queryKey: [directory, "mcp"] as const,
     queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
+    refetchInterval: (query) =>
+      Object.values(query.state.data ?? {}).some((status) => status.status === "connecting") ? 1000 : false,
   })
 
 export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>
@@ -132,6 +144,7 @@ function createGlobalSync() {
   let bootingRoot = false
   let eventFrame: number | undefined
   let eventTimer: ReturnType<typeof setTimeout> | undefined
+  const [childVersion, setChildVersion] = createSignal(0)
 
   onCleanup(() => {
     if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
@@ -204,6 +217,7 @@ function createGlobalSync() {
     onBootstrap: (directory) => {
       void bootstrapInstance(directory)
     },
+    onCreate: () => setChildVersion((value) => value + 1),
     onDispose: (directory) => {
       const key = directoryKey(directory)
       queue.clear(key)
@@ -438,6 +452,8 @@ function createGlobalSync() {
       return globalStore.error
     },
     child: children.child,
+    childVersion,
+    existing: children.existing,
     peek: children.peek,
     queryOptions: queryOptionsApi,
     // bootstrap,
