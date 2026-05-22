@@ -488,6 +488,7 @@ function LegacyHome() {
     if (healthy === false) return "bg-icon-critical-base"
     return "bg-border-weak-base"
   })
+  const useWebDirectoryPicker = createMemo(() => server.current?.type === "sidecar" && server.current.variant === "wsl")
 
   function openProject(directory: string) {
     layout.projects.open(directory)
@@ -506,7 +507,7 @@ function LegacyHome() {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+    if (platform.openDirectoryPickerDialog && server.isLocal() && !useWebDirectoryPicker()) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: language.t("command.project.open"),
         multiple: true,
@@ -547,27 +548,22 @@ function LegacyHome() {
   })
 
   return (
-    <div class="mx-auto mt-24 w-full max-w-2xl px-6 flex flex-col items-center">
-      <div class="flex flex-col items-center gap-3 mb-10">
-        <div onClick={chooseProject} class="cursor-pointer hover:opacity-25 transition-opacity duration-200">
-          <Logo class="w-48 opacity-15" />
-        </div>
-        <Button
-          size="normal"
-          variant="ghost"
-          class="text-12-regular text-text-weak px-3"
-          onClick={() => dialog.show(() => <DialogSelectServer />)}
-        >
-          <div
-            classList={{
-              "size-1.5 rounded-full mr-2": true,
-              [serverDotClass()]: true,
-            }}
-          />
-          {server.name}
-        </Button>
-      </div>
-
+    <div class="mx-auto mt-55 w-full md:w-auto px-4">
+      <Logo class="md:w-xl opacity-12" />
+      <Button
+        size="large"
+        variant="ghost"
+        class="mt-4 mx-auto text-14-regular text-text-weak"
+        onClick={() => dialog.show(() => <DialogSelectServer onNavigateHome={() => navigate("/")} />)}
+      >
+        <div
+          classList={{
+            "size-2 rounded-full": true,
+            [serverDotClass()]: true,
+          }}
+        />
+        {server.name}
+      </Button>
       <Switch>
         <Match when={recent().length > 0}>
           <div class="w-full flex flex-col items-center gap-6">
