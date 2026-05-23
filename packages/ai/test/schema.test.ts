@@ -56,6 +56,14 @@ describe("llm schema", () => {
     )
   })
 
+  test("decodes generated file events", () => {
+    expect(decodeLLMEvent({ type: "file", mediaType: "image/png", data: "iVBORw0KGgo=" })).toMatchObject({
+      type: "file",
+      mediaType: "image/png",
+      data: "iVBORw0KGgo=",
+    })
+  })
+
   test("content part tagged union exposes guards", () => {
     expect(ContentPart.guards.text({ type: "text", text: "hi" })).toBe(true)
     expect(ContentPart.guards.media({ type: "text", text: "hi" })).toBe(false)
