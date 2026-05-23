@@ -1,7 +1,17 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import {
+  batch,
+  createContext,
+  getOwner,
+  onCleanup,
+  onMount,
+  type Context,
+  type ParentProps,
+  untrack,
+  useContext,
+} from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
@@ -467,7 +477,17 @@ function createGlobalSync() {
   }
 }
 
-const GlobalSyncContext = createContext<ReturnType<typeof createGlobalSync>>()
+type GlobalSyncContextValue = ReturnType<typeof createGlobalSync>
+type GlobalSyncContextType = Context<GlobalSyncContextValue | undefined>
+
+declare global {
+  var __OPENCODE_GLOBAL_SYNC_CONTEXT__: GlobalSyncContextType | undefined
+}
+
+// Keep the context object stable when Vite refreshes this module without remounting the provider.
+const GlobalSyncContext: GlobalSyncContextType =
+  globalThis.__OPENCODE_GLOBAL_SYNC_CONTEXT__ ?? createContext<GlobalSyncContextValue>()
+globalThis.__OPENCODE_GLOBAL_SYNC_CONTEXT__ = GlobalSyncContext
 
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
