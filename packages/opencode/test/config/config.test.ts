@@ -9,7 +9,7 @@ import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
-import { Auth } from "../../src/auth"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -38,8 +38,9 @@ import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
 import { AccountTest } from "../fake/account"
-import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
+import { Substitution } from "@opencode-ai/core/substitution"
 
 const testFlock = EffectFlock.defaultLayer
 
@@ -57,10 +58,10 @@ const json = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: u
   )
 
 const wellKnownAuth = (url: string) =>
-  Layer.mock(Auth.Service)({
+  Layer.mock(AuthWellKnown.Service)({
     all: () =>
       Effect.succeed({
-        [url]: new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
+        [url]: new AuthWellKnown.Entry({ key: "TEST_TOKEN", token: "test-token" }),
       }),
   })
 
@@ -85,7 +86,7 @@ function remoteConfigClient(input: {
 
 const configLayer = (
   options: {
-    auth?: Layer.Layer<Auth.Service>
+    authWellKnown?: Layer.Layer<AuthWellKnown.Service>
     account?: Layer.Layer<Account.Service>
     client?: HttpClient.HttpClient
   } = {},
@@ -93,8 +94,9 @@ const configLayer = (
   Config.layer.pipe(
     Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Substitution.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(options.auth ?? AuthTest.empty),
+    Layer.provide(options.authWellKnown ?? AuthWellKnownTest.empty),
     Layer.provide(options.account ?? AccountTest.empty),
     Layer.provideMerge(infra),
     Layer.provide(NpmTest.noop),
@@ -477,13 +479,35 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
+test("environment variable substitution accepts an env overlay", async () => {
+  const originalEnv = process.env.TEST_VAR
+  delete process.env.TEST_VAR
+
+  try {
+    const output = await Effect.runPromise(
+      Substitution.Service.use((substitution) =>
+        substitution.substitute({
+          text: "{env:TEST_VAR}",
+          type: "virtual",
+          dir: "/tmp",
+          source: "test",
+          env: { TEST_VAR: "overlay" },
+        }),
+      ).pipe(Effect.provide(Substitution.defaultLayer)),
+    )
+    expect(output).toBe("overlay")
+  } finally {
+    if (originalEnv === undefined) delete process.env.TEST_VAR
+    else process.env.TEST_VAR = originalEnv
+  }
+})
+
 it.instance("preserves env variables when adding $schema to config", () =>
   withProcessEnv(
     "PRESERVE_VAR",
     "secret_value",
     Effect.gen(function* () {
       const test = yield* TestInstance
-      // Config without $schema - should trigger auto-add
       yield* Effect.promise(() =>
         Filesystem.write(
           path.join(test.directory, "opencode.json"),
@@ -495,7 +519,6 @@ it.instance("preserves env variables when adding $schema to config", () =>
       const config = yield* Config.use.get()
       expect(config.username).toBe("secret_value")
 
-      // Read the file to verify the env variable was preserved
       const content = yield* Effect.promise(() => Filesystem.readText(path.join(test.directory, "opencode.json")))
       expect(content).toContain("{env:PRESERVE_VAR}")
       expect(content).not.toContain("secret_value")
@@ -1609,7 +1632,7 @@ test("project config overrides remote well-known config", async () => {
     },
   ).pipe(
     Effect.scoped,
-    Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com"), client })),
+    Effect.provide(configLayer({ authWellKnown: wellKnownAuth("https://example.com"), client })),
     Effect.runPromise,
   )
 })
@@ -1636,7 +1659,7 @@ test("wellknown URL with trailing slash is normalized", async () => {
     { git: true },
   ).pipe(
     Effect.scoped,
-    Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com/"), client })),
+    Effect.provide(configLayer({ authWellKnown: wellKnownAuth("https://example.com/"), client })),
     Effect.runPromise,
   )
 })
@@ -1675,6 +1698,7 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
         Config.layer.pipe(
           Layer.provide(testFlock),
           Layer.provide(AppFileSystem.defaultLayer),
+          Layer.provide(Substitution.defaultLayer),
           Layer.provide(Env.defaultLayer),
           Layer.provide(wellKnownAuth(server.url.origin)),
           Layer.provide(AccountTest.empty),
@@ -1723,7 +1747,7 @@ test("wellknown remote_config supports templated env vars in headers", async () 
       { git: true },
     ).pipe(
       Effect.scoped,
-      Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com"), client })),
+      Effect.provide(configLayer({ authWellKnown: wellKnownAuth("https://example.com"), client })),
       Effect.runPromise,
     )
   } finally {
@@ -1757,7 +1781,7 @@ test("wellknown token env substitution does not mutate process env", async () =>
       config: { username: "{env:TEST_TOKEN}" },
     }).pipe(
       Effect.scoped,
-      Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com"), client })),
+      Effect.provide(configLayer({ authWellKnown: wellKnownAuth("https://example.com"), client })),
       Effect.runPromise,
     )
 
@@ -1797,7 +1821,7 @@ test("wellknown config null is treated as absent", async () => {
     { git: true },
   ).pipe(
     Effect.scoped,
-    Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com"), client })),
+    Effect.provide(configLayer({ authWellKnown: wellKnownAuth("https://example.com"), client })),
     Effect.runPromise,
   )
 })
@@ -1818,7 +1842,7 @@ test("wellknown remote_config rejects non-object config responses", async () => 
     git: true,
   }).pipe(
     Effect.scoped,
-    Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com"), client })),
+    Effect.provide(configLayer({ authWellKnown: wellKnownAuth("https://example.com"), client })),
     Effect.runPromise,
   )
 
