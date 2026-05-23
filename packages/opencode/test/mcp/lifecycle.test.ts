@@ -1,5 +1,5 @@
 import { expect, mock, beforeEach } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
@@ -740,12 +740,15 @@ it.instance(
 // ========================================================================
 
 it.instance(
-  "connect() on nonexistent server does not throw",
+  "connect() on nonexistent server fails with NotFoundError",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
       Effect.gen(function* () {
-        // Should not throw
-        yield* mcp.connect("nonexistent")
+        const exit = yield* mcp.connect("nonexistent").pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "MCP.NotFoundError", name: "nonexistent" })
+        }
         const status = yield* mcp.status()
         expect(status["nonexistent"]).toBeUndefined()
       }),
@@ -758,12 +761,15 @@ it.instance(
 // ========================================================================
 
 it.instance(
-  "disconnect() on nonexistent server does not throw",
+  "disconnect() on nonexistent server fails with NotFoundError",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
       Effect.gen(function* () {
-        yield* mcp.disconnect("nonexistent")
-        // Should complete without error
+        const exit = yield* mcp.disconnect("nonexistent").pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "MCP.NotFoundError", name: "nonexistent" })
+        }
       }),
     ),
   { config: { mcp: {} } },

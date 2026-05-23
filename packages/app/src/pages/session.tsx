@@ -18,6 +18,7 @@ import {
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { debounce } from "@solid-primitives/scheduled"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
@@ -58,6 +59,7 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { shouldUseV2NewSessionPage } from "@/pages/session/new-session-layout"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
@@ -262,7 +264,8 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
-  const isV2NewSessionPage = () => import.meta.env.VITE_OPENCODE_CHANNEL === "prod" || !params.id
+  const isV2NewSessionPage = () =>
+    shouldUseV2NewSessionPage({ channel: import.meta.env.VITE_OPENCODE_CHANNEL, sessionID: params.id })
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened() && !isV2NewSessionPage())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened() && !isV2NewSessionPage())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
@@ -478,7 +481,7 @@ export default function Page() {
         : skipToken,
     }
   })
-  const refreshVcs = () => void queryClient.invalidateQueries({ queryKey: vcsKey() })
+  const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
     if (store.changes === "git" || store.changes === "branch")
       // avoids suspense
