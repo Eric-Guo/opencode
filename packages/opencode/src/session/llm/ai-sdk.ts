@@ -261,12 +261,22 @@ export function toLLMEvents(
         ]
       })
 
+    case "file":
+      return Effect.succeed([
+        LLMEvent.file({
+          mediaType: event.file.mediaType,
+          data: event.file.base64,
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+      ])
+
     case "error":
       return Effect.fail(event.error)
 
     case "abort":
     case "source":
     case "file":
+    case "raw":
     case "tool-output-denied":
     case "tool-approval-request":
       return Effect.succeed([])
