@@ -216,6 +216,15 @@ function deferred() {
   return { promise, resolve }
 }
 
+const waitConnected = (mcp: MCPNS.Interface, name: string) =>
+  pollWithTimeout(
+    Effect.gen(function* () {
+      const status = yield* mcp.status()
+      return status[name]?.status === "connected" ? true : undefined
+    }),
+    `configured mcp ${name} did not connect`,
+  )
+
 it.instance(
   "status() returns connecting without waiting for configured startup",
   () =>
@@ -255,42 +264,60 @@ it.instance(
   },
 )
 
-it.live("configured MCP startup runs for one project at a time", () =>
-  Effect.gen(function* () {
-    const connect = deferred()
-    connectHook = () => connect.promise
-    const config = {
+it.instance(
+  "configured MCP startup runs for one project at a time",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        const connect = deferred()
+        connectHook = () => connect.promise
+        const config = {
+          mcp: {
+            "slow-server": {
+              type: "local" as const,
+              command: ["echo", "test"],
+            },
+          },
+        }
+        const second = yield* tmpdirScoped({ config })
+
+        yield* mcp.status()
+        yield* pollWithTimeout(
+          Effect.sync(() => (connectStarts === 1 ? true : undefined)),
+          "first configured mcp startup did not begin",
+        )
+
+        yield* mcp.status().pipe(provideInstance(second))
+        yield* Effect.sleep("100 millis")
+        expect(connectStarts).toBe(1)
+        expect(maxActiveConnects).toBe(1)
+
+        connect.resolve()
+
+        yield* pollWithTimeout(
+          Effect.gen(function* () {
+            const first = yield* mcp.status()
+            const next = yield* mcp.status().pipe(provideInstance(second))
+            return first["slow-server"]?.status === "connected" && next["slow-server"]?.status === "connected"
+              ? true
+              : undefined
+          }),
+          "configured mcp startups did not complete",
+        )
+        expect(connectStarts).toBe(2)
+        expect(maxActiveConnects).toBe(1)
+      }),
+    ).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  {
+    config: {
       mcp: {
         "slow-server": {
-          type: "local" as const,
+          type: "local",
           command: ["echo", "test"],
         },
       },
-    }
-
-    const first = yield* tmpdirScoped({ config })
-    const second = yield* tmpdirScoped({ config })
-    const mcp = yield* MCP.Service
-
-    yield* mcp.status().pipe(provideInstance(first))
-    yield* pollWithTimeout(
-      Effect.sync(() => (connectStarts === 1 ? true : undefined)),
-      "first configured mcp startup did not begin",
-    )
-
-    yield* mcp.status().pipe(provideInstance(second))
-    yield* Effect.sleep("100 millis")
-    expect(connectStarts).toBe(1)
-    expect(maxActiveConnects).toBe(1)
-
-    connect.resolve()
-
-    yield* pollWithTimeout(
-      Effect.sync(() => (connectStarts === 2 && activeConnects === 0 ? true : undefined)),
-      "second configured mcp startup did not run after first completed",
-    )
-    expect(maxActiveConnects).toBe(1)
-  }).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer)),
+    },
+  },
 )
 
 // ========================================================================
@@ -377,10 +404,8 @@ it.instance(
         lastCreatedClientName = "disc-server"
         getOrCreateClientState("disc-server")
 
-        yield* mcp.add("disc-server", {
-          type: "local",
-          command: ["echo", "test"],
-        })
+        yield* mcp.status()
+        yield* waitConnected(mcp, "disc-server")
 
         const statusBefore = yield* mcp.status()
         expect(statusBefore["disc-server"]?.status).toBe("connected")
@@ -418,10 +443,8 @@ it.instance(
           { name: "my_tool", description: "a tool", inputSchema: { type: "object", properties: {} } },
         ]
 
-        yield* mcp.add("reconn-server", {
-          type: "local",
-          command: ["echo", "test"],
-        })
+        yield* mcp.status()
+        yield* waitConnected(mcp, "reconn-server")
 
         yield* mcp.disconnect("reconn-server")
         expect((yield* mcp.status())["reconn-server"]?.status).toBe("disabled")
@@ -488,7 +511,7 @@ it.instance(
 // ========================================================================
 
 it.instance(
-  "init connects available servers even when one fails",
+  "connects available servers even when one fails",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
       Effect.gen(function* () {
@@ -526,14 +549,8 @@ it.instance(
   {
     config: {
       mcp: {
-        "good-server": {
-          type: "local",
-          command: ["echo", "good"],
-        },
-        "bad-server": {
-          type: "local",
-          command: ["echo", "bad"],
-        },
+        "good-server": { type: "local", command: ["echo", "good"], enabled: false },
+        "bad-server": { type: "local", command: ["echo", "bad"], enabled: false },
       },
     },
   },
@@ -658,16 +675,7 @@ it.instance(
         expect(key).toContain("my-prompt")
       }),
     ),
-  {
-    config: {
-      mcp: {
-        "prompt-server": {
-          type: "local",
-          command: ["echo", "test"],
-        },
-      },
-    },
-  },
+  { config: { mcp: {} } },
 )
 
 it.instance(
@@ -691,16 +699,7 @@ it.instance(
         expect(key).toContain("my-resource")
       }),
     ),
-  {
-    config: {
-      mcp: {
-        "resource-server": {
-          type: "local",
-          command: ["echo", "test"],
-        },
-      },
-    },
-  },
+  { config: { mcp: {} } },
 )
 
 it.instance(
@@ -712,10 +711,8 @@ it.instance(
         const serverState = getOrCreateClientState("prompt-disc-server")
         serverState.prompts = [{ name: "hidden-prompt", description: "Should not appear" }]
 
-        yield* mcp.add("prompt-disc-server", {
-          type: "local",
-          command: ["echo", "test"],
-        })
+        yield* mcp.status()
+        yield* waitConnected(mcp, "prompt-disc-server")
 
         yield* mcp.disconnect("prompt-disc-server")
 
@@ -824,10 +821,7 @@ it.instance(
   {
     config: {
       mcp: {
-        "fail-connect": {
-          type: "local",
-          command: ["echo", "test"],
-        },
+        "fail-connect": { type: "local", command: ["echo", "test"], enabled: false },
       },
     },
   },
@@ -895,10 +889,7 @@ it.instance(
   {
     config: {
       mcp: {
-        "my.special-server": {
-          type: "local",
-          command: ["echo", "test"],
-        },
+        "my.special-server": { type: "local", command: ["echo", "test"], enabled: false },
       },
     },
   },

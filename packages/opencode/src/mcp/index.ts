@@ -610,14 +610,14 @@ export const layer = Layer.effect(
 
     const startConfigured = Effect.fn("MCP.startConfigured")(function* (
       s: State,
-      entries: ReadonlyArray<readonly [string, ConfigMCP.Info]>,
+      entries: ReadonlyArray<readonly [string, ConfigMCP.Info, number]>,
     ) {
       yield* startupLock.withPermits(1)(
         Effect.forEach(
           entries,
-          ([key, mcp]) =>
+          ([key, mcp, revision]) =>
             Effect.gen(function* () {
-              const revision = s.revision[key] ?? 0
+              if ((s.revision[key] ?? 0) !== revision) return
               const result = yield* createSafely(key, mcp)
               if ((s.revision[key] ?? 0) !== revision) {
                 yield* closeCreateResult(result)
@@ -654,7 +654,7 @@ export const layer = Layer.effect(
           }
 
           s.status[key] = { status: "connecting" }
-          return [[key, mcp] as const]
+          return [[key, mcp, bump(s, key)] as const]
         })
 
         if (configured.length > 0) {
