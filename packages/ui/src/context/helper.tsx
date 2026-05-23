@@ -1,11 +1,25 @@
-import { createContext, createMemo, Show, useContext, type ParentProps, type Accessor } from "solid-js"
+import { createContext, createMemo, Show, useContext, type ParentProps, type Accessor, type Context } from "solid-js"
+
+type SimpleContextCache = Map<string, Context<unknown>>
+
+function getContext<T>(name: string) {
+  const scope = globalThis as typeof globalThis & {
+    __OPENCODE_SIMPLE_CONTEXTS__?: SimpleContextCache
+  }
+  scope.__OPENCODE_SIMPLE_CONTEXTS__ ??= new Map()
+  const cached = scope.__OPENCODE_SIMPLE_CONTEXTS__.get(name)
+  if (cached) return cached as unknown as Context<T | undefined>
+  const ctx = createContext<T>()
+  scope.__OPENCODE_SIMPLE_CONTEXTS__.set(name, ctx as unknown as Context<unknown>)
+  return ctx
+}
 
 export function createSimpleContext<T, Props extends Record<string, any>>(input: {
   name: string
   init: ((input: Props) => T) | (() => T)
   gate?: boolean
 }) {
-  const ctx = createContext<T>()
+  const ctx = getContext<T>(input.name)
 
   return {
     provider: (props: ParentProps<Props>) => {
