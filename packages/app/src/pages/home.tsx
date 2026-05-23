@@ -31,7 +31,7 @@ import { pathKey } from "@/utils/path-key"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
 
-const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const USE_HOME_DESIGN = false
 const HOME_SESSION_LIMIT = 15
 const HOME_ROW =
   "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] border-0 bg-transparent text-left [font-weight:530] text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
