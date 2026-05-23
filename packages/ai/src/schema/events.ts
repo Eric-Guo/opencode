@@ -125,6 +125,14 @@ export const ReasoningEnd = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ReasoningEnd" })
 export type ReasoningEnd = Schema.Schema.Type<typeof ReasoningEnd>
 
+export const File = Schema.Struct({
+  type: Schema.tag("file"),
+  mediaType: Schema.String,
+  data: Schema.Union([Schema.String, Schema.Uint8Array]),
+  providerMetadata: Schema.optional(ProviderMetadata),
+}).annotate({ identifier: "LLM.Event.File" })
+export type File = Schema.Schema.Type<typeof File>
+
 export const ToolInputStart = Schema.Struct({
   type: Schema.tag("tool-input-start"),
   id: ToolCallID,
@@ -223,6 +231,7 @@ const llmEventTagged = Schema.Union([
   ReasoningStart,
   ReasoningDelta,
   ReasoningEnd,
+  File,
   ToolInputStart,
   ToolInputDelta,
   ToolInputEnd,
@@ -259,6 +268,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     ReasoningDelta.make({ ...input, id: contentBlockID(input.id) }),
   reasoningEnd: (input: WithID<ReasoningEnd, ContentBlockID>) =>
     ReasoningEnd.make({ ...input, id: contentBlockID(input.id) }),
+  file: File.make,
   toolInputStart: (input: WithID<ToolInputStart, ToolCallID>) =>
     ToolInputStart.make({ ...input, id: toolCallID(input.id) }),
   toolInputDelta: (input: WithID<ToolInputDelta, ToolCallID>) =>
@@ -293,6 +303,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     reasoningStart: llmEventTagged.guards["reasoning-start"],
     reasoningDelta: llmEventTagged.guards["reasoning-delta"],
     reasoningEnd: llmEventTagged.guards["reasoning-end"],
+    file: llmEventTagged.guards.file,
     toolInputStart: llmEventTagged.guards["tool-input-start"],
     toolInputDelta: llmEventTagged.guards["tool-input-delta"],
     toolInputEnd: llmEventTagged.guards["tool-input-end"],
