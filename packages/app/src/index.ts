@@ -5,13 +5,18 @@ export { loadLocaleDict, normalizeLocale, type Locale } from "./context/language
 export { useWslServers } from "./context/wsl-servers"
 export {
   type DisplayBackend,
+  type FatalRendererErrorLog,
   type Platform,
   PlatformProvider,
+  type WslDistroProbe,
   type WslInstalledDistro,
+  type WslJob,
   type WslOnlineDistro,
   type WslOpencodeCheck,
+  type WslRuntimeCheck,
   type WslServerConfig,
   type WslServerItem,
+  type WslServerRuntime,
   type WslServersEvent,
   type WslServersPlatform,
   type WslServersState,

@@ -16,7 +16,7 @@ import type { InitStep, ServerReadyData, SqliteMigrationProgress } from "../prel
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
-import { initLogging } from "./logging"
+import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import {
@@ -32,6 +32,7 @@ import {
   createLoadingWindow,
   createMainWindow,
   registerRendererProtocol,
+  setRelaunchHandler,
   setBackgroundColor,
   setDockIcon,
 } from "./windows"
@@ -49,6 +50,7 @@ const APP_IDS: Record<string, string> = {
   prod: "ai.opencode.desktop",
 }
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
+const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
 let mainWindow: BrowserWindow | null = null
@@ -141,6 +143,7 @@ const main = Effect.gen(function* () {
   )
   if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
   logger = initLogging()
+  initCrashReporter()
 
   const wslServers = createWslServersController(
     app.getVersion(),
@@ -181,6 +184,8 @@ const main = Effect.gen(function* () {
   ensureLoopbackNoProxy()
   useEnvProxy()
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
+  const features = app.commandLine.getSwitchValue("enable-features")
+  app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
   if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
 
   if (!app.requestSingleInstanceLock()) {
@@ -214,6 +219,21 @@ const main = Effect.gen(function* () {
 
   app.on("will-quit", () => {
     void stopSidecars()
+  })
+
+  app.on("child-process-gone", (_event, details) => {
+    writeLog("utility", "child process gone", { details }, "error")
+  })
+
+  app.on("render-process-gone", (_event, webContents, details) => {
+    writeLog("window", "app render process gone", { url: webContents.getURL(), details }, "error")
+  })
+
+  setRelaunchHandler(() => {
+    void killSidecar().finally(() => {
+      app.relaunch()
+      app.exit(0)
+    })
   })
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -272,6 +292,8 @@ const main = Effect.gen(function* () {
     checkUpdate: async () => checkUpdate(),
     installUpdate: async () => installUpdate(stopSidecars),
     setBackgroundColor: (color) => setBackgroundColor(color),
+    exportDebugLogs: () => exportDebugLogs(),
+    recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
   })
 
   yield* Effect.promise(() => app.whenReady())
@@ -281,6 +303,13 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   setupAutoUpdater()
+  yield* Effect.promise(() => startNetLog()).pipe(
+    Effect.catch((error) =>
+      Effect.sync(() => {
+        logger.warn("failed to start net log", error)
+      }),
+    ),
+  )
 
   const needsMigration = ((): boolean => {
     if (process.env.OPENCODE_DB === ":memory:") return false
@@ -336,9 +365,9 @@ const main = Effect.gen(function* () {
         needsMigration,
         userDataPath: app.getPath("userData"),
         onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
-        onStdout: (message) => logger.log("sidecar stdout", { message }),
-        onStderr: (message) => logger.warn("sidecar stderr", { message }),
-        onExit: (code) => logger.warn("sidecar exited", { code }),
+        onStdout: (message) => writeLog("server", "stdout", { message }),
+        onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
+        onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
       }),
     )
     server = listener
@@ -385,12 +414,19 @@ const main = Effect.gen(function* () {
   mainWindow = createMainWindow()
   if (mainWindow) {
     createMenu({
-      trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
+      trigger: (id) => {
+        const win = BrowserWindow.getFocusedWindow() ?? mainWindow
+        if (win) sendMenuCommand(win, id)
+      },
       checkForUpdates: () => {
         void checkForUpdates(true, stopSidecars)
       },
-      reload: () => mainWindow?.reload(),
-      relaunch,
+      relaunch: () => {
+        void killSidecar().finally(() => {
+          app.relaunch()
+          app.exit(0)
+        })
+      },
     })
   }
 

@@ -1,9 +1,11 @@
 import { execFile } from "node:child_process"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
+import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
 import type {
   InitStep,
+  FatalRendererError,
   ServerReadyData,
   SqliteMigrationProgress,
   TitlebarTheme,
@@ -12,8 +14,9 @@ import type {
   WslServersEvent,
   WslServersState,
 } from "../preload/types"
+import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { getStore } from "./store"
-import { setTitlebar, updateTitlebar } from "./windows"
+import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -52,6 +55,8 @@ type Deps = {
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void> | void
   setBackgroundColor: (color: string) => void
+  exportDebugLogs: () => Promise<string>
+  recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -145,6 +150,10 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("check-update", () => deps.checkUpdate())
   ipcMain.handle("install-update", () => deps.installUpdate())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
+  ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
+  ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
+    deps.recordFatalRendererError(error),
+  )
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
       const store = getStore(name)
@@ -268,10 +277,17 @@ export function registerIpcHandlers(deps: Deps) {
     if (!win) return
     updateTitlebar(win)
   })
+  ipcMain.handle("get-pinch-zoom-enabled", () => getPinchZoomEnabled())
+  ipcMain.handle("set-pinch-zoom-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
+    setPinchZoomEnabled(enabled)
+  })
   ipcMain.handle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     setTitlebar(win, theme)
+  })
+  ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
+    runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action)
   })
 }
 
