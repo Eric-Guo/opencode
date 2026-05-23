@@ -187,8 +187,7 @@ export const loadProvidersQuery = (directory: string | null, sdk: OpencodeClient
 export const loadAgentsQuery = (directory: string | null, sdk: OpencodeClient) =>
   queryOptions({
     queryKey: [directory, "agents"],
-    queryFn: () =>
-      retry(() => sdk.app.agents(directory ? { directory } : undefined).then((x) => normalizeAgentList(x.data))),
+    queryFn: () => retry(() => sdk.app.agents().then((x) => normalizeAgentList(x.data))),
   })
 
 export const loadPathQuery = (directory: string | null, sdk: OpencodeClient) =>

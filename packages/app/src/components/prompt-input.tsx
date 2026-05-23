@@ -1311,17 +1311,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ],
   }))
 
-  const agentsLoaded = () => agentsQuery.data !== undefined || sync.data.agent.length > 0
-  const agentsLoading = () => agentsQuery.isLoading && !agentsLoaded()
+  const agentsLoading = () => agentsQuery.isLoading
   const agentsShouldFadeIn = createMemo((prev) => prev ?? agentsLoading())
   const providersLoading = () => agentsLoading() || providersQuery.isLoading || globalProvidersQuery.isLoading
   const providersShouldFadeIn = createMemo((prev) => prev ?? providersLoading())
-
-  createEffect(() => {
-    const agents = agentsQuery.data
-    if (!agents) return
-    sync.set("agent", agents)
-  })
 
   const [promptReady] = createResource(
     () => prompt.ready().promise,
@@ -1472,7 +1465,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!search) return branchOptions()
     return branchOptions().filter((option) => option.branch.toLowerCase().includes(search))
   })
-  const showAgentControl = createMemo(() => (newSession() || settings.general.showCustomAgents()) && agentNames().length > 0)
+  const showAgentControl = createMemo(() => settings.general.showCustomAgents() && agentNames().length > 0)
   const branchActionLabel = createMemo(() => {
     const search = picker.branchSearch.trim()
     if (search && branchResults().length === 0) return language.t("session.new.branch.add", { branch: search })
@@ -2234,7 +2227,7 @@ function ComposerPicker(props: { state: ComposerPickerState }) {
 
 function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
   return (
-    <div data-component="prompt-agent-control" class="relative">
+    <div class="relative">
       <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-v2-icon-icon-muted">
         <Icon name="sliders" size="small" />
       </div>

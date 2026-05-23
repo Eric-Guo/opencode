@@ -118,7 +118,7 @@ const defaultSettings: Settings = {
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showSessionProgressBar: true,
-    showCustomAgents: true,
+    showCustomAgents: false,
   },
   updates: {
     startup: true,
