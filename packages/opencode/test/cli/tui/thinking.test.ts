@@ -9,6 +9,20 @@ describe("reasoningSummary", () => {
     })
   })
 
+  test("extracts a completed title before its streamed body arrives", () => {
+    expect(reasoningSummary("**Continuing Quality Review**")).toEqual({
+      title: "Continuing Quality Review",
+      body: "",
+    })
+  })
+
+  test("does not consume ordinary leading bold content", () => {
+    expect(reasoningSummary("**Important:** keep this in the body.")).toEqual({
+      title: null,
+      body: "**Important:** keep this in the body.",
+    })
+  })
+
   test("leaves content without a leading title in its body", () => {
     expect(reasoningSummary("Details only.")).toEqual({ title: null, body: "Details only." })
   })
