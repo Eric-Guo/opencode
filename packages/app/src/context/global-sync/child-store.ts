@@ -24,7 +24,6 @@ export function createChildStoreManager(input: {
   isBooting: (directory: string) => boolean
   isLoadingSessions: (directory: string) => boolean
   onBootstrap: (directory: string) => void
-  onCreate: () => void
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
   queryOptions: QueryOptionsApi
@@ -236,7 +235,6 @@ export function createChildStoreManager(input: {
             part_text_accum_delta: {},
           })
           children[key] = child
-          input.onCreate()
           disposers.set(key, dispose)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
@@ -283,10 +281,6 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
-  function existing(directory: string) {
-    return children[directoryKey(directory)]
-  }
-
   function peek(directory: string, options: ChildOptions = {}) {
     const key = directoryKey(directory)
     const childStore = ensureChild(directory)
@@ -328,7 +322,6 @@ export function createChildStoreManager(input: {
   return {
     children,
     ensureChild,
-    existing,
     child,
     peek,
     projectMeta,

@@ -77,6 +77,8 @@ import { pathKey } from "@/utils/path-key"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { displayName } from "@/pages/layout/helpers"
 
+const USE_V2_INPUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+
 interface PromptInputProps {
   class?: string
   variant?: "dock" | "new-session"
@@ -1129,9 +1131,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     setMode: (mode) => setStore("mode", mode),
     setPopover: (popover) => setStore("popover", popover),
-    newSessionProjectDirectory,
-    newSessionWorktree,
-    newSessionWorktreeBranch: () => picker.worktreeName,
+    newSessionProjectDirectory: USE_V2_INPUT ? newSessionProjectDirectory : undefined,
+    newSessionWorktree: USE_V2_INPUT ? newSessionWorktree : () => props.newSessionWorktree,
+    newSessionWorktreeBranch: USE_V2_INPUT ? () => picker.worktreeName : undefined,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     shouldQueue: props.shouldQueue,
     onQueue: props.onQueue,
@@ -1587,8 +1589,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     style: control(),
     onPress: () => command.trigger("project.open"),
   }))
-
-  const USE_V2_INPUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
   return (
     <div class="relative size-full flex flex-col gap-0">

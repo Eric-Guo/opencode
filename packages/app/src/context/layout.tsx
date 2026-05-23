@@ -386,16 +386,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const childStore = globalSync.existing(project.worktree)?.[0]
-      const projectID = childStore?.project
+      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
+      const projectID = childStore.project
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
 
-      // Use child metadata only after the workspace is already loaded. Creating child
-      // stores here fans out workspace bootstrap requests while rendering the project list.
+      // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
+      // Without this, different subdirectories of the same git repo would share the same
+      // icon from the database instead of using their individual overrides.
       const base = { ...metadata, ...project }
-      if (childStore?.icon) {
+      if (childStore.icon) {
         return { ...base, icon: { ...base.icon, override: childStore.icon } }
       }
       return base
@@ -474,7 +475,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       for (const project of projects) {
         if (!project.id) continue
         if (project.id === "global") continue
-        if (!globalSync.existing(project.worktree)) continue
         globalSync.project.icon(project.worktree, project.icon?.override)
       }
     })
@@ -519,6 +519,28 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
           })
       }
+    })
+
+    let sessionFrame: number | undefined
+    let sessionTimer: number | undefined
+
+    onMount(() => {
+      sessionFrame = requestAnimationFrame(() => {
+        sessionFrame = undefined
+        sessionTimer = window.setTimeout(() => {
+          sessionTimer = undefined
+          void Promise.all(
+            server.projects.list().map((project) => {
+              return globalSync.project.loadSessions(project.worktree)
+            }),
+          )
+        }, 0)
+      })
+    })
+
+    onCleanup(() => {
+      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
+      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
     })
 
     return {

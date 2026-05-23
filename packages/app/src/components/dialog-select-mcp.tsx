@@ -11,7 +11,6 @@ import { pathKey } from "@/utils/path-key"
 
 const statusLabels = {
   connected: "mcp.status.connected",
-  connecting: "mcp.status.connecting",
   failed: "mcp.status.failed",
   needs_auth: "mcp.status.needs_auth",
   needs_client_registration: "mcp.status.needs_client_registration",
@@ -80,7 +79,6 @@ export const DialogSelectMcp: Component = () => {
             if (s?.status === "failed" || s?.status === "needs_client_registration") return s.error
           }
           const enabled = () => status() === "connected"
-          const connecting = () => status() === "connecting"
           return (
             <div class="w-full flex items-center justify-between gap-x-3">
               <div class="flex flex-col gap-0.5 min-w-0">
@@ -97,9 +95,8 @@ export const DialogSelectMcp: Component = () => {
               <div onClick={(e) => e.stopPropagation()}>
                 <Switch
                   checked={enabled()}
-                  disabled={connecting() || (toggle.isPending && toggle.variables === i.name)}
+                  disabled={toggle.isPending && toggle.variables === i.name}
                   onChange={() => {
-                    if (connecting()) return
                     if (toggle.isPending) return
                     toggle.mutate(i.name)
                   }}
