@@ -77,7 +77,7 @@ import { pathKey } from "@/utils/path-key"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { displayName } from "@/pages/layout/helpers"
 
-const USE_V2_INPUT = false
+const USE_V2_INPUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 interface PromptInputProps {
   class?: string

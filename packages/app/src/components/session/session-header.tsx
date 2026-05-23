@@ -45,7 +45,7 @@ const OPEN_APPS = [
   "sublime-text",
 ] as const
 
-const USE_V2_TITLEBAR = false
+const USE_V2_TITLEBAR = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 type OpenApp = (typeof OPEN_APPS)[number]
 type OS = "macos" | "windows" | "linux" | "unknown"

@@ -20,7 +20,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
-const USE_DESKTOP_V2 = false
+const USE_DESKTOP_V2 = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
