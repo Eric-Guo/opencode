@@ -104,6 +104,7 @@ describe("createChildStoreManager", () => {
         onBootstrap(directory) {
           bootstraps.push(directory)
         },
+        onCreate() {},
         onDispose() {},
         translate: (key) => key,
         queryOptions: queryOptionsApi,
