@@ -325,12 +325,30 @@ describe("session.llm.ai-sdk adapter", () => {
       await adapt([
         uncheckedAdapterEvent({ type: "abort" }),
         uncheckedAdapterEvent({ type: "source" }),
-        uncheckedAdapterEvent({ type: "file" }),
         uncheckedAdapterEvent({ type: "raw" }),
         uncheckedAdapterEvent({ type: "tool-output-denied" }),
         uncheckedAdapterEvent({ type: "tool-approval-request" }),
       ]),
     ).toEqual([])
+  })
+
+  test("maps AI SDK generated file chunks", async () => {
+    const events = await adapt([
+      uncheckedAdapterEvent({
+        type: "file",
+        file: { mediaType: "image/png", base64: "iVBORw0KGgo=" },
+        providerMetadata: { google: { mimeType: "image/png" } },
+      }),
+    ])
+
+    expect(events).toEqual([
+      {
+        type: "file",
+        mediaType: "image/png",
+        data: "iVBORw0KGgo=",
+        providerMetadata: { google: { mimeType: "image/png" } },
+      },
+    ])
   })
 
   test("preserves tool-error cause", async () => {
