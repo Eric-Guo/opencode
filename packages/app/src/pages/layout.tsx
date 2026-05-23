@@ -2379,7 +2379,6 @@ export default function Layout(props: ParentProps) {
             {props.children}
           </Show>
         </main>
-        {import.meta.env.DEV && <DebugBar />}
         <Toast.Region />
       </div>
     )
