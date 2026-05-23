@@ -275,6 +275,23 @@ const layer = Layer.effect(
         }
       }
 
+      const fileDataUrl = (value: Extract<StreamEvent, { type: "file" }>) => {
+        if (typeof value.data === "string") {
+          if (value.data.startsWith("data:")) return value.data
+          return `data:${value.mediaType};base64,${value.data}`
+        }
+        return `data:${value.mediaType};base64,${Buffer.from(value.data).toString("base64")}`
+      }
+
+      const fileExtension = (mediaType: string) => {
+        const subtype = mediaType.split(";")[0]?.split("/")[1]?.toLowerCase()
+        if (subtype === "jpeg") return "jpg"
+        if (subtype === "svg+xml") return "svg"
+        return subtype?.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "bin"
+      }
+
+      const toolInput = (value: unknown): Record<string, any> => (isRecord(value) ? value : { value })
+
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "reasoning-start":
@@ -312,6 +329,29 @@ const layer = Layer.effect(
             yield* finishReasoning(value.id)
             return
 
+          case "file": {
+            const id = PartID.ascending()
+            const part = {
+              id,
+              messageID: ctx.assistantMessage.id,
+              sessionID: ctx.assistantMessage.sessionID,
+              type: "file",
+              mime: value.mediaType,
+              filename: `generated-${id}.${fileExtension(value.mediaType)}`,
+              url: fileDataUrl(value),
+            } satisfies SessionV1.FilePart
+            if (part.mime.startsWith("image/") && part.mime.split(";")[0] !== "image/svg+xml") {
+              const normalized = yield* image.normalize(part).pipe(Effect.catchCause(() => Effect.succeed(part)))
+              yield* session.updatePart({
+                ...normalized,
+                filename: `generated-${id}.${fileExtension(normalized.mime)}`,
+              })
+              return
+            }
+            yield* session.updatePart(part)
+            return
+          }
+
           case "tool-input-start":
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
@@ -333,7 +373,7 @@ const layer = Layer.effect(
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
             yield* ensureToolCall(value)
-            const input = isRecord(value.input) ? value.input : { value: value.input }
+            const input = toolInput(value.input)
             yield* updateToolCall(value.id, (match) => ({
               ...match,
               tool: value.name,
