@@ -1,7 +1,17 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import {
+  batch,
+  createContext,
+  getOwner,
+  onCleanup,
+  onMount,
+  type Context,
+  type ParentProps,
+  untrack,
+  useContext,
+} from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
@@ -467,7 +477,17 @@ function createServerSyncContext() {
   }
 }
 
-const ServerSyncContext = createContext<ReturnType<typeof createServerSyncContext>>()
+type ServerSyncContextValue = ReturnType<typeof createServerSyncContext>
+type ServerSyncContextType = Context<ServerSyncContextValue | undefined>
+
+declare global {
+  var __OPENCODE_SERVER_SYNC_CONTEXT__: ServerSyncContextType | undefined
+}
+
+// Keep the context object stable when Vite refreshes this module without remounting the provider.
+const ServerSyncContext: ServerSyncContextType =
+  globalThis.__OPENCODE_SERVER_SYNC_CONTEXT__ ?? createContext<ServerSyncContextValue>()
+globalThis.__OPENCODE_SERVER_SYNC_CONTEXT__ = ServerSyncContext
 
 export function ServerSyncProvider(props: ParentProps) {
   const value = createServerSyncContext()
