@@ -13,7 +13,7 @@ export function reasoningSummary(text: string) {
   const content = text.trim()
   const match = content.match(/^\*\*([^*\n]+)\*\*(?:\r?\n\r?\n|$)/)
   if (!match) return { title: null, body: content }
-  return { title: match[1].trim(), body: content.slice(match[0].length).trim() }
+  return { title: match[1].trim(), body: content.slice(match[0].length).trimEnd() }
 }
 
 export function isThinkingMode(value: unknown): value is ThinkingMode {

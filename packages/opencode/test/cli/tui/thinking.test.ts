@@ -16,6 +16,13 @@ describe("reasoningSummary", () => {
     })
   })
 
+  test("preserves markdown-significant indentation in the extracted body", () => {
+    expect(reasoningSummary("**Continuing Quality Review**\n\n    const value = true\n")).toEqual({
+      title: "Continuing Quality Review",
+      body: "    const value = true",
+    })
+  })
+
   test("does not consume ordinary leading bold content", () => {
     expect(reasoningSummary("**Important:** keep this in the body.")).toEqual({
       title: null,
