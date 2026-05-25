@@ -72,7 +72,7 @@ import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { createQuery, useQueries } from "@tanstack/solid-query"
-import { useGlobalSync, useQueryOptions } from "@/context/global-sync"
+import { useQueryOptions, useServerSync } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { displayName } from "@/pages/layout/helpers"
@@ -141,7 +141,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -1362,7 +1362,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const selectedProjectStore = createMemo(() => {
     const project = selectedProject()
     if (!project) return
-    return globalSync.child(project.worktree, { bootstrap: false })[0]
+    return serverSync.child(project.worktree, { bootstrap: false })[0]
   })
   const workspaceQuery = createQuery(() => {
     const project = selectedProject()
