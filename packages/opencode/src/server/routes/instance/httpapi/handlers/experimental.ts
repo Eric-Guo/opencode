@@ -103,10 +103,6 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       return yield* project.sandboxes(ctx.project.id)
     })
 
-    const worktreeBranch = Effect.fn("ExperimentalHttpApi.worktreeBranch")(function* () {
-      return yield* mapWorktreeError(worktreeSvc.branches())
-    })
-
     const worktreeCreate = Effect.fn("ExperimentalHttpApi.worktreeCreate")(function* (ctx: {
       payload: Worktree.CreateInput | undefined
     }) {
@@ -162,7 +158,6 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       .handle("tool", tool)
       .handle("toolIDs", toolIDs)
       .handle("worktree", worktree)
-      .handle("worktreeBranch", worktreeBranch)
       .handle("worktreeCreate", worktreeCreate)
       .handle("worktreeRemove", worktreeRemove)
       .handle("worktreeReset", worktreeReset)

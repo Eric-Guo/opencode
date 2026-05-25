@@ -1448,7 +1448,6 @@ export type WorktreeError = {
 
 export type WorktreeCreateInput = {
   name?: string
-  branch?: string
   /**
    * Additional startup script to run after the project's start command
    */
@@ -4433,34 +4432,6 @@ export type WorktreeCreateResponses = {
 }
 
 export type WorktreeCreateResponse = WorktreeCreateResponses[keyof WorktreeCreateResponses]
-
-export type WorktreeBranchesData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/experimental/worktree/branch"
-}
-
-export type WorktreeBranchesErrors = {
-  /**
-   * WorktreeError | InvalidRequestError
-   */
-  400: WorktreeError | InvalidRequestError
-}
-
-export type WorktreeBranchesError = WorktreeBranchesErrors[keyof WorktreeBranchesErrors]
-
-export type WorktreeBranchesResponses = {
-  /**
-   * List of git branch names
-   */
-  200: Array<string>
-}
-
-export type WorktreeBranchesResponse = WorktreeBranchesResponses[keyof WorktreeBranchesResponses]
 
 export type WorktreeResetData = {
   body?: WorktreeResetInput

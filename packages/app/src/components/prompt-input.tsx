@@ -31,7 +31,9 @@ import {
   FileAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
+import { useNavigate } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
+import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -71,10 +73,10 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import { createQuery, useQueries } from "@tanstack/solid-query"
-import { useQueryOptions, useServerSync } from "@/context/server-sync"
+import { useQueries } from "@tanstack/solid-query"
+import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { displayName } from "@/pages/layout/helpers"
 
 const USE_V2_INPUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
@@ -121,11 +123,9 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
-const MAIN_WORKTREE = "main"
-const CREATE_WORKTREE = "create"
-
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const navigate = useNavigate()
   const queryOptions = useQueryOptions()
 
   const sync = useSync()
@@ -133,6 +133,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const files = useFile()
   const prompt = usePrompt()
   const layout = useLayout()
+  const server = useServer()
   const comments = useComments()
   const dialog = useDialog()
   const providers = useProviders()
@@ -141,14 +142,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
-  const serverSync = useServerSync()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
   let projectSearchRef: HTMLInputElement | undefined
-  let branchSearchRef: HTMLInputElement | undefined
 
   const mirror = { input: false }
   const inset = 56
@@ -290,13 +289,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     applyingHistory: false,
   })
   const [picker, setPicker] = createStore({
-    projectDirectory: undefined as string | undefined,
-    sessionDirectory: undefined as string | undefined,
-    worktreeName: undefined as string | undefined,
     projectOpen: false,
-    branchOpen: false,
     projectSearch: "",
-    branchSearch: "",
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -1131,9 +1125,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     setMode: (mode) => setStore("mode", mode),
     setPopover: (popover) => setStore("popover", popover),
-    newSessionProjectDirectory: USE_V2_INPUT ? newSessionProjectDirectory : undefined,
-    newSessionWorktree: USE_V2_INPUT ? newSessionWorktree : () => props.newSessionWorktree,
-    newSessionWorktreeBranch: USE_V2_INPUT ? () => picker.worktreeName : undefined,
+    newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     shouldQueue: props.shouldQueue,
     onQueue: props.onQueue,
@@ -1353,153 +1345,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
     )
   }
-  const inheritedProject = createMemo(() => projectForDirectory(sdk.directory) ?? projects()[0])
-  const selectedProject = createMemo(() => {
-    const selected = picker.projectDirectory
-    if (selected) return projects().find((project) => pathKey(project.worktree) === pathKey(selected))
-    return inheritedProject()
-  })
-  const selectedProjectStore = createMemo(() => {
-    const project = selectedProject()
-    if (!project) return
-    return serverSync.child(project.worktree, { bootstrap: false })[0]
-  })
-  const workspaceQuery = createQuery(() => {
-    const project = selectedProject()
-    return {
-      queryKey: ["prompt-input", "workspaces", project?.worktree ?? ""] as const,
-      enabled: newSession() && picker.branchOpen && project?.vcs === "git",
-      staleTime: 10_000,
-      queryFn: async () => {
-        if (!project) return []
-        await sdk.client.experimental.workspace.syncList({ directory: project.worktree })
-        return sdk.client.experimental.workspace
-          .list({ directory: project.worktree })
-          .then((x) => (x.data ?? []).filter((workspace) => workspace.type === "worktree" && workspace.directory))
-      },
-    }
-  })
-  const workspaceByDirectory = createMemo(
-    () =>
-      new Map(
-        (workspaceQuery.isSuccess ? workspaceQuery.data : []).flatMap((workspace) =>
-          workspace.directory ? [[pathKey(workspace.directory), workspace] as const] : [],
-        ),
-      ),
-  )
-  const branchQuery = createQuery(() => {
-    const project = selectedProject()
-    return {
-      queryKey: ["prompt-input", "branches", project?.worktree ?? ""] as const,
-      enabled: newSession() && picker.branchOpen && project?.vcs === "git",
-      staleTime: 10_000,
-      queryFn: async () => {
-        if (!project) return []
-        return sdk.client.worktree.branches({ directory: project.worktree }).then((x) => x.data ?? [])
-      },
-    }
-  })
-  const rootBranch = createMemo(() => {
-    const project = selectedProject()
-    if (!project) return "main"
-    const store = selectedProjectStore()
-    if (store?.vcs?.default_branch) return store.vcs.default_branch
-    if (pathKey(project.worktree) === pathKey(sdk.directory)) return sync.data.vcs?.default_branch ?? sync.data.vcs?.branch ?? "main"
-    return "main"
-  })
-  const branchOptions = createMemo(() => {
-    const project = selectedProject()
-    if (!project || project.vcs !== "git") return []
-    const existing = new Set<string>()
-    const options: Array<{ directory: string; branch: string; create?: boolean }> = [
-      { directory: project.worktree, branch: rootBranch() },
-      ...(project.sandboxes ?? []).map((directory) => ({
-        directory,
-        branch:
-          workspaceByDirectory().get(pathKey(directory))?.branch ??
-          (pathKey(directory) === pathKey(sdk.directory) ? sync.data.vcs?.branch : undefined) ??
-          getFilename(directory),
-      })),
-    ]
-    for (const option of options) existing.add(option.branch)
-    return [
-      ...options,
-      ...(branchQuery.isSuccess ? branchQuery.data : [])
-        .filter((branch) => !existing.has(branch))
-        .map((branch) => ({ directory: CREATE_WORKTREE, branch, create: true })),
-    ]
-  })
-  const inheritedSessionDirectory = createMemo(() => {
-    const project = selectedProject()
-    if (!project) return
-    if (pathKey(project.worktree) === pathKey(projectForDirectory(sdk.directory)?.worktree ?? "")) return sdk.directory
-    return project.worktree
-  })
-  const selectedSessionDirectory = createMemo(() => {
-    const project = selectedProject()
-    if (!project) return props.newSessionWorktree ?? MAIN_WORKTREE
-    if (picker.sessionDirectory === CREATE_WORKTREE) return CREATE_WORKTREE
-    const sessionDirectory = picker.sessionDirectory
-    if (sessionDirectory && branchOptions().some((option) => pathKey(option.directory) === pathKey(sessionDirectory))) {
-      return sessionDirectory
-    }
-    return inheritedSessionDirectory() ?? project.worktree
-  })
-  const currentBranch = createMemo(() => {
-    if (selectedSessionDirectory() === CREATE_WORKTREE) {
-      return {
-        directory: CREATE_WORKTREE,
-        branch: picker.worktreeName ?? language.t("session.new.branch.new"),
-      }
-    }
-    const selected = selectedSessionDirectory()
-    return branchOptions().find((option) => pathKey(option.directory) === pathKey(selected)) ?? branchOptions()[0]
-  })
+  const selectedProject = createMemo(() => projectForDirectory(sdk.directory))
   const projectResults = createMemo(() => {
     const search = picker.projectSearch.trim().toLowerCase()
     if (!search) return projects()
     return projects().filter((project) => displayName(project).toLowerCase().includes(search))
   })
-  const branchResults = createMemo(() => {
-    const search = picker.branchSearch.trim().toLowerCase()
-    if (!search) return branchOptions()
-    return branchOptions().filter((option) => option.branch.toLowerCase().includes(search))
-  })
   const showAgentControl = createMemo(() => settings.general.showCustomAgents() && agentNames().length > 0)
-  const branchActionLabel = createMemo(() => {
-    const search = picker.branchSearch.trim()
-    if (search && branchResults().length === 0) return language.t("session.new.branch.add", { branch: search })
-    return language.t("session.new.branch.new")
-  })
-  function newSessionProjectDirectory() {
-    return selectedProject()?.worktree
-  }
-  function newSessionWorktree() {
-    const project = selectedProject()
-    if (!project) return props.newSessionWorktree
-    const selected = selectedSessionDirectory()
-    if (selected === CREATE_WORKTREE) return CREATE_WORKTREE
-    if (selected === project.worktree) return MAIN_WORKTREE
-    return selected
-  }
   const selectProject = (worktree: string) => {
     setPicker({
-      projectDirectory: worktree,
-      sessionDirectory: undefined,
-      worktreeName: undefined,
       projectOpen: false,
       projectSearch: "",
     })
-    restoreFocus()
-  }
-  const selectBranch = (directory: string, name?: string) => {
-    setPicker({
-      sessionDirectory: directory,
-      worktreeName: name,
-      branchOpen: false,
-      branchSearch: "",
-    })
-    restoreFocus()
+    if (pathKey(worktree) === pathKey(selectedProject()?.worktree ?? "")) {
+      restoreFocus()
+      return
+    }
+    layout.projects.open(worktree)
+    server.projects.touch(worktree)
+    navigate(`/${base64Encode(worktree)}/session`)
   }
 
   const projectPickerState = createMemo<ComposerPickerState>(() => ({
@@ -1536,39 +1400,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSearchInput: (value) => setPicker("projectSearch", value),
     onSearchClear: () => setPicker("projectSearch", ""),
     searchRef: (el) => (projectSearchRef = el),
-  }))
-  const branchPickerState = createMemo<ComposerPickerState>(() => ({
-    open: picker.branchOpen,
-    trigger: {
-      action: "prompt-branch",
-      icon: "branch",
-      label: currentBranch()?.branch ?? language.t("session.new.branch.new"),
-      class: "max-w-[160px]",
-      style: control(),
-      onPress: () => setPicker("branchOpen", true),
-    },
-    search: picker.branchSearch,
-    searchPlaceholder: language.t("session.new.branch.search"),
-    clearLabel: language.t("common.clear"),
-    items: branchResults().map((branch) => ({
-      icon: "branch",
-      label: branch.branch,
-      selected: currentBranch()?.directory === branch.directory && currentBranch()?.branch === branch.branch,
-      onSelect: () => selectBranch(branch.directory, branch.create ? branch.branch : undefined),
-    })),
-    action: {
-      icon: "plus",
-      label: branchActionLabel(),
-      onSelect: () => selectBranch(CREATE_WORKTREE, picker.branchSearch.trim() || undefined),
-    },
-    onOpenChange: (open) => {
-      setPicker("branchOpen", open)
-      if (open) requestAnimationFrame(() => branchSearchRef?.focus())
-    },
-    onSearchInput: (value) => setPicker("branchSearch", value),
-    onSearchClear: () => setPicker("branchSearch", ""),
-    searchRef: (el) => (branchSearchRef = el),
-    listClass: "max-h-[200px] overflow-y-auto",
   }))
   const agentControlState = createMemo<ComposerAgentControlState>(() => ({
     title: language.t("command.agent.cycle"),
@@ -1746,9 +1577,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <Show when={newSession() && selectedProject()}>
               <div class="flex h-7 min-w-0 items-center gap-0 px-2">
                 <ComposerPicker state={projectPickerState()} />
-                <Show when={branchOptions().length > 0}>
-                  <ComposerPicker state={branchPickerState()} />
-                </Show>
               </div>
             </Show>
           </div>
@@ -1795,7 +1623,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onMouseDown={(e) => {
                 const target = e.target
                 if (!(target instanceof HTMLElement)) return
-                if (target.closest('[data-action^="prompt-"]')) {
+                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
                   return
                 }
                 editorRef?.focus()

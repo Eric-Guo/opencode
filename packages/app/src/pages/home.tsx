@@ -70,10 +70,11 @@ function HomeDesign() {
   const selectedProject = createMemo(
     () => projects().find((project) => project.worktree === state.project) ?? projects()[0],
   )
+  const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
   const projectDirectories = createMemo(() => {
     const project = selectedProject()
     if (!project) return []
-    return [project.worktree, ...(project.sandboxes ?? [])]
+    return directories(project)
   })
   const search = createMemo(() => state.search.trim())
   const sessionLoad = useQuery(() => ({
@@ -148,6 +149,14 @@ function HomeDesign() {
     })
   }
 
+  const unseenCount = (project: LocalProject) =>
+    directories(project).reduce((total, directory) => total + notification.project.unseenCount(directory), 0)
+
+  const clearNotifications = (project: LocalProject) =>
+    directories(project)
+      .filter((directory) => notification.project.unseenCount(directory) > 0)
+      .forEach((directory) => notification.project.markViewed(directory))
+
   function openSession(session: Session) {
     const project = projectForSession(session, projects(), projectByID())
     layout.projects.open(project?.worktree ?? session.directory)
@@ -199,8 +208,8 @@ function HomeDesign() {
           layout.projects.close(directory)
           if (state.project === directory) setState("project", undefined)
         }}
-        clearNotifications={notification.project.markViewed}
-        unseenCount={notification.project.unseenCount}
+        clearNotifications={clearNotifications}
+        unseenCount={unseenCount}
         openSettings={openSettings}
         openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
         language={language}
@@ -277,8 +286,8 @@ function HomeProjectColumn(props: {
   chooseProject: () => void
   editProject: (project: LocalProject) => void
   closeProject: (directory: string) => void
-  clearNotifications: (directory: string) => void
-  unseenCount: (directory: string) => number
+  clearNotifications: (project: LocalProject) => void
+  unseenCount: (project: LocalProject) => number
   openSettings: () => void
   openHelp: () => void
   language: ReturnType<typeof useLanguage>
@@ -316,7 +325,7 @@ function HomeProjectColumn(props: {
               <HomeProjectRow
                 project={project}
                 selected={props.selected === project.worktree}
-                unseenCount={props.unseenCount(project.worktree)}
+                unseenCount={props.unseenCount(project)}
                 selectProject={props.selectProject}
                 openNewSession={props.openNewSession}
                 editProject={props.editProject}
@@ -358,7 +367,7 @@ function HomeProjectRow(props: {
   openNewSession: (directory: string) => void
   editProject: (project: LocalProject) => void
   closeProject: (directory: string) => void
-  clearNotifications: (directory: string) => void
+  clearNotifications: (project: LocalProject) => void
   language: ReturnType<typeof useLanguage>
 }) {
   const name = createMemo(() => displayName(props.project))
@@ -409,7 +418,7 @@ function HomeProjectRow(props: {
               </MenuV2.Item>
               <MenuV2.Item
                 disabled={props.unseenCount === 0}
-                onSelect={() => props.clearNotifications(props.project.worktree)}
+                onSelect={() => props.clearNotifications(props.project)}
               >
                 <Icon name="circle-check" size="small" />
                 {props.language.t("sidebar.project.clearNotifications")}

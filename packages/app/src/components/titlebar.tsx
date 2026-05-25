@@ -23,7 +23,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { StatusPopover } from "@/components/status-popover"
+import { StatusPopoverV2 } from "@/components/status-popover"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -668,7 +668,7 @@ function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
       <TitlebarUpdatePill state={props.state.update} />
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
-          <StatusPopover variant="v2" scope="server" />
+          <StatusPopoverV2 scope="server" />
         </Tooltip>
       </Show>
       <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
