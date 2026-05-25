@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { normalize, text } from "./session-diff"
+import { normalize, resolveFileDiff, text } from "./session-diff"
 
 describe("session diff", () => {
   test("keeps unified patch content", () => {
@@ -32,6 +32,18 @@ describe("session diff", () => {
 
     expect(text(view, "deletions")).toBe("one\ntwo")
     expect(text(view, "additions")).toBe("one\nthree")
+  })
+
+  test("keeps separated patch hunks partial without complete file contents", () => {
+    const fileDiff = resolveFileDiff({
+      file: "project.ts",
+      patch:
+        'Index: project.ts\n===================================================================\n--- project.ts\t\n+++ project.ts\t\n@@ -1,3 +1,2 @@\n import { and } from "drizzle-orm"\n-import { sql } from "drizzle-orm"\n import { ProjectTable } from "./project.sql"\n@@ -346,3 +345,3 @@\n import { Database } from "@/storage/db"\n-import { ProjectTable } from "./project.sql"\n+import { ProjectTable } from "../project/project.sql"\n import { SessionTable } from "../session/session.sql"\n',
+    })
+
+    expect(fileDiff.isPartial).toBe(true)
+    expect(fileDiff.hunks).toHaveLength(2)
+    expect(fileDiff.hunks[1]?.collapsedBefore).toBeGreaterThan(0)
   })
 
   test("converts legacy content into a patch", () => {

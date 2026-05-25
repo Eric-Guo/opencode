@@ -88,6 +88,7 @@ type DiffBaseProps<T> = FileDiffOptions<T> &
     mode: "diff"
     annotations?: DiffLineAnnotation<T>[]
     preloadedDiff?: DiffPreload<T>
+    virtualize?: boolean
   }
 
 type DiffPairProps<T> = DiffBaseProps<T> & {
@@ -123,7 +124,7 @@ const sharedKeys = [
 ] as const
 
 const textKeys = ["file", ...sharedKeys] as const
-const diffKeys = ["fileDiff", "before", "after", ...sharedKeys] as const
+const diffKeys = ["fileDiff", "before", "after", "virtualize", ...sharedKeys] as const
 
 // ---------------------------------------------------------------------------
 // Shared viewer hook
@@ -482,17 +483,24 @@ function notifyRendered(opts: {
 function renderViewer<I extends RenderTarget>(opts: {
   viewer: Viewer
   current: I | undefined
+  reset?: boolean
   create: () => I
+  update?: (value: I) => void
   assign: (value: I) => void
   draw: (value: I) => void
   onReady: () => void
 }) {
   clearReadyWatcher(opts.viewer.ready)
-  opts.current?.cleanUp()
-  const next = opts.create()
-  opts.assign(next)
+  const reset = opts.reset === true && opts.current !== undefined
+  if (reset) opts.current?.cleanUp()
+  const next = reset || !opts.current ? opts.create() : opts.current
+  if (reset || !opts.current) {
+    opts.viewer.container.innerHTML = ""
+    opts.assign(next)
+  } else {
+    opts.update?.(next)
+  }
 
-  opts.viewer.container.innerHTML = ""
   opts.draw(next)
 
   applyViewerScheme(opts.viewer.getHost())
@@ -566,7 +574,7 @@ function createLocalVirtualStrategy(host: () => HTMLDivElement | undefined, enab
   }
 }
 
-function createSharedVirtualStrategy(host: () => HTMLDivElement | undefined): VirtualStrategy {
+function createSharedVirtualStrategy(host: () => HTMLDivElement | undefined, enabled: () => boolean): VirtualStrategy {
   let shared: NonNullable<ReturnType<typeof acquireVirtualizer>> | undefined
 
   const release = () => {
@@ -576,6 +584,10 @@ function createSharedVirtualStrategy(host: () => HTMLDivElement | undefined): Vi
 
   return {
     get: () => {
+      if (!enabled()) {
+        release()
+        return
+      }
       if (shared) return shared.virtualizer
 
       const container = host()
@@ -689,6 +701,7 @@ function ViewerShell(props: {
 
 function TextViewer<T>(props: TextFileProps<T>) {
   let instance: PierreFile<T> | VirtualizedFile<T> | undefined
+  let renderMode: Virtualizer | "plain" | undefined
   let viewer!: Viewer
 
   const [local, others] = splitProps(props, textKeys)
@@ -861,21 +874,26 @@ function TextViewer<T>(props: TextFileProps<T>) {
     const isVirtual = virtual()
 
     const virtualizer = virtuals.get()
+    const nextRenderMode = isVirtual && virtualizer ? virtualizer : "plain"
 
     renderViewer({
       viewer,
       current: instance,
+      reset: renderMode !== undefined && renderMode !== nextRenderMode,
       create: () =>
         isVirtual && virtualizer
           ? new VirtualizedFile<T>(opts, virtualizer, codeMetrics, workerPool)
           : new PierreFile<T>(opts, workerPool),
+      update: (value) => value.setOptions(opts),
       assign: (value) => {
         instance = value
+        renderMode = nextRenderMode
       },
       draw: (value) => {
         const contents = text()
         value.render({
           file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents },
+          forceRender: true,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })
@@ -895,6 +913,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   onCleanup(() => {
     instance?.cleanUp()
     instance = undefined
+    renderMode = undefined
     virtuals.cleanup()
   })
 
@@ -907,6 +926,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
 
 function DiffViewer<T>(props: DiffFileProps<T>) {
   let instance: FileDiff<T> | undefined
+  let renderMode: Virtualizer | "plain" | undefined
   let dragSide: DiffSelectionSide | undefined
   let dragEndSide: DiffSelectionSide | undefined
   let viewer!: Viewer
@@ -991,7 +1011,10 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     adapter,
   )
 
-  const virtuals = createSharedVirtualStrategy(() => viewer.container)
+  const virtuals = createSharedVirtualStrategy(
+    () => viewer.container,
+    () => local.virtualize !== false,
+  )
 
   const large = createMemo(() => {
     if (local.fileDiff) {
@@ -1056,6 +1079,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     const opts = options()
     const workerPool = large() ? getWorkerPool("unified") : getWorkerPool(props.diffStyle)
     const virtualizer = virtuals.get()
+    const nextRenderMode = virtualizer ?? "plain"
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
     const done = preserve(viewer)
@@ -1070,17 +1094,21 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     renderViewer({
       viewer,
       current: instance,
+      reset: renderMode !== undefined && renderMode !== nextRenderMode,
       create: () =>
         virtualizer
           ? new VirtualizedFileDiff<T>(opts, virtualizer, virtualMetrics, workerPool)
           : new FileDiff<T>(opts, workerPool),
+      update: (value) => value.setOptions(opts),
       assign: (value) => {
         instance = value
+        renderMode = nextRenderMode
       },
       draw: (value) => {
         if (local.fileDiff) {
           value.render({
             fileDiff: local.fileDiff,
+            forceRender: true,
             lineAnnotations: [],
             containerWrapper: viewer.container,
           })
@@ -1092,6 +1120,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
         value.render({
           oldFile: { ...local.before, contents: beforeContents, cacheKey: cacheKey(beforeContents) },
           newFile: { ...local.after, contents: afterContents, cacheKey: cacheKey(afterContents) },
+          forceRender: true,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })
@@ -1111,6 +1140,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   onCleanup(() => {
     instance?.cleanUp()
     instance = undefined
+    renderMode = undefined
     virtuals.cleanup()
     dragSide = undefined
     dragEndSide = undefined
