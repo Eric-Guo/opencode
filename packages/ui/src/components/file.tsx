@@ -893,6 +893,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
         const contents = text()
         value.render({
           file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents },
+          forceRender: true,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })
@@ -1107,6 +1108,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
         if (local.fileDiff) {
           value.render({
             fileDiff: local.fileDiff,
+            forceRender: true,
             lineAnnotations: [],
             containerWrapper: viewer.container,
           })
@@ -1118,6 +1120,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
         value.render({
           oldFile: { ...local.before, contents: beforeContents, cacheKey: cacheKey(beforeContents) },
           newFile: { ...local.after, contents: afterContents, cacheKey: cacheKey(afterContents) },
+          forceRender: true,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })

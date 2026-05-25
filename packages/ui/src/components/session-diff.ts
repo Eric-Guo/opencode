@@ -213,23 +213,18 @@ function fileDiffFromPatch(patch: string) {
   if (hit) return hit
 
   let value: FileDiffMetadata | undefined
-  const info = patchInfo(patch)
-  if (info) {
-    const file = parsePatchFiles(patch)[0]?.files[0]
-    if (file) value = { ...file, isPartial: info.patchIsPartial }
-  }
+  if (validPatch(patch)) value = parsePatchFiles(patch)[0]?.files[0]
   if (value === undefined) value = parseDiffFromFile({ name: "", contents: "" }, { name: "", contents: "" })
 
   return setMapCache(patchFileDiffCache, patch, value)
 }
 
-function patchInfo(value: string) {
+function validPatch(value: string) {
   try {
-    return {
-      patchIsPartial: parsePatch(value).every((file) => file.hunks.every((hunk) => hunk.oldStart > 1)),
-    }
+    parsePatch(value)
+    return true
   } catch {
-    return undefined
+    return false
   }
 }
 
