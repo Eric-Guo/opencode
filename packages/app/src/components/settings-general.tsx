@@ -802,7 +802,7 @@ export const SettingsGeneral: Component = () => {
 
         <DisplaySection />
 
-        <Show when={desktop() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+        <Show when={desktop() && false}>
           <AdvancedSection />
         </Show>
       </div>

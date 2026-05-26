@@ -49,7 +49,7 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { ServersProvider } from "./context/servers"
 
-if (import.meta.env.VITE_OPENCODE_CHANNEL !== "prod") {
+if (false) {
   document.body.classList.remove("text-12-regular")
   document.body.classList.add("font-(family-name:--font-family-text)", "text-[13px]", "font-[440]")
 }
