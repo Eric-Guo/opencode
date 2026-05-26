@@ -50,6 +50,8 @@ export const loadMcpQuery = (directory: string, sdk: OpencodeClient) =>
   queryOptions({
     queryKey: [directory, "mcp"] as const,
     queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
+    refetchInterval: (query) =>
+      Object.values(query.state.data ?? {}).some((status) => status.status === "connecting") ? 1000 : false,
   })
 
 export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>
@@ -81,6 +83,7 @@ export function createServerSyncContext() {
 
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
+  const activeBootstrapped = new Set<string>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
@@ -205,11 +208,15 @@ export function createServerSyncContext() {
     onBootstrap: (directory) => {
       void bootstrapInstance(directory)
     },
+    onActivate: (directory) => {
+      void bootstrapInstance(directory, { requireActive: true })
+    },
     onDispose: (directory) => {
       const key = directoryKey(directory)
       queue.clear(key)
       sessionMeta.delete(key)
       sdkCache.delete(key)
+      activeBootstrapped.delete(key)
       clearProviderRev(key)
       clearSessionPrefetchDirectory(key)
     },
@@ -297,13 +304,19 @@ export function createServerSyncContext() {
     return promise
   }
 
-  async function bootstrapInstance(directory: string) {
+  async function bootstrapInstance(directory: string, options: { requireActive?: boolean } = {}) {
     const key = directoryKey(directory)
     if (!key) return
     const pending = booting.get(key)
-    if (pending) return pending
+    if (pending) {
+      await pending
+      if (options.requireActive && !activeBootstrapped.has(key)) return bootstrapInstance(directory, options)
+      return
+    }
 
     children.pin(key)
+    const active = children.active(key)
+    if (active) activeBootstrapped.add(key)
     const promise = Promise.resolve().then(async () => {
       const child = children.ensureChild(directory)
       const cache = children.vcsCache.get(key)
@@ -311,6 +324,7 @@ export function createServerSyncContext() {
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
+        active,
         global: {
           config: globalStore.config,
           path: globalStore.path,

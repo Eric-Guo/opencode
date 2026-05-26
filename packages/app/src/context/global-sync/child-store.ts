@@ -1,4 +1,4 @@
-import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
+import { createRoot, createSignal, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
@@ -14,7 +14,7 @@ import {
   type VcsCache,
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
-import { useQueries } from "@tanstack/solid-query"
+import { useQueries, useQuery } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../server-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
 import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
@@ -24,6 +24,7 @@ export function createChildStoreManager(input: {
   isBooting: (directory: string) => boolean
   isLoadingSessions: (directory: string) => boolean
   onBootstrap: (directory: string) => void
+  onActivate: (directory: string) => void
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
   queryOptions: QueryOptionsApi
@@ -39,6 +40,8 @@ export function createChildStoreManager(input: {
   const pins = new Map<string, number>()
   const ownerPins = new WeakMap<object, Set<string>>()
   const disposers = new Map<string, () => void>()
+  const activators = new Map<string, () => void>()
+  const active = new Set<string>()
 
   const markKey = (key: DirectoryKey) => {
     if (!key) return
@@ -110,6 +113,8 @@ export function createChildStoreManager(input: {
     metaCache.delete(key)
     iconCache.delete(key)
     lifecycle.delete(key)
+    activators.delete(key)
+    active.delete(key)
     const dispose = disposers.get(key)
     if (dispose) {
       dispose()
@@ -173,14 +178,18 @@ export function createChildStoreManager(input: {
         createRoot((dispose) => {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
+          const [observed, setObserved] = createSignal(false)
 
-          const [pathQuery, mcpQuery, lspQuery, providerQuery] = useQueries(() => ({
+          const [pathQuery, lspQuery, providerQuery] = useQueries(() => ({
             queries: [
               input.queryOptions.path(key),
-              input.queryOptions.mcp(key),
               input.queryOptions.lsp(key),
               input.queryOptions.providers(key),
             ],
+          }))
+          const mcpQuery = useQuery(() => ({
+            ...input.queryOptions.mcp(key),
+            enabled: observed,
           }))
 
           const child = createStore<State>({
@@ -217,10 +226,10 @@ export function createChildStoreManager(input: {
             permission: {},
             question: {},
             get mcp_ready() {
-              return !mcpQuery.isLoading
+              return observed() && !mcpQuery.isLoading
             },
             get mcp() {
-              return mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
+              return !observed() || mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
             },
             get lsp_ready() {
               return !lspQuery.isLoading
@@ -236,6 +245,12 @@ export function createChildStoreManager(input: {
           })
           children[key] = child
           disposers.set(key, dispose)
+          activators.set(key, () => {
+            if (active.has(key)) return
+            active.add(key)
+            setObserved(true)
+            input.onActivate(directory)
+          })
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
@@ -274,6 +289,7 @@ export function createChildStoreManager(input: {
     const key = directoryKey(directory)
     const childStore = ensureChild(directory)
     pinForOwner(key)
+    if (options.active) activators.get(key)?.()
     const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
@@ -284,6 +300,7 @@ export function createChildStoreManager(input: {
   function peek(directory: string, options: ChildOptions = {}) {
     const key = directoryKey(directory)
     const childStore = ensureChild(directory)
+    if (options.active) activators.get(key)?.()
     const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
@@ -330,6 +347,7 @@ export function createChildStoreManager(input: {
     pin,
     unpin,
     pinned,
+    active: (directory: string) => active.has(directoryKey(directory)),
     disposeDirectory,
     runEviction,
     vcsCache,
