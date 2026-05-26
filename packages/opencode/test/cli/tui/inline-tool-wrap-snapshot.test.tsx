@@ -49,7 +49,8 @@ function InlineToolRow(props: { item: ToolFixture; errorExpanded?: boolean }) {
       renderBefore={function () {
         const parent = this.parent
         if (!parent) return
-        setMargin(parent.getChildren()[parent.getChildren().indexOf(this) - 1]?.id.startsWith("text-") ? 1 : 0)
+        const previous = parent.getChildren()[parent.getChildren().indexOf(this) - 1]
+        setMargin(previous?.id.startsWith("text-") || previous?.id.startsWith("tool-block-") ? 1 : 0)
       }}
     >
       <box flexDirection="row">
@@ -65,10 +66,23 @@ function InlineToolRow(props: { item: ToolFixture; errorExpanded?: boolean }) {
   )
 }
 
-function Fixture(props: { errorExpanded?: boolean }) {
+function ShellOutput() {
+  return (
+    <box id="tool-block-shell" marginTop={1} paddingTop={1} paddingBottom={1} paddingLeft={2} gap={1}>
+      <text paddingLeft={3}># List files</text>
+      <box gap={1}>
+        <text>$ ls</text>
+        <text>file.ts</text>
+      </box>
+    </box>
+  )
+}
+
+function Fixture(props: { errorExpanded?: boolean; shellOutput?: boolean }) {
   return (
     <box flexDirection="column" width={72}>
       <box flexDirection="column">
+        {props.shellOutput && <ShellOutput />}
         <For each={tools}>{(item) => <InlineToolRow item={item} errorExpanded={props.errorExpanded} />}</For>
       </box>
     </box>
@@ -93,6 +107,21 @@ describe("TUI inline tool wrapping", () => {
 
   test("snapshots expanded tool errors under the tool text", async () => {
     testSetup = await testRender(() => <Fixture errorExpanded />, { width: 72, height: 12 })
+    await testSetup.renderOnce()
+    await testSetup.renderOnce()
+
+    expect(
+      testSetup
+        .captureCharFrame()
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .join("\n")
+        .trimEnd(),
+    ).toMatchSnapshot()
+  })
+
+  test("keeps separation after a shell output block", async () => {
+    testSetup = await testRender(() => <Fixture shellOutput />, { width: 72, height: 16 })
     await testSetup.renderOnce()
     await testSetup.renderOnce()
 

@@ -1793,7 +1793,7 @@ function InlineTool(props: {
         const children = parent.getChildren()
         const index = children.indexOf(el)
         const previous = children[index - 1]
-        setMargin(previous?.id.startsWith("text-") ? 1 : 0)
+        setMargin(previous?.id.startsWith("text-") || previous?.id.startsWith("tool-block-") ? 1 : 0)
       }}
     >
       <Switch>
@@ -1850,6 +1850,7 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
+      id={props.part ? "tool-block-" + props.part.id : undefined}
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
