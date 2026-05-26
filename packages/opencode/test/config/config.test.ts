@@ -9,7 +9,7 @@ import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
-import { Auth } from "../../src/auth"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -34,8 +34,9 @@ import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
 import { AccountTest } from "../fake/account"
-import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
+import { Substitution } from "@opencode-ai/core/substitution"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
 const infra = CrossSpawnSpawner.defaultLayer.pipe(
@@ -48,6 +49,12 @@ const unexpectedHttp = HttpClient.make((request) =>
   Effect.die(`unexpected http request: ${request.method} ${request.url}`),
 )
 
+const runSubstitution = <A, E>(effect: Effect.Effect<A, E, Substitution.Service>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(Substitution.defaultLayer)))
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
 const json = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unknown, status = 200) =>
   HttpClientResponse.fromWeb(
     request,
@@ -57,13 +64,18 @@ const json = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: u
     }),
   )
 
-const wellKnownAuth = (url: string) =>
-  Layer.mock(Auth.Service)({
+const wellKnownAuth = (url: string, content: unknown = {}) => {
+  const normalized = url.replace(/\/+$/, "")
+  const source = `${normalized}/.well-known/opencode`
+  return Layer.mock(AuthWellKnown.Service)({
     all: () =>
       Effect.succeed({
-        [url]: new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
+        [normalized]: new AuthWellKnown.Entry({ key: "TEST_TOKEN", token: "test-token" }),
       }),
+    configs: () =>
+      Effect.succeed([{ url: normalized, source, dir: path.dirname(source), content }]),
   })
+}
 
 function remoteConfigClient(input: {
   wellKnown: unknown
@@ -86,15 +98,16 @@ function remoteConfigClient(input: {
 
 const configLayer = (
   options: {
-    auth?: Layer.Layer<Auth.Service>
+    authWellKnown?: Layer.Layer<AuthWellKnown.Service>
     account?: Layer.Layer<Account.Service>
     client?: HttpClient.HttpClient
   } = {},
 ) =>
   Config.layer.pipe(
     Layer.provide(testFlock),
+    Layer.provide(Substitution.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(options.auth ?? AuthTest.empty),
+    Layer.provide(options.authWellKnown ?? AuthWellKnownTest.empty),
     Layer.provide(options.account ?? AccountTest.empty),
     Layer.provideMerge(infra),
     Layer.provide(NpmTest.noop),
@@ -216,6 +229,33 @@ const wellKnown = (input: {
   wellKnown?: unknown
 }) => {
   const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
+  const normalized = (input.authUrl ?? "https://example.com").replace(/\/+$/, "")
+  const source = `${normalized}/.well-known/opencode`
+  seen.wellKnown = source
+  const token = "test-token"
+  const remoteConfig = input.remoteConfig
+    ? {
+        ...input.remoteConfig,
+        url: input.remoteConfig.url.replaceAll("{env:TEST_TOKEN}", token),
+        headers: input.remoteConfig.headers
+          ? Object.fromEntries(
+              Object.entries(input.remoteConfig.headers).map(([key, value]) => [
+                key,
+                value.replaceAll("{env:TEST_TOKEN}", token),
+              ]),
+            )
+          : undefined,
+      }
+    : undefined
+  if (remoteConfig) {
+    seen.remote = remoteConfig.url
+    seen.authorization = remoteConfig.headers?.Authorization
+  }
+  const remoteContent = isRecord(input.remote) && isRecord(input.remote.config) ? input.remote.config : input.remote
+  const content =
+    isRecord(input.config) && isRecord(remoteContent)
+      ? { ...input.config, ...remoteContent }
+      : remoteContent ?? input.config ?? {}
   const client = remoteConfigClient({
     seen,
     wellKnown: input.wellKnown ?? {
@@ -226,7 +266,7 @@ const wellKnown = (input: {
   })
   return {
     seen,
-    it: configIt({ auth: wellKnownAuth(input.authUrl ?? "https://example.com"), client }),
+    it: configIt({ authWellKnown: wellKnownAuth(normalized, content), client }),
   }
 }
 
@@ -536,6 +576,30 @@ it.instance("handles file inclusion with replacement tokens", () =>
     expect(config.username).toBe("const out = await Bun.$`echo hi`")
   }),
 )
+
+test("environment variable substitution accepts an env overlay", async () => {
+  const originalEnv = process.env["TEST_VAR"]
+  delete process.env["TEST_VAR"]
+
+  try {
+    expect(
+      await runSubstitution(
+        Substitution.Service.use((substitution) =>
+          substitution.substitute({
+            text: "{env:TEST_VAR}",
+            type: "virtual",
+            dir: "/tmp",
+            source: "test",
+            env: { TEST_VAR: "overlay" },
+          }),
+        ),
+      ),
+    ).toBe("overlay")
+  } finally {
+    if (originalEnv === undefined) delete process.env["TEST_VAR"]
+    else process.env["TEST_VAR"] = originalEnv
+  }
+})
 
 const accountTokenIt = configIt({
   account: Layer.mock(Account.Service)({
@@ -1488,6 +1552,7 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
         Config.layer.pipe(
           Layer.provide(testFlock),
           Layer.provide(AppFileSystem.defaultLayer),
+          Layer.provide(Substitution.defaultLayer),
           Layer.provide(Env.defaultLayer),
           Layer.provide(wellKnownAuth(server.url.origin)),
           Layer.provide(AccountTest.empty),
