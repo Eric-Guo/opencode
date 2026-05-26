@@ -13,7 +13,7 @@ import { McpApi } from "./groups/mcp"
 import { PermissionApi } from "./groups/permission"
 import { ProjectApi } from "./groups/project"
 import { ProviderApi } from "./groups/provider"
-import { PtyApi, PtyConnectApi } from "./groups/pty"
+import { PtyApi } from "./groups/pty"
 import { QuestionApi } from "./groups/question"
 import { SessionApi } from "./groups/session"
 import { SyncApi } from "./groups/sync"
@@ -55,7 +55,6 @@ export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(RootHttpApi)
   .addHttpApi(EventApi)
   .addHttpApi(InstanceHttpApi)
-  .addHttpApi(PtyConnectApi)
   .annotate(HttpApi.AdditionalSchemas, [EventSchema, ...SyncEventSchemas])
 
 export type RootHttpApiType = typeof RootHttpApi

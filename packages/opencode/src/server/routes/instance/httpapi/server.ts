@@ -59,7 +59,12 @@ import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { PublicApi } from "./public"
-import { authorizationLayer, authorizationRouterMiddleware, v2AuthorizationLayer } from "./middleware/authorization"
+import {
+  authorizationLayer,
+  authorizationRouterMiddleware,
+  ptyConnectAuthorizationLayer,
+  v2AuthorizationLayer,
+} from "./middleware/authorization"
 import { EventApi } from "./groups/event"
 import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
@@ -72,15 +77,15 @@ import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
 import { providerHandlers } from "./handlers/provider"
-import { ptyConnectRoute, ptyHandlers } from "./handlers/pty"
+import { ptyConnectHandlers, ptyHandlers } from "./handlers/pty"
 import { questionHandlers } from "./handlers/question"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
 import { v2Handlers } from "./handlers/v2"
 import { workspaceHandlers } from "./handlers/workspace"
-import { instanceContextLayer, instanceRouterMiddleware } from "./middleware/instance-context"
-import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/workspace-routing"
+import { instanceContextLayer } from "./middleware/instance-context"
+import { workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { compressionLayer } from "./middleware/compression"
@@ -102,24 +107,22 @@ const cors = (corsOptions?: CorsOptions) =>
 
 // Route tree:
 // - rootApiRoutes: typed /global/* and control routes; auth is declared by RootHttpApi.
-// - eventApiRoutes/rawInstanceRoutes: raw instance routes; auth and workspace routing happen as router middleware.
-// - instanceApiRoutes: schema routes; auth is declared on each group and workspace context is provided below.
+// - eventApiRoutes: typed SSE route with instance routing context and its existing API contract.
+// - instanceApiRoutes: typed instance routes, including the PTY websocket upgrade handler.
 // - uiRoute: raw catch-all fallback; auth is router middleware so public static assets can bypass it.
 const authOnlyRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const httpApiAuthLayer = authorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
+const ptyConnectHttpApiAuthLayer = ptyConnectAuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const v2HttpApiAuthLayer = v2AuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
+const workspaceRoutingLive = workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, globalHandlers]),
   Layer.provide(schemaErrorLayer),
   Layer.provide(httpApiAuthLayer),
 )
-const instanceRouterLayer = authorizationRouterMiddleware
-  .combine(instanceRouterMiddleware)
-  .combine(workspaceRouterMiddleware)
-  .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal), Layer.provide(ServerAuth.Config.defaultLayer))
 const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
   Layer.provide(eventHandlers),
-  Layer.provide(instanceRouterLayer),
+  Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer]),
 )
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
@@ -130,6 +133,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     mcpHandlers,
     projectHandlers,
     ptyHandlers,
+    ptyConnectHandlers,
     questionHandlers,
     permissionHandlers,
     providerHandlers,
@@ -141,12 +145,12 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   ]),
 )
 
-const rawInstanceRoutes = Layer.mergeAll(ptyConnectRoute).pipe(Layer.provide(instanceRouterLayer))
-const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
+const instanceRoutes = instanceApiRoutes.pipe(
   Layer.provide([
     httpApiAuthLayer,
+    ptyConnectHttpApiAuthLayer,
     v2HttpApiAuthLayer,
-    workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
+    workspaceRoutingLive,
     instanceContextLayer,
     schemaErrorLayer,
   ]),

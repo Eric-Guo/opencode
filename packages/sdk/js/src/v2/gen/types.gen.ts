@@ -1717,6 +1717,10 @@ export type PtyForbiddenError = {
   message: string
 }
 
+export type EffectHttpApiErrorForbidden = {
+  _tag: "Forbidden"
+}
+
 export type QuestionNotFoundError = {
   _tag: "QuestionNotFoundError"
   requestID: string
@@ -1961,10 +1965,6 @@ export type WorkspaceWarpError = {
   data: {
     message: string
   }
-}
-
-export type EffectHttpApiErrorForbidden = {
-  _tag: "Forbidden"
 }
 
 export type SyncEventMessageUpdated = {
@@ -5715,6 +5715,46 @@ export type PtyConnectTokenResponses = {
 
 export type PtyConnectTokenResponse = PtyConnectTokenResponses[keyof PtyConnectTokenResponses]
 
+export type PtyConnectData = {
+  body?: never
+  path: {
+    ptyID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    cursor?: string
+    ticket?: string
+  }
+  url: "/pty/{ptyID}/connect"
+}
+
+export type PtyConnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Forbidden
+   */
+  403: EffectHttpApiErrorForbidden
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
+
+export type PtyConnectResponses = {
+  /**
+   * Connected session
+   */
+  200: boolean
+}
+
+export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]
+
 export type QuestionListData = {
   body?: never
   path?: never
@@ -8187,37 +8227,3 @@ export type ExperimentalWorkspaceWarpResponses = {
 
 export type ExperimentalWorkspaceWarpResponse =
   ExperimentalWorkspaceWarpResponses[keyof ExperimentalWorkspaceWarpResponses]
-
-export type PtyConnectData = {
-  body?: never
-  path: {
-    ptyID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/pty/{ptyID}/connect"
-}
-
-export type PtyConnectErrors = {
-  /**
-   * Forbidden
-   */
-  403: EffectHttpApiErrorForbidden
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
-
-export type PtyConnectResponses = {
-  /**
-   * Connected session
-   */
-  200: boolean
-}
-
-export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]
