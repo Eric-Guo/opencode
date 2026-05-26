@@ -17,7 +17,7 @@ For SSE endpoints, stay in `HttpApiBuilder.group(...)` and return `HttpServerRes
 Use `HttpApiBuilder.group(...)` with `handleRaw(...)` for declared endpoints that need the raw request or response, including WebSocket upgrade routes. This keeps endpoint middleware, routing context, and OpenAPI metadata on one typed route tree.
 
 ```ts
-export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handlers) =>
+export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-connect", (handlers) =>
   Effect.gen(function* () {
     const pty = yield* Pty.Service
 

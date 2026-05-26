@@ -16,10 +16,9 @@ import { described } from "./metadata"
 
 const root = "/pty"
 export const Params = Schema.Struct({ ptyID: PtyID })
-export const ConnectQuery = Schema.Struct({
+export const CursorQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   cursor: Schema.optional(Schema.String),
-  [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String),
 })
 export const ShellItem = Schema.Struct({
   path: Schema.String,
@@ -129,28 +128,6 @@ export const PtyApi = HttpApi.make("pty")
       .middleware(WorkspaceRoutingMiddleware)
       .middleware(Authorization),
   )
-  .add(
-    HttpApiGroup.make("pty-connect")
-      .add(
-        HttpApiEndpoint.get("connect", PtyPaths.connect, {
-          params: Params,
-          query: ConnectQuery,
-          success: described(Schema.Boolean, "Connected session"),
-          error: [HttpApiError.Forbidden, HttpApiError.NotFound],
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "pty.connect",
-            summary: "Connect to PTY session",
-            description:
-              "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.",
-          }),
-        ),
-      )
-      .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." }))
-      .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
-      .middleware(PtyConnectAuthorization),
-  )
   .annotateMerge(
     OpenApi.annotations({
       title: "opencode experimental HttpApi",
@@ -158,3 +135,38 @@ export const PtyApi = HttpApi.make("pty")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
+
+export const PtyConnectApi = HttpApi.make("pty-connect").add(
+  HttpApiGroup.make("pty-connect")
+    .add(
+      // Decode PTY connection query fields in the raw handler after checking
+      // existence, preserving the established empty-404 response ordering.
+      HttpApiEndpoint.get("connect", PtyPaths.connect, {
+        params: Params,
+        success: described(Schema.Boolean, "Connected session"),
+        error: [HttpApiError.Forbidden, HttpApiError.NotFound],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "pty.connect",
+          summary: "Connect to PTY session",
+          description:
+            "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.",
+          transform: (operation) => ({
+            ...operation,
+            parameters: [
+              ...(operation.parameters ?? []),
+              ...["directory", "workspace", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
+                in: "query",
+                name,
+                schema: { type: "string" },
+              })),
+            ],
+          }),
+        }),
+      ),
+    )
+    .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." }))
+    .middleware(InstanceContextMiddleware)
+    .middleware(WorkspaceRoutingMiddleware)
+    .middleware(PtyConnectAuthorization),
+)

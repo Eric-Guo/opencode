@@ -5,14 +5,18 @@ import { handlePtyInput } from "@/pty/input"
 import { Shell } from "@/shell/shell"
 import { EffectBridge } from "@/effect/bridge"
 import { CorsConfig, isAllowedRequestOrigin, type CorsOptions } from "@/server/cors"
-import { PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "@/server/shared/pty-ticket"
-import { Effect } from "effect"
+import {
+  PTY_CONNECT_TICKET_QUERY,
+  PTY_CONNECT_TOKEN_HEADER,
+  PTY_CONNECT_TOKEN_HEADER_VALUE,
+} from "@/server/shared/pty-ticket"
+import { Effect, Option, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
 import * as ApiError from "../errors"
-import { ConnectQuery } from "../groups/pty"
+import { CursorQuery, PtyConnectApi } from "../groups/pty"
 import { WebSocketTracker } from "../websocket-tracker"
 
 function validOrigin(request: HttpServerRequest.HttpServerRequest, opts: CorsOptions | undefined) {
@@ -117,7 +121,7 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
   }),
 )
 
-export const ptyConnectHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty-connect", (handlers) =>
+export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-connect", (handlers) =>
   Effect.gen(function* () {
     const pty = yield* Pty.Service
     const tickets = yield* PtyTicket.Service
@@ -127,7 +131,6 @@ export const ptyConnectHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty-con
       "connect",
       Effect.fn("PtyHttpApi.connect")(function* (ctx: {
         params: { ptyID: PtyID }
-        query: typeof ConnectQuery.Type
         request: HttpServerRequest.HttpServerRequest
       }) {
         const exists = yield* pty.get(ctx.params.ptyID).pipe(
@@ -136,13 +139,16 @@ export const ptyConnectHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty-con
         )
         if (!exists) return HttpServerResponse.empty({ status: 404 })
 
-        if (ctx.query.ticket) {
+        const query = Schema.decodeUnknownOption(CursorQuery)(yield* HttpServerRequest.ParsedSearchParams)
+        if (Option.isNone(query)) return HttpServerResponse.empty({ status: 400 })
+        const ticket = new URL(ctx.request.url, "http://localhost").searchParams.get(PTY_CONNECT_TICKET_QUERY)
+        if (ticket) {
           const valid = validOrigin(ctx.request, cors)
-            ? yield* tickets.consume({ ticket: ctx.query.ticket, ptyID: ctx.params.ptyID, ...(yield* PtyTicket.scope) })
+            ? yield* tickets.consume({ ticket, ptyID: ctx.params.ptyID, ...(yield* PtyTicket.scope) })
             : false
           if (!valid) return HttpServerResponse.empty({ status: 403 })
         }
-        const parsedCursor = ctx.query.cursor === undefined ? undefined : Number(ctx.query.cursor)
+        const parsedCursor = query.value.cursor === undefined ? undefined : Number(query.value.cursor)
         const cursor =
           parsedCursor !== undefined && Number.isSafeInteger(parsedCursor) && parsedCursor >= -1
             ? parsedCursor
