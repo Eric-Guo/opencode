@@ -1365,6 +1365,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     server.projects.touch(worktree)
     navigate(`/${base64Encode(worktree)}/session`)
   }
+  const addProject = async () => {
+    const select = (result: string | string[] | null) => {
+      const directory = Array.isArray(result) ? result[0] : result
+      if (!directory) return
+      selectProject(directory)
+    }
+    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+      select(await platform.openDirectoryPickerDialog({ title: language.t("command.project.open") }))
+      return
+    }
+    void import("@/components/dialog-select-directory").then((x) => {
+      dialog.show(() => <x.DialogSelectDirectory onSelect={select} />, () => select(null))
+    })
+  }
 
   const projectPickerState = createMemo<ComposerPickerState>(() => ({
     open: picker.projectOpen,
@@ -1390,7 +1404,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       label: language.t("session.new.project.add"),
       onSelect: () => {
         setPicker("projectOpen", false)
-        command.trigger("project.open")
+        void addProject()
       },
     },
     onOpenChange: (open) => {
@@ -1418,7 +1432,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     label: language.t("session.new.project.new"),
     class: "max-w-[160px]",
     style: control(),
-    onPress: () => command.trigger("project.open"),
+    onPress: () => void addProject(),
   }))
 
   return (

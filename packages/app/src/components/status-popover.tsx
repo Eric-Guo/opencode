@@ -7,6 +7,7 @@ import { Suspense, createMemo, createSignal, lazy, Show, type JSX } from "solid-
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
+import { useServers } from "@/context/servers"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverServerBody })))
@@ -14,9 +15,10 @@ const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ def
 export function StatusPopover() {
   const language = useLanguage()
   const server = useServer()
+  const servers = useServers()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
-  const ready = createMemo(() => server.healthy() === false || sync.data.mcp_ready)
+  const ready = createMemo(() => servers.health[server.key]?.healthy === false || sync.data.mcp_ready)
   const mcpIssue = createMemo(() => {
     const mcp = Object.values(sync.data.mcp ?? {})
     const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
@@ -24,7 +26,8 @@ export function StatusPopover() {
     if (failed) return "critical" as const
     if (warn) return "warning" as const
   })
-  const healthy = createMemo(() => server.healthy() === true && !mcpIssue())
+  const serverHealthy = () => servers.health[server.key]?.healthy === true
+  const healthy = createMemo(() => servers.health[server.key]?.healthy === true && !mcpIssue())
 
   return (
     <Popover
@@ -46,10 +49,9 @@ export function StatusPopover() {
             classList={{
               "absolute -top-px -right-px size-1.5 rounded-full": true,
               "bg-icon-success-base": ready() && healthy(),
-              "bg-icon-warning-base": ready() && server.healthy() === true && mcpIssue() === "warning",
-              "bg-icon-critical-base":
-                server.healthy() === false || (ready() && server.healthy() === true && mcpIssue() === "critical"),
-              "bg-border-weak-base": server.healthy() === undefined || !ready(),
+              "bg-icon-warning-base": ready() && serverHealthy() && mcpIssue() === "warning",
+              "bg-icon-critical-base": serverHealthy() || (ready() && serverHealthy() && mcpIssue() === "critical"),
+              "bg-border-weak-base": serverHealthy() || !ready(),
             }}
           />
         </div>
@@ -80,9 +82,11 @@ export function StatusPopoverV2(props: { scope?: "server" }) {
 function DirectoryStatusPopover() {
   const language = useLanguage()
   const server = useServer()
+  const servers = useServers()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
-  const ready = createMemo(() => server.healthy() === false || sync.data.mcp_ready)
+  const serverHealth = () => servers.health[server.key]?.healthy
+  const ready = createMemo(() => serverHealth() === false || sync.data.mcp_ready)
   const mcpIssue = createMemo(() => {
     const mcp = Object.values(sync.data.mcp ?? {})
     const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
@@ -90,12 +94,12 @@ function DirectoryStatusPopover() {
     if (failed) return "critical" as const
     if (warn) return "warning" as const
   })
-  const healthy = createMemo(() => server.healthy() === true && !mcpIssue())
+  const healthy = createMemo(() => serverHealth() === true && !mcpIssue())
   const state = createMemo<StatusPopoverState>(() => ({
     shown: shown(),
     ready: ready(),
     healthy: healthy(),
-    serverHealth: server.healthy(),
+    serverHealth: serverHealth(),
     issue: mcpIssue(),
     label: language.t("status.popover.trigger"),
     onOpenChange: setShown,
@@ -112,17 +116,19 @@ function DirectoryStatusPopover() {
 function ServerStatusPopover() {
   const language = useLanguage()
   const server = useServer()
+  const servers = useServers()
   const [shown, setShown] = createSignal(false)
+  const serverHealth = () => servers.health[server.key]?.healthy
   const state = createMemo<StatusPopoverState>(() => ({
     shown: shown(),
-    ready: server.healthy() !== undefined,
-    healthy: server.healthy() === true,
-    serverHealth: server.healthy(),
+    ready: serverHealth() !== undefined,
+    healthy: serverHealth() === true,
+    serverHealth: serverHealth(),
     label: language.t("status.popover.trigger"),
     onOpenChange: setShown,
     body: () => (
       <StatusPopoverBody shown={shown()}>
-        <ServerBody shown={shown} />
+        <ServerBody />
       </StatusPopoverBody>
     ),
   }))

@@ -1,5 +1,5 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
@@ -19,23 +19,24 @@ import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
-import { useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { displayName, getProjectAvatarSource, projectForSession, sortedRootSessions } from "@/pages/layout/helpers"
-import { getFilename } from "@opencode-ai/core/util/path"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "@/pages/session/composer/session-request-tree"
+import { ServerHealthIndicator } from "@/components/server/server-row"
+import { useServers } from "@/context/servers"
 
 const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 const HOME_SESSION_LIMIT = 15
 const HOME_ROW =
-  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] border-0 bg-transparent text-left [font-weight:530] text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-const HOME_PROJECT_NAV_ROW = `${HOME_ROW} h-8 gap-1.5 px-3 [&>span]:min-w-0 [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap`
+  "flex min-w-0 w-full shrink-0 cursor-default items-center rounded-[6px] border-0 bg-transparent text-left text-v2-text-text-muted transition-colors duration-[120ms] ease-in-out hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+const HOME_PROJECT_NAV_ROW = `${HOME_ROW} h-7 gap-2 px-1.5 [&>span]:min-w-0 [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap`
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 
 type HomeSessionRecord = {
@@ -198,8 +199,7 @@ function HomeDesign() {
   return (
     <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
       <HomeProjectColumn
-        projects={projects()}
-        selected={selectedProject()?.worktree}
+        selectedProject={state.project}
         selectProject={selectProject}
         openNewSession={openProjectNewSession}
         chooseProject={() => void chooseProject()}
@@ -279,8 +279,7 @@ function HomeDesign() {
 }
 
 function HomeProjectColumn(props: {
-  projects: LocalProject[]
-  selected?: string
+  selectedProject?: string
   selectProject: (directory: string) => void
   openNewSession: (directory: string) => void
   chooseProject: () => void
@@ -292,6 +291,9 @@ function HomeProjectColumn(props: {
   openHelp: () => void
   language: ReturnType<typeof useLanguage>
 }) {
+  const servers = useServers()
+  const layout = useLayout()
+  const projects = createMemo(() => layout.projects.list())
   return (
     <aside class="flex min-w-0 flex-col lg:pt-[52px]" aria-label={props.language.t("home.projects")}>
       <div class="flex h-7 min-w-0 items-center justify-between pl-3">
@@ -306,37 +308,77 @@ function HomeProjectColumn(props: {
           aria-label={props.language.t("home.project.add")}
         />
       </div>
-      <div class="mt-4 flex max-h-[min(572px,calc(100vh_-_300px))] min-w-0 flex-col gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <Show
-          when={props.projects.length > 0}
-          fallback={
-            <button
-              type="button"
-              class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
-              onClick={props.chooseProject}
-            >
-              <IconV2 name="folder-add-left" size="small" />
-              <span>{props.language.t("home.project.add")}</span>
-            </button>
-          }
-        >
-          <For each={props.projects}>
-            {(project) => (
-              <HomeProjectRow
-                project={project}
-                selected={props.selected === project.worktree}
-                unseenCount={props.unseenCount(project)}
-                selectProject={props.selectProject}
-                openNewSession={props.openNewSession}
-                editProject={props.editProject}
-                closeProject={props.closeProject}
-                clearNotifications={props.clearNotifications}
-                language={props.language}
-              />
-            )}
-          </For>
-        </Show>
-      </div>
+      <For
+        each={servers.list()}
+        fallback={
+          <ProjectList
+            projects={projects()}
+            selectedProject={props.selectedProject}
+            onSelectedProjectChange={props.selectProject}
+            onChooseProject={props.chooseProject}
+            openNewSession={props.openNewSession}
+            editProject={props.editProject}
+            closeProject={props.closeProject}
+            clearNotifications={props.clearNotifications}
+            unseenCount={props.unseenCount}
+            language={props.language}
+          />
+        }
+      >
+        {(server) => {
+          const key = ServerConnection.key(server)
+          const healthy = () => !!servers.health[key]?.healthy
+          const [open, setOpen] = createSignal(true)
+
+          return (
+            <div class="mt-4 max-h-[min(572px,calc(100vh_-_300px))] min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div class="relative h-7 group">
+                <button
+                  class="w-full h-full px-1.5 gap-2 flex flex-row items-center hover:not-disabled:bg-v2-overlay-simple-overlay-hover rounded-[4px]"
+                  disabled={!healthy()}
+                  onClick={() => setOpen((o) => !o)}
+                >
+                  <div class="size-4 flex items-center justify-center">
+                    <ServerHealthIndicator health={servers.health[key]} />
+                  </div>
+                  <div class="flex flex-row items-center gap-1">
+                    <span>{server.displayName ?? new URL(server.http.url).host}</span>
+                    <Show when={healthy()}>
+                      <IconV2
+                        name="outline-chevron-down"
+                        class="text-v2-icon-icon-muted data-[open=false]:-rotate-90"
+                        data-open={open()}
+                      />
+                    </Show>
+                  </div>
+                </button>
+                <IconButtonV2
+                  class="absolute right-1 inset-y-1 opacity-0 group-hover:opacity-100"
+                  name="out"
+                  variant="ghost-muted"
+                  size="small"
+                  icon={<IconV2 name="outline-dots" class="text-v2-icon-icon-muted" />}
+                />
+              </div>
+              <Show when={healthy() && open()}>
+                <div class="h-px bg-v2-border-border-base mx-3 my-1" />
+                <ProjectList
+                  projects={projects()}
+                  selectedProject={props.selectedProject}
+                  onSelectedProjectChange={props.selectProject}
+                  onChooseProject={props.chooseProject}
+                  openNewSession={props.openNewSession}
+                  editProject={props.editProject}
+                  closeProject={props.closeProject}
+                  clearNotifications={props.clearNotifications}
+                  unseenCount={props.unseenCount}
+                  language={props.language}
+                />
+              </Show>
+            </div>
+          )
+        }}
+      </For>
       <div class="mt-4 flex min-w-0 flex-col gap-1">
         <button
           type="button"
@@ -637,6 +679,7 @@ function LegacyHome() {
   const platform = usePlatform()
   const dialog = useDialog()
   const navigate = useNavigate()
+  const servers = useServers()
   const server = useServer()
   const language = useLanguage()
   const homedir = createMemo(() => sync.data.path.home)
@@ -648,7 +691,7 @@ function LegacyHome() {
   })
 
   const serverDotClass = createMemo(() => {
-    const healthy = server.healthy()
+    const healthy = servers.health[server.key]?.healthy
     if (healthy === true) return "bg-icon-success-base"
     if (healthy === false) return "bg-icon-critical-base"
     return "bg-border-weak-base"
@@ -752,5 +795,52 @@ function LegacyHome() {
         </Match>
       </Switch>
     </div>
+  )
+}
+
+function ProjectList(props: {
+  projects: LocalProject[]
+  selectedProject?: string
+  onSelectedProjectChange?(project: string): void
+  onChooseProject?(): void
+  openNewSession: (directory: string) => void
+  editProject: (project: LocalProject) => void
+  closeProject: (directory: string) => void
+  clearNotifications: (project: LocalProject) => void
+  unseenCount: (project: LocalProject) => number
+  language: ReturnType<typeof useLanguage>
+}) {
+  return (
+    <Show
+      when={props.projects.length > 0}
+      fallback={
+        <button
+          type="button"
+          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+          onClick={() => props.onChooseProject?.()}
+        >
+          <IconV2 name="folder-add-left" size="small" />
+          <span>{props.language.t("home.project.add")}</span>
+        </button>
+      }
+    >
+      <div class="flex flex-col gap-1">
+        <For each={props.projects}>
+          {(project) => (
+            <HomeProjectRow
+              project={project}
+              selected={props.selectedProject === project.worktree}
+              unseenCount={props.unseenCount(project)}
+              selectProject={(directory) => props.onSelectedProjectChange?.(directory)}
+              openNewSession={props.openNewSession}
+              editProject={props.editProject}
+              closeProject={props.closeProject}
+              clearNotifications={props.clearNotifications}
+              language={props.language}
+            />
+          )}
+        </For>
+      </div>
+    </Show>
   )
 }
