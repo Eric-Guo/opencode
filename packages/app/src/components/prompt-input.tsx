@@ -79,7 +79,7 @@ import { pathKey } from "@/utils/path-key"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { displayName } from "@/pages/layout/helpers"
 
-const USE_V2_INPUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const USE_V2_INPUT = false
 
 interface PromptInputProps {
   class?: string
