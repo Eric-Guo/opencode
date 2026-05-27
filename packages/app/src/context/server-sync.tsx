@@ -469,6 +469,7 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
       createDirSyncContext: createRefCountMap(
         (dir) => createDirSyncContext(dir, sync),
         (dir) => sync.disableMcp(dir),
+        directoryKey,
       ),
     }
   },
