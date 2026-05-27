@@ -6,7 +6,7 @@ import type { State } from "./types"
 import type { QueryOptionsApi } from "../server-sync"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
-const queryGroups: Array<() => { queries: Array<{ enabled?: () => boolean }> }> = []
+const queryGroups: Array<() => { queries: Array<{ enabled?: boolean }> }> = []
 
 const child = () => createStore({} as State)
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
@@ -49,7 +49,7 @@ beforeAll(async () => {
     persisted: (_target: string, store: unknown[]) => [store[0], store[1], null, () => true],
   }))
   mock.module("@tanstack/solid-query", () => ({
-    useQueries: (options: () => { queries: Array<{ enabled?: () => boolean }> }) => {
+    useQueries: (options: () => { queries: Array<{ enabled?: boolean }> }) => {
       queryGroups.push(options)
       return [
         { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
@@ -154,15 +154,15 @@ describe("createChildStoreManager", () => {
       const [, setStore] = manager.child("/project", { bootstrap: false })
       const queries = queryGroups[offset]
       if (!queries) throw new Error("queries required")
-      expect(queries().queries[1]?.enabled?.()).toBe(false)
+      expect(queries().queries[1]?.enabled).toBe(false)
 
       setStore("status", "complete")
       manager.child("/project", { bootstrap: false, mcp: true })
-      expect(queries().queries[1]?.enabled?.()).toBe(true)
+      expect(queries().queries[1]?.enabled).toBe(true)
       expect(mcpLoads).toEqual(["/project"])
 
       manager.disableMcp("/project")
-      expect(queries().queries[1]?.enabled?.()).toBe(false)
+      expect(queries().queries[1]?.enabled).toBe(false)
       expect(manager.mcp("/project")).toBe(false)
     } finally {
       dispose()

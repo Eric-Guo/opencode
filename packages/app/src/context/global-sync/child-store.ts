@@ -183,7 +183,7 @@ export function createChildStoreManager(input: {
           const [pathQuery, mcpQuery, lspQuery, providerQuery] = useQueries(() => ({
             queries: [
               input.queryOptions.path(key),
-              { ...input.queryOptions.mcp(key), enabled: mcpEnabled },
+              { ...input.queryOptions.mcp(key), enabled: mcpEnabled() },
               input.queryOptions.lsp(key),
               input.queryOptions.providers(key),
             ],
