@@ -209,6 +209,7 @@ export const Definitions = {
   "prompt.autocomplete.select": keybind("return", "Select autocomplete item"),
   "prompt.autocomplete.complete": keybind("tab", "Complete autocomplete item"),
   "permission.prompt.fullscreen": keybind("ctrl+f", "Toggle permission prompt fullscreen"),
+  permission_auto_accept_toggle: keybind("none", "Toggle auto-accept mode for edit permissions"),
   "plugins.toggle": keybind("space", "Toggle plugin"),
   "dialog.plugins.install": keybind("shift+i", "Install plugin from plugin dialog"),
 
@@ -340,6 +341,7 @@ export const CommandMap = {
   tool_details: "session.toggle.actions",
   display_thinking: "session.toggle.thinking",
   prompt_submit: "prompt.submit",
+  permission_auto_accept_toggle: "permission.auto_accept.toggle",
   prompt_editor_context_clear: "prompt.editor_context.clear",
   prompt_skills: "prompt.skills",
   prompt_stash: "prompt.stash",
