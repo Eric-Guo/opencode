@@ -98,6 +98,7 @@ export type IconCache = {
 
 export type ChildOptions = {
   bootstrap?: boolean
+  active?: boolean
 }
 
 export type DirState = {
