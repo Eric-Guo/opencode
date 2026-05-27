@@ -7,7 +7,7 @@ export function databasePath(data: string) {
     (["latest", "dev", "beta", "next", "prod"].includes(OPENCODE_CHANNEL) ||
     process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
     process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
-      ? "opencode.db"
+      ? "opencode-eric_dev.db"
       : `opencode-${OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
   return filename === ":memory:" ? filename : path.resolve(data, filename)
 }
