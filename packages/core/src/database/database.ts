@@ -50,7 +50,7 @@ export function path() {
     process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
   )
     return join(Global.Path.data, "opencode.db")
-  return join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
+  return join(Global.Path.data, "opencode-eric_dev.db")
 }
 
 export const defaultLayer = Layer.unwrap(
