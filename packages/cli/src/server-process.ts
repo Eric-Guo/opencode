@@ -87,7 +87,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               (["latest", "dev", "beta", "next", "prod"].includes(OPENCODE_CHANNEL) ||
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
-                ? "opencode.db"
+                ? "opencode-eric_dev.db"
                 : `opencode-${OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`),
           },
           models: {
