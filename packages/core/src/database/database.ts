@@ -6,7 +6,6 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { Global } from "../global"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
-import { InstallationChannel } from "../installation/version"
 import { makeGlobalNode } from "../effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
@@ -50,7 +49,7 @@ export function layer(options?: Options) {
       process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
       process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
     )
-      return provide(join(Global.Path.data, "opencode.db"))
+      return provide(join(Global.Path.data, "opencode-eric_dev.db"))
     return provide(
       join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`),
     )
