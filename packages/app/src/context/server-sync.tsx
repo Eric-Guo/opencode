@@ -448,6 +448,7 @@ export function createServerSyncContext() {
     },
     child: children.child,
     peek: children.peek,
+    disableMcp: children.disableMcp,
     queryOptions: queryOptionsApi,
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
@@ -465,7 +466,10 @@ export const { use: useServerSync, provider: ServerSyncProvider } = createSimple
 
     return {
       ...sync,
-      createDirSyncContext: createRefCountMap((dir) => createDirSyncContext(dir, sync)),
+      createDirSyncContext: createRefCountMap(
+        (dir) => createDirSyncContext(dir, sync),
+        (dir) => sync.disableMcp(dir),
+      ),
     }
   },
 })

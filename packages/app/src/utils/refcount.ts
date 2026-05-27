@@ -1,6 +1,6 @@
 import { onCleanup } from "solid-js"
 
-export function createRefCountMap<T>(create: (key: string) => T) {
+export function createRefCountMap<T>(create: (key: string) => T, remove?: (key: string) => void) {
   const items = new Map<string, T>()
   const refCounts = new Map<string, number>()
 
@@ -8,6 +8,7 @@ export function createRefCountMap<T>(create: (key: string) => T) {
     onCleanup(() => {
       refCounts.set(key, (refCounts.get(key) ?? 0) - 1)
       if (refCounts.get(key) === 0) {
+        remove?.(key)
         items.delete(key)
         refCounts.delete(key)
       }

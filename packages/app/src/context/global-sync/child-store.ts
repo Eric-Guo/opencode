@@ -41,7 +41,7 @@ export function createChildStoreManager(input: {
   const ownerPins = new WeakMap<object, Set<string>>()
   const disposers = new Map<string, () => void>()
   const mcpDirectories = new Set<string>()
-  const mcpEnablers = new Map<string, () => void>()
+  const mcpToggles = new Map<string, (enabled: boolean) => void>()
 
   const markKey = (key: DirectoryKey) => {
     if (!key) return
@@ -114,7 +114,7 @@ export function createChildStoreManager(input: {
     iconCache.delete(key)
     lifecycle.delete(key)
     mcpDirectories.delete(key)
-    mcpEnablers.delete(key)
+    mcpToggles.delete(key)
     const dispose = disposers.get(key)
     if (dispose) {
       dispose()
@@ -242,7 +242,7 @@ export function createChildStoreManager(input: {
           })
           children[key] = child
           disposers.set(key, dispose)
-          mcpEnablers.set(key, () => setMcpEnabled(true))
+          mcpToggles.set(key, setMcpEnabled)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
@@ -303,8 +303,14 @@ export function createChildStoreManager(input: {
   function enableMcp(directory: string, key: DirectoryKey, childStore: [Store<State>, SetStoreFunction<State>]) {
     if (mcpDirectories.has(key)) return
     mcpDirectories.add(key)
-    mcpEnablers.get(key)?.()
+    mcpToggles.get(key)?.(true)
     if (childStore[0].status !== "loading") input.onMcp(directory, childStore[1])
+  }
+
+  function disableMcp(directory: string) {
+    const key = directoryKey(directory)
+    if (!mcpDirectories.delete(key)) return
+    mcpToggles.get(key)?.(false)
   }
 
   function projectMeta(directory: string, patch: ProjectMeta) {
@@ -347,6 +353,7 @@ export function createChildStoreManager(input: {
     unpin,
     pinned,
     mcp: (directory: string) => mcpDirectories.has(directoryKey(directory)),
+    disableMcp,
     disposeDirectory,
     runEviction,
     vcsCache,

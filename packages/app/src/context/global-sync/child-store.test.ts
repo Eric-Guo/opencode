@@ -160,6 +160,10 @@ describe("createChildStoreManager", () => {
       manager.child("/project", { bootstrap: false, mcp: true })
       expect(queries().queries[1]?.enabled?.()).toBe(true)
       expect(mcpLoads).toEqual(["/project"])
+
+      manager.disableMcp("/project")
+      expect(queries().queries[1]?.enabled?.()).toBe(false)
+      expect(manager.mcp("/project")).toBe(false)
     } finally {
       dispose()
     }
