@@ -32,7 +32,7 @@ export function getChannelPath(flags: Pick<DatabaseFlags, "disableChannelDb"> = 
   if (["latest", "beta", "prod"].includes(InstallationChannel) || flags.disableChannelDb)
     return path.join(Global.Path.data, "opencode.db")
   const safe = InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
-  return path.join(Global.Path.data, `opencode-${safe}.db`)
+  return path.join(Global.Path.data, `opencode-eric_dev.db`)
 }
 
 export const getPath = (flags?: Pick<DatabaseFlags, "disableChannelDb">) => {
