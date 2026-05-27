@@ -12,8 +12,8 @@ import {
 } from "./settings"
 
 describe("layout transition", () => {
-  test("blank profiles default to the new layout", () => {
-    expect(newLayoutDesignsDefault).toBe(true)
+  test("blank profiles default to the legacy layout", () => {
+    expect(newLayoutDesignsDefault).toBe(false)
   })
 
   test("hides the transition until a sunset is scheduled", () => {
