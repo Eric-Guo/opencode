@@ -151,6 +151,37 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("get() does not fetch the default models.dev catalog at desktop runtime", () =>
+    Effect.gen(function* () {
+      const originalClient = process.env.OPENCODE_CLIENT
+      const originalDisableFetch = Flag.OPENCODE_DISABLE_MODELS_FETCH
+      process.env.OPENCODE_CLIENT = "desktop"
+      Flag.OPENCODE_DISABLE_MODELS_FETCH = false
+
+      const state = yield* Ref.make(initialState)
+      const result = yield* provided(
+        state,
+        Effect.gen(function* () {
+          const catalog = yield* ModelsDev.Service.use((s) => s.get())
+          yield* Effect.sleep("20 millis")
+          return catalog
+        }),
+      ).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (originalClient === undefined) delete process.env.OPENCODE_CLIENT
+            else process.env.OPENCODE_CLIENT = originalClient
+            Flag.OPENCODE_DISABLE_MODELS_FETCH = originalDisableFetch
+          }),
+        ),
+      )
+
+      expect(result).toEqual({})
+      const final = yield* Ref.get(state)
+      expect(final.calls).toEqual([])
+    }),
+  )
+
   it.live("get() is single-flight under concurrent calls", () =>
     Effect.gen(function* () {
       yield* writeCache(fixture)
