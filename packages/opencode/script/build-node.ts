@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -11,6 +12,8 @@ const dir = path.resolve(__dirname, "..")
 process.chdir(dir)
 
 const generated = await import("./generate.ts")
+
+await $`rm -rf dist/node`
 
 await Bun.build({
   target: "node",
@@ -28,5 +31,7 @@ await Bun.build({
     "opencode-web-ui.gen.ts": "",
   },
 })
+
+await Bun.write("./dist/node/models-dev-api.json", generated.modelsData)
 
 console.log("Build complete")
