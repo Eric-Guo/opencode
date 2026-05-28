@@ -140,6 +140,11 @@ export const layer = Layer.effect(
     )
 
     const source = Flag.OPENCODE_MODELS_URL || "https://models.dev"
+    // Desktop builds embed the default models.dev snapshot, so startup should not
+    // spend time refreshing the same catalog over the network.
+    const runtimeFetchDisabled =
+      Flag.OPENCODE_DISABLE_MODELS_FETCH ||
+      (Flag.OPENCODE_CLIENT === "desktop" && source === "https://models.dev")
     const filepath = path.join(
       Global.Path.cache,
       source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
@@ -201,7 +206,7 @@ export const layer = Layer.effect(
       if (fromDisk) return fromDisk
       const snapshot = yield* loadSnapshot
       if (snapshot) return snapshot
-      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+      if (runtimeFetchDisabled) return {}
       // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
       const text = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -234,7 +239,7 @@ export const layer = Layer.effect(
       )
     })
 
-    if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+    if (!runtimeFetchDisabled && !process.argv.includes("--get-yargs-completions")) {
       // Schedule.spaced runs the effect once, then waits between completions.
       yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced("60 minutes")), Effect.ignore))
     }
