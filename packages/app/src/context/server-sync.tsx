@@ -50,7 +50,7 @@ type GlobalStore = {
 export const loadMcpQuery = (directory: string, sdk: OpencodeClient) =>
   queryOptions({
     queryKey: [directory, "mcp"] as const,
-    queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
+    queryFn: () => sdk.mcp.status({ directory }).then((r) => r.data ?? {}),
   })
 
 export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>

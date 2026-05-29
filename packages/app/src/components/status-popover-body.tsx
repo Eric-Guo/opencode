@@ -3,7 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { useMutation, useQueryClient } from "@tanstack/solid-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -103,26 +103,28 @@ const useDefaultServerKey = (
 }
 
 const useMcpToggleMutation = () => {
-  const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
   const queryClient = useQueryClient()
   const queryOptions = useQueryOptions()
+  const mcpQuery = useQuery(() => queryOptions.mcp(pathKey(sdk.directory)))
+  const mcpStatus = () => mcpQuery.data ?? {}
 
   return useMutation(() => ({
     mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
+      const status = mcpStatus()[name]
       if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-        return
+        await sdk.client.mcp.disconnect({ name, directory: sdk.directory })
+        return sdk.client.mcp.status({ directory: sdk.directory }).then((r) => r.data ?? {})
       }
       if (status?.status === "needs_auth") {
-        await sdk.client.mcp.auth.authenticate({ name })
-        return
+        await sdk.client.mcp.auth.authenticate({ name, directory: sdk.directory })
+        return sdk.client.mcp.status({ directory: sdk.directory }).then((r) => r.data ?? {})
       }
-      await sdk.client.mcp.connect({ name })
+      await sdk.client.mcp.connect({ name, directory: sdk.directory })
+      return sdk.client.mcp.status({ directory: sdk.directory }).then((r) => r.data ?? {})
     },
-    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
+    onSuccess: (data) => queryClient.setQueryData(queryOptions.mcp(pathKey(sdk.directory)).queryKey, data),
     onError: (err) => {
       showToast({
         variant: "error",
@@ -288,6 +290,7 @@ function ServerStatusList(props: { state: ServerStatusState }) {
 
 export function StatusPopoverBody(props: { shown: Accessor<boolean>; close?: () => void }) {
   const sync = useSync()
+  const sdk = useSDK()
   const servers = useServers()
   const server = useServer()
   const platform = usePlatform()
@@ -295,6 +298,10 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; close?: () 
   const language = useLanguage()
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
+  const queryOptions = useQueryOptions()
+  const mcpQuery = useQuery(() => queryOptions.mcp(pathKey(sdk.directory)))
+  const mcpData = () => mcpQuery.data ?? {}
 
   const fail = (err: unknown) => {
     showToast({
@@ -306,6 +313,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; close?: () 
 
   createEffect(() => {
     if (!props.shown()) return
+    void queryClient.fetchQuery(queryOptions.mcp(pathKey(sdk.directory))).catch(fail)
   })
 
   let dialogRun = 0
@@ -317,8 +325,17 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; close?: () 
   const sortedServers = createMemo(() => listServersByHealth(servers.list(), server.key, servers.health))
   const toggleMcp = useMcpToggleMutation()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
-  const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
-  const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
+  const mcpNames = createMemo(() =>
+    [
+      ...new Set([
+        ...Object.entries(sync.data.config.mcp ?? {})
+          .filter((entry) => typeof entry[1] === "object" && entry[1] !== null && "type" in entry[1])
+          .map(([name]) => name),
+        ...Object.keys(mcpData()),
+      ]),
+    ].sort((a, b) => a.localeCompare(b)),
+  )
+  const mcpStatus = (name: string) => mcpData()[name]?.status ?? "disabled"
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
@@ -476,7 +493,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; close?: () 
                         <div onClick={(event) => event.stopPropagation()}>
                           <Switch
                             checked={enabled()}
-                            disabled={toggleMcp.isPending && toggleMcp.variables === name}
                             onChange={() => {
                               if (toggleMcp.isPending) return
                               toggleMcp.mutate(name)

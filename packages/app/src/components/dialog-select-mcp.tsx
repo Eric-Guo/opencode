@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from "@tanstack/solid-query"
-import { Component, createMemo, Show } from "solid-js"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
+import { Component, createMemo, onMount, Show } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -23,27 +23,42 @@ export const DialogSelectMcp: Component = () => {
   const language = useLanguage()
   const queryClient = useQueryClient()
   const queryOptions = useQueryOptions()
+  const mcpQuery = useQuery(() => queryOptions.mcp(pathKey(sdk.directory)))
+
+  onMount(() => {
+    void queryClient.fetchQuery(queryOptions.mcp(pathKey(sdk.directory)))
+  })
+
+  const mcpStatus = () => mcpQuery.data ?? {}
 
   const items = createMemo(() =>
-    Object.entries(sync.data.mcp ?? {})
-      .map(([name, status]) => ({ name, status: status.status }))
+    [
+      ...new Set([
+        ...Object.entries(sync.data.config.mcp ?? {})
+          .filter((entry) => typeof entry[1] === "object" && entry[1] !== null && "type" in entry[1])
+          .map(([name]) => name),
+        ...Object.keys(mcpStatus()),
+      ]),
+    ]
+      .map((name) => ({ name, status: mcpStatus()[name]?.status ?? "disabled" }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
   const toggle = useMutation(() => ({
     mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
+      const status = mcpStatus()[name]
       if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-        return
+        await sdk.client.mcp.disconnect({ name, directory: sdk.directory })
+        return sdk.client.mcp.status({ directory: sdk.directory }).then((r) => r.data ?? {})
       }
       if (status?.status === "needs_auth") {
-        await sdk.client.mcp.auth.authenticate({ name })
-        return
+        await sdk.client.mcp.auth.authenticate({ name, directory: sdk.directory })
+        return sdk.client.mcp.status({ directory: sdk.directory }).then((r) => r.data ?? {})
       }
-      await sdk.client.mcp.connect({ name })
+      await sdk.client.mcp.connect({ name, directory: sdk.directory })
+      return sdk.client.mcp.status({ directory: sdk.directory }).then((r) => r.data ?? {})
     },
-    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
+    onSuccess: (data) => queryClient.setQueryData(queryOptions.mcp(pathKey(sdk.directory)).queryKey, data),
   }))
 
   const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
@@ -67,15 +82,15 @@ export const DialogSelectMcp: Component = () => {
         }}
       >
         {(i) => {
-          const mcpStatus = () => sync.data.mcp[i.name]
-          const status = () => mcpStatus()?.status
+          const itemStatus = () => mcpStatus()[i.name]
+          const status = () => itemStatus()?.status
           const statusLabel = () => {
             const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
             if (!key) return
             return language.t(key)
           }
           const error = () => {
-            const s = mcpStatus()
+            const s = itemStatus()
             if (s?.status === "failed" || s?.status === "needs_client_registration") return s.error
           }
           const enabled = () => status() === "connected"
@@ -95,7 +110,6 @@ export const DialogSelectMcp: Component = () => {
               <div onClick={(e) => e.stopPropagation()}>
                 <Switch
                   checked={enabled()}
-                  disabled={toggle.isPending && toggle.variables === i.name}
                   onChange={() => {
                     if (toggle.isPending) return
                     toggle.mutate(i.name)
