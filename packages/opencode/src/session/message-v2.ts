@@ -18,6 +18,7 @@ import {
   WithParts,
   type ToolPart,
 } from "@opencode-ai/core/session/legacy"
+export type { FilePart, User, WithParts } from "@opencode-ai/core/session/legacy"
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
