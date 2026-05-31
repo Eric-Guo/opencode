@@ -22,7 +22,6 @@ import * as HttpSessionError from "../../src/server/routes/instance/httpapi/hand
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
-import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@opencode-ai/core/database/database"
 import { MessageTable, SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -777,7 +776,7 @@ describe("session HttpApi", () => {
         const response = yield* request(`${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=80`, {
           headers,
         })
-        const messages = yield* json<MessageV2.WithParts[]>(response)
+        const messages = yield* json<SessionLegacy.WithParts[]>(response)
 
         expect(response.status).toBe(200)
         expect(messages.find((item) => item.info.role === "user")?.info).toMatchObject({
