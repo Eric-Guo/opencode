@@ -20,7 +20,6 @@ import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
 import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "@/session/instruction"
@@ -567,8 +566,8 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const hello = (
         yield* registry.tools({
-          providerID: ProviderID.opencode,
-          modelID: ModelID.make("gpt-5"),
+          providerID: ProviderV2.ID.opencode,
+          modelID: ProviderV2.ModelID.make("gpt-5"),
           agent: { name: "build", mode: "primary", permission: [], options: {} },
         })
       ).find((item) => item.id === "hello")
