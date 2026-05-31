@@ -105,6 +105,22 @@ function TaskGroupFixture() {
   )
 }
 
+function LoadedReadBeforeTaskFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <InlineToolRow id="tool-inline-read" icon="→" complete={true} pending="">
+        Read src/cli/cmd/tui/routes/session/index.tsx
+      </InlineToolRow>
+      <box id="tool-inline-loaded-read-child" paddingLeft={3}>
+        <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
+      </box>
+      <InlineToolRow id="tool-inline-task-after-read" icon="✓" complete={true} pending="" task={true}>
+        Explore Task — Inspect active task spacing
+      </InlineToolRow>
+    </box>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
@@ -138,5 +154,9 @@ describe("TUI inline tool wrapping", () => {
 
   test("separates a contiguous task group from inline tools", async () => {
     expect(await renderFrame(() => <TaskGroupFixture />, { width: 72, height: 10 })).toMatchSnapshot()
+  })
+
+  test("separates a task group after an expanded read", async () => {
+    expect(await renderFrame(() => <LoadedReadBeforeTaskFixture />, { width: 72, height: 8 })).toMatchSnapshot()
   })
 })

@@ -137,6 +137,27 @@ export const TuiThreadCommand = cmd({
         return
       }
 
+      const network = resolveNetworkOptionsNoConfig(args)
+      const external =
+        process.argv.includes("--port") ||
+        process.argv.includes("--hostname") ||
+        process.argv.includes("--mdns") ||
+        network.mdns ||
+        network.port !== 0 ||
+        network.hostname !== "127.0.0.1"
+
+      if (args.scenario && external) {
+        UI.error("--scenario is only available with the internal transport")
+        process.exitCode = 1
+        return
+      }
+
+      if (args.scenario && (args.continue || args.session || args.fork)) {
+        UI.error("--scenario cannot be combined with --continue, --session, or --fork")
+        process.exitCode = 1
+        return
+      }
+
       // Resolve relative --project paths from PWD, then use the real cwd after
       // chdir so the thread and worker share the same directory key.
       const next = resolveThreadDirectory(args.project)
@@ -199,15 +220,6 @@ export const TuiThreadCommand = cmd({
       const prompt = await input(args.prompt)
       const config = await TuiConfig.get()
 
-      const network = resolveNetworkOptionsNoConfig(args)
-      const external =
-        process.argv.includes("--port") ||
-        process.argv.includes("--hostname") ||
-        process.argv.includes("--mdns") ||
-        network.mdns ||
-        network.port !== 0 ||
-        network.hostname !== "127.0.0.1"
-
       const transport = external
         ? {
             url: (await client.call("server", network)).url,
@@ -219,12 +231,6 @@ export const TuiThreadCommand = cmd({
             fetch: createWorkerFetch(client),
             events: createEventSource(client),
           }
-
-      if (args.scenario && external) {
-        UI.error("--scenario is only available with the internal transport")
-        process.exitCode = 1
-        return
-      }
 
       const scenario = args.scenario
         ? (await import("./scenario")).createScenario({
@@ -251,9 +257,10 @@ export const TuiThreadCommand = cmd({
         return
       }
 
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
+      if (!args.scenario)
+        setTimeout(() => {
+          client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+        }, 1000).unref?.()
 
       try {
         const { createTuiRenderer, tui } = await import("./app")

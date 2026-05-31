@@ -2130,8 +2130,8 @@ function Read(props: ToolProps<typeof ReadTool>) {
         Read {pathFormatter.format(props.input.filePath)} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
-        {(filepath) => (
-          <box paddingLeft={3}>
+        {(filepath, index) => (
+          <box id={`tool-inline-loaded-${props.part.id}-${index()}`} paddingLeft={3}>
             <text paddingLeft={3} fg={theme.textMuted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>

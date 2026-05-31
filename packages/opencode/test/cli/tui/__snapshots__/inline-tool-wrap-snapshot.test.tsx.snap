@@ -61,3 +61,10 @@ exports[`TUI inline tool wrapping separates a contiguous task group from inline 
 
    → Read src/cli/cmd/tui/routes/session/index.tsx"
 `;
+
+exports[`TUI inline tool wrapping separates a task group after an expanded read 1`] = `
+"   → Read src/cli/cmd/tui/routes/session/index.tsx
+   ↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx
+
+   ✓ Explore Task — Inspect active task spacing"
+`;
