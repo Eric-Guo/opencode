@@ -76,11 +76,13 @@ export type Event =
   | EventPtyDeleted
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
-  | EventServerConnected
-  | EventGlobalDisposed
   | EventAccountAdded
   | EventAccountRemoved
   | EventAccountSwitched
+  | EventServerConnected
+  | EventServerHeartbeat
+  | EventServerInstanceDisposed
+  | EventGlobalDisposed
 
 export type OAuth = {
   type: "oauth"
@@ -1391,6 +1393,29 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "account.added"
+        properties: {
+          account: AuthInfo
+        }
+      }
+    | {
+        id: string
+        type: "account.removed"
+        properties: {
+          account: AuthInfo
+        }
+      }
+    | {
+        id: string
+        type: "account.switched"
+        properties: {
+          serviceID: string
+          from?: string
+          to?: string
+        }
+      }
+    | {
+        id: string
         type: "server.connected"
         properties: {
           [key: string]: unknown
@@ -1398,9 +1423,36 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "server.heartbeat"
+        properties: {
+          [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "server.instance.disposed"
+        properties: {
+          directory: string
+        }
+      }
+    | {
+        id: string
         type: "global.disposed"
         properties: {
           [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "sync"
+        syncEvent?: {
+          id: string
+          aggregateID: string
+          seq: number
+          type: string
+          data: {
+            [key: string]: unknown
+          }
         }
       }
 }
@@ -3229,6 +3281,30 @@ export type PermissionV2Rule = {
 
 export type PermissionV2Ruleset = Array<PermissionV2Rule>
 
+export type AuthOAuthCredential = {
+  type: "oauth"
+  refresh: string
+  access: string
+  expires: number
+}
+
+export type AuthApiKeyCredential = {
+  type: "api"
+  key: string
+  metadata?: {
+    [key: string]: string
+  }
+}
+
+export type AuthCredential = AuthOAuthCredential | AuthApiKeyCredential
+
+export type AuthInfo = {
+  id: string
+  serviceID: string
+  description: string
+  credential: AuthCredential
+}
+
 export type PolicyEffect = "allow" | "deny"
 
 export type ConfigV2ExperimentalPolicy = {
@@ -4359,46 +4435,6 @@ export type EventInstallationUpdateAvailable = {
   }
 }
 
-export type EventServerConnected = {
-  id: string
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  id: string
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type AuthOAuthCredential = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-}
-
-export type AuthApiKeyCredential = {
-  type: "api"
-  key: string
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type AuthCredential = AuthOAuthCredential | AuthApiKeyCredential
-
-export type AuthInfo = {
-  id: string
-  serviceID: string
-  description: string
-  credential: AuthCredential
-}
-
 export type EventAccountAdded = {
   id: string
   type: "account.added"
@@ -4422,6 +4458,38 @@ export type EventAccountSwitched = {
     serviceID: string
     from?: string
     to?: string
+  }
+}
+
+export type EventServerConnected = {
+  id: string
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventServerHeartbeat = {
+  id: string
+  type: "server.heartbeat"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventServerInstanceDisposed = {
+  id: string
+  type: "server.instance.disposed"
+  properties: {
+    directory: string
+  }
+}
+
+export type EventGlobalDisposed = {
+  id: string
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
   }
 }
 

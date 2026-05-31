@@ -4,6 +4,7 @@ import "@/server/event"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { described } from "./metadata"
+import { ReplayEvent } from "./sync"
 
 const GlobalHealth = Schema.Struct({
   healthy: Schema.Literal(true),
@@ -14,14 +15,19 @@ const GlobalEventSchema = Schema.Struct({
   directory: Schema.String,
   project: Schema.optional(Schema.String),
   workspace: Schema.optional(Schema.String),
-  payload: Schema.Union(
-    EventV2.registry
+  payload: Schema.Union([
+    ...EventV2.registry
       .values()
       .map((definition) =>
         Schema.Struct({ id: Schema.String, type: Schema.Literal(definition.type), properties: definition.data }),
       )
       .toArray(),
-  ),
+    Schema.Struct({
+      id: Schema.String,
+      type: Schema.Literal("sync"),
+      syncEvent: Schema.optional(ReplayEvent),
+    }),
+  ]),
 }).annotate({ identifier: "GlobalEvent" })
 
 export const GlobalUpgradeInput = Schema.Struct({
