@@ -111,6 +111,16 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("scenario", {
+        type: "string",
+        choices: ["tools-mixed", "subagents"] as const,
+        describe: "render a synthetic TUI state preview",
+      })
+      .option("scenario-speed", {
+        type: "number",
+        default: 1,
+        describe: "playback speed for synthetic TUI responses",
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
@@ -210,12 +220,30 @@ export const TuiThreadCommand = cmd({
             events: createEventSource(client),
           }
 
+      if (args.scenario && external) {
+        UI.error("--scenario is only available with the internal transport")
+        process.exitCode = 1
+        return
+      }
+
+      const scenario = args.scenario
+        ? (await import("./scenario")).createScenario({
+            name: args.scenario,
+            directory: cwd,
+            fetch: transport.fetch!,
+            speed: args.scenarioSpeed,
+          })
+        : undefined
+      const sessionID = scenario?.sessionID ?? args.session
+      const fetch = scenario?.fetch ?? transport.fetch
+      const events = scenario?.events ?? transport.events
+
       try {
         await validateSession({
           url: transport.url,
-          sessionID: args.session,
+          sessionID,
           directory: cwd,
-          fetch: transport.fetch,
+          fetch,
         })
       } catch (error) {
         UI.error(errorMessage(error))
@@ -240,11 +268,11 @@ export const TuiThreadCommand = cmd({
           },
           config,
           directory: cwd,
-          fetch: transport.fetch,
-          events: transport.events,
+          fetch,
+          events,
           args: {
             continue: args.continue,
-            sessionID: args.session,
+            sessionID,
             agent: args.agent,
             model: args.model,
             prompt,
