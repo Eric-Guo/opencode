@@ -9,6 +9,7 @@ import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
 import { Provider } from "@/provider/provider"
+import { Image } from "@/image/image"
 
 import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
@@ -184,7 +185,38 @@ const env = LayerNode.compile(
   replacements,
 )
 
+const generatedFileLlm = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.file({ mediaType: "image/png", data: "iVBORw0KGgo=" }),
+        LLMEvent.file({ mediaType: "image/svg+xml", data: "PHN2Zz48L3N2Zz4=" }),
+        LLMEvent.file({ mediaType: "image/jpeg", data: "/9j/" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }),
+        LLMEvent.finish({ reason: "stop", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }),
+      ),
+  }),
+)
+const passthroughImage = Layer.succeed(
+  Image.Service,
+  Image.Service.of({
+    normalize: (input: SessionV1.FilePart) => Effect.succeed(input),
+  }),
+)
+const generatedFileEnv = LayerNode.compile(
+  root,
+  new Map(
+    [
+      ...replacements,
+      LayerNode.replace(LLM.layer, generatedFileLlm),
+      LayerNode.replace(Image.layer, passthroughImage),
+    ].map((item) => [item.source, item.replacement]),
+  ),
+)
+
 const it = testEffect(env)
+const fileIt = testEffect(generatedFileEnv)
 
 const providerErrorLLM = Layer.succeed(
   LLM.Service,
@@ -236,6 +268,54 @@ const boot = Effect.fn("test.boot")(function* () {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+fileIt.live("session.processor effect tests records model-generated file events as DB parts", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "generate images")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "generate images" }],
+          tools: {},
+        })
+
+        const parts = (yield* MessageV2.parts(msg.id)).filter((part): part is MessageV2.FilePart => part.type === "file")
+
+        expect(value).toBe("continue")
+        expect(parts.map((part) => part.mime)).toEqual(["image/png", "image/svg+xml", "image/jpeg"])
+        expect(parts.map((part) => part.url)).toEqual([
+          "data:image/png;base64,iVBORw0KGgo=",
+          "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+          "data:image/jpeg;base64,/9j/",
+        ])
+        expect(parts.map((part) => part.filename?.split(".").at(-1))).toEqual(["png", "svg", "jpg"])
+      }),
+    { config: cfg },
+  ),
+)
 
 it.live("session.processor effect tests capture llm input cleanly", () =>
   provideTmpdirServer(
