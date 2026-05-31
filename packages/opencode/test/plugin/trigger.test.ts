@@ -4,6 +4,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { Substitution } from "@opencode-ai/core/substitution"
 import path from "path"
 import { pathToFileURL } from "url"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -11,6 +12,7 @@ import { Config } from "../../src/config/config"
 import { Env } from "../../src/env"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Plugin } from "../../src/plugin/index"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -22,6 +24,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(AuthWellKnownTest.empty),
+  Layer.provide(Substitution.defaultLayer),
   Layer.provide(Env.defaultLayer),
   Layer.provide(AuthTest.empty),
   Layer.provide(AccountTest.empty),
