@@ -15,6 +15,7 @@ import {
   User,
   WithParts,
 } from "@opencode-ai/core/v1/session"
+export type { FilePart, User, WithParts } from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
