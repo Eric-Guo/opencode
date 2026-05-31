@@ -334,7 +334,7 @@ fileIt.live("session.processor effect tests records model-generated file events 
           tools: {},
         })
 
-        const parts = MessageV2.parts(msg.id).filter((part): part is MessageV2.FilePart => part.type === "file")
+        const parts = (yield* MessageV2.parts(msg.id)).filter((part): part is MessageV2.FilePart => part.type === "file")
 
         expect(value).toBe("continue")
         expect(parts.map((part) => part.mime)).toEqual(["image/png", "image/svg+xml", "image/jpeg"])
