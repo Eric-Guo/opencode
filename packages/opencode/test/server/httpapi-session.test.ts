@@ -790,7 +790,7 @@ describe("session HttpApi", () => {
         const response = yield* request(`${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=80`, {
           headers,
         })
-        const messages = yield* json<MessageV2.WithParts[]>(response)
+        const messages = yield* json<SessionLegacy.WithParts[]>(response)
 
         expect(response.status).toBe(200)
         expect(messages.find((item) => item.info.role === "user")?.info).toMatchObject({
