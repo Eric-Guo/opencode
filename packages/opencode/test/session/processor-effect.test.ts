@@ -9,6 +9,7 @@ import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
 import { Provider } from "@/provider/provider"
+import { Image } from "@/image/image"
 
 import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
@@ -198,28 +199,16 @@ const generatedFileLlm = Layer.succeed(
 const passthroughImage = Layer.succeed(
   Image.Service,
   Image.Service.of({
-    normalize: (input) => Effect.succeed(input),
+    normalize: (input: SessionV1.FilePart) => Effect.succeed(input),
   }),
 )
-const generatedFileDeps = Layer.mergeAll(
-  Session.defaultLayer,
-  Snapshot.defaultLayer,
-  AgentSvc.defaultLayer,
-  Permission.defaultLayer,
-  Plugin.defaultLayer,
-  Config.defaultLayer,
-  generatedFileLlm,
-  Provider.defaultLayer,
-  status,
-  Database.defaultLayer,
-  EventV2Bridge.defaultLayer,
-).pipe(Layer.provideMerge(infra))
-const generatedFileEnv = SessionProcessor.layer.pipe(
-  Layer.provide(summary),
-  Layer.provide(passthroughImage),
-  Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-  Layer.provideMerge(generatedFileDeps),
-)
+const generatedFileEnv = LayerNode.buildLayer(root, {
+  replacements: [
+    ...replacements,
+    LayerNode.replace(LLM.node, generatedFileLlm),
+    LayerNode.replace(Image.node, passthroughImage),
+  ],
+})
 
 const it = testEffect(env)
 const fileIt = testEffect(generatedFileEnv)
@@ -312,7 +301,7 @@ fileIt.live("session.processor effect tests records model-generated file events 
           tools: {},
         })
 
-        const parts = MessageV2.parts(msg.id).filter((part): part is MessageV2.FilePart => part.type === "file")
+        const parts = (yield* MessageV2.parts(msg.id)).filter((part): part is MessageV2.FilePart => part.type === "file")
 
         expect(value).toBe("continue")
         expect(parts.map((part) => part.mime)).toEqual(["image/png", "image/svg+xml", "image/jpeg"])
