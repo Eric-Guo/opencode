@@ -182,55 +182,55 @@ const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
   })
 
 const insertLegacyMessageV2Assistant = (sessionID: SessionIDType, parentID: MessageID) =>
-  Effect.sync(() => {
-    Database.use((db) =>
-      db
-        .insert(MessageTable)
-        .values({
-          id: MessageID.ascending(),
-          session_id: sessionID,
-          time_created: 1,
-          time_updated: 1,
-          data: {
-            role: "assistant",
-            time: { created: 1, completed: 1 },
-            parentID,
-            modelID: ModelID.make("test"),
-            providerID: ProviderID.make("test"),
-            mode: "build",
-            path: { cwd: "/tmp", root: "/tmp" },
-            cost: 0,
-            tokens: {
-              input: 0,
-              output: 0,
-              reasoning: 0,
-              cache: { read: 0, write: 0 },
-            },
-          } as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
-        })
-        .run(),
-    )
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(MessageTable)
+      .values({
+        id: MessageID.ascending(),
+        session_id: sessionID,
+        time_created: 1,
+        time_updated: 1,
+        data: {
+          role: "assistant",
+          time: { created: 1, completed: 1 },
+          parentID,
+          modelID: ProviderV2.ModelID.make("test"),
+          providerID: ProviderV2.ID.make("test"),
+          mode: "build",
+          path: { cwd: "/tmp", root: "/tmp" },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+        } as unknown as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
+      })
+      .run()
+      .pipe(Effect.orDie)
   })
 
 const insertLegacyMessageV2User = (sessionID: SessionIDType) =>
-  Effect.sync(() => {
+  Effect.gen(function* () {
     const id = MessageID.ascending()
-    Database.use((db) =>
-      db
-        .insert(MessageTable)
-        .values({
-          id,
-          session_id: sessionID,
-          time_created: 1,
-          time_updated: 1,
-          data: {
-            role: "user",
-            time: { created: 1 },
-            model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
-          } as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
-        })
-        .run(),
-    )
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(MessageTable)
+      .values({
+        id,
+        session_id: sessionID,
+        time_created: 1,
+        time_updated: 1,
+        data: {
+          role: "user",
+          time: { created: 1 },
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
+        } as unknown as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
+      })
+      .run()
+      .pipe(Effect.orDie)
     return id
   })
 
