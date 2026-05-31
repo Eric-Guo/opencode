@@ -25,6 +25,31 @@ export function createScenario(input: { name: Name; directory: string; fetch: ty
     session: session(sessionID, input.directory, input.name, created),
     transcript: input.name === "subagents" ? subagents(sessionID, created) : toolsMixed(sessionID, created),
   }
+  const childID = `${sessionID}_child`
+  const child = {
+    session: { ...session(childID, input.directory, input.name, created), parentID: sessionID },
+    transcript: [
+      {
+        info: userMessage(childID, "msg_child_user", created),
+        parts: [text(childID, "msg_child_user", "part_child_user", "Inspect current delegated work.")],
+      },
+      {
+        info: assistantMessage(childID, "msg_child_assistant", "msg_child_user", created + 1),
+        parts: [
+          tool(
+            childID,
+            "msg_child_assistant",
+            "part_child_read",
+            "read",
+            running(
+              { filePath: "src/cli/cmd/tui/routes/session/index.tsx" },
+              "src/cli/cmd/tui/routes/session/index.tsx",
+            ),
+          ),
+        ],
+      },
+    ],
+  }
   const providers = [
     {
       id: "scenario",
@@ -90,6 +115,13 @@ export function createScenario(input: { name: Name; directory: string; fetch: ty
       if (request.method === "GET" && pathname === base) return json(scenario.session)
       if (request.method === "GET" && pathname === `${base}/message`) return json(scenario.transcript)
       if (request.method === "GET" && (pathname === `${base}/todo` || pathname === `${base}/diff`)) return json([])
+      if (request.method === "GET" && pathname === `/session/${childID}`) return json(child.session)
+      if (request.method === "GET" && pathname === `/session/${childID}/message`) return json(child.transcript)
+      if (
+        request.method === "GET" &&
+        (pathname === `/session/${childID}/todo` || pathname === `/session/${childID}/diff`)
+      )
+        return json([])
       if (request.method === "POST" && pathname === `${base}/message`) {
         const prompt = await promptText(request)
         count += 1
@@ -298,7 +330,7 @@ function toolsMixed(sessionID: string, time: number): Transcript {
       sessionID,
       "msg_01_assistant",
       "part_11_tip",
-      'Type "agent tool weave", "parallel subagents", "blocks and inline", "errors", or "pending tools" to append live preview turns.',
+      'Type "agent tool weave" to inspect active and completed task groups, or "parallel subagents" to append another group.',
     ),
   ])
 }
@@ -330,7 +362,7 @@ function subagents(sessionID: string, time: number): Transcript {
       sessionID,
       "msg_01_assistant",
       "part_05_tip",
-      'Type "agent tool weave" to compare active and completed tasks among tools, or "parallel subagents" to append another group.',
+      'Type "agent tool weave" to inspect active and completed task groups, or "parallel subagents" to append another group.',
     ),
   ])
 }
@@ -369,7 +401,7 @@ function responseParts(sessionID: string, messageID: string, prompt: string): Pa
         sessionID,
         messageID,
         `${messageID}_01_text`,
-        "Active and completed delegated agents woven through inline tools:",
+        "Active and completed delegated agent groups among inline tools:",
       ),
       tool(
         sessionID,
@@ -386,16 +418,11 @@ function responseParts(sessionID: string, messageID: string, prompt: string): Pa
         running(
           { description: "Trace spacing while surrounding tools stay visible", subagent_type: "explore" },
           "Delegating",
+          { sessionId: `${sessionID}_child` },
         ),
       ),
-      tool(
-        sessionID,
-        messageID,
-        `${messageID}_04_read`,
-        "read",
-        completed({ filePath: "src/cli/cmd/tui/routes/session/index.tsx" }, {}, "Read spacing logic"),
-      ),
-      task(sessionID, messageID, `${messageID}_05_task`, "Compare completed task separators after reads", false),
+      task(sessionID, messageID, `${messageID}_04_task`, "Compare completed task separators after reads", false),
+      task(sessionID, messageID, `${messageID}_05_task`, "Confirm completed agent presentation", true),
       tool(
         sessionID,
         messageID,
@@ -411,12 +438,14 @@ function responseParts(sessionID: string, messageID: string, prompt: string): Pa
         running(
           { description: "Audit multiple active tasks adjacent to tools", subagent_type: "explore" },
           "Delegating",
+          { sessionId: `${sessionID}_child` },
         ),
       ),
+      task(sessionID, messageID, `${messageID}_08_task`, "Confirm secondary completed agent presentation", false),
       tool(
         sessionID,
         messageID,
-        `${messageID}_08_grep`,
+        `${messageID}_09_grep`,
         "grep",
         completed(
           { pattern: "spinner", path: "src/cli/cmd/tui/routes/session/index.tsx" },
@@ -424,7 +453,6 @@ function responseParts(sessionID: string, messageID: string, prompt: string): Pa
           "Verify spinner path",
         ),
       ),
-      task(sessionID, messageID, `${messageID}_09_task`, "Confirm stable completed agent icon between results", true),
     ]
   }
   if (/parallel|subagent|task/i.test(prompt)) {
@@ -591,8 +619,12 @@ function completed(input: Record<string, unknown>, metadata: Record<string, unkn
   }
 }
 
-function running(input: Record<string, unknown>, title: string): ToolState {
-  return { status: "running", input, title, metadata: {}, time: { start: Date.now() } }
+function running(
+  input: Record<string, unknown>,
+  title: string,
+  metadata: Record<string, unknown> = {},
+): Extract<ToolState, { status: "running" }> {
+  return { status: "running", input, title, metadata, time: { start: Date.now() } }
 }
 
 function failed(input: Record<string, unknown>, error: string): ToolState {
