@@ -298,7 +298,7 @@ function toolsMixed(sessionID: string, time: number): Transcript {
       sessionID,
       "msg_01_assistant",
       "part_11_tip",
-      'Type "parallel subagents", "blocks and inline", "errors", or "pending tools" to append live preview turns.',
+      'Type "agent tool weave", "parallel subagents", "blocks and inline", "errors", or "pending tools" to append live preview turns.',
     ),
   ])
 }
@@ -330,7 +330,7 @@ function subagents(sessionID: string, time: number): Transcript {
       sessionID,
       "msg_01_assistant",
       "part_05_tip",
-      'Type "parallel subagents" to append another group, or "blocks and inline" to compare with block boundaries.',
+      'Type "agent tool weave" to compare active and completed tasks among tools, or "parallel subagents" to append another group.',
     ),
   ])
 }
@@ -363,6 +363,70 @@ function interactiveTurn(sessionID: string, time: number, index: number, prompt:
 }
 
 function responseParts(sessionID: string, messageID: string, prompt: string): Part[] {
+  if (/sandwich|weave/i.test(prompt)) {
+    return [
+      text(
+        sessionID,
+        messageID,
+        `${messageID}_01_text`,
+        "Active and completed delegated agents woven through inline tools:",
+      ),
+      tool(
+        sessionID,
+        messageID,
+        `${messageID}_02_grep`,
+        "grep",
+        completed({ pattern: "InlineToolRow" }, { matches: 3 }, "Locate inline row renderer"),
+      ),
+      tool(
+        sessionID,
+        messageID,
+        `${messageID}_03_task`,
+        "task",
+        running(
+          { description: "Trace spacing while surrounding tools stay visible", subagent_type: "explore" },
+          "Delegating",
+        ),
+      ),
+      tool(
+        sessionID,
+        messageID,
+        `${messageID}_04_read`,
+        "read",
+        completed({ filePath: "src/cli/cmd/tui/routes/session/index.tsx" }, {}, "Read spacing logic"),
+      ),
+      task(sessionID, messageID, `${messageID}_05_task`, "Compare completed task separators after reads", false),
+      tool(
+        sessionID,
+        messageID,
+        `${messageID}_06_glob`,
+        "glob",
+        completed({ pattern: "test/cli/tui/**/*.snap" }, { count: 4 }, "Locate snapshots"),
+      ),
+      tool(
+        sessionID,
+        messageID,
+        `${messageID}_07_task`,
+        "task",
+        running(
+          { description: "Audit multiple active tasks adjacent to tools", subagent_type: "explore" },
+          "Delegating",
+        ),
+      ),
+      tool(
+        sessionID,
+        messageID,
+        `${messageID}_08_grep`,
+        "grep",
+        completed(
+          { pattern: "spinner", path: "src/cli/cmd/tui/routes/session/index.tsx" },
+          { matches: 3 },
+          "Verify spinner path",
+        ),
+      ),
+      task(sessionID, messageID, `${messageID}_09_task`, "Confirm stable completed agent icon between results", true),
+    ]
+  }
   if (/parallel|subagent|task/i.test(prompt)) {
     return [
       text(sessionID, messageID, `${messageID}_01_text`, "Three delegated investigations returned concurrently:"),
