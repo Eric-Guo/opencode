@@ -86,6 +86,41 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
   )
 }
 
+function TaskGroupFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <InlineToolRow id="tool-inline-before" icon="✱" complete={true} pending="">
+        Grep "Task" (2 matches)
+      </InlineToolRow>
+      <InlineToolRow id="tool-inline-task-one" icon="⠙" complete={true} pending="" task={true}>
+        Explore Task — Inspect active task spacing
+      </InlineToolRow>
+      <InlineToolRow id="tool-inline-task-two" icon="✓" complete={true} pending="" task={true}>
+        General Task — Confirm completed task spacing
+      </InlineToolRow>
+      <InlineToolRow id="tool-inline-after" icon="→" complete={true} pending="">
+        Read src/cli/cmd/tui/routes/session/index.tsx
+      </InlineToolRow>
+    </box>
+  )
+}
+
+function LoadedReadBeforeTaskFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <InlineToolRow id="tool-inline-read" icon="→" complete={true} pending="">
+        Read src/cli/cmd/tui/routes/session/index.tsx
+      </InlineToolRow>
+      <box id="tool-inline-loaded-read-child" paddingLeft={3}>
+        <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
+      </box>
+      <InlineToolRow id="tool-inline-task-after-read" icon="✓" complete={true} pending="" task={true}>
+        Explore Task — Inspect active task spacing
+      </InlineToolRow>
+    </box>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
@@ -115,5 +150,13 @@ describe("TUI inline tool wrapping", () => {
 
   test("keeps separation after a padded user message", async () => {
     expect(await renderFrame(() => <Fixture before="user" />, { width: 72, height: 14 })).toMatchSnapshot()
+  })
+
+  test("separates a contiguous task group from inline tools", async () => {
+    expect(await renderFrame(() => <TaskGroupFixture />, { width: 72, height: 10 })).toMatchSnapshot()
+  })
+
+  test("separates a task group after an expanded read", async () => {
+    expect(await renderFrame(() => <LoadedReadBeforeTaskFixture />, { width: 72, height: 8 })).toMatchSnapshot()
   })
 })

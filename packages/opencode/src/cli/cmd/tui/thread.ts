@@ -113,6 +113,16 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("scenario", {
+        type: "string",
+        choices: ["tools-mixed", "subagents"] as const,
+        describe: "render a synthetic TUI state preview",
+      })
+      .option("scenario-speed", {
+        type: "number",
+        default: 1,
+        describe: "playback speed for synthetic TUI responses",
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
@@ -125,6 +135,27 @@ export const TuiThreadCommand = cmd({
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
+        process.exitCode = 1
+        return
+      }
+
+      const network = resolveNetworkOptionsNoConfig(args)
+      const external =
+        process.argv.includes("--port") ||
+        process.argv.includes("--hostname") ||
+        process.argv.includes("--mdns") ||
+        network.mdns ||
+        network.port !== 0 ||
+        network.hostname !== "127.0.0.1"
+
+      if (args.scenario && external) {
+        UI.error("--scenario is only available with the internal transport")
+        process.exitCode = 1
+        return
+      }
+
+      if (args.scenario && (args.continue || args.session || args.fork)) {
+        UI.error("--scenario cannot be combined with --continue, --session, or --fork")
         process.exitCode = 1
         return
       }
@@ -190,17 +221,7 @@ export const TuiThreadCommand = cmd({
 
       const prompt = await input(args.prompt)
       const config = await TuiConfig.get()
-
-      const network = resolveNetworkOptionsNoConfig(args)
-      const external =
-        process.argv.includes("--port") ||
-        process.argv.includes("--hostname") ||
-        process.argv.includes("--mdns") ||
-        network.mdns ||
-        network.port !== 0 ||
-        network.hostname !== "127.0.0.1"
       const discovered = external ? undefined : await ServerDiscovery.find()
-
       const transport = external
         ? {
             url: (await client.call("server", network)).url,
@@ -222,12 +243,24 @@ export const TuiThreadCommand = cmd({
             events: createEventSource(client),
           }
 
+      const scenario = args.scenario
+        ? (await import("./scenario")).createScenario({
+            name: args.scenario,
+            directory: cwd,
+            fetch: transport.fetch!,
+            speed: args.scenarioSpeed,
+          })
+        : undefined
+      const sessionID = scenario?.sessionID ?? args.session
+      const fetch = scenario?.fetch ?? transport.fetch
+      const events = scenario?.events ?? transport.events
+
       try {
         await validateSession({
           url: transport.url,
-          sessionID: args.session,
+          sessionID,
           directory: cwd,
-          fetch: transport.fetch,
+          fetch,
           headers: transport.headers,
         })
       } catch (error) {
@@ -236,9 +269,10 @@ export const TuiThreadCommand = cmd({
         return
       }
 
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
+      if (!args.scenario)
+        setTimeout(() => {
+          client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+        }, 1000).unref?.()
 
       try {
         const { createTuiRenderer, tui } = await import("./app")
@@ -253,12 +287,12 @@ export const TuiThreadCommand = cmd({
           },
           config,
           directory: cwd,
-          fetch: transport.fetch,
+          fetch,
           headers: transport.headers,
-          events: transport.events,
+          events,
           args: {
             continue: args.continue,
-            sessionID: args.session,
+            sessionID,
             agent: args.agent,
             model: args.model,
             prompt,

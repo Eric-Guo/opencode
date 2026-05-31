@@ -1789,6 +1789,7 @@ function InlineTool(props: {
   complete: any
   pending: string
   spinner?: boolean
+  task?: boolean
   children: JSX.Element
   part: ToolPart
   onClick?: () => void
@@ -1829,6 +1830,7 @@ function InlineTool(props: {
 
   return (
     <InlineToolRow
+      id={`tool-inline-${props.task ? "task-" : ""}${props.part.id}`}
       icon={props.icon}
       iconColor={props.iconColor}
       color={fg()}
@@ -1840,6 +1842,7 @@ function InlineTool(props: {
       complete={props.complete}
       pending={props.pending}
       spinner={props.spinner}
+      task={props.task}
       separateAfter={(id) =>
         sync.data.message[ctx.sessionID]?.some((message) => message.role === "user" && message.id === id) ?? false
       }
@@ -1860,6 +1863,7 @@ function InlineTool(props: {
 }
 
 export function InlineToolRow(props: {
+  id?: string
   icon: string
   iconColor?: RGBA
   color?: RGBA
@@ -1871,6 +1875,7 @@ export function InlineToolRow(props: {
   complete: any
   pending: string
   spinner?: boolean
+  task?: boolean
   children: JSX.Element
   separateAfter?: (id: string | undefined) => boolean
   onMouseOver?: () => void
@@ -1881,6 +1886,7 @@ export function InlineToolRow(props: {
 
   return (
     <box
+      id={props.id}
       marginTop={margin()}
       paddingLeft={3}
       onMouseOver={props.onMouseOver}
@@ -1895,9 +1901,12 @@ export function InlineToolRow(props: {
         const children = parent.getChildren()
         const index = children.indexOf(el)
         const previous = children[index - 1]
+        const previousInline = previous?.id.startsWith("tool-inline-") ?? false
+        const previousTask = previous?.id.startsWith("tool-inline-task-") ?? false
         setMargin(
           previous?.id.startsWith("text-") ||
             previous?.id.startsWith("tool-block-") ||
+            (previousInline && previousTask !== Boolean(props.task)) ||
             props.separateAfter?.(previous?.id)
             ? 1
             : 0,
@@ -2123,8 +2132,8 @@ function Read(props: ToolProps<typeof ReadTool>) {
         Read {pathFormatter.format(props.input.filePath)} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
-        {(filepath) => (
-          <box paddingLeft={3}>
+        {(filepath, index) => (
+          <box id={`tool-inline-loaded-${props.part.id}-${index()}`} paddingLeft={3}>
             <text paddingLeft={3} fg={theme.textMuted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
@@ -2197,13 +2206,6 @@ function Task(props: ToolProps<typeof TaskTool>) {
     return status
   })
 
-  const duration = createMemo(() => {
-    const first = messages().find((x) => x.role === "user")?.time.created
-    const assistant = messages().findLast((x) => x.role === "assistant")?.time.completed
-    if (!first || !assistant) return 0
-    return assistant - first
-  })
-
   const content = createMemo(() => {
     if (!props.input.description) return ""
     const description =
@@ -2222,20 +2224,13 @@ function Task(props: ToolProps<typeof TaskTool>) {
       } else content.push(`↳ ${tools().length} toolcalls`)
     }
 
-    if (props.part.state.status === "completed") {
-      content.push(
-        props.metadata.background === true
-          ? `└ ${tools().length} toolcalls`
-          : `└ ${tools().length} toolcalls · ${Locale.duration(duration())}`,
-      )
-    }
-
     return content.join("\n")
   })
 
   return (
     <InlineTool
-      icon="│"
+      icon={props.part.state.status === "completed" ? "✓" : "│"}
+      task={true}
       color={retry() ? theme.error : undefined}
       spinner={isRunning()}
       complete={props.input.description}

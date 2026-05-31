@@ -77,11 +77,12 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventServerConnected
+  | EventServerHeartbeat
+  | EventServerInstanceDisposed
   | EventGlobalDisposed
   | EventAccountAdded
   | EventAccountRemoved
   | EventAccountSwitched
-  | EventServerInstanceDisposed
 
 export type QuestionReplied = {
   sessionID: string
@@ -1406,6 +1407,20 @@ export type GlobalEvent = {
         type: "server.connected"
         properties: {
           [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "server.heartbeat"
+        properties: {
+          [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "server.instance.disposed"
+        properties: {
+          directory: string
         }
       }
     | {
@@ -4460,6 +4475,14 @@ export type EventInstallationUpdateAvailable = {
 export type EventServerConnected = {
   id: string
   type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventServerHeartbeat = {
+  id: string
+  type: "server.heartbeat"
   properties: {
     [key: string]: unknown
   }
