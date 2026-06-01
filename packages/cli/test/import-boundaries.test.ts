@@ -17,11 +17,13 @@ describe("CLI frontend import boundaries", () => {
 
   test("exposes only the intentional package entrypoints", async () => {
     const run = await import("@opencode-ai/cli/run")
+    const tui = await import("@opencode-ai/cli/tui")
     const mini = await import("@opencode-ai/tui/mini")
     const tool = await import("@opencode-ai/tui/mini/tool")
     const cli = await Bun.file(path.join(root, "packages/cli/package.json")).json()
 
     expect(Object.keys(run).sort()).toEqual(["runNonInteractive", "runV1Bridge"])
+    expect(Object.keys(tui).sort()).toEqual(["runV1TuiBridge"])
     expect(Object.keys(mini).sort()).toEqual(["runMiniFrontend"])
     expect(Object.keys(tool).sort()).toEqual([
       "nonEmptyToolContent",
