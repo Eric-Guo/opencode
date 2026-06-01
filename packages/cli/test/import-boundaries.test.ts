@@ -26,10 +26,12 @@ describe("CLI frontend import boundaries", () => {
   })
 
   test("exposes only the intentional package entrypoints", async () => {
+    const tui = await import("@opencode/cli/tui")
     const mini = await import("@opencode/tui/mini")
     const tool = await import("@opencode/tui/mini/tool")
     const cli = await Bun.file(path.join(root, "packages/cli/package.json")).json()
 
+    expect(Object.keys(tui).sort()).toEqual(["runV1TuiBridge"])
     expect(Object.keys(mini).sort()).toEqual(["runMiniFrontend"])
     expect(Object.keys(tool).sort()).toEqual([
       "nonEmptyToolContent",
