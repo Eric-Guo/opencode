@@ -4,6 +4,7 @@ import * as Observability from "@opencode-ai/core/effect/observability"
 
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Database } from "@opencode-ai/core/database/database"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
 import { Config } from "@/config/config"
@@ -61,6 +62,7 @@ export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
   AppFileSystem.defaultLayer,
   Database.defaultLayer,
+  AuthWellKnown.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
   Config.defaultLayer,
