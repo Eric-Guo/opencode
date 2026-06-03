@@ -260,9 +260,7 @@ export const TaskTool = Tool.define(
           }),
           notify(nextSession.id),
         ]),
-        run: runTask().pipe(
-          Effect.onInterrupt(() => ops.cancel(nextSession.id)),
-        ),
+        run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
       })
 
       function backgroundResult() {
