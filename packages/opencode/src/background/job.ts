@@ -189,14 +189,13 @@ export const layer = Layer.effect(
           const started_at = yield* Clock.currentTimeMillis
           const done = yield* Deferred.make<Info>()
           const promoted = yield* Deferred.make<Info>()
-          return yield* SynchronizedRef.modifyEffect(
+          const initial = yield* SynchronizedRef.modifyEffect(
             s.jobs,
             Effect.fnUntraced(function* (jobs) {
               const existing = jobs.get(id)
-              if (existing?.info.status === "running") return [snapshot(existing), jobs] as const
+              if (existing?.info.status === "running") return [{ info: snapshot(existing) }, jobs] as const
               const scope = yield* Scope.fork(s.scope, "parallel")
               const token = {}
-              yield* fork(scope, id, token, 0, restore(input.run))
               const job = {
                 info: {
                   id,
@@ -214,9 +213,12 @@ export const layer = Layer.effect(
                 promoted,
                 onPromote: input.onPromote,
               }
-              return [snapshot(job), new Map(jobs).set(id, job)] as const
+              return [{ info: snapshot(job), scope, token }, new Map(jobs).set(id, job)] as const
             }),
           )
+          if (!("scope" in initial)) return initial.info
+          yield* fork(initial.scope, id, initial.token, 0, restore(input.run))
+          return initial.info
         }),
       )
     })
@@ -225,22 +227,21 @@ export const layer = Layer.effect(
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const s = yield* InstanceState.get(state)
-          return yield* SynchronizedRef.modifyEffect(
-            s.jobs,
-            Effect.fnUntraced(function* (jobs) {
-              const job = jobs.get(input.id)
-              if (!job || job.info.status !== "running") return [false, jobs] as const
-              yield* fork(job.scope, input.id, job.token, job.next, restore(input.run))
-              return [
-                true,
-                new Map(jobs).set(input.id, {
-                  ...job,
-                  pending: job.pending + 1,
-                  next: job.next + 1,
-                }),
-              ] as const
-            }),
-          )
+          const initial = yield* SynchronizedRef.modify(s.jobs, (jobs) => {
+            const job = jobs.get(input.id)
+            if (!job || job.info.status !== "running") return [{}, jobs] as const
+            return [
+              { scope: job.scope, token: job.token, sequence: job.next },
+              new Map(jobs).set(input.id, {
+                ...job,
+                pending: job.pending + 1,
+                next: job.next + 1,
+              }),
+            ] as const
+          })
+          if (!("scope" in initial)) return false
+          yield* fork(initial.scope, input.id, initial.token, initial.sequence, restore(input.run))
+          return true
         }),
       )
     })
