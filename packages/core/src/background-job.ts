@@ -25,6 +25,8 @@ type Active = {
   pending: number
   next: number
   output?: { sequence: number; text: string }
+  promoted: Deferred.Deferred<Info>
+  onPromote?: Effect.Effect<void>
 }
 
 type State = {
@@ -38,6 +40,11 @@ type FinishResult = {
   scope?: Scope.Closeable
 }
 
+type PromoteResult = {
+  info?: Info
+  promoted?: Deferred.Deferred<Info>
+}
+
 type StartResult = { info: Info } | { info: Info; scope: Scope.Closeable; token: object }
 
 type ExtendResult = { extended: false } | { extended: true; scope: Scope.Closeable; token: object; sequence: number }
@@ -47,6 +54,7 @@ export type StartInput = {
   type: string
   title?: string
   metadata?: Record<string, unknown>
+  onPromote?: Effect.Effect<void>
   run: Effect.Effect<string, unknown>
 }
 
@@ -71,6 +79,8 @@ export interface Interface {
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly extend: (input: ExtendInput) => Effect.Effect<boolean>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
+  readonly waitForPromotion: (id: string) => Effect.Effect<Info>
+  readonly promote: (id: string) => Effect.Effect<Info | undefined>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
 }
 
@@ -182,6 +192,7 @@ export const make = Effect.gen(function* () {
         const id = input.id ?? Identifier.ascending("job")
         const started_at = yield* Clock.currentTimeMillis
         const done = yield* Deferred.make<Info>()
+        const promoted = yield* Deferred.make<Info>()
         const result = yield* SynchronizedRef.modifyEffect(
           state.jobs,
           Effect.fnUntraced(function* (jobs) {
@@ -205,6 +216,8 @@ export const make = Effect.gen(function* () {
               token,
               pending: 1,
               next: 1,
+              promoted,
+              onPromote: input.onPromote,
             }
             return [{ info: snapshot(job), scope, token }, new Map(jobs).set(id, job)] as readonly [
               StartResult,
@@ -254,6 +267,39 @@ export const make = Effect.gen(function* () {
     return { info: snapshot(job), timedOut: true }
   })
 
+  const waitForPromotion: Interface["waitForPromotion"] = Effect.fn("BackgroundJob.waitForPromotion")(function* (id) {
+    const job = (yield* SynchronizedRef.get(state.jobs)).get(id)
+    if (!job || job.info.status !== "running") return yield* Effect.never
+    if (job.info.metadata?.background === true) return snapshot(job)
+    return yield* Deferred.await(job.promoted)
+  })
+
+  const promote: Interface["promote"] = Effect.fn("BackgroundJob.promote")(function* (id) {
+    const result = yield* SynchronizedRef.modifyEffect(
+      state.jobs,
+      Effect.fnUntraced(function* (jobs) {
+        const job = jobs.get(id)
+        if (!job || job.info.status !== "running") return [{}, jobs] as readonly [PromoteResult, Map<string, Active>]
+        if (job.info.metadata?.background === true)
+          return [{ info: snapshot(job) }, jobs] as readonly [PromoteResult, Map<string, Active>]
+        yield* job.onPromote ?? Effect.void
+        const next = {
+          ...job,
+          info: {
+            ...job.info,
+            metadata: { ...job.info.metadata, background: true },
+          },
+        }
+        return [{ info: snapshot(next), promoted: job.promoted }, new Map(jobs).set(id, next)] as readonly [
+          PromoteResult,
+          Map<string, Active>,
+        ]
+      }),
+    )
+    if (result.info && result.promoted) yield* Deferred.succeed(result.promoted, result.info).pipe(Effect.ignore)
+    return result.info
+  })
+
   const cancel: Interface["cancel"] = Effect.fn("BackgroundJob.cancel")(function* (id) {
     const completed_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [FinishResult, Map<string, Active>] => {
@@ -276,7 +322,7 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
-  return Service.of({ list, get, start, extend, wait, cancel })
+  return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel })
 })
 
 export const layer = Layer.effect(Service, make)
