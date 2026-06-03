@@ -86,6 +86,7 @@ type RunFooterViewProps = {
   theme?: RunTheme
   diffStyle?: RunDiffStyle
   tuiConfig: RunTuiConfig
+  backgroundSubagents: boolean
   history?: RunPrompt[]
   agent: string
   onSubmit: (input: RunPrompt) => boolean
@@ -159,7 +160,9 @@ export function RunFooterView(props: RunFooterViewProps) {
       label: count === 1 ? "agent" : "agents",
     }
   })
-  const foregroundSubagents = createMemo(() => tabs().some((item) => item.status === "running" && !item.background))
+  const foregroundSubagents = createMemo(
+    () => props.backgroundSubagents && tabs().some((item) => item.status === "running" && !item.background),
+  )
   const queuedIndicator = createMemo(() => {
     const count = queuedPrompts().length
     if (count === 0) return
@@ -800,10 +803,10 @@ export function RunFooterView(props: RunFooterViewProps) {
                             </text>
                           )}
                         </Show>
-                        <Show when={foregroundSubagents()}>
+                        <Show when={foregroundSubagents() && backgroundShortcut()}>
                           <text id="run-direct-footer-background-label" fg={theme().text} wrapMode="none" truncate>
                             <span style={{ fg: theme().highlight }}>• </span>
-                            <span style={{ fg: theme().highlight }}>{backgroundShortcut() || "ctrl+b"}</span>{" "}
+                            <span style={{ fg: theme().highlight }}>{backgroundShortcut()}</span>{" "}
                             <span style={{ fg: theme().muted }}>background</span>
                           </text>
                         </Show>

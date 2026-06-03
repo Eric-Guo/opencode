@@ -1026,7 +1026,10 @@ export function Session() {
       hidden: true,
       enabled: foregroundTasks().length > 0,
       run: () => {
-        void sdk.client.experimental.session.background({ sessionID: route.sessionID })
+        void sdk.client.experimental.session.background({
+          sessionID: route.sessionID,
+          workspace: project.workspace.current(),
+        })
         dialog.clear()
       },
     },

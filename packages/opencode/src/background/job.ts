@@ -24,6 +24,7 @@ type Active = {
   pending: number
   next: number
   output?: { sequence: number; text: string }
+  tail: Deferred.Deferred<void>
   promoted: Deferred.Deferred<Info>
   onPromote?: Effect.Effect<void>
 }
@@ -42,11 +43,21 @@ type FinishResult = {
 type PromoteResult = {
   info?: Info
   promoted?: Deferred.Deferred<Info>
+  onPromote?: Effect.Effect<void>
 }
 
 type StartResult = { info: Info; start: false } | { info: Info; scope: Scope.Closeable; start: true; token: object }
 
-type ExtendResult = { start: false } | { scope: Scope.Closeable; start: true; token: object; sequence: number }
+type ExtendResult =
+  | { start: false }
+  | {
+      previous: Deferred.Deferred<void>
+      scope: Scope.Closeable
+      start: true
+      tail: Deferred.Deferred<void>
+      token: object
+      sequence: number
+    }
 
 export type StartInput = {
   id?: string
@@ -137,6 +148,7 @@ export const layer = Layer.effect(
             : "error"
         const next = {
           ...job,
+          onPromote: undefined,
           pending: 0,
           output,
           info: {
@@ -193,6 +205,7 @@ export const layer = Layer.effect(
           const started_at = yield* Clock.currentTimeMillis
           const done = yield* Deferred.make<Info>()
           const promoted = yield* Deferred.make<Info>()
+          const tail = yield* Deferred.make<void>()
           const initial = yield* SynchronizedRef.modifyEffect(
             s.jobs,
             Effect.fnUntraced(function* (jobs) {
@@ -215,6 +228,7 @@ export const layer = Layer.effect(
                 token,
                 pending: 1,
                 next: 1,
+                tail,
                 promoted,
                 onPromote: input.onPromote,
               }
@@ -225,7 +239,13 @@ export const layer = Layer.effect(
             }),
           )
           if (!initial.start) return initial.info
-          yield* fork(initial.scope, id, initial.token, 0, restore(input.run))
+          yield* fork(
+            initial.scope,
+            id,
+            initial.token,
+            0,
+            restore(input.run).pipe(Effect.ensuring(Deferred.succeed(tail, undefined))),
+          )
           return initial.info
         }),
       )
@@ -235,21 +255,32 @@ export const layer = Layer.effect(
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const s = yield* InstanceState.get(state)
+          const tail = yield* Deferred.make<void>()
           const initial = yield* SynchronizedRef.modify(s.jobs, (jobs) => {
             const job = jobs.get(input.id)
             if (!job || job.info.status !== "running")
               return [{ start: false }, jobs] as readonly [ExtendResult, Map<string, Active>]
             return [
-              { scope: job.scope, start: true, token: job.token, sequence: job.next },
+              { previous: job.tail, scope: job.scope, start: true, tail, token: job.token, sequence: job.next },
               new Map(jobs).set(input.id, {
                 ...job,
                 pending: job.pending + 1,
                 next: job.next + 1,
+                tail,
               }),
             ] as readonly [ExtendResult, Map<string, Active>]
           })
           if (!initial.start) return false
-          yield* fork(initial.scope, input.id, initial.token, initial.sequence, restore(input.run))
+          yield* fork(
+            initial.scope,
+            input.id,
+            initial.token,
+            initial.sequence,
+            Deferred.await(initial.previous).pipe(
+              Effect.andThen(restore(input.run)),
+              Effect.ensuring(Deferred.succeed(initial.tail, undefined)),
+            ),
+          )
           return true
         }),
       )
@@ -282,21 +313,22 @@ export const layer = Layer.effect(
           if (!job || job.info.status !== "running") return [{}, jobs] as readonly [PromoteResult, Map<string, Active>]
           if (job.info.metadata?.background === true)
             return [{ info: snapshot(job) }, jobs] as readonly [PromoteResult, Map<string, Active>]
-          yield* job.onPromote ?? Effect.void
           const next = {
             ...job,
+            onPromote: undefined,
             info: {
               ...job.info,
               metadata: { ...job.info.metadata, background: true },
             },
           }
-          return [{ info: snapshot(next), promoted: job.promoted }, new Map(jobs).set(id, next)] as readonly [
-            PromoteResult,
-            Map<string, Active>,
-          ]
+          return [
+            { info: snapshot(next), onPromote: job.onPromote, promoted: job.promoted },
+            new Map(jobs).set(id, next),
+          ] as readonly [PromoteResult, Map<string, Active>]
         }),
       )
       if (result.info && result.promoted) yield* Deferred.succeed(result.promoted, result.info).pipe(Effect.ignore)
+      if (result.onPromote) yield* result.onPromote.pipe(Effect.ignore)
       return result.info
     })
 
@@ -310,6 +342,7 @@ export const layer = Layer.effect(
           if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
           const next = {
             ...job,
+            onPromote: undefined,
             pending: 0,
             info: {
               ...job.info,

@@ -99,6 +99,31 @@ describe("background.job", () => {
     }),
   )
 
+  it.instance("runs extensions after earlier work completes", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const first = yield* Deferred.make<void>()
+      const order: string[] = []
+      const job = yield* jobs.start({
+        type: "test",
+        run: Effect.sync(() => order.push("start")).pipe(Effect.andThen(Deferred.await(first)), Effect.as("first")),
+      })
+
+      expect(
+        yield* jobs.extend({
+          id: job.id,
+          run: Effect.sync(() => order.push("extend")).pipe(Effect.as("second")),
+        }),
+      ).toBe(true)
+      yield* Effect.yieldNow
+      expect(order).toEqual(["start"])
+
+      yield* Deferred.succeed(first, undefined)
+      expect((yield* jobs.wait({ id: job.id })).info?.output).toBe("second")
+      expect(order).toEqual(["start", "extend"])
+    }),
+  )
+
   it.instance("rejects extensions after a job completes", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
@@ -160,21 +185,19 @@ describe("background.job", () => {
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const interrupted = yield* Deferred.make<void>()
-      const extendedInterrupted = yield* Deferred.make<void>()
       const job = yield* jobs.start({
         type: "test",
         run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
       })
       yield* jobs.extend({
         id: job.id,
-        run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(extendedInterrupted, undefined))),
+        run: Effect.never,
       })
 
       const cancelled = yield* jobs.cancel(job.id)
 
       expect(cancelled?.status).toBe("cancelled")
       yield* Deferred.await(interrupted).pipe(Effect.timeout("1 second"))
-      yield* Deferred.await(extendedInterrupted).pipe(Effect.timeout("1 second"))
       expect((yield* jobs.get(job.id))?.status).toBe("cancelled")
     }),
   )
