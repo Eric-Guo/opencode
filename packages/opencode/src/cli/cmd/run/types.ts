@@ -68,6 +68,7 @@ export type RunInput = {
   files: RunFilePart[]
   initialInput?: string
   thinking: boolean
+  backgroundSubagents: boolean
   demo?: boolean
 }
 

@@ -3,6 +3,7 @@ import { Agent } from "@/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MCP } from "@/mcp"
 import { Project } from "@/project/project"
 import { Session } from "@/session/session"
@@ -33,6 +34,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const worktreeSvc = yield* Worktree.Service
     const sessions = yield* Session.Service
     const background = yield* BackgroundJob.Service
+    const flags = yield* RuntimeFlags.Service
 
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
       const [state, groups] = yield* Effect.all(
@@ -152,6 +154,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const sessionBackground = Effect.fn("ExperimentalHttpApi.sessionBackground")(function* (ctx: {
       params: { sessionID: SessionID }
     }) {
+      if (!flags.experimentalBackgroundSubagents) return false
       const jobs = (yield* background.list()).filter(
         (job) =>
           job.type === "task" &&
@@ -159,8 +162,8 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
           job.metadata?.parentSessionId === ctx.params.sessionID &&
           job.metadata.background !== true,
       )
-      yield* Effect.forEach(jobs, (job) => background.promote(job.id), { concurrency: "unbounded", discard: true })
-      return jobs.length > 0
+      const promoted = yield* Effect.forEach(jobs, (job) => background.promote(job.id), { concurrency: "unbounded" })
+      return promoted.some((job) => job !== undefined)
     })
 
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {
