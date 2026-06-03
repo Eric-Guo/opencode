@@ -1,32 +1,19 @@
-import { Component, createMemo } from "solid-js"
-import { useParams } from "@solidjs/router"
+import { Component } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
-import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { decode64 } from "@/utils/base64"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { useSettingsDialogTitle } from "./settings-dialog-title"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
-  const serverSync = useServerSync()
-  const params = useParams()
-  const config = createMemo(() => {
-    const directory = decode64(params.dir) ?? serverSync.data.path.directory
-    if (!directory) return serverSync.data.config
-    return serverSync.child(directory, { bootstrap: false })[0].config
-  })
-  const title = createMemo(() => {
-    const name = config().username ?? serverSync.data.config.username ?? ""
-    const clerk = config().clerk_code ?? serverSync.data.config.clerk_code
-    return clerk ? `${name} (${clerk})` : name
-  })
+  const title = useSettingsDialogTitle()
 
   return (
     <Dialog size="x-large" transition>
