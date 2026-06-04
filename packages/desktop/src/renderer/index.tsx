@@ -244,7 +244,10 @@ const createPlatform = (): Platform => {
       }
     },
 
-    fetch,
+    fetch: (input, init) => {
+      if (input instanceof Request) return fetch(input)
+      return fetch(input, init)
+    },
 
     getDefaultServer: async () => {
       const url = await window.api.getDefaultServerUrl().catch(() => null)
@@ -313,7 +316,8 @@ render(() => {
 
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
-  const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
+  // Fetch sidecar credentials (available immediately, before health check)
+  const [sidecar] = createResource(() => window.api.awaitInitialization())
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
@@ -421,7 +425,7 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders locale={locale.latest}>
-        <App />
+        <Show when={true}>{(_) => <App />}</Show>
       </AppBaseProviders>
     </PlatformProvider>
   )

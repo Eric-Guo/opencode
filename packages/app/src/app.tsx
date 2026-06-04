@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
   type Component,
+  createEffect,
   createMemo,
   createResource,
   createSignal,
@@ -30,8 +31,9 @@ import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { GlobalSDKProvider } from "@/context/global-sdk"
-import { GlobalSyncProvider } from "@/context/global-sync"
+import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSyncProvider } from "@/context/server-sync"
+import { GlobalProvider } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
@@ -40,7 +42,7 @@ import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
-import { SettingsProvider } from "@/context/settings"
+import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import { WslServersProvider } from "@/context/wsl-servers"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -92,9 +94,26 @@ function QueryProvider(props: ParentProps) {
   return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
 }
 
+function BodyDesignClass() {
+  const settings = useSettings()
+
+  createEffect(() => {
+    if (typeof document === "undefined") return
+
+    const enabled = settings.general.newLayoutDesigns()
+    document.body.classList.toggle("text-12-regular", !enabled)
+    document.body.classList.toggle("font-(family-name:--font-family-text)", enabled)
+    document.body.classList.toggle("text-[13px]", enabled)
+    document.body.classList.toggle("font-[440]", enabled)
+  })
+
+  return null
+}
+
 function AppShellProviders(props: ParentProps) {
   return (
     <SettingsProvider>
+      <BodyDesignClass />
       <PermissionProvider>
         <LayoutProvider>
           <NotificationProvider>
@@ -299,17 +318,14 @@ export function AppInterface(props: {
   disableHealthCheck?: boolean
 }) {
   return (
-    <ServerProvider
-      defaultServer={props.defaultServer}
-      disableHealthCheck={props.disableHealthCheck}
-      servers={props.servers}
-    >
-      <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <ServerKey>
-          {() => (
-            <QueryProvider>
-              <GlobalSDKProvider>
-                <GlobalSyncProvider>
+    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
+      <GlobalProvider defaultServer={props.defaultServer} servers={props.servers}>
+        <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+          <ServerKey>
+            {() => (
+              <QueryProvider>
+                <ServerSDKProvider>
+                  <ServerSyncProvider>
                   <Dynamic
                     component={props.router ?? Router}
                     root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
@@ -320,12 +336,13 @@ export function AppInterface(props: {
                       <Route path="/session/:id?" component={SessionRoute} />
                     </Route>
                   </Dynamic>
-                </GlobalSyncProvider>
-              </GlobalSDKProvider>
-            </QueryProvider>
-          )}
-        </ServerKey>
-      </ConnectionGate>
+                  </ServerSyncProvider>
+                </ServerSDKProvider>
+              </QueryProvider>
+            )}
+          </ServerKey>
+        </ConnectionGate>
+      </GlobalProvider>
     </ServerProvider>
   )
 }

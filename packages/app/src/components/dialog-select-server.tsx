@@ -8,22 +8,21 @@ import { List } from "@opencode-ai/ui/list"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { useMutation } from "@tanstack/solid-query"
-import { showToast } from "@opencode-ai/ui/toast"
-import { batch, createEffect, createMemo, createResource, For, onCleanup, Show, untrack } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { showToast } from "@/utils/toast"
+import { useNavigate } from "@solidjs/router"
+import { createEffect, createMemo, createResource, For, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { DialogWslServer } from "@/components/dialog-wsl-server"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
+import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useWslServers } from "@/context/wsl-servers"
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
+import { useSettings } from "@/context/settings"
 
 const DEFAULT_USERNAME = "opencode"
-
-interface DialogSelectServerProps {
-  onNavigateHome?: () => void
-}
 
 interface ServerFormProps {
   value: string
@@ -33,6 +32,7 @@ interface ServerFormProps {
   placeholder: string
   busy: boolean
   error: string
+  status: boolean | undefined
   onChange: (value: string) => void
   onNameChange: (value: string) => void
   onUsernameChange: (value: string) => void
@@ -76,7 +76,39 @@ function useDefaultServer() {
       showRequestError(language, err)
     }
   }
-  return { defaultKey, canDefault, setDefault }
+  return { defaultKey: () => defaultKey.latest, canDefault, setDefault }
+}
+
+function useServerPreview() {
+  const checkServerHealth = useCheckServerHealth()
+
+  const looksComplete = (value: string) => {
+    const normalized = normalizeServerUrl(value)
+    if (!normalized) return false
+    const host = normalized.replace(/^https?:\/\//, "").split("/")[0]
+    if (!host) return false
+    if (host.includes("localhost") || host.startsWith("127.0.0.1")) return true
+    return host.includes(".") || host.includes(":")
+  }
+
+  const previewStatus = async (
+    value: string,
+    username: string,
+    password: string,
+    setStatus: (value: boolean | undefined) => void,
+  ) => {
+    setStatus(undefined)
+    if (!looksComplete(value)) return
+    const normalized = normalizeServerUrl(value)
+    if (!normalized) return
+    const http: ServerConnection.HttpBase = { url: normalized }
+    if (username) http.username = username
+    if (password) http.password = password
+    const result = await checkServerHealth(http)
+    setStatus(result.healthy)
+  }
+
+  return { previewStatus }
 }
 
 function ServerForm(props: ServerFormProps) {
@@ -94,7 +126,7 @@ function ServerForm(props: ServerFormProps) {
   }
 
   return (
-    <div class="px-5">
+    <div>
       <div class="bg-surface-base rounded-md p-5 flex flex-col gap-3">
         <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
           <TextField
@@ -144,20 +176,42 @@ function ServerForm(props: ServerFormProps) {
   )
 }
 
-export function DialogSelectServer(props: DialogSelectServerProps = {}) {
+export function DialogSelectServer() {
   const dialog = useDialog()
+  const controller = useServerManagementController({ onSelect: dialog.close })
+
+  return (
+    <Dialog
+      title={controller.formTitle()}
+      fit={controller.isAddWslMode()}
+      class={
+        controller.isAddWslMode()
+          ? "[&_[data-slot=dialog-body]]:flex-none [&_[data-slot=dialog-body]]:overflow-visible"
+          : undefined
+      }
+    >
+      <div class={controller.isAddWslMode() ? "flex flex-col gap-2 px-5" : "flex flex-1 min-h-0 flex-col px-5"}>
+        <Show when={!controller.isAddWslMode()} fallback={<DialogWslServer onAdded={controller.handleAddedWsl} />}>
+          <Show when={controller.isFormMode()} fallback={<ServerConnectionList controller={controller} />}>
+            <ServerConnectionForm controller={controller} />
+          </Show>
+        </Show>
+      </div>
+    </Dialog>
+  )
+}
+
+export function useServerManagementController(options: { onSelect?: () => void } = {}) {
+  const navigate = useNavigate()
   const server = useServer()
+  const global = useGlobal()
   const platform = usePlatform()
   const language = useLanguage()
   const wslServers = useWslServers()
-  const defaultServer = useDefaultServer()
+  const { defaultKey, canDefault, setDefault } = useDefaultServer()
+  const { previewStatus } = useServerPreview()
   const checkServerHealth = useCheckServerHealth()
-  let disposed = false
-  onCleanup(() => {
-    disposed = true
-  })
   const [store, setStore] = createStore({
-    status: {} as Record<ServerConnection.Key, ServerHealth | undefined>,
     addServer: {
       url: "",
       name: "",
@@ -165,6 +219,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
       password: "",
       error: "",
       showForm: false,
+      status: undefined as boolean | undefined,
     },
     addWsl: {
       showWizard: false,
@@ -176,6 +231,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
       username: "",
       password: "",
       error: "",
+      status: undefined as boolean | undefined,
     },
   })
 
@@ -187,6 +243,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
       password: "",
       error: "",
       showForm: false,
+      status: undefined,
     })
   }
   const resetEdit = () => {
@@ -197,6 +254,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
       username: "",
       password: "",
       error: "",
+      status: undefined,
     })
   }
 
@@ -275,7 +333,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
       return key
     },
     onSuccess: async (key) => {
-      if (defaultServer.defaultKey() === key) await defaultServer.setDefault(null)
+      if (defaultKey() === key) await setDefault(null)
       server.remove(key)
     },
     onError: (err) => showRequestError(language, err),
@@ -312,16 +370,13 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
     return [current, ...list.filter((x) => x !== current)]
   })
 
-  const current = createMemo(() => items().find((x) => ServerConnection.key(x) === server.key) ?? items()[0])
-  const wslState = () => wslServers.data
-  const healthPollKey = createMemo(() =>
-    items()
-      .map((conn) =>
-        [ServerConnection.key(conn), conn.http.url, conn.http.username ?? "", conn.http.password ?? ""].join("\n"),
-      )
-      .join("\n\n"),
+  const settings = useSettings()
+  const current = createMemo<ServerConnection.Any | undefined>(() =>
+    settings.general.newLayoutDesigns()
+      ? undefined
+      : (items().find((x) => ServerConnection.key(x) === server.key) ?? items()[0]),
   )
-  const health = (key: ServerConnection.Key) => store.status[key]
+  const wslState = () => wslServers.data
   const wslRuntime = (conn: ServerConnection.Any) => {
     if (!isWslSidecar(conn)) return
     return wslState()?.servers.find((item) => item.config.id === ServerConnection.key(conn))?.runtime
@@ -339,6 +394,10 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
     if (kind === "failed") return "Failed"
     return "Stopped"
   }
+  const wslCheck = (conn: ServerConnection.Any) => {
+    if (!isWslSidecar(conn)) return null
+    return wslState()?.opencodeChecks[conn.distro] ?? null
+  }
 
   const sortedItems = createMemo(() => {
     const list = items()
@@ -353,68 +412,31 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
     return list.slice().sort((a, b) => {
       if (a === active) return -1
       if (b === active) return 1
-      const diff = rank(health(ServerConnection.key(a))) - rank(health(ServerConnection.key(b)))
+      const diff =
+        rank(global.servers.health[ServerConnection.key(a)]) - rank(global.servers.health[ServerConnection.key(b)])
       if (diff !== 0) return diff
       return (order.get(a) ?? 0) - (order.get(b) ?? 0)
     })
   })
 
-  async function refreshHealth() {
-    const results: Record<ServerConnection.Key, ServerHealth> = {}
-    const list = untrack(items)
-    await Promise.all(
-      list.map(async (conn) => {
-        results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
-      }),
-    )
-    if (disposed) return
-    setStore("status", reconcile(results))
-  }
-
-  createEffect(() => {
-    healthPollKey()
-    void refreshHealth()
-    const interval = setInterval(refreshHealth, 10_000)
-    onCleanup(() => clearInterval(interval))
-  })
-
-  const wslCheck = (conn: ServerConnection.Any) => {
-    if (!isWslSidecar(conn)) return null
-    return wslState()?.opencodeChecks[conn.distro] ?? null
-  }
-
   async function select(conn: ServerConnection.Any, persist?: boolean) {
-    if (!persist && health(ServerConnection.key(conn))?.healthy === false) return
-    const nextKey = ServerConnection.key(conn)
-    const changed = server.key !== nextKey
-
-    const navigateHome = () => props.onNavigateHome?.()
-
-    const apply = () => {
-      dialog.close()
-      if (persist && conn.type === "http") {
-        server.add(conn)
-        navigateHome()
-        return
-      }
-
-      batch(() => {
-        navigateHome()
-        server.setActive(nextKey)
-      })
-    }
-
-    if (!changed) {
-      await apply()
+    if (!persist && global.servers.health[ServerConnection.key(conn)]?.healthy === false) return
+    options.onSelect?.()
+    if (persist && conn.type === "http") {
+      server.add(conn)
+      navigate("/")
       return
     }
-
-    apply()
+    navigate("/")
+    queueMicrotask(() => server.setActive(ServerConnection.key(conn)))
   }
 
   const handleAddChange = (value: string) => {
     if (addMutation.isPending) return
     setStore("addServer", { url: value, error: "" })
+    void previewStatus(value, store.addServer.username, store.addServer.password, (next) =>
+      setStore("addServer", { status: next }),
+    )
   }
 
   const handleAddNameChange = (value: string) => {
@@ -425,16 +447,25 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
   const handleAddUsernameChange = (value: string) => {
     if (addMutation.isPending) return
     setStore("addServer", { username: value, error: "" })
+    void previewStatus(store.addServer.url, value, store.addServer.password, (next) =>
+      setStore("addServer", { status: next }),
+    )
   }
 
   const handleAddPasswordChange = (value: string) => {
     if (addMutation.isPending) return
     setStore("addServer", { password: value, error: "" })
+    void previewStatus(store.addServer.url, store.addServer.username, value, (next) =>
+      setStore("addServer", { status: next }),
+    )
   }
 
   const handleEditChange = (value: string) => {
     if (editMutation.isPending) return
     setStore("editServer", { value, error: "" })
+    void previewStatus(value, store.editServer.username, store.editServer.password, (next) =>
+      setStore("editServer", { status: next }),
+    )
   }
 
   const handleEditNameChange = (value: string) => {
@@ -445,11 +476,17 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
   const handleEditUsernameChange = (value: string) => {
     if (editMutation.isPending) return
     setStore("editServer", { username: value, error: "" })
+    void previewStatus(store.editServer.value, value, store.editServer.password, (next) =>
+      setStore("editServer", { status: next }),
+    )
   }
 
   const handleEditPasswordChange = (value: string) => {
     if (editMutation.isPending) return
     setStore("editServer", { password: value, error: "" })
+    void previewStatus(store.editServer.value, store.editServer.username, value, (next) =>
+      setStore("editServer", { status: next }),
+    )
   }
 
   const mode = createMemo<"list" | "add-wsl" | "add" | "edit">(() => {
@@ -480,6 +517,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
       username: DEFAULT_USERNAME,
       password: "",
       error: "",
+      status: undefined,
     })
   }
 
@@ -493,6 +531,7 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
       username: conn.http.username ?? "",
       password: conn.http.password ?? "",
       error: "",
+      status: global.servers.health[ServerConnection.key(conn)]?.healthy,
     })
   }
 
@@ -553,313 +592,342 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
 
   async function handleRemove(key: ServerConnection.Key) {
     server.remove(key)
-    if (defaultServer.defaultKey() === key) await defaultServer.setDefault(null)
+    if (defaultKey() === key) await setDefault(null)
   }
 
-  return (
-    <Dialog
-      title={formTitle()}
-      fit={isAddWslMode()}
-      class={isAddWslMode() ? "[&_[data-slot=dialog-body]]:flex-none [&_[data-slot=dialog-body]]:overflow-visible" : undefined}
-    >
-      <div class={isAddWslMode() ? "flex flex-col gap-2" : "flex flex-1 min-h-0 flex-col gap-2"}>
-        <Show
-          when={!isFormMode()}
-          fallback={
-            <Show
-              when={isAddWslMode()}
-              fallback={
-                <ServerForm
-                  value={isAddMode() ? store.addServer.url : store.editServer.value}
-                  name={isAddMode() ? store.addServer.name : store.editServer.name}
-                  username={isAddMode() ? store.addServer.username : store.editServer.username}
-                  password={isAddMode() ? store.addServer.password : store.editServer.password}
-                  placeholder={language.t("dialog.server.add.placeholder")}
-                  busy={formBusy()}
-                  error={isAddMode() ? store.addServer.error : store.editServer.error}
-                  onChange={isAddMode() ? handleAddChange : handleEditChange}
-                  onNameChange={isAddMode() ? handleAddNameChange : handleEditNameChange}
-                  onUsernameChange={isAddMode() ? handleAddUsernameChange : handleEditUsernameChange}
-                  onPasswordChange={isAddMode() ? handleAddPasswordChange : handleEditPasswordChange}
-                  onSubmit={submitForm}
-                  onBack={resetForm}
-                />
-              }
-            >
-              <DialogWslServer onAdded={handleAddedWsl} />
-            </Show>
-          }
-        >
-          <Show when={nonReadyWslServers().length > 0}>
-            <div class="px-5">
-              <div class="bg-surface-base rounded-md overflow-hidden">
-                <For each={nonReadyWslServers()}>
-                  {(item) => {
-                    const key = ServerConnection.Key.make(item.config.id)
-                    const retryable = () => canRetryWslRuntime(item.runtime.kind)
-                    return (
-                      <div class="min-h-14 p-3 flex items-center gap-3 border-b border-border-weak-base last:border-b-0">
-                        <div
-                          classList={{
-                            "size-1.5 rounded-full shrink-0": true,
-                            "bg-icon-critical-base": item.runtime.kind === "failed",
-                            "bg-border-weak-base": item.runtime.kind !== "failed",
-                          }}
-                        />
-                        <div class="flex items-center gap-2 min-w-0 flex-1">
-                          <span class="text-14-medium text-text-base truncate">{item.config.distro}</span>
-                          <span class="text-11-regular text-text-weak border border-border-weak-base bg-surface-base px-1.5 py-0.5 rounded-md shrink-0">
-                            WSL
-                          </span>
-                          <Show when={defaultServer.defaultKey() === key}>
-                            <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs shrink-0">
-                              {language.t("dialog.server.status.default")}
-                            </span>
-                          </Show>
-                          <span class="text-12-regular text-text-weak truncate">
-                            {wslRuntimeLabel(item.runtime.kind)}
-                          </span>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenu.Trigger
-                            as={IconButton}
-                            icon="dot-grid"
-                            variant="ghost"
-                            class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
-                            onClick={(e: MouseEvent) => e.stopPropagation()}
-                            onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                          />
-                          <DropdownMenu.Portal>
-                            <DropdownMenu.Content class="mt-1">
-                              <Show when={retryable()}>
-                                <DropdownMenu.Item onSelect={() => retryWslMutation.mutate(key)}>
-                                  <DropdownMenu.ItemLabel>Retry start</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                              </Show>
-                              <Show when={defaultServer.canDefault() && defaultServer.defaultKey() !== key}>
-                                <DropdownMenu.Item onSelect={() => void defaultServer.setDefault(key)}>
-                                  <DropdownMenu.ItemLabel>
-                                    {language.t("dialog.server.menu.default")}
-                                  </DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                              </Show>
-                              <Show when={defaultServer.canDefault() && defaultServer.defaultKey() === key}>
-                                <DropdownMenu.Item onSelect={() => void defaultServer.setDefault(null)}>
-                                  <DropdownMenu.ItemLabel>
-                                    {language.t("dialog.server.menu.defaultRemove")}
-                                  </DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                              </Show>
-                              <Show when={retryable() || defaultServer.canDefault()}>
-                                <DropdownMenu.Separator />
-                              </Show>
-                              <DropdownMenu.Item
-                                onSelect={() => removeWslMutation.mutate(key)}
-                                class="text-text-on-critical-base hover:bg-surface-critical-weak"
-                              >
-                                <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.delete")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                          </DropdownMenu.Portal>
-                        </DropdownMenu>
-                      </div>
-                    )
-                  }}
-                </For>
-              </div>
-            </div>
-          </Show>
-          <List
-            search={{
-              placeholder: language.t("dialog.server.search.placeholder"),
-              autofocus: false,
-            }}
-            noInitialSelection
-            emptyMessage={language.t("dialog.server.empty")}
-            items={sortedItems}
-            key={(x) => ServerConnection.key(x)}
-            onSelect={(x) => {
-              if (x) void select(x)
-            }}
-            divider={true}
-            class="flex-1 min-h-0 px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
-          >
-            {(i) => {
-              const key = ServerConnection.key(i)
-              const wsl = isWslSidecar(i)
-              const wslDistro = wsl ? i.distro : undefined
-              const blocked = () => health(key)?.healthy === false
-              const canChangeDefault = () => defaultServer.canDefault() && (i.type === "http" || wsl)
-              const canRemove = () => i.type === "http" || wsl
-              const opencodeAction = () => {
-                const check = wslCheck(i)
-                if (!check) return null
-                if (!check.resolvedPath) return "Install OpenCode"
-                if (check.matchesDesktop === false) return "Update OpenCode"
-                return null
-              }
-              const updating = () => {
-                const job = wslState()?.job
-                return job?.kind === "install-opencode" && job.distro === wslDistro
-              }
-              return (
-                <div class="flex items-center gap-3 min-w-0 flex-1 w-full group/item">
-                  <div class="flex flex-col h-full items-start w-5">
-                    <ServerHealthIndicator health={health(key)} />
-                  </div>
-                  <ServerRow
-                    conn={i}
-                    dimmed={blocked()}
-                    status={health(key)}
-                    version={wslCheck(i)?.version ?? undefined}
-                    class="flex items-center gap-3 min-w-0 flex-1"
-                    badge={
-                      <Show when={defaultServer.defaultKey() === ServerConnection.key(i)}>
-                        <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs">
-                          {language.t("dialog.server.status.default")}
-                        </span>
-                      </Show>
-                    }
-                    showCredentials
-                  />
-                  <div class="flex items-center justify-center gap-3 pl-4">
-                    <Show when={wsl && opencodeAction()}>
-                      {(label) => (
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          disabled={!!wslState()?.job}
-                          class="shrink-0"
-                          onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                          onClick={(e: MouseEvent) => {
-                            e.stopPropagation()
-                            if (wslDistro) updateWslMutation.mutate(wslDistro)
-                          }}
-                        >
-                          <Show when={updating()}>
-                            <Spinner class="size-3.5 shrink-0" />
-                          </Show>
-                          {label()}
-                        </Button>
-                      )}
-                    </Show>
-                    <Show when={ServerConnection.key(current()) === key}>
-                      <Icon name="check" class="h-6" />
-                    </Show>
+  return {
+    defaultKey,
+    canDefault,
+    current,
+    sortedItems,
+    status: () => global.servers.health,
+    isFormMode,
+    isAddMode,
+    isAddWslMode,
+    canAddWsl,
+    nonReadyWslServers,
+    canRetryWsl,
+    canRetryWslRuntime,
+    wslRuntimeLabel,
+    wslCheck,
+    wslJob: () => wslState()?.job,
+    formTitle,
+    formBusy,
+    formValue: () => (isAddMode() ? store.addServer.url : store.editServer.value),
+    formName: () => (isAddMode() ? store.addServer.name : store.editServer.name),
+    formUsername: () => (isAddMode() ? store.addServer.username : store.editServer.username),
+    formPassword: () => (isAddMode() ? store.addServer.password : store.editServer.password),
+    formError: () => (isAddMode() ? store.addServer.error : store.editServer.error),
+    formStatus: () => (isAddMode() ? store.addServer.status : store.editServer.status),
+    select,
+    setDefault,
+    startAdd,
+    startAddWsl,
+    startEdit,
+    resetForm,
+    submitForm,
+    handleRemove,
+    handleAddedWsl,
+    retryWsl: (key: ServerConnection.Key) => retryWslMutation.mutate(key),
+    removeWsl: (key: ServerConnection.Key) => removeWslMutation.mutate(key),
+    updateWsl: (distro: string) => updateWslMutation.mutate(distro),
+    handleFormChange: () => (isAddMode() ? handleAddChange : handleEditChange),
+    handleFormNameChange: () => (isAddMode() ? handleAddNameChange : handleEditNameChange),
+    handleFormUsernameChange: () => (isAddMode() ? handleAddUsernameChange : handleEditUsernameChange),
+    handleFormPasswordChange: () => (isAddMode() ? handleAddPasswordChange : handleEditPasswordChange),
+  }
+}
 
-                    <Show when={i.type === "http" || i.type === "sidecar"}>
-                      <DropdownMenu>
-                        <DropdownMenu.Trigger
-                          as={IconButton}
-                          icon="dot-grid"
-                          variant="ghost"
-                          class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
-                          onClick={(e: MouseEvent) => e.stopPropagation()}
-                          onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                        />
-                        <DropdownMenu.Portal>
-                          <DropdownMenu.Content class="mt-1">
-                            <Show when={i.type === "http"}>
-                              <DropdownMenu.Item
-                                onSelect={() => {
-                                  if (i.type !== "http") return
-                                  startEdit(i)
-                                }}
-                              >
-                                <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                            <Show when={wsl && canRetryWsl(i)}>
-                              <DropdownMenu.Item onSelect={() => retryWslMutation.mutate(key)}>
-                                <DropdownMenu.ItemLabel>Retry start</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                            <Show when={canChangeDefault() && defaultServer.defaultKey() !== key}>
-                              <DropdownMenu.Item onSelect={() => void defaultServer.setDefault(key)}>
-                                <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.default")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                            <Show when={canChangeDefault() && defaultServer.defaultKey() === key}>
-                              <DropdownMenu.Item onSelect={() => void defaultServer.setDefault(null)}>
-                                <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.defaultRemove")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                            <Show when={canRemove() && (i.type === "http" || canChangeDefault() || canRetryWsl(i))}>
-                              <DropdownMenu.Separator />
-                            </Show>
-                            <Show when={canRemove()}>
-                              <DropdownMenu.Item
-                                onSelect={() => {
-                                  if (wsl) {
-                                    removeWslMutation.mutate(key)
-                                    return
-                                  }
-                                  void handleRemove(key)
-                                }}
-                                class="text-text-on-critical-base hover:bg-surface-critical-weak"
-                              >
-                                <DropdownMenu.ItemLabel>
-                                  {language.t("dialog.server.menu.delete")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </Show>
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                      </DropdownMenu>
+export function ServerConnectionList(props: { controller: ReturnType<typeof useServerManagementController> }) {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  return (
+    <div class="flex flex-1 min-h-0 flex-col gap-4">
+      <Show when={props.controller.nonReadyWslServers().length > 0}>
+        <div class="bg-surface-base rounded-md overflow-hidden">
+          <For each={props.controller.nonReadyWslServers()}>
+            {(item) => {
+              const key = ServerConnection.Key.make(item.config.id)
+              const retryable = () => props.controller.canRetryWslRuntime(item.runtime.kind)
+              return (
+                <div class="min-h-14 p-3 flex items-center gap-3 border-b border-border-weak-base last:border-b-0">
+                  <div
+                    classList={{
+                      "size-1.5 rounded-full shrink-0": true,
+                      "bg-icon-critical-base": item.runtime.kind === "failed",
+                      "bg-border-weak-base": item.runtime.kind !== "failed",
+                    }}
+                  />
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span class="text-14-medium text-text-base truncate">{item.config.distro}</span>
+                    <span class="text-11-regular text-text-weak border border-border-weak-base bg-surface-base px-1.5 py-0.5 rounded-md shrink-0">
+                      WSL
+                    </span>
+                    <Show when={props.controller.defaultKey() === key}>
+                      <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs shrink-0">
+                        {language.t("dialog.server.status.default")}
+                      </span>
                     </Show>
+                    <span class="text-12-regular text-text-weak truncate">
+                      {props.controller.wslRuntimeLabel(item.runtime.kind)}
+                    </span>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenu.Trigger
+                      as={IconButton}
+                      icon="dot-grid"
+                      variant="ghost"
+                      class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
+                      onClick={(e: MouseEvent) => e.stopPropagation()}
+                      onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                    />
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content class="mt-1">
+                        <Show when={retryable()}>
+                          <DropdownMenu.Item onSelect={() => props.controller.retryWsl(key)}>
+                            <DropdownMenu.ItemLabel>Retry start</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
+                        <Show when={props.controller.canDefault() && props.controller.defaultKey() !== key}>
+                          <DropdownMenu.Item onSelect={() => void props.controller.setDefault(key)}>
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.default")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
+                        <Show when={props.controller.canDefault() && props.controller.defaultKey() === key}>
+                          <DropdownMenu.Item onSelect={() => void props.controller.setDefault(null)}>
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.defaultRemove")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
+                        <Show when={retryable() || props.controller.canDefault()}>
+                          <DropdownMenu.Separator />
+                        </Show>
+                        <DropdownMenu.Item
+                          onSelect={() => props.controller.removeWsl(key)}
+                          class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                        >
+                          <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu>
                 </div>
               )
             }}
-          </List>
-        </Show>
-
-        <div class="shrink-0 px-5 pb-5">
-          <Show
-            when={!isAddWslMode() && isFormMode()}
-            fallback={
-              <Show when={!isAddWslMode()}>
-                <div class="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    icon="plus-small"
-                    size="large"
-                    onClick={startAdd}
-                    class="py-1.5 pl-1.5 pr-3 flex items-center gap-1.5"
-                  >
-                    {language.t("dialog.server.add.button")}
-                  </Button>
-                  <Show when={canAddWsl()}>
+          </For>
+        </div>
+      </Show>
+      <List
+        class="flex-1 min-h-0 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
+        search={{
+          placeholder: language.t("dialog.server.search.placeholder"),
+          autofocus: false,
+        }}
+        noInitialSelection
+        emptyMessage={language.t("dialog.server.empty")}
+        items={props.controller.sortedItems}
+        key={(x) => ServerConnection.key(x)}
+        onSelect={(x) => {
+          if (x && !settings.general.newLayoutDesigns()) void props.controller.select(x)
+        }}
+        divider={true}
+      >
+        {(i) => {
+          const key = ServerConnection.key(i)
+          const wsl = isWslSidecar(i)
+          const wslDistro = wsl ? i.distro : undefined
+          const canChangeDefault = () => props.controller.canDefault() && (i.type === "http" || wsl)
+          const canRemove = () => i.type === "http" || wsl
+          const opencodeAction = () => {
+            const check = props.controller.wslCheck(i)
+            if (!check) return null
+            if (!check.resolvedPath) return "Install OpenCode"
+            if (check.matchesDesktop === false) return "Update OpenCode"
+            return null
+          }
+          const updating = () => {
+            const job = props.controller.wslJob()
+            return job?.kind === "install-opencode" && job.distro === wslDistro
+          }
+          return (
+            <div class="flex items-center gap-3 min-w-0 flex-1 w-full group/item">
+              <div class="flex flex-col h-full items-center w-5">
+                <ServerHealthIndicator health={props.controller.status()[key]} />
+              </div>
+              <ServerRow
+                conn={i}
+                dimmed={props.controller.status()[key]?.healthy === false}
+                status={props.controller.status()[key]}
+                version={props.controller.wslCheck(i)?.version ?? undefined}
+                class="flex items-center gap-3 min-w-0 flex-1"
+                badge={
+                  <Show when={props.controller.defaultKey() === ServerConnection.key(i)}>
+                    <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs">
+                      {language.t("dialog.server.status.default")}
+                    </span>
+                  </Show>
+                }
+                showCredentials
+              />
+              <div class="flex items-center justify-center gap-3 pl-4">
+                <Show when={wsl && opencodeAction()}>
+                  {(label) => (
                     <Button
                       variant="secondary"
-                      icon="plus-small"
-                      size="large"
-                      onClick={startAddWsl}
-                      class="py-1.5 pl-1.5 pr-3 flex items-center gap-1.5"
+                      size="small"
+                      disabled={!!props.controller.wslJob()}
+                      class="shrink-0"
+                      onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                      onClick={(e: MouseEvent) => {
+                        e.stopPropagation()
+                        if (wslDistro) props.controller.updateWsl(wslDistro)
+                      }}
                     >
-                      Add WSL
+                      <Show when={updating()}>
+                        <Spinner class="size-3.5 shrink-0" />
+                      </Show>
+                      {label()}
                     </Button>
-                  </Show>
-                </div>
-              </Show>
-            }
+                  )}
+                </Show>
+                <Show when={props.controller.current()}>
+                  {(current) => (
+                    <Show when={ServerConnection.key(current()) === key}>
+                      <Icon name="check" class="h-6" />
+                    </Show>
+                  )}
+                </Show>
+
+                <Show when={i.type === "http" || wsl}>
+                  <DropdownMenu>
+                    <DropdownMenu.Trigger
+                      as={IconButton}
+                      icon="dot-grid"
+                      variant="ghost"
+                      class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
+                      onClick={(e: MouseEvent) => e.stopPropagation()}
+                      onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                    />
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content class="mt-1">
+                        <Show when={i.type === "http"}>
+                          <DropdownMenu.Item
+                            onSelect={() => {
+                              if (i.type !== "http") return
+                              props.controller.startEdit(i)
+                            }}
+                          >
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
+                        <Show when={wsl && props.controller.canRetryWsl(i)}>
+                          <DropdownMenu.Item onSelect={() => props.controller.retryWsl(key)}>
+                            <DropdownMenu.ItemLabel>Retry start</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
+                        <Show when={canChangeDefault() && props.controller.defaultKey() !== key}>
+                          <DropdownMenu.Item onSelect={() => void props.controller.setDefault(key)}>
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.default")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
+                        <Show when={canChangeDefault() && props.controller.defaultKey() === key}>
+                          <DropdownMenu.Item onSelect={() => void props.controller.setDefault(null)}>
+                            <DropdownMenu.ItemLabel>
+                              {language.t("dialog.server.menu.defaultRemove")}
+                            </DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
+                        <Show when={canRemove() && (i.type === "http" || canChangeDefault() || props.controller.canRetryWsl(i))}>
+                          <DropdownMenu.Separator />
+                        </Show>
+                        <Show when={canRemove()}>
+                          <DropdownMenu.Item
+                            onSelect={() => {
+                              if (wsl) {
+                                props.controller.removeWsl(key)
+                                return
+                              }
+                              void props.controller.handleRemove(key)
+                            }}
+                            class="text-text-on-critical-base hover:bg-surface-critical-weak"
+                          >
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </Show>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu>
+                </Show>
+              </div>
+            </div>
+          )
+        }}
+      </List>
+
+      <div class="shrink-0 pb-5">
+        <div class="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            icon="plus-small"
+            size="large"
+            onClick={props.controller.startAdd}
+            class="py-1.5 pl-1.5 pr-3 flex items-center gap-1.5"
           >
-            <Button variant="primary" size="large" onClick={submitForm} disabled={formBusy()} class="px-3 py-1.5">
-              {formBusy()
-                ? language.t("dialog.server.add.checking")
-                : isAddMode()
-                  ? language.t("dialog.server.add.button")
-                  : language.t("common.save")}
+            {language.t("dialog.server.add.button")}
+          </Button>
+          <Show when={props.controller.canAddWsl()}>
+            <Button
+              variant="secondary"
+              icon="plus-small"
+              size="large"
+              onClick={props.controller.startAddWsl}
+              class="py-1.5 pl-1.5 pr-3 flex items-center gap-1.5"
+            >
+              Add WSL
             </Button>
           </Show>
         </div>
       </div>
-    </Dialog>
+    </div>
+  )
+}
+
+export function ServerConnectionForm(props: { controller: ReturnType<typeof useServerManagementController> }) {
+  const language = useLanguage()
+
+  return (
+    <div class="flex flex-1 min-h-0 flex-col gap-4">
+      <ServerForm
+        value={props.controller.formValue()}
+        name={props.controller.formName()}
+        username={props.controller.formUsername()}
+        password={props.controller.formPassword()}
+        placeholder={language.t("dialog.server.add.placeholder")}
+        busy={props.controller.formBusy()}
+        error={props.controller.formError()}
+        status={props.controller.formStatus()}
+        onChange={props.controller.handleFormChange()}
+        onNameChange={props.controller.handleFormNameChange()}
+        onUsernameChange={props.controller.handleFormUsernameChange()}
+        onPasswordChange={props.controller.handleFormPasswordChange()}
+        onSubmit={props.controller.submitForm}
+        onBack={props.controller.resetForm}
+      />
+      <div class="shrink-0 pb-5">
+        <Button
+          variant="primary"
+          size="large"
+          onClick={props.controller.submitForm}
+          disabled={props.controller.formBusy()}
+          class="px-3 py-1.5"
+        >
+          {props.controller.formBusy()
+            ? language.t("dialog.server.add.checking")
+            : props.controller.isAddMode()
+              ? language.t("dialog.server.add.button")
+              : language.t("common.save")}
+        </Button>
+      </div>
+    </div>
   )
 }

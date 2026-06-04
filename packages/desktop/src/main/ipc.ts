@@ -4,10 +4,8 @@ import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
 import type {
-  InitStep,
   FatalRendererError,
   ServerReadyData,
-  SqliteMigrationProgress,
   TitlebarTheme,
   WindowConfig,
   WslServerConfig,
@@ -26,7 +24,7 @@ const pickerFilters = (ext?: string[]) => {
 type Deps = {
   killSidecar: () => Promise<void> | void
   relaunch: () => void
-  awaitInitialization: (sendStep: (step: InitStep) => void) => Promise<ServerReadyData>
+  awaitInitialization: () => Promise<ServerReadyData>
   getWslServersState: () => Promise<WslServersState> | WslServersState
   onWslServersEvent: (listener: (event: WslServersEvent) => void) => () => void
   wslServersProbeRuntime: () => Promise<void> | void
@@ -50,7 +48,6 @@ type Deps = {
   checkAppExists: (appName: string) => Promise<boolean> | boolean
   wslPath: (path: string, mode: "windows" | "linux" | null, distro?: string | null) => Promise<string>
   resolveAppPath: (appName: string) => Promise<string | null>
-  loadingWindowComplete: () => void
   runUpdater: (alertOnFail: boolean) => Promise<void> | void
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void> | void
@@ -79,10 +76,7 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
-  ipcMain.handle("await-initialization", (event: IpcMainInvokeEvent) => {
-    const send = (step: InitStep) => event.sender.send("init-step", step)
-    return deps.awaitInitialization(send)
-  })
+  ipcMain.handle("await-initialization", () => deps.awaitInitialization())
   ipcMain.handle("wsl-servers-subscribe", (event) => {
     const id = event.sender.id
     if (wslSubscriptions.has(id)) return
@@ -145,7 +139,6 @@ export function registerIpcHandlers(deps: Deps) {
       deps.wslPath(path, mode, distro),
   )
   ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
-  ipcMain.on("loading-window-complete", () => deps.loadingWindowComplete())
   ipcMain.handle("run-updater", (_event: IpcMainInvokeEvent, alertOnFail: boolean) => deps.runUpdater(alertOnFail))
   ipcMain.handle("check-update", () => deps.checkUpdate())
   ipcMain.handle("install-update", () => deps.installUpdate())
@@ -289,10 +282,6 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
     runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action)
   })
-}
-
-export function sendSqliteMigrationProgress(win: BrowserWindow, progress: SqliteMigrationProgress) {
-  win.webContents.send("sqlite-migration-progress", progress)
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {
