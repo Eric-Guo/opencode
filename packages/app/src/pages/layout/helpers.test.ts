@@ -9,6 +9,7 @@ import {
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
   childSessionOnPath,
+  closeHomeProject,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
@@ -215,6 +216,14 @@ describe("layout workspace helpers", () => {
   test("formats fallback project display name", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")
+    expect(displayName({ worktree: "/" })).toBe("/")
+  })
+
+  test("closes a home project through its server context", () => {
+    const closed: string[] = []
+
+    expect(closeHomeProject({ close: (directory) => closed.push(directory) }, "/", "/")).toBeUndefined()
+    expect(closed).toEqual(["/"])
   })
 
   test("extracts api error message and fallback", () => {

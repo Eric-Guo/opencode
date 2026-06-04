@@ -13,6 +13,7 @@ import type {
 } from "../preload/types"
 import { WSL_SERVERS_KEY } from "./constants"
 import { getStore } from "./store"
+import { wslServerIdsToStartOnInitialize } from "./wsl-server-startup"
 import {
   installWslDistro,
   installWslOpencode,
@@ -226,9 +227,9 @@ export function createWslServersController(appVersion: string, spawnSidecar: Spa
       return () => listeners.delete(listener)
     },
 
-    async initialize(opts?: { defaultServer?: string | null }) {
+    async initialize() {
       refreshFromStore()
-      if (opts?.defaultServer?.startsWith("wsl:")) void startServer(opts.defaultServer)
+      for (const id of wslServerIdsToStartOnInitialize(state.servers.map((item) => item.config))) void startServer(id)
     },
 
     async probeRuntime() {
