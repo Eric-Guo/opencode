@@ -52,6 +52,7 @@ export interface DialogSelectOption<T = any> {
   value: T
   description?: string
   details?: string[]
+  search?: string
   footer?: JSX.Element | string
   category?: string
   categoryView?: JSX.Element

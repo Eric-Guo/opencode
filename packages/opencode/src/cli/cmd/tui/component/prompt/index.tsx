@@ -159,6 +159,7 @@ export function Prompt(props: PromptProps) {
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const [autoaccept, setAutoaccept] = kv.signal<"none" | "edit">("permission_auto_accept", "edit")
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -419,6 +420,16 @@ export function Prompt(props: PromptProps) {
   const promptCommands = createMemo(() =>
     [
       {
+        title: autoaccept() === "none" ? "Enable autoedit" : "Disable autoedit",
+        desc: "Toggle automatic acceptance of edit permissions",
+        name: "permission.auto_accept.toggle",
+        category: "Agent",
+        run: () => {
+          setAutoaccept(() => (autoaccept() === "none" ? "edit" : "none"))
+          dialog.clear()
+        },
+      },
+      {
         title: "Clear prompt",
         name: "prompt.clear",
         category: "Prompt",
@@ -648,6 +659,7 @@ export function Prompt(props: PromptProps) {
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
+      "permission.auto_accept.toggle",
       "prompt.submit",
       "prompt.editor",
       "prompt.editor_context.clear",
@@ -1602,8 +1614,13 @@ export function Prompt(props: PromptProps) {
                   )}
                 </Show>
               </box>
-              <Show when={hasRightContent()}>
+              <Show when={autoaccept() === "edit" || hasRightContent()}>
                 <box flexDirection="row" gap={1} alignItems="center">
+                  <Show when={autoaccept() === "edit"}>
+                    <text>
+                      <span style={{ fg: theme.warning }}>autoedit</span>
+                    </text>
+                  </Show>
                   {props.right}
                 </box>
               </Show>
