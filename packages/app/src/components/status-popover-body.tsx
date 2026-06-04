@@ -287,7 +287,7 @@ function ServerStatusList(props: { state: ServerStatusState }) {
   )
 }
 
-export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
+export function StatusPopoverBody(props: { shown: Accessor<boolean>; close?: () => void }) {
   const sync = useSync()
   const global = useGlobal()
   const server = useServer()
@@ -379,6 +379,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                         aria-disabled={blocked()}
                         onClick={() => {
                           if (blocked()) return
+                          props.close?.()
                           navigate("/")
                           queueMicrotask(() => server.setActive(key))
                         }}
