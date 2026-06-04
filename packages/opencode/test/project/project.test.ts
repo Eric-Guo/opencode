@@ -6,13 +6,14 @@ import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { SessionID } from "@/session/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
@@ -238,6 +239,72 @@ describe("Project.fromDirectory", () => {
       expect(
         (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
           ?.project_id,
+      ).toBe(remoteID)
+    }),
+  )
+
+  it.live("migrates same-worktree project data when cache already points at remote ID", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      const projects = yield* Project.Service
+      const rootResult = yield* projects.fromDirectory(tmp)
+      const rootProject = rootResult.project
+      const remoteID = remoteProjectID("github.com/acme/restored")
+      const sessionID = crypto.randomUUID() as SessionID
+      const workspaceID = WorkspaceV2.ID.ascending()
+      const directory = AbsolutePath.make(path.join(tmp, "packages", "app"))
+
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: rootProject.id,
+          slug: sessionID,
+          directory: tmp,
+          title: "test",
+          version: "0.0.0-test",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(WorkspaceTable)
+        .values({ id: workspaceID, type: "local", name: "test", project_id: rootProject.id })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(ProjectDirectoryTable)
+        .values({ project_id: rootProject.id, directory, type: "root", time_created: Date.now() })
+        .run()
+        .pipe(Effect.orDie)
+      yield* Effect.promise(() => $`git remote add origin git@github.com:acme/restored.git`.cwd(tmp).quiet())
+      yield* Effect.promise(() => Bun.write(path.join(tmp, ".git", "opencode"), remoteID))
+
+      const result = yield* projects.fromDirectory(tmp)
+
+      expect(result.project.id).toBe(remoteID)
+      expect(
+        yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, rootProject.id)).get().pipe(Effect.orDie),
+      ).toBeUndefined()
+      expect(
+        (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
+          ?.project_id,
+      ).toBe(remoteID)
+      expect(
+        (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
+          ?.project_id,
+      ).toBe(remoteID)
+      expect(
+        (
+          yield* db
+            .select()
+            .from(ProjectDirectoryTable)
+            .where(eq(ProjectDirectoryTable.directory, directory))
+            .get()
+            .pipe(Effect.orDie)
+        )?.project_id,
       ).toBe(remoteID)
     }),
   )
