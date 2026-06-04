@@ -1,6 +1,7 @@
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionID, MessageID, PartID } from "./schema"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import {
   APIError,
@@ -99,13 +100,13 @@ function infoModel(input: unknown): User["model"] | undefined {
   if (!modelID) return
   return {
     providerID: ProviderV2.ID.make(input.providerID),
-    modelID: ProviderV2.ModelID.make(modelID),
+    modelID: ModelV2.ID.make(modelID),
     ...(typeof input.variant === "string" ? { variant: input.variant } : {}),
   }
 }
 
 const legacyModel = (input: unknown, fallback?: User["model"]) =>
-  infoModel(input) ?? fallback ?? { providerID: ProviderV2.ID.make("unknown"), modelID: ProviderV2.ModelID.make("unknown") }
+  infoModel(input) ?? fallback ?? { providerID: ProviderV2.ID.make("unknown"), modelID: ModelV2.ID.make("unknown") }
 
 const info = (row: typeof MessageTable.$inferSelect, fallbackModel?: User["model"]) => {
   const data = row.data as typeof row.data & { agent?: unknown; mode?: unknown; model?: unknown }
