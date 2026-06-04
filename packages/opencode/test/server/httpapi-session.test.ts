@@ -196,7 +196,7 @@ const insertLegacyMessageV2Assistant = (sessionID: SessionIDType, parentID: Mess
           role: "assistant",
           time: { created: 1, completed: 1 },
           parentID,
-          modelID: ProviderV2.ModelID.make("test"),
+          modelID: ModelV2.ID.make("test"),
           providerID: ProviderV2.ID.make("test"),
           mode: "build",
           path: { cwd: "/tmp", root: "/tmp" },
@@ -227,7 +227,7 @@ const insertLegacyMessageV2User = (sessionID: SessionIDType) =>
         data: {
           role: "user",
           time: { created: 1 },
-          model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
         } as unknown as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
       })
       .run()
