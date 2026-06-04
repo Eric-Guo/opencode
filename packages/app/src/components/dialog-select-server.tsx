@@ -23,6 +23,7 @@ const DEFAULT_USERNAME = "opencode"
 
 interface DialogSelectServerProps {
   onNavigateHome?: () => void
+  inline?: boolean
 }
 
 interface ServerFormProps {
@@ -556,13 +557,8 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
     if (defaultServer.defaultKey() === key) await defaultServer.setDefault(null)
   }
 
-  return (
-    <Dialog
-      title={formTitle()}
-      fit={isAddWslMode()}
-      class={isAddWslMode() ? "[&_[data-slot=dialog-body]]:flex-none [&_[data-slot=dialog-body]]:overflow-visible" : undefined}
-    >
-      <div class={isAddWslMode() ? "flex flex-col gap-2" : "flex flex-1 min-h-0 flex-col gap-2"}>
+  const content = (
+    <div class={isAddWslMode() ? "flex flex-col gap-2" : "flex flex-1 min-h-0 flex-col gap-2"}>
         <Show
           when={!isFormMode()}
           fallback={
@@ -859,7 +855,31 @@ export function DialogSelectServer(props: DialogSelectServerProps = {}) {
             </Button>
           </Show>
         </div>
+    </div>
+  )
+
+  if (props.inline) {
+    return (
+      <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+        <div class="flex flex-col flex-1 min-h-0 max-w-[720px]">
+          <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+            <div class="flex flex-col gap-1 pt-6 pb-8">
+              <div class="text-16-medium text-text-strong">{formTitle()}</div>
+            </div>
+          </div>
+          {content}
+        </div>
       </div>
+    )
+  }
+
+  return (
+    <Dialog
+      title={formTitle()}
+      fit={isAddWslMode()}
+      class={isAddWslMode() ? "[&_[data-slot=dialog-body]]:flex-none [&_[data-slot=dialog-body]]:overflow-visible" : undefined}
+    >
+      {content}
     </Dialog>
   )
 }
