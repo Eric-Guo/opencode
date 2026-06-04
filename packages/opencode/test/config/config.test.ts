@@ -7,6 +7,7 @@ import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
@@ -36,8 +37,10 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
+import { Substitution } from "@opencode-ai/core/substitution"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 import { NpmTest } from "../fake/npm"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
@@ -96,6 +99,8 @@ const configLayer = (
 ) =>
   Config.layer.pipe(
     Layer.provide(testFlock),
+    Layer.provide(Substitution.defaultLayer),
+    Layer.provide(AuthWellKnownTest.empty),
     Layer.provide(Env.defaultLayer),
     Layer.provide(options.auth ?? AuthTest.empty),
     Layer.provide(options.account ?? AccountTest.empty),
@@ -1485,6 +1490,22 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
       )
     },
   })
+  const fakeAuthWellKnown = Layer.mock(AuthWellKnown.Service)({
+    configs: () =>
+      Effect.sync(() => {
+        fetchedUrl = `${server.url.origin}/.well-known/opencode`
+        return [
+          {
+            url: server.url.origin,
+            source: `${server.url.origin}/.well-known/opencode`,
+            dir: `${server.url.origin}/.well-known`,
+            content: {
+              mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true } },
+            },
+          },
+        ]
+      }),
+  })
 
   try {
     await provideTmpdirInstance(
@@ -1504,8 +1525,9 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
           Config.layer.pipe(
             Layer.provide(testFlock),
             Layer.provide(FSUtil.defaultLayer),
+            Layer.provide(Substitution.defaultLayer),
             Layer.provide(Env.defaultLayer),
-            Layer.provide(wellKnownAuth(server.url.origin)),
+            Layer.provide(fakeAuthWellKnown),
             Layer.provide(AccountTest.empty),
             Layer.provideMerge(infra),
             Layer.provide(NpmTest.noop),
