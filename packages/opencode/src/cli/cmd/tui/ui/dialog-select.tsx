@@ -54,6 +54,7 @@ export interface DialogSelectOption<T = any> {
   value: T
   description?: string
   details?: string[]
+  search?: string
   footer?: JSX.Element | string
   titleWidth?: number
   truncateTitle?: boolean | "left"
@@ -133,8 +134,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     // users typically search by the item name, and not its category.
     const result = fuzzysort
       .go(needle, options, {
-        keys: ["title", "category"],
-        scoreFn: (r) => r[0].score * 2 + r[1].score,
+        keys: ["title", "category", "search"],
+        scoreFn: (r) => r[0].score * 2 + r[1].score + r[2].score,
       })
       .map((x) => x.obj)
 
