@@ -53,7 +53,13 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 }
 
 export const displayName = (project: { name?: string; worktree: string }) =>
-  project.name || getFilename(project.worktree)
+  project.name || getFilename(project.worktree) || project.worktree
+
+export function closeHomeProject(projects: { close: (directory: string) => void }, directory: string, selected?: string) {
+  projects.close(directory)
+  if (selected === directory) return
+  return selected
+}
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 

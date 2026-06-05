@@ -20,8 +20,6 @@ import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
 
-const pollMs = 10_000
-
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
   if (parts.length === 1) return value
@@ -60,7 +58,7 @@ const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
   const [state, setState] = createStore({
-    url: undefined as string | undefined,
+    key: undefined as ServerConnection.Key | undefined,
     tick: 0,
   })
 
@@ -69,7 +67,7 @@ const useDefaultServerKey = (
     let dead = false
     const result = get?.()
     if (!result) {
-      setState("url", undefined)
+      setState("key", undefined)
       onCleanup(() => {
         dead = true
       })
@@ -79,7 +77,7 @@ const useDefaultServerKey = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setState("url", next ? normalizeServerUrl(next) : undefined)
+        setState("key", next ? defaultServerKey(next) : undefined)
       })
       onCleanup(() => {
         dead = true
@@ -87,7 +85,7 @@ const useDefaultServerKey = (
       return
     }
 
-    setState("url", normalizeServerUrl(result))
+    setState("key", defaultServerKey(result))
     onCleanup(() => {
       dead = true
     })
@@ -95,12 +93,17 @@ const useDefaultServerKey = (
 
   return {
     key: () => {
-      const u = state.url
-      if (!u) return
-      return ServerConnection.key({ type: "http", http: { url: u } })
+      return state.key
     },
     refresh: () => setState("tick", (value) => value + 1),
   }
+}
+
+function defaultServerKey(value: string) {
+  if (value.startsWith("wsl:")) return ServerConnection.Key.make(value)
+  const url = normalizeServerUrl(value)
+  if (!url) return
+  return ServerConnection.key({ type: "http", http: { url } })
 }
 
 const useMcpToggleMutation = () => {
@@ -160,7 +163,6 @@ export function StatusPopoverServerBody() {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
-
   let dialogRun = 0
   let dialogDead = false
   onCleanup(() => {

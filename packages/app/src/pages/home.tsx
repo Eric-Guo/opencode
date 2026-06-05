@@ -26,7 +26,13 @@ import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { displayName, getProjectAvatarSource, projectForSession, sortedRootSessions } from "@/pages/layout/helpers"
+import {
+  closeHomeProject,
+  displayName,
+  getProjectAvatarSource,
+  projectForSession,
+  sortedRootSessions,
+} from "@/pages/layout/helpers"
 import { sessionTitle } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { messageAgentColor } from "@/utils/agent"
@@ -279,10 +285,9 @@ function HomeDesign() {
           openNewSession={openProjectNewSession}
           chooseProject={(conn) => void chooseProject(conn)}
           editProject={editProject}
-          closeProject={(directory) => {
-            layout.projects.close(directory)
-            if (state.project === directory) setState("project", undefined)
-          }}
+          closeProject={(directory, projects = layout.projects) =>
+            setState("project", closeHomeProject(projects, directory, state.project))
+          }
           clearNotifications={clearNotifications}
           unseenCount={unseenCount}
           openSettings={openSettings}
@@ -352,7 +357,7 @@ function HomeProjectColumn(props: {
   openNewSession: (directory: string) => void
   chooseProject: (server: ServerConnection.Any) => void
   editProject: (project: LocalProject) => void
-  closeProject: (directory: string) => void
+  closeProject: (directory: string, projects?: { close: (directory: string) => void }) => void
   clearNotifications: (project: LocalProject) => void
   unseenCount: (project: LocalProject) => number
   openSettings: () => void
@@ -412,6 +417,7 @@ function HomeProjectColumn(props: {
                     {...props}
                     projects={serverCtx.projects.list()}
                     chooseProject={() => props.chooseProject(item)}
+                    closeProject={(directory) => props.closeProject(directory, serverCtx.projects)}
                   />
                 </Show>
               </div>
@@ -1014,6 +1020,7 @@ function LegacyHome() {
     if (healthy === false) return "bg-icon-critical-base"
     return "bg-border-weak-base"
   })
+  const useWebDirectoryPicker = createMemo(() => server.current?.type === "sidecar" && server.current.variant === "wsl")
 
   function openProject(server: ServerConnection.Any, directory: string) {
     const serverCtx = global.createServerCtx(server)
@@ -1036,7 +1043,7 @@ function LegacyHome() {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+    if (platform.openDirectoryPickerDialog && server.isLocal() && !useWebDirectoryPicker()) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: language.t("command.project.open"),
         multiple: true,

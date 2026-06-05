@@ -154,6 +154,7 @@ export default function Layout(props: ParentProps) {
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => route().dir)
+  const useWebDirectoryPicker = createMemo(() => server.current?.type === "sidecar" && server.current.variant === "wsl")
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory && !newDesign(),
@@ -1478,7 +1479,7 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+    if (platform.openDirectoryPickerDialog && server.isLocal() && !useWebDirectoryPicker()) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: language.t("command.project.open"),
         multiple: true,
