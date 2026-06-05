@@ -3,6 +3,7 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { Effect, Exit, Layer, Option } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import { Substitution } from "@opencode-ai/core/substitution"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
@@ -38,13 +39,13 @@ import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 import { NpmTest } from "../fake/npm"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
 const infra = CrossSpawnSpawner.defaultLayer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 )
-
 const testFlock = EffectFlock.defaultLayer
 
 const unexpectedHttp = HttpClient.make((request) =>
@@ -98,6 +99,8 @@ const configLayer = (
     Layer.provide(testFlock),
     Layer.provide(Env.defaultLayer),
     Layer.provide(options.auth ?? AuthTest.empty),
+    Layer.provide(AuthWellKnownTest.empty),
+    Layer.provide(Substitution.defaultLayer),
     Layer.provide(options.account ?? AccountTest.empty),
     Layer.provideMerge(infra),
     Layer.provide(NpmTest.noop),
@@ -1504,7 +1507,9 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
           Config.layer.pipe(
             Layer.provide(testFlock),
             Layer.provide(FSUtil.defaultLayer),
+            Layer.provide(Substitution.defaultLayer),
             Layer.provide(Env.defaultLayer),
+            Layer.provide(AuthWellKnownTest.empty),
             Layer.provide(wellKnownAuth(server.url.origin)),
             Layer.provide(AccountTest.empty),
             Layer.provideMerge(infra),
