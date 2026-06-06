@@ -27,11 +27,11 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
+import { useKV } from "./kv"
 import { batch, onMount } from "solid-js"
 import * as Log from "@opencode-ai/core/util/log"
 import { emptyConsoleState, type ConsoleState } from "@opencode-ai/core/v1/config/console-state"
 import path from "path"
-import { useKV } from "./kv"
 import { aggregateFailures } from "./aggregate-failures"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
@@ -111,6 +111,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const project = useProject()
     const sdk = useSDK()
     const kv = useKV()
+    const [autoaccept] = kv.signal<"none" | "edit">("permission_auto_accept", "edit")
 
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
@@ -160,6 +161,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "permission.asked": {
           const request = event.properties
+          if (autoaccept() === "edit" && request.permission === "edit") {
+            sdk.client.permission.reply({
+              reply: "once",
+              requestID: request.id,
+            })
+            break
+          }
           const requests = store.permission[request.sessionID]
           if (!requests) {
             setStore("permission", request.sessionID, [request])
