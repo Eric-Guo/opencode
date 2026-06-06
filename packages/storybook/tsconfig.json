@@ -8,6 +8,7 @@
     "lib": ["es2023", "dom", "dom.iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
     "types": ["vite/client", "node"]
