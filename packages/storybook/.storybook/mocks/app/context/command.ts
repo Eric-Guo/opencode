@@ -8,6 +8,25 @@ const keybinds: Record<string, string> = {
   "model.variant.cycle": "mod+shift+m",
 }
 
+export interface CommandOption {
+  id: string
+  title: string
+  description?: string
+  category?: string
+  keybind?: string
+  slash?: string
+  suggested?: boolean
+  disabled?: boolean
+  hidden?: boolean
+  onSelect?: (source?: "palette" | "keybind" | "slash") => void
+  onHighlight?: () => (() => void) | void
+}
+
+export function formatKeybind(config: string): string {
+  if (!config || config === "none") return ""
+  return config
+}
+
 export function useCommand() {
   return {
     options: [],
