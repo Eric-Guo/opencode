@@ -323,7 +323,7 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount}>
             <Show
-              when={isV2}
+              when={isV2()}
               fallback={
                 <div class="flex items-center gap-2">
                   <Show when={projectDirectory()}>
