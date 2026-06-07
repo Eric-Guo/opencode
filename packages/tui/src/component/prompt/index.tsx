@@ -105,6 +105,14 @@ function randomIndex(count: number) {
   return Math.floor(Math.random() * count)
 }
 
+function optimisticMessageID() {
+  return `msg_${crypto.randomUUID()}`
+}
+
+function optimisticPartID() {
+  return `prt_${crypto.randomUUID()}`
+}
+
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
 }
@@ -1015,6 +1023,7 @@ export function Prompt(props: PromptProps) {
       sessionID = res.data.id
     }
 
+    const messageID = optimisticMessageID()
     const inputText = expandTrackedPastedText(
       store.prompt.input,
       input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
@@ -1035,6 +1044,7 @@ export function Prompt(props: PromptProps) {
       editorSelection && editor.labelState() === "pending"
         ? [
             {
+              id: optimisticPartID(),
               type: "text" as const,
               text: formatEditorContext(editorSelection),
               synthetic: true,
@@ -1082,24 +1092,30 @@ export function Prompt(props: PromptProps) {
         parts: nonTextParts.filter((x) => x.type === "file"),
       })
     } else {
-      move.startSubmit()
+      const parts = [
+        ...editorParts,
+        {
+          id: optimisticPartID(),
+          type: "text" as const,
+          text: inputText,
+        },
+        ...nonTextParts.map((part) => ({
+          ...part,
+          id: optimisticPartID(),
+        })),
+      ]
+      const request = {
+        sessionID,
+        messageID,
+        agent: agent.name,
+        model: selectedModel,
+        variant,
+        parts,
+      }
+      sync.session.addOptimisticPrompt(request)
       sdk.client.session
-        .prompt({
-          sessionID,
-          ...selectedModel,
-          agent: agent.name,
-          model: selectedModel,
-          variant,
-          parts: [
-            ...editorParts,
-            {
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts,
-          ],
-        })
-        .catch(() => {})
+        .prompt(request)
+        .catch(() => sync.session.removeOptimisticPrompt(request.sessionID, request.messageID))
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
