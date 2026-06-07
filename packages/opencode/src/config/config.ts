@@ -7,7 +7,8 @@ import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
 import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Auth } from "../auth"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
+import { Substitution } from "@opencode-ai/core/substitution"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -17,8 +18,8 @@ import { isRecord } from "@/util/record"
 import type { ConsoleState } from "@opencode-ai/core/v1/config/console-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
-import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
@@ -30,9 +31,7 @@ import { ConfigManaged } from "./managed"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
 import { ConfigPlugin } from "./plugin"
-import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
-import { withTransientReadRetry } from "@/util/effect-http-client"
 
 const log = Log.create({ service: "config" })
 
@@ -60,43 +59,6 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   delete copy.tui
   log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
   return copy
-}
-
-async function substituteWellKnownRemoteConfig(input: {
-  value: unknown
-  dir: string
-  source: string
-  env: Record<string, string>
-}) {
-  if (!isRecord(input.value) || typeof input.value.url !== "string") return undefined
-
-  const url = await ConfigVariable.substitute({
-    text: input.value.url,
-    type: "virtual",
-    dir: input.dir,
-    source: input.source,
-    env: input.env,
-  })
-  const headers = isRecord(input.value.headers)
-    ? Object.fromEntries(
-        await Promise.all(
-          Object.entries(input.value.headers)
-            .filter((entry): entry is [string, string] => typeof entry[1] === "string")
-            .map(async ([key, value]) => [
-              key,
-              await ConfigVariable.substitute({
-                text: value,
-                type: "virtual",
-                dir: input.dir,
-                source: input.source,
-                env: input.env,
-              }),
-            ]),
-        ),
-      )
-    : undefined
-
-  return { url, headers }
 }
 
 async function resolveLoadedPlugins<T extends { plugin?: ConfigPluginV1.Spec[] }>(config: T, filepath: string) {
@@ -177,30 +139,13 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const authSvc = yield* Auth.Service
+    const authWellKnown = yield* AuthWellKnown.Service
+    const substitution = yield* Substitution.Service
     const accountSvc = yield* Account.Service
     const env = yield* Env.Service
     const npmSvc = yield* Npm.Service
-    const http = yield* HttpClient.HttpClient
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
-
-    const fetchRemoteJson = Effect.fnUntraced(function* <S extends Schema.Top>(
-      url: string,
-      headers: Record<string, string> | undefined,
-      schema: S,
-    ) {
-      const response = yield* HttpClient.filterStatusOk(withTransientReadRetry(http))
-        .execute(
-          HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.setHeaders(headers ?? {})),
-        )
-        .pipe(
-          Effect.catch((error) => Effect.die(new Error(`failed to fetch remote config from ${url}: ${String(error)}`))),
-        )
-      return yield* HttpClientResponse.schemaBodyJson(schema)(response).pipe(
-        Effect.catch((error) => Effect.die(new Error(`failed to decode remote config from ${url}: ${String(error)}`))),
-      )
-    })
 
     const loadConfig = Effect.fnUntraced(function* (
       text: string,
@@ -208,13 +153,11 @@ export const layer = Layer.effect(
       env?: Record<string, string>,
     ) {
       const source = "path" in options ? options.path : options.source
-      const expanded = yield* Effect.promise(() =>
-        ConfigVariable.substitute(
-          "path" in options
-            ? { text, type: "path", path: options.path, env }
-            : { text, type: "virtual", ...options, env },
-        ),
-      )
+      const expanded = yield* substitution.substitute(
+        "path" in options
+          ? { text, type: "path", path: options.path, env }
+          : { text, type: "virtual", ...options, env },
+      ).pipe(Effect.orDie)
       const parsed = ConfigParse.jsonc(expanded, source)
       const data = ConfigParse.schema(ConfigV1.Info, normalizeLoadedConfig(parsed, source), source)
       if (!("path" in options)) return data
@@ -304,10 +247,7 @@ export const layer = Layer.effect(
 
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(
       function* (ctx: InstanceContext) {
-        const auth = yield* authSvc.all().pipe(Effect.orDie)
-
         let result: Info = {}
-        const authEnv: Record<string, string> = {}
         const consoleManagedProviders = new Set<string>()
         let activeOrgName: string | undefined
 
@@ -344,59 +284,22 @@ export const layer = Layer.effect(
           return mergePluginOrigins(source, next.plugin, kind)
         }
 
-        for (const [key, value] of Object.entries(auth)) {
-          if (value.type === "wellknown") {
-            const url = key.replace(/\/+$/, "")
-            authEnv[value.key] = value.token
-            const wellknownURL = `${url}/.well-known/opencode`
-            log.debug("fetching remote config", { url: wellknownURL })
-            const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, ConfigV1.WellKnown)
-            const remote = yield* Effect.promise(() =>
-              substituteWellKnownRemoteConfig({
-                value: wellknown.remote_config,
-                dir: url,
-                source: wellknownURL,
-                env: authEnv,
-              }),
-            )
-            const fetchedConfig = remote
-              ? yield* Effect.gen(function* () {
-                  log.debug("fetching remote config", { url: remote.url })
-                  const data = yield* fetchRemoteJson(remote.url, remote.headers, Schema.Json)
-                  if (isRecord(data) && isRecord(data.config)) return data.config
-                  if (isRecord(data)) return data
-                  return yield* Effect.die(
-                    new Error(`failed to decode remote config from ${remote.url}: expected object`),
-                  )
-                })
-              : {}
-            const remoteConfig = mergeConfig(isRecord(wellknown.config) ? wellknown.config : {}, fetchedConfig)
-            if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-            const source = wellknownURL
-            const next = yield* loadConfig(
-              JSON.stringify(remoteConfig),
-              {
-                dir: path.dirname(source),
-                source,
-              },
-              authEnv,
-            )
-            yield* merge(source, next, "global")
-            log.debug("loaded remote config from well-known", { url })
-          }
+        for (const item of yield* authWellKnown.configs().pipe(Effect.orDie)) {
+          yield* merge(item.source, yield* loadConfig(JSON.stringify(item.content), { dir: item.dir, source: item.source }), "global")
+          log.debug("loaded well-known config", { url: item.url })
         }
 
-        const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
+        const global = yield* getGlobal()
         yield* merge(Global.Path.config, global, "global")
 
         if (Flag.OPENCODE_CONFIG) {
-          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
+          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG))
           log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
-            yield* merge(file, yield* loadFile(file, authEnv), "local")
+            yield* merge(file, yield* loadFile(file), "local")
           }
         }
 
@@ -417,7 +320,7 @@ export const layer = Layer.effect(
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               log.debug(`loading config from ${source}`)
-              yield* merge(source, yield* loadFile(source, authEnv))
+              yield* merge(source, yield* loadFile(source))
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []
@@ -670,7 +573,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Env.defaultLayer),
-  Layer.provide(Auth.defaultLayer),
+  Layer.provide(AuthWellKnown.defaultLayer),
+  Layer.provide(Substitution.defaultLayer),
   Layer.provide(Account.defaultLayer),
   Layer.provide(Npm.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
