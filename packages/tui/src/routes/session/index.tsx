@@ -126,6 +126,7 @@ const sessionBindingCommands = [
   "session.toggle.actions",
   "session.toggle.scrollbar",
   "session.toggle.generic_tool_output",
+  "permission.auto_accept.toggle",
   "session.first",
   "session.last",
   "session.messages_last_user",
@@ -248,6 +249,7 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [autoaccept, setAutoaccept] = kv.signal<"none" | "edit">("permission_auto_accept", "edit")
   const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
@@ -661,6 +663,15 @@ export function Session() {
           sessionID: route.sessionID,
           messageID: message.id,
         })
+      },
+    },
+    {
+      title: autoaccept() === "none" ? "Enable auto-accept for edit permissions" : "Disable auto-accept for edit permissions",
+      value: "permission.auto_accept.toggle",
+      category: "Agent",
+      run: () => {
+        setAutoaccept((prev) => (prev === "none" ? "edit" : "none"))
+        dialog.clear()
       },
     },
     {
