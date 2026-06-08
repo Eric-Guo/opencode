@@ -1,4 +1,3 @@
-import "@pierre/trees/web-components"
 import { FileTree } from "@pierre/trees"
 import { Dialog, DialogFooter } from "@opencode-ai/ui/v2/dialog-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
