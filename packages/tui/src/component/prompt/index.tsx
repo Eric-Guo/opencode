@@ -15,6 +15,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { tint, useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -1016,6 +1017,7 @@ export function Prompt(props: PromptProps) {
       sessionID = res.data.id
     }
 
+    const messageID = SessionV1.MessageID.ascending()
     const inputText = expandTrackedPastedText(
       store.prompt.input,
       input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
@@ -1036,6 +1038,7 @@ export function Prompt(props: PromptProps) {
       editorSelection && editor.labelState() === "pending"
         ? [
             {
+              id: SessionV1.PartID.ascending(),
               type: "text" as const,
               text: formatEditorContext(editorSelection),
               synthetic: true,
@@ -1084,23 +1087,31 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       move.startSubmit()
+      const parts = [
+        ...editorParts,
+        {
+          id: SessionV1.PartID.ascending(),
+          type: "text" as const,
+          text: inputText,
+        },
+        ...nonTextParts.map((part) => ({
+          id: SessionV1.PartID.ascending(),
+          ...part,
+        })),
+      ]
+      const request = {
+        sessionID,
+        messageID,
+        ...selectedModel,
+        agent: agent.name,
+        model: selectedModel,
+        variant,
+        parts,
+      }
+      sync.session.addOptimisticPrompt(request)
       sdk.client.session
-        .prompt({
-          sessionID,
-          ...selectedModel,
-          agent: agent.name,
-          model: selectedModel,
-          variant,
-          parts: [
-            ...editorParts,
-            {
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts,
-          ],
-        })
-        .catch(() => {})
+        .prompt(request)
+        .catch(() => sync.session.removeOptimisticPrompt(request.sessionID, request.messageID))
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
