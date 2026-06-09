@@ -427,7 +427,7 @@ export function Session() {
     const maxTop = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
     const filename = `session-${route.sessionID.slice(0, 8)}-render-state-${timestamp}.json`
     renderer.dumpBuffers(timestamp)
-    await Filesystem.writeJson(path.join(process.cwd(), filename), {
+    await writeFile(path.join(process.cwd(), filename), JSON.stringify({
       capturedAt: timestamp,
       channel: InstallationChannel,
       version: InstallationVersion,
@@ -461,7 +461,7 @@ export function Session() {
           }
         }),
       })),
-    })
+    }))
     toast.show({ message: `Session render state written to ${filename}`, variant: "success" })
   }
 
