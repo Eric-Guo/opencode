@@ -61,6 +61,7 @@ export const {
   init: () => {
     const startup = useTuiStartup()
     const kv = useKV()
+    const [autoaccept] = kv.signal<"none" | "edit">("permission_auto_accept", "edit")
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
       provider: Provider[]
@@ -183,6 +184,13 @@ export const {
 
         case "permission.asked": {
           const request = event.properties
+          if (autoaccept() === "edit" && request.permission === "edit") {
+            void sdk.client.permission.reply({
+              reply: "once",
+              requestID: request.id,
+            })
+            break
+          }
           const requests = store.permission[request.sessionID]
           if (!requests) {
             setStore("permission", request.sessionID, [request])
