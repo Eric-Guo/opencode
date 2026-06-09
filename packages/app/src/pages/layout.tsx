@@ -2367,7 +2367,6 @@ export default function Layout(props: ParentProps) {
             </Show>
           </main>
           {import.meta.env.DEV && <DebugBar />}
-          <HelpButton />
           <ToastRegion v2={newDesign()} />
         </div>
       }
@@ -2521,7 +2520,6 @@ export default function Layout(props: ParentProps) {
           </div>
           {import.meta.env.DEV && <DebugBar />}
         </div>
-        <HelpButton />
         <ToastRegion v2={newDesign()} />
       </div>
     </Show>
