@@ -209,7 +209,9 @@ export const TuiThreadCommand = cmd({
 
       const worker = new Worker(file, {
         env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+          Object.entries({ ...process.env, ...Bun.env }).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined,
+          ),
         ),
       })
       const client = Rpc.client<typeof rpc>(worker)
