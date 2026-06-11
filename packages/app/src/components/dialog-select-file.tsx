@@ -402,8 +402,8 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
         title={language.t("session.header.searchFiles")}
         onSelect={(result) => {
           if (typeof result !== "string") return
-          if (props.onSelectFile) {
-            props.onSelectFile(result)
+          if (props.onOpenFile) {
+            props.onOpenFile(result)
             return
           }
           open(result)
