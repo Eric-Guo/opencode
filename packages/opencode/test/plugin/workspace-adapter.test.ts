@@ -5,6 +5,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { Substitution } from "@opencode-ai/core/substitution"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -25,14 +26,15 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { AccountTest } from "../fake/account"
-import { AuthTest } from "../fake/auth"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 import { NpmTest } from "../fake/npm"
 
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
+  Layer.provide(Substitution.defaultLayer),
   Layer.provide(Env.defaultLayer),
-  Layer.provide(AuthTest.empty),
+  Layer.provide(AuthWellKnownTest.empty),
   Layer.provide(AccountTest.empty),
   Layer.provide(NpmTest.noop),
   Layer.provide(FetchHttpClient.layer),
