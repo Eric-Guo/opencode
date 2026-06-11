@@ -8,7 +8,8 @@ import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
 import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Auth } from "../auth"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
+import { Substitution } from "@opencode-ai/core/substitution"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -32,7 +33,7 @@ import { ConfigManaged } from "./managed"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
 import { ConfigPlugin } from "./plugin"
-import { ConfigVariable } from "./variable"
+import { Auth } from "@/auth"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
@@ -63,34 +64,18 @@ function normalizeLoadedConfig(data: unknown) {
 
 async function substituteWellKnownRemoteConfig(input: {
   value: unknown
-  dir: string
-  source: string
   env: Record<string, string>
 }) {
   if (!isRecord(input.value) || typeof input.value.url !== "string") return undefined
 
-  const url = await ConfigVariable.substitute({
-    text: input.value.url,
-    type: "virtual",
-    dir: input.dir,
-    source: input.source,
-    env: input.env,
-  })
+  const substituteEnv = (text: string) => text.replace(/\{env:([^}]+)\}/g, (_, key) => input.env[key] ?? process.env[key] ?? "")
+  const url = substituteEnv(input.value.url)
   const headers = isRecord(input.value.headers)
     ? Object.fromEntries(
         await Promise.all(
           Object.entries(input.value.headers)
             .filter((entry): entry is [string, string] => typeof entry[1] === "string")
-            .map(async ([key, value]) => [
-              key,
-              await ConfigVariable.substitute({
-                text: value,
-                type: "virtual",
-                dir: input.dir,
-                source: input.source,
-                env: input.env,
-              }),
-            ]),
+            .map(async ([key, value]) => [key, substituteEnv(value)]),
         ),
       )
     : undefined
@@ -177,6 +162,8 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const authSvc = yield* Auth.Service
+    const authWellKnown = yield* AuthWellKnown.Service
+    const substitution = yield* Substitution.Service
     const accountSvc = yield* Account.Service
     const env = yield* Env.Service
     const npmSvc = yield* Npm.Service
@@ -216,13 +203,13 @@ export const layer = Layer.effect(
       env?: Record<string, string>,
     ) {
       const source = "path" in options ? options.path : options.source
-      const expanded = yield* Effect.promise(() =>
-        ConfigVariable.substitute(
+      const expanded = yield* substitution
+        .substitute(
           "path" in options
             ? { text, type: "path", path: options.path, env }
             : { text, type: "virtual", ...options, env },
-        ),
-      )
+        )
+        .pipe(Effect.orDie)
       const parsed = ConfigParse.jsonc(expanded, source)
       const data = ConfigParse.schema(ConfigV1.Info, normalizeLoadedConfig(parsed), source)
       if (!("path" in options)) return data
@@ -312,8 +299,6 @@ export const layer = Layer.effect(
 
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(
       function* (ctx: InstanceContext) {
-        const auth = yield* authSvc.all().pipe(Effect.orDie)
-
         let result: Info = {}
         const authEnv: Record<string, string> = {}
         const consoleManagedProviders = new Set<string>()
@@ -352,6 +337,16 @@ export const layer = Layer.effect(
           return mergePluginOrigins(source, next.plugin, kind)
         }
 
+        const auth = yield* Effect.orDie(authSvc.all())
+        for (const item of yield* authWellKnown.configs().pipe(Effect.orDie)) {
+          yield* merge(
+            item.source,
+            yield* loadConfig(JSON.stringify(item.content), { dir: item.dir, source: item.source }),
+            "global",
+          )
+          yield* Effect.logDebug("loaded well-known config", { url: item.url })
+        }
+
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
@@ -362,8 +357,6 @@ export const layer = Layer.effect(
             const remote = yield* Effect.promise(() =>
               substituteWellKnownRemoteConfig({
                 value: wellknown.remote_config,
-                dir: url,
-                source: wellknownURL,
                 env: authEnv,
               }),
             )
@@ -676,11 +669,16 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Env.defaultLayer),
   Layer.provide(Auth.defaultLayer),
+  Layer.provide(AuthWellKnown.defaultLayer),
+  Layer.provide(Substitution.defaultLayer),
   Layer.provide(Account.defaultLayer),
   Layer.provide(Npm.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
 )
 
-export const node = LayerNode.make(layer, [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient])
+export const node = LayerNode.make(
+  layer.pipe(Layer.provide(AuthWellKnown.defaultLayer), Layer.provide(Substitution.defaultLayer)),
+  [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient],
+)
 
 export * as Config from "./config"
