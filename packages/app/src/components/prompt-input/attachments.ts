@@ -32,6 +32,7 @@ type PromptAttachmentsInput = {
   focusEditor: () => void
   addPart: (part: ContentPart) => boolean
   readClipboardImage?: () => Promise<File | null>
+  getPathForFile?: (file: File) => string
 }
 
 export function createPromptAttachments(input: PromptAttachmentsInput) {
@@ -62,6 +63,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       type: "image",
       id: uuid(),
       filename: file.name,
+      sourcePath: input.getPathForFile?.(file) || undefined,
       mime,
       dataUrl: url,
     }
