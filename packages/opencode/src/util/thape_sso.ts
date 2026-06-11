@@ -116,7 +116,6 @@ export async function ensureSsoUsername() {
   setRuntimeEnv("THAPE_SSO_CLERK_CODE", payload.clerk_code)
   setRuntimeEnv("OPENCODE_ENABLE_EXA", "true")
   setRuntimeEnv("OPENCODE_ENABLE_OPENTELEMETRY", "false")
-  setRuntimeEnv("OPENCODE_DISABLE_DEFAULT_PLUGINS", "true")
 
   if (!opencode_api_key) {
     await log(Effect.logWarning("SSO username no access to this agent."))
