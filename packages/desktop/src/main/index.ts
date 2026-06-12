@@ -54,6 +54,7 @@ const APP_IDS: Record<string, string> = {
 }
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
+const DEBUG_LOGS = import.meta.env.OPENCODE_DESKTOP_DEBUG_LOGS === true
 
 let logger: ReturnType<typeof initLogging>
 let mainWindow: BrowserWindow | null = null
@@ -63,6 +64,12 @@ const pendingDeepLinks: string[] = []
 
 function useEnvProxy() {
   configureNodeProxyFromEnv((error) => logger.warn("failed to load proxy environment", error))
+}
+
+function enableDebugLogs() {
+  if (!DEBUG_LOGS) return
+  process.env.OPENCODE_PRINT_LOGS = "1"
+  process.env.OPENCODE_LOG_LEVEL = "DEBUG"
 }
 
 function getStartupEnv() {
@@ -150,6 +157,7 @@ const main = Effect.gen(function* () {
     onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
   )
   if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
+  enableDebugLogs()
   logger = initLogging()
   initCrashReporter()
 
@@ -189,6 +197,7 @@ const main = Effect.gen(function* () {
     version: app.getVersion(),
     packaged: app.isPackaged,
     onboardingTest: Boolean(onboardingTestRoot),
+    debugLogs: DEBUG_LOGS,
   })
 
   const startupEnv = getStartupEnv()
@@ -211,6 +220,7 @@ const main = Effect.gen(function* () {
   }
 
   preferAppEnv(app.getPath("userData"))
+  enableDebugLogs()
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))

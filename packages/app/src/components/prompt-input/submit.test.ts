@@ -1,10 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 import type { Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
+const fetchedSessions: Array<{ directory: string; sessionID: string }> = []
 const enabledAutoAccept: Array<{ sessionID: string; directory: string }> = []
 const optimistic: Array<{
   directory?: string
@@ -27,6 +29,19 @@ let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
+const sessionInfo = (id: string, title: string): Session => ({
+  id,
+  slug: id,
+  projectID: "project-1",
+  directory: "/repo/main",
+  title,
+  version: "1",
+  time: {
+    created: 1,
+    updated: 1,
+  },
+})
+
 const clientFor = (directory: string) => {
   createdClients.push(directory)
   return {
@@ -37,6 +52,15 @@ const clientFor = (directory: string) => {
           data: {
             id: `session-${createdSessions.length}`,
             title: `New session ${createdSessions.length}`,
+          },
+        }
+      },
+      get: async ({ sessionID }: { sessionID: string }) => {
+        fetchedSessions.push({ directory, sessionID })
+        return {
+          data: {
+            id: sessionID,
+            title: `Recovered ${sessionID}`,
           },
         }
       },
@@ -73,6 +97,9 @@ beforeAll(async () => {
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
+    Toast: {
+      Region: () => undefined,
+    },
     showToast: () => 0,
   }))
 
@@ -217,6 +244,7 @@ beforeAll(async () => {
 beforeEach(() => {
   createdClients.length = 0
   createdSessions.length = 0
+  fetchedSessions.length = 0
   enabledAutoAccept.length = 0
   optimistic.length = 0
   optimisticSeeded.length = 0
@@ -299,7 +327,7 @@ describe("prompt submit worktree selection", () => {
     variant = "high"
 
     const submit = createPromptSubmit({
-      info: () => ({ id: "session-1" }),
+      info: () => sessionInfo("session-1", "Existing session"),
       imageAttachments: () => [],
       commentCount: () => 0,
       autoAccept: () => false,
@@ -326,6 +354,35 @@ describe("prompt submit worktree selection", () => {
         model: { providerID: "provider", modelID: "model", variant: "high" },
       },
     })
+  })
+
+  test("recovers an existing session when the store entry is missing", async () => {
+    params = { id: "session-1" }
+
+    const submit = createPromptSubmit({
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(fetchedSessions).toEqual([{ directory: "/repo/main", sessionID: "session-1" }])
+    expect(storedSessions["/repo/main"]).toEqual([{ id: "session-1", title: "Recovered session-1" }])
+    expect(optimistic).toHaveLength(1)
   })
 
   test("seeds new sessions before optimistic prompts are added", async () => {

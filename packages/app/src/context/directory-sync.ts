@@ -182,9 +182,9 @@ export const createDirSyncContext = (
   type Setter = Child[1]
 
   const current = createMemo(() => serverSync.child(directory, { mcp: true }))
-  const target = (directory?: string) => {
-    if (!directory || directory === directory) return current()
-    return serverSync.child(directory)
+  const target = (targetDirectory?: string) => {
+    if (!targetDirectory || targetDirectory === directory) return current()
+    return serverSync.child(targetDirectory)
   }
   const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
   const initialMessagePageSize = 80

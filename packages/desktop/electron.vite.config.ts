@@ -43,6 +43,7 @@ export default defineConfig({
   main: {
     define: {
       "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
+      "import.meta.env.OPENCODE_DESKTOP_DEBUG_LOGS": JSON.stringify(process.env.OPENCODE_DESKTOP_DEBUG_LOGS === "1"),
     },
     build: {
       rollupOptions: {
