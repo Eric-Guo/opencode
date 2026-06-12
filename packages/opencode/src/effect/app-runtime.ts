@@ -2,8 +2,9 @@ import { Layer, ManagedRuntime } from "effect"
 import { attach } from "./run-service"
 import * as Observability from "@opencode-ai/core/observability"
 
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Database } from "@opencode-ai/core/database/database"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
 import { Config } from "@/config/config"
@@ -54,8 +55,9 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
-  FSUtil.defaultLayer,
+  AppFileSystem.defaultLayer,
   Database.defaultLayer,
+  AuthWellKnown.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
   Config.defaultLayer,

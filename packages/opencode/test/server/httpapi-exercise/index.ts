@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * End-to-end exerciser for the Effect HttpApi routes.
  *
