@@ -5,6 +5,7 @@ export type ClientOptions = {
 }
 
 export type Event =
+  | EventFileEdited
   | EventModelsDevRefreshed
   | EventCredentialAdded
   | EventCredentialRemoved
@@ -54,7 +55,6 @@ export type Event =
   | EventSessionError
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
-  | EventFileEdited
   | EventConnectorUpdated
   | EventPermissionV2Asked
   | EventPermissionV2Replied
@@ -734,6 +734,13 @@ export type GlobalEvent = {
   payload:
     | {
         id: string
+        type: "file.edited"
+        properties: {
+          file: string
+        }
+      }
+    | {
+        id: string
         type: "models-dev.refreshed"
         properties: {
           [key: string]: unknown
@@ -1273,13 +1280,6 @@ export type GlobalEvent = {
         type: "installation.update-available"
         properties: {
           version: string
-        }
-      }
-    | {
-        id: string
-        type: "file.edited"
-        properties: {
-          file: string
         }
       }
     | {
@@ -4264,6 +4264,14 @@ export type ReferenceInfo = {
   source: ReferenceLocalSource | ReferenceGitSource
 }
 
+export type EventFileEdited = {
+  id: string
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
 export type EventModelsDevRefreshed = {
   id: string
   type: "models-dev.refreshed"
@@ -4949,14 +4957,6 @@ export type EventInstallationUpdateAvailable = {
   type: "installation.update-available"
   properties: {
     version: string
-  }
-}
-
-export type EventFileEdited = {
-  id: string
-  type: "file.edited"
-  properties: {
-    file: string
   }
 }
 
