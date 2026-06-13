@@ -4,6 +4,8 @@ import { Cause, Effect, Exit, Layer, Option } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
+import { Substitution } from "@opencode-ai/core/substitution"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
@@ -11,7 +13,6 @@ import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
-import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -38,7 +39,7 @@ import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { AccountTest } from "../fake/account"
-import { AuthTest } from "../fake/auth"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 import { NpmTest } from "../fake/npm"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
@@ -62,11 +63,16 @@ const json = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: u
   )
 
 const wellKnownAuth = (url: string) =>
-  Layer.mock(Auth.Service)({
-    all: () =>
-      Effect.succeed({
-        [url]: new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
-      }),
+  Layer.mock(AuthWellKnown.Service)({
+    configs: () =>
+      Effect.succeed([
+        {
+          url,
+          source: `${url.replace(/\/+$/, "")}/.well-known/opencode`,
+          dir: `${url.replace(/\/+$/, "")}/.well-known`,
+          content: {},
+        },
+      ]),
   })
 
 function remoteConfigClient(input: {
@@ -99,7 +105,7 @@ function remoteConfigClient(input: {
 
 const configLayer = (
   options: {
-    auth?: Layer.Layer<Auth.Service>
+    authWellKnown?: Layer.Layer<AuthWellKnown.Service>
     account?: Layer.Layer<Account.Service>
     client?: HttpClient.HttpClient
   } = {},
@@ -107,11 +113,12 @@ const configLayer = (
   Config.layer.pipe(
     Layer.provide(testFlock),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(options.auth ?? AuthTest.empty),
+    Layer.provide(options.authWellKnown ?? AuthWellKnownTest.empty),
     Layer.provide(options.account ?? AccountTest.empty),
     Layer.provideMerge(infra),
     Layer.provide(NpmTest.noop),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, options.client ?? unexpectedHttp)),
+    Layer.provide(Substitution.defaultLayer),
     Layer.provideMerge(FSUtil.defaultLayer),
   )
 
@@ -239,7 +246,7 @@ const wellKnown = (input: {
   })
   return {
     seen,
-    it: configIt({ auth: wellKnownAuth(input.authUrl ?? "https://example.com"), client }),
+    it: configIt({ authWellKnown: wellKnownAuth(input.authUrl ?? "https://example.com"), client }),
   }
 }
 
@@ -1538,6 +1545,7 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
             Layer.provide(FSUtil.defaultLayer),
             Layer.provide(Env.defaultLayer),
             Layer.provide(wellKnownAuth(server.url.origin)),
+            Layer.provide(Substitution.defaultLayer),
             Layer.provide(AccountTest.empty),
             Layer.provideMerge(infra),
             Layer.provide(NpmTest.noop),
