@@ -1,4 +1,3 @@
-import "@pierre/trees/web-components"
 import { FileTree } from "@pierre/trees"
 import { Dialog, DialogFooter } from "@opencode-ai/ui/v2/dialog-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
@@ -234,10 +233,10 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
           scrollbar-width: thin;
         }
       `,
-      onExpansionChange(change) {
+      onExpansionChange(change: { expanded: boolean; path: string }) {
         if (change.expanded) void load(change.path, navigation)
       },
-      onSelectionChange(paths) {
+      onSelectionChange(paths: readonly string[]) {
         const path = paths.at(-1)
         setSelected(path ? policy.selection(root(), path) ?? "" : "")
       },

@@ -5,7 +5,7 @@ test("reports directory expansion changes", () => {
   const changes: Array<{ path: string; expanded: boolean }> = []
   const tree = new FileTree({
     paths: ["src/"],
-    onExpansionChange: (change) => changes.push(change),
+    onExpansionChange: (change: { path: string; expanded: boolean }) => changes.push(change),
   })
 
   const src = tree.getItem("src/")
