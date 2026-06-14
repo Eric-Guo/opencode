@@ -16,7 +16,7 @@ import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
-import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
+import { createVirtualizer, defaultRangeExtractor, elementScroll } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
@@ -468,12 +468,18 @@ export function MessageTimeline(props: {
     return reuseTimelineRows(previous, rows)
   })
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})
+  let virtualContent: HTMLDivElement | undefined
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
       return timelineRows().length
     },
     getScrollElement: () => listRoot() ?? null,
     estimateSize: () => timelineFallbackItemSize,
+    scrollToFn: (offset, options, instance) => {
+      // Expose the computed range before core writes an anchor correction so the browser does not clamp it to the old height.
+      if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
+      elementScroll(offset, options, instance)
+    },
     get getItemKey() {
       const rows = timelineRows()
       return (index: number) => {
@@ -1579,6 +1585,7 @@ export function MessageTimeline(props: {
         <div
           data-timeline-virtual-content
           ref={(element) => {
+            virtualContent = element
             props.setContentRef(element)
           }}
           style={{
