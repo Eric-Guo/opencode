@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { stream } from "./markdown-stream"
+import { project, stream } from "./markdown-stream"
 
 describe("markdown stream", () => {
   test("heals incomplete emphasis while streaming", () => {
@@ -15,8 +15,51 @@ describe("markdown stream", () => {
 
   test("splits an unfinished trailing code fence from stable content", () => {
     expect(stream("before\n\n```ts\nconst x = 1", true)).toEqual([
-      { raw: "before\n\n", src: "before\n\n", mode: "live" },
-      { raw: "```ts\nconst x = 1", src: "```ts\nconst x = 1", mode: "live" },
+      { raw: "before\n\n", src: "before\n\n", mode: "full" },
+      { raw: "```ts\nconst x = 1", src: "const x = 1", mode: "code", language: "ts" },
+    ])
+  })
+
+  test("fully parses a code fence once it closes", () => {
+    const text = "before\n\n```ts\nconst x = 1\n```"
+    expect(stream(text, true)).toEqual([
+      { raw: "before\n\n", src: "before\n\n", mode: "full" },
+      { raw: "```ts\nconst x = 1\n```", src: "const x = 1", mode: "code", language: "ts", complete: true },
+    ])
+  })
+
+  test("freezes completed top-level blocks and only keeps the tail live", () => {
+    expect(stream("# Plan\n\nFinished paragraph.\n\n- live item", true)).toEqual([
+      { raw: "# Plan\n\n", src: "# Plan\n\n", mode: "full" },
+      { raw: "Finished paragraph.\n\n", src: "Finished paragraph.\n\n", mode: "full" },
+      { raw: "- live item", src: "- live item", mode: "live" },
+    ])
+  })
+
+  test("keeps a growing table together until a later block freezes it", () => {
+    expect(stream("| a | b |\n|---|---|\n| 1 | 2 |", true)).toEqual([
+      { raw: "| a | b |\n|---|---|\n| 1 | 2 |", src: "| a | b |\n|---|---|\n| 1 | 2 |", mode: "live" },
+    ])
+  })
+
+  test("reprojects non-prefix replacements from current content", () => {
+    expect(stream("# Replacement\n\nNew body", true)).toEqual([
+      { raw: "# Replacement\n\n", src: "# Replacement\n\n", mode: "full" },
+      { raw: "New body", src: "New body", mode: "live" },
+    ])
+  })
+
+  test("reprojects truncation without retaining removed blocks", () => {
+    expect(stream("Only the restored prefix", true)).toEqual([
+      { raw: "Only the restored prefix", src: "Only the restored prefix", mode: "live" },
+    ])
+  })
+
+  test("shifts later blocks when an earlier block is inserted", () => {
+    expect(stream("# Inserted\n\nFirst body\n\nSecond body", true)).toEqual([
+      { raw: "# Inserted\n\n", src: "# Inserted\n\n", mode: "full" },
+      { raw: "First body\n\n", src: "First body\n\n", mode: "full" },
+      { raw: "Second body", src: "Second body", mode: "live" },
     ])
   })
 
@@ -28,5 +71,28 @@ describe("markdown stream", () => {
         mode: "live",
       },
     ])
+  })
+
+  test("keeps compact and indented reference definitions with their uses", () => {
+    expect(stream("[docs]\n\n   [docs]:/guide", true)).toEqual([
+      {
+        raw: "[docs]\n\n   [docs]:/guide",
+        src: "[docs]\n\n   [docs]:/guide",
+        mode: "live",
+      },
+    ])
+  })
+
+  test("appends plain code deltas without reprojecting frozen blocks", () => {
+    const previous = project(undefined, "# Plan\n\n```ts\nconst one = 1\n", true)
+    const next = project(previous, `${previous.text}const two = 2\n`, true)
+
+    expect(next.blocks[0]).toBe(previous.blocks[0])
+    expect(next.blocks.at(-1)).toEqual({
+      raw: "```ts\nconst one = 1\nconst two = 2\n",
+      src: "const one = 1\nconst two = 2\n",
+      mode: "code",
+      language: "ts",
+    })
   })
 })

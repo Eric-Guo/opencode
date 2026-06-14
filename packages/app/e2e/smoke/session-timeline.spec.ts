@@ -30,6 +30,76 @@ type SmokeWindow = Window & {
 test.describe("smoke: session timeline", () => {
   test.setTimeout(240_000)
 
+  test("keeps the visible message fixed while prepending history", async ({ page }) => {
+    const requests: { before?: string; phase: "start" | "end"; at: number }[] = []
+    await mockOpenCodeServer(page, {
+      sessions: fixture.sessions,
+      provider: fixture.provider,
+      directory: fixture.directory,
+      project: fixture.project,
+      pageMessages,
+      messageDelay: 3_000,
+      onMessages: (input) => requests.push({ before: input.before, phase: input.phase, at: performance.now() }),
+    })
+    await configureSmokePage(page, fixture.directory)
+
+    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
+    await waitForTimelineStable(page)
+    const scroller = timelineScroller(page)
+    await pointAtTimeline(page)
+    const deadline = Date.now() + 120_000
+    while (!requests.some((request) => request.before && request.phase === "start")) {
+      if (Date.now() >= deadline) throw new Error("Timed out scrolling to the history boundary")
+      await page.mouse.wheel(0, -240)
+      await page.waitForTimeout(20)
+    }
+    expect(requests.some((request) => request.before && request.phase === "end")).toBe(false)
+    const keys = ["prt_user_text_smoke_0032", "prt_text_2_smoke_0032", "prt_tool_apply_patch_8_smoke_0032"]
+    const positions = () =>
+      scroller.evaluate((element, keys) => {
+        const top = element.getBoundingClientRect().top
+        return Object.fromEntries(
+          keys.map((key) => {
+            const row = element.querySelector<HTMLElement>(`[data-timeline-part-id="${key}"]`)
+            if (!row) throw new Error(`Missing stable timeline key: ${key}`)
+            return [key, Math.round((row.getBoundingClientRect().top - top) * devicePixelRatio) / devicePixelRatio]
+          }),
+        )
+      }, keys)
+    const before = await positions()
+    expect(requests.some((request) => request.before && request.phase === "end")).toBe(false)
+
+    await expect.poll(() => requests.some((request) => request.before && request.phase === "end")).toBe(true)
+    await waitForTimelineStable(page)
+    await expect.poll(positions).toEqual(before)
+  })
+
+  test("preserves the timeline gap above the composer", async ({ page }) => {
+    await mockOpenCodeServer(page, {
+      sessions: fixture.sessions,
+      provider: fixture.provider,
+      directory: fixture.directory,
+      project: fixture.project,
+      pageMessages,
+    })
+    await configureSmokePage(page, fixture.directory)
+
+    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
+    await waitForTimelineStable(page)
+    const scroller = timelineScroller(page)
+    await scroller.evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+    })
+    await waitForTimelineStable(page)
+
+    const spacer = scroller.locator('[data-timeline-row="bottom-spacer"]')
+    await expect(spacer).toBeVisible()
+    expect(await spacer.evaluate((element) => element.getBoundingClientRect().height)).toBe(64)
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+      .toBeLessThanOrEqual(1)
+  })
+
   test("renders seeded timeline in order while paging through history", async ({ page }) => {
     const errors = trackPageErrors(page)
     await mockOpenCodeServer(page, {

@@ -88,33 +88,16 @@ type SessionHistoryWindowInput = {
   loadMore: (sessionID: string) => Promise<void>
   userScrolled: () => boolean
   scroller: () => HTMLDivElement | undefined
+  onBeforeLoad?: () => void
+  onAfterLoad?: () => void
 }
 
 function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
   const historyScrollThreshold = 200
-  let shiftFrame: number | undefined
-
-  const [state, setState] = createStore({
-    shift: false,
-  })
 
   const userMessages = createMemo(() => input.visibleUserMessages(), emptyUserMessages, {
     equals: same,
   })
-
-  const cancelShiftReset = () => {
-    if (shiftFrame === undefined) return
-    cancelAnimationFrame(shiftFrame)
-    shiftFrame = undefined
-  }
-
-  const scheduleShiftReset = () => {
-    cancelShiftReset()
-    shiftFrame = requestAnimationFrame(() => {
-      shiftFrame = undefined
-      setState("shift", false)
-    })
-  }
 
   const fetchOlderMessages = async () => {
     const id = input.sessionID()
@@ -124,31 +107,22 @@ function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
     // TODO(session-timeline): switch this to core cursor-based part pagination when that API lands.
     const beforeVisible = input.visibleUserMessages().length
     let loaded = input.loaded()
-    let growth = 0
-
-    cancelShiftReset()
-    setState("shift", true)
+    input.onBeforeLoad?.()
 
     while (true) {
       await input.loadMore(id)
+      input.onAfterLoad?.()
       if (input.sessionID() !== id) return
 
       const nextLoaded = input.loaded()
       const raw = nextLoaded - loaded
       loaded = nextLoaded
-      growth = input.visibleUserMessages().length - beforeVisible
+      const growth = input.visibleUserMessages().length - beforeVisible
 
       if (growth > 0) break
       if (raw <= 0) break
       if (!input.historyMore()) break
     }
-
-    if (growth > 0) {
-      scheduleShiftReset()
-      return
-    }
-
-    setState("shift", false)
   }
 
   const loadAndReveal = () => fetchOlderMessages()
@@ -162,22 +136,8 @@ function createSessionHistoryLoader(input: SessionHistoryWindowInput) {
     void fetchOlderMessages()
   }
 
-  createEffect(
-    on(
-      input.sessionID,
-      () => {
-        cancelShiftReset()
-        setState({ shift: false })
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(cancelShiftReset)
-
   return {
     userMessages,
-    shift: () => state.shift,
     loadAndReveal,
     onScrollerScroll,
   }
@@ -613,6 +573,7 @@ export default function Page() {
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
   let revealMessage = (_id: string) => {}
+  let scrollToEnd = () => {}
   let scrollMark = 0
   let messageMark = 0
 
@@ -1199,7 +1160,7 @@ export default function Page() {
 
   const autoScroll = createAutoScroll({
     working: () => true,
-    overflowAnchor: "dynamic",
+    overflowAnchor: "none",
   })
 
   let scrollStateFrame: number | undefined
@@ -1236,7 +1197,8 @@ export default function Page() {
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
-    autoScroll.forceScrollToBottom()
+    autoScroll.resume()
+    scrollToEnd()
     clearMessageHash()
 
     const el = scroller
@@ -1279,6 +1241,8 @@ export default function Page() {
     },
   )
 
+  let captureHistoryAnchor = () => {}
+  let restoreHistoryAnchor = () => {}
   const historyLoader = createSessionHistoryLoader({
     sessionID: () => params.id,
     loaded: () => messages().length,
@@ -1288,6 +1252,8 @@ export default function Page() {
     loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
     userScrolled: autoScroll.userScrolled,
     scroller: () => scroller,
+    onBeforeLoad: () => captureHistoryAnchor(),
+    onAfterLoad: () => restoreHistoryAnchor(),
   })
 
   fill = () => {
@@ -1608,7 +1574,7 @@ export default function Page() {
 
       dockHeight = next
 
-      if (stick) autoScroll.forceScrollToBottom()
+      if (stick) scrollToEnd()
 
       if (el) scheduleScrollState(el)
       fill()
@@ -1627,7 +1593,13 @@ export default function Page() {
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
-    autoScroll,
+    autoScroll: {
+      pause: autoScroll.pause,
+      forceScrollToBottom: () => {
+        autoScroll.resume()
+        scrollToEnd()
+      },
+    },
     scroller: () => scroller,
     anchor,
     revealMessage: (id) => revealMessage(id),
@@ -1808,11 +1780,17 @@ export default function Page() {
                         const root = scroller
                         if (root) scheduleScrollState(root)
                       }}
-                      historyShift={historyLoader.shift()}
                       userMessages={historyLoader.userMessages()}
+                      setHistoryAnchor={(handlers) => {
+                        captureHistoryAnchor = handlers.capture
+                        restoreHistoryAnchor = handlers.restore
+                      }}
                       anchor={anchor}
                       setRevealMessage={(fn) => {
                         revealMessage = fn
+                      }}
+                      setScrollToEnd={(fn) => {
+                        scrollToEnd = fn
                       }}
                     />
                   </Show>

@@ -63,6 +63,7 @@
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@tanstack/solid-query": "5.91.4",
+    "@tanstack/solid-virtual": "catalog:",
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
     "effect": "catalog:",
@@ -75,7 +76,6 @@
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
-    "tailwindcss": "catalog:",
-    "virtua": "catalog:"
+    "tailwindcss": "catalog:"
   }
 }
