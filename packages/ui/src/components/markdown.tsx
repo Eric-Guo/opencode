@@ -603,7 +603,7 @@ function updateCodeBlock(
     const prefix = prior.findIndex((token, index) => !sameToken(token, tail[index]))
     const keep = stableCount + (prefix < 0 ? Math.min(prior.length, tail.length) : prefix)
     while (code.children.length > keep) code.lastElementChild?.remove()
-    code.append(...tail.slice(keep - stableCount).map(createTokenSpan))
+    tail.slice(keep - stableCount).map(createTokenSpan).forEach((span) => code.appendChild(span))
     renderedCodeTokens.set(next, {
       language: block.language,
       stableCount: block.stable.length,
@@ -618,9 +618,10 @@ function updateCodeBlock(
   pre.className = "shiki OpenCode"
   const codeElement = document.createElement("code")
   codeElement.className = `language-${block.language}`
-  codeElement.append(...block.stable.map(createTokenSpan), ...block.unstable.map(createTokenSpan))
+  ;[...block.stable, ...block.unstable].map(createTokenSpan).forEach((span) => codeElement.appendChild(span))
   pre.appendChild(codeElement)
-  wrapper.append(pre, createCopyButton(labels))
+  wrapper.appendChild(pre)
+  wrapper.appendChild(createCopyButton(labels))
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
     language: block.language,
