@@ -16,7 +16,16 @@ export type Projection = {
 
 function refs(text: string) {
   if (!text.includes("]:")) return false
-  return /^[ \t]{0,3}\[[^\]]+\]:[ \t]*\S+/m.test(text)
+  return /^[ \t]{0,3}\[[^\]]+\]:[ \t]*(?:\S+|\r?\n[ \t]+\S+)/m.test(text)
+}
+
+function language(value: string | undefined) {
+  return value?.trim().split(/\s+/, 1)[0] || undefined
+}
+
+function openCode(raw: string) {
+  const newline = raw.indexOf("\n")
+  return newline < 0 ? "" : raw.slice(newline + 1)
 }
 
 function open(raw: string) {
@@ -60,8 +69,14 @@ export function stream(text: string, live: boolean): Block[] {
 
   const code = last as Tokens.Code
   if (!open(code.raw))
-    return [...result, { raw, src: code.text, mode: "code", language: code.lang, complete: true }]
-  return [...result, { raw, src: code.text, mode: "code", language: code.lang }]
+    return [...result, { raw, src: code.text, mode: "code", language: language(code.lang), complete: true }]
+  return [...result, { raw, src: openCode(code.raw), mode: "code", language: language(code.lang) }]
+}
+
+export function canReusePendingBlock(current: Pick<Block, "mode" | "raw"> | undefined, next: Block) {
+  if (!current || current.mode !== next.mode) return false
+  if (next.mode === "code") return next.raw.startsWith(current.raw)
+  return current.raw === next.raw
 }
 
 export function project(previous: Projection | undefined, text: string, live: boolean): Projection {
@@ -70,7 +85,6 @@ export function project(previous: Projection | undefined, text: string, live: bo
   const suffix = text.slice(previous.text.length)
   if (!suffix || tail?.mode !== "code" || tail.complete || suffix.includes("```") || suffix.includes("~~~"))
     return { text, blocks: stream(text, live) }
-  const separator = tail.src.length > 0 && previous.text.endsWith("\n") && !tail.src.endsWith("\n") ? "\n" : ""
   return {
     text,
     blocks: [
@@ -78,7 +92,7 @@ export function project(previous: Projection | undefined, text: string, live: bo
       {
         ...tail,
         raw: tail.raw + suffix,
-        src: tail.src + separator + suffix,
+        src: tail.src + suffix,
       },
     ],
   }

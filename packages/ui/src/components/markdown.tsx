@@ -3,18 +3,10 @@ import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/core/util/encode"
-import { getSharedHighlighter } from "@pierre/diffs"
-import { ShikiStreamTokenizer } from "@shikijs/stream"
-import { ComponentProps, createEffect, createMemo, createResource, createSignal, onCleanup, splitProps } from "solid-js"
+import { ComponentProps, createEffect, createMemo, createResource, createSignal, createUniqueId, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
-import {
-  bundledLanguages,
-  getTokenStyleObject,
-  stringifyTokenStyle,
-  type BundledLanguage,
-  type ThemedToken,
-} from "shiki"
-import { project, type Block, type Projection } from "./markdown-stream"
+import { bundledLanguages } from "shiki"
+import { canReusePendingBlock, project, type Block, type Projection } from "./markdown-stream"
 import { disposeStreamingCode, highlightStreamingCode, MarkdownWorkerDisposedError } from "./markdown-worker"
 import type { MarkdownToken } from "./markdown-worker-protocol"
 
@@ -33,6 +25,7 @@ type RenderedBlock =
       hash: string
       language: string
       complete: boolean
+      generation: number
       stable: MarkdownToken[]
       unstable: MarkdownToken[]
     }
@@ -46,18 +39,7 @@ const max = 200
 const cache = new Map<string, Entry>()
 const renderedCodeTokens = new WeakMap<
   HTMLDivElement,
-  { language: string; stableCount: number; unstable: MarkdownToken[] }
->()
-const codeCache = new Map<
-  string,
-  {
-    language: string
-    source: string
-    tokenizer: ShikiStreamTokenizer
-    stable: ThemedToken[]
-    unstable: ThemedToken[]
-    pending: Promise<void>
-  }
+  { language: string; generation: number; stableCount: number; unstable: MarkdownToken[] }
 >()
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
@@ -107,62 +89,13 @@ function fallback(markdown: string) {
 
 async function code(text: string, language: string | undefined, key: string, complete = false) {
   const name = language && language in bundledLanguages ? language : "text"
-  if (typeof Worker !== "undefined") {
-    try {
-      const result = await highlightStreamingCode(key, text, name, complete)
-      return { language: name, stable: result.stable, unstable: result.unstable }
-    } catch (error) {
-      if (error instanceof MarkdownWorkerDisposedError)
-        return { language: name, stable: [], unstable: [[text, ""] as MarkdownToken] }
-      // Keep highlighting available in runtimes where the worker cannot start.
-    }
+  try {
+    const result = await highlightStreamingCode(key, text, name, complete)
+    return { language: name, generation: result.generation, stable: result.stable, unstable: result.unstable }
+  } catch (error) {
+    if (!(error instanceof MarkdownWorkerDisposedError)) console.error("Markdown highlighting worker failed", error)
+    return { language: name, generation: 0, stable: [], unstable: [[text, ""] as MarkdownToken] }
   }
-  return codeOnMainThread(text, name, key)
-}
-
-async function codeOnMainThread(text: string, name: string, key: string) {
-  const existing = codeCache.get(key)
-  const entry =
-    existing && existing.language === name && text.startsWith(existing.source)
-      ? existing
-      : {
-          language: name,
-          source: "",
-          tokenizer: new ShikiStreamTokenizer({
-            highlighter: await getSharedHighlighter({
-              themes: ["OpenCode"],
-              langs: [],
-              preferredHighlighter: "shiki-wasm",
-            }),
-            lang: name,
-            theme: "OpenCode",
-          }),
-          stable: [],
-          unstable: [],
-          pending: Promise.resolve(),
-        }
-  if (!entry.tokenizer.options.highlighter.getLoadedLanguages().includes(name))
-    await entry.tokenizer.options.highlighter.loadLanguage(bundledLanguages[name as BundledLanguage])
-  const suffix = text.slice(entry.source.length)
-  entry.source = text
-  entry.pending = entry.pending.then(async () => {
-    const result = await entry.tokenizer.enqueue(suffix)
-    entry.stable.push(...result.stable.filter((token) => token.content.length > 0))
-    entry.unstable = result.unstable.filter((token) => token.content.length > 0)
-  })
-  codeCache.delete(key)
-  codeCache.set(key, entry)
-  if (codeCache.size > max) codeCache.delete(codeCache.keys().next().value!)
-  await entry.pending
-  return {
-    language: name,
-    stable: entry.stable.map(token),
-    unstable: entry.unstable.map(token),
-  }
-}
-
-function token(value: ThemedToken): MarkdownToken {
-  return [value.content, stringifyTokenStyle(value.htmlStyle ?? getTokenStyleObject(value))]
 }
 
 type CopyLabels = {
@@ -198,7 +131,7 @@ function createIcon(path: string, slot: string) {
   return icon
 }
 
-function createCopyButton(labels: CopyLabels, icons = true) {
+function createCopyButton(labels: CopyLabels) {
   const button = document.createElement("button")
   button.type = "button"
   button.setAttribute("data-component", "icon-button")
@@ -207,10 +140,8 @@ function createCopyButton(labels: CopyLabels, icons = true) {
   button.setAttribute("data-slot", "markdown-copy-button")
   button.setAttribute("aria-label", labels.copy)
   button.setAttribute("data-tooltip", labels.copy)
-  if (icons) {
-    button.appendChild(createIcon(iconPaths.copy, "copy-icon"))
-    button.appendChild(createIcon(iconPaths.check, "check-icon"))
-  }
+  button.appendChild(createIcon(iconPaths.copy, "copy-icon"))
+  button.appendChild(createIcon(iconPaths.check, "check-icon"))
   return button
 }
 
@@ -226,7 +157,7 @@ function setCopyState(button: HTMLButtonElement, labels: CopyLabels, copied: boo
   button.setAttribute("data-tooltip", labels.copy)
 }
 
-function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels, shallow: boolean) {
+function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   const parent = block.parentElement
   if (!parent) return
   const wrapped = parent.getAttribute("data-component") === "markdown-code"
@@ -235,7 +166,7 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels, shallow: b
     wrapper.setAttribute("data-component", "markdown-code")
     parent.replaceChild(wrapper, block)
     wrapper.appendChild(block)
-    wrapper.appendChild(createCopyButton(labels, !shallow))
+    wrapper.appendChild(createCopyButton(labels))
     return
   }
 
@@ -282,10 +213,10 @@ function markCodeLinks(root: HTMLDivElement) {
   }
 }
 
-function decorate(root: HTMLDivElement, labels: CopyLabels, shallow = false) {
+function decorate(root: HTMLDivElement, labels: CopyLabels) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
-    ensureCodeWrapper(block, labels, shallow)
+    ensureCodeWrapper(block, labels)
   }
   markCodeLinks(root)
 }
@@ -358,6 +289,7 @@ export function Markdown(
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
+  const owner = createUniqueId()
   const activeCodeKeys = new Set<string>()
   const projection = createMemo((previous: Projection | undefined) =>
     project(previous, local.text, local.streaming ?? false),
@@ -390,7 +322,7 @@ export function Markdown(
       return Promise.all(
         src.projection.blocks.map(async (block, index) => {
           const key = base ? `${base}:${index}:${block.mode}` : undefined
-          const blockKey = key ?? `block:${index}`
+          const blockKey = `${owner}:${key ?? `block:${index}`}`
 
           if (block.mode === "code") {
             const result = await code(block.src, block.language, blockKey, block.complete)
@@ -477,6 +409,9 @@ export function Markdown(
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
     content.forEach((block, index) => updateBlock(container, index, block, labels))
     while (container.children.length > content.length) container.lastElementChild?.remove()
+    container.querySelectorAll<HTMLButtonElement>('[data-slot="markdown-copy-button"]').forEach((button) =>
+      setCopyState(button, labels, button.dataset.copied === "true"),
+    )
 
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
@@ -509,7 +444,7 @@ function pendingBlocks(result: RenderResult | undefined, projection: Projection 
   const initial = result.blocks.length === 1 && result.blocks[0]?.key === "initial"
   return projection.blocks.map((block, index) => {
     const current = initial ? undefined : result.blocks[index]
-    if (current) return current
+    if (current && canReusePendingBlock(current, block)) return current
     const key = cacheKey ? `${cacheKey}:${index}:${block.mode}` : `block:${index}`
     if (block.mode !== "code")
       return { key, mode: block.mode, raw: block.raw, hash: String(block.raw.length), html: fallback(block.src) }
@@ -521,13 +456,13 @@ function pendingBlocks(result: RenderResult | undefined, projection: Projection 
       language: block.language ?? "text",
       complete: !!block.complete,
       stable: [],
+      generation: 0,
       unstable: [[block.src, ""] as MarkdownToken],
     }
   })
 }
 
 function disposeCode(key: string) {
-  codeCache.delete(key)
   disposeStreamingCode(key)
 }
 
@@ -550,11 +485,7 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   next.dataset.markdownHash = block.hash
   next.style.display = "contents"
   next.innerHTML = block.html
-  decorate(
-    next,
-    labels,
-    current instanceof HTMLDivElement && current.querySelector('[data-slot="markdown-copy-button"]') !== null,
-  )
+  decorate(next, labels)
 
   if (!(current instanceof HTMLDivElement)) {
     container.appendChild(next)
@@ -596,7 +527,11 @@ function updateCodeBlock(
   if (code instanceof HTMLElement) {
     code.className = `language-${block.language}`
     const previous = renderedCodeTokens.get(next)
-    const reset = !previous || previous.language !== block.language || block.stable.length < previous.stableCount
+    const reset =
+      !previous ||
+      previous.language !== block.language ||
+      previous.generation !== block.generation ||
+      block.stable.length < previous.stableCount
     const stableCount = reset ? 0 : previous.stableCount
     const tail = [...block.stable.slice(stableCount), ...block.unstable]
     const prior = reset ? [] : previous.unstable
@@ -606,6 +541,7 @@ function updateCodeBlock(
     tail.slice(keep - stableCount).map(createTokenSpan).forEach((span) => code.appendChild(span))
     renderedCodeTokens.set(next, {
       language: block.language,
+      generation: block.generation,
       stableCount: block.stable.length,
       unstable: block.unstable,
     })
@@ -625,6 +561,7 @@ function updateCodeBlock(
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
     language: block.language,
+    generation: block.generation,
     stableCount: block.stable.length,
     unstable: block.unstable,
   })

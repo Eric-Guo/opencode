@@ -19,11 +19,14 @@ let nextID = 0
 const pending = new Map<number, Pending>()
 const states = new Map<string, MarkdownWorkerState>()
 const keys = new Set<string>()
+const latest = new Map<string, number>()
 
 export function highlightStreamingCode(key: string, text: string, language: string, complete = false) {
   const instance = getWorker()
   const id = ++nextID
+  latest.set(key, id)
   keys.delete(key)
+  latest.delete(key)
   keys.add(key)
   if (keys.size > 200) disposeStreamingCode(keys.values().next().value!)
   return new Promise<MarkdownWorkerState>((resolve, reject) => {
@@ -61,21 +64,25 @@ function getWorker() {
       return
     }
     const state = applyMarkdownWorkerResponse(states.get(event.data.key), event.data)
-    if (result.complete) {
+    if (result.complete && latest.get(event.data.key) === event.data.id) {
       states.delete(event.data.key)
       keys.delete(event.data.key)
+      latest.delete(event.data.key)
     } else states.set(event.data.key, state)
     result.resolve(state)
   }
-  worker.onerror = (event) => {
-    const error = new Error(event.message || "Markdown highlighting worker failed")
+  const fail = (message: string) => {
+    const error = new Error(message)
     pending.forEach((request) => request.reject(error))
     pending.clear()
     states.clear()
     keys.clear()
+    latest.clear()
     worker?.terminate()
     worker = undefined
   }
+  worker.onerror = (event) => fail(event.message || "Markdown highlighting worker failed")
+  worker.onmessageerror = () => fail("Markdown worker response failed")
   worker.postMessage({ type: "init", theme: OpenCodeTheme } satisfies MarkdownWorkerRequest)
   return worker
 }

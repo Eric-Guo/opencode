@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { project, stream } from "./markdown-stream"
+import { canReusePendingBlock, project, stream } from "./markdown-stream"
 
 describe("markdown stream", () => {
   test("heals incomplete emphasis while streaming", () => {
@@ -81,6 +81,44 @@ describe("markdown stream", () => {
         mode: "live",
       },
     ])
+  })
+
+  test("keeps multiline reference definitions with their uses", () => {
+    expect(stream("[docs][id]\n\n[id]:\n  /guide", true)).toEqual([
+      {
+        raw: "[docs][id]\n\n[id]:\n  /guide",
+        src: "[docs][id]\n\n[id]:\n  /guide",
+        mode: "live",
+      },
+    ])
+  })
+
+  test("uses only the language portion of fence metadata", () => {
+    expect(stream("```ts title=example\nconst x = 1", true)).toEqual([
+      {
+        raw: "```ts title=example\nconst x = 1",
+        src: "const x = 1",
+        mode: "code",
+        language: "ts",
+      },
+    ])
+  })
+
+  test("preserves trailing newlines in open code fences", () => {
+    expect(stream("```ts\nconst x = 1\n", true)).toEqual([
+      {
+        raw: "```ts\nconst x = 1\n",
+        src: "const x = 1\n",
+        mode: "code",
+        language: "ts",
+      },
+    ])
+  })
+
+  test("only reuses pending blocks with compatible identity and content", () => {
+    expect(canReusePendingBlock({ mode: "full", raw: "First\n\n" }, { mode: "full", raw: "# Inserted\n\n", src: "", })).toBe(false)
+    expect(canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "code", raw: "```ts\none two", src: "" })).toBe(true)
+    expect(canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "live", raw: "one", src: "" })).toBe(false)
   })
 
   test("appends plain code deltas without reprojecting frozen blocks", () => {

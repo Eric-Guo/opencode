@@ -20,6 +20,7 @@ export type MarkdownWorkerResponse =
 
 export type MarkdownWorkerState = {
   id: number
+  generation: number
   stable: MarkdownToken[]
   unstable: MarkdownToken[]
 }
@@ -31,6 +32,7 @@ export function applyMarkdownWorkerResponse(
   if (state && response.id <= state.id) return state
   return {
     id: response.id,
+    generation: (state?.generation ?? 0) + (response.reset ? 1 : 0),
     stable: response.reset ? response.stable : [...(state?.stable ?? []), ...response.stable],
     unstable: response.unstable,
   }

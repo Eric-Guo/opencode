@@ -2,6 +2,14 @@ import { expect, test } from "bun:test"
 import { applyMarkdownWorkerResponse } from "./markdown-worker-protocol"
 
 const token = (content: string): [string, string] => [content, ""]
+const response = (id: number, reset: boolean, stable: [string, string][], unstable: [string, string][]) => ({
+  type: "highlight" as const,
+  id,
+  key: "code",
+  reset,
+  stable,
+  unstable,
+})
 
 test("accumulates stable worker tokens and replaces the unstable tail", () => {
   const first = applyMarkdownWorkerResponse(undefined, {
@@ -25,8 +33,15 @@ test("accumulates stable worker tokens and replaces the unstable tail", () => {
   expect(second.unstable.map((item) => item[0])).toEqual(["three"])
 })
 
+test("increments generation only when the worker resets token identity", () => {
+  const first = applyMarkdownWorkerResponse(undefined, response(1, true, [["const", ""]], []))
+  const append = applyMarkdownWorkerResponse(first, response(2, false, [[" x", ""]], []))
+  const replacement = applyMarkdownWorkerResponse(append, response(3, true, [["let y", ""]], []))
+  expect([first.generation, append.generation, replacement.generation]).toEqual([1, 1, 2])
+})
+
 test("ignores stale worker responses and resets replacement streams", () => {
-  const current = { id: 2, stable: [token("current")], unstable: [] }
+  const current = { id: 2, generation: 1, stable: [token("current")], unstable: [] }
   expect(
     applyMarkdownWorkerResponse(current, {
       type: "highlight",
