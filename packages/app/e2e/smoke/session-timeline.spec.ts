@@ -54,6 +54,10 @@ test.describe("smoke: session timeline", () => {
       await page.waitForTimeout(20)
     }
     expect(requests.some((request) => request.before && request.phase === "end")).toBe(false)
+    for (let index = 0; index < 12; index++) {
+      await page.mouse.wheel(0, -120)
+      await page.waitForTimeout(20)
+    }
     const keys = ["prt_user_text_smoke_0032", "prt_text_2_smoke_0032", "prt_tool_apply_patch_8_smoke_0032"]
     const positions = () =>
       scroller.evaluate((element, keys) => {

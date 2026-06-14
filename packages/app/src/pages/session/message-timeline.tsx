@@ -406,13 +406,19 @@ export function MessageTimeline(props: {
 
   let prependAnchor: { key: string; offset: number } | undefined
   let prependAnchorFrame: number | undefined
+  let prependLoading = false
   const clearPrependAnchor = () => {
+    prependLoading = false
     prependAnchor = undefined
     if (prependAnchorFrame === undefined) return
     cancelAnimationFrame(prependAnchorFrame)
     prependAnchorFrame = undefined
   }
   const capturePrependAnchor = () => {
+    prependLoading = true
+    updatePrependAnchor()
+  }
+  const updatePrependAnchor = () => {
     const root = listRoot()
     if (!root) return
     const view = root.getBoundingClientRect()
@@ -425,6 +431,7 @@ export function MessageTimeline(props: {
     prependAnchor = { key: anchor.element.dataset.timelineKey, offset: anchor.rect.top - view.top }
   }
   const restorePrependAnchor = () => {
+    prependLoading = false
     applyPrependAnchor()
   }
   const applyPrependAnchor = () => {
@@ -479,7 +486,7 @@ export function MessageTimeline(props: {
     anchorTo: "end",
     followOnAppend: true,
     scrollEndThreshold: 80,
-    overscan: 40,
+    overscan: 50,
     paddingEnd: 64,
     rangeExtractor: (range) => {
       const id = activeMessageID()
@@ -592,7 +599,7 @@ export function MessageTimeline(props: {
 
 
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
-    clearPrependAnchor()
+    if (!prependLoading) clearPrependAnchor()
     const root = event.currentTarget
     const delta = normalizeWheelDelta({
       deltaY: event.deltaY,
@@ -604,7 +611,7 @@ export function MessageTimeline(props: {
   }
 
   const handleListTouchStart = (event: TouchEvent) => {
-    clearPrependAnchor()
+    if (!prependLoading) clearPrependAnchor()
     touchGesture = event.touches[0]?.clientY
   }
 
@@ -630,12 +637,13 @@ export function MessageTimeline(props: {
   }
 
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
-    clearPrependAnchor()
+    if (!prependLoading) clearPrependAnchor()
     if (event.target !== event.currentTarget) return
     props.onMarkScrollGesture(event.currentTarget)
   }
 
   const handleListScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+    if (prependLoading) updatePrependAnchor()
     props.onScheduleScrollState(event.currentTarget)
     props.onHistoryScroll()
     if (!props.hasScrollGesture()) return
