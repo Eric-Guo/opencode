@@ -95,4 +95,16 @@ describe("markdown stream", () => {
       language: "ts",
     })
   })
+
+  test("does not add a blank line before the first streamed code", () => {
+    const previous = project(undefined, "```ts\n", true)
+    const next = project(previous, `${previous.text}const x = 1`, true)
+
+    expect(next.blocks.at(-1)).toEqual({
+      raw: "```ts\nconst x = 1",
+      src: "const x = 1",
+      mode: "code",
+      language: "ts",
+    })
+  })
 })

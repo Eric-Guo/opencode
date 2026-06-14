@@ -70,7 +70,7 @@ export function project(previous: Projection | undefined, text: string, live: bo
   const suffix = text.slice(previous.text.length)
   if (!suffix || tail?.mode !== "code" || tail.complete || suffix.includes("```") || suffix.includes("~~~"))
     return { text, blocks: stream(text, live) }
-  const separator = previous.text.endsWith("\n") && !tail.src.endsWith("\n") ? "\n" : ""
+  const separator = tail.src.length > 0 && previous.text.endsWith("\n") && !tail.src.endsWith("\n") ? "\n" : ""
   return {
     text,
     blocks: [
