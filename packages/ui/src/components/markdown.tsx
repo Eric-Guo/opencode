@@ -276,6 +276,33 @@ function touch(key: string, value: Entry) {
   cache.delete(first)
 }
 
+function initialResult(text: string, key: string | undefined, projection: Projection, owner: string): RenderResult {
+  if (!text) return { text, blocks: [] }
+  const base = key ?? checksum(text)
+  if (base) {
+    const blocks = projection.blocks.flatMap((block, index) => {
+      if (block.mode === "code") return []
+      const cacheKey = `${base}:${index}:${block.mode}`
+      const cached = cache.get(cacheKey)
+      if (cached?.raw !== block.raw) return []
+      return [{ key: `${owner}:${cacheKey}`, mode: block.mode, ...cached }]
+    })
+    if (blocks.length === projection.blocks.length) return { text, blocks }
+  }
+  return {
+    text,
+    blocks: [
+      {
+        key: "initial",
+        mode: "full",
+        raw: text,
+        hash: checksum(text) ?? "",
+        html: fallback(text),
+      },
+    ],
+  }
+}
+
 export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
@@ -368,18 +395,7 @@ export function Markdown(
         )
     },
     {
-      initialValue: {
-        text: local.text,
-        blocks: [
-          {
-            key: "initial",
-            mode: "full" as const,
-            raw: local.text,
-            hash: checksum(local.text) ?? "",
-            html: fallback(local.text),
-          },
-        ],
-      } satisfies RenderResult,
+      initialValue: initialResult(local.text, local.cacheKey, projection(), owner),
     },
   )
 

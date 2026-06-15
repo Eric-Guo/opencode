@@ -140,7 +140,22 @@ test.describe("smoke: session timeline", () => {
       ({ destination, last }) => {
         const ids = new Set(destination)
         const samples: Array<{ ids: string[]; last: boolean; bottomError?: number }> = []
+        const firstPaintNodes = new WeakSet<Node>()
+        let firstPaint = false
+        let removedFirstPaintNodes = 0
         let running = true
+        new MutationObserver((records) => {
+          if (!firstPaint || !running) return
+          records.forEach((record) =>
+            record.removedNodes.forEach((node) => {
+              if (firstPaintNodes.has(node)) removedFirstPaintNodes += 1
+              if (!(node instanceof Element)) return
+              node.querySelectorAll("*").forEach((element) => {
+                if (firstPaintNodes.has(element)) removedFirstPaintNodes += 1
+              })
+            }),
+          )
+        }).observe(document.documentElement, { childList: true, subtree: true })
         const sample = () => {
           if (!running) return
           setTimeout(() => {
@@ -159,12 +174,24 @@ test.describe("smoke: session timeline", () => {
                 .filter((id) => ids.has(id))
               const bottom = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
               samples.push({ ids: visible, last: visible.includes(last), bottomError: bottom?.bottom - view.bottom })
+              if (!firstPaint && visible.includes(last) && Math.abs((bottom?.bottom ?? Infinity) - view.bottom) <= 1) {
+                firstPaint = true
+                root.querySelectorAll<HTMLElement>("[data-timeline-key]").forEach((row) => {
+                  const rect = row.getBoundingClientRect()
+                  if (rect.bottom <= view.top || rect.top >= view.bottom) return
+                  firstPaintNodes.add(row)
+                  row.querySelectorAll("*").forEach((element) => firstPaintNodes.add(element))
+                })
+              }
             }
             requestAnimationFrame(sample)
           }, 0)
         }
-        ;(window as Window & { __sessionTabPaint?: { samples: typeof samples; stop: () => void } }).__sessionTabPaint = {
+        ;(window as Window & {
+          __sessionTabPaint?: { samples: typeof samples; removed: () => number; stop: () => void }
+        }).__sessionTabPaint = {
           samples,
+          removed: () => removedFirstPaintNodes,
           stop: () => {
             running = false
           },
@@ -180,15 +207,21 @@ test.describe("smoke: session timeline", () => {
         (sample) => sample.ids.length > 0,
       ),
     )
+    await page.waitForTimeout(200)
     const first = await page.evaluate(() => {
       const probe = (window as Window & {
-        __sessionTabPaint?: { samples: Array<{ ids: string[]; last: boolean; bottomError?: number }>; stop: () => void }
+        __sessionTabPaint?: {
+          samples: Array<{ ids: string[]; last: boolean; bottomError?: number }>
+          removed: () => number
+          stop: () => void
+        }
       }).__sessionTabPaint!
       probe.stop()
-      return probe.samples.find((sample) => sample.ids.length > 0)
+      return { first: probe.samples.find((sample) => sample.ids.length > 0), removed: probe.removed() }
     })
-    expect(first?.last).toBe(true)
-    expect(Math.abs(first?.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
+    expect(first.first?.last).toBe(true)
+    expect(Math.abs(first.first?.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
+    expect(first.removed).toBe(0)
   })
 
   test("paints a cold session tab at the latest message", async ({ page }) => {
