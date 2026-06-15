@@ -8,7 +8,6 @@ import {
   onCleanup,
   onMount,
   Show,
-  mapArray,
   type Accessor,
   type JSX,
 } from "solid-js"
@@ -50,7 +49,6 @@ import type {
   UserMessage,
 } from "@opencode-ai/sdk/v2"
 import { showToast } from "@/utils/toast"
-import { Binary } from "@opencode-ai/core/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/ui/session-diff"
@@ -70,7 +68,8 @@ import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { makeTimer } from "@solid-primitives/timer"
-import { MessageComment, SummaryDiff, Timeline, TimelineRow, TimelineRowMap } from "./message-timeline.data"
+import { createTimelineProjection } from "./projection"
+import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -86,18 +85,6 @@ const timelineCache = new Map<
   string,
   { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }
 >()
-
-function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
-  if (!previous?.length) return rows
-  const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
-  const next = rows.map((row) => {
-    const existing = byKey.get(TimelineRow.key(row))
-    if (!existing) return row
-    return TimelineRow.equals(existing, row) ? existing : row
-  })
-  if (previous.length === next.length && previous.every((row, index) => row === next[index])) return previous
-  return next
-}
 
 const taskDescription = (part: PartType, sessionID: string) => {
   if (part.type !== "tool" || part.tool !== "task") return
@@ -286,36 +273,13 @@ export function MessageTimeline(props: {
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const sessionID = createMemo(() => params.id)
-  const sessionMessages = createMemo(() => {
-    const id = sessionID()
-    if (!id) return emptyMessages
-    return sync().data.message[id] ?? emptyMessages
-  })
-  const messageByID = createMemo(() => new Map(sessionMessages().map((message) => [message.id, message] as const)))
-  const assistantMessagesByParent = createMemo(() => {
-    const result = new Map<string, AssistantMessage[]>()
-    for (const message of sessionMessages()) {
-      if (message.role !== "assistant") continue
-      const messages = result.get(message.parentID)
-      if (messages) {
-        messages.push(message)
-        continue
-      }
-      result.set(message.parentID, [message])
-    }
-    return result
-  })
-  const pending = createMemo(() =>
-    sessionMessages().findLast(
-      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
-    ),
-  )
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
     return sync().data.session_status[id] ?? idle
   })
   const working = createMemo(() => sessionStatus().type !== "idle")
+  const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync().data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
@@ -333,25 +297,6 @@ export function MessageTimeline(props: {
     makeTimer(() => setTimeoutDone(true), 260, setTimeout)
   })
 
-  const activeMessageID = createMemo(() => {
-    const parentID = pending()?.parentID
-    if (parentID) {
-      const messages = sessionMessages()
-      const result = Binary.search(messages, parentID, (message) => message.id)
-      const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
-      if (message && message.role === "user") return message.id
-    }
-
-    const status = sessionStatus()
-    if (status.type !== "idle") {
-      const messages = sessionMessages()
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user") return messages[i].id
-      }
-    }
-
-    return undefined
-  })
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -390,27 +335,20 @@ export function MessageTimeline(props: {
     return language.t("command.session.new")
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
-
-  const messageRowMemos = createMemo(
-    mapArray(
-      () => props.userMessages,
-      (userMessage, indexAccessor) => {
-        return createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
-          const rows = Timeline.constructMessageRows(
-            userMessage,
-            getMsgParts,
-            assistantMessagesByParent().get(userMessage.id) ?? emptyAssistantMessages,
-            indexAccessor(),
-            settings.general.showReasoningSummaries(),
-            sessionStatus().type,
-            activeMessageID() === userMessage.id,
-          )
-
-          return reuseTimelineRows(previous, rows)
-        })
-      },
-    ),
-  )
+  const projection = createTimelineProjection({
+    messages: sessionMessages,
+    userMessages: () => props.userMessages,
+    parts: getMsgParts,
+    status: sessionStatus,
+    showReasoningSummaries: settings.general.showReasoningSummaries,
+  })
+  const activeMessageID = projection.activeMessageID
+  const assistantMessagesByParent = projection.assistantMessagesByParent
+  const lastAssistantGroupKey = projection.lastAssistantGroupKey
+  const messageByID = projection.messageByID
+  const messageRowIndex = projection.messageRowIndex
+  const timelineRowByKey = projection.rowByKey
+  const timelineRows = projection.rows
 
   let prependAnchor: { key: string; offset: number } | undefined
   let prependAnchorFrame: number | undefined
@@ -471,10 +409,6 @@ export function MessageTimeline(props: {
     prependAnchorFrame = requestAnimationFrame(apply)
   }
 
-  const timelineRows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
-    const rows = messageRowMemos().flatMap((memo) => memo())
-    return reuseTimelineRows(previous, rows)
-  })
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
   const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length || coldBottomMount ? 6 : 50)
   const prepareScrollOverscan = () => {
@@ -517,28 +451,10 @@ export function MessageTimeline(props: {
   })
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
     item.end <= (instance.scrollOffset ?? 0)
-  const timelineRowByKey = createMemo(() => new Map(timelineRows().map((row) => [TimelineRow.key(row), row] as const)))
   const virtualItemByKey = createMemo(
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key as string))
-  const messageRowIndex = createMemo(() => {
-    const result = new Map<string, number>()
-    timelineRows().forEach((row, index) => {
-      if (!("userMessageID" in row)) return
-      if (result.has(row.userMessageID)) return
-      result.set(row.userMessageID, index)
-    })
-    return result
-  })
-  const lastAssistantGroupKey = createMemo(() => {
-    const result = new Map<string, string>()
-    timelineRows().forEach((row) => {
-      if (row._tag !== "AssistantPart") return
-      result.set(row.userMessageID, row.group.key)
-    })
-    return result
-  })
   createEffect(() => {
     props.setRevealMessage?.((id) => {
       const index = messageRowIndex().get(id)
