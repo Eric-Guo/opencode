@@ -280,6 +280,8 @@ export function MessageTimeline(props: {
   const { params, sessionKey } = useSessionKey()
   const ownerSessionKey = sessionKey()
   const cached = timelineCache.get(ownerSessionKey)
+  const initialMeasurements = cached?.measurements
+  const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
   const platform = usePlatform()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
@@ -474,8 +476,7 @@ export function MessageTimeline(props: {
     return reuseTimelineRows(previous, rows)
   })
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
-  const initialMeasurements = cached?.measurements
-  const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length ? 6 : 50)
+  const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length || coldBottomMount ? 6 : 50)
   const prepareScrollOverscan = () => {
     if (renderOverscan() < 50) setRenderOverscan(50)
   }
@@ -556,7 +557,10 @@ export function MessageTimeline(props: {
     }
     requestAnimationFrame(() => {
       if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
-      if (renderOverscan() < 50) setTimeout(expand, 0)
+      if (!coldBottomMount) {
+        if (renderOverscan() < 50) setTimeout(expand, 0)
+        return
+      }
     })
   })
 

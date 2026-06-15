@@ -191,6 +191,77 @@ test.describe("smoke: session timeline", () => {
     expect(Math.abs(first?.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
   })
 
+  test("paints a cold session tab at the latest message", async ({ page }) => {
+    await mockOpenCodeServer(page, {
+      sessions: fixture.sessions,
+      provider: fixture.provider,
+      directory: fixture.directory,
+      project: fixture.project,
+      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID as keyof typeof fixture.messages] ?? [] }),
+    })
+    await configureSmokePage(page, fixture.directory)
+    await page.addInitScript(
+      ({ dirBase64, sourceID, targetID }) => {
+        localStorage.setItem(
+          "opencode.global.dat:tabs",
+          JSON.stringify(
+            [sourceID, targetID].map((sessionId) => ({
+              type: "session",
+              server: "http://127.0.0.1:4096",
+              dirBase64,
+              sessionId,
+            })),
+          ),
+        )
+      },
+      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
+    )
+    await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.sourceID}`)
+    await expectSessionTitle(page, fixture.expected.sourceTitle)
+    const last = fixture.expected.targetMessageIDs.at(-1)!
+    const destination = fixture.messages[fixture.targetID].map((message) => message.info.id)
+    await page.evaluate(({ destination, last }) => {
+      const ids = new Set(destination)
+      const samples: Array<{ destination: boolean; last: boolean; bottomError?: number }> = []
+      const sample = () => {
+        const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
+          element.querySelector("[data-timeline-row]"),
+        )
+        if (root) {
+          const view = root.getBoundingClientRect()
+          const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
+          const messages = [...root.querySelectorAll<HTMLElement>("[data-message-id]")].filter((element) => {
+            const rect = element.getBoundingClientRect()
+            return rect.bottom > view.top && rect.top < view.bottom
+          })
+          samples.push({
+            destination: messages.some((element) => ids.has(element.dataset.messageId!)),
+            last: messages.some((element) => element.dataset.messageId === last),
+            bottomError: spacer ? spacer.bottom - view.bottom : undefined,
+          })
+        }
+        requestAnimationFrame(() => setTimeout(sample, 0))
+      }
+      ;(window as Window & { __coldTabSamples?: typeof samples }).__coldTabSamples = samples
+      requestAnimationFrame(() => setTimeout(sample, 0))
+    }, { destination, last })
+
+    await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
+    await page.waitForFunction(() =>
+      (window as Window & { __coldTabSamples?: Array<{ destination: boolean }> }).__coldTabSamples?.some(
+        (sample) => sample.destination,
+      ),
+    )
+    const result = await page.evaluate(() => {
+      const samples = (window as Window & {
+        __coldTabSamples?: Array<{ destination: boolean; last: boolean; bottomError?: number }>
+      }).__coldTabSamples!
+      return samples.find((sample) => sample.destination)!
+    })
+    expect(result.last).toBe(true)
+    expect(Math.abs(result.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
+  })
+
   test("renders seeded timeline in order while paging through history", async ({ page }) => {
     const errors = trackPageErrors(page)
     await mockOpenCodeServer(page, {
