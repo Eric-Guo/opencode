@@ -1165,6 +1165,16 @@ export default function Page() {
     working: () => true,
     overflowAnchor: "none",
   })
+  createEffect(
+    on(
+      () => params.id,
+      (id, previous) => {
+        if (!id || !previous || id === previous) return
+        if (location.hash || store.messageId || ui.pendingMessage) return
+        autoScroll.resume()
+      },
+    ),
+  )
 
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
@@ -1763,8 +1773,9 @@ export default function Page() {
                   </div>
                 </Match>
                 <Match when={params.id}>
-                  <Show when={messagesReady()}>
-                    <MessageTimeline
+                  <Show when={messagesReady() ? params.id : undefined} keyed>
+                    {(_id) => (
+                      <MessageTimeline
                       actions={actions}
                       scroll={ui.scroll}
                       onResumeScroll={resumeScroll}
@@ -1799,7 +1810,8 @@ export default function Page() {
                       setScrollToEnd={(fn) => {
                         scrollToEnd = fn
                       }}
-                    />
+                      />
+                    )}
                   </Show>
                 </Match>
                 <Match when={true}>

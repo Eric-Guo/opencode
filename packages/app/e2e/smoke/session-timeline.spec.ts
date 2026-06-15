@@ -104,6 +104,93 @@ test.describe("smoke: session timeline", () => {
       .toBeLessThanOrEqual(1)
   })
 
+  test("paints cached session tabs at the latest message", async ({ page }) => {
+    await mockOpenCodeServer(page, {
+      sessions: fixture.sessions,
+      provider: fixture.provider,
+      directory: fixture.directory,
+      project: fixture.project,
+      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID as keyof typeof fixture.messages] ?? [] }),
+    })
+    await configureSmokePage(page, fixture.directory)
+    await page.addInitScript(
+      ({ dirBase64, sourceID, targetID }) => {
+        localStorage.setItem(
+          "opencode.global.dat:tabs",
+          JSON.stringify(
+            [sourceID, targetID].map((sessionId) => ({
+              type: "session",
+              server: "http://127.0.0.1:4096",
+              dirBase64,
+              sessionId,
+            })),
+          ),
+        )
+      },
+      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
+    )
+
+    await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.targetID}`)
+    await expectSessionTitle(page, fixture.expected.targetTitle)
+    await switchTitlebarSession(page, fixture.sourceID, fixture.expected.sourceTitle)
+
+    const destination = fixture.messages[fixture.targetID].map((message) => message.info.id)
+    const last = fixture.expected.targetMessageIDs.at(-1)!
+    await page.evaluate(
+      ({ destination, last }) => {
+        const ids = new Set(destination)
+        const samples: Array<{ ids: string[]; last: boolean; bottomError?: number }> = []
+        let running = true
+        const sample = () => {
+          if (!running) return
+          setTimeout(() => {
+            if (!running) return
+            const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
+              element.querySelector("[data-timeline-row]"),
+            )
+            if (root) {
+              const view = root.getBoundingClientRect()
+              const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
+                .filter((element) => {
+                  const rect = element.getBoundingClientRect()
+                  return rect.bottom > view.top && rect.top < view.bottom
+                })
+                .map((element) => element.dataset.messageId!)
+                .filter((id) => ids.has(id))
+              const bottom = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
+              samples.push({ ids: visible, last: visible.includes(last), bottomError: bottom?.bottom - view.bottom })
+            }
+            requestAnimationFrame(sample)
+          }, 0)
+        }
+        ;(window as Window & { __sessionTabPaint?: { samples: typeof samples; stop: () => void } }).__sessionTabPaint = {
+          samples,
+          stop: () => {
+            running = false
+          },
+        }
+        requestAnimationFrame(sample)
+      },
+      { destination, last },
+    )
+
+    await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
+    await page.waitForFunction(() =>
+      (window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }> } }).__sessionTabPaint?.samples.some(
+        (sample) => sample.ids.length > 0,
+      ),
+    )
+    const first = await page.evaluate(() => {
+      const probe = (window as Window & {
+        __sessionTabPaint?: { samples: Array<{ ids: string[]; last: boolean; bottomError?: number }>; stop: () => void }
+      }).__sessionTabPaint!
+      probe.stop()
+      return probe.samples.find((sample) => sample.ids.length > 0)
+    })
+    expect(first?.last).toBe(true)
+    expect(Math.abs(first?.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
+  })
+
   test("renders seeded timeline in order while paging through history", async ({ page }) => {
     const errors = trackPageErrors(page)
     await mockOpenCodeServer(page, {
@@ -499,6 +586,14 @@ async function selectHomeProject(page: Page, projectName: string) {
 async function navigateToSession(page: Page, directory: string, sessionId: string, expectedTitle: string) {
   await page.goto(`/${base64Encode(directory)}/session/${sessionId}`)
   await expectSessionTitle(page, expectedTitle)
+}
+
+async function switchTitlebarSession(page: Page, sessionID: string, title: string) {
+  const href = `/${base64Encode(fixture.directory)}/session/${sessionID}`
+  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
+  await expect(tab).toBeVisible()
+  await tab.click()
+  await expectSessionTitle(page, title)
 }
 
 async function expectSessionReady(page: Page) {

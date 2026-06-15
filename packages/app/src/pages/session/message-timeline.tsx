@@ -16,7 +16,7 @@ import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
-import { createVirtualizer, defaultRangeExtractor, elementScroll } from "@tanstack/solid-virtual"
+import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
@@ -82,6 +82,10 @@ type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 const timelineFallbackItemSize = 60
+const timelineCache = new Map<
+  string,
+  { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }
+>()
 
 function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
   if (!previous?.length) return rows
@@ -274,6 +278,8 @@ export function MessageTimeline(props: {
   const dialog = useDialog()
   const language = useLanguage()
   const { params, sessionKey } = useSessionKey()
+  const ownerSessionKey = sessionKey()
+  const cached = timelineCache.get(ownerSessionKey)
   const platform = usePlatform()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
@@ -467,13 +473,20 @@ export function MessageTimeline(props: {
     const rows = messageRowMemos().flatMap((memo) => memo())
     return reuseTimelineRows(previous, rows)
   })
-  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})
+  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
+  const initialMeasurements = cached?.measurements
+  const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length ? 6 : 50)
+  const prepareScrollOverscan = () => {
+    if (renderOverscan() < 50) setRenderOverscan(50)
+  }
   let virtualContent: HTMLDivElement | undefined
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
       return timelineRows().length
     },
     getScrollElement: () => listRoot() ?? null,
+    initialOffset: () => (props.shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
+    initialMeasurementsCache: initialMeasurements,
     estimateSize: () => timelineFallbackItemSize,
     scrollToFn: (offset, options, instance) => {
       // Expose the computed range before core writes an anchor correction so the browser does not clamp it to the old height.
@@ -497,7 +510,8 @@ export function MessageTimeline(props: {
     rangeExtractor: (range) => {
       const id = activeMessageID()
       const active = id ? timelineRows().findLastIndex((row) => "userMessageID" in row && row.userMessageID === id) : -1
-      return [...new Set([...defaultRangeExtractor(range), ...(active < 0 ? [] : [active])])].sort((a, b) => a - b)
+      const indexes = defaultRangeExtractor({ ...range, overscan: renderOverscan() })
+      return [...new Set([...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b)
     },
   })
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
@@ -534,6 +548,18 @@ export function MessageTimeline(props: {
     props.setHistoryAnchor?.({ capture: capturePrependAnchor, restore: restorePrependAnchor })
   })
 
+  onMount(() => {
+    const expand = () => {
+      const next = Math.min(50, renderOverscan() + 8)
+      setRenderOverscan(next)
+      if (next < 50) requestAnimationFrame(() => setTimeout(expand, 0))
+    }
+    requestAnimationFrame(() => {
+      if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+      if (renderOverscan() < 50) setTimeout(expand, 0)
+    })
+  })
+
   let bottomAnchorSessionKey = ""
   let bottomAnchorFrame: number | undefined
 
@@ -565,6 +591,9 @@ export function MessageTimeline(props: {
   })
 
   onCleanup(() => {
+    timelineCache.delete(ownerSessionKey)
+    timelineCache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
+    while (timelineCache.size > 16) timelineCache.delete(timelineCache.keys().next().value!)
     if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
     props.setRevealMessage?.(() => {})
     props.setScrollToEnd?.(() => {})
@@ -605,6 +634,7 @@ export function MessageTimeline(props: {
 
 
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
+    prepareScrollOverscan()
     if (!prependLoading) clearPrependAnchor()
     const root = event.currentTarget
     const delta = normalizeWheelDelta({
@@ -617,6 +647,7 @@ export function MessageTimeline(props: {
   }
 
   const handleListTouchStart = (event: TouchEvent) => {
+    prepareScrollOverscan()
     if (!prependLoading) clearPrependAnchor()
     touchGesture = event.touches[0]?.clientY
   }
@@ -643,6 +674,7 @@ export function MessageTimeline(props: {
   }
 
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    prepareScrollOverscan()
     if (!prependLoading) clearPrependAnchor()
     if (event.target !== event.currentTarget) return
     props.onMarkScrollGesture(event.currentTarget)
