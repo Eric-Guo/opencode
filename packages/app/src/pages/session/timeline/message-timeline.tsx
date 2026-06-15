@@ -319,6 +319,7 @@ export function MessageTimeline(props: {
   })
   const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
   const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
+  const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
   const childTaskDescription = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -410,10 +411,9 @@ export function MessageTimeline(props: {
   }
 
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
-  const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length || coldBottomMount ? 6 : 50)
-  const prepareScrollOverscan = () => {
-    if (renderOverscan() < 50) setRenderOverscan(50)
-  }
+  const [renderOverscan, setRenderOverscan] = createSignal(initialMeasurements?.length || coldBottomMount ? 6 : 20)
+  let resizePinnedIndexes: number[] = []
+  let resizePinFrame: number | undefined
   let virtualContent: HTMLDivElement | undefined
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -446,9 +446,32 @@ export function MessageTimeline(props: {
       const id = activeMessageID()
       const active = id ? timelineRows().findLastIndex((row) => "userMessageID" in row && row.userMessageID === id) : -1
       const indexes = defaultRangeExtractor({ ...range, overscan: renderOverscan() })
-      return [...new Set([...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b)
+      return [...new Set([...resizePinnedIndexes, ...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b)
     },
   })
+  const resizeItem = virtualizer.resizeItem
+  virtualizer.resizeItem = (index, size) => {
+    const item = virtualizer.measurementsCache[index]
+    const previous = item ? (virtualizer.itemSizeCache.get(item.key) ?? item.size) : undefined
+    const root = listRoot()
+    if (root && previous !== undefined && Math.abs(size - previous) > root.clientHeight) {
+      const view = root.getBoundingClientRect()
+      resizePinnedIndexes = [...root.querySelectorAll<HTMLElement>("[data-index]")]
+        .filter((element) => {
+          const rect = element.getBoundingClientRect()
+          return rect.bottom > view.top && rect.top < view.bottom
+        })
+        .map((element) => Number(element.dataset.index))
+      if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
+      resizePinFrame = requestAnimationFrame(() => {
+        resizePinFrame = requestAnimationFrame(() => {
+          resizePinFrame = undefined
+          resizePinnedIndexes = []
+        })
+      })
+    }
+    resizeItem(index, size)
+  }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
     item.end <= (instance.scrollOffset ?? 0)
   const virtualItemByKey = createMemo(
@@ -465,18 +488,15 @@ export function MessageTimeline(props: {
     props.setHistoryAnchor?.({ capture: capturePrependAnchor, restore: restorePrependAnchor })
   })
 
+  let overscanFrame: number | undefined
   onMount(() => {
-    const expand = () => {
-      const next = Math.min(50, renderOverscan() + 8)
-      setRenderOverscan(next)
-      if (next < 50) requestAnimationFrame(() => setTimeout(expand, 0))
-    }
-    requestAnimationFrame(() => {
+    overscanFrame = requestAnimationFrame(() => {
       if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
-      if (!coldBottomMount) {
-        if (renderOverscan() < 50) setTimeout(expand, 0)
-        return
-      }
+      overscanFrame = requestAnimationFrame(() => {
+        overscanFrame = undefined
+        if (renderOverscan() < 20) setRenderOverscan(20)
+        if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+      })
     })
   })
 
@@ -490,6 +510,7 @@ export function MessageTimeline(props: {
     bottomAnchorSessionKey = key
     if (!props.shouldAnchorBottom()) return
     if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
+    if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
     bottomAnchorFrame = requestAnimationFrame(() => {
@@ -515,6 +536,8 @@ export function MessageTimeline(props: {
     timelineCache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
     while (timelineCache.size > 16) timelineCache.delete(timelineCache.keys().next().value!)
     if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
+    if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
+    if (overscanFrame !== undefined) cancelAnimationFrame(overscanFrame)
     props.setRevealMessage?.(() => {})
     props.setScrollToEnd?.(() => {})
     props.setHistoryAnchor?.({ capture: () => {}, restore: () => {} })
@@ -552,9 +575,7 @@ export function MessageTimeline(props: {
     props.setScrollRef(root)
   }
 
-
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
-    prepareScrollOverscan()
     if (!prependLoading) clearPrependAnchor()
     const root = event.currentTarget
     const delta = normalizeWheelDelta({
@@ -567,7 +588,6 @@ export function MessageTimeline(props: {
   }
 
   const handleListTouchStart = (event: TouchEvent) => {
-    prepareScrollOverscan()
     if (!prependLoading) clearPrependAnchor()
     touchGesture = event.touches[0]?.clientY
   }
@@ -594,7 +614,6 @@ export function MessageTimeline(props: {
   }
 
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
-    prepareScrollOverscan()
     if (!prependLoading) clearPrependAnchor()
     if (event.target !== event.currentTarget) return
     props.onMarkScrollGesture(event.currentTarget)
@@ -910,8 +929,6 @@ export function MessageTimeline(props: {
     }
   }
 
-  const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
-
   const renderAssistantPartGroup = (row: Accessor<TimelineRowMap["AssistantPart"]>, onSizeChange?: () => void) => {
     if (row().group.type === "context") {
       const parts = createMemo(() => {
@@ -962,7 +979,7 @@ export function MessageTimeline(props: {
                 defaultOpen={defaultOpen()}
                 toolOpen={toolOpen[part().id] ?? defaultOpen()}
                 onToolOpenChange={(open) => setToolOpen(part().id, open)}
-                deferToolContent={false}
+                deferToolContent
                 virtualizeDiff={false}
                 onContentRendered={onSizeChange}
               />
