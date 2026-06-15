@@ -25,6 +25,10 @@ export type MarkdownWorkerState = {
   unstable: MarkdownToken[]
 }
 
+export function shouldReleaseMarkdownWorkerState(complete: boolean, latestID: number | undefined, responseID: number) {
+  return complete && latestID === responseID
+}
+
 export function applyMarkdownWorkerResponse(
   state: MarkdownWorkerState | undefined,
   response: Extract<MarkdownWorkerResponse, { type: "highlight" }>,

@@ -145,4 +145,39 @@ describe("markdown stream", () => {
       language: "ts",
     })
   })
+
+  test("closes code fences split across provider deltas", () => {
+    const open = project(undefined, "```ts\nconst x = 1\n", true)
+    const one = project(open, `${open.text}\``, true)
+    const two = project(one, `${one.text}\``, true)
+    const closed = project(two, `${two.text}\``, true)
+    const prose = project(closed, `${closed.text}\nafter`, true)
+
+    expect(closed.blocks.at(-1)).toEqual({
+      raw: "```ts\nconst x = 1\n```",
+      src: "const x = 1",
+      mode: "code",
+      language: "ts",
+      complete: true,
+    })
+    expect(prose.blocks).toEqual([
+      { raw: "```ts\nconst x = 1\n```\n", src: "```ts\nconst x = 1\n```\n", mode: "full" },
+      { raw: "after", src: "after", mode: "live" },
+    ])
+  })
+
+  test("closes tilde fences split across provider deltas", () => {
+    const open = project(undefined, "~~~ts\nconst x = 1\n", true)
+    const one = project(open, `${open.text}~`, true)
+    const two = project(one, `${one.text}~`, true)
+    const closed = project(two, `${two.text}~`, true)
+
+    expect(closed.blocks.at(-1)).toEqual({
+      raw: "~~~ts\nconst x = 1\n~~~",
+      src: "const x = 1",
+      mode: "code",
+      language: "ts",
+      complete: true,
+    })
+  })
 })

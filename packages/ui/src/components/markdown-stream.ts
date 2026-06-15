@@ -39,6 +39,12 @@ function open(raw: string) {
   return !new RegExp(`^[\\t ]{0,3}${char}{${size},}[\\t ]*$`).test(last)
 }
 
+function closesFence(raw: string, suffix: string) {
+  const mark = raw.match(/^[ \t]{0,3}(`{3,}|~{3,})/)?.[1]
+  if (!mark) return suffix.includes("```") || suffix.includes("~~~")
+  return `${raw.slice(-(mark.length - 1))}${suffix}`.includes(mark)
+}
+
 function heal(text: string) {
   return remend(text, { linkMode: "text-only" })
 }
@@ -83,7 +89,7 @@ export function project(previous: Projection | undefined, text: string, live: bo
   if (!live || !previous || !text.startsWith(previous.text)) return { text, blocks: stream(text, live) }
   const tail = previous.blocks.at(-1)
   const suffix = text.slice(previous.text.length)
-  if (!suffix || tail?.mode !== "code" || tail.complete || suffix.includes("```") || suffix.includes("~~~"))
+  if (!suffix || tail?.mode !== "code" || tail.complete || closesFence(tail.raw, suffix))
     return { text, blocks: stream(text, live) }
   return {
     text,

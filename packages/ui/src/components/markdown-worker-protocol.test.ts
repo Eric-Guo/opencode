@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { applyMarkdownWorkerResponse } from "./markdown-worker-protocol"
+import { applyMarkdownWorkerResponse, shouldReleaseMarkdownWorkerState } from "./markdown-worker-protocol"
 
 const token = (content: string): [string, string] => [content, ""]
 const response = (id: number, reset: boolean, stable: [string, string][], unstable: [string, string][]) => ({
@@ -63,4 +63,10 @@ test("ignores stale worker responses and resets replacement streams", () => {
       unstable: [],
     }).stable.map((item) => item[0]),
   ).toEqual(["replacement"])
+})
+
+test("releases only the latest completed worker state", () => {
+  expect(shouldReleaseMarkdownWorkerState(true, 4, 4)).toBe(true)
+  expect(shouldReleaseMarkdownWorkerState(true, 5, 4)).toBe(false)
+  expect(shouldReleaseMarkdownWorkerState(false, 4, 4)).toBe(false)
 })

@@ -2,6 +2,7 @@ import MarkdownShikiWorkerUrl from "./markdown-shiki.worker.ts?worker&url"
 import { OpenCodeTheme } from "../context/marked"
 import {
   applyMarkdownWorkerResponse,
+  shouldReleaseMarkdownWorkerState,
   type MarkdownWorkerRequest,
   type MarkdownWorkerResponse,
   type MarkdownWorkerState,
@@ -26,7 +27,6 @@ export function highlightStreamingCode(key: string, text: string, language: stri
   const id = ++nextID
   latest.set(key, id)
   keys.delete(key)
-  latest.delete(key)
   keys.add(key)
   if (keys.size > 200) disposeStreamingCode(keys.values().next().value!)
   return new Promise<MarkdownWorkerState>((resolve, reject) => {
@@ -37,6 +37,7 @@ export function highlightStreamingCode(key: string, text: string, language: stri
 
 export function disposeStreamingCode(key: string) {
   keys.delete(key)
+  latest.delete(key)
   states.delete(key)
   pending.forEach((request, id) => {
     if (request.key !== key) return
@@ -64,7 +65,7 @@ function getWorker() {
       return
     }
     const state = applyMarkdownWorkerResponse(states.get(event.data.key), event.data)
-    if (result.complete && latest.get(event.data.key) === event.data.id) {
+    if (shouldReleaseMarkdownWorkerState(result.complete, latest.get(event.data.key), event.data.id)) {
       states.delete(event.data.key)
       keys.delete(event.data.key)
       latest.delete(event.data.key)
