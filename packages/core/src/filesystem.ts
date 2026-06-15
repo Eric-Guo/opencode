@@ -10,6 +10,13 @@ import { FileSystemSearch } from "./filesystem/search"
 import { Entry, Match } from "./filesystem/schema"
 export { Entry, Match, Submatch } from "./filesystem/schema"
 
+export const AppFileSystem = {
+  Service: FSUtil.Service,
+  layer: FSUtil.layer,
+  defaultLayer: FSUtil.defaultLayer,
+  node: FSUtil.node,
+}
+
 export const ReadInput = Schema.Struct({
   path: RelativePath,
 })
