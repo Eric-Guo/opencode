@@ -412,7 +412,6 @@ export function Markdown(
     container.querySelectorAll<HTMLButtonElement>('[data-slot="markdown-copy-button"]').forEach((button) =>
       setCopyState(button, labels, button.dataset.copied === "true"),
     )
-
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
         copy: i18n.t("ui.message.copy"),
