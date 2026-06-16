@@ -7,13 +7,14 @@ export function createLatestWorkerQueue<T extends { key: string }>(input: {
   const jobs: Array<Slot | { type: "dispose"; key: string }> = []
   const slots = new Map<string, Slot>()
   let running: Promise<void> | undefined
+  let cursor = 0
 
   const schedule = () => {
     if (running) return
     running = Promise.resolve()
       .then(async () => {
-        while (jobs.length > 0) {
-          const job = jobs.shift()!
+        while (cursor < jobs.length) {
+          const job = jobs[cursor++]!
           if (job.type === "dispose") {
             input.dispose(job.key)
             continue
@@ -25,6 +26,8 @@ export function createLatestWorkerQueue<T extends { key: string }>(input: {
         }
       })
       .finally(() => {
+        jobs.splice(0, cursor)
+        cursor = 0
         running = undefined
         if (jobs.length > 0) schedule()
       })

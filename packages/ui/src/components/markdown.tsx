@@ -361,7 +361,7 @@ export function Markdown(
       return Promise.all(
         src.projection.blocks.map(async (block, index) => {
           const key = base ? `${base}:${index}:${block.mode}` : undefined
-          const blockKey = markdownBlockKey(owner, base, index, block.mode)
+          const blockKey = markdownBlockKey(owner, src.key, index, block.mode)
 
           if (block.mode === "code") {
             const cached = completedCode.get(blockKey)

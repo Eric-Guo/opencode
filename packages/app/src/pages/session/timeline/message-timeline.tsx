@@ -383,14 +383,15 @@ export function MessageTimeline(props: {
     applyPrependAnchor()
   }
   const applyPrependAnchor = () => {
-    const anchor = prependAnchor
     const root = listRoot()
-    if (!root || !anchor) return
+    if (!root || !prependAnchor) return
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
     let frames = 0
     let stable = 0
     const apply = () => {
       prependAnchorFrame = undefined
+      const anchor = prependAnchor
+      if (!anchor) return
       const element = root.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(anchor.key)}"]`)
       const delta = element
         ? element.getBoundingClientRect().top - root.getBoundingClientRect().top - anchor.offset
@@ -403,7 +404,7 @@ export function MessageTimeline(props: {
       }
       frames += 1
       if (stable >= 30 || frames >= 180) {
-        prependAnchor = undefined
+        if (!prependLoading) prependAnchor = undefined
         return
       }
       prependAnchorFrame = requestAnimationFrame(apply)
