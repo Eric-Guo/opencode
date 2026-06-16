@@ -15,6 +15,7 @@ import {
   MarkdownWorkerUnavailableError,
 } from "./markdown-worker"
 import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
+import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 
 type Entry = {
   raw: string
@@ -43,10 +44,7 @@ type RenderResult = {
 
 const max = 200
 const cache = new Map<string, Entry>()
-const renderedCodeTokens = new WeakMap<
-  HTMLDivElement,
-  { language: string; generation: number; stableCount: number; unstable: MarkdownToken[] }
->()
+const renderedCodeTokens = new WeakMap<HTMLDivElement, RenderedCodeState>()
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
@@ -564,14 +562,15 @@ function updateCodeBlock(
   if (code instanceof HTMLElement) {
     code.className = `language-${block.language}`
     const previous = renderedCodeTokens.get(next)
-    const reset =
-      !previous ||
-      previous.language !== block.language ||
-      previous.generation !== block.generation ||
-      block.stable.length < previous.stableCount
-    const stableCount = reset ? 0 : previous.stableCount
+    const reset = shouldResetCodeTokens(previous, {
+      language: block.language,
+      generation: block.generation,
+      stableCount: block.stable.length,
+      raw: block.raw,
+    })
+    const stableCount = reset ? 0 : previous!.stableCount
     const tail = [...block.stable.slice(stableCount), ...block.unstable]
-    const prior = reset ? [] : previous.unstable
+    const prior = reset ? [] : previous!.unstable
     const prefix = prior.findIndex((token, index) => !sameToken(token, tail[index]))
     const keep = stableCount + (prefix < 0 ? Math.min(prior.length, tail.length) : prefix)
     while (code.children.length > keep) code.lastElementChild?.remove()
@@ -581,6 +580,7 @@ function updateCodeBlock(
       generation: block.generation,
       stableCount: block.stable.length,
       unstable: block.unstable,
+      raw: block.raw,
     })
     return
   }
@@ -601,6 +601,7 @@ function updateCodeBlock(
     generation: block.generation,
     stableCount: block.stable.length,
     unstable: block.unstable,
+    raw: block.raw,
   })
   if (current) current.replaceWith(next)
   else container.appendChild(next)
