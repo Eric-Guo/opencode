@@ -13,6 +13,7 @@ import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Plugin } from "../../src/plugin"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 import { NpmTest } from "../fake/npm"
 import { ProviderTest } from "../fake/provider"
 import { SkillTest } from "../fake/skill"
@@ -29,6 +30,7 @@ const configLayer = Config.layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Env.defaultLayer),
   Layer.provide(AuthTest.empty),
+  Layer.provide(AuthWellKnownTest.empty),
   Layer.provide(AccountTest.empty),
   Layer.provide(NpmTest.noop),
   Layer.provide(FetchHttpClient.layer),
