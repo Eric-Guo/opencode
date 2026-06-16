@@ -7,8 +7,13 @@ import { ComponentProps, createEffect, createMemo, createResource, createSignal,
 import { isServer } from "solid-js/web"
 import { bundledLanguages } from "shiki"
 import { canReusePendingBlock, project, type Block, type Projection } from "./markdown-stream"
-import { disposeStreamingCode, highlightStreamingCode, MarkdownWorkerDisposedError } from "./markdown-worker"
-import type { MarkdownToken } from "./markdown-worker-protocol"
+import {
+  disposeStreamingCode,
+  highlightStreamingCode,
+  MarkdownWorkerDisposedError,
+  MarkdownWorkerSupersededError,
+} from "./markdown-worker"
+import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
 
 type Entry = {
   raw: string
@@ -93,7 +98,8 @@ async function code(text: string, language: string | undefined, key: string, com
     const result = await highlightStreamingCode(key, text, name, complete)
     return { language: name, generation: result.generation, stable: result.stable, unstable: result.unstable }
   } catch (error) {
-    if (!(error instanceof MarkdownWorkerDisposedError)) console.error("Markdown highlighting worker failed", error)
+    if (!(error instanceof MarkdownWorkerDisposedError) && !(error instanceof MarkdownWorkerSupersededError))
+      console.error("Markdown highlighting worker failed", error)
     return { language: name, generation: 0, stable: [], unstable: [[text, ""] as MarkdownToken] }
   }
 }
@@ -349,7 +355,7 @@ export function Markdown(
       return Promise.all(
         src.projection.blocks.map(async (block, index) => {
           const key = base ? `${base}:${index}:${block.mode}` : undefined
-          const blockKey = `${owner}:${key ?? `block:${index}`}`
+          const blockKey = markdownBlockKey(owner, base, index, block.mode)
 
           if (block.mode === "code") {
             const result = await code(block.src, block.language, blockKey, block.complete)
@@ -405,7 +411,7 @@ export function Markdown(
     const container = root()
     const result = html.latest ?? html()
     const projected = projection()
-    const content = local.text ? pendingBlocks(result, projected, local.cacheKey) : []
+    const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner) : []
     if (!container) return
     if (isServer) return
     if (content.length === 0) {
@@ -453,14 +459,19 @@ export function Markdown(
   )
 }
 
-function pendingBlocks(result: RenderResult | undefined, projection: Projection | undefined, cacheKey?: string) {
+function pendingBlocks(
+  result: RenderResult | undefined,
+  projection: Projection | undefined,
+  cacheKey: string | undefined,
+  owner: string,
+) {
   if (!result) return []
   if (!projection || result.text === projection.text) return result.blocks
   const initial = result.blocks.length === 1 && result.blocks[0]?.key === "initial"
   return projection.blocks.map((block, index) => {
     const current = initial ? undefined : result.blocks[index]
     if (current && canReusePendingBlock(current, block)) return current
-    const key = cacheKey ? `${cacheKey}:${index}:${block.mode}` : `block:${index}`
+    const key = markdownBlockKey(owner, cacheKey, index, block.mode)
     if (block.mode !== "code")
       return { key, mode: block.mode, raw: block.raw, hash: String(block.raw.length), html: fallback(block.src) }
     return {

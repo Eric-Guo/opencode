@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { applyMarkdownWorkerResponse, shouldReleaseMarkdownWorkerState } from "./markdown-worker-protocol"
+import { applyMarkdownWorkerResponse, markdownBlockKey, shouldReleaseMarkdownWorkerState } from "./markdown-worker-protocol"
 
 const token = (content: string): [string, string] => [content, ""]
 const response = (id: number, reset: boolean, stable: [string, string][], unstable: [string, string][]) => ({
@@ -69,4 +69,9 @@ test("releases only the latest completed worker state", () => {
   expect(shouldReleaseMarkdownWorkerState(true, 4, 4)).toBe(true)
   expect(shouldReleaseMarkdownWorkerState(true, 5, 4)).toBe(false)
   expect(shouldReleaseMarkdownWorkerState(false, 4, 4)).toBe(false)
+})
+
+test("prefixes pending and dispatched block keys with the component owner", () => {
+  expect(markdownBlockKey("owner", "message", 2, "code")).toBe("owner:message:2:code")
+  expect(markdownBlockKey("owner", undefined, 2, "code")).toBe("owner:block:2")
 })

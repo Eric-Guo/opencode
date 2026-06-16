@@ -10,6 +10,7 @@ import {
   type ThemedToken,
 } from "shiki"
 import type { MarkdownToken, MarkdownWorkerRequest, MarkdownWorkerResponse } from "./markdown-worker-protocol"
+import { createLatestWorkerQueue } from "./markdown-worker-queue"
 
 type Stream = {
   language: string
@@ -19,7 +20,11 @@ type Stream = {
 
 const streams = new Map<string, Stream>()
 let highlighter: ReturnType<typeof createHighlighter> | undefined
-let queue = Promise.resolve()
+const queue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "highlight" }>>({
+  run: highlight,
+  supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
+  dispose: (key) => void streams.delete(key),
+})
 
 self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
   if (event.data.type === "init") {
@@ -27,13 +32,11 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
     return
   }
   if (event.data.type === "dispose") {
-    const key = event.data.key
-    queue = queue.then(() => void streams.delete(key)).catch(() => {})
+    queue.dispose(event.data.key)
     return
   }
 
-  const request = event.data
-  queue = queue.then(() => highlight(request)).catch(() => {})
+  queue.highlight(event.data)
 }
 
 async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {

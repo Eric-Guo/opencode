@@ -17,6 +17,7 @@ export type MarkdownWorkerResponse =
       unstable: MarkdownToken[]
     }
   | { type: "error"; id: number; key: string; message: string }
+  | { type: "superseded"; id: number; key: string }
 
 export type MarkdownWorkerState = {
   id: number
@@ -27,6 +28,10 @@ export type MarkdownWorkerState = {
 
 export function shouldReleaseMarkdownWorkerState(complete: boolean, latestID: number | undefined, responseID: number) {
   return complete && latestID === responseID
+}
+
+export function markdownBlockKey(owner: string, cacheKey: string | undefined, index: number, mode: string) {
+  return `${owner}:${cacheKey ? `${cacheKey}:${index}:${mode}` : `block:${index}`}`
 }
 
 export function applyMarkdownWorkerResponse(

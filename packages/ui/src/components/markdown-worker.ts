@@ -48,6 +48,7 @@ export function disposeStreamingCode(key: string) {
 }
 
 export class MarkdownWorkerDisposedError extends Error {}
+export class MarkdownWorkerSupersededError extends Error {}
 
 function getWorker() {
   if (worker) return worker
@@ -58,6 +59,10 @@ function getWorker() {
     pending.delete(event.data.id)
     if (!keys.has(event.data.key)) {
       result.reject(new MarkdownWorkerDisposedError())
+      return
+    }
+    if (event.data.type === "superseded") {
+      result.reject(new MarkdownWorkerSupersededError())
       return
     }
     if (event.data.type === "error") {
