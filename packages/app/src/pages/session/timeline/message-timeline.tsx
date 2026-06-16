@@ -253,7 +253,7 @@ export function MessageTimeline(props: {
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
-  setHistoryAnchor?: (handlers: { capture: () => void; restore: () => void }) => void
+  setHistoryAnchor?: (handlers: { capture: () => void; restore: (done: boolean) => void }) => void
 }) {
   let touchGesture: number | undefined
 
@@ -377,8 +377,8 @@ export function MessageTimeline(props: {
     if (!anchor.element.dataset.timelineKey) return
     prependAnchor = { key: anchor.element.dataset.timelineKey, offset: anchor.rect.top - view.top }
   }
-  const restorePrependAnchor = () => {
-    prependLoading = false
+  const restorePrependAnchor = (done: boolean) => {
+    if (done) prependLoading = false
     applyPrependAnchor()
   }
   const applyPrependAnchor = () => {

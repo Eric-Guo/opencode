@@ -1129,9 +1129,9 @@ export default function Page() {
   )
 
   let captureHistoryAnchor = () => {}
-  let restoreHistoryAnchor = () => {}
+  let restoreHistoryAnchor = (_done: boolean) => {}
   const loadOlder = () =>
-    timeline.history.loadOlder({ before: () => captureHistoryAnchor(), after: () => restoreHistoryAnchor() })
+    timeline.history.loadOlder({ before: () => captureHistoryAnchor(), after: restoreHistoryAnchor })
   const onHistoryScroll = () => {
     if (!autoScroll.userScrolled() || !scroller || scroller.scrollTop >= 200) return
     void loadOlder()

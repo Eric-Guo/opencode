@@ -75,7 +75,7 @@ export function createTimelineModel(input: {
     const id = input.sessionID()
     return id ? sync().session.history.loading(id) : false
   })
-  const loadOlder = async (options?: { before?: () => void; after?: () => void }) => {
+  const loadOlder = async (options?: { before?: () => void; after?: (done: boolean) => void }) => {
     return loadOlderTimeline({
       sessionID: input.sessionID,
       loaded: () => messages().length,
@@ -125,7 +125,7 @@ export async function loadOlderTimeline(input: {
   loading: Accessor<boolean>
   loadMore: (sessionID: string) => Promise<void>
   before?: () => void
-  after?: () => void
+  after?: (done: boolean) => void
 }) {
   const id = input.sessionID()
   if (!id || !input.more() || input.loading()) return
@@ -135,8 +135,9 @@ export async function loadOlderTimeline(input: {
   let loaded = input.loaded()
   input.before?.()
   while (true) {
-    await input.loadMore(id).finally(() => {
-      if (input.sessionID() === id) input.after?.()
+    await input.loadMore(id).catch((error) => {
+      if (input.sessionID() === id) input.after?.(true)
+      throw error
     })
     if (input.sessionID() !== id) return
 
@@ -144,6 +145,8 @@ export async function loadOlderTimeline(input: {
     const growth = input.visible() - beforeVisible
     const raw = nextLoaded - loaded
     loaded = nextLoaded
-    if (growth > 0 || raw <= 0 || !input.more()) return
+    const done = growth > 0 || raw <= 0 || !input.more()
+    input.after?.(done)
+    if (done) return
   }
 }

@@ -19,7 +19,7 @@ describe("timeline model", () => {
     let loaded = 10
     let visible = 2
     let calls = 0
-    const anchors: string[] = []
+    const anchors: Array<string | boolean> = []
 
     await loadOlderTimeline({
       sessionID: () => "ses_test",
@@ -33,11 +33,11 @@ describe("timeline model", () => {
         if (calls === 2) visible += 1
       },
       before: () => anchors.push("before"),
-      after: () => anchors.push("after"),
+      after: (done) => anchors.push("after", done),
     })
 
     expect(calls).toBe(2)
-    expect(anchors).toEqual(["before", "after", "after"])
+    expect(anchors).toEqual(["before", "after", false, "after", true])
   })
 
   test("stops when a page adds no raw messages", async () => {
