@@ -55,4 +55,25 @@ describe("timeline model", () => {
 
     expect(calls).toBe(1)
   })
+
+  test("does not restore an anchor after the session changes", async () => {
+    let sessionID = "ses_old"
+    let restore = 0
+
+    await loadOlderTimeline({
+      sessionID: () => sessionID,
+      loaded: () => 10,
+      visible: () => 2,
+      more: () => true,
+      loading: () => false,
+      loadMore: async () => {
+        sessionID = "ses_new"
+      },
+      after: () => {
+        restore += 1
+      },
+    })
+
+    expect(restore).toBe(0)
+  })
 })
