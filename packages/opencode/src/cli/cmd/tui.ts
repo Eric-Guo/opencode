@@ -8,6 +8,8 @@ import { errorMessage } from "@opencode-ai/tui/util/error"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
+import { ServerAuth } from "@/server/auth"
+import { ServerDiscovery } from "@/cli/server-discovery"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "@opencode-ai/tui/context/sdk"
 import { writeHeapSnapshot } from "v8"
@@ -153,25 +155,37 @@ export const TuiThreadCommand = cmd({
         network.mdns ||
         network.port !== 0 ||
         network.hostname !== "127.0.0.1"
+      const discovered = external ? undefined : await ServerDiscovery.find()
 
       const transport = external
         ? {
             url: (await client.call("server", network)).url,
             fetch: undefined,
+            headers: ServerAuth.headers(),
             events: undefined,
           }
+        : discovered
+          ? {
+              url: discovered,
+              fetch: undefined,
+              headers: ServerAuth.headers(),
+              events: undefined,
+            }
         : {
             url: "http://opencode.internal",
             fetch: createWorkerFetch(client),
+            headers: undefined,
             events: createEventSource(client),
           }
+      const url = String(transport.url)
 
       try {
         await validateSession({
-          url: transport.url,
+          url,
           sessionID: args.session,
           directory: cwd,
           fetch: transport.fetch,
+          headers: transport.headers,
         })
       } catch (error) {
         UI.error(errorMessage(error))
@@ -189,7 +203,7 @@ export const TuiThreadCommand = cmd({
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
         await Effect.runPromise(
           run({
-            url: transport.url,
+            url,
             async onSnapshot() {
               const tui = writeHeapSnapshot("tui.heapsnapshot")
               const server = await client.call("snapshot", undefined)
@@ -221,4 +235,3 @@ export const TuiThreadCommand = cmd({
     process.exit(0)
   },
 })
-// scratch
