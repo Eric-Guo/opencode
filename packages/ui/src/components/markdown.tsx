@@ -12,6 +12,7 @@ import {
   highlightStreamingCode,
   MarkdownWorkerDisposedError,
   MarkdownWorkerSupersededError,
+  MarkdownWorkerUnavailableError,
 } from "./markdown-worker"
 import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
 
@@ -98,7 +99,11 @@ async function code(text: string, language: string | undefined, key: string, com
     const result = await highlightStreamingCode(key, text, name, complete)
     return { language: name, generation: result.generation, stable: result.stable, unstable: result.unstable }
   } catch (error) {
-    if (!(error instanceof MarkdownWorkerDisposedError) && !(error instanceof MarkdownWorkerSupersededError))
+    if (
+      !(error instanceof MarkdownWorkerDisposedError) &&
+      !(error instanceof MarkdownWorkerSupersededError) &&
+      !(error instanceof MarkdownWorkerUnavailableError)
+    )
       console.error("Markdown highlighting worker failed", error)
     return { language: name, generation: 0, stable: [], unstable: [[text, ""] as MarkdownToken] }
   }
@@ -324,6 +329,7 @@ export function Markdown(
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
   const activeCodeKeys = new Set<string>()
+  const completedCode = new Map<string, Extract<RenderedBlock, { mode: "code" }>>()
   const projection = createMemo((previous: Projection | undefined) =>
     project(previous, local.text, local.streaming ?? false),
   )
@@ -358,8 +364,10 @@ export function Markdown(
           const blockKey = markdownBlockKey(owner, base, index, block.mode)
 
           if (block.mode === "code") {
+            const cached = completedCode.get(blockKey)
+            if (block.complete && cached?.raw === block.raw) return cached
             const result = await code(block.src, block.language, blockKey, block.complete)
-            return {
+            const rendered = {
               key: blockKey,
               mode: block.mode,
               raw: block.raw,
@@ -367,6 +375,8 @@ export function Markdown(
               complete: !!block.complete,
               ...result,
             }
+            if (block.complete) completedCode.set(blockKey, rendered)
+            return rendered
           }
 
           if (key) {
@@ -444,6 +454,7 @@ export function Markdown(
   onCleanup(() => {
     if (copyCleanup) copyCleanup()
     activeCodeKeys.forEach(disposeCode)
+    completedCode.clear()
   })
 
   return (

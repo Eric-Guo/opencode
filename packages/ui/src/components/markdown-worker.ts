@@ -7,6 +7,7 @@ import {
   type MarkdownWorkerResponse,
   type MarkdownWorkerState,
 } from "./markdown-worker-protocol"
+import { createWorkerTransport } from "./markdown-worker-transport"
 
 type Pending = {
   key: string
@@ -16,11 +17,21 @@ type Pending = {
 }
 
 let worker: Worker | undefined
+let disabled: Error | undefined
 let nextID = 0
 const pending = new Map<number, Pending>()
 const states = new Map<string, MarkdownWorkerState>()
 const keys = new Set<string>()
 const latest = new Map<string, number>()
+const transport = createWorkerTransport<Extract<MarkdownWorkerRequest, { type: "highlight" }>>({
+  post: (request) => worker!.postMessage(request),
+  supersede: (request) => {
+    const result = pending.get(request.id)
+    if (!result) return
+    pending.delete(request.id)
+    result.reject(new MarkdownWorkerSupersededError())
+  },
+})
 
 export function highlightStreamingCode(key: string, text: string, language: string, complete = false) {
   const instance = getWorker()
@@ -31,7 +42,7 @@ export function highlightStreamingCode(key: string, text: string, language: stri
   if (keys.size > 200) disposeStreamingCode(keys.values().next().value!)
   return new Promise<MarkdownWorkerState>((resolve, reject) => {
     pending.set(id, { key, complete, resolve, reject })
-    instance.postMessage({ type: "highlight", id, key, text, language, complete } satisfies MarkdownWorkerRequest)
+    transport.send({ type: "highlight", id, key, text, language, complete })
   })
 }
 
@@ -39,6 +50,7 @@ export function disposeStreamingCode(key: string) {
   keys.delete(key)
   latest.delete(key)
   states.delete(key)
+  transport.dispose(key)
   pending.forEach((request, id) => {
     if (request.key !== key) return
     pending.delete(id)
@@ -49,24 +61,37 @@ export function disposeStreamingCode(key: string) {
 
 export class MarkdownWorkerDisposedError extends Error {}
 export class MarkdownWorkerSupersededError extends Error {}
+export class MarkdownWorkerUnavailableError extends Error {}
 
 function getWorker() {
   if (worker) return worker
-  worker = new Worker(MarkdownShikiWorkerUrl, { type: "module" })
+  if (disabled) throw new MarkdownWorkerUnavailableError(disabled.message)
+  try {
+    worker = new Worker(MarkdownShikiWorkerUrl, { type: "module" })
+  } catch (error) {
+    disabled = error instanceof Error ? error : new Error(String(error))
+    throw new MarkdownWorkerUnavailableError(disabled.message)
+  }
   worker.onmessage = (event: MessageEvent<MarkdownWorkerResponse>) => {
     const result = pending.get(event.data.id)
-    if (!result) return
+    if (!result) {
+      transport.complete(event.data.key, event.data.id)
+      return
+    }
     pending.delete(event.data.id)
     if (!keys.has(event.data.key)) {
       result.reject(new MarkdownWorkerDisposedError())
+      transport.complete(event.data.key, event.data.id)
       return
     }
     if (event.data.type === "superseded") {
       result.reject(new MarkdownWorkerSupersededError())
+      transport.complete(event.data.key, event.data.id)
       return
     }
     if (event.data.type === "error") {
       result.reject(new Error(event.data.message))
+      transport.complete(event.data.key, event.data.id)
       return
     }
     const state = applyMarkdownWorkerResponse(states.get(event.data.key), event.data)
@@ -76,9 +101,12 @@ function getWorker() {
       latest.delete(event.data.key)
     } else states.set(event.data.key, state)
     result.resolve(state)
+    transport.complete(event.data.key, event.data.id)
   }
   const fail = (message: string) => {
     const error = new Error(message)
+    disabled = error
+    transport.reset()
     pending.forEach((request) => request.reject(error))
     pending.clear()
     states.clear()

@@ -73,6 +73,13 @@ export function createTimelineProjection(input: {
     })
     return result
   })
+  const messageLastRowIndex = createMemo(() => {
+    const result = new Map<string, number>()
+    rows().forEach((row, index) => {
+      if ("userMessageID" in row) result.set(row.userMessageID, index)
+    })
+    return result
+  })
   const lastAssistantGroupKey = createMemo(() => {
     const result = new Map<string, string>()
     rows().forEach((row) => {
@@ -87,6 +94,7 @@ export function createTimelineProjection(input: {
     lastAssistantGroupKey,
     messageByID,
     messageRowIndex,
+    messageLastRowIndex,
     rowByKey,
     rows,
   }

@@ -347,6 +347,7 @@ export function MessageTimeline(props: {
   const assistantMessagesByParent = projection.assistantMessagesByParent
   const lastAssistantGroupKey = projection.lastAssistantGroupKey
   const messageByID = projection.messageByID
+  const messageLastRowIndex = projection.messageLastRowIndex
   const messageRowIndex = projection.messageRowIndex
   const timelineRowByKey = projection.rowByKey
   const timelineRows = projection.rows
@@ -447,7 +448,7 @@ export function MessageTimeline(props: {
     paddingEnd: 64,
     rangeExtractor: (range) => {
       const id = activeMessageID()
-      const active = id ? timelineRows().findLastIndex((row) => "userMessageID" in row && row.userMessageID === id) : -1
+      const active = id ? (messageLastRowIndex().get(id) ?? -1) : -1
       const indexes = defaultRangeExtractor({ ...range, overscan: renderOverscan() })
       return [...new Set([...resizePinnedIndexes, ...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b)
     },
