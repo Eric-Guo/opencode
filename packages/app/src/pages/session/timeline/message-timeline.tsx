@@ -68,6 +68,7 @@ import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { makeTimer } from "@solid-primitives/timer"
+import { scheduleConnectedMeasure } from "./measure"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 
@@ -1187,6 +1188,7 @@ export function MessageTimeline(props: {
       return part?.type === "tool" && ["edit", "write", "apply_patch"].includes(part.tool)
     }
     const [ready, setReady] = createSignal(initialItem.size <= timelineFallbackItemSize || !asyncFile())
+    let contentMeasureFrame: number | undefined
 
     onMount(() => virtualizer.measureElement(element))
 
@@ -1199,6 +1201,10 @@ export function MessageTimeline(props: {
         { defer: true },
       ),
     )
+
+    onCleanup(() => {
+      if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+    })
 
     return (
       <div
@@ -1223,7 +1229,8 @@ export function MessageTimeline(props: {
             row={row()}
             onSizeChange={() => {
               setReady(true)
-              requestAnimationFrame(() => virtualizer.measureElement(element))
+              if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+              contentMeasureFrame = scheduleConnectedMeasure(element, virtualizer.measureElement)
             }}
           />
         </div>

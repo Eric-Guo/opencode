@@ -28,6 +28,13 @@ describe("markdown stream", () => {
     ])
   })
 
+  test("keeps a completed code fence in worker-rendered code mode when prose follows", () => {
+    expect(stream("```ts\nconst x = 1\n```\n\nafter", true)).toEqual([
+      { raw: "```ts\nconst x = 1\n```\n\n", src: "const x = 1", mode: "code", language: "ts", complete: true },
+      { raw: "after", src: "after", mode: "live" },
+    ])
+  })
+
   test("freezes completed top-level blocks and only keeps the tail live", () => {
     expect(stream("# Plan\n\nFinished paragraph.\n\n- live item", true)).toEqual([
       { raw: "# Plan\n\n", src: "# Plan\n\n", mode: "full" },
@@ -161,7 +168,7 @@ describe("markdown stream", () => {
       complete: true,
     })
     expect(prose.blocks).toEqual([
-      { raw: "```ts\nconst x = 1\n```\n", src: "```ts\nconst x = 1\n```\n", mode: "full" },
+      { raw: "```ts\nconst x = 1\n```\n", src: "const x = 1", mode: "code", language: "ts", complete: true },
       { raw: "after", src: "after", mode: "live" },
     ])
   })
