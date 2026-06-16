@@ -135,9 +135,10 @@ export async function loadOlderTimeline(input: {
   let loaded = input.loaded()
   input.before?.()
   while (true) {
-    await input.loadMore(id)
+    await input.loadMore(id).finally(() => {
+      if (input.sessionID() === id) input.after?.()
+    })
     if (input.sessionID() !== id) return
-    input.after?.()
 
     const nextLoaded = input.loaded()
     const growth = input.visible() - beforeVisible

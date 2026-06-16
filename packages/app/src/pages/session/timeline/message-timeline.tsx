@@ -440,6 +440,9 @@ export function MessageTimeline(props: {
     anchorTo: "end",
     followOnAppend: true,
     scrollEndThreshold: 80,
+    get scrollMargin() {
+      return showHeader() ? 64 : 0
+    },
     overscan: 50,
     paddingEnd: 64,
     rangeExtractor: (range) => {
@@ -1200,7 +1203,7 @@ export function MessageTimeline(props: {
         data-timeline-key={props.rowKey}
         style={{
           position: "absolute",
-          top: `${item().start}px`,
+          top: `${item().start - (showHeader() ? 64 : 0)}px`,
           left: "0",
           width: "100%",
           height: `${item().size}px`,

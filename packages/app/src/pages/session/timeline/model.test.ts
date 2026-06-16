@@ -76,4 +76,26 @@ describe("timeline model", () => {
 
     expect(restore).toBe(0)
   })
+
+  test("releases the anchor when loading history fails", async () => {
+    let restore = 0
+
+    await expect(
+      loadOlderTimeline({
+        sessionID: () => "ses_test",
+        loaded: () => 10,
+        visible: () => 2,
+        more: () => true,
+        loading: () => false,
+        loadMore: async () => {
+          throw new Error("history failed")
+        },
+        after: () => {
+          restore += 1
+        },
+      }),
+    ).rejects.toThrow("history failed")
+
+    expect(restore).toBe(1)
+  })
 })
