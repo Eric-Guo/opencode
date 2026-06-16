@@ -89,6 +89,7 @@ test("preserves POSIX case while matching Windows drives case-insensitively", ()
   expect(treePathWithin("/repo", "/repo/../tmp")).toBeFalse()
   expect(treePathWithin("/", "/src")).toBeTrue()
   expect(pickerMode("file", "C:/Repo").selection("c:/repo/src", "file.ts")).toBe("src/file.ts")
+  expect(pickerMode("file", "C:/").selection("C:/", "file.ts")).toBe("file.ts")
 })
 
 test("displays paths using the selected server path format", () => {

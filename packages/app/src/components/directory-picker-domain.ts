@@ -105,7 +105,7 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   const root = insensitive ? rootPath.toLowerCase() : rootPath
   const target = insensitive ? targetPath.toLowerCase() : targetPath
   if (target === root) return ""
-  const prefix = root === "/" ? root : root + "/"
+  const prefix = root.endsWith("/") ? root : root + "/"
   if (!target.startsWith(prefix)) return
   return targetPath.slice(prefix.length)
 }
