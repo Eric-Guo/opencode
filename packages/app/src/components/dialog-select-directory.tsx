@@ -76,7 +76,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const directories = createDirectorySearch({
     sdk,
     home,
-    start,
+    base: start,
   })
 
   const recentProjects = createMemo(() => {

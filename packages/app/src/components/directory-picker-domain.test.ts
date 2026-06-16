@@ -14,6 +14,7 @@ import {
   treeEntries,
   treePathWithin,
   currentPickerSuggestions,
+  createDirectorySearch,
   displayPickerPath,
   pickerParent,
   pickerRoot,
@@ -126,6 +127,28 @@ test("exposes autocomplete results only for their source query", () => {
 test("scopes file autocomplete to the current browser root", () => {
   expect(pickerFileSearchQuery("/home/luke/repos", "/home/luke/repos/src/in", "/home/luke")).toBe("src/in")
   expect(pickerFileSearchQuery("/home/luke", "~/repos/op", "/home/luke")).toBe("repos/op")
+})
+
+test("resolves directory autocomplete from the current browser root", async () => {
+  const directories: string[] = []
+  const sdk = {
+    client: {
+      find: {
+        files: (input: { directory: string }) => {
+          directories.push(input.directory)
+          return Promise.resolve({ data: [] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  let base = "/repo"
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => base })
+
+  await search("components")
+  base = "/repo/src"
+  await search("components")
+
+  expect(directories).toEqual(["/repo", "/repo/src"])
 })
 
 test("identifies the next directory level to preload", () => {

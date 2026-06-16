@@ -71,7 +71,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const start = createMemo(
     () => props.start || sync.data.path.home || sync.data.path.directory || fallbackPath()?.home || fallbackPath()?.directory,
   )
-  const search = createDirectorySearch({ sdk, home, start })
+  const search = createDirectorySearch({ sdk, home, base: () => root() || start() })
   const [suggestions] = createResource(input, async (value) => {
     const typed = cleanPickerInput(value).replace(/\/+$/, "")
     const current = displayPickerPath(root(), value, home()).replace(/\/+$/, "")

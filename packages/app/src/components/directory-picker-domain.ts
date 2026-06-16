@@ -247,21 +247,21 @@ export function displayPickerPath(path: string, input: string, home: string) {
   return pickerTilde(value, home) || value
 }
 
-export function createDirectorySearch(args: { sdk: ServerSDK; start: () => string | undefined; home: () => string }) {
+export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string | undefined; home: () => string }) {
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
   let current = 0
 
   const scoped = (value: string) => {
-    const start = args.start()
-    if (!start) return
+    const base = args.base()
+    if (!base) return
     const raw = normalizePickerDrive(value)
-    if (!raw) return { directory: trimPickerPath(start), path: "" }
+    if (!raw) return { directory: trimPickerPath(base), path: "" }
     const home = args.home()
-    if (raw === "~") return { directory: trimPickerPath(home || start), path: "" }
-    if (raw.startsWith("~/")) return { directory: trimPickerPath(home || start), path: raw.slice(2) }
+    if (raw === "~") return { directory: trimPickerPath(home || base), path: "" }
+    if (raw.startsWith("~/")) return { directory: trimPickerPath(home || base), path: raw.slice(2) }
     const root = pickerRoot(raw)
     if (root) return { directory: trimPickerPath(root), path: raw.slice(root.length) }
-    return { directory: trimPickerPath(start), path: raw }
+    return { directory: trimPickerPath(base), path: raw }
   }
 
   const directories = async (directory: string) => {
