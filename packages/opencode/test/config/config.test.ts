@@ -8,10 +8,11 @@ import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { Substitution } from "@opencode-ai/core/substitution"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
-import { Auth } from "../../src/auth"
+import { AuthWellKnown } from "@opencode-ai/core/auth-well-known"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -39,6 +40,7 @@ import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
+import { AuthWellKnownTest } from "../fake/auth-well-known"
 import { NpmTest } from "../fake/npm"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
@@ -62,11 +64,16 @@ const json = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: u
   )
 
 const wellKnownAuth = (url: string) =>
-  Layer.mock(Auth.Service)({
-    all: () =>
-      Effect.succeed({
-        [url]: new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
-      }),
+  Layer.mock(AuthWellKnown.Service)({
+    configs: () =>
+      Effect.succeed([
+        {
+          url,
+          source: `${url.replace(/\/+$/, "")}/.well-known/opencode`,
+          dir: `${url.replace(/\/+$/, "")}/.well-known`,
+          content: {},
+        },
+      ]),
   })
 
 function remoteConfigClient(input: {
@@ -99,15 +106,17 @@ function remoteConfigClient(input: {
 
 const configLayer = (
   options: {
-    auth?: Layer.Layer<Auth.Service>
+    auth?: Layer.Layer<AuthWellKnown.Service>
     account?: Layer.Layer<Account.Service>
     client?: HttpClient.HttpClient
   } = {},
 ) =>
   Config.layer.pipe(
     Layer.provide(testFlock),
+    Layer.provide(Substitution.defaultLayer),
+    Layer.provide(options.auth ?? AuthWellKnownTest.empty),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(options.auth ?? AuthTest.empty),
+    Layer.provide(AuthTest.empty),
     Layer.provide(options.account ?? AccountTest.empty),
     Layer.provideMerge(infra),
     Layer.provide(NpmTest.noop),
@@ -1536,6 +1545,7 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
           Config.layer.pipe(
             Layer.provide(testFlock),
             Layer.provide(FSUtil.defaultLayer),
+            Layer.provide(Substitution.defaultLayer),
             Layer.provide(Env.defaultLayer),
             Layer.provide(wellKnownAuth(server.url.origin)),
             Layer.provide(AccountTest.empty),
