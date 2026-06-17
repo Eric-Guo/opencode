@@ -1,4 +1,5 @@
 export * as FileSystem from "./filesystem"
+export { FSUtil as AppFileSystem } from "./fs-util"
 
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
