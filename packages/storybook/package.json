@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "storybook": "storybook dev -p 6006",
-    "build": "storybook build"
+    "storybook": "NODE_OPTIONS=--max-old-space-size=16384 storybook dev -p 6006",
+    "build": "NODE_OPTIONS=--max-old-space-size=16384 storybook build"
   },
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",
@@ -22,7 +22,7 @@
     "@types/react": "18.0.25",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "solid-js": "catalog:",
+    "solid-js": "1.9.14",
     "storybook": "^10.2.13",
     "storybook-solidjs-vite": "^10.0.9",
     "typescript": "catalog:",
