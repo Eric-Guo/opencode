@@ -17,6 +17,7 @@ import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
+import os from "os"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
@@ -108,6 +109,7 @@ export const layer = Layer.effect(
         const whitelistedDirs = [
           Truncate.GLOB,
           path.join(Global.Path.tmp, "*"),
+          ...(process.platform === "win32" ? [path.join(os.tmpdir(), "*")] : []),
           ...skillDirs.map((dir) => path.join(dir, "*")),
           ...referenceDirs.map((dir) => path.join(dir, "*")),
         ]
