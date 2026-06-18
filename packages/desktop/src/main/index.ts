@@ -17,6 +17,7 @@ import { checkAppExists, resolveAppPath } from "./apps"
 import { CHANNEL } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
+import { ensureKimiWebBridgeDaemon } from "./kimi-webbridge"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
@@ -259,6 +260,13 @@ const main = Effect.gen(function* () {
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
 
   yield* Effect.promise(() => app.whenReady())
+
+  void ensureKimiWebBridgeDaemon({
+    logger: {
+      log: (message, meta) => logger.log(message, meta),
+      warn: (message, meta) => logger.warn(message, meta),
+    },
+  })
 
   if (!TEST_ONBOARDING) migrate()
   app.setAsDefaultProtocolClient("opencode")
