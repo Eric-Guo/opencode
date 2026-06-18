@@ -1,6 +1,7 @@
 export * as Agent from "./agent.js"
 
 import path from "path"
+import os from "os"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
@@ -60,6 +61,9 @@ const layer = Layer.effect(
       { action: "external_directory", resource: SHELL_OUTPUT_GLOB(global.data), effect: "allow" },
       { action: "external_directory", resource: TOOL_OUTPUT_GLOB(global.data), effect: "allow" },
       { action: "external_directory", resource: path.join(global.tmp, "*"), effect: "allow" },
+      ...(process.platform === "win32"
+        ? [{ action: "external_directory" as const, resource: path.join(os.tmpdir(), "*"), effect: "allow" as const }]
+        : []),
       { action: "external_directory", resource: path.join(global.config, "*"), effect: "allow" },
     ]
     const state = State.create<Data, Draft>({
