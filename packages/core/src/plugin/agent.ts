@@ -1,6 +1,7 @@
 export * as AgentPlugin from "./agent"
 
 import path from "path"
+import os from "os"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
 import { Global } from "../global"
@@ -103,7 +104,11 @@ export const Plugin = PluginV2.define({
     const agent = yield* AgentV2.Service
     const location = yield* Location.Service
     const worktree = location.directory
-    const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
+    const whitelistedDirs = [
+      TRUNCATION_GLOB,
+      path.join(Global.Path.tmp, "*"),
+      ...(process.platform === "win32" ? [path.join(os.tmpdir(), "*")] : []),
+    ]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
       { action: "external_directory", resource: "*", effect: "ask" },
       ...whitelistedDirs.map(
