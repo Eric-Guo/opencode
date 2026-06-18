@@ -1,5 +1,6 @@
 import { afterEach, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
+import os from "os"
 import path from "path"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -546,12 +547,16 @@ it.instance(
   },
 )
 
-it.instance("global tmp directory children are allowed for external_directory", () =>
+it.instance("tmp directory children are allowed for external_directory", () =>
   Effect.gen(function* () {
     const build = yield* load((svc) => svc.get("build"))
     expect(
       Permission.evaluate("external_directory", path.join(Global.Path.tmp, "scratch"), build!.permission).action,
     ).toBe("allow")
+    expect(
+      Permission.evaluate("external_directory", path.join(os.tmpdir(), "webbridge-req.json"), build!.permission)
+        .action,
+    ).toBe(process.platform === "win32" ? "allow" : "ask")
     expect(Permission.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("ask")
   }),
 )
