@@ -1,3 +1,4 @@
+import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
@@ -235,6 +236,31 @@ describe("Agent", () => {
           expect(Permission.evaluate("subagent", "*", info.permissions).effect).toBe("deny")
         }),
       )
+    }),
+  )
+
+  it.effect("allows host temp external directories", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      yield* AgentPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
+      )
+
+      const build = yield* agent.get(Agent.ID.make("build"))
+      expect(build).toBeDefined()
+      const effect = Permission.evaluate(
+        "external_directory",
+        path.join(os.tmpdir(), "webbridge-req.json"),
+        build!.permissions,
+      ).effect
+      expect(effect).toBe("allow")
     }),
   )
 })
