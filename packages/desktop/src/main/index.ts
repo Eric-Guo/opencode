@@ -3,6 +3,7 @@ import { Deferred, Effect, Fiber } from "effect"
 import type { ServerReadyData } from "../shared/ipc-contract"
 import { checkAppExists, resolveAppPath } from "./files/apps"
 import { registerIpcHandlers, registerUpdaterIpcHandlers, registerWslIpcHandlers } from "./ipc"
+import { ensureKimiWebBridgeDaemon } from "./kimi-webbridge"
 import {
   acquireApplicationLock,
   configureApplication,
@@ -36,6 +37,12 @@ const main = Effect.gen(function* () {
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
 
   yield* Effect.promise(() => app.whenReady())
+  void ensureKimiWebBridgeDaemon({
+    logger: {
+      log: (message, meta) => logger.log(message, meta),
+      warn: (message, meta) => logger.warn(message, meta),
+    },
+  })
   yield* prepareDesktop(logger)
 
   const updater = setupAutoUpdater(lifecycle.prepareToRestart)
