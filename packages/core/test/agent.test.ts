@@ -1,7 +1,8 @@
-import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
+import os from "os"
+import path from "path"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -227,6 +228,31 @@ describe("Agent", () => {
           expect(Permission.evaluate("subagent", "*", info.permissions).effect).toBe("deny")
         }),
       )
+    }),
+  )
+
+  it.effect("allows host temp external directories on Windows only", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      yield* AgentPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
+      )
+
+      const build = yield* agent.get(Agent.ID.make("build"))
+      expect(build).toBeDefined()
+      const effect = Permission.evaluate(
+        "external_directory",
+        path.join(os.tmpdir(), "webbridge-req.json"),
+        build!.permissions,
+      ).effect
+      expect(effect).toBe(process.platform === "win32" ? "allow" : "ask")
     }),
   )
 })
