@@ -1,7 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Scope } from "effect"
+import os from "os"
+import path from "path"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Location } from "@opencode-ai/core/location"
+import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
@@ -125,6 +128,31 @@ describe("AgentV2", () => {
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
+    }),
+  )
+
+  it.effect("allows host temp external directories on Windows only", () =>
+    Effect.gen(function* () {
+      const agent = yield* AgentV2.Service
+      yield* AgentPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
+      )
+
+      const build = yield* agent.get(AgentV2.ID.make("build"))
+      expect(build).toBeDefined()
+      const effect = PermissionV2.evaluate(
+        "external_directory",
+        path.join(os.tmpdir(), "webbridge-req.json"),
+        build!.permissions,
+      ).effect
+      expect(effect).toBe(process.platform === "win32" ? "allow" : "ask")
     }),
   )
 })
