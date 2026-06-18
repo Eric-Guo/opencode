@@ -8,6 +8,7 @@ import {
   registerWslInitialization,
   registerWslIpcHandlers,
 } from "./ipc"
+import { ensureKimiWebBridgeDaemon } from "./kimi-webbridge"
 import {
   acquireApplicationLock,
   configureApplication,
@@ -45,6 +46,12 @@ const main = Effect.gen(function* () {
   const backgroundTask = yield* Effect.promise(() => startBackgroundCli(logger)).pipe(Effect.forkChild)
 
   yield* Effect.promise(() => app.whenReady())
+  void ensureKimiWebBridgeDaemon({
+    logger: {
+      log: (message, meta) => logger.log(message, meta),
+      warn: (message, meta) => logger.warn(message, meta),
+    },
+  })
   yield* prepareDesktop(logger)
 
   const updater = yield* Effect.promise(() => setupAutoUpdater(lifecycle.prepareToRestart))
