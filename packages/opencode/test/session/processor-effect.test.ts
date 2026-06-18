@@ -205,13 +205,16 @@ const passthroughImage = Layer.succeed(
     normalize: (input: SessionV1.FilePart) => Effect.succeed(input),
   }),
 )
-const generatedFileEnv = LayerNode.buildLayer(root, {
-  replacements: [
-    ...replacements,
-    LayerNode.replace(LLM.layer, generatedFileLlm),
-    LayerNode.replace(Image.layer, passthroughImage),
-  ],
-})
+const generatedFileEnv = LayerNodeTree.compile(
+  root,
+  new Map(
+    [
+      ...replacements,
+      LayerNode.replace(LLM.layer, generatedFileLlm),
+      LayerNode.replace(Image.layer, passthroughImage),
+    ].map((item) => [item.source, item.replacement]),
+  ),
+)
 
 const it = testEffect(env)
 const fileIt = testEffect(generatedFileEnv)
