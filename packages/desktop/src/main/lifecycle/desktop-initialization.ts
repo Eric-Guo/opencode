@@ -2,6 +2,7 @@ export * as DesktopInitialization from "./desktop-initialization"
 
 import { app, session } from "electron"
 import { Context, Effect, Layer } from "effect"
+import { ensureKimiWebBridgeDaemon } from "../kimi-webbridge"
 import { DesktopLogging } from "../native/logging"
 import { configureProxyCommandLine, configureSessionProxy } from "../proxy"
 import { getStore } from "../storage/store"
@@ -24,6 +25,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const logging = yield* DesktopLogging.Service
+    const runFork = Effect.runForkWith(yield* Effect.context())
     yield* preferApplicationEnvironment
     const commandLineProxy = configureProxyCommandLine(app.commandLine)
     if (commandLineProxy)
@@ -46,6 +48,14 @@ export const layer = Layer.effect(
       }),
     )
     yield* Effect.promise(() => app.whenReady())
+    yield* Effect.sync(() => {
+      void ensureKimiWebBridgeDaemon({
+        logger: {
+          log: (message, meta) => runFork(Effect.logInfo(message, meta)),
+          warn: (message, meta) => runFork(Effect.logWarning(message, meta)),
+        },
+      })
+    })
     yield* prepareDesktop
     marks.init = Date.now()
     return Service.of({
