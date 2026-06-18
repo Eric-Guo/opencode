@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "storybook": "storybook dev -p 6006",
-    "build": "storybook build"
+    "storybook": "NODE_OPTIONS=--max-old-space-size=16384 storybook dev -p 6006",
+    "build": "NODE_OPTIONS=--max-old-space-size=16384 storybook build"
   },
   "devDependencies": {
     "@opencode-ai/client": "workspace:*",
