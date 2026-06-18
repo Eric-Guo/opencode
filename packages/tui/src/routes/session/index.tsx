@@ -427,41 +427,48 @@ export function Session() {
     const maxTop = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
     const filename = `session-${route.sessionID.slice(0, 8)}-render-state-${timestamp}.json`
     renderer.dumpBuffers(timestamp)
-    await Filesystem.writeJson(path.join(process.cwd(), filename), {
-      capturedAt: timestamp,
-      channel: InstallationChannel,
-      version: InstallationVersion,
-      sessionID: route.sessionID,
-      scroll: {
-        top: scroll.scrollTop,
-        height: scroll.scrollHeight,
-        viewportHeight: scroll.viewport.height,
-        maxTop,
-        atBottom: scroll.scrollTop >= maxTop,
-      },
-      messages: messages().map((message) => ({
-        id: message.id,
-        role: message.role,
-        parts: (sync.data.part[message.id] ?? []).map((part) => {
-          const renderable = scroll.findDescendantById(`text-${part.id}`)
-          return {
-            id: part.id,
-            type: part.type,
-            ...((part.type === "text" || part.type === "reasoning") && { textLength: part.text.length }),
-            ...(renderable && {
-              renderable: {
-                id: renderable.id,
-                x: renderable.x,
-                y: renderable.y,
-                width: renderable.width,
-                height: renderable.height,
-                visible: renderable.visible,
-              },
+    await writeExport(
+      path.join(process.cwd(), filename),
+      JSON.stringify(
+        {
+          capturedAt: timestamp,
+          channel: InstallationChannel,
+          version: InstallationVersion,
+          sessionID: route.sessionID,
+          scroll: {
+            top: scroll.scrollTop,
+            height: scroll.scrollHeight,
+            viewportHeight: scroll.viewport.height,
+            maxTop,
+            atBottom: scroll.scrollTop >= maxTop,
+          },
+          messages: messages().map((message) => ({
+            id: message.id,
+            role: message.role,
+            parts: (sync.data.part[message.id] ?? []).map((part) => {
+              const renderable = scroll.findDescendantById(`text-${part.id}`)
+              return {
+                id: part.id,
+                type: part.type,
+                ...((part.type === "text" || part.type === "reasoning") && { textLength: part.text.length }),
+                ...(renderable && {
+                  renderable: {
+                    id: renderable.id,
+                    x: renderable.x,
+                    y: renderable.y,
+                    width: renderable.width,
+                    height: renderable.height,
+                    visible: renderable.visible,
+                  },
+                }),
+              }
             }),
-          }
-        }),
-      })),
-    })
+          })),
+        },
+        null,
+        2,
+      ),
+    )
     toast.show({ message: `Session render state written to ${filename}`, variant: "success" })
   }
 
