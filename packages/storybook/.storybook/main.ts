@@ -2,7 +2,7 @@ import { defineMain } from "storybook-solidjs-vite"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import tailwindcss from "@tailwindcss/vite"
-import { playgroundCss } from "./playground-css-plugin"
+import { playgroundCss } from "./playground-css-plugin.ts"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const ui = path.resolve(here, "../../ui")
