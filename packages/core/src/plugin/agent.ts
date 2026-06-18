@@ -1,6 +1,7 @@
 export * as AgentPlugin from "./agent"
 
 import path from "path"
+import os from "os"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
@@ -100,7 +101,11 @@ export const Plugin = define({
   id: "agent",
   effect: Effect.fn(function* (ctx) {
     const worktree = ctx.location.directory
-    const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
+    const whitelistedDirs = [
+      TRUNCATION_GLOB,
+      path.join(Global.Path.tmp, "*"),
+      ...(process.platform === "win32" ? [path.join(os.tmpdir(), "*")] : []),
+    ]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
       { action: "external_directory", resource: "*", effect: "ask" },
       ...whitelistedDirs.map(
