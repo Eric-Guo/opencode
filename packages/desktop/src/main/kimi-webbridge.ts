@@ -13,13 +13,17 @@ type CommandResult = {
   stderr: string
 }
 
+type CommandOptions = {
+  timeout?: number
+}
+
 type Dependencies = {
   homeDir: string
   logger: Logger
   platform: NodeJS.Platform
   readFile: (path: string) => Promise<string>
   access: (path: string) => Promise<void>
-  execFile: (file: string, args: string[]) => Promise<CommandResult>
+  execFile: (file: string, args: string[], options?: CommandOptions) => Promise<CommandResult>
   processRunning: (pid: number) => boolean
 }
 
@@ -36,12 +40,15 @@ type DaemonStatus = {
 }
 
 const commandTimeout = 5_000
+const installTimeout = 120_000
 
 export async function ensureKimiWebBridgeDaemon(options: EnsureOptions = {}) {
   const deps = createDependencies(options)
   const pidFile = joinPath(deps, deps.homeDir, ".kimi-webbridge", "daemon.pid")
   const pid = await readDaemonPid(pidFile, deps)
-  const command = await resolveCommand(deps)
+  const command = await ensureCommand(deps)
+  if (!command) return
+
   const status = await readStatus(command, deps)
 
   if (status.running) {
@@ -122,7 +129,63 @@ async function resolveCommand(deps: Dependencies) {
     ),
   )
 
-  return available.find((candidate) => candidate !== undefined) ?? (deps.platform === "win32" ? installBin : commandName(deps.platform))
+  return available.find((candidate) => candidate !== undefined)
+}
+
+async function ensureCommand(deps: Dependencies) {
+  const command = await resolveCommand(deps)
+  if (command) return command
+
+  const installer = installCommand(deps.platform)
+  if (!installer) {
+    deps.logger.warn?.("kimi-webbridge command not found and automatic install is unsupported", {
+      platform: deps.platform,
+    })
+    return
+  }
+
+  deps.logger.log?.("installing kimi-webbridge", {
+    platform: deps.platform,
+  })
+  const installed = await runCommand(installer.file, installer.args, deps, { timeout: installTimeout })
+  if (!installed.ok) {
+    deps.logger.warn?.("failed to install kimi-webbridge", {
+      platform: deps.platform,
+      error: installed.error,
+      stderr: installed.stderr,
+    })
+    return
+  }
+
+  const nextCommand = await resolveCommand(deps)
+  if (nextCommand) return nextCommand
+
+  deps.logger.warn?.("kimi-webbridge install finished but command is still missing", {
+    platform: deps.platform,
+    stdout: installed.stdout,
+    stderr: installed.stderr,
+  })
+}
+
+function installCommand(platform: NodeJS.Platform) {
+  if (platform === "win32") {
+    return {
+      file: "powershell.exe",
+      args: [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "irm https://cdn.kimi.com/webbridge/install.ps1 | iex",
+      ],
+    }
+  }
+  if (platform === "darwin") {
+    return {
+      file: "bash",
+      args: ["-lc", "curl -fsSL https://cdn.kimi.com/webbridge/install.sh | bash"],
+    }
+  }
 }
 
 function commandName(platform: NodeJS.Platform) {
@@ -162,8 +225,8 @@ async function readStatus(command: string, deps: Dependencies): Promise<DaemonSt
   return { running: false }
 }
 
-async function runCommand(command: string, args: string[], deps: Dependencies) {
-  return deps.execFile(command, args).then(
+async function runCommand(command: string, args: string[], deps: Dependencies, options?: CommandOptions) {
+  return deps.execFile(command, args, options).then(
     (result) => ({ ok: true as const, stdout: result.stdout, stderr: result.stderr }),
     (error) => ({
       ok: false as const,
@@ -191,9 +254,9 @@ function parseStatus(stdout: string): DaemonStatus | undefined {
   }
 }
 
-function execFileUtf8(file: string, args: string[]) {
+function execFileUtf8(file: string, args: string[], options?: CommandOptions) {
   return new Promise<CommandResult>((resolve, reject) => {
-    execFile(file, args, { encoding: "utf8", timeout: commandTimeout }, (error, stdout, stderr) => {
+    execFile(file, args, { encoding: "utf8", timeout: options?.timeout ?? commandTimeout }, (error, stdout, stderr) => {
       if (error) {
         reject(Object.assign(error, { stdout, stderr }))
         return
