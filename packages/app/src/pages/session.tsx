@@ -1713,6 +1713,36 @@ export default function Page() {
 
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
 
+  let sessionPoll: number | undefined
+  createEffect(
+    on(
+      () => {
+        const id = params.id
+        return [sdk().directory, id, id ? busy(id) : false] as const
+      },
+      ([directory, id, active]) => {
+        if (sessionPoll !== undefined) {
+          clearInterval(sessionPoll)
+          sessionPoll = undefined
+        }
+        if (!id || !active) return
+
+        const refresh = () => {
+          if (sdk().directory !== directory || params.id !== id || !busy(id)) return
+          void sync().session.sync(id, { force: true })
+        }
+
+        refresh()
+        sessionPoll = window.setInterval(refresh, 1500)
+      },
+      { defer: true },
+    ),
+  )
+  onCleanup(() => {
+    if (sessionPoll === undefined) return
+    clearInterval(sessionPoll)
+  })
+
   const queuedFollowups = createMemo(() => {
     const id = params.id
     if (!id) return emptyFollowups

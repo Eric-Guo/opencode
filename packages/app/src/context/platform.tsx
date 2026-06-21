@@ -27,6 +27,13 @@ export type FatalRendererErrorLog = {
   os?: DesktopOS
 }
 
+export type RendererLogLevel = "info" | "warn" | "error"
+export type RendererLog = {
+  level: RendererLogLevel
+  message: string
+  data?: Record<string, unknown>
+}
+
 type PlatformBase = {
   /** App version */
   version?: string
@@ -117,6 +124,9 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Record a renderer diagnostic message in platform logs (desktop only) */
+  recordRendererLog?(log: RendererLog): Promise<void>
 }
 
 export type Platform = PlatformBase &
