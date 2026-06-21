@@ -39,6 +39,11 @@ export type FatalRendererError = {
   platform: string
   os?: string
 }
+export type RendererLog = {
+  level: "info" | "warn" | "error"
+  message: string
+  data?: Record<string, unknown>
+}
 
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
@@ -99,4 +104,5 @@ export type ElectronAPI = {
   setBackgroundColor: (color: string) => Promise<void>
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
+  recordRendererLog: (log: RendererLog) => Promise<void>
 }

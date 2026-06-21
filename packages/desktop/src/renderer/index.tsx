@@ -229,6 +229,7 @@ const createPlatform = (): Platform => {
     exportDebugLogs: () => window.api.exportDebugLogs(),
 
     recordFatalRendererError: (error) => window.api.recordFatalRendererError(error),
+    recordRendererLog: (log) => window.api.recordRendererLog(log),
 
     restart: async () => {
       await window.api.killSidecar().catch(() => undefined)
