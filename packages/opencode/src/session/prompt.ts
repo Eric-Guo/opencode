@@ -1200,23 +1200,34 @@ const layer = Layer.effect(
           }
           yield* sessions.updateMessage(msg)
 
-          const finalizeInterruptedAssistant = Effect.gen(function* () {
-            if (msg.time.completed) return
-            msg.error ??= MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
-              providerID: msg.providerID,
-              aborted: true,
+          const finalizeAssistantFailure = (error: unknown, aborted: boolean) =>
+            Effect.gen(function* () {
+              if (!msg.error) {
+                msg.error = MessageV2.fromError(error, {
+                  providerID: msg.providerID,
+                  aborted,
+                })
+              }
+              if (!msg.time.completed) {
+                msg.time.completed = Date.now()
+              }
+              yield* sessions.updateMessage(msg)
             })
-            msg.time.completed = Date.now()
-            yield* sessions.updateMessage(msg)
-          })
-
+          const finalizeInterruptedAssistant = finalizeAssistantFailure(
+            new DOMException("Aborted", "AbortError"),
+            true,
+          )
           const handle = yield* processor
             .create({
               assistantMessage: msg,
               sessionID,
               model,
             })
-            .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
+            .pipe(
+              Effect.tapError((error) => finalizeAssistantFailure(error, false)),
+              Effect.tapDefect((defect) => finalizeAssistantFailure(defect, false)),
+              Effect.onInterrupt(() => finalizeInterruptedAssistant),
+            )
 
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
@@ -1328,8 +1339,13 @@ const layer = Layer.effect(
             }
             return "continue" as const
           }).pipe(
+            Effect.onExit((exit) => {
+              if (Exit.isSuccess(exit)) return Effect.void
+              if (msg.time.completed || msg.error) return Effect.void
+              if (Cause.hasInterruptsOnly(exit.cause)) return finalizeInterruptedAssistant
+              return finalizeAssistantFailure(Cause.squash(exit.cause), false)
+            }),
             Effect.ensuring(instruction.clear(handle.message.id)),
-            Effect.onInterrupt(() => finalizeInterruptedAssistant),
           )
           if (outcome === "break") break
           continue
