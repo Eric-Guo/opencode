@@ -12,6 +12,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
 import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
@@ -28,6 +29,23 @@ type PendingPrompt = {
 }
 
 const pending = new Map<string, PendingPrompt>()
+
+function promptLogValue(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message, stack: value.stack }
+  }
+  if (!value || typeof value !== "object") return value
+  if (seen.has(value)) return "[Circular]"
+  seen.add(value)
+  if (Array.isArray(value)) return value.map((item) => promptLogValue(item, seen))
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, promptLogValue(item, seen)]),
+  )
+}
+
+function promptLogData(data: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(data).map(([key, value]) => [key, promptLogValue(value)]))
+}
 
 export type FollowupDraft = {
   sessionID: string
@@ -175,7 +193,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
 type PromptSubmitInput = {
   prompt: ReturnType<typeof usePrompt>
-  info: Accessor<{ id: string } | undefined>
+  info: Accessor<Session | undefined>
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
@@ -215,6 +233,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const prompt = input.prompt
   const layout = useLayout()
   const language = useLanguage()
+  const platform = usePlatform()
   const params = useParams()
   const [search] = useSearchParams<{ draftId?: string }>()
   const server = useServer()
@@ -228,6 +247,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
     if (err instanceof Error) return err.message
     return language.t("common.requestFailed")
+  }
+
+  const logPromptSubmit = (level: "warn" | "error", message: string, data: Record<string, unknown>) => {
+    const serialized = promptLogData(data)
+    if (level === "error") console.error(message, serialized)
+    else console.warn(message, serialized)
+    void platform.recordRendererLog?.({ level, message, data: serialized }).catch(() => undefined)
   }
 
   const abort = async () => {
@@ -336,6 +362,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           .create({ directory: projectDirectory })
           .then((x) => x.data)
           .catch((err) => {
+            logPromptSubmit("error", "[prompt-submit] failed to create worktree", {
+              err,
+              projectDirectory,
+              worktreeSelection,
+              isNewSession,
+              mode,
+              currentSessionID: params.id,
+            })
             showToast({
               title: language.t("prompt.toast.worktreeCreateFailed.title"),
               description: errorMessage(err),
@@ -344,6 +378,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
 
         if (!createdWorktree?.directory) {
+          logPromptSubmit("error", "[prompt-submit] worktree creation returned no directory", {
+            createdWorktree,
+            projectDirectory,
+            worktreeSelection,
+            isNewSession,
+            mode,
+            currentSessionID: params.id,
+          })
           showToast({
             title: language.t("prompt.toast.worktreeCreateFailed.title"),
             description: language.t("common.requestFailed"),
@@ -370,11 +412,51 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     let session = input.info()
+    if (!session && params.id) {
+      logPromptSubmit("warn", "[prompt-submit] session missing from store, attempting recovery", {
+        projectDirectory,
+        sessionDirectory,
+        currentSessionID: params.id,
+        mode,
+      })
+      session = await client.session
+        .get({ sessionID: params.id })
+        .then((x) => x.data ?? undefined)
+        .catch((err) => {
+          logPromptSubmit("error", "[prompt-submit] failed to recover existing session", {
+            err,
+            projectDirectory,
+            sessionDirectory,
+            currentSessionID: params.id,
+            mode,
+            promptTextLength: text.length,
+            imageCount: images.length,
+            commentCount: input.commentCount(),
+          })
+          return undefined
+        })
+      if (session) seed(sessionDirectory, session)
+    }
     if (!session && isNewSession) {
       const created = await client.session
         .create()
         .then((x) => x.data ?? undefined)
         .catch((err) => {
+          logPromptSubmit("error", "[prompt-submit] failed to create session", {
+            err,
+            projectDirectory,
+            sessionDirectory,
+            worktreeSelection,
+            isNewSession,
+            mode,
+            currentSessionID: params.id,
+            promptTextLength: text.length,
+            imageCount: images.length,
+            commentCount: input.commentCount(),
+            modelID: currentModel.id,
+            providerID: currentModel.provider.id,
+            agent: currentAgent.name,
+          })
           showToast({
             title: language.t("prompt.toast.sessionCreateFailed.title"),
             description: errorMessage(err),
@@ -395,9 +477,39 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             sessionId: session.id,
           })
         else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+      } else {
+        logPromptSubmit("error", "[prompt-submit] session creation returned no session", {
+          projectDirectory,
+          sessionDirectory,
+          worktreeSelection,
+          isNewSession,
+          mode,
+          currentSessionID: params.id,
+          promptTextLength: text.length,
+          imageCount: images.length,
+          commentCount: input.commentCount(),
+          modelID: currentModel.id,
+          providerID: currentModel.provider.id,
+          agent: currentAgent.name,
+        })
       }
     }
     if (!session) {
+      logPromptSubmit("error", "[prompt-submit] missing session before submit", {
+        projectDirectory,
+        sessionDirectory,
+        worktreeSelection,
+        isNewSession,
+        mode,
+        currentSessionID: params.id,
+        inputSessionID: input.info()?.id,
+        promptTextLength: text.length,
+        imageCount: images.length,
+        commentCount: input.commentCount(),
+        modelID: currentModel.id,
+        providerID: currentModel.provider.id,
+        agent: currentAgent.name,
+      })
       showToast({
         title: language.t("prompt.toast.promptSendFailed.title"),
         description: language.t("prompt.toast.promptSendFailed.description"),
@@ -583,6 +695,21 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
     }).catch((err) => {
+      logPromptSubmit("error", "[prompt-submit] failed to send followup draft", {
+        err,
+        sessionID: session.id,
+        projectDirectory,
+        sessionDirectory,
+        isNewSession,
+        mode,
+        messageID,
+        promptTextLength: text.length,
+        imageCount: images.length,
+        commentCount: input.commentCount(),
+        modelID: currentModel.id,
+        providerID: currentModel.provider.id,
+        agent: currentAgent.name,
+      })
       pending.delete(pendingKey(session.id))
       if (sessionDirectory === projectDirectory) {
         sync().set("session_status", session.id, { type: "idle" })
