@@ -2396,7 +2396,6 @@ export default function LegacyLayout(props: ParentProps) {
         </div>
         {import.meta.env.DEV && import.meta.env.VITE_DISABLE_DEBUG_BAR !== "1" && <DebugBar />}
       </div>
-      <HelpButton />
       <ToastRegion v2={false} />
     </div>
   )
