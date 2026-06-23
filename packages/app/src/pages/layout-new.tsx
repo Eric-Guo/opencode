@@ -31,7 +31,6 @@ export default function NewLayout(props: ParentProps) {
         {props.children}
       </main>
       {import.meta.env.DEV && <DebugBar />}
-      <HelpButton />
       <ToastRegion v2 />
     </div>
   )
