@@ -120,7 +120,6 @@ function ResolvedTargetSessionRoute() {
     return {
       queryKey: [sdk.scope, "session-route", id] as const,
       enabled: !placement(),
-      retry: false,
       queryFn: async () => {
         const session = (await sdk.client.session.get({ sessionID: id })).data!
         const root = await rootSession(session, (sessionID) =>
