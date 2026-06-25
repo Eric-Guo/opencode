@@ -12,6 +12,7 @@ import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
 import { useGlobal } from "@/context/global"
+import { KeyedOwner } from "@/components/keyed-owner"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -51,18 +52,22 @@ export function DirectoryDataProvider(
   )
 
   return (
-    <DataProvider
-      data={sync().data}
-      directory={directory()}
-      onNavigateToSession={(sessionID: string) => {
-        const server = props.server?.()
-        if (server && params.id) global.sessionPlacement.inherit(server, params.id, sessionID)
-        navigate(href(sessionID))
-      }}
-      onSessionHref={href}
-    >
-      <LocalProvider>{props.children}</LocalProvider>
-    </DataProvider>
+    <KeyedOwner value={directory()}>
+      {(directory) => (
+        <DataProvider
+          data={sync().data}
+          directory={directory}
+          onNavigateToSession={(sessionID: string) => {
+            const server = props.server?.()
+            if (server && params.id) global.sessionPlacement.inherit(server, params.id, sessionID)
+            navigate(href(sessionID))
+          }}
+          onSessionHref={href}
+        >
+          <LocalProvider>{props.children}</LocalProvider>
+        </DataProvider>
+      )}
+    </KeyedOwner>
   )
 }
 
