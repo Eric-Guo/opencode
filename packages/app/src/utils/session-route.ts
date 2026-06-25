@@ -16,10 +16,6 @@ export function requireServerKey(segment: string | undefined) {
   return ServerConnection.Key.make(key)
 }
 
-export function targetSessionProviderKey(input: { server: ServerConnection.Key; sessionID: string }) {
-  return input.server
-}
-
 type SessionParent = { id: string; parentID?: string }
 
 export async function rootSession(session: SessionParent, get: (sessionID: string) => Promise<SessionParent>) {

@@ -51,13 +51,7 @@ import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import {
-  legacySessionHref,
-  requireServerKey,
-  rootSession,
-  sessionHref,
-  targetSessionProviderKey,
-} from "./utils/session-route"
+import { legacySessionHref, requireServerKey, rootSession, sessionHref } from "./utils/session-route"
 
 import Session from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
@@ -101,10 +95,7 @@ const TargetSessionRoute = () => {
   })
 
   return (
-    <Show
-      when={targetSessionProviderKey({ server: requireServerKey(params.serverKey), sessionID: params.id })}
-      keyed
-    >
+    <Show when={requireServerKey(params.serverKey)} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
           <ResolvedTargetSessionRoute />
