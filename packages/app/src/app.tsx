@@ -10,7 +10,7 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
-import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
   type Component,
@@ -113,37 +113,29 @@ function ResolvedTargetSessionRoute() {
   const serverSDK = useServerSDK()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
   const placement = createMemo(() => global.sessionPlacement.get(serverKey(), params.id))
-  const [resolved] = createResource(
-    () => {
-      if (placement()) return
-      return { id: params.id, sdk: serverSDK() }
-    },
-    async ({ id, sdk }) => {
-      const session = (await sdk.client.session.get({ sessionID: id })).data!
+  const resolved = useQuery(() => ({
+    queryKey: [serverSDK().scope, "session-route", params.id] as const,
+    enabled: !placement(),
+    queryFn: async () => {
+      const session = (await serverSDK().client.session.get({ sessionID: params.id })).data!
       const root = await rootSession(session, (sessionID) =>
-        sdk.client.session.get({ sessionID }).then((result) => result.data!),
+        serverSDK()
+          .client.session.get({ sessionID })
+          .then((result) => result.data!),
       )
-      return {
-        id,
-        placement: global.sessionPlacement.set({
-          server: serverKey(),
-          leafID: session.id,
-          rootID: root.id,
-          directory: session.directory,
-        }),
-      }
+      return global.sessionPlacement.set({
+        server: serverKey(),
+        leafID: session.id,
+        rootID: root.id,
+        directory: session.directory,
+      })
     },
-  )
-  const resolvedPlacement = createMemo(() => {
-    const current = resolved()
-    if (current?.id !== params.id) return
-    return current.placement
-  })
-  const directory = createMemo(() => placement()?.directory ?? resolvedPlacement()?.directory)
+  }))
+  const directory = createMemo(() => placement()?.directory ?? resolved.data?.directory)
   const targetDirectory = () => directory()!
 
   createEffect(() => {
-    const current = placement() ?? resolvedPlacement()
+    const current = placement() ?? resolved.data
     if (!current) return
     tabs.addSessionTab({
       server: serverKey(),
