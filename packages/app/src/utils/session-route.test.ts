@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ServerConnection } from "@/context/server"
-import { legacySessionHref, requireServerKey, rootSession, sessionHref } from "./session-route"
+import { legacySessionHref, requireServerKey, rootSession, sessionHref, targetSessionProviderKey } from "./session-route"
 
 describe("session routes", () => {
   test("builds and decodes a server-keyed session route", () => {
@@ -18,6 +18,20 @@ describe("session routes", () => {
   test("builds the legacy directory-keyed route", () => {
     expect(legacySessionHref("/Users/example/project", "session-1")).toBe(
       "/L1VzZXJzL2V4YW1wbGUvcHJvamVjdA/session/session-1",
+    )
+  })
+
+  test("keeps target session providers mounted while changing sessions on the same server", () => {
+    const server = ServerConnection.Key.make("sidecar")
+
+    expect(targetSessionProviderKey({ server, sessionID: "session-1" })).toBe(
+      targetSessionProviderKey({ server, sessionID: "session-2" }),
+    )
+    expect(targetSessionProviderKey({ server, sessionID: "session-1" })).not.toBe(
+      targetSessionProviderKey({
+        server: ServerConnection.Key.make("https://example.com"),
+        sessionID: "session-1",
+      }),
     )
   })
 
