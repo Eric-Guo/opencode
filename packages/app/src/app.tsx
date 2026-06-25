@@ -123,19 +123,27 @@ function ResolvedTargetSessionRoute() {
       const root = await rootSession(session, (sessionID) =>
         sdk.client.session.get({ sessionID }).then((result) => result.data!),
       )
-      return global.sessionPlacement.set({
-        server: serverKey(),
-        leafID: session.id,
-        rootID: root.id,
-        directory: session.directory,
-      })
+      return {
+        id,
+        placement: global.sessionPlacement.set({
+          server: serverKey(),
+          leafID: session.id,
+          rootID: root.id,
+          directory: session.directory,
+        }),
+      }
     },
   )
-  const directory = createMemo(() => placement()?.directory ?? resolved()?.directory)
+  const resolvedPlacement = createMemo(() => {
+    const current = resolved()
+    if (current?.id !== params.id) return
+    return current.placement
+  })
+  const directory = createMemo(() => placement()?.directory ?? resolvedPlacement()?.directory)
   const targetDirectory = () => directory()!
 
   createEffect(() => {
-    const current = placement() ?? resolved()
+    const current = placement() ?? resolvedPlacement()
     if (!current) return
     tabs.addSessionTab({
       server: serverKey(),
