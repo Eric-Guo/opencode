@@ -95,7 +95,7 @@ const TargetSessionRoute = () => {
   })
 
   return (
-    <Show when={`${params.serverKey}\0${params.id}`} keyed>
+    <Show when={requireServerKey(params.serverKey)} keyed>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>
           <ResolvedTargetSessionRoute />
@@ -294,7 +294,7 @@ function ServerScopedProviders(props: ServerScopedShellProps) {
     <PermissionProvider directory={props.directory}>
       <LayoutProvider>
         <NotificationProvider directory={props.directory} sessionID={props.sessionID}>
-          <ModelsProvider>{props.children}</ModelsProvider>
+          <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
         </NotificationProvider>
       </LayoutProvider>
     </PermissionProvider>
@@ -323,7 +323,7 @@ function TargetServerScopedProviders(props: ServerScopedShellProps) {
   return (
     <PermissionProvider directory={props.directory}>
       <NotificationProvider directory={props.directory} sessionID={props.sessionID}>
-        <ModelsProvider>{props.children}</ModelsProvider>
+        <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
       </NotificationProvider>
     </PermissionProvider>
   )
