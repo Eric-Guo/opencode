@@ -113,25 +113,29 @@ function ResolvedTargetSessionRoute() {
   const serverSDK = useServerSDK()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
   const placement = createMemo(() => global.sessionPlacement.get(serverKey(), params.id))
-  const resolved = useQuery(() => ({
-    queryKey: [serverSDK().scope, "session-route", params.id] as const,
-    enabled: !placement(),
-    queryFn: async () => {
-      const session = (await serverSDK().client.session.get({ sessionID: params.id })).data!
-      const root = await rootSession(session, (sessionID) =>
-        serverSDK()
-          .client.session.get({ sessionID })
-          .then((result) => result.data!),
-      )
-      return global.sessionPlacement.set({
-        server: serverKey(),
-        leafID: session.id,
-        rootID: root.id,
-        directory: session.directory,
-      })
-    },
-  }))
+  const resolved = useQuery(() => {
+    const sdk = serverSDK()
+    const server = serverKey()
+    const id = params.id
+    return {
+      queryKey: [sdk.scope, "session-route", id] as const,
+      enabled: !placement(),
+      queryFn: async () => {
+        const session = (await sdk.client.session.get({ sessionID: id })).data!
+        const root = await rootSession(session, (sessionID) =>
+          sdk.client.session.get({ sessionID }).then((result) => result.data!),
+        )
+        return global.sessionPlacement.set({
+          server,
+          leafID: session.id,
+          rootID: root.id,
+          directory: session.directory,
+        })
+      },
+    }
+  })
   const directory = createMemo(() => placement()?.directory ?? resolved.data?.directory)
+  const error = createMemo(() => (placement() ? undefined : resolved.error))
   const targetDirectory = () => directory()!
 
   createEffect(() => {
@@ -145,7 +149,7 @@ function ResolvedTargetSessionRoute() {
 
   return (
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
-      <Show when={!resolved.error} fallback={<ErrorPage error={resolved.error} />}>
+      <Show when={!error()} fallback={<ErrorPage error={error()} />}>
         <Show when={directory()}>
           <Show
             when={settings.general.newLayoutDesigns()}
