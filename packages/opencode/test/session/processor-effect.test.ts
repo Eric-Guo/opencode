@@ -207,8 +207,8 @@ const passthroughImage = Layer.succeed(
 const generatedFileEnv = LayerNode.buildLayer(root, {
   replacements: [
     ...replacements,
-    LayerNode.replace(LLM.node, generatedFileLlm),
-    LayerNode.replace(Image.node, passthroughImage),
+    LayerNode.replace(LLM.layer, generatedFileLlm),
+    LayerNode.replace(Image.layer, passthroughImage),
   ],
 })
 
