@@ -28,6 +28,8 @@ type OptimisticItem = {
   parts: Part[]
 }
 
+type SessionEvent = { type: string; properties?: unknown }
+
 const hasParts = (parts: Part[] | undefined, want: Part[]) => {
   if (!parts) return want.length === 0
   return want.every((part) => Binary.search(parts, part.id, (item) => item.id).found)
@@ -95,6 +97,7 @@ export function createServerSession(client: OpencodeClient) {
   const inflightDiff = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
+  const initialEvents = new Map<string, SessionEvent[]>()
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
   const pinned = new Map<string, number>()
@@ -265,19 +268,19 @@ export function createServerSession(client: OpencodeClient) {
     if (meta.loading[sessionID]) return
     const generation = generations.get(sessionID) ?? 0
     const initiallyUnloaded = data.message[sessionID] === undefined
+    if (initiallyUnloaded) initialEvents.set(sessionID, [])
     setMeta("loading", sessionID, true)
     await fetchMessages(sessionID, limit, before)
       .then((page) => {
         if ((generations.get(sessionID) ?? 0) !== generation) return
         const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
         next.confirmed.forEach((messageID) => clearOptimistic(sessionID, messageID))
-        const messages = mode === "prepend"
-          ? merge(data.message[sessionID] ?? [], next.session)
-          : initiallyUnloaded
-            ? merge(next.session, data.message[sessionID] ?? [])
-            : next.session
+        const messages = mode === "prepend" ? merge(data.message[sessionID] ?? [], next.session) : next.session
+        const events = initialEvents.get(sessionID) ?? []
+        initialEvents.delete(sessionID)
         batch(() => {
-          setData("message", sessionID, reconcile(messages, { key: "id" }))
+          if (initiallyUnloaded) setData("message", sessionID, messages)
+          if (!initiallyUnloaded) setData("message", sessionID, reconcile(messages, { key: "id" }))
           for (const item of next.part) {
             const parts = item.part.filter((part) => !SKIP_PARTS.has(part.type))
             if (parts.length) setData("part", item.id, reconcile(parts, { key: "id" }))
@@ -287,8 +290,10 @@ export function createServerSession(client: OpencodeClient) {
           setMeta("complete", sessionID, next.complete)
           setMeta("at", sessionID, Date.now())
         })
+        events.forEach(apply)
       })
       .finally(() => {
+        initialEvents.delete(sessionID)
         if ((generations.get(sessionID) ?? 0) === generation) setMeta("loading", sessionID, false)
       })
   }
@@ -318,7 +323,7 @@ export function createServerSession(client: OpencodeClient) {
     await runInflight(inflight, sessionID, () => loadMessages(sessionID, limit))
   }
 
-  const eventSessionID = (event: { type: string; properties?: unknown }) => {
+  const eventSessionID = (event: SessionEvent) => {
     const properties = event.properties
     if (!properties || typeof properties !== "object") return
     if ("sessionID" in properties && typeof properties.sessionID === "string") return properties.sessionID
@@ -340,9 +345,10 @@ export function createServerSession(client: OpencodeClient) {
       return properties.part.sessionID
   }
 
-  const apply = (event: { type: string; properties?: unknown }) => {
+  const apply = (event: SessionEvent) => {
     const eventID = eventSessionID(event)
     if (eventID) {
+      if (event.type.startsWith("message.")) initialEvents.get(eventID)?.push(event)
       touch(eventID)
       if (!data.info[eventID]) void resolve(eventID).catch(() => {})
     }
