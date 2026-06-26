@@ -326,10 +326,11 @@ export function createServerSession(client: OpencodeClient) {
             ? merge(data.message[sessionID] ?? [], next.session)
             : next.session
         ).filter((message) => !removed?.removedMessages.has(message.id))
+        const messageIDs = new Set(messages.map((message) => message.id))
         batch(() => {
           setData("message", sessionID, reconcile(messages, { key: "id" }))
           for (const item of next.part) {
-            if (!messages.some((message) => message.id === item.id)) continue
+            if (!messageIDs.has(item.id)) continue
             const fetched = item.part.filter((part) => !SKIP_PARTS.has(part.type))
             const parts = initial
               ? mergeConcurrent(fetched, data.part[item.id] ?? [], initial.part.get(item.id) ?? new Map())
