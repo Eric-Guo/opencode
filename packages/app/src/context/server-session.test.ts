@@ -150,6 +150,46 @@ describe("server session", () => {
     expect(store.data.part[kept.id]).toBeUndefined()
   })
 
+  test("does not restore removed optimistic content on refresh", async () => {
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const part: Part = {
+      id: "part",
+      sessionID: "child",
+      messageID: message.id,
+      type: "text",
+      text: "removed",
+    }
+    const kept = { ...message, id: "kept" }
+    const keptPart = { ...part, id: "kept-part", messageID: kept.id }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: async () => ({ data: [{ info: kept, parts: [] }], response: { headers: new Headers() } }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    store.optimistic.add({ sessionID: "child", message, parts: [part] })
+    store.optimistic.add({ sessionID: "child", message: kept, parts: [keptPart] })
+
+    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
+    store.apply({
+      type: "message.part.removed",
+      properties: { sessionID: "child", messageID: kept.id, partID: keptPart.id },
+    })
+    await store.sync("child", { force: true })
+
+    expect(store.data.message.child).toEqual([kept])
+    expect(store.data.part[message.id]).toBeUndefined()
+    expect(store.data.part[kept.id]).toBeUndefined()
+  })
+
   test("applies events without a directory store", () => {
     const ctx = setup({})
     ctx.store.apply({ type: "session.created", properties: { info: session("root") } })

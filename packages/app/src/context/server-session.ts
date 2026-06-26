@@ -223,6 +223,13 @@ export function createServerSession(client: OpencodeClient) {
     if (items.size === 0) optimistic.delete(sessionID)
   }
 
+  const clearOptimisticPart = (sessionID: string, messageID: string, partID: string) => {
+    const items = optimistic.get(sessionID)
+    const item = items?.get(messageID)
+    if (!item) return
+    items?.set(messageID, { ...item, parts: item.parts.filter((part) => part.id !== partID) })
+  }
+
   const evict = (sessionIDs: string[]) => {
     if (sessionIDs.length === 0) return
     sessionIDs.forEach((sessionID) => {
@@ -451,6 +458,7 @@ export function createServerSession(client: OpencodeClient) {
       case "message.removed": {
         const props = event.properties as { sessionID: string; messageID: string }
         initialLoads.get(props.sessionID)?.removedMessages.add(props.messageID)
+        clearOptimistic(props.sessionID, props.messageID)
         setData(
           produce((draft) => {
             const messages = draft.message[props.sessionID]
@@ -493,6 +501,7 @@ export function createServerSession(client: OpencodeClient) {
         const removed = initial?.removedParts.get(props.messageID) ?? new Set<string>()
         removed.add(props.partID)
         initial?.removedParts.set(props.messageID, removed)
+        clearOptimisticPart(props.sessionID, props.messageID, props.partID)
         setData(
           produce((draft) => {
             delete draft.part_text_accum_delta[props.partID]
