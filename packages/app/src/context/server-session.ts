@@ -336,6 +336,13 @@ export function createServerSession(client: OpencodeClient) {
               : fetched
             const kept = parts.filter((part) => !removed?.removedParts.get(item.id)?.has(part.id))
             if (kept.length) setData("part", item.id, reconcile(kept, { key: "id" }))
+            if (!kept.length)
+              setData(
+                produce((draft) => {
+                  for (const part of draft.part[item.id] ?? []) delete draft.part_text_accum_delta[part.id]
+                  delete draft.part[item.id]
+                }),
+              )
           }
           setMeta("limit", sessionID, messages.length)
           setMeta("cursor", sessionID, next.cursor)

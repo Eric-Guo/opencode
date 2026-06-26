@@ -190,6 +190,45 @@ describe("server session", () => {
     expect(store.data.part[kept.id]).toBeUndefined()
   })
 
+  test("clears stale parts when the initial page has none", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const part: Part = {
+      id: "part",
+      sessionID: "child",
+      messageID: message.id,
+      type: "text",
+      text: "stale",
+    }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    store.apply({ type: "message.updated", properties: { info: message } })
+    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part, time: 1 } })
+    const loading = store.sync("child")
+
+    resolveMessages?.({ data: [{ info: message, parts: [] }], response: { headers: new Headers() } })
+    await loading
+
+    expect(store.data.part[message.id]).toBeUndefined()
+  })
+
   test("applies events without a directory store", () => {
     const ctx = setup({})
     ctx.store.apply({ type: "session.created", properties: { info: session("root") } })
