@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { retry } from "@opencode-ai/core/util/retry"
 import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
 import { createServerSession } from "./server-session"
 
@@ -49,24 +50,36 @@ const deferredResponse = () => Promise.withResolvers<MessageResponse>()
 function messageClient(...responses: Array<MessageResponse | Promise<MessageResponse>>) {
   let index = 0
   const requests: unknown[] = []
+  const waiting = new Map<number, () => void>()
   const client = {
     session: {
       get: async () => ({ data: session("child", "root") }),
       messages: (input: unknown) => {
         requests.push(input)
+        waiting.get(requests.length)?.()
+        waiting.delete(requests.length)
         return responses[index++]
       },
     },
   } as unknown as OpencodeClient
-  return Object.assign(client, { requests })
+  return Object.assign(client, {
+    requests,
+    requested(count: number) {
+      if (requests.length >= count) return Promise.resolve()
+      return new Promise<void>((resolve) => waiting.set(count, resolve))
+    },
+  })
 }
 
-async function waitForRequests(client: { requests: unknown[] }, count: number) {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (client.requests.length >= count) return
-    await Bun.sleep(0)
+const retryImmediately: typeof retry = async (task, options = {}) => {
+  const attempts = options.attempts ?? 3
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await task()
+    } catch (error) {
+      if (attempt === attempts - 1) throw error
+    }
   }
-  throw new Error(`Expected ${count} message requests, received ${client.requests.length}`)
 }
 
 function setup(sessions: Record<string, Session>) {
@@ -587,14 +600,14 @@ describe("server session", () => {
     const intermediate = { ...stale, text: "intermediate" }
     const fetched = { ...stale, text: "fetched" }
     const client = messageClient(failed.promise, retried.promise)
-    const store = createServerSession(client, { retryDelay: 0 })
+    const store = createServerSession(client, { retry: retryImmediately })
     store.apply({ type: "message.updated", properties: { info: message } })
     store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: stale, time: 1 } })
     const loading = store.sync("child")
 
     store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: intermediate, time: 2 } })
     failed.reject(new Error("failed to fetch"))
-    await waitForRequests(client, 2)
+    await client.requested(2)
     retried.resolve(response([{ info: message, parts: [fetched] }]))
     await loading
 
@@ -607,7 +620,7 @@ describe("server session", () => {
     const message = userMessage("message")
     const part = textPart(message.id, { text: "stale" })
     const client = messageClient(failed.promise, retried.promise)
-    const store = createServerSession(client, { retryDelay: 0 })
+    const store = createServerSession(client, { retry: retryImmediately })
     store.apply({ type: "message.updated", properties: { info: message } })
     store.apply({ type: "message.part.updated", properties: { sessionID: "child", part, time: 1 } })
     const loading = store.sync("child")
@@ -617,7 +630,7 @@ describe("server session", () => {
       properties: { sessionID: "child", messageID: message.id, partID: part.id, field: "text", delta: " delta" },
     })
     failed.reject(new Error("failed to fetch"))
-    await waitForRequests(client, 2)
+    await client.requested(2)
     retried.resolve(response([{ info: message, parts: [part] }]))
     await loading
 
@@ -630,7 +643,7 @@ describe("server session", () => {
     const message = userMessage("message")
     const part = textPart(message.id)
     const client = messageClient(response([{ info: message, parts: [part] }]), failed.promise, retried.promise)
-    const store = createServerSession(client, { retryDelay: 0 })
+    const store = createServerSession(client, { retry: retryImmediately })
     await store.sync("child")
     const loading = store.sync("child", { force: true })
 
@@ -639,7 +652,7 @@ describe("server session", () => {
       properties: { sessionID: "child", messageID: message.id, partID: part.id },
     })
     failed.reject(new Error("failed to fetch"))
-    await waitForRequests(client, 3)
+    await client.requested(3)
     retried.resolve(response([{ info: message, parts: [part] }]))
     await loading
 
@@ -652,13 +665,13 @@ describe("server session", () => {
     const message = userMessage("message")
     const part = textPart(message.id)
     const client = messageClient(response([{ info: message, parts: [part] }]), failed.promise, retried.promise)
-    const store = createServerSession(client, { retryDelay: 0 })
+    const store = createServerSession(client, { retry: retryImmediately })
     await store.sync("child")
     const loading = store.sync("child", { force: true })
 
     store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
     failed.reject(new Error("failed to fetch"))
-    await waitForRequests(client, 3)
+    await client.requested(3)
     retried.resolve(response([{ info: message, parts: [part] }]))
     await loading
 
@@ -673,14 +686,14 @@ describe("server session", () => {
     const stale = textPart(message.id, { id: "stale", text: "stale" })
     const optimistic = textPart(message.id, { id: "optimistic", text: "optimistic" })
     const client = messageClient(response([{ info: message, parts: [stale] }]), failed.promise, retried.promise)
-    const store = createServerSession(client, { retryDelay: 0 })
+    const store = createServerSession(client, { retry: retryImmediately })
     await store.sync("child")
     const loading = store.sync("child", { force: true })
 
     store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
     store.optimistic.add({ sessionID: "child", message, parts: [optimistic] })
     failed.reject(new Error("failed to fetch"))
-    await waitForRequests(client, 3)
+    await client.requested(3)
     retried.resolve(response([{ info: message, parts: [stale] }]))
     await loading
 
@@ -694,7 +707,7 @@ describe("server session", () => {
     const message = userMessage("message")
     const part = textPart(message.id)
     const client = messageClient(response([{ info: message, parts: [part] }]), failed.promise, retried.promise)
-    const store = createServerSession(client, { retryDelay: 0 })
+    const store = createServerSession(client, { retry: retryImmediately })
     await store.sync("child")
     const loading = store.sync("child", { force: true })
 
@@ -703,7 +716,7 @@ describe("server session", () => {
       properties: { sessionID: "child", messageID: message.id, partID: part.id, field: "text", delta: " delta" },
     })
     failed.reject(new Error("failed to fetch"))
-    await waitForRequests(client, 3)
+    await client.requested(3)
     retried.resolve(response([{ info: message, parts: [] }]))
     await loading
 
@@ -718,14 +731,14 @@ describe("server session", () => {
     const message = userMessage("message")
     const part = textPart(message.id)
     const client = messageClient(first.promise, second.promise, third.promise)
-    const store = createServerSession(client, { retryDelay: 0 })
+    const store = createServerSession(client, { retry: retryImmediately })
     const loading = store.sync("child").catch((error) => error)
 
     store.apply({ type: "message.part.updated", properties: { sessionID: "child", part, time: 2 } })
     first.reject(new Error("failed to fetch"))
-    await waitForRequests(client, 2)
+    await client.requested(2)
     second.reject(new Error("failed to fetch"))
-    await waitForRequests(client, 3)
+    await client.requested(3)
     third.reject(new Error("failed to fetch"))
     await loading
 

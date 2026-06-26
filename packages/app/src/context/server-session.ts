@@ -132,7 +132,7 @@ function reconcileFetched<T extends { id: string }>(
   return [...result.values()].sort((a, b) => cmp(a.id, b.id))
 }
 
-export function createServerSession(client: OpencodeClient, options?: { retryDelay?: number }) {
+export function createServerSession(client: OpencodeClient, options?: { retry?: typeof retry }) {
   const [data, setData] = createStore({
     info: {} as Record<string, Session | undefined>,
     session_status: {} as Record<string, SessionStatus>,
@@ -445,13 +445,10 @@ export function createServerSession(client: OpencodeClient, options?: { retryDel
     )
 
   const fetchMessages = async (sessionID: string, limit: number, before?: string, onAttempt?: () => void) => {
-    const response = await retry(
-      () => {
-        onAttempt?.()
-        return client.session.messages({ sessionID, limit, before })
-      },
-      { delay: options?.retryDelay },
-    )
+    const response = await (options?.retry ?? retry)(() => {
+      onAttempt?.()
+      return client.session.messages({ sessionID, limit, before })
+    })
     const items = (response.data ?? []).filter((item) => !!item?.info?.id)
     return {
       session: items.map((item) => cleanMessage(item.info)).sort((a, b) => cmp(a.id, b.id)),
