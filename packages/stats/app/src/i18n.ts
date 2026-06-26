@@ -1,21 +1,5 @@
 import { type Locale } from "./lib/language"
-import { dict as ar } from "./i18n/ar"
-import { dict as br } from "./i18n/br"
-import { dict as da } from "./i18n/da"
-import { dict as de } from "./i18n/de"
-import { dict as es } from "./i18n/es"
-import { dict as fr } from "./i18n/fr"
-import { dict as it } from "./i18n/it"
-import { dict as ja } from "./i18n/ja"
-import { dict as ko } from "./i18n/ko"
-import { dict as no } from "./i18n/no"
-import { dict as pl } from "./i18n/pl"
-import { dict as ru } from "./i18n/ru"
-import { dict as th } from "./i18n/th"
-import { dict as tr } from "./i18n/tr"
-import { dict as uk } from "./i18n/uk"
 import { dict as zh } from "./i18n/zh"
-import { dict as zht } from "./i18n/zht"
 
 const en = {
   "app.title": "AI Model Usage Rankings | OpenCode Data",
@@ -256,24 +240,8 @@ export type Key = keyof typeof en
 export type Dict = Record<Key, string>
 
 const dictionaries = {
-  ar,
-  br,
-  da,
-  de,
   en,
-  es,
-  fr,
-  it,
-  ja,
-  ko,
-  no,
-  pl,
-  ru,
-  th,
-  tr,
-  uk,
   zh,
-  zht,
 } satisfies Record<Locale, Dict>
 
 export function dict(locale: Locale) {
