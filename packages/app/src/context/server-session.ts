@@ -75,6 +75,30 @@ function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   return [...items.values()].sort((x, y) => cmp(x.id, y.id))
 }
 
+function mergeConcurrent<T extends { id: string }>(
+  fetched: T[],
+  current: readonly T[],
+  before: Map<string, string>,
+  partial = false,
+) {
+  const next = new Map(fetched.map((item) => [item.id, item]))
+  const live = new Map(current.map((item) => [item.id, item]))
+  for (const id of new Set([...next.keys(), ...live.keys(), ...before.keys()])) {
+    const fetchedItem = next.get(id)
+    const liveItem = live.get(id)
+    const previous = before.get(id)
+    if (partial && !fetchedItem && liveItem) {
+      next.set(id, liveItem)
+      continue
+    }
+    if (JSON.stringify(liveItem) === previous) continue
+    if (JSON.stringify(fetchedItem) !== previous) continue
+    if (liveItem) next.set(id, liveItem)
+    if (!liveItem) next.delete(id)
+  }
+  return [...next.values()].sort((a, b) => cmp(a.id, b.id))
+}
+
 export function createServerSession(client: OpencodeClient) {
   const [data, setData] = createStore({
     info: {} as Record<string, Session | undefined>,
@@ -95,7 +119,6 @@ export function createServerSession(client: OpencodeClient) {
   const inflightDiff = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
-  const initialLoads = new Map<string, { dirty: boolean }>()
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
   const pinned = new Map<string, number>()
@@ -205,7 +228,6 @@ export function createServerSession(client: OpencodeClient) {
       inflight.delete(sessionID)
       inflightDiff.delete(sessionID)
       inflightTodo.delete(sessionID)
-      initialLoads.delete(sessionID)
     })
     setData(
       produce((draft) => {
@@ -266,23 +288,37 @@ export function createServerSession(client: OpencodeClient) {
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
     if (meta.loading[sessionID]) return
     const generation = generations.get(sessionID) ?? 0
-    const initial = meta.limit[sessionID] === undefined ? { dirty: false } : undefined
-    if (initial) initialLoads.set(sessionID, initial)
+    const initial =
+      meta.limit[sessionID] === undefined
+        ? {
+            message: new Map((data.message[sessionID] ?? []).map((item) => [item.id, JSON.stringify(item)])),
+            part: new Map(
+              (data.message[sessionID] ?? []).map((message) => [
+                message.id,
+                new Map((data.part[message.id] ?? []).map((item) => [item.id, JSON.stringify(item)])),
+              ]),
+            ),
+          }
+        : undefined
     setMeta("loading", sessionID, true)
     await fetchMessages(sessionID, limit, before)
       .then((page) => {
         if ((generations.get(sessionID) ?? 0) !== generation) return
-        if (initial?.dirty) {
-          if (data.message[sessionID] === undefined) setData("message", sessionID, [])
-          return
-        }
         const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
         next.confirmed.forEach((messageID) => clearOptimistic(sessionID, messageID))
-        const messages = mode === "prepend" ? merge(data.message[sessionID] ?? [], next.session) : next.session
+        const messages = initial
+          ? mergeConcurrent(next.session, data.message[sessionID] ?? [], initial.message, true)
+          : mode === "prepend"
+            ? merge(data.message[sessionID] ?? [], next.session)
+            : next.session
         batch(() => {
           setData("message", sessionID, reconcile(messages, { key: "id" }))
           for (const item of next.part) {
-            const parts = item.part.filter((part) => !SKIP_PARTS.has(part.type))
+            if (!messages.some((message) => message.id === item.id)) continue
+            const fetched = item.part.filter((part) => !SKIP_PARTS.has(part.type))
+            const parts = initial
+              ? mergeConcurrent(fetched, data.part[item.id] ?? [], initial.part.get(item.id) ?? new Map())
+              : fetched
             if (parts.length) setData("part", item.id, reconcile(parts, { key: "id" }))
           }
           setMeta("limit", sessionID, messages.length)
@@ -292,7 +328,6 @@ export function createServerSession(client: OpencodeClient) {
         })
       })
       .finally(() => {
-        if (initialLoads.get(sessionID) === initial) initialLoads.delete(sessionID)
         if ((generations.get(sessionID) ?? 0) === generation) setMeta("loading", sessionID, false)
       })
   }
@@ -347,10 +382,6 @@ export function createServerSession(client: OpencodeClient) {
   const apply = (event: { type: string; properties?: unknown }) => {
     const eventID = eventSessionID(event)
     if (eventID) {
-      if (event.type.startsWith("message.")) {
-        const initial = initialLoads.get(eventID)
-        if (initial) initial.dirty = true
-      }
       touch(eventID)
       if (!data.info[eventID]) void resolve(eventID).catch(() => {})
     }

@@ -55,24 +55,29 @@ describe("server session", () => {
     expect(ctx.store.data.message.root).toEqual([])
   })
 
-  test("discards an initial page made stale by live events", async () => {
+  test("merges live events into the initial page", async () => {
     let resolveMessages:
       | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
       | undefined
-    const stale: Message = {
-      id: "message",
+    const user: Message = {
+      id: "message-1",
       sessionID: "child",
       role: "user",
       time: { created: 1 },
       agent: "build",
       model: { providerID: "provider", modelID: "model" },
     }
-    const stalePart: Part = {
+    const live: Message = {
+      ...user,
+      id: "message-2",
+      time: { created: 2 },
+    }
+    const livePart: Part = {
       id: "part",
       sessionID: "child",
-      messageID: stale.id,
+      messageID: live.id,
       type: "text",
-      text: "stale",
+      text: "live",
     }
     const client = {
       session: {
@@ -85,16 +90,14 @@ describe("server session", () => {
     } as unknown as OpencodeClient
     const store = createServerSession(client)
     const loading = store.sync("child")
-    const live = { ...stale, time: { created: 2 } }
-    const livePart = { ...stalePart, text: "live" }
 
     store.apply({ type: "message.updated", properties: { info: live } })
     store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: livePart, time: 2 } })
-    resolveMessages?.({ data: [{ info: stale, parts: [stalePart] }], response: { headers: new Headers() } })
+    resolveMessages?.({ data: [{ info: user, parts: [] }], response: { headers: new Headers() } })
     await loading
 
-    expect(store.data.message.child).toEqual([live])
-    expect(store.data.part[stale.id]).toEqual([livePart])
+    expect(store.data.message.child).toEqual([user, live])
+    expect(store.data.part[live.id]).toEqual([livePart])
   })
 
   test("applies events without a directory store", () => {
