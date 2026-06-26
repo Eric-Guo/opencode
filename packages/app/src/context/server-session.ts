@@ -30,6 +30,7 @@ type OptimisticItem = {
 
 type SessionEvent = { type: string; properties?: unknown }
 type InitialEventJournal = {
+  messages: Map<string, string | undefined>
   removedMessages: Set<string>
   parts: Map<string, Map<string, string | undefined>>
   size: number
@@ -278,7 +279,13 @@ export function createServerSession(client: OpencodeClient) {
     const generation = generations.get(sessionID) ?? 0
     const initiallyUnloaded = meta.limit[sessionID] === undefined
     if (initiallyUnloaded)
-      initialEvents.set(sessionID, { removedMessages: new Set(), parts: new Map(), size: 0, overflow: false })
+      initialEvents.set(sessionID, {
+        messages: new Map(),
+        removedMessages: new Set(),
+        parts: new Map(),
+        size: 0,
+        overflow: false,
+      })
     setMeta("loading", sessionID, true)
     await fetchMessages(sessionID, limit, before)
       .then((page) => {
@@ -294,7 +301,17 @@ export function createServerSession(client: OpencodeClient) {
         const liveMessages = data.message[sessionID] ?? []
         const messages = mode === "prepend" || initiallyUnloaded ? merge(liveMessages, next.session) : next.session
         const messageMap = new Map(messages.map((message) => [message.id, message]))
-        journal?.removedMessages.forEach((messageID) => messageMap.delete(messageID))
+        journal?.messages.forEach((baseline, messageID) => {
+          if (journal.removedMessages.has(messageID)) {
+            const fetched = messageMap.get(messageID)
+            if (!fetched || JSON.stringify(fetched) === baseline) messageMap.delete(messageID)
+            return
+          }
+          const current = liveMessages.find((message) => message.id === messageID)
+          if (!current) return
+          const fetched = messageMap.get(messageID)
+          if (!fetched || JSON.stringify(fetched) === baseline) messageMap.set(messageID, current)
+        })
         const mergedMessages = [...messageMap.values()].sort((a, b) => cmp(a.id, b.id))
         batch(() => {
           if (initiallyUnloaded) setData("message", sessionID, mergedMessages)
@@ -316,7 +333,8 @@ export function createServerSession(client: OpencodeClient) {
             journal?.parts.get(message.id)?.forEach((baseline, partID) => {
               const current = live.get(partID)
               if (!current) {
-                parts.delete(partID)
+                const fetched = parts.get(partID)
+                if (!fetched || JSON.stringify(fetched) === baseline) parts.delete(partID)
                 return
               }
               const fetched = parts.get(partID)
@@ -589,15 +607,29 @@ export function createServerSession(client: OpencodeClient) {
     if (!properties || typeof properties !== "object") return
     if (event.type === "message.updated" && "info" in properties) {
       const info = properties.info as Message
-      if (journal.removedMessages.delete(info.id)) journal.size -= 1
+      if (!journal.messages.has(info.id)) {
+        if (journal.size >= initialEventLimit) {
+          journal.overflow = true
+          return
+        }
+        journal.size += 1
+        const current = data.message[info.sessionID]?.find((message) => message.id === info.id)
+        journal.messages.set(info.id, current ? JSON.stringify(current) : undefined)
+      }
+      journal.removedMessages.delete(info.id)
     }
-    if (event.type === "message.removed" && "messageID" in properties) {
+    if (event.type === "message.removed" && "sessionID" in properties && "messageID" in properties) {
       const messageID = properties.messageID as string
-      if (!journal.removedMessages.has(messageID) && journal.size >= initialEventLimit) {
+      if (!journal.messages.has(messageID) && journal.size >= initialEventLimit) {
         journal.overflow = true
         return
       }
-      if (!journal.removedMessages.has(messageID)) journal.size += 1
+      if (!journal.messages.has(messageID)) {
+        journal.size += 1
+        const sessionID = properties.sessionID as string
+        const current = data.message[sessionID]?.find((message) => message.id === messageID)
+        journal.messages.set(messageID, current ? JSON.stringify(current) : undefined)
+      }
       journal.removedMessages.add(messageID)
     }
     if (

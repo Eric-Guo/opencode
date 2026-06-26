@@ -266,6 +266,74 @@ describe("server session", () => {
     expect(store.data.message.child?.[0]?.time.created).toBe(2)
   })
 
+  test("preserves a newer message event over a stale initial page", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const stale: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const live: Message = { ...stale, time: { created: 2 } }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    store.apply({ type: "message.updated", properties: { info: stale } })
+    const loading = store.sync("child")
+
+    store.apply({ type: "message.updated", properties: { info: live } })
+    resolveMessages?.({ data: [{ info: stale, parts: [] }], response: { headers: new Headers() } })
+    await loading
+
+    expect(store.data.message.child?.[0]?.time.created).toBe(2)
+  })
+
+  test("preserves a newer initial message over an older removal event", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const stale: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    store.apply({ type: "message.updated", properties: { info: stale } })
+    const loading = store.sync("child")
+
+    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: stale.id } })
+    resolveMessages?.({
+      data: [{ info: { ...stale, time: { created: 2 } }, parts: [] }],
+      response: { headers: new Headers() },
+    })
+    await loading
+
+    expect(store.data.message.child?.[0]?.time.created).toBe(2)
+  })
+
   test("applies events without a directory store", () => {
     const ctx = setup({})
     ctx.store.apply({ type: "session.created", properties: { info: session("root") } })
