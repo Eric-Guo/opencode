@@ -38,7 +38,6 @@ function SessionTabSlot(props: {
     get index() {
       return props.index()
     },
-    transition: sortableTransition,
   })
   let ref!: HTMLDivElement
   const sdk = createMemo(() => props.serverCtx()?.sdk ?? null)
@@ -82,38 +81,32 @@ function SessionTabSlot(props: {
   })
 
   return (
-    <div
-      ref={sortable.ref}
-      data-titlebar-tab-slot
-      data-tab-key={props.id}
-      class="flex min-w-0 w-56 flex-1 basis-0"
-      classList={{ hidden: !session() }}
-    >
-      <TabNavItem
-        ref={(el) => {
-          ref = el
-        }}
-        href={tabHref(props.tab)}
-        server={props.tab.server}
-        session={session}
-        onTitleChange={(title) => {
-          const value = session()
-          const ctx = props.serverCtx()
-          if (value && ctx) ctx.sync.session.remember({ ...value, title })
-        }}
-        onTitleChangeFailed={(title) => {
-          const value = session()
-          const ctx = props.serverCtx()
-          if (value && ctx) ctx.sync.session.remember({ ...value, title })
-        }}
-        onNavigate={() => props.onNavigate(ref)}
-        onClose={props.onClose}
-        active={props.active()}
-        activeServer={props.tab.server === props.activeServerKey}
-        forceTruncate={props.forceTruncate}
-        dragging={sortable.isDragSource()}
-      />
-    </div>
+    <TabNavItem
+      ref={(el) => {
+        sortable.ref(el)
+        ref = el
+      }}
+      tabKey={props.id}
+      href={tabHref(props.tab)}
+      server={props.tab.server}
+      session={session}
+      onTitleChange={(title) => {
+        const value = session()
+        const ctx = props.serverCtx()
+        if (value && ctx) ctx.sync.session.remember({ ...value, title })
+      }}
+      onTitleChangeFailed={(title) => {
+        const value = session()
+        const ctx = props.serverCtx()
+        if (value && ctx) ctx.sync.session.remember({ ...value, title })
+      }}
+      onNavigate={() => props.onNavigate(ref)}
+      onClose={props.onClose}
+      active={props.active()}
+      activeServer={props.tab.server === props.activeServerKey}
+      forceTruncate={props.forceTruncate}
+      dragging={sortable.isDragSource()}
+    />
   )
 }
 
@@ -133,24 +126,23 @@ function DraftTabSlot(props: {
     get index() {
       return props.index()
     },
-    transition: sortableTransition,
   })
   let ref!: HTMLDivElement
 
   return (
-    <div ref={sortable.ref} data-titlebar-tab-slot data-tab-key={props.id} class="flex min-w-0 w-56 flex-1 basis-0">
-      <DraftTabItem
-        ref={(el) => {
-          ref = el
-        }}
-        href={tabHref(props.tab)}
-        title={props.title}
-        onNavigate={() => props.onNavigate(ref)}
-        onClose={props.onClose}
-        active={props.active()}
-        dragging={sortable.isDragSource()}
-      />
-    </div>
+    <DraftTabItem
+      ref={(el) => {
+        sortable.ref(el)
+        ref = el
+      }}
+      tabKey={props.id}
+      href={tabHref(props.tab)}
+      title={props.title}
+      onNavigate={() => props.onNavigate(ref)}
+      onClose={props.onClose}
+      active={props.active()}
+      dragging={sortable.isDragSource()}
+    />
   )
 }
 
@@ -230,7 +222,7 @@ export function TitlebarTabStrip(props: {
             if (!source) return
             const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
             if (!tab) return
-            const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
+            const tabEl = source.element?.closest<HTMLDivElement>("[data-titlebar-tab]")
             props.onNavigate(tab, tabEl ?? undefined)
           }}
           onDragEnd={(event) => {
