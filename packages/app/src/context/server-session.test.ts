@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client"
 import { createServerSession } from "./server-session"
 
 const session = (id: string, parentID?: string): Session => ({
@@ -53,6 +53,35 @@ describe("server session", () => {
     expect(ctx.get).toEqual([{ sessionID: "root" }])
     expect(ctx.messages).toEqual([{ sessionID: "root", limit: 2, before: undefined }])
     expect(ctx.store.data.message.root).toEqual([])
+  })
+
+  test("preserves live messages received during the initial load", async () => {
+    let resolveMessages: ((value: { data: []; response: { headers: Headers } }) => void) | undefined
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: []; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+
+    store.apply({ type: "message.updated", properties: { info: message } })
+    resolveMessages?.({ data: [], response: { headers: new Headers() } })
+    await loading
+
+    expect(store.data.message.child).toEqual([message])
   })
 
   test("applies events without a directory store", () => {

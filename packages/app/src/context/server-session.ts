@@ -264,13 +264,18 @@ export function createServerSession(client: OpencodeClient) {
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
     if (meta.loading[sessionID]) return
     const generation = generations.get(sessionID) ?? 0
+    const initiallyUnloaded = data.message[sessionID] === undefined
     setMeta("loading", sessionID, true)
     await fetchMessages(sessionID, limit, before)
       .then((page) => {
         if ((generations.get(sessionID) ?? 0) !== generation) return
         const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
         next.confirmed.forEach((messageID) => clearOptimistic(sessionID, messageID))
-        const messages = mode === "prepend" ? merge(data.message[sessionID] ?? [], next.session) : next.session
+        const messages = mode === "prepend"
+          ? merge(data.message[sessionID] ?? [], next.session)
+          : initiallyUnloaded
+            ? merge(next.session, data.message[sessionID] ?? [])
+            : next.session
         batch(() => {
           setData("message", sessionID, reconcile(messages, { key: "id" }))
           for (const item of next.part) {
