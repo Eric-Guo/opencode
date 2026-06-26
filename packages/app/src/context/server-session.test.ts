@@ -188,7 +188,7 @@ describe("server session", () => {
     expect(store.data.part[message.id]).toEqual([live])
   })
 
-  test("discards a stale initial page when the event journal fills", async () => {
+  test("does not replay deltas already included in the initial page", async () => {
     let resolveMessages:
       | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
       | undefined
@@ -222,11 +222,48 @@ describe("server session", () => {
         properties: { sessionID: "child", messageID: message.id, partID: live.id, field: "text", delta: "x" },
       })
     }
-    resolveMessages?.({ data: [{ info: message, parts: [stale] }], response: { headers: new Headers() } })
+    resolveMessages?.({
+      data: [{ info: message, parts: [{ ...stale, text: `live${"x".repeat(4_097)}` }] }],
+      response: { headers: new Headers() },
+    })
     await loading
 
     const part = store.data.part[message.id]?.find((part) => part.type === "text")
     expect(part?.text).toBe(`live${"x".repeat(4_097)}`)
+  })
+
+  test("prefers a newer initial page over an older message event", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+
+    store.apply({ type: "message.updated", properties: { info: message } })
+    resolveMessages?.({
+      data: [{ info: { ...message, time: { created: 2 } }, parts: [] }],
+      response: { headers: new Headers() },
+    })
+    await loading
+
+    expect(store.data.message.child?.[0]?.time.created).toBe(2)
   })
 
   test("applies events without a directory store", () => {
