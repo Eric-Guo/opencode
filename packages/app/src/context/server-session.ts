@@ -78,21 +78,15 @@ function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
 function mergeConcurrent<T extends { id: string }>(
   fetched: T[],
   current: readonly T[],
-  before: Map<string, string>,
+  touched: Set<string>,
   partial = false,
 ) {
   const next = new Map(fetched.map((item) => [item.id, item]))
   const live = new Map(current.map((item) => [item.id, item]))
-  for (const id of new Set([...next.keys(), ...live.keys(), ...before.keys()])) {
-    const fetchedItem = next.get(id)
+  if (partial) live.forEach((item, id) => !next.has(id) && next.set(id, item))
+  // Events observed while the request is pending are the freshest client state for those identities.
+  for (const id of touched) {
     const liveItem = live.get(id)
-    const previous = before.get(id)
-    if (partial && !fetchedItem && liveItem) {
-      next.set(id, liveItem)
-      continue
-    }
-    if (JSON.stringify(liveItem) === previous) continue
-    if (JSON.stringify(fetchedItem) !== previous) continue
     if (liveItem) next.set(id, liveItem)
     if (!liveItem) next.delete(id)
   }
@@ -119,10 +113,7 @@ export function createServerSession(client: OpencodeClient) {
   const inflightDiff = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
-  const initialLoads = new Map<
-    string,
-    { removedMessages: Set<string>; removedParts: Map<string, Set<string>> }
-  >()
+  const messageLoads = new Map<string, { messages: Set<string>; parts: Map<string, Set<string>> }>()
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
   const pinned = new Map<string, number>()
@@ -239,7 +230,7 @@ export function createServerSession(client: OpencodeClient) {
       inflight.delete(sessionID)
       inflightDiff.delete(sessionID)
       inflightTodo.delete(sessionID)
-      initialLoads.delete(sessionID)
+      messageLoads.delete(sessionID)
     })
     setData(
       produce((draft) => {
@@ -300,43 +291,50 @@ export function createServerSession(client: OpencodeClient) {
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
     if (meta.loading[sessionID]) return
     const generation = generations.get(sessionID) ?? 0
-    const initial =
-      meta.limit[sessionID] === undefined
-        ? {
-            message: new Map((data.message[sessionID] ?? []).map((item) => [item.id, JSON.stringify(item)])),
-            part: new Map(
-              (data.message[sessionID] ?? []).map((message) => [
-                message.id,
-                new Map((data.part[message.id] ?? []).map((item) => [item.id, JSON.stringify(item)])),
-              ]),
-            ),
-          }
-        : undefined
-    if (initial) initialLoads.set(sessionID, { removedMessages: new Set(), removedParts: new Map() })
+    const initial = meta.limit[sessionID] === undefined
+    const active = { messages: new Set<string>(), parts: new Map<string, Set<string>>() }
+    messageLoads.set(sessionID, active)
     setMeta("loading", sessionID, true)
     await fetchMessages(sessionID, limit, before)
       .then((page) => {
         if ((generations.get(sessionID) ?? 0) !== generation) return
-        const removed = initialLoads.get(sessionID)
+        const concurrent = messageLoads.get(sessionID) === active ? active : undefined
         const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
         next.confirmed.forEach((messageID) => clearOptimistic(sessionID, messageID))
-        const messages = (initial
-          ? mergeConcurrent(next.session, data.message[sessionID] ?? [], initial.message, true)
-          : mode === "prepend"
-            ? merge(data.message[sessionID] ?? [], next.session)
-            : next.session
-        ).filter((message) => !removed?.removedMessages.has(message.id))
+        const messages = mergeConcurrent(
+          next.session,
+          data.message[sessionID] ?? [],
+          concurrent?.messages ?? new Set(),
+          initial || mode === "prepend",
+        )
         const messageIDs = new Set(messages.map((message) => message.id))
         batch(() => {
+          const dropped = (data.message[sessionID] ?? []).filter((message) => !messageIDs.has(message.id))
           setData("message", sessionID, reconcile(messages, { key: "id" }))
+          setData(
+            produce((draft) => {
+              for (const message of dropped) {
+                for (const part of draft.part[message.id] ?? []) delete draft.part_text_accum_delta[part.id]
+                delete draft.part[message.id]
+              }
+            }),
+          )
           for (const item of next.part) {
             if (!messageIDs.has(item.id)) continue
             const fetched = item.part.filter((part) => !SKIP_PARTS.has(part.type))
-            const parts = initial
-              ? mergeConcurrent(fetched, data.part[item.id] ?? [], initial.part.get(item.id) ?? new Map())
-              : fetched
-            const kept = parts.filter((part) => !removed?.removedParts.get(item.id)?.has(part.id))
-            if (kept.length) setData("part", item.id, reconcile(kept, { key: "id" }))
+            const kept = mergeConcurrent(fetched, data.part[item.id] ?? [], concurrent?.parts.get(item.id) ?? new Set())
+            if (kept.length) {
+              const keptIDs = new Set(kept.map((part) => part.id))
+              setData(
+                "part_text_accum_delta",
+                produce((draft) => {
+                  for (const part of data.part[item.id] ?? []) {
+                    if (!keptIDs.has(part.id)) delete draft[part.id]
+                  }
+                }),
+              )
+              setData("part", item.id, reconcile(kept, { key: "id" }))
+            }
             if (!kept.length)
               setData(
                 produce((draft) => {
@@ -352,7 +350,7 @@ export function createServerSession(client: OpencodeClient) {
         })
       })
       .finally(() => {
-        initialLoads.delete(sessionID)
+        if (messageLoads.get(sessionID) === active) messageLoads.delete(sessionID)
         if ((generations.get(sessionID) ?? 0) === generation) setMeta("loading", sessionID, false)
       })
   }
@@ -447,7 +445,7 @@ export function createServerSession(client: OpencodeClient) {
       }
       case "message.updated": {
         const info = cleanMessage((event.properties as { info: Message }).info)
-        initialLoads.get(info.sessionID)?.removedMessages.delete(info.id)
+        messageLoads.get(info.sessionID)?.messages.add(info.id)
         const messages = data.message[info.sessionID]
         if (!messages) {
           setData("message", info.sessionID, [info])
@@ -465,7 +463,7 @@ export function createServerSession(client: OpencodeClient) {
       }
       case "message.removed": {
         const props = event.properties as { sessionID: string; messageID: string }
-        initialLoads.get(props.sessionID)?.removedMessages.add(props.messageID)
+        messageLoads.get(props.sessionID)?.messages.add(props.messageID)
         clearOptimistic(props.sessionID, props.messageID)
         setData(
           produce((draft) => {
@@ -483,7 +481,12 @@ export function createServerSession(client: OpencodeClient) {
       case "message.part.updated": {
         const part = (event.properties as { part: Part }).part
         if (SKIP_PARTS.has(part.type)) return
-        initialLoads.get(part.sessionID)?.removedParts.get(part.messageID)?.delete(part.id)
+        const load = messageLoads.get(part.sessionID)
+        if (load) {
+          const touched = load.parts.get(part.messageID) ?? new Set<string>()
+          touched.add(part.id)
+          load.parts.set(part.messageID, touched)
+        }
         setData(
           "part_text_accum_delta",
           produce((draft) => void delete draft[part.id]),
@@ -505,10 +508,12 @@ export function createServerSession(client: OpencodeClient) {
       }
       case "message.part.removed": {
         const props = event.properties as { sessionID: string; messageID: string; partID: string }
-        const initial = initialLoads.get(props.sessionID)
-        const removed = initial?.removedParts.get(props.messageID) ?? new Set<string>()
-        removed.add(props.partID)
-        initial?.removedParts.set(props.messageID, removed)
+        const load = messageLoads.get(props.sessionID)
+        if (load) {
+          const touched = load.parts.get(props.messageID) ?? new Set<string>()
+          touched.add(props.partID)
+          load.parts.set(props.messageID, touched)
+        }
         clearOptimisticPart(props.sessionID, props.messageID, props.partID)
         setData(
           produce((draft) => {
@@ -523,11 +528,23 @@ export function createServerSession(client: OpencodeClient) {
         return
       }
       case "message.part.delta": {
-        const props = event.properties as { messageID: string; partID: string; field: string; delta: string }
+        const props = event.properties as {
+          sessionID: string
+          messageID: string
+          partID: string
+          field: string
+          delta: string
+        }
         const parts = data.part[props.messageID]
         if (!parts) return
         const result = Binary.search(parts, props.partID, (part) => part.id)
         if (!result.found) return
+        const load = messageLoads.get(props.sessionID)
+        if (load) {
+          const touched = load.parts.get(props.messageID) ?? new Set<string>()
+          touched.add(props.partID)
+          load.parts.set(props.messageID, touched)
+        }
         const field = props.field as keyof (typeof parts)[number]
         const current = parts[result.index]?.[field]
         setData(

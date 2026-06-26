@@ -100,6 +100,48 @@ describe("server session", () => {
     expect(store.data.part[live.id]).toEqual([livePart])
   })
 
+  test("preserves same-ID live updates over the initial page", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const fetched: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const fetchedPart: Part = {
+      id: "part",
+      sessionID: "child",
+      messageID: fetched.id,
+      type: "text",
+      text: "fetched",
+    }
+    const live = { ...fetched, time: { created: 2 } }
+    const livePart = { ...fetchedPart, text: "live" }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+
+    store.apply({ type: "message.updated", properties: { info: live } })
+    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: livePart, time: 2 } })
+    resolveMessages?.({ data: [{ info: fetched, parts: [fetchedPart] }], response: { headers: new Headers() } })
+    await loading
+
+    expect(store.data.message.child).toEqual([live])
+    expect(store.data.part[live.id]).toEqual([livePart])
+  })
+
   test("preserves removals received during the initial load", async () => {
     let resolveMessages:
       | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
@@ -150,6 +192,79 @@ describe("server session", () => {
     expect(store.data.part[kept.id]).toBeUndefined()
   })
 
+  test("keeps removal tracking isolated across load generations", async () => {
+    const resolveMessages: Array<
+      (value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void
+    > = []
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages.push(resolve)
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    const first = store.sync("child")
+    store.apply({ type: "session.deleted", properties: { info: session("child", "root") } })
+    const second = store.sync("child")
+
+    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
+    resolveMessages[0]?.({ data: [], response: { headers: new Headers() } })
+    await first
+    resolveMessages[1]?.({ data: [{ info: message, parts: [] }], response: { headers: new Headers() } })
+    await second
+
+    expect(store.data.message.child).toEqual([])
+  })
+
+  test("preserves remove then re-add during a refresh", async () => {
+    let resolveRefresh:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    let calls = 0
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () => {
+          calls += 1
+          if (calls === 1)
+            return Promise.resolve({ data: [{ info: message, parts: [] }], response: { headers: new Headers() } })
+          return new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveRefresh = resolve
+          })
+        },
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    await store.sync("child")
+    const refreshing = store.sync("child", { force: true })
+
+    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
+    store.apply({ type: "message.updated", properties: { info: message } })
+    resolveRefresh?.({ data: [], response: { headers: new Headers() } })
+    await refreshing
+
+    expect(store.data.message.child).toEqual([message])
+  })
+
   test("does not restore removed optimistic content on refresh", async () => {
     const message: Message = {
       id: "message",
@@ -190,6 +305,30 @@ describe("server session", () => {
     expect(store.data.part[kept.id]).toBeUndefined()
   })
 
+  test("replaces confirmed optimistic content with the initial page", async () => {
+    const optimistic: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const fetched = { ...optimistic, time: { created: 2 } }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: async () => ({ data: [{ info: fetched, parts: [] }], response: { headers: new Headers() } }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    store.optimistic.add({ sessionID: "child", message: optimistic, parts: [] })
+
+    await store.sync("child")
+
+    expect(store.data.message.child).toEqual([fetched])
+  })
+
   test("clears stale parts when the initial page has none", async () => {
     let resolveMessages:
       | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
@@ -227,6 +366,180 @@ describe("server session", () => {
     await loading
 
     expect(store.data.part[message.id]).toBeUndefined()
+  })
+
+  test("clears delta buffers for parts omitted by the initial page", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const kept: Part = { id: "part-1", sessionID: "child", messageID: message.id, type: "text", text: "kept" }
+    const removed: Part = { ...kept, id: "part-2", text: "removed" }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    store.apply({ type: "message.updated", properties: { info: message } })
+    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: kept, time: 1 } })
+    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: removed, time: 1 } })
+    store.apply({
+      type: "message.part.delta",
+      properties: { sessionID: "child", messageID: message.id, partID: removed.id, field: "text", delta: " delta" },
+    })
+    const loading = store.sync("child")
+
+    resolveMessages?.({ data: [{ info: message, parts: [kept] }], response: { headers: new Headers() } })
+    await loading
+
+    expect(store.data.part[message.id]).toEqual([kept])
+    expect(store.data.part_text_accum_delta[removed.id]).toBeUndefined()
+  })
+
+  test("preserves live updates during a forced refresh", async () => {
+    let resolveRefresh:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const stale: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const stalePart: Part = {
+      id: "part",
+      sessionID: "child",
+      messageID: stale.id,
+      type: "text",
+      text: "stale",
+    }
+    let calls = 0
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () => {
+          calls += 1
+          if (calls === 1)
+            return Promise.resolve({ data: [{ info: stale, parts: [stalePart] }], response: { headers: new Headers() } })
+          return new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveRefresh = resolve
+          })
+        },
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    await store.sync("child")
+    const refreshing = store.sync("child", { force: true })
+    const live = { ...stale, time: { created: 2 } }
+    const livePart = { ...stalePart, text: "live" }
+
+    store.apply({ type: "message.updated", properties: { info: live } })
+    store.apply({
+      type: "message.part.delta",
+      properties: { sessionID: "child", messageID: stale.id, partID: stalePart.id, field: "text", delta: " live" },
+    })
+    resolveRefresh?.({ data: [{ info: stale, parts: [stalePart] }], response: { headers: new Headers() } })
+    await refreshing
+
+    expect(store.data.message.child).toEqual([live])
+    expect(store.data.part[stale.id]).toEqual([{ ...livePart, text: "stale live" }])
+  })
+
+  test("preserves removals during history prepend", async () => {
+    let resolveHistory:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const latest: Message = {
+      id: "message-2",
+      sessionID: "child",
+      role: "user",
+      time: { created: 2 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const older = { ...latest, id: "message-1", time: { created: 1 } }
+    let calls = 0
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () => {
+          calls += 1
+          if (calls === 1)
+            return Promise.resolve({
+              data: [{ info: latest, parts: [] }],
+              response: { headers: new Headers({ "x-next-cursor": "older" }) },
+            })
+          return new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveHistory = resolve
+          })
+        },
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    await store.sync("child")
+    const loading = store.history.loadMore("child")
+
+    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: older.id } })
+    resolveHistory?.({ data: [{ info: older, parts: [] }], response: { headers: new Headers() } })
+    await loading
+
+    expect(store.data.message.child).toEqual([latest])
+  })
+
+  test("clears orphaned parts when a refresh drops a message", async () => {
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const part: Part = {
+      id: "part",
+      sessionID: "child",
+      messageID: message.id,
+      type: "text",
+      text: "stale",
+    }
+    let calls = 0
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: async () => {
+          calls += 1
+          return {
+            data: calls === 1 ? [{ info: message, parts: [part] }] : [],
+            response: { headers: new Headers() },
+          }
+        },
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    await store.sync("child")
+    store.apply({
+      type: "message.part.delta",
+      properties: { sessionID: "child", messageID: message.id, partID: part.id, field: "text", delta: " delta" },
+    })
+    await store.sync("child", { force: true })
+
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part[message.id]).toBeUndefined()
+    expect(store.data.part_text_accum_delta[part.id]).toBeUndefined()
   })
 
   test("applies events without a directory store", () => {
