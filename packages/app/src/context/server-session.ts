@@ -119,6 +119,10 @@ export function createServerSession(client: OpencodeClient) {
   const inflightDiff = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
+  const initialLoads = new Map<
+    string,
+    { removedMessages: Set<string>; removedParts: Map<string, Set<string>> }
+  >()
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
   const pinned = new Map<string, number>()
@@ -228,6 +232,7 @@ export function createServerSession(client: OpencodeClient) {
       inflight.delete(sessionID)
       inflightDiff.delete(sessionID)
       inflightTodo.delete(sessionID)
+      initialLoads.delete(sessionID)
     })
     setData(
       produce((draft) => {
@@ -300,17 +305,20 @@ export function createServerSession(client: OpencodeClient) {
             ),
           }
         : undefined
+    if (initial) initialLoads.set(sessionID, { removedMessages: new Set(), removedParts: new Map() })
     setMeta("loading", sessionID, true)
     await fetchMessages(sessionID, limit, before)
       .then((page) => {
         if ((generations.get(sessionID) ?? 0) !== generation) return
+        const removed = initialLoads.get(sessionID)
         const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
         next.confirmed.forEach((messageID) => clearOptimistic(sessionID, messageID))
-        const messages = initial
+        const messages = (initial
           ? mergeConcurrent(next.session, data.message[sessionID] ?? [], initial.message, true)
           : mode === "prepend"
             ? merge(data.message[sessionID] ?? [], next.session)
             : next.session
+        ).filter((message) => !removed?.removedMessages.has(message.id))
         batch(() => {
           setData("message", sessionID, reconcile(messages, { key: "id" }))
           for (const item of next.part) {
@@ -319,7 +327,8 @@ export function createServerSession(client: OpencodeClient) {
             const parts = initial
               ? mergeConcurrent(fetched, data.part[item.id] ?? [], initial.part.get(item.id) ?? new Map())
               : fetched
-            if (parts.length) setData("part", item.id, reconcile(parts, { key: "id" }))
+            const kept = parts.filter((part) => !removed?.removedParts.get(item.id)?.has(part.id))
+            if (kept.length) setData("part", item.id, reconcile(kept, { key: "id" }))
           }
           setMeta("limit", sessionID, messages.length)
           setMeta("cursor", sessionID, next.cursor)
@@ -328,6 +337,7 @@ export function createServerSession(client: OpencodeClient) {
         })
       })
       .finally(() => {
+        initialLoads.delete(sessionID)
         if ((generations.get(sessionID) ?? 0) === generation) setMeta("loading", sessionID, false)
       })
   }
@@ -422,6 +432,7 @@ export function createServerSession(client: OpencodeClient) {
       }
       case "message.updated": {
         const info = cleanMessage((event.properties as { info: Message }).info)
+        initialLoads.get(info.sessionID)?.removedMessages.delete(info.id)
         const messages = data.message[info.sessionID]
         if (!messages) {
           setData("message", info.sessionID, [info])
@@ -439,6 +450,7 @@ export function createServerSession(client: OpencodeClient) {
       }
       case "message.removed": {
         const props = event.properties as { sessionID: string; messageID: string }
+        initialLoads.get(props.sessionID)?.removedMessages.add(props.messageID)
         setData(
           produce((draft) => {
             const messages = draft.message[props.sessionID]
@@ -455,6 +467,7 @@ export function createServerSession(client: OpencodeClient) {
       case "message.part.updated": {
         const part = (event.properties as { part: Part }).part
         if (SKIP_PARTS.has(part.type)) return
+        initialLoads.get(part.sessionID)?.removedParts.get(part.messageID)?.delete(part.id)
         setData(
           "part_text_accum_delta",
           produce((draft) => void delete draft[part.id]),
@@ -475,7 +488,11 @@ export function createServerSession(client: OpencodeClient) {
         return
       }
       case "message.part.removed": {
-        const props = event.properties as { messageID: string; partID: string }
+        const props = event.properties as { sessionID: string; messageID: string; partID: string }
+        const initial = initialLoads.get(props.sessionID)
+        const removed = initial?.removedParts.get(props.messageID) ?? new Set<string>()
+        removed.add(props.partID)
+        initial?.removedParts.set(props.messageID, removed)
         setData(
           produce((draft) => {
             delete draft.part_text_accum_delta[props.partID]

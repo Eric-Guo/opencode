@@ -100,6 +100,56 @@ describe("server session", () => {
     expect(store.data.part[live.id]).toEqual([livePart])
   })
 
+  test("preserves removals received during the initial load", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const removed: Message = {
+      id: "message-1",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const kept = { ...removed, id: "message-2" }
+    const part: Part = {
+      id: "part",
+      sessionID: "child",
+      messageID: kept.id,
+      type: "text",
+      text: "removed",
+    }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+
+    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: removed.id } })
+    store.apply({
+      type: "message.part.removed",
+      properties: { sessionID: "child", messageID: kept.id, partID: part.id },
+    })
+    resolveMessages?.({
+      data: [
+        { info: removed, parts: [] },
+        { info: kept, parts: [part] },
+      ],
+      response: { headers: new Headers() },
+    })
+    await loading
+
+    expect(store.data.message.child).toEqual([kept])
+    expect(store.data.part[kept.id]).toBeUndefined()
+  })
+
   test("applies events without a directory store", () => {
     const ctx = setup({})
     ctx.store.apply({ type: "session.created", properties: { info: session("root") } })
