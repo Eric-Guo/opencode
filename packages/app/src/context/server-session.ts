@@ -28,17 +28,6 @@ type OptimisticItem = {
   parts: Part[]
 }
 
-type SessionEvent = { type: string; properties?: unknown }
-type InitialEventJournal = {
-  messages: Map<string, string | undefined>
-  removedMessages: Set<string>
-  parts: Map<string, Map<string, string | undefined>>
-  size: number
-  overflow: boolean
-}
-
-const initialEventLimit = 4_096
-
 const hasParts = (parts: Part[] | undefined, want: Part[]) => {
   if (!parts) return want.length === 0
   return want.every((part) => Binary.search(parts, part.id, (item) => item.id).found)
@@ -106,7 +95,7 @@ export function createServerSession(client: OpencodeClient) {
   const inflightDiff = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
-  const initialEvents = new Map<string, InitialEventJournal>()
+  const initialLoads = new Map<string, { dirty: boolean }>()
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
   const pinned = new Map<string, number>()
@@ -216,7 +205,7 @@ export function createServerSession(client: OpencodeClient) {
       inflight.delete(sessionID)
       inflightDiff.delete(sessionID)
       inflightTodo.delete(sessionID)
-      initialEvents.delete(sessionID)
+      initialLoads.delete(sessionID)
     })
     setData(
       produce((draft) => {
@@ -277,80 +266,33 @@ export function createServerSession(client: OpencodeClient) {
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
     if (meta.loading[sessionID]) return
     const generation = generations.get(sessionID) ?? 0
-    const initiallyUnloaded = meta.limit[sessionID] === undefined
-    if (initiallyUnloaded)
-      initialEvents.set(sessionID, {
-        messages: new Map(),
-        removedMessages: new Set(),
-        parts: new Map(),
-        size: 0,
-        overflow: false,
-      })
+    const initial = meta.limit[sessionID] === undefined ? { dirty: false } : undefined
+    if (initial) initialLoads.set(sessionID, initial)
     setMeta("loading", sessionID, true)
     await fetchMessages(sessionID, limit, before)
       .then((page) => {
         if ((generations.get(sessionID) ?? 0) !== generation) return
-        const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
-        next.confirmed.forEach((messageID) => clearOptimistic(sessionID, messageID))
-        const journal = initialEvents.get(sessionID)
-        initialEvents.delete(sessionID)
-        if (journal?.overflow) {
+        if (initial?.dirty) {
           if (data.message[sessionID] === undefined) setData("message", sessionID, [])
           return
         }
-        const liveMessages = data.message[sessionID] ?? []
-        const messages = mode === "prepend" || initiallyUnloaded ? merge(liveMessages, next.session) : next.session
-        const messageMap = new Map(messages.map((message) => [message.id, message]))
-        journal?.messages.forEach((baseline, messageID) => {
-          if (journal.removedMessages.has(messageID)) {
-            const fetched = messageMap.get(messageID)
-            if (!fetched || JSON.stringify(fetched) === baseline) messageMap.delete(messageID)
-            return
-          }
-          const current = liveMessages.find((message) => message.id === messageID)
-          if (!current) return
-          const fetched = messageMap.get(messageID)
-          if (!fetched || JSON.stringify(fetched) === baseline) messageMap.set(messageID, current)
-        })
-        const mergedMessages = [...messageMap.values()].sort((a, b) => cmp(a.id, b.id))
+        const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
+        next.confirmed.forEach((messageID) => clearOptimistic(sessionID, messageID))
+        const messages = mode === "prepend" ? merge(data.message[sessionID] ?? [], next.session) : next.session
         batch(() => {
-          if (initiallyUnloaded) setData("message", sessionID, mergedMessages)
-          if (!initiallyUnloaded) setData("message", sessionID, reconcile(mergedMessages, { key: "id" }))
-          const fetchedParts = new Map(
-            next.part.map((item) => [item.id, item.part.filter((part) => !SKIP_PARTS.has(part.type))]),
-          )
-          for (const message of mergedMessages) {
-            const fetched = fetchedParts.get(message.id) ?? []
-            if (!initiallyUnloaded) {
-              if (fetched.length) setData("part", message.id, reconcile(fetched, { key: "id" }))
-              continue
-            }
-            const parts = new Map(fetched.map((part) => [part.id, part]))
-            const live = new Map((data.part[message.id] ?? []).map((part) => [part.id, part]))
-            live.forEach((part, partID) => {
-              if (!parts.has(partID)) parts.set(partID, part)
-            })
-            journal?.parts.get(message.id)?.forEach((baseline, partID) => {
-              const current = live.get(partID)
-              if (!current) {
-                const fetched = parts.get(partID)
-                if (!fetched || JSON.stringify(fetched) === baseline) parts.delete(partID)
-                return
-              }
-              const fetched = parts.get(partID)
-              if (!fetched || JSON.stringify(fetched) === baseline) parts.set(partID, current)
-            })
-            const merged = [...parts.values()].sort((a, b) => cmp(a.id, b.id))
-            if (merged.length) setData("part", message.id, reconcile(merged, { key: "id" }))
+          setData("message", sessionID, reconcile(messages, { key: "id" }))
+          for (const item of next.part) {
+            const parts = item.part.filter((part) => !SKIP_PARTS.has(part.type))
+            if (parts.length) setData("part", item.id, reconcile(parts, { key: "id" }))
           }
-          setMeta("limit", sessionID, mergedMessages.length)
+          setMeta("limit", sessionID, messages.length)
           setMeta("cursor", sessionID, next.cursor)
           setMeta("complete", sessionID, next.complete)
           setMeta("at", sessionID, Date.now())
         })
       })
       .finally(() => {
-        initialEvents.delete(sessionID)
+        if (initialLoads.get(sessionID) === initial) initialLoads.delete(sessionID)
         if ((generations.get(sessionID) ?? 0) === generation) setMeta("loading", sessionID, false)
       })
   }
@@ -380,7 +322,7 @@ export function createServerSession(client: OpencodeClient) {
     await runInflight(inflight, sessionID, () => loadMessages(sessionID, limit))
   }
 
-  const eventSessionID = (event: SessionEvent) => {
+  const eventSessionID = (event: { type: string; properties?: unknown }) => {
     const properties = event.properties
     if (!properties || typeof properties !== "object") return
     if ("sessionID" in properties && typeof properties.sessionID === "string") return properties.sessionID
@@ -402,11 +344,13 @@ export function createServerSession(client: OpencodeClient) {
       return properties.part.sessionID
   }
 
-  const apply = (event: SessionEvent) => {
+  const apply = (event: { type: string; properties?: unknown }) => {
     const eventID = eventSessionID(event)
     if (eventID) {
-      const journal = initialEvents.get(eventID)
-      if (journal) recordInitialEvent(journal, event)
+      if (event.type.startsWith("message.")) {
+        const initial = initialLoads.get(eventID)
+        if (initial) initial.dirty = true
+      }
       touch(eventID)
       if (!data.info[eventID]) void resolve(eventID).catch(() => {})
     }
@@ -597,72 +541,6 @@ export function createServerSession(client: OpencodeClient) {
             if (result.found) draft.splice(result.index, 1)
           }),
         )
-      }
-    }
-  }
-
-  function recordInitialEvent(journal: InitialEventJournal, event: SessionEvent) {
-    if (journal.overflow) return
-    const properties = event.properties
-    if (!properties || typeof properties !== "object") return
-    if (event.type === "message.updated" && "info" in properties) {
-      const info = properties.info as Message
-      if (!journal.messages.has(info.id)) {
-        if (journal.size >= initialEventLimit) {
-          journal.overflow = true
-          return
-        }
-        journal.size += 1
-        const current = data.message[info.sessionID]?.find((message) => message.id === info.id)
-        journal.messages.set(info.id, current ? JSON.stringify(current) : undefined)
-      }
-      journal.removedMessages.delete(info.id)
-    }
-    if (event.type === "message.removed" && "sessionID" in properties && "messageID" in properties) {
-      const messageID = properties.messageID as string
-      if (!journal.messages.has(messageID) && journal.size >= initialEventLimit) {
-        journal.overflow = true
-        return
-      }
-      if (!journal.messages.has(messageID)) {
-        journal.size += 1
-        const sessionID = properties.sessionID as string
-        const current = data.message[sessionID]?.find((message) => message.id === messageID)
-        journal.messages.set(messageID, current ? JSON.stringify(current) : undefined)
-      }
-      journal.removedMessages.add(messageID)
-    }
-    if (
-      (event.type === "message.part.updated" || event.type === "message.part.removed" || event.type === "message.part.delta") &&
-      "messageID" in properties &&
-      "partID" in properties
-    ) {
-      const messageID = properties.messageID as string
-      const partID = properties.partID as string
-      const parts = journal.parts.get(messageID) ?? new Map<string, string | undefined>()
-      if (!parts.has(partID)) {
-        if (journal.size >= initialEventLimit) {
-          journal.overflow = true
-          return
-        }
-        journal.size += 1
-        const current = data.part[messageID]?.find((part) => part.id === partID)
-        parts.set(partID, current ? JSON.stringify(current) : undefined)
-        journal.parts.set(messageID, parts)
-      }
-    }
-    if (event.type === "message.part.updated" && "part" in properties) {
-      const part = properties.part as Part
-      const parts = journal.parts.get(part.messageID) ?? new Map<string, string | undefined>()
-      if (!parts.has(part.id)) {
-        if (journal.size >= initialEventLimit) {
-          journal.overflow = true
-          return
-        }
-        journal.size += 1
-        const current = data.part[part.messageID]?.find((item) => item.id === part.id)
-        parts.set(part.id, current ? JSON.stringify(current) : undefined)
-        journal.parts.set(part.messageID, parts)
       }
     }
   }
