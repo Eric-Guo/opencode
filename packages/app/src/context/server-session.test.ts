@@ -151,6 +151,84 @@ describe("server session", () => {
     expect(store.data.part[message.id]).toEqual([live])
   })
 
+  test("preserves events when the first message arrives before the initial load", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const stale: Part = { id: "part", sessionID: "child", messageID: message.id, type: "text", text: "stale" }
+    const live: Part = { ...stale, text: "live" }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    store.apply({ type: "message.updated", properties: { info: message } })
+    const loading = store.sync("child")
+
+    store.apply({
+      type: "message.part.updated",
+      properties: { sessionID: "child", part: live, time: 2 },
+    })
+    resolveMessages?.({ data: [{ info: message, parts: [stale] }], response: { headers: new Headers() } })
+    await loading
+
+    expect(store.data.part[message.id]).toEqual([live])
+  })
+
+  test("discards a stale initial page when the event journal fills", async () => {
+    let resolveMessages:
+      | ((value: { data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }) => void)
+      | undefined
+    const message: Message = {
+      id: "message",
+      sessionID: "child",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+    }
+    const stale: Part = { id: "part", sessionID: "child", messageID: message.id, type: "text", text: "stale" }
+    const live: Part = { ...stale, text: "live" }
+    const client = {
+      session: {
+        get: async () => ({ data: session("child", "root") }),
+        messages: () =>
+          new Promise<{ data: { info: Message; parts: Part[] }[]; response: { headers: Headers } }>((resolve) => {
+            resolveMessages = resolve
+          }),
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client)
+    store.apply({ type: "message.updated", properties: { info: message } })
+    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: live, time: 1 } })
+    const loading = store.sync("child")
+
+    for (let index = 0; index < 4_097; index++) {
+      store.apply({
+        type: "message.part.delta",
+        properties: { sessionID: "child", messageID: message.id, partID: live.id, field: "text", delta: "x" },
+      })
+    }
+    resolveMessages?.({ data: [{ info: message, parts: [stale] }], response: { headers: new Headers() } })
+    await loading
+
+    const part = store.data.part[message.id]?.find((part) => part.type === "text")
+    expect(part?.text).toBe(`live${"x".repeat(4_097)}`)
+  })
+
   test("applies events without a directory store", () => {
     const ctx = setup({})
     ctx.store.apply({ type: "session.created", properties: { info: session("root") } })

@@ -29,6 +29,9 @@ type OptimisticItem = {
 }
 
 type SessionEvent = { type: string; properties?: unknown }
+type InitialEventJournal = { events: SessionEvent[]; overflow: boolean }
+
+const initialEventLimit = 4_096
 
 const hasParts = (parts: Part[] | undefined, want: Part[]) => {
   if (!parts) return want.length === 0
@@ -97,7 +100,7 @@ export function createServerSession(client: OpencodeClient) {
   const inflightDiff = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
-  const initialEvents = new Map<string, SessionEvent[]>()
+  const initialEvents = new Map<string, InitialEventJournal>()
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
   const pinned = new Map<string, number>()
@@ -207,6 +210,7 @@ export function createServerSession(client: OpencodeClient) {
       inflight.delete(sessionID)
       inflightDiff.delete(sessionID)
       inflightTodo.delete(sessionID)
+      initialEvents.delete(sessionID)
     })
     setData(
       produce((draft) => {
@@ -267,8 +271,8 @@ export function createServerSession(client: OpencodeClient) {
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
     if (meta.loading[sessionID]) return
     const generation = generations.get(sessionID) ?? 0
-    const initiallyUnloaded = data.message[sessionID] === undefined
-    if (initiallyUnloaded) initialEvents.set(sessionID, [])
+    const initiallyUnloaded = meta.limit[sessionID] === undefined
+    if (initiallyUnloaded) initialEvents.set(sessionID, { events: [], overflow: false })
     setMeta("loading", sessionID, true)
     await fetchMessages(sessionID, limit, before)
       .then((page) => {
@@ -276,8 +280,12 @@ export function createServerSession(client: OpencodeClient) {
         const next = mergeOptimisticPage(page, [...(optimistic.get(sessionID)?.values() ?? [])])
         next.confirmed.forEach((messageID) => clearOptimistic(sessionID, messageID))
         const messages = mode === "prepend" ? merge(data.message[sessionID] ?? [], next.session) : next.session
-        const events = initialEvents.get(sessionID) ?? []
+        const journal = initialEvents.get(sessionID)
         initialEvents.delete(sessionID)
+        if (journal?.overflow) {
+          if (data.message[sessionID] === undefined) setData("message", sessionID, [])
+          return
+        }
         batch(() => {
           if (initiallyUnloaded) setData("message", sessionID, messages)
           if (!initiallyUnloaded) setData("message", sessionID, reconcile(messages, { key: "id" }))
@@ -290,7 +298,7 @@ export function createServerSession(client: OpencodeClient) {
           setMeta("complete", sessionID, next.complete)
           setMeta("at", sessionID, Date.now())
         })
-        events.forEach(apply)
+        journal?.events.forEach(apply)
       })
       .finally(() => {
         initialEvents.delete(sessionID)
@@ -348,7 +356,11 @@ export function createServerSession(client: OpencodeClient) {
   const apply = (event: SessionEvent) => {
     const eventID = eventSessionID(event)
     if (eventID) {
-      if (event.type.startsWith("message.")) initialEvents.get(eventID)?.push(event)
+      const journal = initialEvents.get(eventID)
+      if (journal && event.type.startsWith("message.")) {
+        if (journal.events.length < initialEventLimit) journal.events.push(event)
+        else journal.overflow = true
+      }
       touch(eventID)
       if (!data.info[eventID]) void resolve(eventID).catch(() => {})
     }
