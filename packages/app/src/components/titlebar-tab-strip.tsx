@@ -138,12 +138,7 @@ function DraftTabSlot(props: {
   let ref!: HTMLDivElement
 
   return (
-    <div
-      ref={sortable.ref}
-      data-titlebar-tab-slot
-      data-tab-key={props.id}
-      class="flex min-w-0 w-56 flex-1 basis-0"
-    >
+    <div ref={sortable.ref} data-titlebar-tab-slot data-tab-key={props.id} class="flex min-w-0 w-56 flex-1 basis-0">
       <DraftTabItem
         ref={(el) => {
           ref = el
@@ -208,7 +203,7 @@ export function TitlebarTabStrip(props: {
   })
 
   return (
-    <div data-slot="titlebar-tabs" class="relative min-w-0 flex-1">
+    <div data-slot="titlebar-tabs" class="relative min-w-0">
       <div
         data-slot="titlebar-tabs-scroll"
         class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
@@ -249,11 +244,7 @@ export function TitlebarTabStrip(props: {
             }
           }}
         >
-          <div
-            data-titlebar-tab-list
-            class="flex w-full min-w-0 flex-row items-center"
-            ref={listRef}
-          >
+          <div data-titlebar-tab-list class="flex w-full min-w-0 flex-row items-center" ref={listRef}>
             <For each={props.tabs}>
               {(tab, index) => {
                 const id = tabKey(tab)
