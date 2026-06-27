@@ -97,6 +97,7 @@ for (const profile of profiles) {
     await expectVisualStability(testInfo, `shell-${profiles.indexOf(profile)}`, trace, {
       flow: ["shell", "following"],
       stable: ["shell", "following"],
+      required: ["shell", "following"],
       unique: ["shell", "following"],
       preserveBottomAnchor: true,
       maxPositionReversals: 0,
@@ -131,6 +132,7 @@ test("keeps following row stable when a collapsed shell receives 50 lines", asyn
   await expectVisualStability(testInfo, "collapsed-shell", trace, {
     flow: ["shell", "following"],
     stable: ["shell", "following"],
+    required: ["shell", "following"],
     unique: ["shell", "following"],
     maxPositionReversals: 0,
     perMarker: true,
@@ -173,6 +175,7 @@ test("keeps rows stable when a running shell becomes an error", async ({ page },
   await expectVisualStability(testInfo, "shell-error", trace, {
     flow: ["shell", "following"],
     stable: ["shell", "following"],
+    required: ["shell", "following"],
     unique: ["shell", "following"],
     preserveBottomAnchor: true,
     maxPositionReversals: 0,
@@ -204,6 +207,7 @@ test("keeps rows stable when later text arrives before shell output", async ({ p
   await expectVisualStability(testInfo, "late-text-before-shell-output", trace, {
     flow: ["shell", "following"],
     stable: ["shell"],
+    required: ["shell", "following"],
     unique: ["shell", "following"],
     preserveBottomAnchor: true,
     maxPositionReversals: 0,

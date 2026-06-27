@@ -163,7 +163,7 @@ test("analyzes each marked event independently", () => {
   }
 
   expect(analyzeVisualStability(input, { maxPositionReversals: 0 })).toContain("changing top reversed 1 times")
-  expect(analyzeVisualStabilityByMarker(input, { maxPositionReversals: 0 })).toEqual([])
+  expect(analyzeVisualStabilityByMarker(input, { maxPositionReversals: 0, motion: ["following"] })).toEqual([])
 })
 
 test("reports regions rendered in the wrong flow order", () => {
@@ -173,6 +173,114 @@ test("reports regions rendered in the wrong flow order", () => {
   )
 
   expect(issues.some((issue) => issue.includes("changing rendered after following"))).toBe(true)
+})
+
+test("uses painted bounds instead of clipped layout overflow", () => {
+  expect(
+    analyzeVisualStability(
+      trace([
+        frame(
+          0,
+          region({ top: 100, bottom: 140, height: 40, layoutTop: 100, layoutBottom: 300 }),
+          region({ top: 140, bottom: 180 }),
+        ),
+      ]),
+      { flow: ["changing", "following"] },
+    ),
+  ).toEqual([])
+})
+
+test("does not report disappearance when a present row moves outside the viewport", () => {
+  expect(
+    analyzeVisualStability(
+      trace([
+        frame(0, region({ visible: true })),
+        frame(16, region({ visible: false, inViewport: false, top: -100, bottom: -80 })),
+        frame(32, region({ visible: true })),
+      ]),
+    ),
+  ).toEqual([])
+})
+
+test("reports an in-viewport transparent frame between visible frames", () => {
+  const issues = analyzeVisualStability(
+    trace([
+      frame(0, region()),
+      frame(16, region({ visible: false, opacity: 0, inViewport: true })),
+      frame(32, region()),
+    ]),
+  )
+
+  expect(issues.some((issue) => issue.includes("blanked between visible frames"))).toBe(true)
+})
+
+test("reports an in-viewport display-none frame between visible frames", () => {
+  const issues = analyzeVisualStability(
+    trace([
+      frame(0, region()),
+      frame(16, region({ visible: false, width: 0, height: 0, inViewport: true, cssHidden: true })),
+      frame(32, region()),
+    ]),
+  )
+
+  expect(issues.some((issue) => issue.includes("blanked between visible frames"))).toBe(true)
+})
+
+test("can limit motion analysis to unaffected regions", () => {
+  expect(
+    analyzeVisualStability(
+      trace([frame(0, region({ height: 20 })), frame(16, region({ height: 40 })), frame(32, region({ height: 30 }))]),
+      { motion: ["following"] },
+    ),
+  ).toEqual([])
+})
+
+test("reports a blank frame across replacement surfaces", () => {
+  const issues = analyzeVisualStability(
+    {
+      markers: [],
+      samples: [
+        { at: 0, regions: { thinking: region(), error: region({ present: false, visible: false }) } },
+        {
+          at: 16,
+          regions: {
+            thinking: region({ present: false, visible: false }),
+            error: region({ present: false, visible: false }),
+          },
+        },
+        { at: 32, regions: { thinking: region({ present: false, visible: false }), error: region() } },
+      ],
+    },
+    { continuousAny: [["thinking", "error"]] },
+  )
+
+  expect(issues.some((issue) => issue.includes("thinking | error blanked"))).toBe(true)
+})
+
+test("reports failure to acquire the bottom anchor", () => {
+  const issues = analyzeVisualStability(
+    trace([
+      { at: 0, regions: { changing: region() }, viewport: viewport(600) },
+      { at: 16, regions: { changing: region() }, viewport: viewport(120) },
+    ]),
+    { acquireBottomAnchor: true },
+  )
+
+  expect(issues.some((issue) => issue.includes("did not acquire bottom anchor"))).toBe(true)
+})
+
+test("reports a required region that never renders", () => {
+  const issues = analyzeVisualStability(
+    trace([
+      {
+        at: 0,
+        regions: { changing: region({ present: false, visible: false }) },
+      },
+    ]),
+    { required: ["changing"] },
+  )
+
+  expect(issues).toContain("changing never rendered")
 })
 
 function frame(
@@ -187,6 +295,7 @@ function region(input: Partial<VisualStabilityTrace["samples"][number]["regions"
   return {
     present: true,
     visible: true,
+    inViewport: true,
     top: 0,
     bottom: 20,
     width: 100,
@@ -196,6 +305,8 @@ function region(input: Partial<VisualStabilityTrace["samples"][number]["regions"
     node: 1,
     label: "",
     text: "",
+    layoutTop: input.top ?? 0,
+    layoutBottom: input.bottom ?? 20,
     ...input,
   }
 }

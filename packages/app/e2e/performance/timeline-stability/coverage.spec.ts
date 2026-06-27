@@ -1,36 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { assistantMessage, setupTimeline, status, toolPart, userMessage, userText } from "./fixture"
 
-const rowTypes = [
-  "TurnGap",
-  "CommentStrip",
-  "UserMessage",
-  "TurnDivider",
-  "AssistantPart",
-  "Thinking",
-  "Retry",
-  "DiffSummary",
-  "Error",
-] as const
-
-const toolTypes = [
-  "read",
-  "glob",
-  "grep",
-  "list",
-  "webfetch",
-  "websearch",
-  "task",
-  "bash",
-  "edit",
-  "write",
-  "apply_patch",
-  "todowrite",
-  "question",
-  "skill",
-  "custom_mcp_tool",
-] as const
-
 test.describe("timeline stability coverage", () => {
   test("renders every admitted tool family and hides timeline-only exclusions", async ({ page }) => {
     const parts = [
@@ -88,7 +58,6 @@ test.describe("timeline stability coverage", () => {
       await expect(page.locator(`[data-timeline-part-id="${id}"]`).first(), id).toBeVisible()
     }
     await expect(page.locator('[data-timeline-part-id="prt_todo"]')).toHaveCount(0)
-    expect(toolTypes).toHaveLength(15)
   })
 
   test("projects gaps, dividers, assistant parts, and errors together", async ({ page }) => {
@@ -141,7 +110,6 @@ test.describe("timeline stability coverage", () => {
     await expect(page.getByText("Visible provider failure")).toBeVisible()
     await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
     await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
-    expect(rowTypes).toHaveLength(9)
   })
 
   test("renders comment strips and historical diff summary overflow", async ({ page }) => {

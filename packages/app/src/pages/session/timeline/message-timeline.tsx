@@ -436,6 +436,16 @@ export function MessageTimeline(props: {
     },
   })
   const resizeItem = virtualizer.resizeItem
+  let resizeAnchorScheduled = false
+  const anchorResizedBottom = () => {
+    if (resizeAnchorScheduled || props.hasScrollGesture()) return
+    resizeAnchorScheduled = true
+    queueMicrotask(() => {
+      resizeAnchorScheduled = false
+      if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+      virtualizer.scrollToEnd()
+    })
+  }
   virtualizer.resizeItem = (index, size) => {
     const item = virtualizer.measurementsCache[index]
     const previous = item ? (virtualizer.itemSizeCache.get(item.key) ?? item.size) : undefined
@@ -457,9 +467,13 @@ export function MessageTimeline(props: {
       })
     }
     resizeItem(index, size)
+    if (root && props.shouldAnchorBottom()) anchorResizedBottom()
   }
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
-    item.end <= instance.getLogicalScrollOffset()
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
+    if (props.shouldAnchorBottom()) return false
+    const first = virtualizer.range?.startIndex
+    return first !== undefined && item.index < first
+  }
   const virtualItemByKey = createMemo(
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
@@ -486,24 +500,13 @@ export function MessageTimeline(props: {
     })
   })
 
-  let bottomAnchorSessionKey = ""
-  let bottomAnchorFrame: number | undefined
-
   const maybeAnchorBottom = () => {
-    const key = sessionKey()
-    if (bottomAnchorSessionKey === key) return
     if (timelineRows().length === 0) return
-    bottomAnchorSessionKey = key
-    if (!props.shouldAnchorBottom()) return
-    if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
+    if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
-    bottomAnchorFrame = requestAnimationFrame(() => {
-      bottomAnchorFrame = undefined
-      if (sessionKey() !== key) return
-      virtualizer.scrollToEnd()
-    })
+    virtualizer.scrollToEnd()
   }
 
   let measuredSessionKey = sessionKey()
@@ -522,7 +525,6 @@ export function MessageTimeline(props: {
     timelineCache.delete(ownerSessionKey)
     timelineCache.set(ownerSessionKey, { measurements: virtualizer.takeSnapshot(), toolOpen: { ...toolOpen } })
     while (timelineCache.size > 16) timelineCache.delete(timelineCache.keys().next().value!)
-    if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     if (overscanFrame !== undefined) cancelAnimationFrame(overscanFrame)
     props.setRevealMessage?.(() => {})
@@ -922,10 +924,16 @@ export function MessageTimeline(props: {
           .map((ref) => getMsgPart(ref.messageID, ref.partID))
           .filter((part): part is ToolPart => part?.type === "tool")
       })
+      const contextOpenKey = () => `context:${row().group.key}`
+      const open = createMemo(() => {
+        return toolOpen[contextOpenKey()] === true
+      })
 
       return (
         <ContextToolGroup
           parts={parts()}
+          open={open()}
+          onOpenChange={(value) => setToolOpen(contextOpenKey(), value)}
           busy={
             workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key
           }

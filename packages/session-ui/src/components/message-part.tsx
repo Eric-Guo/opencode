@@ -944,16 +944,24 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
-export function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean; onSizeChange?: () => void }) {
+export function ContextToolGroup(props: {
+  parts: ToolPart[]
+  busy?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onSizeChange?: () => void
+}) {
   const i18n = useI18n()
-  const [open, setOpen] = createSignal(false)
+  const [localOpen, setLocalOpen] = createSignal(false)
+  const open = () => props.open ?? localOpen()
   const pending = createMemo(
     () =>
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
   const handleOpenChange = (value: boolean) => {
-    setOpen(value)
+    if (props.open === undefined) setLocalOpen(value)
+    props.onOpenChange?.(value)
     props.onSizeChange?.()
   }
 
@@ -1839,6 +1847,12 @@ ToolRegistry.register({
       event.preventDefault()
       open()
     }
+    const navigateKey = (event: KeyboardEvent) => {
+      if (!clickable() || href()) return
+      if (event.key !== "Enter" && event.key !== " ") return
+      event.preventDefault()
+      open()
+    }
 
     const trigger = () => (
       <div data-component="task-tool-card">
@@ -1871,9 +1885,11 @@ ToolRegistry.register({
         status={props.status}
         trigger={trigger()}
         hideDetails
+        triggerAsLink
         triggerHref={href()}
         clickable={clickable()}
         onTriggerClick={navigate}
+        onTriggerKeyDown={navigateKey}
       />
     )
   },

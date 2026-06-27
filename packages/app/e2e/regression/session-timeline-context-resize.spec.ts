@@ -40,8 +40,6 @@ test.describe("regression: session timeline context group resize", () => {
 
   test("paints a stable exploring to explored transition", async ({ page }) => {
     const events: { directory: string; payload: Record<string, unknown> }[] = []
-    const devtools = await page.context().newCDPSession(page)
-    await devtools.send("Emulation.setCPUThrottlingRate", { rate: 4 })
     await page.setViewportSize({ width: 1400, height: 900 })
     await mockServer(page, events, [
       ...Array.from({ length: 8 }, (_, index) => turn(index, false)).flat(),
@@ -51,6 +49,8 @@ test.describe("regression: session timeline context group resize", () => {
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
     await expectSessionTitle(page, title)
+    const devtools = await page.context().newCDPSession(page)
+    await devtools.send("Emulation.setCPUThrottlingRate", { rate: 4 })
     const context = page.locator(`[data-timeline-part-ids="${contextIDs.join(",")}"]`).first()
     await expectAppVisible(context)
     await expect(context.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Exploring")

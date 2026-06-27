@@ -34,9 +34,13 @@ test.describe("timeline adverse visual stability", () => {
       has: page.locator('[data-timeline-row="AssistantPart"]'),
     })
     await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -450 }))
       element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight - 450)
     })
     await page.waitForTimeout(150)
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+      .toBeGreaterThan(100)
     const anchor = await scroller.evaluate((element) => {
       const view = element.getBoundingClientRect()
       return [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((row) => {

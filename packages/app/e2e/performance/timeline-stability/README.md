@@ -6,6 +6,8 @@ Run from `packages/app`:
 bun run test:stability
 ```
 
+For diagnostic before/violation/after screenshots, set `OPENCODE_STABILITY_CAPTURE=1` before running. Screenshot capture is intentionally opt-in so compositor readback does not affect normal pass/fail timing.
+
 The suite uses a production build, one Chromium worker, deterministic event delays, and 4x CPU throttling for adverse scenarios. Failed perceptual checks retain:
 
 - `video.webm`
@@ -14,7 +16,7 @@ The suite uses a production build, one Chromium worker, deterministic event dela
 - frame-by-frame visual trace attached to the Playwright report
 - event markers and summarized violations attached to the Playwright report
 
-The current matrix expands to 77 Playwright cases plus visual-oracle unit coverage. It intentionally remains red when a captured painted frame violates a perceptual invariant.
+The matrix intentionally remains red when a captured painted frame violates a perceptual invariant.
 
 ## Coverage
 

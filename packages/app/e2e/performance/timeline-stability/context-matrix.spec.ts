@@ -55,6 +55,7 @@ test("appends context operations while the group is expanded", async ({ page }, 
     unique: ["context", "following"],
     preserveBottomAnchor: true,
     maxPositionReversals: 0,
+    motion: ["following"],
     perMarker: true,
   })
   await expect(
@@ -83,8 +84,6 @@ test("splits and merges context groups when a middle text part changes", async (
     cpuRate: 4,
   })
   await startVisualStabilityProbe(page, {
-    read: { selector: '[data-timeline-part-ids="prt_split_01_read"]', closest: '[data-timeline-row="AssistantPart"]' },
-    glob: { selector: '[data-timeline-part-ids*="prt_split_03_glob"]', closest: '[data-timeline-row="AssistantPart"]' },
     following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
   })
   await timeline.send(
@@ -121,6 +120,12 @@ test("removing the first context member replaces the group once without overlapp
     ],
     cpuRate: 4,
   })
+  const original = page.locator(`[data-timeline-part-ids="${ids.join(",")}"]`)
+  const originalRowKey = await original.evaluate((element) =>
+    element.closest("[data-timeline-key]")?.getAttribute("data-timeline-key"),
+  )
+  await original.locator('[data-slot="collapsible-trigger"]').click()
+  await expect(original.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
   await startVisualStabilityProbe(page, {
     context: {
       selector: '[data-timeline-part-ids*="prt_key_02_glob"]',
@@ -139,6 +144,14 @@ test("removing the first context member replaces the group once without overlapp
     maxPositionReversals: 0,
   })
   await expect(page.locator(`[data-timeline-part-ids="${ids.slice(1).join(",")}"]`)).toBeVisible()
+  expect(
+    await page
+      .locator(`[data-timeline-part-ids="${ids.slice(1).join(",")}"]`)
+      .evaluate((element) => element.closest("[data-timeline-key]")?.getAttribute("data-timeline-key")),
+  ).toBe(originalRowKey)
+  await expect(
+    page.locator(`[data-timeline-part-ids="${ids.slice(1).join(",")}"] [data-slot="collapsible-trigger"]`),
+  ).toHaveAttribute("aria-expanded", "true")
 })
 
 test("preserves a collapsed context group through count and status updates", async ({ page }) => {

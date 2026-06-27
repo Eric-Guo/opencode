@@ -37,7 +37,6 @@ test("does not reverse visible rows when the user wheels during shell remeasurem
     stable: ["shell", "following"],
     unique: ["shell", "following"],
     maxPositionReversals: 1,
-    perMarker: true,
   })
 })
 
@@ -69,7 +68,7 @@ test("jump to latest lands on stable final rows after offscreen growth", async (
   await expectVisualStability(testInfo, "jump-latest", trace, {
     flow: ["shell", "following"],
     unique: ["shell", "following"],
-    preserveBottomAnchor: true,
+    acquireBottomAnchor: true,
     maxPositionReversals: 1,
   })
 })

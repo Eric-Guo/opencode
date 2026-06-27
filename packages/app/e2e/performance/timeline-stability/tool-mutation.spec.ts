@@ -25,7 +25,7 @@ test("adds a task child-session link without replacing the task row", async ({ p
     cpuRate: 4,
   })
   await startVisualStabilityProbe(page, {
-    task: { selector: `[data-timeline-part-id="${taskID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
+    task: { selector: `[data-timeline-part-id="${taskID}"] [data-slot="collapsible-trigger"]` },
   })
   await timeline.send(
     partUpdated(toolPart(taskID, "task", "completed", input, { metadata: { sessionId: childID } })),

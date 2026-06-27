@@ -138,7 +138,8 @@ test("replaces thinking with an assistant error without a blank turn", async ({ 
   await timeline.send(status("busy"), 150)
   await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
   await startVisualStabilityProbe(page, {
-    turn: { selector: '[data-timeline-row="UserMessage"][data-message-id="msg_1000_timeline_user"]' },
+    thinking: { selector: '[data-timeline-row="Thinking"]' },
+    error: { selector: '[data-timeline-row="Error"]' },
   })
   await timeline.send(
     messageUpdated({
@@ -151,8 +152,8 @@ test("replaces thinking with an assistant error without a blank turn", async ({ 
   await expect(page.locator('[data-timeline-row="Error"]')).toContainText("Provider failed visibly")
   const trace = await stopVisualStabilityProbe(page)
   await expectVisualStability(testInfo, "thinking-error", trace, {
-    stable: ["turn"],
-    unique: ["turn"],
+    unique: ["thinking", "error"],
+    continuousAny: [["thinking", "error"]],
   })
 })
 

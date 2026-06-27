@@ -4,8 +4,12 @@ import { writeFile } from "node:fs/promises"
 export type VisualRegionSample = {
   present: boolean
   visible: boolean
+  inViewport: boolean
+  cssHidden?: boolean
   top: number
   bottom: number
+  layoutTop?: number
+  layoutBottom?: number
   width: number
   height: number
   opacity: number
@@ -49,114 +53,186 @@ const recordings = new WeakMap<
 >()
 
 export async function startVisualStabilityProbe(page: Page, regions: Record<string, ProbeRegion>) {
-  const session = await page.context().newCDPSession(page)
+  await stopRecording(page)
+  await page.evaluate(() => {
+    ;(window as ProbeWindow).__visualStabilityProbe?.stop()
+  })
+  const capture = process.env.OPENCODE_STABILITY_CAPTURE === "1"
+  const session = capture ? await page.context().newCDPSession(page) : undefined
   const frames: CapturedFrame[] = []
-  await session.send("Page.enable")
-  const startedAtEpoch = await page.evaluate((regions) => {
-    const samples: VisualStabilityTrace["samples"] = []
-    const markers: VisualStabilityTrace["markers"] = []
-    const startedAt = performance.now()
-    const nodes = new WeakMap<Node, number>()
-    let nextNode = 1
-    let running = true
-    const round = (value: number) => Math.round(value * 10) / 10
-    const opacity = (element: Element) => Number(getComputedStyle(element).opacity)
-    const sample = () => {
-      if (!running) return
-      setTimeout(() => {
+  if (session) await session.send("Page.enable")
+  const startedAtEpoch = await page
+    .evaluate((regions) => {
+      const samples: VisualStabilityTrace["samples"] = []
+      const markers: VisualStabilityTrace["markers"] = []
+      const startedAt = performance.now()
+      const nodes = new WeakMap<Node, number>()
+      const lastBounds = new Map<string, { top: number; bottom: number }>()
+      let nextNode = 1
+      let running = true
+      const round = (value: number) => Math.round(value * 10) / 10
+      const opacity = (element: Element) => Number(getComputedStyle(element).opacity)
+      const sample = () => {
         if (!running) return
-        const viewport = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
-          element.querySelector("[data-timeline-row]"),
-        )
-        const viewportRect = viewport?.getBoundingClientRect()
-        samples.push({
-          at: performance.now() - startedAt,
-          viewport: viewport
-            ? {
-                top: round(viewportRect!.top),
-                bottom: round(viewportRect!.bottom),
-                scrollTop: round(viewport.scrollTop),
-                scrollHeight: round(viewport.scrollHeight),
-                clientHeight: round(viewport.clientHeight),
-                distanceFromBottom: round(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop),
-              }
-            : undefined,
-          regions: Object.fromEntries(
-            Object.entries(regions).map(([name, config]) => {
-              const found = document.querySelector<HTMLElement>(config.selector)
-              const count = document.querySelectorAll(config.selector).length
-              const element = config.closest ? found?.closest<HTMLElement>(config.closest) : found
-              if (!element)
+        setTimeout(() => {
+          if (!running) return
+          const viewport = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
+            element.querySelector("[data-timeline-row]"),
+          )
+          const viewportRect = viewport?.getBoundingClientRect()
+          samples.push({
+            at: performance.now() - startedAt,
+            viewport: viewport
+              ? {
+                  top: round(viewportRect!.top),
+                  bottom: round(viewportRect!.bottom),
+                  scrollTop: round(viewport.scrollTop),
+                  scrollHeight: round(viewport.scrollHeight),
+                  clientHeight: round(viewport.clientHeight),
+                  distanceFromBottom: round(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop),
+                }
+              : undefined,
+            regions: Object.fromEntries(
+              Object.entries(regions).map(([name, config]) => {
+                const found = document.querySelector<HTMLElement>(config.selector)
+                const count = document.querySelectorAll(config.selector).length
+                const element = config.closest ? found?.closest<HTMLElement>(config.closest) : found
+                if (!element)
+                  return [
+                    name,
+                    {
+                      present: false,
+                      visible: false,
+                      inViewport: false,
+                      top: 0,
+                      bottom: 0,
+                      width: 0,
+                      height: 0,
+                      opacity: 0,
+                      count,
+                      node: 0,
+                      label: "",
+                      text: "",
+                    },
+                  ]
+                const rect = element.getBoundingClientRect()
+                const style = getComputedStyle(element)
+                if (rect.height > 0) lastBounds.set(name, { top: rect.top, bottom: rect.bottom })
+                const known = rect.height > 0 ? rect : lastBounds.get(name)
+                const painted = (() => {
+                  const result = { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right }
+                  let parent = element.parentElement
+                  while (parent) {
+                    const parentStyle = getComputedStyle(parent)
+                    if (["hidden", "clip", "scroll", "auto"].includes(parentStyle.overflowY)) {
+                      const parentRect = parent.getBoundingClientRect()
+                      result.top = Math.max(result.top, parentRect.top)
+                      result.bottom = Math.min(result.bottom, parentRect.bottom)
+                    }
+                    if (["hidden", "clip", "scroll", "auto"].includes(parentStyle.overflowX)) {
+                      const parentRect = parent.getBoundingClientRect()
+                      result.left = Math.max(result.left, parentRect.left)
+                      result.right = Math.min(result.right, parentRect.right)
+                    }
+                    if (parent === viewport) break
+                    parent = parent.parentElement
+                  }
+                  if (viewportRect) {
+                    result.top = Math.max(result.top, viewportRect.top)
+                    result.bottom = Math.min(result.bottom, viewportRect.bottom)
+                    result.left = Math.max(result.left, viewportRect.left)
+                    result.right = Math.min(result.right, viewportRect.right)
+                  }
+                  return result
+                })()
+                const contentOpacity = config.opacitySelectors?.length
+                  ? Math.max(
+                      0,
+                      ...config.opacitySelectors.flatMap((selector) =>
+                        [...element.querySelectorAll(selector)].map((node) => {
+                          let value = 1
+                          let current: Element | null = node
+                          while (current) {
+                            value *= opacity(current)
+                            if (current === element) break
+                            current = current.parentElement
+                          }
+                          return value
+                        }),
+                      ),
+                    )
+                  : opacity(element)
+                let visibleOpacity = contentOpacity
+                let ancestor = element.parentElement
+                let ancestorHidden = false
+                while (ancestor) {
+                  const ancestorStyle = getComputedStyle(ancestor)
+                  visibleOpacity *= Number(ancestorStyle.opacity)
+                  if (ancestorStyle.display === "none" || ancestorStyle.visibility === "hidden") ancestorHidden = true
+                  if (ancestor === viewport) break
+                  ancestor = ancestor.parentElement
+                }
+                const cssHidden =
+                  ancestorHidden || style.display === "none" || style.visibility === "hidden" || visibleOpacity === 0
                 return [
                   name,
                   {
-                    present: false,
-                    visible: false,
-                    top: 0,
-                    bottom: 0,
-                    width: 0,
-                    height: 0,
-                    opacity: 0,
+                    present: true,
+                    visible:
+                      style.display !== "none" &&
+                      style.visibility !== "hidden" &&
+                      visibleOpacity > 0 &&
+                      painted.right > painted.left &&
+                      painted.bottom > painted.top,
+                    inViewport:
+                      !viewportRect || (!!known && known.bottom > viewportRect.top && known.top < viewportRect.bottom),
+                    cssHidden,
+                    top: round(painted.top),
+                    bottom: round(painted.bottom),
+                    layoutTop: round(rect.top),
+                    layoutBottom: round(rect.bottom),
+                    width: round(painted.right - painted.left),
+                    height: round(painted.bottom - painted.top),
+                    opacity: round(visibleOpacity),
                     count,
-                    node: 0,
-                    label: "",
-                    text: "",
+                    node: (() => {
+                      const current = nodes.get(element)
+                      if (current) return current
+                      nodes.set(element, nextNode)
+                      return nextNode++
+                    })(),
+                    label: element.getAttribute("aria-label") ?? "",
+                    text: (element.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 500),
                   },
                 ]
-              const rect = element.getBoundingClientRect()
-              const visibleOpacity = config.opacitySelectors?.length
-                ? Math.max(
-                    0,
-                    ...config.opacitySelectors.flatMap((selector) =>
-                      [...element.querySelectorAll(selector)].map(opacity),
-                    ),
-                  )
-                : opacity(element)
-              const style = getComputedStyle(element)
-              return [
-                name,
-                {
-                  present: true,
-                  visible:
-                    style.display !== "none" &&
-                    style.visibility !== "hidden" &&
-                    visibleOpacity > 0 &&
-                    rect.width > 0 &&
-                    rect.height > 0 &&
-                    (!viewportRect || (rect.bottom > viewportRect.top && rect.top < viewportRect.bottom)),
-                  top: round(rect.top),
-                  bottom: round(rect.bottom),
-                  width: round(rect.width),
-                  height: round(rect.height),
-                  opacity: round(visibleOpacity),
-                  count,
-                  node: (() => {
-                    const current = nodes.get(element)
-                    if (current) return current
-                    nodes.set(element, nextNode)
-                    return nextNode++
-                  })(),
-                  label: element.getAttribute("aria-label") ?? "",
-                  text: element.innerText.trim().replace(/\s+/g, " "),
-                },
-              ]
-            }),
-          ),
-        })
-        requestAnimationFrame(sample)
-      }, 0)
-    }
-    ;(window as ProbeWindow).__visualStabilityProbe = {
-      startedAt,
-      markers,
-      samples,
-      stop: () => {
-        running = false
-      },
-    }
-    requestAnimationFrame(sample)
-    return performance.timeOrigin + startedAt
-  }, regions)
+              }),
+            ),
+          })
+          requestAnimationFrame(sample)
+        }, 0)
+      }
+      ;(window as ProbeWindow).__visualStabilityProbe = {
+        startedAt,
+        markers,
+        samples,
+        stop: () => {
+          running = false
+        },
+      }
+      requestAnimationFrame(sample)
+      return new Promise<number>((resolve) => {
+        const ready = () => {
+          if (samples.length > 0) return resolve(performance.timeOrigin + startedAt)
+          requestAnimationFrame(ready)
+        }
+        ready()
+      })
+    }, regions)
+    .catch(async (error) => {
+      if (session) await session.detach().catch(() => undefined)
+      throw error
+    })
+  if (!session) return
   const recording = {
     session,
     frames,
@@ -165,36 +241,51 @@ export async function startVisualStabilityProbe(page: Page, regions: Record<stri
     capture: Promise.resolve(),
   }
   recording.capture = (async () => {
-    while (recording.running && recording.frames.length < 900) {
-      const frame = await session.send("Page.captureScreenshot", {
-        format: "jpeg",
-        quality: 80,
-        captureBeyondViewport: false,
-        optimizeForSpeed: true,
-      })
-      recording.frames.push({ at: Date.now() - recording.startedAtEpoch, data: frame.data })
-      await new Promise((resolve) => setTimeout(resolve, 0))
+    try {
+      while (recording.running && recording.frames.length < 900) {
+        const frame = await session.send("Page.captureScreenshot", {
+          format: "jpeg",
+          quality: 80,
+          captureBeyondViewport: false,
+          optimizeForSpeed: true,
+        })
+        recording.frames.push({ at: Date.now() - recording.startedAtEpoch, data: frame.data })
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    } catch {
+      recording.running = false
     }
   })()
   recordings.set(page, recording)
 }
 
 export async function stopVisualStabilityProbe(page: Page) {
-  const trace = await page.evaluate(() => {
-    const probe = (window as ProbeWindow).__visualStabilityProbe
-    if (!probe) throw new Error("Visual stability probe is not running")
-    probe.stop()
-    return { markers: probe.markers, samples: probe.samples }
-  })
-  const recording = recordings.get(page)
-  if (recording) {
-    recording.running = false
-    await recording.capture
-    await recording.session.detach()
-    recordings.delete(page)
-    Object.defineProperty(trace, capturedFrames, { value: recording.frames })
-  }
+  let frames: CapturedFrame[] = []
+  const trace = await page
+    .evaluate(() => {
+      const probe = (window as ProbeWindow).__visualStabilityProbe
+      if (!probe) throw new Error("Visual stability probe is not running")
+      probe.stop()
+      return { markers: probe.markers, samples: probe.samples }
+    })
+    .finally(async () => {
+      frames = await stopRecording(page)
+    })
+  Object.defineProperty(trace, capturedFrames, { value: frames })
   return trace
+}
+
+async function stopRecording(page: Page) {
+  const recording = recordings.get(page)
+  if (!recording) return []
+  recordings.delete(page)
+  recording.running = false
+  try {
+    await recording.capture
+  } finally {
+    await recording.session.detach().catch(() => undefined)
+  }
+  return recording.frames
 }
 
 export async function markVisualStability(page: Page, label: string) {
@@ -280,9 +371,13 @@ export function analyzeVisualStability(
     maxPositionReversals?: number
     stable?: string[]
     fixed?: string[]
+    motion?: string[]
     unique?: string[]
     preserveBottomAnchor?: boolean
+    acquireBottomAnchor?: boolean
     perMarker?: boolean
+    continuousAny?: string[][]
+    required?: string[]
   } = {},
 ) {
   const issues: string[] = []
@@ -292,6 +387,10 @@ export function analyzeVisualStability(
   const maxReversals = options.maxReversals ?? 1
   const maxPositionReversals = options.maxPositionReversals ?? maxReversals
   const names = [...new Set(trace.samples.flatMap((sample) => Object.keys(sample.regions)))]
+
+  for (const name of options.required ?? []) {
+    if (!trace.samples.some((sample) => sample.regions[name]?.visible)) issues.push(`${name} never rendered`)
+  }
 
   for (const name of names) {
     const samples = trace.samples.flatMap((sample) => {
@@ -319,12 +418,21 @@ export function analyzeVisualStability(
       if (sample.opacity < opacityFloor)
         issues.push(`${name} opacity fell to ${sample.opacity} at ${Math.round(sample.at)}ms`)
     }
+    const firstPresent = samples.findIndex((sample) => sample.present)
+    const lastPresent = samples.findLastIndex((sample) => sample.present)
+    if (samples.slice(firstPresent, lastPresent + 1).some((sample) => !sample.present))
+      issues.push(`${name} disappeared between present frames`)
     const firstVisible = samples.findIndex((sample) => sample.visible)
     const lastVisible = samples.findLastIndex((sample) => sample.visible)
-    if (samples.slice(firstVisible, lastVisible + 1).some((sample) => !sample.visible))
-      issues.push(`${name} disappeared between visible frames`)
+    if (
+      firstVisible >= 0 &&
+      samples.slice(firstVisible, lastVisible + 1).some((sample) => !sample.visible && sample.inViewport)
+    )
+      issues.push(`${name} blanked between visible frames`)
 
-    for (const metric of ["top", "bottom", "width", "height"] as const) {
+    for (const metric of options.motion && !options.motion.includes(name)
+      ? []
+      : (["top", "bottom", "width", "height"] as const)) {
       const directions = visible
         .slice(1)
         .map((sample, index) => sample[metric] - visible[index]![metric])
@@ -349,6 +457,19 @@ export function analyzeVisualStability(
       const lost = viewports.find((viewport) => viewport.distanceFromBottom > 4)
       if (lost) issues.push(`bottom anchor moved to ${lost.distanceFromBottom}px`)
     }
+  }
+  if (options.acquireBottomAnchor) {
+    const final = trace.samples.findLast((sample) => sample.viewport)?.viewport
+    if (!final || final.distanceFromBottom > 4)
+      issues.push(`did not acquire bottom anchor${final ? ` (${final.distanceFromBottom}px away)` : ""}`)
+  }
+
+  for (const group of options.continuousAny ?? []) {
+    const active = trace.samples.map((sample) => group.some((name) => sample.regions[name]?.visible))
+    const first = active.indexOf(true)
+    const last = active.lastIndexOf(true)
+    if (first >= 0 && active.slice(first, last + 1).some((value) => !value))
+      issues.push(`${group.join(" | ")} blanked between visible frames`)
   }
 
   for (const [before, after] of (options.flow ?? []).slice(1).map((after, index) => [options.flow![index]!, after])) {
@@ -385,7 +506,10 @@ export function analyzeVisualStabilityByMarker(
   options: Parameters<typeof analyzeVisualStability>[1] = {},
 ) {
   if (trace.markers.length === 0) return analyzeVisualStability(trace, options)
-  return trace.markers.flatMap((marker, index) => {
+  const required = (options.required ?? []).flatMap((name) =>
+    trace.samples.some((sample) => sample.regions[name]?.visible) ? [] : [`${name} never rendered`],
+  )
+  const windows = trace.markers.flatMap((marker, index) => {
     const end = trace.markers[index + 1]?.at ?? Infinity
     const before = trace.samples.findLast((sample) => sample.at < marker.at)
     const samples = [
@@ -393,8 +517,10 @@ export function analyzeVisualStabilityByMarker(
       ...trace.samples.filter((sample) => sample.at >= marker.at && sample.at < end),
     ]
     if (samples.length < 2) return []
-    return analyzeVisualStability({ markers: [marker], samples }, { ...options, perMarker: false }).map(
-      (issue) => `${marker.label}: ${issue}`,
-    )
+    return analyzeVisualStability(
+      { markers: [marker], samples },
+      { ...options, perMarker: false, required: undefined },
+    ).map((issue) => `${marker.label}: ${issue}`)
   })
+  return [...required, ...windows]
 }

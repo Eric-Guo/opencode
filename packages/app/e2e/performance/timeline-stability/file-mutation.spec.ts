@@ -73,6 +73,7 @@ test("adds patch files incrementally without resetting outer expansion", async (
     unique: ["patch", "following"],
     preserveBottomAnchor: true,
     maxPositionReversals: 0,
+    motion: ["following"],
     perMarker: true,
   })
   await expect(trigger).toHaveAttribute("aria-expanded", "true")

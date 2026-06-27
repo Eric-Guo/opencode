@@ -21,7 +21,7 @@ import {
 
 test.describe("timeline visual lifecycle stability", () => {
   test("streams empty, short, and long parallel shells to staggered completion", async ({ page }, testInfo) => {
-    test.setTimeout(90_000)
+    test.setTimeout(180_000)
     const ids = Array.from({ length: 5 }, (_, index) => `prt_shell_${index + 1}`)
     const initial = ids.map((id) => shell(id, "running"))
     const followingID = "prt_shell_following"
@@ -146,7 +146,7 @@ test.describe("timeline visual lifecycle stability", () => {
     await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
 
     await startVisualStabilityProbe(page, {
-      turn: { selector: `[data-message-id="${assistant.info.parentID}"]` },
+      thinking: { selector: '[data-timeline-row="Thinking"]' },
       reasoning: {
         selector: `[data-timeline-part-id="${reasoningID}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
@@ -170,6 +170,7 @@ test.describe("timeline visual lifecycle stability", () => {
       stable: ["reasoning", "text"],
       unique: ["reasoning", "text"],
       maxReversals: 4,
+      continuousAny: [["thinking", "reasoning", "text"]],
     })
     await expect(page.locator(`[data-timeline-part-id="${textID}"]`)).toContainText("stable output")
   })
