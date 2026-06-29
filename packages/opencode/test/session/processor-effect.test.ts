@@ -206,13 +206,11 @@ const passthroughImage = Layer.succeed(
 )
 const generatedFileEnv = LayerNode.compile(
   root,
-  new Map(
-    [
-      ...replacements,
-      LayerNode.replace(LLM.layer, generatedFileLlm),
-      LayerNode.replace(Image.layer, passthroughImage),
-    ].map((item) => [item.source, item.replacement]),
-  ),
+  [
+    ...replacements,
+    [LLM.node, generatedFileLlm],
+    [Image.node, passthroughImage],
+  ],
 )
 
 const it = testEffect(env)
