@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test"
-import { assistantMessage, reasoningPart, setupTimeline, status, textPart, toolPart, userMessage } from "./fixture"
+import {
+  assistantMessage,
+  reasoningPart,
+  setupTimeline,
+  status,
+  textPart,
+  toolPart,
+  userMessage,
+} from "../performance/timeline-stability/fixture"
 
 const profiles = [
   { name: "summaries off no reasoning", summaries: false, reasoning: "", other: false, thinking: true, body: false },

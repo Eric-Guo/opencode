@@ -1,7 +1,10 @@
 import { Binary } from "@opencode-ai/core/util/binary"
 import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { createMemo, mapArray, type Accessor } from "solid-js"
+import { reuseTimelineRows } from "./row-reconciliation"
 import { Timeline, TimelineRow } from "./rows"
+
+export { reuseTimelineRows } from "./row-reconciliation"
 
 const emptyAssistantMessages: AssistantMessage[] = []
 
@@ -101,45 +104,4 @@ export function createTimelineProjection(input: {
     rowByKey,
     rows,
   }
-}
-
-export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
-  if (!previous?.length) return rows
-  const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
-  const contextByPart = new Map<string, Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>>()
-  previous.forEach((row) => {
-    if (row._tag !== "AssistantPart" || row.group.type !== "context") return
-    row.group.refs.forEach((ref) => contextByPart.set(`${row.userMessageID}:${ref.partID}`, row))
-  })
-  const claimedContextKeys = new Set<string>()
-  const next = rows.map((input) => {
-    const row = stabilizeContextKey(byKey, contextByPart, input, claimedContextKeys)
-    const existing = byKey.get(TimelineRow.key(row))
-    if (!existing) return row
-    return TimelineRow.equals(existing, row) ? existing : row
-  })
-  if (previous.length === next.length && previous.every((row, index) => row === next[index])) return previous
-  return next
-}
-
-function stabilizeContextKey(
-  byKey: Map<string, TimelineRow.TimelineRow>,
-  contextByPart: Map<string, Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>>,
-  row: TimelineRow.TimelineRow,
-  claimed: Set<string>,
-) {
-  if (row._tag !== "AssistantPart" || row.group.type !== "context") return row
-  if (byKey.has(TimelineRow.key(row))) {
-    claimed.add(row.group.key)
-    return row
-  }
-  const existing = row.group.refs
-    .map((ref) => contextByPart.get(`${row.userMessageID}:${ref.partID}`))
-    .find((item) => item && item.group.type === "context" && !claimed.has(item.group.key))
-  if (!existing || existing._tag !== "AssistantPart" || existing.group.type !== "context") return row
-  claimed.add(existing.group.key)
-  return new TimelineRow.AssistantPart({
-    ...row,
-    group: { ...row.group, key: existing.group.key },
-  })
 }

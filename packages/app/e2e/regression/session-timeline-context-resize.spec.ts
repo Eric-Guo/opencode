@@ -1,7 +1,13 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
-import { analyzeVisualStability, startVisualStabilityProbe, stopVisualStabilityProbe } from "../utils/visual-stability"
+import {
+  analyzeVisualObservations,
+  defineVisualRegions,
+  startVisualProbe,
+  stopVisualProbe,
+  visualPlan,
+} from "../utils/visual-stability"
 
 const directory = "C:/OpenCode/ContextResizeRegression"
 const projectID = "proj_context_resize_regression"
@@ -56,7 +62,7 @@ test.describe("regression: session timeline context group resize", () => {
     await expect(context.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Exploring")
 
     const contextSelector = `[data-timeline-part-ids="${contextIDs.join(",")}"]`
-    await startVisualStabilityProbe(page, {
+    const regions = defineVisualRegions({
       status: {
         selector: `${contextSelector} [data-component="tool-status-title"]`,
         opacitySelectors: ['[data-slot="tool-status-active"]', '[data-slot="tool-status-done"]'],
@@ -67,6 +73,7 @@ test.describe("regression: session timeline context group resize", () => {
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+    await startVisualProbe(page, regions)
     for (const [index, delay] of [120, 350, 80, 500].entries()) {
       events.push({
         directory,
@@ -92,12 +99,22 @@ test.describe("regression: session timeline context group resize", () => {
 
     await expect(context.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Explored")
     await page.waitForTimeout(700)
-    const trace = await stopVisualStabilityProbe(page)
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
     const labels = trace.samples
       .map((sample) => sample.regions.status?.label)
       .filter((value): value is string => !!value)
       .filter((value, index, all) => value !== all[index - 1])
-    const issues = analyzeVisualStability(trace, { flow: ["context", "following"] })
+    const issues = analyzeVisualObservations(
+      trace.samples,
+      visualPlan(regions, [
+        { type: "required", regions: ["context", "following"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: "all" },
+        { type: "label-stability", regions: "all" },
+        { type: "flow", regions: ["context", "following"] },
+      ]),
+    )
 
     expect(labels).toEqual(["Exploring", "Explored"])
     expect(issues, JSON.stringify(trace.samples, null, 2)).toEqual([])

@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test"
 import {
-  expectVisualStability,
-  startVisualStabilityProbe,
-  stopVisualStabilityProbe,
+  defineVisualRegions,
+  reportVisualStability,
+  startVisualProbe,
+  stopVisualProbe,
+  visualPlan,
 } from "../../utils/visual-stability"
 import {
   assistantMessage,
@@ -13,7 +15,7 @@ import {
   toolPart,
   userMessage,
   waitForVisualSettle,
-  type Message,
+  type TimelineMessage,
 } from "./fixture"
 
 test.describe("timeline adverse visual stability", () => {
@@ -51,20 +53,30 @@ test.describe("timeline adverse visual stability", () => {
     expect(anchor).toBeTruthy()
     await waitForVisualSettle(page, [`[data-timeline-key="${anchor}"]`])
 
-    await startVisualStabilityProbe(page, {
+    const regions = defineVisualRegions({
       anchor: { selector: `[data-timeline-key="${anchor}"]` },
     })
+    await startVisualProbe(page, regions)
     await timeline.send(partUpdated(shell(activeShellID, "running", lines(1))), 180)
     await timeline.send(partUpdated(shell(activeShellID, "running", lines(10))), 90)
     await timeline.send(partUpdated(shell(activeShellID, "running", lines(50))), 350)
     await timeline.send(partUpdated(shell(activeShellID, "completed", lines(50))), 500)
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, "scrolled-away-shell", trace, {
-      stable: ["anchor"],
-      fixed: ["anchor"],
-      unique: ["anchor"],
-      maxPositionReversals: 0,
-    })
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    await reportVisualStability(
+      testInfo,
+      "scrolled-away-shell",
+      trace,
+      visualPlan(regions, [
+        { type: "required", regions: ["anchor"] },
+        { type: "unique", regions: ["anchor"] },
+        { type: "stable", regions: ["anchor"] },
+        { type: "fixed", regions: ["anchor"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: "all", maxPositionReversals: 0 },
+        { type: "label-stability", regions: "all" },
+      ]),
+    )
   })
 
   test("preserves an explicit shell state across virtualization", async ({ page }) => {
@@ -118,25 +130,38 @@ test.describe("timeline adverse visual stability", () => {
       `[data-timeline-part-id="${shellID}"]`,
       `[data-timeline-part-id="${followingID}"]`,
     ])
-    await startVisualStabilityProbe(page, {
+    const regions = defineVisualRegions({
       shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
         selector: `[data-timeline-part-id="${followingID}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+    await startVisualProbe(page, regions)
     await timeline.send(partUpdated(shell(shellID, "running", wideLines(10))), 100)
     await timeline.send(partUpdated(shell(shellID, "running", wideLines(50))), 300)
     await timeline.send(partUpdated(shell(shellID, "completed", wideLines(50))), 500)
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, "narrow-shell", trace, {
-      flow: ["shell", "following"],
-      stable: ["shell", "following"],
-      unique: ["shell", "following"],
-      preserveBottomAnchor: true,
-      maxPositionReversals: 0,
-      perMarker: true,
-    })
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    await reportVisualStability(
+      testInfo,
+      "narrow-shell",
+      trace,
+      visualPlan(
+        regions,
+        [
+          { type: "required", regions: ["shell", "following"] },
+          { type: "unique", regions: ["shell", "following"] },
+          { type: "stable", regions: ["shell", "following"] },
+          { type: "opacity", regions: "all" },
+          { type: "continuity", regions: "all" },
+          { type: "motion", regions: "all", maxPositionReversals: 0 },
+          { type: "label-stability", regions: "all" },
+          { type: "preserve-bottom-anchor" },
+          { type: "flow", regions: ["shell", "following"] },
+        ],
+        { perMarker: true },
+      ),
+    )
   })
 
   test("keeps visible rows ordered while resizing desktop to narrow and back", async ({ page }, testInfo) => {
@@ -158,7 +183,7 @@ test.describe("timeline adverse visual stability", () => {
       seedHistory: true,
     })
     const group = `[data-timeline-part-ids="${contextIDs.join(",")}"]`
-    await startVisualStabilityProbe(page, {
+    const regions = defineVisualRegions({
       shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
       context: { selector: group, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
@@ -166,24 +191,33 @@ test.describe("timeline adverse visual stability", () => {
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+    await startVisualProbe(page, regions)
     await page.setViewportSize({ width: 430, height: 800 })
     await page.waitForTimeout(500)
     await page.setViewportSize({ width: 900, height: 800 })
     await page.waitForTimeout(500)
     await page.setViewportSize({ width: 1400, height: 900 })
     await page.waitForTimeout(500)
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, "responsive-resize", trace, {
-      flow: ["shell", "context", "following"],
-      stable: ["shell", "context", "following"],
-      unique: ["shell", "context", "following"],
-      maxPositionReversals: 4,
-      maxReversals: 4,
-    })
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    await reportVisualStability(
+      testInfo,
+      "responsive-resize",
+      trace,
+      visualPlan(regions, [
+        { type: "required", regions: ["shell", "context", "following"] },
+        { type: "unique", regions: ["shell", "context", "following"] },
+        { type: "stable", regions: ["shell", "context", "following"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: "all", maxPositionReversals: 4, maxReversals: 4 },
+        { type: "label-stability", regions: "all" },
+        { type: "flow", regions: ["shell", "context", "following"] },
+      ]),
+    )
   })
 })
 
-function history(count: number, offset = 0): Message[] {
+function history(count: number, offset = 0): TimelineMessage[] {
   return Array.from({ length: count }, (_, index) => {
     const value = index + offset
     const prefix = `msg_0${String(value).padStart(3, "0")}_history`

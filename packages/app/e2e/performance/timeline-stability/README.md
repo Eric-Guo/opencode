@@ -1,4 +1,4 @@
-# Timeline stability matrix
+# Timeline Layout Continuity
 
 Run from `packages/app`:
 
@@ -6,47 +6,56 @@ Run from `packages/app`:
 bun run test:stability
 ```
 
-For diagnostic before/violation/after screenshots, set `OPENCODE_STABILITY_CAPTURE=1` before running. Screenshot capture is intentionally opt-in so compositor readback does not affect normal pass/fail timing.
+The suite runs a production build in one Chromium worker. Selected scenarios use deterministic 4x CPU stress after application readiness. This is a stress profile, not emulation of a specific device.
 
-The suite uses a production build, one Chromium worker, deterministic event delays, and 4x CPU throttling for adverse scenarios. Failed perceptual checks retain:
+## What It Proves
+
+The continuity probe samples DOM-derived layout and visibility state across browser render opportunities. Tests declare explicit contracts such as:
+
+- Preserve a visible semantic anchor while the user is away from the bottom.
+- Preserve end anchoring while active content grows or new content appears.
+- Keep adjacent visible rows ordered without material overlap.
+- Keep user-selected disclosure state through updates and virtualization.
+- Avoid a sampled blank interval while one visible surface replaces another.
+- Preserve logical row and control identity where local state or focus depends on it.
+- Keep keyboard, wheel, and nested-scroll ownership consistent during remeasurement.
+
+The suite exercises real browser reducer, projection, component, virtualizer, layout, focus, and interaction code. The backend and event producer are controlled fixtures.
+
+## What It Does Not Prove
+
+The pass/fail oracle does not inspect every compositor-presented pixel. A sample taken after `requestAnimationFrame` is a DOM/layout observation, not proof that every sampled state was displayed or that every displayed frame was sampled.
+
+The suite does not provide complete coverage for:
+
+- Compositor-only or raster-only glitches.
+- Color, contrast, canvas, WebGL, masks, irregular clips, or arbitrary occlusion.
+- Physical display refresh rates, native OS scaling, or a named low-end device.
+- TCP packetization, proxy buffering, or the complete real server/provider pipeline.
+
+Playwright video, trace, screenshots, and observation JSON are diagnostic evidence. They are not pixel baselines and do not participate in normal pass/fail decisions.
+
+For optional before/violation/after screenshots, set `OPENCODE_STABILITY_CAPTURE=1`. Capture is opt-in because compositor readback can perturb timing.
+
+## Test Layers
+
+- **Projection:** admitted rows, grouping, labels, and final visible states.
+- **Local state:** disclosure state, identity, duplicate delivery, and virtualization restoration.
+- **Interaction:** wheel, keyboard, nested scrolling, actionability, and focus behavior.
+- **Layout continuity:** anchoring, adjacency, responsive reflow, and visible surface handoffs.
+- **Reducer hardening:** validly shaped but intentionally reordered, duplicated, removed, or replaced events.
+- **Oracle contract:** pure analyzer and browser sampler calibration tests.
+
+Production-lifecycle fixtures should model states emitted by the current producer. Impossible or reordered sequences belong in reducer-hardening tests and must not be described as normal provider behavior.
+
+## Diagnostics
+
+Failures retain:
 
 - `video.webm`
 - `trace.zip`
 - failure screenshot
-- frame-by-frame visual trace attached to the Playwright report
-- event markers and summarized violations attached to the Playwright report
+- sampled DOM/layout trace JSON
+- event markers and summarized violations
 
-The matrix intentionally remains red when a captured painted frame violates a perceptual invariant.
-
-## Coverage
-
-- Timeline rows: turn gaps, comments, user messages, compaction and interruption dividers, assistant parts, thinking, retry, diff summaries, and errors.
-- Tool families: context tools, web fetch/search, tasks, shell, edit, write, patches, questions, skills, generic tools, and hidden todos.
-- Tool states: pending, running, completed, error, dismissed question, and interrupted context member.
-- Streaming: reasoning, text deltas with incomplete Markdown, empty shell output, one-line output, 50-line output, and five parallel shells completing out of order.
-- Shell matrix: empty, one-line, incremental 1/10/25/50-line growth, one-burst growth, wide ANSI/CRLF output, collapsed output updates, running-to-error, and explicit expand/collapse.
-- Later-content ordering: shell starts empty, a later text part arrives, then shell output streams and completes.
-- User state: collapsed and expanded defaults, manual overrides, sibling updates, busy-to-idle updates, and virtualization unmount/remount.
-- Adverse conditions: deterministic network jitter, bursty event delivery, 4x CPU slowdown, narrow viewport, long history, bottom anchoring, and scrolled-away visible anchors.
-- File rendering: edit diffs, writes, single/multi-file patches, add/update/delete/move states, diagnostics surfaces, and diff-summary overflow.
-- Structural mutations: middle-row insertion/removal, question admission, text canonical replacement, context grouping boundaries, assistant errors, and alternate idle/completion event order.
-- Interaction matrix: shell/context/edit/diff-summary expansion, collapse, re-expansion, show-all/show-less surfaces, and responsive desktop-to-narrow resizing.
-- Reasoning matrix: summaries on/off, absent/blank/nonblank reasoning, reasoning headings, visible sibling tools, and provider-independent payload behavior.
-- Context mutation matrix: append while expanded, split/merge boundaries, first-member removal and key replacement, and collapsed-state persistence.
-- Environment matrix: reduced motion, device scales 1/1.25/1.5/2, translated status labels, responsive resizing, tiny viewports, and rows taller than the viewport.
-- Event race matrix: per-event analysis windows, initial stable-frame gating, stale/canonical text reconciliation, part and message removal, retry evolution, early idle, and error handoff.
-- File mutation matrix: incremental patch files, diagnostics updates, nested accordion state, and outer collapse/reopen.
-- Scroll interaction matrix: wheel input during remeasurement, jump-to-latest after offscreen growth, visible-anchor preservation, and virtualization state restoration.
-- User parts: images, file attachments, inline file references, agent references, and synthetic comment strips.
-
-## Perceptual invariants
-
-- Adjacent painted rows never overlap.
-- Visible rows do not disappear and return during one transition.
-- Unchanged rows do not remount or duplicate.
-- Status labels do not revert.
-- Opacity handoffs do not produce a blank visible frame.
-- Bottom-anchored content remains bottom anchored.
-- Rows move monotonically for one logical update rather than up, down, then up.
-- A user scrolled away from the bottom retains the same visible anchor position. Scrollbar and `scrollTop` changes alone are diagnostic and do not fail the suite.
-- Manual collapse/expand intent survives unrelated and same-part updates.
+The analyzer records both unclipped layout bounds and ancestor-clipped visible intersections. Scrollbar and raw `scrollTop` changes alone do not fail continuity checks; user-visible semantic anchor movement does.

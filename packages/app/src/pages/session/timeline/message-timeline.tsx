@@ -35,7 +35,7 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
@@ -594,6 +594,15 @@ export function MessageTimeline(props: {
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
     if (!prependLoading) clearPrependAnchor()
     if (event.target !== event.currentTarget) return
+    props.onMarkScrollGesture(event.currentTarget)
+  }
+
+  const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
+    const key = scrollKey(event)
+    if (!key) return
+    if (!isScrollKeyTarget(event.target, key)) return
+    if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
+    if (!prependLoading) clearPrependAnchor()
     props.onMarkScrollGesture(event.currentTarget)
   }
 
@@ -1291,6 +1300,7 @@ export function MessageTimeline(props: {
         onTouchEnd={handleListTouchEnd}
         onTouchCancel={handleListTouchEnd}
         onPointerDown={handleListPointerDown}
+        onKeyDown={handleListKeyDown}
         onScroll={handleListScroll}
         onClick={props.onAutoScrollInteraction}
         class="relative min-w-0 w-full h-full"

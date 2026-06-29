@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test"
 import {
-  expectVisualStability,
-  startVisualStabilityProbe,
-  stopVisualStabilityProbe,
+  defineVisualRegions,
+  reportVisualStability,
+  startVisualProbe,
+  stopVisualProbe,
+  visualPlan,
 } from "../../utils/visual-stability"
 import { assistantMessage, setupTimeline, shell, textPart, toolPart, userMessage, waitForVisualSettle } from "./fixture"
 
@@ -20,37 +22,34 @@ test("expands and collapses a long completed shell without overlap", async ({ pa
   })
   const trigger = page.locator(`[data-timeline-part-id="${shellID}"] [data-slot="collapsible-trigger"]`)
   await waitForVisualSettle(page, [`[data-timeline-part-id="${shellID}"]`, `[data-timeline-part-id="${followingID}"]`])
-  await startVisualStabilityProbe(page, {
+  const regions = defineVisualRegions({
     shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
     following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
   })
+  const plan = visualPlan(regions, [
+    { type: "required", regions: ["shell", "following"] },
+    { type: "unique", regions: ["shell", "following"] },
+    { type: "stable", regions: ["shell", "following"] },
+    { type: "opacity", regions: "all" },
+    { type: "continuity", regions: "all" },
+    { type: "motion", regions: "all", maxPositionReversals: 0 },
+    { type: "label-stability", regions: "all" },
+    { type: "preserve-bottom-anchor" },
+    { type: "flow", regions: ["shell", "following"] },
+  ])
+  await startVisualProbe(page, regions)
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
   await page.waitForTimeout(500)
-  const expanded = await stopVisualStabilityProbe(page)
-  await expectVisualStability(testInfo, "shell-expand", expanded, {
-    flow: ["shell", "following"],
-    stable: ["shell", "following"],
-    unique: ["shell", "following"],
-    preserveBottomAnchor: true,
-    maxPositionReversals: 0,
-  })
+  const expanded = await stopVisualProbe<keyof typeof regions>(page)
+  await reportVisualStability(testInfo, "shell-expand", expanded, plan)
 
-  await startVisualStabilityProbe(page, {
-    shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-    following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-  })
+  await startVisualProbe(page, regions)
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await page.waitForTimeout(500)
-  const collapsed = await stopVisualStabilityProbe(page)
-  await expectVisualStability(testInfo, "shell-collapse", collapsed, {
-    flow: ["shell", "following"],
-    stable: ["shell", "following"],
-    unique: ["shell", "following"],
-    preserveBottomAnchor: true,
-    maxPositionReversals: 0,
-  })
+  const collapsed = await stopVisualProbe<keyof typeof regions>(page)
+  await reportVisualStability(testInfo, "shell-collapse", collapsed, plan)
 })
 
 test("expands and collapses a completed context group without overlap", async ({ page }, testInfo) => {
@@ -83,24 +82,34 @@ test("expands and collapses a completed context group without overlap", async ({
     ["context-collapse", false],
     ["context-reexpand", true],
   ] as const) {
-    await startVisualStabilityProbe(page, {
+    const regions = defineVisualRegions({
       context: { selector: group, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
         selector: `[data-timeline-part-id="${followingID}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+    await startVisualProbe(page, regions)
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
     await page.waitForTimeout(500)
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, name, trace, {
-      flow: ["context", "following"],
-      stable: ["context", "following"],
-      unique: ["context", "following"],
-      preserveBottomAnchor: true,
-      maxPositionReversals: 0,
-    })
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    await reportVisualStability(
+      testInfo,
+      name,
+      trace,
+      visualPlan(regions, [
+        { type: "required", regions: ["context", "following"] },
+        { type: "unique", regions: ["context", "following"] },
+        { type: "stable", regions: ["context", "following"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: "all", maxPositionReversals: 0 },
+        { type: "label-stability", regions: "all" },
+        { type: "preserve-bottom-anchor" },
+        { type: "flow", regions: ["context", "following"] },
+      ]),
+    )
   }
 })
 
@@ -137,22 +146,31 @@ test("expands and collapses an edit diff without moving twice", async ({ page },
   })
   const trigger = page.locator(`[data-timeline-part-id="${editID}"] [data-slot="collapsible-trigger"]`).first()
   await waitForVisualSettle(page, [`[data-timeline-part-id="${editID}"]`, `[data-timeline-part-id="${followingID}"]`])
-  await startVisualStabilityProbe(page, {
+  const regions = defineVisualRegions({
     edit: { selector: `[data-timeline-part-id="${editID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
     following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
   })
+  await startVisualProbe(page, regions)
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
   await page.waitForTimeout(900)
-  const trace = await stopVisualStabilityProbe(page)
-  await expectVisualStability(testInfo, "edit-expand", trace, {
-    flow: ["edit", "following"],
-    stable: ["edit", "following"],
-    unique: ["edit", "following"],
-    preserveBottomAnchor: true,
-    maxPositionReversals: 0,
-    maxReversals: 1,
-  })
+  const trace = await stopVisualProbe<keyof typeof regions>(page)
+  await reportVisualStability(
+    testInfo,
+    "edit-expand",
+    trace,
+    visualPlan(regions, [
+      { type: "required", regions: ["edit", "following"] },
+      { type: "unique", regions: ["edit", "following"] },
+      { type: "stable", regions: ["edit", "following"] },
+      { type: "opacity", regions: "all" },
+      { type: "continuity", regions: "all" },
+      { type: "motion", regions: "all", maxPositionReversals: 0, maxReversals: 1 },
+      { type: "label-stability", regions: "all" },
+      { type: "preserve-bottom-anchor" },
+      { type: "flow", regions: ["edit", "following"] },
+    ]),
+  )
 })
 
 test("shows all and expands historical diff summary without overlap", async ({ page }, testInfo) => {
@@ -185,22 +203,31 @@ test("shows all and expands historical diff summary without overlap", async ({ p
   const diff = page.locator('[data-timeline-row="DiffSummary"]')
   const following = page.locator(`[data-message-id="${nextUserID}"]`).first()
   await expect(diff).toBeVisible()
-  await startVisualStabilityProbe(page, {
+  const regions = defineVisualRegions({
     diff: { selector: '[data-timeline-row="DiffSummary"]' },
     following: { selector: `[data-message-id="${nextUserID}"]` },
   })
+  await startVisualProbe(page, regions)
   await page.getByText(/show all/i).click()
   await page.waitForTimeout(500)
   await diff.locator('[data-slot="session-turn-diff-trigger"]').first().click()
   await page.waitForTimeout(900)
-  const trace = await stopVisualStabilityProbe(page)
-  await expectVisualStability(testInfo, "diff-summary-expand", trace, {
-    flow: ["diff", "following"],
-    stable: ["diff", "following"],
-    unique: ["diff", "following"],
-    maxPositionReversals: 1,
-    maxReversals: 2,
-  })
+  const trace = await stopVisualProbe<keyof typeof regions>(page)
+  await reportVisualStability(
+    testInfo,
+    "diff-summary-expand",
+    trace,
+    visualPlan(regions, [
+      { type: "required", regions: ["diff", "following"] },
+      { type: "unique", regions: ["diff", "following"] },
+      { type: "stable", regions: ["diff", "following"] },
+      { type: "opacity", regions: "all" },
+      { type: "continuity", regions: "all" },
+      { type: "motion", regions: "all", maxPositionReversals: 1, maxReversals: 2 },
+      { type: "label-stability", regions: "all" },
+      { type: "flow", regions: ["diff", "following"] },
+    ]),
+  )
 })
 
 function lines(count: number) {

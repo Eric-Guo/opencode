@@ -1670,7 +1670,13 @@ ToolRegistry.register({
         trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1694,7 +1700,13 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1721,7 +1733,13 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <Markdown text={props.output!} />
           </div>
         </Show>
@@ -1951,7 +1969,13 @@ ToolRegistry.register({
               />
             </Tooltip>
           </div>
-          <div data-slot="bash-scroll" data-scrollable>
+          <div
+            data-slot="bash-scroll"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
             <pre data-slot="bash-pre">
               <code>{text()}</code>
             </pre>

@@ -1,7 +1,15 @@
 import { expect, test } from "@playwright/test"
-import { assistantMessage, setupTimeline, status, toolPart, userMessage, userText } from "./fixture"
+import {
+  assistantMessage,
+  setupTimeline,
+  status,
+  toolPart,
+  userMessage,
+  userText,
+  type PartSeed,
+} from "../performance/timeline-stability/fixture"
 
-test.describe("timeline stability coverage", () => {
+test.describe("session timeline projection", () => {
   test("renders every admitted tool family and hides timeline-only exclusions", async ({ page }) => {
     const parts = [
       toolPart("prt_01_read", "read", "completed", { filePath: "src/a.ts" }),
@@ -75,19 +83,27 @@ test.describe("timeline stability coverage", () => {
           },
         }),
         userText("Continue after the comment", { id: "prt_visible_user" }),
-        { id: "prt_compaction", type: "compaction", auto: true },
       ],
       { summary: { diffs: Array.from({ length: 11 }, (_, index) => summaryDiff(index)) } },
     )
-    const aborted = assistantMessage([{ id: "prt_before_abort", type: "text", text: "Before interruption" }], {
-      id: "msg_1001_assistant_aborted",
-      error: { name: "MessageAbortedError", data: { message: "Stopped" } },
-    })
+    const aborted = assistantMessage(
+      [
+        { id: "prt_before_abort", type: "text", text: "Before interruption" },
+        { id: "prt_compaction", type: "compaction", auto: true },
+      ],
+      {
+        id: "msg_1001_assistant_aborted",
+        error: { name: "MessageAbortedError", data: { message: "Stopped" } },
+      },
+    )
     const failed = assistantMessage([{ id: "prt_after_abort", type: "text", text: "After interruption" }], {
       id: "msg_1002_assistant_failed",
       error: {
         name: "APIError",
-        data: { message: JSON.stringify({ error: { type: "provider_error", message: "Visible provider failure" } }) },
+        data: {
+          message: JSON.stringify({ error: { type: "provider_error", message: "Visible provider failure" } }),
+          isRetryable: false,
+        },
       },
       created: 1700000003000,
     })
@@ -167,7 +183,7 @@ test.describe("timeline stability coverage", () => {
 
   test("renders user image, file attachment, file reference, and agent reference", async ({ page }) => {
     const text = "Use @explore with @src/a.ts and inspect the attachments"
-    const parts = [
+    const parts: PartSeed<"user">[] = [
       userText(text, { id: "prt_user_rich" }),
       {
         id: "prt_user_image",
@@ -195,7 +211,7 @@ test.describe("timeline stability coverage", () => {
         id: "prt_user_agent",
         type: "agent",
         name: "explore",
-        source: { start: 4, end: 12 },
+        source: { value: "@explore", start: 4, end: 12 },
       },
     ]
     await setupTimeline(page, { messages: [userMessage(parts), assistantMessage()] })
@@ -264,7 +280,5 @@ function summaryDiff(index: number) {
     additions: 1,
     deletions: 1,
     patch: `@@ -1 +1 @@\n-export const value = ${index}\n+export const value = ${index + 1}`,
-    before: `export const value = ${index}\n`,
-    after: `export const value = ${index + 1}\n`,
   }
 }

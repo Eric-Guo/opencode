@@ -4,6 +4,9 @@ import {
   analyzeVisualStabilityByMarker,
   type VisualStabilityTrace,
 } from "../../utils/visual-stability"
+import { analyzeVisualObservations } from "../../utils/visual-stability/analyzer"
+import { legacyVisualPlan, visualPlan, type VisualInvariant } from "../../utils/visual-stability/invariant"
+import { defineVisualRegions, mapVisualRegions } from "../../utils/visual-stability/regions"
 
 function trace(samples: VisualStabilityTrace["samples"]): VisualStabilityTrace {
   return { markers: [], samples }
@@ -163,7 +166,31 @@ test("analyzes each marked event independently", () => {
   }
 
   expect(analyzeVisualStability(input, { maxPositionReversals: 0 })).toContain("changing top reversed 1 times")
-  expect(analyzeVisualStabilityByMarker(input, { maxPositionReversals: 0, motion: ["following"] })).toEqual([])
+  expect(
+    analyzeVisualStabilityByMarker(input, {
+      maxPositionReversals: 0,
+      motion: ["changing"],
+      aggregateMotion: false,
+    }),
+  ).toEqual([])
+})
+
+test("reports cross-event motion reversals by default", () => {
+  const input: VisualStabilityTrace = {
+    markers: [
+      { at: 10, label: "up" },
+      { at: 40, label: "down" },
+    ],
+    samples: [
+      frame(0, region({ top: 100 })),
+      frame(16, region({ top: 90 })),
+      frame(32, region({ top: 80 })),
+      frame(48, region({ top: 90 })),
+      frame(64, region({ top: 100 })),
+    ],
+  }
+
+  expect(analyzeVisualStabilityByMarker(input, { maxPositionReversals: 0 })).toContain("changing top reversed 1 times")
 })
 
 test("reports regions rendered in the wrong flow order", () => {
@@ -229,7 +256,11 @@ test("reports an in-viewport display-none frame between visible frames", () => {
 test("can limit motion analysis to unaffected regions", () => {
   expect(
     analyzeVisualStability(
-      trace([frame(0, region({ height: 20 })), frame(16, region({ height: 40 })), frame(32, region({ height: 30 }))]),
+      trace([
+        frame(0, region({ height: 20 }), region()),
+        frame(16, region({ height: 40 }), region()),
+        frame(32, region({ height: 30 }), region()),
+      ]),
       { motion: ["following"] },
     ),
   ).toEqual([])
@@ -281,6 +312,51 @@ test("reports a required region that never renders", () => {
   )
 
   expect(issues).toContain("changing never rendered")
+})
+
+test("preserves typed region names while mapping definitions", () => {
+  const regions = defineVisualRegions({
+    changing: { selector: "[data-changing]" },
+    following: { selector: "[data-following]", closest: "[data-row]" },
+  })
+  const selectors = mapVisualRegions(regions, (region) => region.selector)
+
+  expect(selectors).toEqual({ changing: "[data-changing]", following: "[data-following]" })
+  const name: keyof typeof selectors = "changing"
+  expect(name).toBe("changing")
+})
+
+test("evaluates the typed invariant algebra over explicit observations", () => {
+  const regions = defineVisualRegions({
+    changing: { selector: "[data-changing]" },
+    following: { selector: "[data-following]" },
+  })
+  const invariants = [
+    { type: "required", regions: ["changing"] },
+    { type: "flow", regions: ["changing", "following"] },
+  ] satisfies VisualInvariant<keyof typeof regions>[]
+  // @ts-expect-error Plans reject names that are not in the region definition.
+  const invalid = { type: "required", regions: ["missing"] } satisfies VisualInvariant<keyof typeof regions>
+  const plan = visualPlan(regions, invariants, { perMarker: true })
+
+  expect(invalid.regions).toEqual(["missing"])
+  expect(plan.perMarker).toBe(true)
+  expect(analyzeVisualObservations([frame(0, region({ bottom: 50 }), region({ top: 49, bottom: 69 }))], plan)).toEqual([
+    "changing overlapped following by 1px at 0ms",
+  ])
+})
+
+test("legacy plan adapter preserves analyzer messages and order", () => {
+  const input = trace([
+    frame(0, region({ label: "Exploring", opacity: 1, bottom: 40 }), region({ top: 40, bottom: 60 })),
+    frame(16, region({ label: "Explored", opacity: 0.2, bottom: 50 }), region({ top: 49, bottom: 69 })),
+    frame(32, region({ label: "Exploring", opacity: 1, bottom: 50 }), region({ top: 50, bottom: 70 })),
+  ])
+  const options = { flow: ["changing", "following"], stable: ["changing"] }
+
+  expect(analyzeVisualObservations(input.samples, legacyVisualPlan(options))).toEqual(
+    analyzeVisualStability(input, options),
+  )
 })
 
 function frame(

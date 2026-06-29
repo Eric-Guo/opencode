@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test"
 import {
-  expectVisualStability,
-  startVisualStabilityProbe,
-  stopVisualStabilityProbe,
+  defineVisualRegions,
+  reportVisualStability,
+  startVisualProbe,
+  stopVisualProbe,
+  visualPlan,
 } from "../../utils/visual-stability"
 import {
   assistantMessage,
@@ -49,16 +51,21 @@ test.describe("timeline tool state stability", () => {
     await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
     await expect(page.locator(`[data-timeline-part-id="${todoID}"]`)).toHaveCount(0)
 
-    const regionIDs = ids.map((id) => `prt_state_${id}`)
-    await startVisualStabilityProbe(
-      page,
-      Object.fromEntries(
-        regionIDs.map((id) => [
-          id,
-          { selector: `[data-timeline-part-id="${id}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-        ]),
-      ),
-    )
+    const regionIDs = [
+      "prt_state_webfetch",
+      "prt_state_websearch",
+      "prt_state_task",
+      "prt_state_skill",
+      "prt_state_custom",
+    ] as const
+    const regions = defineVisualRegions({
+      prt_state_webfetch: toolRegion(regionIDs[0]),
+      prt_state_websearch: toolRegion(regionIDs[1]),
+      prt_state_task: toolRegion(regionIDs[2]),
+      prt_state_skill: toolRegion(regionIDs[3]),
+      prt_state_custom: toolRegion(regionIDs[4]),
+    })
+    await startVisualProbe(page, regions)
     for (const [index, id] of ids.entries()) {
       await timeline.send(
         partUpdated(toolPart(`prt_state_${id}`, names[id], "running", inputs[id])),
@@ -82,67 +89,27 @@ test.describe("timeline tool state stability", () => {
     )
     await timeline.waitForPart(questionID)
     await timeline.send(status("idle"), 500)
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, "lightweight-tools", trace, {
-      stable: regionIDs,
-      unique: regionIDs,
-      maxReversals: 4,
-    })
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    await reportVisualStability(
+      testInfo,
+      "lightweight-tools",
+      trace,
+      visualPlan(regions, [
+        { type: "required", regions: regionIDs },
+        { type: "unique", regions: regionIDs },
+        { type: "stable", regions: regionIDs },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: "all", maxReversals: 4 },
+        { type: "label-stability", regions: "all" },
+      ]),
+    )
     await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toContainText("Keep it stable")
     await expect(page.locator(`[data-timeline-part-id="${todoID}"]`)).toHaveCount(0)
     await expect(
       page.locator(`a[href$="/session/${childID}"]`, { has: page.locator('[data-component="task-tool-card"]') }),
     ).toBeVisible()
     await expect(page.getByRole("button", { name: /Exa Web Search/ })).toBeVisible()
-  })
-
-  test("stabilizes edit, write, and multi-file patch completion while expanded", async ({ page }, testInfo) => {
-    test.setTimeout(90_000)
-    const ids = ["prt_file_01_edit", "prt_file_02_write", "prt_file_03_patch"]
-    const pending = [
-      toolPart(ids[0]!, "edit", "pending", { filePath: "src/edit.ts" }),
-      toolPart(ids[1]!, "write", "pending", { filePath: "src/write.ts", content: source(40) }),
-      toolPart(ids[2]!, "apply_patch", "pending", { files: ["src/a.ts", "src/b.ts", "src/old.ts"] }),
-      textPart("prt_file_04_following", "Following file operations"),
-    ]
-    const timeline = await setupTimeline(page, {
-      messages: [userMessage(), assistantMessage(pending, { completed: false })],
-      settings: { editToolPartsExpanded: true },
-      cpuRate: 4,
-    })
-    for (const id of ids) await timeline.waitForPart(id)
-    const regions = Object.fromEntries([
-      ...ids.map((id) => [
-        id,
-        { selector: `[data-timeline-part-id="${id}"]`, closest: '[data-timeline-row="AssistantPart"]' },
-      ]),
-      [
-        "following",
-        { selector: '[data-timeline-part-id="prt_file_04_following"]', closest: '[data-timeline-row="AssistantPart"]' },
-      ],
-    ])
-    await startVisualStabilityProbe(page, regions)
-    await timeline.send(partUpdated(edit("running")), 180)
-    await timeline.send(partUpdated(write("running")), 90)
-    await timeline.send(partUpdated(patch("running")), 300)
-    await timeline.send(partUpdated(write("completed")), 140)
-    await timeline.send(partUpdated(edit("completed")), 380)
-    await timeline.send(partUpdated(patch("completed")), 800)
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, "file-tools", trace, {
-      flow: [...ids, "following"],
-      stable: ids,
-      unique: ids,
-      preserveBottomAnchor: true,
-      maxPositionReversals: 0,
-      maxReversals: 4,
-    })
-    await expect(page.locator('[data-component="edit-content"]')).toBeVisible()
-    await expect(page.locator('[data-component="write-content"]')).toBeVisible()
-    await expect(page.locator('[data-component="apply-patch-file-diff"]')).toHaveCount(2)
-    await expect(
-      page.locator('[data-scope="apply-patch"] [data-type="delete"] [data-slot="collapsible-content"]'),
-    ).toBeHidden()
   })
 
   test("keeps an expanded mixed context group stable through staggered completion and error", async ({
@@ -171,7 +138,7 @@ test.describe("timeline tool state stability", () => {
     await group.locator('[data-slot="collapsible-trigger"]').click()
     await expect(group.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
 
-    await startVisualStabilityProbe(page, {
+    const regions = defineVisualRegions({
       status: {
         selector: `${groupSelector} [data-component="tool-status-title"]`,
         opacitySelectors: ['[data-slot="tool-status-active"]', '[data-slot="tool-status-done"]'],
@@ -182,6 +149,7 @@ test.describe("timeline tool state stability", () => {
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+    await startVisualProbe(page, regions)
     for (const [index, delay] of [90, 260, 70, 380].entries()) {
       await timeline.send(partUpdated(toolPart(ids[index]!, tools[index]!, "running", inputs[index]!)), delay)
     }
@@ -194,13 +162,22 @@ test.describe("timeline tool state stability", () => {
     await timeline.send(partUpdated(toolPart(ids[2]!, tools[2]!, "completed", inputs[2]!)), 250)
     await expect(group.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Explored")
     await timeline.send(status("idle"), 700)
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, "mixed-context", trace, {
-      flow: ["context", "following"],
-      stable: ["context"],
-      unique: ["context"],
-      maxReversals: 4,
-    })
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    await reportVisualStability(
+      testInfo,
+      "mixed-context",
+      trace,
+      visualPlan(regions, [
+        { type: "required", regions: ["context", "following"] },
+        { type: "unique", regions: ["context"] },
+        { type: "stable", regions: ["context"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: "all", maxReversals: 4 },
+        { type: "label-stability", regions: "all" },
+        { type: "flow", regions: ["context", "following"] },
+      ]),
+    )
     await expect(group.locator('[data-component="tool-status-title"]')).toHaveAttribute("aria-label", "Explored")
     await expect(group.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
     await group.locator('[data-slot="collapsible-trigger"]').click()
@@ -210,155 +187,12 @@ test.describe("timeline tool state stability", () => {
     await group.locator('[data-slot="collapsible-trigger"]').click()
     await expect(group.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
   })
-
-  test("renders every tool error outcome without leaking hidden tools", async ({ page }) => {
-    const ordinary = ["bash", "edit", "write", "apply_patch", "webfetch", "websearch", "task", "skill", "mcp_probe"]
-    const parts = ordinary.map((tool, index) =>
-      toolPart(`prt_error_${index}`, tool, "error", errorInput(tool), { error: `${tool} failed visibly` }),
-    )
-    parts.push(
-      toolPart("prt_question_dismissed", "question", "error", questionInput(), {
-        error: "The user dismissed this question",
-      }),
-      toolPart("prt_question_error", "question", "error", questionInput(), { error: "Question transport failed" }),
-      toolPart("prt_todo_error", "todowrite", "error", { todos: [] }, { error: "Hidden todo failure" }),
-    )
-    await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
-
-    await expect(page.locator('[data-kind="tool-error-card"]')).toHaveCount(ordinary.length + 1)
-    await expect(page.getByText(/dismissed/i)).toBeVisible()
-    await expect(page.locator('[data-timeline-part-id="prt_todo_error"]')).toHaveCount(0)
-    for (let index = 0; index < ordinary.length; index++) {
-      await expect(page.locator(`[data-timeline-part-id="prt_error_${index}"]`)).toBeVisible()
-    }
-  })
-
-  test("transitions shell and question through running error outcomes", async ({ page }) => {
-    const shellID = "prt_transition_error_shell"
-    const questionID = "prt_transition_error_question"
-    const timeline = await setupTimeline(page, {
-      messages: [
-        userMessage(),
-        assistantMessage(
-          [
-            toolPart(shellID, "bash", "pending", { command: "exit 1" }),
-            toolPart(questionID, "question", "pending", questionInput()),
-          ],
-          { completed: false },
-        ),
-      ],
-    })
-    await timeline.waitForPart(shellID)
-    await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
-    await timeline.send(partUpdated(toolPart(shellID, "bash", "running", { command: "exit 1" })), 120)
-    await timeline.send(partUpdated(toolPart(questionID, "question", "running", questionInput())), 180)
-    await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toHaveCount(0)
-    await timeline.send(
-      partUpdated(toolPart(shellID, "bash", "error", { command: "exit 1" }, { error: "Command exited 1" })),
-      180,
-    )
-    await timeline.send(
-      partUpdated(
-        toolPart(questionID, "question", "error", questionInput(), { error: "The user dismissed this question" }),
-      ),
-      250,
-    )
-
-    await expect(page.locator(`[data-timeline-part-id="${shellID}"] [data-kind="tool-error-card"]`)).toBeVisible()
-    await expect(page.locator(`[data-timeline-part-id="${questionID}"]`)).toContainText(/dismissed/i)
-  })
-
-  test("labels all web search provider variants", async ({ page }) => {
-    const parts = [
-      toolPart(
-        "prt_search_parallel",
-        "websearch",
-        "completed",
-        { query: "parallel" },
-        { metadata: { provider: "parallel" } },
-      ),
-      toolPart("prt_search_exa", "websearch", "completed", { query: "exa" }, { metadata: { provider: "exa" } }),
-      toolPart("prt_search_generic", "websearch", "completed", { query: "generic" }),
-    ]
-    await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
-
-    await expect(page.getByRole("button", { name: /Parallel Web Search/ })).toBeVisible()
-    await expect(page.getByRole("button", { name: /Exa Web Search/ })).toBeVisible()
-    await expect(page.getByRole("button", { name: /^Web Search/ })).toBeVisible()
-  })
 })
 
 function questionInput() {
   return { questions: [{ header: "Stability", question: "Keep it stable?", options: [] }] }
 }
 
-function edit(state: "running" | "completed") {
-  return toolPart(
-    "prt_file_01_edit",
-    "edit",
-    state,
-    { filePath: "src/edit.ts" },
-    {
-      metadata:
-        state === "completed"
-          ? {
-              filediff: {
-                file: "src/edit.ts",
-                additions: 2,
-                deletions: 1,
-                before: source(30),
-                after: source(31),
-              },
-            }
-          : {},
-    },
-  )
-}
-
-function write(state: "running" | "completed") {
-  return toolPart("prt_file_02_write", "write", state, { filePath: "src/write.ts", content: source(40) })
-}
-
-function patch(state: "running" | "completed") {
-  return toolPart(
-    "prt_file_03_patch",
-    "apply_patch",
-    state,
-    { files: ["src/a.ts", "src/b.ts", "src/old.ts"] },
-    {
-      metadata:
-        state === "completed"
-          ? {
-              files: [patchFile("src/a.ts", "update"), patchFile("src/b.ts", "add"), patchFile("src/old.ts", "delete")],
-            }
-          : {},
-    },
-  )
-}
-
-function patchFile(filePath: string, type: "add" | "update" | "delete") {
-  return {
-    filePath,
-    relativePath: filePath,
-    type,
-    additions: type === "delete" ? 0 : 1,
-    deletions: type === "add" ? 0 : 1,
-    before: type === "add" ? undefined : source(8),
-    after: type === "delete" ? undefined : source(9),
-  }
-}
-
-function source(count: number) {
-  return Array.from({ length: count }, (_, index) => `export const value${index} = ${index}\n`).join("")
-}
-
-function errorInput(tool: string) {
-  if (tool === "bash") return { command: "exit 1" }
-  if (["edit", "write"].includes(tool)) return { filePath: "src/error.ts", content: "" }
-  if (tool === "apply_patch") return { files: ["src/error.ts"] }
-  if (tool === "webfetch") return { url: "https://example.com" }
-  if (tool === "websearch") return { query: "failure" }
-  if (tool === "task") return { description: "Fail task", subagent_type: "explore" }
-  if (tool === "skill") return { name: "failure" }
-  return { target: "failure" }
+function toolRegion(id: string) {
+  return { selector: `[data-timeline-part-id="${id}"]`, closest: '[data-timeline-row="AssistantPart"]' }
 }

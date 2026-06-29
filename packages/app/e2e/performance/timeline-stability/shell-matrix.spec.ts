@@ -1,8 +1,10 @@
 import { test } from "@playwright/test"
 import {
-  expectVisualStability,
-  startVisualStabilityProbe,
-  stopVisualStabilityProbe,
+  defineVisualRegions,
+  reportVisualStability,
+  startVisualProbe,
+  stopVisualProbe,
+  visualPlan,
 } from "../../utils/visual-stability"
 import {
   assistantMessage,
@@ -20,26 +22,12 @@ const profiles = [
     updates: [{ state: "completed" as const, output: "", delay: 350 }],
   },
   {
-    name: "one line running to completed",
-    updates: [
-      { state: "running" as const, output: "one line", delay: 180 },
-      { state: "completed" as const, output: "one line", delay: 350 },
-    ],
-  },
-  {
     name: "50 lines arriving incrementally",
     updates: [
       { state: "running" as const, output: lines(1), delay: 100 },
       { state: "running" as const, output: lines(10), delay: 160 },
       { state: "running" as const, output: lines(25), delay: 90 },
       { state: "running" as const, output: lines(50), delay: 220 },
-      { state: "completed" as const, output: lines(50), delay: 500 },
-    ],
-  },
-  {
-    name: "50 lines arriving in one burst",
-    updates: [
-      { state: "running" as const, output: lines(50), delay: 180 },
       { state: "completed" as const, output: lines(50), delay: 500 },
     ],
   },
@@ -83,27 +71,38 @@ for (const profile of profiles) {
       `[data-timeline-part-id="${shellID}"]`,
       `[data-timeline-part-id="${followingID}"]`,
     ])
-    await startVisualStabilityProbe(page, {
+    const regions = defineVisualRegions({
       shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
         selector: `[data-timeline-part-id="${followingID}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+    await startVisualProbe(page, regions)
     for (const update of profile.updates) {
       await timeline.send(partUpdated(shell(shellID, update.state, update.output)), update.delay)
     }
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, `shell-${profiles.indexOf(profile)}`, trace, {
-      flow: ["shell", "following"],
-      stable: ["shell", "following"],
-      required: ["shell", "following"],
-      unique: ["shell", "following"],
-      preserveBottomAnchor: true,
-      maxPositionReversals: 0,
-      maxReversals: 1,
-      perMarker: true,
-    })
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    await reportVisualStability(
+      testInfo,
+      `shell-${profiles.indexOf(profile)}`,
+      trace,
+      visualPlan(
+        regions,
+        [
+          { type: "required", regions: ["shell", "following"] },
+          { type: "unique", regions: ["shell", "following"] },
+          { type: "stable", regions: ["shell", "following"] },
+          { type: "opacity", regions: "all" },
+          { type: "continuity", regions: "all" },
+          { type: "motion", regions: "all", maxPositionReversals: 0, maxReversals: 1 },
+          { type: "label-stability", regions: "all" },
+          { type: "preserve-bottom-anchor" },
+          { type: "flow", regions: ["shell", "following"] },
+        ],
+        { perMarker: true },
+      ),
+    )
   })
 }
 
@@ -122,21 +121,33 @@ test("keeps following row stable when a collapsed shell receives 50 lines", asyn
     seedHistory: true,
   })
   await waitForVisualSettle(page, [`[data-timeline-part-id="${shellID}"]`, `[data-timeline-part-id="${followingID}"]`])
-  await startVisualStabilityProbe(page, {
+  const regions = defineVisualRegions({
     shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
     following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
   })
+  await startVisualProbe(page, regions)
   await timeline.send(partUpdated(shell(shellID, "running", lines(50))), 240)
   await timeline.send(partUpdated(shell(shellID, "completed", lines(50))), 500)
-  const trace = await stopVisualStabilityProbe(page)
-  await expectVisualStability(testInfo, "collapsed-shell", trace, {
-    flow: ["shell", "following"],
-    stable: ["shell", "following"],
-    required: ["shell", "following"],
-    unique: ["shell", "following"],
-    maxPositionReversals: 0,
-    perMarker: true,
-  })
+  const trace = await stopVisualProbe<keyof typeof regions>(page)
+  await reportVisualStability(
+    testInfo,
+    "collapsed-shell",
+    trace,
+    visualPlan(
+      regions,
+      [
+        { type: "required", regions: ["shell", "following"] },
+        { type: "unique", regions: ["shell", "following"] },
+        { type: "stable", regions: ["shell", "following"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: ["following"], maxPositionReversals: 0 },
+        { type: "label-stability", regions: "all" },
+        { type: "flow", regions: ["shell", "following"] },
+      ],
+      { perMarker: true },
+    ),
+  )
 })
 
 test("keeps rows stable when a running shell becomes an error", async ({ page }, testInfo) => {
@@ -154,10 +165,11 @@ test("keeps rows stable when a running shell becomes an error", async ({ page },
     seedHistory: true,
   })
   await waitForVisualSettle(page, [`[data-timeline-part-id="${shellID}"]`, `[data-timeline-part-id="${followingID}"]`])
-  await startVisualStabilityProbe(page, {
+  const regions = defineVisualRegions({
     shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
     following: { selector: `[data-timeline-part-id="${followingID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
   })
+  await startVisualProbe(page, regions)
   await timeline.send(
     partUpdated({
       ...shell(shellID, "error"),
@@ -171,16 +183,27 @@ test("keeps rows stable when a running shell becomes an error", async ({ page },
     }),
     500,
   )
-  const trace = await stopVisualStabilityProbe(page)
-  await expectVisualStability(testInfo, "shell-error", trace, {
-    flow: ["shell", "following"],
-    stable: ["shell", "following"],
-    required: ["shell", "following"],
-    unique: ["shell", "following"],
-    preserveBottomAnchor: true,
-    maxPositionReversals: 0,
-    perMarker: true,
-  })
+  const trace = await stopVisualProbe<keyof typeof regions>(page)
+  await reportVisualStability(
+    testInfo,
+    "shell-error",
+    trace,
+    visualPlan(
+      regions,
+      [
+        { type: "required", regions: ["shell", "following"] },
+        { type: "unique", regions: ["shell", "following"] },
+        { type: "stable", regions: ["shell", "following"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: ["following"], maxPositionReversals: 0 },
+        { type: "label-stability", regions: "all" },
+        { type: "preserve-bottom-anchor" },
+        { type: "flow", regions: ["shell", "following"] },
+      ],
+      { perMarker: true },
+    ),
+  )
 })
 
 test("keeps rows stable when later text arrives before shell output", async ({ page }, testInfo) => {
@@ -193,26 +216,38 @@ test("keeps rows stable when later text arrives before shell output", async ({ p
     seedHistory: true,
   })
   await waitForVisualSettle(page, [`[data-timeline-part-id="${shellID}"]`])
-  await startVisualStabilityProbe(page, {
+  const regions = defineVisualRegions({
     shell: { selector: `[data-timeline-part-id="${shellID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
     following: {
       selector: `[data-timeline-part-id="${followingID}"]`,
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+  await startVisualProbe(page, regions)
   await timeline.send(partUpdated(textPart(followingID, "Later assistant content arrived before shell output.")), 240)
   await timeline.send(partUpdated(shell(shellID, "running", lines(20))), 300)
   await timeline.send(partUpdated(shell(shellID, "completed", lines(20))), 600)
-  const trace = await stopVisualStabilityProbe(page)
-  await expectVisualStability(testInfo, "late-text-before-shell-output", trace, {
-    flow: ["shell", "following"],
-    stable: ["shell"],
-    required: ["shell", "following"],
-    unique: ["shell", "following"],
-    preserveBottomAnchor: true,
-    maxPositionReversals: 0,
-    perMarker: true,
-  })
+  const trace = await stopVisualProbe<keyof typeof regions>(page)
+  await reportVisualStability(
+    testInfo,
+    "late-text-before-shell-output",
+    trace,
+    visualPlan(
+      regions,
+      [
+        { type: "required", regions: ["shell", "following"] },
+        { type: "unique", regions: ["shell", "following"] },
+        { type: "stable", regions: ["shell"] },
+        { type: "opacity", regions: "all" },
+        { type: "continuity", regions: "all" },
+        { type: "motion", regions: "all", maxPositionReversals: 0 },
+        { type: "label-stability", regions: "all" },
+        { type: "preserve-bottom-anchor" },
+        { type: "flow", regions: ["shell", "following"] },
+      ],
+      { perMarker: true },
+    ),
+  )
 })
 
 function lines(count: number) {

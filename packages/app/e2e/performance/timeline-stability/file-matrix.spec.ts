@@ -1,8 +1,10 @@
 import { test } from "@playwright/test"
 import {
-  expectVisualStability,
-  startVisualStabilityProbe,
-  stopVisualStabilityProbe,
+  defineVisualRegions,
+  reportVisualStability,
+  startVisualProbe,
+  stopVisualProbe,
+  visualPlan,
 } from "../../utils/visual-stability"
 import {
   assistantMessage,
@@ -16,8 +18,6 @@ import {
 
 const profiles = [
   { name: "edit", tool: "edit", input: { filePath: "src/edit.ts" } },
-  { name: "write", tool: "write", input: { filePath: "src/write.ts", content: source(50, true) } },
-  { name: "single patch", tool: "apply_patch", input: { files: ["src/a.ts"] }, single: true },
   {
     name: "multi patch",
     tool: "apply_patch",
@@ -44,25 +44,37 @@ for (const profile of profiles) {
       cpuRate: 4,
     })
     await waitForVisualSettle(page, [`[data-timeline-part-id="${partID}"]`, `[data-timeline-part-id="${followingID}"]`])
-    await startVisualStabilityProbe(page, {
+    const regions = defineVisualRegions({
       tool: { selector: `[data-timeline-part-id="${partID}"]`, closest: '[data-timeline-row="AssistantPart"]' },
       following: {
         selector: `[data-timeline-part-id="${followingID}"]`,
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+    await startVisualProbe(page, regions)
     await timeline.send(partUpdated(toolPart(partID, profile.tool, "running", profile.input)), 180)
     await timeline.send(partUpdated(completedPart(partID, profile)), 900)
-    const trace = await stopVisualStabilityProbe(page)
-    await expectVisualStability(testInfo, `file-${profile.name}`, trace, {
-      flow: ["tool", "following"],
-      stable: ["tool", "following"],
-      unique: ["tool", "following"],
-      preserveBottomAnchor: true,
-      maxPositionReversals: 0,
-      maxReversals: 1,
-      perMarker: true,
-    })
+    const trace = await stopVisualProbe<keyof typeof regions>(page)
+    await reportVisualStability(
+      testInfo,
+      `file-${profile.name}`,
+      trace,
+      visualPlan(
+        regions,
+        [
+          { type: "required", regions: ["tool", "following"] },
+          { type: "unique", regions: ["tool", "following"] },
+          { type: "stable", regions: ["tool", "following"] },
+          { type: "opacity", regions: "all" },
+          { type: "continuity", regions: "all" },
+          { type: "motion", regions: "all", maxPositionReversals: 0, maxReversals: 1 },
+          { type: "label-stability", regions: "all" },
+          { type: "preserve-bottom-anchor" },
+          { type: "flow", regions: ["tool", "following"] },
+        ],
+        { perMarker: true },
+      ),
+    )
   })
 }
 
@@ -80,16 +92,12 @@ function completedPart(partID: string, profile: (typeof profiles)[number]) {
       },
     })
   }
-  if (profile.tool === "write") return toolPart(partID, profile.tool, "completed", profile.input)
-  const files =
-    "single" in profile && profile.single
-      ? [patchFile("src/a.ts", "update")]
-      : [
-          patchFile("src/a.ts", "update"),
-          patchFile("src/b.ts", "add"),
-          patchFile("src/old.ts", "delete"),
-          { ...patchFile("src/moved.ts", "move"), move: "src/new-place.ts" },
-        ]
+  const files = [
+    patchFile("src/a.ts", "update"),
+    patchFile("src/b.ts", "add"),
+    patchFile("src/old.ts", "delete"),
+    { ...patchFile("src/moved.ts", "move"), move: "src/new-place.ts" },
+  ]
   return toolPart(partID, profile.tool, "completed", profile.input, { metadata: { files } })
 }
 
