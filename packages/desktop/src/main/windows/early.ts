@@ -3,6 +3,7 @@ import path from "node:path"
 import { app, BrowserWindow, screen, shell } from "electron"
 import { resolveExternalURL } from "../files/external-url"
 import { windowArguments } from "./bootstrap"
+import { APP_NAME } from "../constants"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import { platformFrame, storedBackgroundColor, storedZoomLevel, tone } from "./defaults"
@@ -29,6 +30,7 @@ export type EarlyWindow = {
   readonly id: string
   readonly win: BrowserWindow
   readonly state: WindowState
+  readonly loaded: boolean
   readonly shownAt: number
 }
 
@@ -94,7 +96,7 @@ export function createEarlyWindow() {
     height: state.height,
     show: !deferReveal,
     autoHideMenuBar: true,
-    title: "OpenCode",
+    title: APP_NAME,
     icon: path.join(icons, `icon.${process.platform === "win32" ? "ico" : "png"}`),
     backgroundColor: storedBackgroundColor(),
     ...platformFrame(tone(), zoom),
@@ -113,16 +115,25 @@ export function createEarlyWindow() {
 
   if (deferReveal) win.show()
 
-  const entry: EarlyWindow = { id, win, state, shownAt: Date.now() }
+  const entry: EarlyWindow = {
+    id,
+    win,
+    state,
+    shownAt: Date.now(),
+    loaded: !import.meta.env.OPENCODE_DESKTOP_EXTENSION,
+  }
 
   dispatch({ type: "early.created", id, entry })
   win.once("closed", () => dispatch({ type: "early.closed", entry }))
   // The renderer boots while the main bundle and layers load, instead of after them. Everything the
   // page needs before its first request is wired here; the IPC port arrives once the layers are up.
   registerRendererProtocol(path.join(root, "out/renderer"))
-  allowRendererPermissions(win)
-  wireNavigationPolicy(win, (url) => dispatch({ type: "external.opened", entry, url }))
-  wireRendererHeaders(win)
+  // Extensions create their own renderer views when the full window is adopted.
+  if (!entry.loaded) return
+
+  allowRendererPermissions(win.webContents)
+  wireNavigationPolicy(win.webContents, (url) => dispatch({ type: "external.opened", entry, url }))
+  wireRendererHeaders(win.webContents)
   loadWindow(win, "index.html")
 }
 
