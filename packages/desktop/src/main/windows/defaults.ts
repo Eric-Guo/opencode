@@ -9,9 +9,9 @@ import { getStore } from "../storage/store"
 // full window setup in appearance.ts, so both draw the same frame.
 
 const oc2Theme = oc2ThemeJson as DesktopTheme
+// Match the desktop shell's 40px native-control area.
 
-// Match the renderer's 36px titlebar plus its former 8px content inset.
-export const titlebarHeight = 44
+export const titlebarHeight = 40
 
 export function tone() {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light"
