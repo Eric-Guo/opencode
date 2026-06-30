@@ -2,7 +2,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
-import type { Embeds } from "@opencode/plugin/gui/main"
+import type { Embeds, Windows } from "@opencode/plugin/gui/main"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
@@ -206,6 +206,7 @@ export function createBrowserPage(
     fileRoots?: () => ReadonlyArray<string>
     shared: Shared
     embeds: Embeds
+    windows: Windows
   },
 ) {
   const policy: Policy = {
@@ -240,7 +241,7 @@ export function createBrowserPage(
 
     if (focused?.getParentWindow() === win && focused.contentView.children.includes(view)) win.focus()
 
-    if (win.isFocused()) win.webContents.focus()
+    if (win.isFocused()) options.windows.contents(win).focus()
   }
 
   contents.on("before-input-event", (event, input) => {

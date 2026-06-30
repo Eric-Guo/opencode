@@ -95,7 +95,8 @@ export function createBrowserPane(input: {
       if (!win || selectBinding(machine.state, binding) || handles.has(binding))
         throw new Error("browser.pane.owner.invalid")
 
-      if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
+      if (win.isDestroyed() || input.windows.contents(win).isDestroyed())
+        throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
       const partition = `opencode-browser-${crypto.randomUUID()}`
@@ -114,8 +115,8 @@ export function createBrowserPane(input: {
         if (event.isMainFrame && !event.isSameDocument) closed()
       }
 
-      win.webContents.once("destroyed", closed)
-      win.webContents.on("did-start-navigation", navigate)
+      input.windows.contents(win).once("destroyed", closed)
+      input.windows.contents(win).on("did-start-navigation", navigate)
 
       const handle: Handle = {
         window,
@@ -125,8 +126,8 @@ export function createBrowserPane(input: {
         registered: Promise.withResolvers(),
         cleanup: () => {
           if (win.isDestroyed()) return
-          win.webContents.off("destroyed", closed)
-          win.webContents.off("did-start-navigation", navigate)
+          input.windows.contents(win).off("destroyed", closed)
+          input.windows.contents(win).off("did-start-navigation", navigate)
         },
         pages: new Map(),
         requests: new Map(),
@@ -433,7 +434,7 @@ export function createBrowserPane(input: {
   function emit(binding: string, event: PaneEvent) {
     const handle = handles.get(binding)
 
-    if (!handle || handle.win.isDestroyed() || handle.win.webContents.isDestroyed()) return
+    if (!handle || handle.win.isDestroyed() || input.windows.contents(handle.win).isDestroyed()) return
     input.emit(handle.window, { binding, event })
   }
 
@@ -522,6 +523,7 @@ export function createBrowserPane(input: {
       fileRoots: () => selectFileRoots(machine.state, binding),
       shared,
       embeds: input.embeds,
+      windows: input.windows,
       fail,
       publish: (error) => {
         if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state(), error })
