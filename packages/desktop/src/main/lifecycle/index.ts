@@ -8,11 +8,18 @@ import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import {
+  getLastFocusedWindow,
+  getPrimaryWebContents,
+  makeMainWindows,
+  setAppQuitting,
+  setRelaunchHandler,
+} from "../windows"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 
 export interface Interface {
+  readonly quit: () => void
   readonly relaunch: () => void
   readonly prepareToRestart: Effect.Effect<void>
   readonly consumeInitialDeepLinks: () => string[]
@@ -37,7 +44,7 @@ const runtime = Layer.effect(
       if (!urls.length) return
       pendingDeepLinks.push(...urls)
       const win = getLastFocusedWindow()
-      if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
+      if (win) emitIpcEvent(getPrimaryWebContents(win), new DeepLinksOpened({ urls }))
     }
     const relaunch = () => {
       setAppQuitting()
@@ -51,6 +58,10 @@ const runtime = Layer.effect(
           ),
         ),
       )
+    }
+    const quit = () => {
+      setAppQuitting()
+      runFork(shutdown.run.pipe(Effect.ensuring(Effect.sync(() => app.exit(0)))))
     }
     const secondInstance = (_event: Event, argv: string[]) => {
       const urls = argv.filter((arg) => arg.startsWith("opencode://"))
@@ -128,6 +139,7 @@ const runtime = Layer.effect(
     )
 
     return Service.of({
+      quit,
       relaunch,
       prepareToRestart,
       consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),

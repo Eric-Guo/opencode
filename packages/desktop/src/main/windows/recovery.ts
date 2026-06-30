@@ -1,9 +1,9 @@
 import { app, dialog } from "electron"
-import type { BrowserWindow } from "electron"
+import type { BrowserWindow, WebContents } from "electron"
 import { Effect } from "effect"
 import { DesktopLogging, scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
-import { safeWindowURL } from "./state"
+import { safeWebContentsURL } from "./state"
 import { makeUnresponsiveSampler } from "./unresponsive"
 
 export const makeWindowRecovery = Effect.gen(function* () {
@@ -13,9 +13,14 @@ export const makeWindowRecovery = Effect.gen(function* () {
   const logging = yield* DesktopLogging.Service
   const createUnresponsiveSampler = yield* makeUnresponsiveSampler
 
-  function wireWindowRecovery(win: BrowserWindow, name: string, relaunch: () => void) {
+  function wireWindowRecovery(
+    win: BrowserWindow,
+    contents: WebContents,
+    name: string,
+    relaunch: () => void,
+  ) {
     let showing = false
-    const sampler = createUnresponsiveSampler(win, name)
+    const sampler = createUnresponsiveSampler(win, name, contents)
 
     type RecoveryAction = "relaunch" | "export-logs" | "keep-waiting" | "quit"
     const handle = async (action: RecoveryAction | undefined, wait: boolean) => {
@@ -87,7 +92,7 @@ export const makeWindowRecovery = Effect.gen(function* () {
             errorCode,
             errorDescription,
             validatedURL,
-            currentURL: safeWindowURL(win),
+            currentURL: safeWebContentsURL(contents),
             isMainFrame,
           }),
         ),
@@ -105,18 +110,22 @@ export const makeWindowRecovery = Effect.gen(function* () {
       )
     }
 
-    win.webContents.on("did-fail-load", (_event, code, description, url, mainFrame) => {
+    contents.on("did-fail-load", (_event, code, description, url, mainFrame) => {
       failed("did-fail-load", code, description, url, mainFrame)
     })
-    win.webContents.on("did-fail-provisional-load", (_event, code, description, url, mainFrame) => {
+    contents.on("did-fail-provisional-load", (_event, code, description, url, mainFrame) => {
       failed("did-fail-provisional-load", code, description, url, mainFrame)
     })
-    win.webContents.on("render-process-gone", (_event, details) => {
+    contents.on("render-process-gone", (_event, details) => {
       sampler.stopAndFlush()
       runFork(
         scoped(
           "window",
-          Effect.logError("renderer process gone", { window: name, currentURL: safeWindowURL(win), details }),
+          Effect.logError("renderer process gone", {
+            window: name,
+            currentURL: safeWebContentsURL(contents),
+            details,
+          }),
         ),
       )
       void show(
@@ -129,25 +138,42 @@ export const makeWindowRecovery = Effect.gen(function* () {
         false,
       )
     })
-    win.on("unresponsive", () => {
+    contents.on("unresponsive", () => {
       runFork(
-        scoped("window", Effect.logError("renderer unresponsive", { window: name, currentURL: safeWindowURL(win) })),
+        scoped(
+          "window",
+          Effect.logError("renderer unresponsive", { window: name, currentURL: safeWebContentsURL(contents) }),
+        ),
       )
       sampler.start()
       void show(nativeT("desktop.recovery.unresponsive"), nativeT("desktop.recovery.unresponsive.detail"), true)
     })
-    win.on("responsive", () => {
+    contents.on("responsive", () => {
       runFork(
-        scoped("window", Effect.logError("renderer responsive", { window: name, currentURL: safeWindowURL(win) })),
+        scoped(
+          "window",
+          Effect.logError("renderer responsive", { window: name, currentURL: safeWebContentsURL(contents) }),
+        ),
       )
       sampler.stopAndFlush()
     })
-    win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-      if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
-        runFork(scoped("pty", Effect.logInfo("console", { window: name, level, message, line, sourceId })))
+    contents.on("console-message", (event) => {
+      if (event.message.toLowerCase().includes("terminal") || event.sourceId.toLowerCase().includes("terminal")) {
+        runFork(
+          scoped(
+            "pty",
+            Effect.logInfo("console", {
+              window: name,
+              level: event.level,
+              message: event.message,
+              line: event.lineNumber,
+              sourceId: event.sourceId,
+            }),
+          ),
+        )
       }
     })
-    win.webContents.on("preload-error", (_event, path, error) => {
+    contents.on("preload-error", (_event, path, error) => {
       runFork(scoped("preload", Effect.logError("preload error", { window: name, preloadPath: path, error })))
     })
   }
