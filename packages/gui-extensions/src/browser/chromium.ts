@@ -2,7 +2,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
-import type { Embeds } from "../sdk/main"
+import type { Embeds, Windows } from "../sdk/main"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
@@ -146,6 +146,7 @@ export function createBrowserPage(
     fileRoots?: () => ReadonlyArray<string>
     shared: Shared
     embeds: Embeds
+    windows: Windows
   },
 ) {
   const policy: Policy = {
@@ -1585,7 +1586,8 @@ export function createBrowserPage(
 
     // The pick focused the page; the comment editor opens in the app window. Focus only moves
     // within a focused window, so synthetic input never raises a background window.
-    if (!win.isDestroyed() && win.isFocused()) win.webContents.focus()
+
+    if (!win.isDestroyed() && win.isFocused()) options.windows.contents(win).focus()
     options.inspect?.({
       active: false,
       element: {
