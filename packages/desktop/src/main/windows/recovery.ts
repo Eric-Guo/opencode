@@ -1,5 +1,5 @@
 import { app, dialog } from "electron"
-import type { BrowserWindow } from "electron"
+import type { BrowserWindow, WebContents } from "electron"
 import { Effect } from "effect"
 import type { DesktopNativeKey } from "@opencode/app/i18n/desktop-native"
 import { DesktopLogging, scoped } from "../native/logging"
@@ -11,7 +11,7 @@ import {
   type RecoveryErrorKind,
   type RecoveryIncident,
 } from "./recovery-machine"
-import { safeWindowURL } from "./state"
+import { safeWebContentsURL } from "./state"
 
 const ACTION_LABELS = {
   relaunch: "desktop.recovery.action.relaunch",
@@ -36,6 +36,7 @@ export const windowRecovery = Effect.gen(function* () {
 
   function wireWindowRecovery(
     win: BrowserWindow,
+    contents: WebContents,
     name: string,
     options: {
       readonly relaunch: () => void
@@ -43,7 +44,7 @@ export const windowRecovery = Effect.gen(function* () {
       readonly reveal: () => void
     },
   ) {
-    const isDevToolsOpen = () => !win.isDestroyed() && win.webContents.isDevToolsOpened()
+    const isDevToolsOpen = () => !win.isDestroyed() && contents.isDevToolsOpened()
 
     const recovery = createRecoveryDriver({
       reveal: options.reveal,
@@ -64,12 +65,12 @@ export const windowRecovery = Effect.gen(function* () {
       },
       exportLogs: () => runPromise(Effect.asVoid(logging.exportDebug)),
       collectSample: async () => {
-        if (win.isDestroyed() || win.webContents.isDestroyed() || win.webContents.mainFrame.isDestroyed()) return
+        if (win.isDestroyed() || contents.isDestroyed() || contents.mainFrame.isDestroyed()) return
 
-        return (await win.webContents.mainFrame.collectJavaScriptCallStack()) || undefined
+        return (await contents.mainFrame.collectJavaScriptCallStack()) || undefined
       },
       flushSamples: (samples) =>
-        runFork(scoped("window", Effect.logError(formatUnresponsiveSamples(name, safeWindowURL(win), samples)))),
+        runFork(scoped("window", Effect.logError(formatUnresponsiveSamples(name, safeWebContentsURL(contents), samples)))),
       logError: (failure) =>
         runFork(
           scoped("window", Effect.logError(ERROR_MESSAGES[failure.kind], { window: name, error: failure.error })),
@@ -96,7 +97,7 @@ export const windowRecovery = Effect.gen(function* () {
             errorCode,
             errorDescription,
             validatedURL,
-            currentURL: safeWindowURL(win),
+            currentURL: safeWebContentsURL(contents),
             isMainFrame,
           }),
         ),
@@ -110,35 +111,45 @@ export const windowRecovery = Effect.gen(function* () {
       })
     }
 
-    win.webContents.on("did-fail-load", (_event, code, description, url, mainFrame) => {
+    contents.on("did-fail-load", (_event, code, description, url, mainFrame) => {
       failed("did-fail-load", code, description, url, mainFrame)
     })
-    win.webContents.on("did-fail-provisional-load", (_event, code, description, url, mainFrame) => {
+    contents.on("did-fail-provisional-load", (_event, code, description, url, mainFrame) => {
       failed("did-fail-provisional-load", code, description, url, mainFrame)
     })
-    win.webContents.on("render-process-gone", (_event, details) => {
+    contents.on("render-process-gone", (_event, details) => {
       runFork(
         scoped(
           "window",
-          Effect.logError("renderer process gone", { window: name, currentURL: safeWindowURL(win), details }),
+          Effect.logError("renderer process gone", {
+            window: name,
+            currentURL: safeWebContentsURL(contents),
+            details,
+          }),
         ),
       )
       recovery.dispatch({ type: "process.gone", reason: details.reason, exitCode: details.exitCode })
     })
-    win.on("unresponsive", () => {
+    contents.on("unresponsive", () => {
       runFork(
-        scoped("window", Effect.logError("renderer unresponsive", { window: name, currentURL: safeWindowURL(win) })),
+        scoped(
+          "window",
+          Effect.logError("renderer unresponsive", { window: name, currentURL: safeWebContentsURL(contents) }),
+        ),
       )
       recovery.dispatch({ type: "renderer.unresponsive", devtoolsOpen: isDevToolsOpen() })
     })
-    win.on("responsive", () => {
+    contents.on("responsive", () => {
       runFork(
-        scoped("window", Effect.logError("renderer responsive", { window: name, currentURL: safeWindowURL(win) })),
+        scoped(
+          "window",
+          Effect.logError("renderer responsive", { window: name, currentURL: safeWebContentsURL(contents) }),
+        ),
       )
       recovery.dispatch({ type: "renderer.responsive" })
     })
     win.once("closed", () => recovery.dispatch({ type: "window.closed" }))
-    win.webContents.on("console-message", (event) => {
+    contents.on("console-message", (event) => {
       if (event.message.toLowerCase().includes("terminal") || event.sourceId.toLowerCase().includes("terminal")) {
         runFork(
           scoped(
@@ -154,7 +165,7 @@ export const windowRecovery = Effect.gen(function* () {
         )
       }
     })
-    win.webContents.on("preload-error", (_event, path, error) => {
+    contents.on("preload-error", (_event, path, error) => {
       runFork(scoped("preload", Effect.logError("preload error", { window: name, preloadPath: path, error })))
     })
   }
