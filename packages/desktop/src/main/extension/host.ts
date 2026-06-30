@@ -50,7 +50,7 @@ import {
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import type { Database } from "../storage/database"
 import type { StateStore } from "../storage/state"
-import { getLastFocusedWindow, getMainWindows, onMainWindow } from "../windows"
+import { getLastFocusedWindow, getMainWindows, getPrimaryWebContents, onMainWindow } from "../windows"
 import { ExtensionError } from "./error"
 import { createManager } from "./manager"
 import { evaluateMain } from "./module"
@@ -128,7 +128,9 @@ export function createHost(input: {
   // successful one keeps their state and menu items until the app has quit.
   const restarting = new Set<string>()
 
-  const broadcast = (event: DesktopEvent) => getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
+  const broadcast = (event: DesktopEvent) =>
+    getMainWindows().forEach((win) => emitIpcEvent(getPrimaryWebContents(win), event))
+
   const changed = () => broadcast(new ExtensionsChanged({ list: installed() }))
 
   const subscribers = (remote: string, window?: number) => {
@@ -152,7 +154,7 @@ export function createHost(input: {
       const encoded = Schema.encodeUnknownExit(schema)(stateOf(win.id))
       if (Exit.isFailure(encoded))
         return input.log("extension state encoding failed", { remote, cause: String(encoded.cause) })
-      emitIpcEvent(win.webContents, new ExtensionState({ remote, state: encoded.value }))
+      emitIpcEvent(getPrimaryWebContents(win), new ExtensionState({ remote, state: encoded.value }))
     })
   }
 
@@ -325,6 +327,7 @@ export function createHost(input: {
         {
           get: (window) => getMainWindows().find((win) => win.id === window),
           list: getMainWindows,
+          contents: getPrimaryWebContents,
           focused: () => getLastFocusedWindow() ?? undefined,
           on: (event, handler) => {
             if (event === "open") return contribute(onMainWindow(handler))
@@ -433,7 +436,8 @@ export function createHost(input: {
           const event = new ExtensionEvent({ remote, name, data: encoded.value })
           if (window === undefined) return broadcast(event)
           const win = BrowserWindow.fromId(window)
-          if (win && !win.isDestroyed()) emitIpcEvent(win.webContents, event)
+
+          if (win && !win.isDestroyed()) emitIpcEvent(getPrimaryWebContents(win), event)
         },
         dispose,
       }
@@ -660,7 +664,7 @@ export function createHost(input: {
   const wire = (win: BrowserWindow) => {
     const window = win.id
     const forget = () => input.subscriptions.forEach((ids) => ids.delete(window))
-    win.webContents.on(
+    getPrimaryWebContents(win).on(
       "did-start-navigation",
       (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
         if (!event.isMainFrame || event.isSameDocument) return
