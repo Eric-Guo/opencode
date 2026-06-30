@@ -4,7 +4,7 @@ import type { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { DeepLinksOpened } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
-import { getWindowByID, onMainWindow } from "../windows"
+import { getWindowByID, getPrimaryWebContents, onMainWindow } from "../windows"
 import { createDeepLinkState, transitionDeepLinks, type DeepLinkEvent } from "./machine"
 
 export interface Interface {
@@ -26,7 +26,7 @@ export const make = Effect.fn("DeepLinks.make")(function* (focus: (win: BrowserW
       if (command.type === "window.focus") return focus(getWindowByID(command.windowID))
       const win = getWindowByID(command.windowID)
       const opened = new DeepLinksOpened({ attempt: command.attempt, urls: command.urls })
-      const sent = !!win && emitIpcEvent(win.webContents, opened)
+      const sent = !!win && emitIpcEvent(getPrimaryWebContents(win), opened)
 
       // A renderer without an event stream is gone, so its links wait for the next one.
       if (!sent) dispatch({ type: "client.disconnected", clientID: command.clientID })
