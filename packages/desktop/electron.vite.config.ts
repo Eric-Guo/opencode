@@ -1,12 +1,12 @@
 import { defineConfig } from "electron-vite"
 import type { Plugin } from "vite"
 import { BetaNotes } from "./script/beta-notes"
+import { desktopExtension } from "./scripts/extension"
+import { resolve } from "node:path"
 import { pickerPlugin } from "./script/picker"
 import { nodePtyPackage } from "./script/utils"
-import { cp, rm } from "node:fs/promises"
 
-const SEVEN_SEVEN_DIST = "../7777/dist"
-const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
+const extension = desktopExtension()
 
 function resolveChannel() {
   const raw = process.env.OPENCODE_CHANNEL
@@ -40,7 +40,7 @@ const initialChunk: Plugin = {
 
 export default defineConfig(async ({ command }) => {
   const channel = resolveChannel()
-  const nodePtyPkg = nodePtyPackage(process.env.RUST_TARGET)
+  const nodePtyPkg = nodePtyPackage()
 
   // Beta builds carry their commit and recent history for the updater's "What's new in beta"; the dev server carries
   // them without asking GitHub, so the page can be tried; other channels none.
@@ -55,8 +55,10 @@ export default defineConfig(async ({ command }) => {
     main: {
       resolve: {
         dedupe: ["effect"],
+        alias: { "#desktop-main-extension": extension?.main ?? resolve("src/main/extension.ts") },
       },
       define: {
+        "import.meta.env.OPENCODE_DESKTOP_EXTENSION": JSON.stringify(!!extension),
         // Local renderer/server mode still uses the dev application identity and updater policy.
         "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel === "local" ? "dev" : channel),
       },
@@ -99,10 +101,14 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       ],
     },
     preload: {
+      resolve: { alias: { "#desktop-preload-extension": extension?.preload ?? resolve("src/preload/extension.ts") } },
       build: {
         minify: command === "build",
         rolldownOptions: {
-          input: { index: "src/preload/index.ts" },
+          input: {
+            index: "src/preload/index.ts",
+            ...extension?.preloads,
+          },
           output: {
             format: "cjs",
             // The package is "type": "module". Under --no-sandbox Electron loads the preload
@@ -114,6 +120,10 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       },
     },
     renderer: {
+      resolve: {
+        dedupe: ["solid-js"],
+        alias: { "#desktop-renderer-extension": extension?.renderer ?? resolve("src/renderer/extension.ts") },
+      },
       experimental: {
         bundledDev: true,
       },
@@ -130,14 +140,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         { ...pickerPlugin(), transformIndexHtml: undefined },
         appPlugin,
         initialChunk,
-        {
-          name: "opencode:copy-7777-renderer",
-          apply: "build",
-          async writeBundle() {
-            await rm(SEVEN_SEVEN_RENDERER_OUT, { recursive: true, force: true })
-            await cp(SEVEN_SEVEN_DIST, SEVEN_SEVEN_RENDERER_OUT, { recursive: true })
-          },
-        },
+        extension?.assetsPlugin,
       ],
       publicDir: "../../../app/public",
       root: "src/renderer",
