@@ -16,6 +16,8 @@ import { SidecarCredentials } from "./service/sidecar-credentials"
 import { createBrowserRestoreStore } from "./browser/restore"
 import type { StateStore } from "./storage/state"
 
+import { getPrimaryWebContents } from "./windows/content"
+
 type Entry = {
   bindingID: string
   win: BrowserWindow
@@ -49,7 +51,8 @@ export function createBrowserPane(storage: StateStore) {
       if (disposed || !destinationOrigin(target.endpoint.url)) throw new Error("browser.pane.registration.invalid")
       if (target.endpoint.username && !target.endpoint.password) throw new Error("browser.pane.endpoint.invalid")
       if (entries.has(bindingID)) throw new Error("browser.pane.owner.invalid")
-      if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
+      if (win.isDestroyed() || getPrimaryWebContents(win).isDestroyed())
+        throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.sessionID)
       const storageKey = `${target.serverKey}\n${sessionID}`
       const saved = restore.load(storageKey)
@@ -102,12 +105,12 @@ export function createBrowserPane(storage: StateStore) {
       const navigate = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
         if (event.isMainFrame && !event.isSameDocument) stop()
       }
-      win.webContents.once("destroyed", stop)
-      win.webContents.on("did-start-navigation", navigate)
+      getPrimaryWebContents(win).once("destroyed", stop)
+      getPrimaryWebContents(win).on("did-start-navigation", navigate)
       entry.cleanup = () => {
         if (win.isDestroyed()) return
-        win.webContents.off("destroyed", stop)
-        win.webContents.off("did-start-navigation", navigate)
+        getPrimaryWebContents(win).off("destroyed", stop)
+        getPrimaryWebContents(win).off("did-start-navigation", navigate)
       }
       entries.set(bindingID, entry)
       void runtime
@@ -314,8 +317,9 @@ export function createBrowserPane(storage: StateStore) {
   }
 
   function publish(entry: Entry, event: BrowserPaneEvent["event"]) {
-    if (!entries.has(entry.bindingID) || entry.win.isDestroyed() || entry.win.webContents.isDestroyed()) return
-    emitIpcEvent(entry.win.webContents, new BrowserPaneEvent({ bindingID: entry.bindingID, event }))
+    if (!entries.has(entry.bindingID) || entry.win.isDestroyed() || getPrimaryWebContents(entry.win).isDestroyed())
+      return
+    emitIpcEvent(getPrimaryWebContents(entry.win), new BrowserPaneEvent({ bindingID: entry.bindingID, event }))
   }
 
   function close(entry: Entry, reason = "browser.pane.registration.closed") {

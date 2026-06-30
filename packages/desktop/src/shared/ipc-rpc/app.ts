@@ -1,9 +1,9 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
-const ServerReadyData = Schema.Struct({
-  url: Schema.String,
-})
+const ServerReadyData = Schema.StructWithRest(Schema.Struct({ url: Schema.String }), [
+  Schema.Record(Schema.String, Schema.Unknown),
+])
 
 export const PairingInfo = Schema.Struct({
   urls: Schema.Array(Schema.String),
@@ -11,6 +11,10 @@ export const PairingInfo = Schema.Struct({
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
+// Wire compatibility for existing bundled renderers. The optional extension owns the implementation.
+export const AppGetCybrosCurrentUser = Rpc.make("AppGetCybrosCurrentUser", {
+  success: Schema.Unknown,
+})
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
   success: Schema.Array(Schema.String),
 })
@@ -64,8 +68,10 @@ export const AppSetKeepScreenActive = Rpc.make("AppSetKeepScreenActive", {
   payload: { enabled: Schema.Boolean },
   error: Schema.String,
 })
+export const AppQuit = Rpc.make("AppQuit")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
+  AppGetCybrosCurrentUser,
   AppReconnectService,
   AppConsumeInitialDeepLinks,
   AppGetDefaultServerUrl,
@@ -84,4 +90,5 @@ export const AppRpcs = RpcGroup.make(
   AppPairCode,
   AppGetKeepScreenActive,
   AppSetKeepScreenActive,
+  AppQuit,
 )
