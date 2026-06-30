@@ -10,7 +10,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
-import type { Embeds } from "@opencode/plugin/gui/main"
+import type { Embeds, Windows } from "@opencode/plugin/gui/main"
 import { captureCoordinator, captureScale, cropPixels, FULL_PAGE_DEADLINE_MS, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
@@ -329,6 +329,7 @@ export function createBrowserPage(
     system: SystemMedia
     /** Logs that an Electron internal is not what the page expects; the pane logs each message once. */
     warn?: (message: string) => void
+    windows: Windows
   },
 ) {
   const policy: Policy = {
@@ -421,7 +422,7 @@ export function createBrowserPage(
 
     if (focused?.getParentWindow() === win && focused.contentView.children.includes(view)) win.focus()
 
-    if (win.isFocused()) win.webContents.focus()
+    if (win.isFocused()) options.windows.contents(win).focus()
   }
 
   contents.on("before-input-event", (event, input) => {
