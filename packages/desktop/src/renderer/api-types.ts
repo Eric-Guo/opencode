@@ -1,5 +1,5 @@
 import type { BrowserPaneEvent } from "@opencode/app/desktop"
-import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
+import type { DesktopMenuAction, DesktopMenuHistoryEntry } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import type { UpdaterState } from "@opencode/app/updater"
 import type { WslServersPlatform } from "@opencode/app/wsl/types"
@@ -74,6 +74,7 @@ export type ElectronAPI = {
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
   relaunch(): void
+  quit(): void
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>
   getPinchZoomEnabled(): Promise<boolean>
@@ -82,6 +83,8 @@ export type ElectronAPI = {
   onZoomFactorChanged(cb: (factor: number) => void): () => void
   setTitlebar(theme: TitlebarTheme): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
+  getDesktopMenuHistory(): Promise<DesktopMenuHistoryEntry[]>
+  goToDesktopMenuHistory(index: number): Promise<void>
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>
   setForceFocus(enabled: boolean): Promise<void>
