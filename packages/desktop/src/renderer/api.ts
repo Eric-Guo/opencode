@@ -23,8 +23,8 @@ const updaterHandler = (state: UpdaterState) => {
 }
 
 export const api: ElectronAPI = {
-  awaitInitialization: () => invoke("AppAwaitInitialization"),
-  reconnectService: () => invoke("AppReconnectService"),
+  awaitInitialization: () => invoke("AppAwaitInitialization").then(mutable),
+  reconnectService: () => invoke("AppReconnectService").then(mutable),
   sshServers: {
     getState: () => invoke("SshGetState"),
     subscribe: (callback) => {
@@ -140,6 +140,7 @@ export const api: ElectronAPI = {
   setWindowFocus: () => invoke("WindowSetFocus"),
   showWindow: () => invoke("WindowShow"),
   relaunch: () => send("AppRelaunch"),
+  quit: () => send("AppQuit"),
   getZoomFactor: () => invoke("WindowGetZoomFactor"),
   setZoomFactor: (factor) => invoke("WindowSetZoomFactor", { factor }),
   getPinchZoomEnabled: () => invoke("WindowGetPinchZoomEnabled"),
@@ -148,6 +149,8 @@ export const api: ElectronAPI = {
   onZoomFactorChanged: (cb) => listen("WindowZoomChanged", (event) => cb(event.factor)),
   setTitlebar: (theme) => invoke("WindowSetTitlebar", { theme }),
   runDesktopMenuAction: (action) => invoke("MenuRunAction", { action }),
+  getDesktopMenuHistory: () => invoke("MenuGetHistory").then(mutable),
+  goToDesktopMenuHistory: (index) => invoke("MenuGoToHistory", { index }),
   setBackgroundColor: (color) => invoke("AppSetBackgroundColor", { color }),
   exportDebugLogs: () => invoke("AppExportDebugLogs"),
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),

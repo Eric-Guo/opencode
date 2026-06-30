@@ -4,6 +4,7 @@
 import {
   AppBaseProviders,
   AppInterface,
+  DialogUserLogin,
   currentRoute,
   PlatformProvider,
   preloadRoute,
@@ -17,6 +18,8 @@ import {
   type LayoutRoute,
   type UpdaterPlatform,
 } from "@opencode/app/desktop"
+import { useDialog } from "@opencode/ui/context/dialog"
+import extension from "#desktop-renderer-extension"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
@@ -76,8 +79,8 @@ function DesktopWindow(props: {
   onReady: () => void
   onRoute: (route: LayoutRoute) => void
 }) {
-  const platform = createDesktopPlatform(props.api, props.windowState, props.updater)
   const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
+  const platform = createDesktopPlatform(props.api, props.windowState, props.updater)
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(() => preloadStoredLocale(platform))
   const [initialRoute] = createResource(() => preloadRoute(getLastActiveUrl(props.windowState.id)))
@@ -147,8 +150,7 @@ function DesktopWindow(props: {
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
         onThemeApplied={(mode, scheme) => {
-          void props.api.setTitlebar({ mode, scheme })
-          void props.api.themeReady()
+          void props.api.setTitlebar({ mode, scheme }).finally(() => props.api.themeReady())
         }}
       >
         <Show when={true}>{(_) => <ReadyApp />}</Show>
@@ -174,7 +176,15 @@ function DesktopStartupReady(props: {
 
 function DesktopEffects(props: { api: ElectronAPI }) {
   const command = useCommand()
-  bindDesktopMenu((id) => command.trigger(id))
+  const dialog = useDialog()
+  const effects = extension.setup?.({
+    showLogin: (onLogin) => {
+      void dialog.show(() => <DialogUserLogin onLogin={onLogin} onExit={() => props.api.quit()} />)
+    },
+  })
+  bindDesktopMenu((id) => {
+    if (!effects?.command(id)) command.trigger(id)
+  })
   const theme = useTheme()
 
   createEffect(() => {

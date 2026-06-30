@@ -210,8 +210,15 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
         })
       )
         throw new Error("CORS must be a comma-separated list of HTTP(S) origins without paths or trailing slashes")
+      const existing = yield* read()
+      // Desktop startup can reapply the same origins; their order and duplicates do not affect CORS.
+      if (
+        cors.every((origin) => existing.cors?.includes(origin)) &&
+        existing.cors?.every((origin) => cors.includes(origin))
+      )
+        return
       yield* Service.stop(yield* options())
-      yield* write({ ...(yield* read()), cors })
+      yield* write({ ...existing, cors })
       return
     }
   }
@@ -249,8 +256,10 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
       return
     }
     case "cors": {
+      const existing = yield* read()
+      if (existing.cors === undefined) return
       yield* Service.stop(yield* options())
-      const { cors: _cors, ...next } = yield* read()
+      const { cors: _cors, ...next } = existing
       yield* write(next)
       return
     }
