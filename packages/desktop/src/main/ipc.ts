@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from "electron"
+import { ipcMain } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 
@@ -17,6 +17,8 @@ import { runDesktopMenuAction } from "./native/menu-actions"
 import { createDesktopStorage } from "./storage"
 import {
   getPinchZoomEnabled,
+  getPrimaryWebContents,
+  getWindowFromWebContents,
   getWindowID,
   setPinchZoomEnabled,
   setTitlebar,
@@ -78,8 +80,13 @@ export function registerIpcHandlers(deps: Deps) {
   handle(Ipc.app.setForceFocus, (event, enabled) => setForceFocus(event.sender, enabled))
   handle(Ipc.app.recordFatalRendererError, (_event, error) => deps.recordFatalRendererError(error))
   handle(Ipc.app.setNativeTranslations, (event, value) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win || win.isDestroyed() || win.webContents !== event.sender || event.senderFrame !== event.sender.mainFrame) {
+    const win = getWindowFromWebContents(event.sender)
+    if (
+      !win ||
+      win.isDestroyed() ||
+      getPrimaryWebContents(win) !== event.sender ||
+      event.senderFrame !== event.sender.mainFrame
+    ) {
       throw new Error("Invalid native translation sender")
     }
     const bundle = parseDesktopNativeBundle(value)
@@ -112,7 +119,7 @@ export function registerIpcHandlers(deps: Deps) {
   handle(Ipc.files.readClipboardImage, () => files.readClipboardImage())
 
   handle(Ipc.window.getId, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     if (!win) throw new Error("Window not found")
     const id = getWindowID(win)
     if (!id) throw new Error("Window ID not found")
@@ -120,28 +127,28 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   handle(Ipc.window.themeReady, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     if (!win) throw new Error("Window not found")
     setWindowThemeReady(win)
   })
 
   handle(Ipc.window.getFocused, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     return win?.isFocused() ?? false
   })
 
   handle(Ipc.window.getFullscreen, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     return win?.isFullScreen() ?? false
   })
 
   handle(Ipc.window.setFocus, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     win?.focus()
   })
 
   handle(Ipc.window.show, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     win?.show()
   })
 
@@ -152,7 +159,7 @@ export function registerIpcHandlers(deps: Deps) {
   handle(Ipc.window.getZoomFactor, (event) => event.sender.getZoomFactor())
   handle(Ipc.window.setZoomFactor, (event, factor) => {
     event.sender.setZoomFactor(factor)
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     if (!win) return
     updateTitlebar(win)
   })
@@ -161,12 +168,12 @@ export function registerIpcHandlers(deps: Deps) {
     setPinchZoomEnabled(enabled)
   })
   handle(Ipc.window.setTitlebar, (event, theme) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     if (!win) return
     setTitlebar(win, theme)
   })
   handle(Ipc.menu.runAction, (event, action) => {
-    runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action, {
+    runDesktopMenuAction(getWindowFromWebContents(event.sender), action, {
       checkForUpdates: () => void deps.showUpdater(),
       relaunch: deps.relaunch,
     })
