@@ -1,10 +1,12 @@
-import type { BrowserWindow, NativeImage, WebContentsView } from "electron"
+import type { BrowserWindow, NativeImage, WebContents, WebContentsView } from "electron"
 import type { Schema } from "effect"
 import { Host, Point, type Cleanup } from "./core"
 
 export * from "./core"
 
 export interface Windows {
+  /** The app renderer, which may be hosted in a child view inside the window. */
+  contents(window: BrowserWindow): WebContents
   get(id: number): BrowserWindow | undefined
   list(): readonly BrowserWindow[]
   focused(): BrowserWindow | undefined
