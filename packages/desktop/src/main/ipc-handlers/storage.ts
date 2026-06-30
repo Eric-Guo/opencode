@@ -1,4 +1,4 @@
-import { BrowserWindow } from "electron"
+import { rendererContents } from "../windows/content"
 import { Effect } from "effect"
 import { StorageRpcs } from "../../shared/ipc-rpc"
 import { StorageChanged } from "../../shared/ipc-rpc/events"
@@ -21,8 +21,8 @@ export const storageHandlers = StorageRpcs.toLayer(
           const origin = sender(handoff, context)
           const event = new StorageChanged({ name, insert, remove, revision })
 
-          for (const win of BrowserWindow.getAllWindows()) {
-            if (win.webContents !== origin) emitIpcEvent(win.webContents, event)
+          for (const contents of rendererContents()) {
+            if (contents !== origin) emitIpcEvent(contents, event)
           }
 
           return revision

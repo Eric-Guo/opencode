@@ -1,4 +1,4 @@
-import type { DesktopMenuAction, DesktopZoomLevel } from "@opencode/app/desktop-menu"
+import type { DesktopMenuAction, DesktopMenuHistoryEntry, DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
@@ -57,6 +57,7 @@ export type ElectronAPI = {
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
   relaunch(): void
+  quit(): void
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>
   getPinchZoomEnabled(): Promise<boolean>
@@ -68,6 +69,8 @@ export type ElectronAPI = {
   setTitlebar(theme: TitlebarTheme): Promise<void>
   setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
+  getDesktopMenuHistory(): Promise<DesktopMenuHistoryEntry[]>
+  goToDesktopMenuHistory(index: number): Promise<void>
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>
   setForceFocus(enabled: boolean): Promise<void>
