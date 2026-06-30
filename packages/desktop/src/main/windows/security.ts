@@ -1,7 +1,7 @@
-import type { BrowserWindow, Session } from "electron"
+import type { Session, WebContents } from "electron"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { addRendererHeaders, hasHeader, upsertHeader } from "./headers"
-import { isRendererUrl } from "./scheme"
+import { isRendererUrl } from "./protocol"
 
 const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
 
@@ -11,9 +11,8 @@ const wiredHeaderSessions = new WeakSet<Session>()
 
 // App windows share Electron's default session, where setPermission*Handler replaces the previous
 // handler. One pair of handlers per session evaluates against the live renderer WebContents set.
-export function allowRendererPermissions(win: BrowserWindow) {
-  if (win.isDestroyed() || win.webContents.isDestroyed()) return
-  const webContents = win.webContents
+export function allowRendererPermissions(webContents: WebContents) {
+  if (webContents.isDestroyed()) return
   const session = webContents.session
   const allowed = allowedBySession.get(session) ?? registerPermissionHandlers(session)
   const id = webContents.id
@@ -26,7 +25,6 @@ export function allowRendererPermissions(win: BrowserWindow) {
   }
 
   webContents.once("destroyed", remove)
-  win.once("closed", remove)
 }
 
 function registerPermissionHandlers(session: Session) {
@@ -71,21 +69,21 @@ function registerPermissionHandlers(session: Session) {
   return allowed
 }
 
-export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => void) {
-  win.webContents.setWindowOpenHandler(({ url }) => {
+export function wireNavigationPolicy(contents: WebContents, openExternalURL: (url: string) => unknown) {
+  contents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
 
     return { action: "deny" }
   })
-  win.webContents.on("will-navigate", (event, url) => {
+  contents.on("will-navigate", (event, url) => {
     if (isRendererUrl(url)) return
     event.preventDefault()
     openExternalURL(url)
   })
 }
 
-export function wireRendererHeaders(win: BrowserWindow) {
-  const session = win.webContents.session
+export function wireRendererHeaders(contents: WebContents) {
+  const session = contents.session
 
   if (wiredHeaderSessions.has(session)) return
   wiredHeaderSessions.add(session)

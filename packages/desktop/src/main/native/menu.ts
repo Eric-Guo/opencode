@@ -1,17 +1,20 @@
 import { BrowserWindow, Menu } from "electron"
 import type { MenuItemConstructorOptions } from "electron"
 import {
+  DESKTOP_MENU_HISTORY_LIMIT,
   DESKTOP_MENU,
   desktopMenuKey,
   desktopMenuVisible,
   desktopMenuWithPlugins,
   type DesktopMenu,
   type DesktopMenuEntry,
+  type DesktopMenuHistoryEntry,
   type DesktopMenuRole,
 } from "@opencode/app/desktop-menu"
 import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 
+import { getPrimaryWebContents } from "../windows"
 import { runDesktopMenuAction } from "./menu-actions"
 import {
   createMenuState,
@@ -29,6 +32,9 @@ type Deps = {
   createWindow: () => void
   openExternal: (url: string) => void
   relaunch: () => void
+  getHistory: () => DesktopMenuHistoryEntry[]
+  goToHistory: (index: number) => void
+  onHistoryChange: (listener: () => void) => () => void
 }
 
 /** A GUI plugin's contribution to the native menu, already translated by the plugin. */
@@ -43,6 +49,8 @@ export type MenubarEntry = {
 }
 
 const installation = { state: createMenuState<Deps>() }
+
+let stopHistory: (() => void) | undefined
 
 function dispatch(event: MenuEvent<Deps>) {
   const next = transitionMenu(installation.state, event)
@@ -67,6 +75,8 @@ export function createMenu(deps: Deps) {
 /** Later contributions and translations no longer rebuild the menu. */
 export function disposeMenu() {
   dispatch({ type: "disposed" })
+  stopHistory?.()
+  stopHistory = undefined
 }
 
 function build(deps: Deps, provider: MenubarProvider) {
@@ -93,11 +103,31 @@ function build(deps: Deps, provider: MenubarProvider) {
     })
 
   if (extra.length) built.items.forEach((item) => item.submenu?.on("menu-will-show", refresh))
+
+  const updateHistory = () => {
+    const history = deps.getHistory()
+    const separator = built.getMenuItemById("desktop-history-separator")
+
+    if (separator) separator.visible = history.length > 0
+    Array.from({ length: DESKTOP_MENU_HISTORY_LIMIT }, (_, index) => {
+      const item = built.getMenuItemById(`desktop-history-${index}`)
+
+      if (!item) return
+      const entry = history[index]
+      item.label = entry?.url ?? ""
+      item.visible = Boolean(entry)
+      item.enabled = Boolean(entry && !entry.active)
+    })
+  }
+
+  stopHistory?.()
+  stopHistory = deps.onHistoryChange(updateHistory)
+  updateHistory()
   Menu.setApplicationMenu(built)
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {
-  emitIpcEvent(win.webContents, new MenuCommandTriggered({ id }))
+  emitIpcEvent(getPrimaryWebContents(win), new MenuCommandTriggered({ id }))
 }
 
 function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Deps): MenuItemConstructorOptions {
@@ -112,14 +142,29 @@ function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Dep
 
   const options: MenuItemConstructorOptions = {
     label: nativeT(menu.labelKey),
-    submenu: items.map((item) => {
-      const entry = item.entry
+    submenu: [
+      ...items.map((item) => {
+        const entry = item.entry
+        if ("menu" in entry)
+          return { id: entry.id, label: entry.label, enabled: entry.enabled(), click: () => entry.run() }
+        return nativeItem(entry, deps)
+      }),
+      ...(menu.id === "history"
+        ? [
+            { id: "desktop-history-separator", type: "separator" as const, visible: false },
+            ...Array.from({ length: DESKTOP_MENU_HISTORY_LIMIT }, (_, index) => ({
+              id: `desktop-history-${index}`,
+              label: "",
+              visible: false,
+              click: () => {
+                const entry = deps.getHistory()[index]
 
-      if ("menu" in entry)
-        return { id: entry.id, label: entry.label, enabled: entry.enabled(), click: () => entry.run() }
-
-      return nativeItem(entry, deps)
-    }),
+                if (entry && !entry.active) deps.goToHistory(entry.index)
+              },
+            })),
+          ]
+        : []),
+    ],
   }
 
   if (menu.role) options.role = nativeRole(menu.role)
