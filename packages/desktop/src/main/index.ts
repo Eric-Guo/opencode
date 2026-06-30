@@ -35,7 +35,8 @@ if (acquireApplicationLock()) {
     startSidecarProbe()
     // The window's renderer is already loading. Its HTML and preloaded chunks are served from this
     // thread, so the bundle waits for that burst to be answered (or a cap) before it evaluates.
-    if (!process.env.ELECTRON_RENDERER_URL) await rendererAssetsServed({ quietMs: 40, capMs: 400 })
+    if (!process.env.ELECTRON_RENDERER_URL && !import.meta.env.OPENCODE_DESKTOP_EXTENSION)
+      await rendererAssetsServed({ quietMs: 40, capMs: 400 })
     marks.served = Date.now()
     return import("./desktop")
   })
