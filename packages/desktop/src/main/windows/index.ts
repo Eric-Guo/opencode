@@ -22,6 +22,7 @@ import { loadWindow, registerRendererProtocol } from "./protocol"
 import { createWindowRegistry } from "./registry"
 import { wireWindowRecovery } from "./recovery"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
+import { getPrimaryWebContents, getWindowFromWebContents, trackWebContents } from "./content"
 
 const windowIDs = new WeakMap<BrowserWindow, string>()
 const themeReady = new WeakMap<BrowserWindow, () => void>()
@@ -49,6 +50,7 @@ export {
   setTitlebar,
   updateTitlebar,
 }
+export { getPrimaryWebContents, getWindowFromWebContents }
 
 export function setRelaunchHandler(handler: () => void) {
   relaunchHandler = handler
@@ -91,6 +93,7 @@ export function createMainWindow(id: string = randomUUID()) {
     ...windowAppearance(),
   })
 
+  trackWebContents(win, win.webContents, true)
   allowRendererPermissions(win)
   wireWindowRecovery(win, id, () => relaunchHandler())
   wireNavigationPolicy(win)
