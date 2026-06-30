@@ -73,6 +73,7 @@ export function createDesktopPlatform(
     setDefaultServer: async (url) => {
       await api.setDefaultServerUrl(url)
     },
+    quit: () => api.quit(),
     wslServers: os === "windows" ? api.wslServers : undefined,
     sshServers: api.sshServers,
     webviewZoom,
@@ -84,6 +85,8 @@ export function createDesktopPlatform(
       return () => window.removeEventListener(DragCancelEvent, callback)
     },
     runDesktopMenuAction: createDesktopMenuAction(api),
+    getDesktopMenuHistory: () => api.getDesktopMenuHistory(),
+    goToDesktopMenuHistory: (index) => api.goToDesktopMenuHistory(index),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
     },
