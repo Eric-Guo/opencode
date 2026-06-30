@@ -1,7 +1,7 @@
-import type { BrowserWindow } from "electron"
+import type { BrowserWindow, WebContents } from "electron"
 import { Effect } from "effect"
 import { scoped } from "../native/logging"
-import { safeWindowURL } from "./state"
+import { safeWebContentsURL } from "./state"
 
 const sampleInterval = 1000
 const samplePeriod = 15000
@@ -9,13 +9,13 @@ const samplePeriod = 15000
 export const makeUnresponsiveSampler = Effect.gen(function* () {
   const runFork = Effect.runForkWith(yield* Effect.context())
 
-  function createUnresponsiveSampler(win: BrowserWindow, name: string) {
+  function createUnresponsiveSampler(win: BrowserWindow, name: string, contents: WebContents = win.webContents) {
     let sampleTimer: ReturnType<typeof setTimeout> | undefined
     let stopTimer: ReturnType<typeof setTimeout> | undefined
     let sampling = false
     const samples = new Map<string, number>()
 
-    const active = () => sampling && !win.isDestroyed() && !win.webContents.isDestroyed()
+    const active = () => sampling && !win.isDestroyed() && !contents.isDestroyed()
     const clearTimers = () => {
       if (sampleTimer) clearTimeout(sampleTimer)
       if (stopTimer) clearTimeout(stopTimer)
@@ -31,7 +31,7 @@ export const makeUnresponsiveSampler = Effect.gen(function* () {
 
     const collect = async () => {
       if (!active()) return
-      const stack = await win.webContents.mainFrame.collectJavaScriptCallStack().catch((error) => {
+      const stack = await contents.mainFrame.collectJavaScriptCallStack().catch((error) => {
         runFork(scoped("window", Effect.logError("failed to collect unresponsive sample", { window: name, error })))
         return undefined
       })
@@ -51,7 +51,7 @@ export const makeUnresponsiveSampler = Effect.gen(function* () {
       const message = [
         "renderer unresponsive samples",
         `Window: ${name}`,
-        `URL: ${safeWindowURL(win)}`,
+        `URL: ${safeWebContentsURL(contents)}`,
         ...entries.map((entry) => `<${entry[1]}> ${entry[0]}`),
         `Total Samples: ${total}`,
       ].join("\n")
@@ -61,7 +61,7 @@ export const makeUnresponsiveSampler = Effect.gen(function* () {
     }
 
     const start = () => {
-      if (sampling || win.isDestroyed() || win.webContents.isDestroyed() || win.webContents.isDevToolsOpened()) return
+      if (sampling || win.isDestroyed() || contents.isDestroyed() || contents.isDevToolsOpened()) return
       sampling = true
       samples.clear()
       schedule()
