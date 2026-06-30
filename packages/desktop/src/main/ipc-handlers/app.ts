@@ -1,4 +1,3 @@
-import { BrowserWindow } from "electron"
 import { parseDesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
@@ -16,7 +15,16 @@ import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
-import { getLastFocusedWindow, setBackgroundColor } from "../windows"
+import extension from "#desktop-main-extension"
+import {
+  getNavigationHistory,
+  getLastFocusedWindow,
+  getPrimaryWebContents,
+  getWindowFromWebContents,
+  goToNavigationHistory,
+  setBackgroundColor,
+  subscribeNavigationHistory,
+} from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -28,8 +36,15 @@ export const appHandlers = AppRpcs.toLayer(
     const logging = yield* DesktopLogging.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
     return AppRpcs.of({
-      AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
+      AppAwaitInitialization: (_args, context) =>
+        Effect.gen(function* () {
+          const data = yield* background.connection.pipe(Effect.map(SidecarCredentials.ready))
+
+          return { ...data, ...extension.rendererData?.(sender(handoff, context)) }
+        }),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
+      AppGetCybrosCurrentUser: (_args, context) =>
+        promise(() => extension.request?.(sender(handoff, context), "account.current-user") ?? null),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
       AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),
@@ -46,8 +61,9 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetNativeTranslations: ({ value }, context) =>
         Effect.sync(() => {
           const contents = sender(handoff, context)
-          const win = BrowserWindow.fromWebContents(contents)
-          if (!win || win.isDestroyed() || win.webContents !== contents) {
+          const win = getWindowFromWebContents(contents)
+
+          if (!win || win.isDestroyed() || getPrimaryWebContents(win) !== contents) {
             throw new Error("Invalid native translation sender")
           }
           const bundle = parseDesktopNativeBundle(value)
@@ -62,9 +78,13 @@ export const appHandlers = AppRpcs.toLayer(
             createWindow: lifecycle.createWindow,
             openExternal: (url) => runFork(openExternalURL(url)),
             relaunch: lifecycle.relaunch,
+            getHistory: () => getNavigationHistory(getLastFocusedWindow()),
+            goToHistory: (index) => goToNavigationHistory(getLastFocusedWindow(), index),
+            onHistoryChange: subscribeNavigationHistory,
           })
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
+      AppQuit: () => background.stop.pipe(Effect.ensuring(Effect.sync(lifecycle.quit))),
     })
   }),
 )
