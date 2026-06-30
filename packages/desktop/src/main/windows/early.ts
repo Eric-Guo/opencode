@@ -4,6 +4,7 @@ import { app, BrowserWindow, screen, shell } from "electron"
 import { Predicate } from "effect"
 import { resolveExternalURL } from "../files/external-url"
 import { windowArguments } from "./bootstrap"
+import { APP_NAME } from "../constants"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import { platformFrame, storedBackgroundColor, storedZoomLevel, tone } from "./defaults"
@@ -23,6 +24,7 @@ export type EarlyWindow = {
   win: BrowserWindow
   state: WindowState
   shownAt: number
+  loaded: boolean
   // Navigation policy is wired before the layers exist; the adopter swaps in the logged version.
   openExternal: (url: string) => void
 }
@@ -59,7 +61,7 @@ export function createEarlyWindow() {
     height: state.height,
     show: !deferReveal,
     autoHideMenuBar: true,
-    title: "OpenCode",
+    title: APP_NAME,
     icon: path.join(icons, `icon.${process.platform === "win32" ? "ico" : "png"}`),
     backgroundColor: storedBackgroundColor(),
     ...platformFrame(tone(), zoom),
@@ -89,6 +91,7 @@ export function createEarlyWindow() {
     win,
     state,
     shownAt: Date.now(),
+    loaded: !import.meta.env.OPENCODE_DESKTOP_EXTENSION,
     openExternal: (url) => {
       const target = resolveExternalURL(url)
 
@@ -100,9 +103,12 @@ export function createEarlyWindow() {
   // The renderer boots while the main bundle and layers load, instead of after them. Everything the
   // page needs before its first request is wired here; the IPC port arrives once the layers are up.
   registerRendererProtocol(path.join(root, "out/renderer"))
-  allowRendererPermissions(win)
-  wireNavigationPolicy(win, (url) => record.openExternal(url))
-  wireRendererHeaders(win)
+  // Extensions create their own renderer views when the full window is adopted.
+
+  if (!record.loaded) return
+  allowRendererPermissions(win.webContents)
+  wireNavigationPolicy(win.webContents, (url) => record.openExternal(url))
+  wireRendererHeaders(win.webContents)
   loadWindow(win, "index.html")
 }
 
