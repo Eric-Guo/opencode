@@ -1,4 +1,5 @@
 export { AppBaseProviders, AppInterface, preloadRoute } from "./app"
+export { DialogUserLogin, type UserLoginCredentials } from "./shell/user-login"
 export { useCommand } from "./shell/commands/command"
 export { currentRoute, type LayoutRoute, useCurrentRoute } from "./shell/state/layout"
 export { loadLocaleDict, normalizeLocale, type Locale, useLanguage } from "./runtime/i18n/language"
