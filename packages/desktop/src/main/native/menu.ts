@@ -10,6 +10,7 @@ import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 
 import { UPDATER_ENABLED } from "../constants"
+import { getPrimaryWebContents } from "../windows"
 import { runDesktopMenuAction } from "./menu-actions"
 import { nativeT } from "./translations"
 
@@ -38,7 +39,7 @@ export function createMenu(deps: Deps) {
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {
-  emitIpcEvent(win.webContents, new MenuCommandTriggered({ id }))
+  emitIpcEvent(getPrimaryWebContents(win), new MenuCommandTriggered({ id }))
 }
 
 function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOptions {
