@@ -1,9 +1,11 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
-import * as fs from "node:fs/promises"
+import { cp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 
 const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+const SEVEN_SEVEN_DIST = "../7777/dist"
+const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -68,9 +70,9 @@ export default defineConfig({
       {
         name: "opencode:copy-server-assets",
         async writeBundle() {
-          for (const l of await fs.readdir(OPENCODE_SERVER_DIST)) {
+          for (const l of await readdir(OPENCODE_SERVER_DIST)) {
             if (!l.endsWith(".wasm")) continue
-            await fs.writeFile(`./out/main/chunks/${l}`, await fs.readFile(`${OPENCODE_SERVER_DIST}/${l}`))
+            await writeFile(`./out/main/chunks/${l}`, await readFile(`${OPENCODE_SERVER_DIST}/${l}`))
           }
         },
       },
@@ -88,7 +90,18 @@ export default defineConfig({
     },
   },
   renderer: {
-    plugins: [appPlugin, sentry],
+    plugins: [
+      appPlugin,
+      {
+        name: "opencode:copy-7777-renderer",
+        apply: "build",
+        async writeBundle() {
+          await rm(SEVEN_SEVEN_RENDERER_OUT, { recursive: true, force: true })
+          await cp(SEVEN_SEVEN_DIST, SEVEN_SEVEN_RENDERER_OUT, { recursive: true })
+        },
+      },
+      sentry,
+    ],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {

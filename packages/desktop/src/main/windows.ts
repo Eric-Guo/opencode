@@ -38,6 +38,7 @@ const oc2Background = {
 }
 const documentPolicyHeader = "Document-Policy"
 const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
+type HeaderValue = string | string[]
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -66,6 +67,7 @@ const minZoomLevel = 0.2
 const helpURL = "https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"
 const desktopTabs = [
   { id: "opencode", title: "OpenCode", label: "OC" },
+  { id: "7777", title: "7777", label: "7777", html: "7777/index.html", devHtml: "index.html" },
   {
     id: "plm",
     title: "PLM",
@@ -287,10 +289,14 @@ export function registerRendererProtocol() {
   })
 }
 
-function loadWebContents(contents: WebContents, html: string) {
-  const devUrl = process.env.ELECTRON_RENDERER_URL
+function loadWebContents(
+  contents: WebContents,
+  html: string,
+  options: { devUrl?: string | false; devHtml?: string } = {},
+) {
+  const devUrl = options.devUrl === false ? undefined : (options.devUrl ?? process.env.ELECTRON_RENDERER_URL)
   if (devUrl) {
-    const url = new URL(html, devUrl)
+    const url = new URL(options.devHtml ?? html, devUrl)
     return contents.loadURL(url.toString())
   }
 
@@ -339,11 +345,11 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
   })
 
   let active: DesktopTabID = "opencode"
-  const externalViews = new Map<DesktopTabID, WebContentsView>()
+  const tabViews = new Map<DesktopTabID, WebContentsView>()
 
   function getView(id: DesktopTabID) {
     if (id === "opencode") return openCodeView
-    return externalViews.get(id)
+    return tabViews.get(id)
   }
 
   function getActiveView() {
@@ -356,14 +362,29 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     )
   }
 
+  function getRendererTab(id: DesktopTabID) {
+    return desktopTabs.find(
+      (tab): tab is Extract<(typeof desktopTabs)[number], { html: string }> => tab.id === id && "html" in tab,
+    )
+  }
+
   function ensureView(id: DesktopTabID) {
     if (id === "opencode") return openCodeView
-    const cached = externalViews.get(id)
+    const cached = tabViews.get(id)
     if (cached) return cached
+    const rendererTab = getRendererTab(id)
+    if (rendererTab) {
+      const view = createRendererTabView(win, rendererTab, sendState)
+      tabViews.set(id, view)
+      win.contentView.addChildView(view)
+      view.setVisible(false)
+      layout()
+      return view
+    }
     const tab = getExternalTab(id)
     if (!tab) return openCodeView
     const view = createExternalView(win, tab, sendState)
-    externalViews.set(id, view)
+    tabViews.set(id, view)
     win.contentView.addChildView(view)
     view.setVisible(false)
     layout()
@@ -397,7 +418,7 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     const contentWidth = Math.max(0, bounds.width - tabbarWidth)
     tabbarView.setBounds({ x: 0, y: 0, width: tabbarWidth, height: bounds.height })
     openCodeView.setBounds({ x: tabbarWidth, y: 0, width: contentWidth, height: bounds.height })
-    externalViews.forEach((view) => {
+    tabViews.forEach((view) => {
       view.setBounds({ x: tabbarWidth, y: 0, width: contentWidth, height: bounds.height })
     })
   }
@@ -407,7 +428,7 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     active = id
     const activeView = ensureView(id)
     openCodeView.setVisible(id === "opencode")
-    externalViews.forEach((view, viewID) => {
+    tabViews.forEach((view, viewID) => {
       view.setVisible(viewID === id)
     })
     win.contentView.addChildView(tabbarView)
@@ -461,6 +482,36 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     desktopTabManagers.delete(tabbarWebContentsId)
   })
   return managerValue
+}
+
+function createRendererTabView(
+  win: BrowserWindow,
+  tab: Extract<(typeof desktopTabs)[number], { html: string }>,
+  sendState: () => void,
+) {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: join(root, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  trackWebContents(win, view.webContents)
+  registerViewContextMenu(view)
+  allowRendererPermissions(view.webContents)
+  wireWindowRecovery(win, view.webContents, tab.id)
+  view.setBackgroundColor(backgroundColor ?? defaultBackgroundColor())
+  view.webContents.on("did-navigate", sendState)
+  view.webContents.on("did-navigate-in-page", sendState)
+  view.webContents.on("did-stop-loading", sendState)
+  void loadWebContents(view.webContents, tab.html, {
+    devUrl: process.env.ELECTRON_7777_RENDERER_URL ?? false,
+    devHtml: tab.devHtml,
+  }).catch((error) => {
+    writeLog("window", "renderer tab initial load failed", { tab: tab.id, error }, "error")
+  })
+  return view
 }
 
 function createExternalView(
@@ -690,7 +741,7 @@ function isTrustedRendererUrl(value?: string) {
   return isRendererUrl(value)
 }
 
-function addRendererHeaders(value: string, headers: Record<string, any>) {
+function addRendererHeaders(value: string, headers: Record<string, HeaderValue>) {
   upsertKeyValue(headers, "Access-Control-Allow-Origin", ["*"])
   upsertKeyValue(headers, "Access-Control-Allow-Headers", ["*"])
   if (isRendererUrl(value, true)) upsertKeyValue(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
@@ -701,9 +752,10 @@ function isRendererUrl(value?: string, html = false) {
   const url = new URL(value)
   if (html && !url.pathname.endsWith(".html")) return false
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
-  const devUrl = process.env.ELECTRON_RENDERER_URL
-  if (!devUrl || !URL.canParse(devUrl)) return false
-  return url.origin === new URL(devUrl).origin
+  return [process.env.ELECTRON_RENDERER_URL, process.env.ELECTRON_7777_RENDERER_URL].some((devUrl) => {
+    if (!devUrl || !URL.canParse(devUrl)) return false
+    return url.origin === new URL(devUrl).origin
+  })
 }
 
 function wireZoom(win: BrowserWindow, contents: WebContents) {
@@ -731,7 +783,7 @@ function updateZoom(win: BrowserWindow) {
   contents.send("zoom-factor-changed", contents.getZoomFactor())
 }
 
-function upsertKeyValue(obj: Record<string, any>, keyToChange: string, value: any) {
+function upsertKeyValue(obj: Record<string, HeaderValue>, keyToChange: string, value: HeaderValue) {
   const keyToChangeLower = keyToChange.toLowerCase()
   for (const key of Object.keys(obj)) {
     if (key.toLowerCase() === keyToChangeLower) {
