@@ -203,7 +203,8 @@ export function createBrowserPane(input: {
       if (!win || selectBinding(machine.state, binding) || handles.has(binding))
         throw new Error("browser.pane.owner.invalid")
 
-      if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
+      if (win.isDestroyed() || input.windows.contents(win).isDestroyed())
+        throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
       const saved = restore.load(storageKey)
@@ -223,8 +224,8 @@ export function createBrowserPane(input: {
         if (event.isMainFrame && !event.isSameDocument) closed()
       }
 
-      win.webContents.once("destroyed", closed)
-      win.webContents.on("did-start-navigation", navigate)
+      input.windows.contents(win).once("destroyed", closed)
+      input.windows.contents(win).on("did-start-navigation", navigate)
 
       const scopes = owners.get(win) ?? new Map<string, Pick<Handle, "pluginTabs" | "background">>()
       const rights = scopes.get(storageKey) ?? { pluginTabs: pluginTabs(), background: new Set<Browser.TabID>() }
@@ -244,8 +245,8 @@ export function createBrowserPane(input: {
           unguard()
 
           if (win.isDestroyed()) return
-          win.webContents.off("destroyed", closed)
-          win.webContents.off("did-start-navigation", navigate)
+          input.windows.contents(win).off("destroyed", closed)
+          input.windows.contents(win).off("did-start-navigation", navigate)
         },
         pages: new Map(),
         activity: restoredActivity(saved),
@@ -755,7 +756,7 @@ export function createBrowserPane(input: {
   function emit(binding: string, event: PaneEvent) {
     const handle = handles.get(binding)
 
-    if (!handle || handle.win.isDestroyed() || handle.win.webContents.isDestroyed()) return
+    if (!handle || handle.win.isDestroyed() || input.windows.contents(handle.win).isDestroyed()) return
     input.emit(handle.window, { binding, event })
   }
 
@@ -947,6 +948,7 @@ export function createBrowserPane(input: {
         warned.add(message)
         void runtime.runFork(Effect.logWarning(message))
       },
+      windows: input.windows,
       fail,
       log: (level, message, data) => input.log.write(level, message, { session: handle.session, ...data }),
       refused: (notice, token, site) => {
