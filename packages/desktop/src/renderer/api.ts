@@ -21,7 +21,7 @@ const toArrayBuffer = (value: Uint8Array) =>
 const seeded = window.electron.storageSnapshot.then((snapshot) => new Map(Object.entries(snapshot)))
 
 export const api: ElectronAPI = {
-  awaitInitialization: () => invoke("AppAwaitInitialization"),
+  awaitInitialization: () => invoke("AppAwaitInitialization").then(mutable),
   reconnectService: (signal) => cancellable("AppReconnectService", undefined, signal),
   onSidecarChanged: (cb) => listen("SidecarChanged", (event) => cb({ url: event.url })),
   readyDeepLinks: () => send("AppReadyDeepLinks"),
@@ -86,6 +86,7 @@ export const api: ElectronAPI = {
   setWindowFocus: () => invoke("WindowSetFocus"),
   showWindow: () => invoke("WindowShow"),
   relaunch: () => send("AppRelaunch"),
+  quit: () => send("AppQuit"),
   getZoomFactor: () => invoke("WindowGetZoomFactor"),
   setZoomFactor: (factor) => invoke("WindowSetZoomFactor", { factor }),
   getPinchZoomEnabled: () => invoke("WindowGetPinchZoomEnabled"),
@@ -97,6 +98,8 @@ export const api: ElectronAPI = {
   setTitlebar: (theme) => invoke("WindowSetTitlebar", { theme }),
   setTrafficLightsPosition: (position) => invoke("WindowSetTrafficLightsPosition", position),
   runDesktopMenuAction: (action) => invoke("MenuRunAction", { action }),
+  getDesktopMenuHistory: () => invoke("MenuGetHistory").then(mutable),
+  goToDesktopMenuHistory: (index) => invoke("MenuGoToHistory", { index }),
   setBackgroundColor: (color) => invoke("AppSetBackgroundColor", { color }),
   exportDebugLogs: () => invoke("AppExportDebugLogs"),
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),
