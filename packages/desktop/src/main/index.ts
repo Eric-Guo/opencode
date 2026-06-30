@@ -8,7 +8,6 @@ import type { Event } from "electron"
 import { app, BrowserWindow, session } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
-import contextMenu from "electron-context-menu"
 
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
@@ -100,22 +99,6 @@ function ensureLoopbackNoProxy() {
 }
 
 const main = Effect.gen(function* () {
-  contextMenu({
-    showSaveImageAs: true,
-    showLookUpSelection: false,
-    showSearchWithGoogle: false,
-    append: (_defaultActions, _parameters, browserWindow) => [
-      {
-        label: "Debug",
-        click: () => {
-          if (browserWindow && "webContents" in browserWindow) {
-            browserWindow.webContents.openDevTools()
-          }
-        },
-      },
-    ],
-  })
-
   // on macOS apps run in `/` which can cause issues with ripgrep
   try {
     process.chdir(homedir())
