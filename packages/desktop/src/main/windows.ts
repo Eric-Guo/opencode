@@ -1,21 +1,37 @@
 import windowState from "electron-window-state"
+import contextMenu from "electron-context-menu"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
-import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell } from "electron"
+import {
+  app,
+  BrowserWindow,
+  WebContentsView,
+  dialog,
+  ipcMain,
+  net,
+  nativeImage,
+  nativeTheme,
+  protocol,
+  safeStorage,
+  session,
+  shell,
+} from "electron"
+import type { Cookie, WebContents } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
+import { loadDesktopTabs, type ExternalDesktopTab, type RendererDesktopTab } from "./desktop-tabs"
 import { exportDebugLogs, write as writeLog } from "./logging"
 import { getStore, removeStoreFile } from "./store"
-import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
+import { DESKTOP_TAB_COOKIES_STORE, PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
-import { safeWindowURL } from "./window-state"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { safeWebContentsURL } from "./window-state"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -31,6 +47,7 @@ const oc2Background = {
 }
 const documentPolicyHeader = "Document-Policy"
 const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
+type HeaderValue = string | string[]
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -51,6 +68,7 @@ let relaunchHandler = () => {
   app.exit(0)
 }
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
+const systemControlColors = new WeakMap<BrowserWindow, string>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 const windowIDs = new WeakMap<BrowserWindow, string>()
 const registry = createWindowRegistry<BrowserWindow>({
@@ -59,11 +77,51 @@ const registry = createWindowRegistry<BrowserWindow>({
   cleanup: (id) => {
     rmSync(join(app.getPath("userData"), windowStateFile(id)), { force: true })
     removeStoreFile(windowDataFile(id))
+    removeStoreFile(desktopTabStateFile(id))
   },
 })
+const primaryWebContents = new WeakMap<BrowserWindow, WebContents>()
+const webContentsOwners = new Map<number, BrowserWindow>()
 const titlebarHeight = 40
+const tabbarWidth = 72
 const maxZoomLevel = 10
 const minZoomLevel = 0.2
+const helpURL = "https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"
+const desktopTabManagers = new Map<number, DesktopTabManager>()
+const externalTabSessionRestores = new Map<string, Promise<void>>()
+
+type DesktopTabID = string
+type DesktopTabAction = "settings" | "help"
+type DesktopTabManager = ReturnType<typeof createDesktopTabManager>
+type DesktopTabsState = {
+  active: DesktopTabID
+  tabs: {
+    id: DesktopTabID
+    title: string
+    label: string
+  }[]
+  navigation: {
+    canGoBack: boolean
+    canGoForward: boolean
+  }
+}
+
+let desktopTabsIpcRegistered = false
+
+export function getPrimaryWebContents(win: BrowserWindow) {
+  return primaryWebContents.get(win) ?? win.webContents
+}
+
+export function getWindowFromWebContents(contents: WebContents) {
+  return BrowserWindow.fromWebContents(contents) ?? webContentsOwners.get(contents.id) ?? null
+}
+
+function trackWebContents(win: BrowserWindow, contents: WebContents) {
+  webContentsOwners.set(contents.id, win)
+  contents.once("destroyed", () => {
+    webContentsOwners.delete(contents.id)
+  })
+}
 
 export function setRelaunchHandler(handler: () => void) {
   relaunchHandler = handler
@@ -102,11 +160,11 @@ function defaultBackgroundColor() {
   return oc2Background[tone()]
 }
 
-function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
+function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1, systemControlColor?: string) {
   const mode = theme.mode ?? tone()
   return {
     color: "#00000000",
-    symbolColor: mode === "dark" ? "white" : "black",
+    symbolColor: systemControlColor ?? (mode === "dark" ? "white" : "black"),
     height: Math.max(titlebarHeight, Math.round(titlebarHeight * zoom)),
   }
 }
@@ -125,17 +183,20 @@ export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = 
 
 export function updateTitlebar(win: BrowserWindow) {
   if (process.platform !== "win32") return
-  win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
+  win.setTitleBarOverlay(
+    overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor(), systemControlColors.get(win)),
+  )
 }
 
 export function setPinchZoomEnabled(enabled: boolean) {
   getStore().set(PINCH_ZOOM_ENABLED_KEY, enabled)
-  for (const win of BrowserWindow.getAllWindows()) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    const contents = getPrimaryWebContents(win)
     pinchZoomEnabled.set(win, enabled)
-    win.webContents.send("pinch-zoom-enabled-changed", enabled)
-    if (!enabled && win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    contents.send("pinch-zoom-enabled-changed", enabled)
+    if (!enabled && contents.getZoomFactor() !== 1) contents.setZoomFactor(1)
     updateZoom(win)
-  }
+  })
 }
 
 export function getPinchZoomEnabled() {
@@ -166,6 +227,7 @@ export function setDockIcon() {
 }
 
 export function createMainWindow(id: string = randomUUID()) {
+  const desktopTabs = loadDesktopTabs()
   const state = windowState({
     file: windowStateFile(id),
     defaultWidth: 1280,
@@ -204,17 +266,21 @@ export function createMainWindow(id: string = randomUUID()) {
     },
   })
 
-  allowRendererPermissions(win)
-  wireWindowRecovery(win, id)
-  wireNavigationPolicy(win)
+  const openCodeView = createOpenCodeView(win)
+  const tabbarView = createTabbarView(win)
+  const tabManager = createDesktopTabManager(win, id, openCodeView, tabbarView, desktopTabs)
 
-  win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+  allowRendererPermissions(openCodeView.webContents)
+  wireWindowRecovery(win, openCodeView.webContents, "main")
+  wireNavigationPolicy(openCodeView.webContents)
+
+  openCodeView.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
     upsertKeyValue(requestHeaders, "Access-Control-Allow-Origin", ["*"])
     callback({ requestHeaders })
   })
 
-  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+  openCodeView.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const { responseHeaders = {} } = details
     addRendererHeaders(details.url, responseHeaders)
     callback({ responseHeaders })
@@ -223,11 +289,11 @@ export function createMainWindow(id: string = randomUUID()) {
   state.manage(win)
   registerWindow(win, id)
   wireFullscreen(win)
-  loadWindow(win, "index.html")
-  wireZoom(win)
+  wireZoom(win, openCodeView.webContents)
+  tabManager.load()
 
-  win.once("ready-to-show", () => {
-    win.show()
+  void loadWebContents(openCodeView.webContents, "index.html").finally(() => {
+    if (!win.isDestroyed()) win.show()
   })
 
   return win
@@ -253,14 +319,14 @@ export function openLocalFileURL(value: string) {
   })
 }
 
-function wireNavigationPolicy(win: BrowserWindow) {
-  win.webContents.setWindowOpenHandler(({ url }) => {
+function wireNavigationPolicy(contents: WebContents) {
+  contents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
     return { action: "deny" }
   })
   // Renderer reloads (window.location.reload) navigate to the app's own URL
   // and must stay in-window; everything else leaves through the OS.
-  win.webContents.on("will-navigate", (event, url) => {
+  contents.on("will-navigate", (event, url) => {
     if (isRendererUrl(url)) return
     event.preventDefault()
     openExternalURL(url)
@@ -286,6 +352,10 @@ function windowStateFile(id: string) {
 // the per-window renderer store this window persists its tabs into.
 function windowDataFile(id: string) {
   return `opencode.window.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
+}
+
+function desktopTabStateFile(id: string) {
+  return `opencode.desktop-tabs.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
 }
 
 export function registerRendererProtocol() {
@@ -331,20 +401,476 @@ export function registerRendererProtocol() {
   })
 }
 
-function loadWindow(win: BrowserWindow, html: string) {
-  const devUrl = process.env.ELECTRON_RENDERER_URL
+function loadWebContents(
+  contents: WebContents,
+  html: string,
+  options: { devUrl?: string | false; devHtml?: string } = {},
+) {
+  const devUrl = options.devUrl === false ? undefined : (options.devUrl ?? process.env.ELECTRON_RENDERER_URL)
   if (devUrl) {
-    const url = new URL(html, devUrl)
-    void win.loadURL(url.toString())
-    return
+    const url = new URL(options.devHtml ?? html, devUrl)
+    return contents.loadURL(url.toString())
   }
 
-  void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
+  return contents.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
 }
 
-function wireWindowRecovery(win: BrowserWindow, name: string) {
+function createOpenCodeView(win: BrowserWindow) {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: join(root, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  primaryWebContents.set(win, view.webContents)
+  trackWebContents(win, view.webContents)
+  registerViewContextMenu(view)
+  view.setBackgroundColor(backgroundColor ?? defaultBackgroundColor())
+  win.contentView.addChildView(view)
+  return view
+}
+
+function createTabbarView(win: BrowserWindow) {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: join(root, "../preload/tabbar.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  trackWebContents(win, view.webContents)
+  view.setBackgroundColor("#111315")
+  win.contentView.addChildView(view)
+  return view
+}
+
+function createDesktopTabManager(
+  win: BrowserWindow,
+  windowID: string,
+  openCodeView: WebContentsView,
+  tabbarView: WebContentsView,
+  desktopTabs: ReturnType<typeof loadDesktopTabs>,
+) {
+  registerDesktopTabsIpc()
+  const tabbarWebContents = tabbarView.webContents
+  const tabbarWebContentsId = tabbarWebContents.id
+  tabbarWebContents.once("destroyed", () => {
+    desktopTabManagers.delete(tabbarWebContentsId)
+  })
+
+  let active: DesktopTabID = "opencode"
+  const tabViews = new Map<DesktopTabID, WebContentsView>()
+
+  function getView(id: DesktopTabID) {
+    if (id === "opencode") return openCodeView
+    return tabViews.get(id)
+  }
+
+  function getActiveView() {
+    return getView(active) ?? openCodeView
+  }
+
+  function getTab(id: DesktopTabID) {
+    return desktopTabs.find((tab) => tab.id === id)
+  }
+
+  function getExternalTab(id: DesktopTabID) {
+    return desktopTabs.find(
+      (tab): tab is ExternalDesktopTab => tab.id === id && "url" in tab,
+    )
+  }
+
+  function getRendererTab(id: DesktopTabID) {
+    return desktopTabs.find(
+      (tab): tab is RendererDesktopTab => tab.id === id && "html" in tab,
+    )
+  }
+
+  function ensureView(id: DesktopTabID) {
+    if (id === "opencode") return openCodeView
+    const cached = tabViews.get(id)
+    if (cached) return cached
+    const rendererTab = getRendererTab(id)
+    if (rendererTab) {
+      const view = createRendererTabView(win, rendererTab, sendState)
+      tabViews.set(id, view)
+      win.contentView.addChildView(view)
+      view.setVisible(false)
+      layout()
+      return view
+    }
+    const tab = getExternalTab(id)
+    if (!tab) return openCodeView
+    const savedURL = getStore(desktopTabStateFile(windowID)).get(id)
+    const url = typeof savedURL === "string" && isDesktopTabURL(tab, savedURL) ? savedURL : tab.url
+    const view = createExternalView(
+      win,
+      tab,
+      sendState,
+      url,
+      (url) => {
+        if (isDesktopTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
+      },
+    )
+    tabViews.set(id, view)
+    win.contentView.addChildView(view)
+    view.setVisible(false)
+    layout()
+    return view
+  }
+
+  function releaseView(id: DesktopTabID) {
+    const tab = getTab(id)
+    if (!tab || !("releaseWhenLostFocus" in tab) || !tab.releaseWhenLostFocus) return
+    const view = tabViews.get(id)
+    if (!view) return
+    if ("url" in tab) {
+      const url = view.webContents.getURL()
+      if (isDesktopTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
+    }
+    tabViews.delete(id)
+    win.contentView.removeChildView(view)
+    if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false })
+  }
+
+  function state(): DesktopTabsState {
+    const contents = getActiveView().webContents
+    return {
+      active,
+      tabs: desktopTabs.map((tab) => ({
+        id: tab.id,
+        title: tab.title,
+        label: tab.label,
+      })),
+      navigation: {
+        canGoBack: contents.navigationHistory.canGoBack(),
+        canGoForward: contents.navigationHistory.canGoForward(),
+      },
+    }
+  }
+
+  function sendState() {
+    if (tabbarWebContents.isDestroyed()) return
+    tabbarWebContents.send("desktop-tabs-state", state())
+  }
+
+  function layout() {
+    if (win.isDestroyed()) return
+    const bounds = win.getContentBounds()
+    const contentWidth = Math.max(0, bounds.width - tabbarWidth)
+    tabbarView.setBounds({ x: 0, y: 0, width: tabbarWidth, height: bounds.height })
+    openCodeView.setBounds({ x: tabbarWidth, y: 0, width: contentWidth, height: bounds.height })
+    tabViews.forEach((view) => {
+      view.setBounds({ x: tabbarWidth, y: 0, width: contentWidth, height: bounds.height })
+    })
+  }
+
+  function activate(id: DesktopTabID) {
+    const tab = getTab(id)
+    if (!tab) return
+    const previous = active
+    active = id
+    if (tab.systemControlColor) systemControlColors.set(win, tab.systemControlColor)
+    if (!tab.systemControlColor) systemControlColors.delete(win)
+    updateTitlebar(win)
+    const activeView = ensureView(id)
+    openCodeView.setVisible(id === "opencode")
+    tabViews.forEach((view, viewID) => {
+      view.setVisible(viewID === id)
+    })
+    if (previous !== id) releaseView(previous)
+    win.contentView.addChildView(tabbarView)
+    layout()
+    sendState()
+    activeView.webContents.focus()
+  }
+
+  function navigate(direction: "back" | "forward") {
+    const contents = getActiveView().webContents
+    if (direction === "back" && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack()
+    if (direction === "forward" && contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward()
+    sendState()
+  }
+
+  function runAction(action: DesktopTabAction) {
+    if (action === "settings") {
+      activate("opencode")
+      openCodeView.webContents.send("menu-command", "settings.open")
+      return
+    }
+    if (action === "help") {
+      void shell.openExternal(helpURL)
+    }
+  }
+
+  const managerValue = {
+    load() {
+      layout()
+      openCodeView.webContents.on("did-navigate", sendState)
+      openCodeView.webContents.on("did-navigate-in-page", sendState)
+      openCodeView.webContents.on("did-stop-loading", sendState)
+      void loadWebContents(tabbarWebContents, "tabbar.html").catch((error) => {
+        writeLog("window", "tabbar load failed", { error }, "error")
+      })
+      sendState()
+    },
+    activate,
+    back: () => navigate("back"),
+    forward: () => navigate("forward"),
+    reload: () => {
+      getActiveView().webContents.reload()
+    },
+    action: runAction,
+    sendState,
+  }
+
+  desktopTabManagers.set(tabbarWebContentsId, managerValue)
+  win.on("resize", layout)
+  win.on("closed", () => {
+    desktopTabManagers.delete(tabbarWebContentsId)
+  })
+  return managerValue
+}
+
+function createRendererTabView(
+  win: BrowserWindow,
+  tab: RendererDesktopTab,
+  sendState: () => void,
+) {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: join(root, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  trackWebContents(win, view.webContents)
+  registerViewContextMenu(view)
+  allowRendererPermissions(view.webContents)
+  wireWindowRecovery(win, view.webContents, tab.id)
+  view.setBackgroundColor(backgroundColor ?? defaultBackgroundColor())
+  view.webContents.on("did-navigate", sendState)
+  view.webContents.on("did-navigate-in-page", sendState)
+  view.webContents.on("did-stop-loading", sendState)
+  void loadWebContents(view.webContents, tab.html, {
+    devUrl: process.env.ELECTRON_7777_RENDERER_URL ?? false,
+    devHtml: tab.devHtml,
+  }).catch((error) => {
+    writeLog("window", "renderer tab initial load failed", { tab: tab.id, error }, "error")
+  })
+  return view
+}
+
+function createExternalView(
+  win: BrowserWindow,
+  tab: ExternalDesktopTab,
+  sendState: () => void,
+  url: string,
+  saveURL: (url: string) => void,
+) {
+  const view = new WebContentsView({
+    webPreferences: {
+      partition: tab.partition,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  trackWebContents(win, view.webContents)
+  registerViewContextMenu(view)
+  view.setBackgroundColor("#ffffff")
+  view.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false)
+  })
+  view.webContents.session.setPermissionCheckHandler(() => false)
+  view.webContents.setWindowOpenHandler((details) => {
+    openExternalURL(details.url)
+    return { action: "deny" }
+  })
+  view.webContents.on("will-navigate", (event, url) => {
+    if (isDesktopTabURL(tab, url)) return
+    event.preventDefault()
+    openExternalURL(url)
+  })
+  view.webContents.on("did-navigate", (_event, url) => {
+    saveURL(url)
+    sendState()
+  })
+  view.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+    if (isMainFrame) saveURL(url)
+    sendState()
+  })
+  view.webContents.on("did-stop-loading", sendState)
+  view.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return
+    writeLog(
+      "window",
+      "external tab load failed",
+      { tab: tab.id, errorCode, errorDescription, validatedURL },
+      "error",
+    )
+  })
+  void restoreExternalTabSession(tab)
+    .then(() => view.webContents.loadURL(url))
+    .catch((error) => {
+      writeLog("window", "external tab initial load failed", { tab: tab.id, error }, "error")
+    })
+  return view
+}
+
+function isDesktopTabURL(tab: ExternalDesktopTab, url: string) {
+  return URL.canParse(url) && new URL(url).hostname === new URL(tab.url).hostname
+}
+
+function restoreExternalTabSession(tab: ExternalDesktopTab) {
+  const cached = externalTabSessionRestores.get(tab.partition)
+  if (cached) return cached
+
+  // Persistent partitions retain durable cookies, but Chromium drops session cookies on exit.
+  // Restore the encrypted snapshot before the first request so authentication is already available.
+  const externalSession = session.fromPartition(tab.partition)
+  const cookies = new Map(
+    readExternalTabCookies(tab.partition).map((cookie) => [externalTabCookieKey(cookie), cookie] as const),
+  )
+  externalSession.cookies.on("changed", (_event, cookie, _cause, removed) => {
+    if (removed) cookies.delete(externalTabCookieKey(cookie))
+    if (!removed) cookies.set(externalTabCookieKey(cookie), cookie)
+    writeExternalTabCookies(tab.partition, [...cookies.values()])
+  })
+  const restored = Promise.allSettled(
+    [...cookies.values()]
+      .filter(
+        (cookie): cookie is Cookie & { domain: string } =>
+          Boolean(cookie.domain) && (!cookie.expirationDate || cookie.expirationDate > Date.now() / 1000),
+      )
+      .map((cookie) =>
+        externalSession.cookies.set({
+          url: `${cookie.secure ? "https" : "http"}://${cookie.domain.replace(/^\./, "")}${cookie.path ?? "/"}`,
+          name: cookie.name,
+          value: cookie.value,
+          ...(!cookie.hostOnly && cookie.domain ? { domain: cookie.domain } : {}),
+          ...(cookie.path ? { path: cookie.path } : {}),
+          ...(cookie.secure ? { secure: true } : {}),
+          ...(cookie.httpOnly ? { httpOnly: true } : {}),
+          ...(cookie.sameSite ? { sameSite: cookie.sameSite } : {}),
+          ...(!cookie.session && cookie.expirationDate ? { expirationDate: cookie.expirationDate } : {}),
+        }),
+      ),
+  )
+    .then(async (results) => {
+      results.forEach((result) => {
+        if (result.status === "rejected") {
+          writeLog(
+            "window",
+            "external tab cookie restore failed",
+            { partition: tab.partition, error: result.reason },
+            "warn",
+          )
+        }
+      })
+      cookies.clear()
+      ;(await externalSession.cookies.get({})).forEach((cookie) => cookies.set(externalTabCookieKey(cookie), cookie))
+      writeExternalTabCookies(tab.partition, [...cookies.values()])
+    })
+    .catch((error) => {
+      writeLog("window", "external tab session restore failed", { partition: tab.partition, error }, "error")
+    })
+  externalTabSessionRestores.set(tab.partition, restored)
+  return restored
+}
+
+function externalTabCookieKey(cookie: Cookie) {
+  return [cookie.name, cookie.domain ?? "", cookie.path ?? ""].join("\n")
+}
+
+function readExternalTabCookies(partition: string) {
+  const value = getStore(DESKTOP_TAB_COOKIES_STORE).get(partition)
+  if (typeof value !== "string" || !safeStorage.isEncryptionAvailable()) return []
+  try {
+    const parsed: unknown = JSON.parse(safeStorage.decryptString(Buffer.from(value, "base64")))
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isExternalTabCookie)
+  } catch (error) {
+    writeLog("window", "external tab cookies restore failed", { partition, error }, "error")
+    return []
+  }
+}
+
+function writeExternalTabCookies(partition: string, cookies: Cookie[]) {
+  if (!safeStorage.isEncryptionAvailable()) {
+    writeLog("window", "external tab cookies encryption unavailable", { partition }, "warn")
+    return
+  }
+  try {
+    getStore(DESKTOP_TAB_COOKIES_STORE).set(
+      partition,
+      safeStorage.encryptString(JSON.stringify(cookies)).toString("base64"),
+    )
+  } catch (error) {
+    writeLog("window", "external tab cookies save failed", { partition, error }, "error")
+  }
+}
+
+function isExternalTabCookie(value: unknown): value is Cookie {
+  if (!value || typeof value !== "object") return false
+  const cookie = value as Record<string, unknown>
+  return (
+    typeof cookie.name === "string" &&
+    typeof cookie.value === "string" &&
+    ["unspecified", "no_restriction", "lax", "strict"].includes(String(cookie.sameSite))
+  )
+}
+
+function registerViewContextMenu(view: WebContentsView) {
+  contextMenu({
+    window: view,
+    showSaveImageAs: true,
+    showLookUpSelection: false,
+    showSearchWithGoogle: false,
+    append: () => [
+      {
+        label: "Debug",
+        click: () => {
+          view.webContents.openDevTools()
+        },
+      },
+    ],
+  })
+}
+
+function registerDesktopTabsIpc() {
+  if (desktopTabsIpcRegistered) return
+  desktopTabsIpcRegistered = true
+
+  ipcMain.on("desktop-tabs-subscribe", (event) => {
+    desktopTabManagers.get(event.sender.id)?.sendState()
+  })
+  ipcMain.on("desktop-tabs-unsubscribe", () => {})
+  ipcMain.on("desktop-tabs-select", (event, id: DesktopTabID) => {
+    desktopTabManagers.get(event.sender.id)?.activate(id)
+  })
+  ipcMain.on("desktop-tabs-back", (event) => {
+    desktopTabManagers.get(event.sender.id)?.back()
+  })
+  ipcMain.on("desktop-tabs-forward", (event) => {
+    desktopTabManagers.get(event.sender.id)?.forward()
+  })
+  ipcMain.on("desktop-tabs-reload", (event) => {
+    desktopTabManagers.get(event.sender.id)?.reload()
+  })
+  ipcMain.on("desktop-tabs-action", (event, action: DesktopTabAction) => {
+    if (action !== "settings" && action !== "help") return
+    desktopTabManagers.get(event.sender.id)?.action(action)
+  })
+}
+
+function wireWindowRecovery(win: BrowserWindow, contents: WebContents, name: string) {
   let showing = false
-  const sampler = createUnresponsiveSampler(win, name)
+  const sampler = createUnresponsiveSampler(win, name, contents)
 
   type RecoveryAction = "relaunch" | "export-logs" | "keep-waiting" | "quit"
   const handle = async (action: RecoveryAction | undefined, wait: boolean) => {
@@ -414,7 +940,7 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
         errorCode,
         errorDescription,
         validatedURL,
-        currentURL: safeWindowURL(win),
+        currentURL: safeWebContentsURL(contents),
         isMainFrame,
       },
       "error",
@@ -433,15 +959,20 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     )
   }
 
-  win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  contents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     failed("did-fail-load", errorCode, errorDescription, validatedURL, isMainFrame)
   })
-  win.webContents.on("did-fail-provisional-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  contents.on("did-fail-provisional-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     failed("did-fail-provisional-load", errorCode, errorDescription, validatedURL, isMainFrame)
   })
-  win.webContents.on("render-process-gone", (_event, details) => {
+  contents.on("render-process-gone", (_event, details) => {
     sampler.stopAndFlush()
-    writeLog("window", "renderer process gone", { window: name, currentURL: safeWindowURL(win), details }, "error")
+    writeLog(
+      "window",
+      "renderer process gone",
+      { window: name, currentURL: safeWebContentsURL(contents), details },
+      "error",
+    )
     void show(
       nativeT("desktop.recovery.terminated"),
       nativeT("desktop.recovery.terminated.detail", {
@@ -452,21 +983,27 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
       false,
     )
   })
-  win.on("unresponsive", () => {
-    writeLog("window", "renderer unresponsive", { window: name, currentURL: safeWindowURL(win) }, "error")
+  contents.on("unresponsive", () => {
+    writeLog("window", "renderer unresponsive", { window: name, currentURL: safeWebContentsURL(contents) }, "error")
     sampler.start()
     void show(nativeT("desktop.recovery.unresponsive"), nativeT("desktop.recovery.unresponsive.detail"), true)
   })
-  win.on("responsive", () => {
-    writeLog("window", "renderer responsive", { window: name, currentURL: safeWindowURL(win) }, "error")
+  contents.on("responsive", () => {
+    writeLog("window", "renderer responsive", { window: name, currentURL: safeWebContentsURL(contents) }, "error")
     sampler.stopAndFlush()
   })
-  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
-      writeLog("pty", "console", { window: name, level, message, line, sourceId })
+  contents.on("console-message", (event) => {
+    if (event.message.toLowerCase().includes("terminal") || event.sourceId.toLowerCase().includes("terminal")) {
+      writeLog("pty", "console", {
+        window: name,
+        level: event.level,
+        message: event.message,
+        line: event.lineNumber,
+        sourceId: event.sourceId,
+      })
     }
   })
-  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+  contents.on("preload-error", (_event, preloadPath, error) => {
     writeLog("preload", "preload error", { window: name, preloadPath, error }, "error")
   })
 }
@@ -478,17 +1015,17 @@ function addDocumentPolicy(response: Response, file: string) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-function allowRendererPermissions(win: BrowserWindow) {
-  const webContentsId = win.webContents.id
+function allowRendererPermissions(contents: WebContents) {
+  const webContentsId = contents.id
 
-  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+  contents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
       rendererPermissions.has(permission) &&
         isTrustedRendererUrl(details.requestingUrl) &&
         webContents.id === webContentsId,
     )
   })
-  win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+  contents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     if (!rendererPermissions.has(permission)) return false
     if (webContents && webContents.id !== webContentsId) return false
     return isTrustedRendererUrl(details.requestingUrl) || isTrustedRendererUrl(requestingOrigin)
@@ -499,7 +1036,7 @@ function isTrustedRendererUrl(value?: string) {
   return isRendererUrl(value)
 }
 
-function addRendererHeaders(value: string, headers: Record<string, any>) {
+function addRendererHeaders(value: string, headers: Record<string, HeaderValue>) {
   upsertKeyValue(headers, "Access-Control-Allow-Origin", ["*"])
   upsertKeyValue(headers, "Access-Control-Allow-Headers", ["*"])
   if (isRendererUrl(value, true)) upsertKeyValue(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
@@ -510,30 +1047,32 @@ function isRendererUrl(value?: string, html = false) {
   const url = new URL(value)
   if (html && !url.pathname.endsWith(".html")) return false
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
-  const devUrl = process.env.ELECTRON_RENDERER_URL
-  if (!devUrl || !URL.canParse(devUrl)) return false
-  return url.origin === new URL(devUrl).origin
+  return [process.env.ELECTRON_RENDERER_URL, process.env.ELECTRON_7777_RENDERER_URL].some((devUrl) => {
+    if (!devUrl || !URL.canParse(devUrl)) return false
+    return url.origin === new URL(devUrl).origin
+  })
 }
 
-function wireZoom(win: BrowserWindow) {
+function wireZoom(win: BrowserWindow, contents: WebContents) {
   pinchZoomEnabled.set(win, getPinchZoomEnabled())
-  win.webContents.setZoomFactor(1)
-  win.webContents.on("zoom-changed", (event, zoomDirection) => {
+  contents.setZoomFactor(1)
+  contents.on("zoom-changed", (event, zoomDirection) => {
     event.preventDefault()
     if (pinchZoomEnabled.get(win)) {
-      win.webContents.setZoomFactor(clampZoom(win.webContents.getZoomFactor() + (zoomDirection === "in" ? 0.2 : -0.2)))
+      contents.setZoomFactor(clampZoom(contents.getZoomFactor() + (zoomDirection === "in" ? 0.2 : -0.2)))
       updateZoom(win)
       return
     }
-    if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    if (contents.getZoomFactor() !== 1) contents.setZoomFactor(1)
     updateZoom(win)
   })
 }
 
 function wireFullscreen(win: BrowserWindow) {
   const send = (fullscreen: boolean) => {
-    if (win.isDestroyed() || win.webContents.isDestroyed()) return
-    win.webContents.send("window-fullscreen-changed", fullscreen)
+    const contents = getPrimaryWebContents(win)
+    if (win.isDestroyed() || contents.isDestroyed()) return
+    contents.send("window-fullscreen-changed", fullscreen)
   }
 
   win.on("enter-full-screen", () => send(true))
@@ -545,11 +1084,12 @@ function clampZoom(value: number) {
 }
 
 function updateZoom(win: BrowserWindow) {
+  const contents = getPrimaryWebContents(win)
   updateTitlebar(win)
-  win.webContents.send("zoom-factor-changed", win.webContents.getZoomFactor())
+  contents.send("zoom-factor-changed", contents.getZoomFactor())
 }
 
-function upsertKeyValue(obj: Record<string, any>, keyToChange: string, value: any) {
+function upsertKeyValue(obj: Record<string, HeaderValue>, keyToChange: string, value: HeaderValue) {
   const keyToChangeLower = keyToChange.toLowerCase()
   for (const key of Object.keys(obj)) {
     if (key.toLowerCase() === keyToChangeLower) {
