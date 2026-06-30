@@ -1,10 +1,10 @@
-import { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { MenuRpcs } from "../../shared/ipc-rpc"
 import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { runDesktopMenuAction } from "../native/menu-actions"
 import { Updater } from "../updater"
+import { getNavigationHistory, getWindowFromWebContents, goToNavigationHistory } from "../windows"
 import { sender } from "./context"
 
 export const menuHandlers = MenuRpcs.toLayer(
@@ -16,12 +16,16 @@ export const menuHandlers = MenuRpcs.toLayer(
     return MenuRpcs.of({
       MenuRunAction: ({ action }, context) =>
         Effect.sync(() =>
-          runDesktopMenuAction(BrowserWindow.fromWebContents(sender(handoff, context)), action, {
+          runDesktopMenuAction(getWindowFromWebContents(sender(handoff, context)), action, {
             checkForUpdates: () => runFork(updater.show),
             createWindow: lifecycle.createWindow,
             relaunch: lifecycle.relaunch,
           }),
         ),
+      MenuGetHistory: (_args, context) =>
+        Effect.sync(() => getNavigationHistory(getWindowFromWebContents(sender(handoff, context)))),
+      MenuGoToHistory: ({ index }, context) =>
+        Effect.sync(() => goToNavigationHistory(getWindowFromWebContents(sender(handoff, context)), index)),
     })
   }),
 )
