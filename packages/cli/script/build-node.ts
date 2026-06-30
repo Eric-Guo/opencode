@@ -127,7 +127,7 @@ for (const target of targets) {
   }
 
   const host = target.platform === process.platform && target.arch === process.arch
-  if (host) {
+  if (host && !sidecarOnly) {
     if (!builder) throw new Error("Node SEA builder is unavailable")
     run(builder, [...nodeExecArgv, "dist-node/opencode.mjs", "--version"])
     run(builder, [...nodeExecArgv, "dist-node/opencode.mjs", "--help"])

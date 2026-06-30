@@ -1,3 +1,4 @@
+import "#desktop-preload-extension"
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
 import { windowIDFromArguments } from "../shared/window-bootstrap"
