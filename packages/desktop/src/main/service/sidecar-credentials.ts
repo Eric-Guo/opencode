@@ -17,7 +17,7 @@ export function get() {
   return current
 }
 
-/** What the renderer learns about the sidecar: its origin, never its credential. */
+/** Renderer initialization data excludes the sidecar credential. */
 export function ready(data: Data): ServerReadyData {
   return { url: data.url }
 }
