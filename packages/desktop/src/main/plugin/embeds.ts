@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { BaseWindow, ImageView, screen, View, type BrowserWindow, type WebContentsView } from "electron"
 import type { Embed } from "@opencode/plugin/gui/main"
 import type { BridgeLayout } from "@opencode/plugin/gui/host"
+import { getContentView } from "../windows/content"
 import { createCornerImages } from "../native/corners"
 import type { Instance } from "./lifecycle"
 
@@ -96,7 +97,7 @@ export function createEmbeds() {
         bounds.x -= clip.x
         bounds.y -= clip.y
       } else if (entry.clip) {
-        attach(entry, entry.window.contentView)
+        attach(entry, getContentView(entry.window))
         disposeClip(entry)
       }
 
@@ -158,7 +159,7 @@ export function createEmbeds() {
 
     if (entry.window.isDestroyed()) return
     entry.view.setVisible(false)
-    const root = entry.clip?.root ?? entry.window.contentView
+    const root = entry.clip?.root ?? getContentView(entry.window)
     entry.corners.forEach((corner) => root.removeChildView(corner))
     root.removeChildView(entry.view)
     disposeClip(entry)
@@ -189,13 +190,13 @@ export function createEmbeds() {
 
       const corners = [new ImageView(), new ImageView()]
       view.setVisible(false)
-      window.contentView.addChildView(view)
+      getContentView(window).addChildView(view)
       corners.forEach((corner) => {
         // Painting above a WebContentsView needs a composited layer; a zero blur creates one
         // without an animated bounds update.
         corner.setBackgroundBlur(0)
         corner.setVisible(false)
-        window.contentView.addChildView(corner)
+        getContentView(window).addChildView(corner)
       })
 
       const entry: Entry = {
@@ -310,7 +311,7 @@ function createClip(entry: Entry) {
 
   const root = window?.contentView ?? new View()
 
-  if (!window) entry.window.contentView.addChildView(root)
+  if (!window) getContentView(entry.window).addChildView(root)
   attach(entry, root)
 
   return { root, window }
@@ -324,7 +325,7 @@ function disposeClip(entry: Entry) {
 
   if (clip.window) {
     if (!clip.window.isDestroyed()) clip.window.destroy()
-  } else entry.window.contentView.removeChildView(clip.root)
+  } else getContentView(entry.window).removeChildView(clip.root)
 }
 
 // Freezes the shown page so the renderer can paint it under DOM overlays while the view hides.
