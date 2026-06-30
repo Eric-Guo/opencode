@@ -87,7 +87,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     build: {
       minify: command === "build",
       rolldownOptions: {
-        input: { index: "src/preload/index.ts" },
+        input: { index: "src/preload/index.ts", tabbar: "src/preload/tabbar.ts" },
         output: {
           format: "cjs",
           // The package is "type": "module". Under --no-sandbox Electron loads the preload
@@ -127,6 +127,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       rolldownOptions: {
         input: {
           main: "src/renderer/index.html",
+          tabbar: "src/renderer/tabbar.html",
         },
       },
     },

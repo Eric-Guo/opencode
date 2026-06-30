@@ -1,4 +1,3 @@
-import { BrowserWindow } from "electron"
 import { parseDesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
@@ -17,7 +16,7 @@ import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { Updater } from "../updater"
-import { getLastFocusedWindow, setBackgroundColor } from "../windows"
+import { getLastFocusedWindow, getPrimaryWebContents, getWindowFromWebContents, setBackgroundColor } from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -48,8 +47,8 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetNativeTranslations: ({ value }, context) =>
         Effect.sync(() => {
           const contents = sender(handoff, context)
-          const win = BrowserWindow.fromWebContents(contents)
-          if (!win || win.isDestroyed() || win.webContents !== contents) {
+          const win = getWindowFromWebContents(contents)
+          if (!win || win.isDestroyed() || getPrimaryWebContents(win) !== contents) {
             throw new Error("Invalid native translation sender")
           }
           const bundle = parseDesktopNativeBundle(value)
