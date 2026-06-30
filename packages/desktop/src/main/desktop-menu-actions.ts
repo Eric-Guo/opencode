@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
-import { createMainWindow, updateTitlebar } from "./windows"
+import { createMainWindow, getPrimaryWebContents, updateTitlebar } from "./windows"
 
 export type DesktopMenuActionHandlers = Partial<{
   checkForUpdates: () => void
@@ -36,49 +36,54 @@ export function runDesktopMenuAction(
       win?.maximize()
       return
     case "view.reload":
-      win?.reload()
+      getContents(win)?.reload()
       return
     case "view.toggleDevTools":
-      win?.webContents.toggleDevTools()
+      getContents(win)?.toggleDevTools()
       return
     case "view.resetZoom":
       setZoom(win, 1)
       return
     case "view.zoomIn":
-      setZoom(win, (win?.webContents.getZoomFactor() ?? 1) + 0.2)
+      setZoom(win, (getContents(win)?.getZoomFactor() ?? 1) + 0.2)
       return
     case "view.zoomOut":
-      setZoom(win, (win?.webContents.getZoomFactor() ?? 1) - 0.2)
+      setZoom(win, (getContents(win)?.getZoomFactor() ?? 1) - 0.2)
       return
     case "view.toggleFullscreen":
       win?.setFullScreen(!win.isFullScreen())
       return
     case "edit.undo":
-      win?.webContents.undo()
+      getContents(win)?.undo()
       return
     case "edit.redo":
-      win?.webContents.redo()
+      getContents(win)?.redo()
       return
     case "edit.cut":
-      win?.webContents.cut()
+      getContents(win)?.cut()
       return
     case "edit.copy":
-      win?.webContents.copy()
+      getContents(win)?.copy()
       return
     case "edit.paste":
-      win?.webContents.paste()
+      getContents(win)?.paste()
       return
     case "edit.delete":
-      win?.webContents.delete()
+      getContents(win)?.delete()
       return
     case "edit.selectAll":
-      win?.webContents.selectAll()
+      getContents(win)?.selectAll()
       return
   }
 }
 
+function getContents(win: BrowserWindow | null) {
+  if (!win) return
+  return getPrimaryWebContents(win)
+}
+
 function setZoom(win: BrowserWindow | null, value: number) {
   if (!win) return
-  win.webContents.setZoomFactor(Math.min(Math.max(value, 0.2), 10))
+  getPrimaryWebContents(win).setZoomFactor(Math.min(Math.max(value, 0.2), 10))
   updateTitlebar(win)
 }
