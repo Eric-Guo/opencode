@@ -1,6 +1,7 @@
 export * as Ipc from "./ipc"
 
-import { app, BrowserWindow, MessageChannelMain } from "electron"
+import { ipcMain, MessageChannelMain } from "electron"
+import type { WebContents } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
@@ -21,8 +22,16 @@ import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
+import { BackgroundService } from "./service/background-service"
+import extension from "#desktop-main-extension"
 import { Updater } from "./updater"
-import { getLastFocusedWindow } from "./windows"
+import {
+  getNavigationHistory,
+  getLastFocusedWindow,
+  goToNavigationHistory,
+  subscribeNavigationHistory,
+  subscribeWebContents,
+} from "./windows"
 import { Wsl } from "./wsl/start"
 
 const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer, Ssh.layer)
@@ -47,8 +56,11 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const handoff = yield* IpcPortHandoff
   const lifecycle = yield* ApplicationLifecycle.Service
   const desktopCli = yield* DesktopCli.Service
+  const background = yield* BackgroundService.Service
   const updater = yield* Updater.Service
-  const runFork = Effect.runForkWith(yield* Effect.context())
+  const context = yield* Effect.context()
+  const runFork = Effect.runForkWith(context)
+  const runPromise = Effect.runPromiseWith(context)
   const menu = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -59,24 +71,31 @@ export const registerIpcHandlers = Effect.gen(function* () {
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
     relaunch: lifecycle.relaunch,
+    getHistory: () => getNavigationHistory(getLastFocusedWindow()),
+    goToHistory: (index: number) => goToNavigationHistory(getLastFocusedWindow(), index),
+    onHistoryChange: subscribeNavigationHistory,
   }
-  const wire = (_event: Electron.Event, win: BrowserWindow) => {
-    win.webContents.on("before-input-event", (_event, input) => {
+  const wire = (contents: WebContents) => {
+    contents.on("before-input-event", (_event, input) => {
       if (input.type !== "keyDown" || input.key !== "Escape") return
-      win.webContents.send(DragCancelEvent)
+      contents.send(DragCancelEvent)
     })
-    win.webContents.on("did-finish-load", () => {
-      if (win.isDestroyed() || win.webContents.isDestroyed()) return
+    contents.on("did-finish-load", () => {
+      if (contents.isDestroyed()) return
       const channel = new MessageChannelMain()
-      handoff.bind(win.webContents, channel.port1)
-      win.webContents.postMessage(IpcTransportPort, null, [channel.port2])
+      handoff.bind(contents, channel.port1)
+      contents.postMessage(IpcTransportPort, null, [channel.port2])
     })
   }
-  yield* Effect.sync(() => {
-    app.on("browser-window-created", wire)
-    BrowserWindow.getAllWindows().forEach((win) => wire({} as Electron.Event, win))
-  })
-  yield* Effect.addFinalizer(() => Effect.sync(() => app.off("browser-window-created", wire)))
+  const unsubscribe = subscribeWebContents(wire)
+  const handlers = extension.ipc?.({ connection: () => runPromise(background.connection) }) ?? {}
+  Object.entries(handlers).forEach(([channel, handle]) => ipcMain.handle(channel, handle))
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      unsubscribe()
+      Object.keys(handlers).forEach((channel) => ipcMain.removeHandler(channel))
+    }),
+  )
   return {
     installMenu: () => createMenu(menu),
   }

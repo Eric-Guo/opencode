@@ -74,5 +74,8 @@
     "@lydell/node-pty-win32-arm64": "1.2.0-beta.12",
     "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
     "msgpackr-extract": "3.0.4"
+  },
+  "exports": {
+    "./extension": "./src/extension.ts"
   }
 }
