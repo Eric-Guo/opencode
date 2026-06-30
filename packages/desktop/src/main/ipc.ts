@@ -9,7 +9,15 @@ import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../prel
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
-import { getPinchZoomEnabled, getWindowID, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import {
+  getPinchZoomEnabled,
+  getPrimaryWebContents,
+  getWindowID,
+  getWindowFromWebContents,
+  setPinchZoomEnabled,
+  setTitlebar,
+  updateTitlebar,
+} from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 
@@ -199,7 +207,7 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("get-window-count", () => BrowserWindow.getAllWindows().length)
 
   ipcMain.handle("get-window-id", (event: IpcMainInvokeEvent) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     if (!win) throw new Error("Window not found")
     const id = getWindowID(win)
     if (!id) throw new Error("Window ID not found")
@@ -207,17 +215,17 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     return win?.isFocused() ?? false
   })
 
   ipcMain.handle("set-window-focus", (event: IpcMainInvokeEvent) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     win?.focus()
   })
 
   ipcMain.handle("show-window", (event: IpcMainInvokeEvent) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     win?.show()
   })
 
@@ -228,7 +236,7 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())
   ipcMain.handle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: number) => {
     event.sender.setZoomFactor(factor)
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     if (!win) return
     updateTitlebar(win)
   })
@@ -237,12 +245,12 @@ export function registerIpcHandlers(deps: Deps) {
     setPinchZoomEnabled(enabled)
   })
   ipcMain.handle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = getWindowFromWebContents(event.sender)
     if (!win) return
     setTitlebar(win, theme)
   })
   ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
-    runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action, {
+    runDesktopMenuAction(getWindowFromWebContents(event.sender), action, {
       checkForUpdates: () => void deps.showUpdater(),
       relaunch: deps.relaunch,
     })
@@ -250,9 +258,9 @@ export function registerIpcHandlers(deps: Deps) {
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {
-  win.webContents.send("menu-command", id)
+  getPrimaryWebContents(win).send("menu-command", id)
 }
 
 export function sendDeepLinks(win: BrowserWindow, urls: string[]) {
-  win.webContents.send("deep-link", urls)
+  getPrimaryWebContents(win).send("deep-link", urls)
 }
