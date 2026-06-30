@@ -15,9 +15,18 @@
     "noEmit": true,
     "emitDeclarationOnly": false,
     "outDir": "node_modules/.ts-dist",
-    "types": ["vite/client", "node", "electron"]
+    "types": ["vite/client", "node", "electron"],
+    "paths": {
+      "#desktop-main-extension": ["./src/main/extension.ts"],
+      "#desktop-renderer-extension": ["./src/renderer/extension.ts"],
+      "#desktop-preload-extension": ["./src/preload/extension.ts"]
+    }
   },
-  "references": [{ "path": "../app" }],
+  "references": [
+    {
+      "path": "../app"
+    }
+  ],
   "include": ["src", "package.json"],
   "exclude": ["src/**/*.test.ts"]
 }
