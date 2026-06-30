@@ -498,6 +498,23 @@
         "msgpackr-extract": "3.0.4",
       },
     },
+    "packages/desktop-tab": {
+      "name": "@opencode/desktop-tab",
+      "version": "0.1.0",
+      "dependencies": {
+        "electron-context-menu": "4.1.2",
+        "jsonc-parser": "3.3.1",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.0",
+        "@types/node": "24.12.2",
+        "@typescript/native-preview": "7.0.0-dev.20251207.1",
+      },
+      "peerDependencies": {
+        "@opencode/desktop": "^2.0.3",
+        "electron": "^42.10.1",
+      },
+    },
     "packages/enterprise": {
       "name": "@opencode/enterprise",
       "version": "2.0.3",
@@ -2237,6 +2254,8 @@
     "@opencode/core": ["@opencode/core@workspace:packages/core"],
 
     "@opencode/desktop": ["@opencode/desktop@workspace:packages/desktop"],
+
+    "@opencode/desktop-tab": ["@opencode/desktop-tab@workspace:packages/desktop-tab"],
 
     "@opencode/enterprise": ["@opencode/enterprise@workspace:packages/enterprise"],
 
