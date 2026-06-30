@@ -22,6 +22,7 @@ import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 
 export interface Interface {
+  readonly quit: () => void
   readonly relaunch: () => void
   readonly deepLinks: DeepLinks.Interface
   /** Where the app stands between running and exiting. */
@@ -102,6 +103,8 @@ const runtime = Layer.effect(
 
     const deepLinks = yield* DeepLinks.make(focusWindow)
 
+    const quit = () => driver.dispatch({ type: "exit.requested", mode: "quit" })
+
     const secondInstance = (_event: Event, argv: string[]) => {
       const urls = argv.filter((arg) => arg.startsWith("opencode://"))
 
@@ -180,6 +183,7 @@ const runtime = Layer.effect(
     )
 
     return Service.of({
+      quit,
       relaunch,
       deepLinks,
       state: driver.state,

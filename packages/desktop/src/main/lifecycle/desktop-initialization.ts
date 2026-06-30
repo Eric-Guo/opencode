@@ -6,6 +6,7 @@ import { ensureSsoUsername } from "@opencode/core/thape-sso"
 import { DesktopLogging } from "../native/logging"
 import { configureProxyCommandLine, configureSessionProxy } from "../proxy"
 import { marks } from "./marks"
+import extension from "#desktop-main-extension"
 import {
   loadProxyEnvironment,
   preferApplicationEnvironment,
@@ -47,6 +48,8 @@ export const layer = Layer.effect(
       }),
     )
     yield* Effect.promise(() => app.whenReady())
+    if (extension.apiVersion !== 1) throw new Error("Unsupported desktop extension API")
+    if (extension.initialize) yield* Effect.promise(() => extension.initialize!())
     yield* Effect.promise(() => ensureSsoUsername())
     yield* prepareDesktop
     marks.init = Date.now()
