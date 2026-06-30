@@ -19,6 +19,9 @@ the unpacked app on Windows, and AppImage/deb/rpm on Linux. The release workflow
 bun run build && bun run pack
 ```
 
+The desktop prebuild prepares the embedded server sidecar and desktop assets. Optional renderer bundles such as 7777 are built by their distribution extension.
+
+See [EXTENSIONS.md](./EXTENSIONS.md) for the optional desktop extension API. The SigmaAgents tab shell is maintained in the separate `packages/desktop-tab` checkout; build it with `OPENCODE_DESKTOP_EXTENSION=../desktop-tab bun run build`.
 Both read the same environment as every other release package:
 
 | Variable | Meaning |
@@ -27,7 +30,7 @@ Both read the same environment as every other release package:
 | `OPENCODE_VERSION` | Version stamped into the app and its packages. |
 | `OPENCODE_TARGET` | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
-All channels build the embedded server sidecar from source, along with its assets and the 7777 UI.
+All channels build the embedded server sidecar from source, along with its assets.
 The sidecar and its assets are included under `out/main` in the app archive. A separate CLI distribution is not required.
 
 `bun dev` builds the embedded sidecar from source and starts the development renderer with the dev app identity.
