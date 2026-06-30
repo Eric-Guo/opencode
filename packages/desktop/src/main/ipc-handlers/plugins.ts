@@ -1,10 +1,10 @@
-import { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { PluginRpcs } from "../../shared/ipc-rpc"
 import { pluginFailure } from "../plugin/error"
 import type { PluginHost } from "../plugin/host"
 import { Plugins } from "../plugin"
 import { IpcPortHandoff } from "../ipc-transport"
+import { getWindowFromWebContents, getPrimaryWebContents } from "../windows/content"
 import { isRendererUrl } from "../windows/scheme"
 import { sender, type RpcContext } from "./context"
 
@@ -16,9 +16,9 @@ export const pluginHandlers = PluginRpcs.toLayer(
     // Ipcs scope state and events by the calling app window.
     const caller = (context: RpcContext) => {
       const contents = sender(handoff, context)
-      const win = BrowserWindow.fromWebContents(contents)
+      const win = getWindowFromWebContents(contents)
 
-      if (!win || win.isDestroyed() || win.webContents !== contents || !isRendererUrl(contents.getURL()))
+      if (!win || win.isDestroyed() || getPrimaryWebContents(win) !== contents || !isRendererUrl(contents.getURL()))
         throw new Error("plugin.caller.invalid")
 
       return win.id
