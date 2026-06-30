@@ -1,4 +1,3 @@
-import { BrowserWindow } from "electron"
 import { parseDesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
@@ -12,7 +11,13 @@ import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
 import { SidecarCredentials } from "../service/sidecar-credentials"
-import { getWindowID, setBackgroundColor } from "../windows"
+import extension from "#desktop-main-extension"
+import {
+  getWindowID,
+  getPrimaryWebContents,
+  getWindowFromWebContents,
+  setBackgroundColor,
+} from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -23,19 +28,26 @@ export const appHandlers = AppRpcs.toLayer(
     const logging = yield* DesktopLogging.Service
 
     return AppRpcs.of({
-      AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
+      AppAwaitInitialization: (_args, context) =>
+        Effect.gen(function* () {
+          const data = yield* background.connection.pipe(Effect.map(SidecarCredentials.ready))
+
+          return { ...data, ...extension.rendererData?.(sender(handoff, context)) }
+        }),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
       AppReadyDeepLinks: (_request, context) =>
         Effect.sync(() => {
           const contents = sender(handoff, context)
-          const win = BrowserWindow.fromWebContents(contents)
-          // Only an app window's own renderer receives deep links, not one embedded in it.
-          const id = win?.webContents === contents ? getWindowID(win) : undefined
+          const win = getWindowFromWebContents(contents)
+          // Only the primary app renderer receives deep links, including when hosted by an extension.
+          const id = win && getPrimaryWebContents(win) === contents ? getWindowID(win) : undefined
 
           if (id) lifecycle.deepLinks.ready(id, context.client.id)
         }),
       AppAcknowledgeDeepLinks: ({ attempt }, context) =>
         Effect.sync(() => lifecycle.deepLinks.acknowledge(context.client.id, attempt)),
+      AppGetCybrosCurrentUser: (_args, context) =>
+        promise(() => extension.request?.(sender(handoff, context), "account.current-user") ?? null),
       AppIsFirstLaunchOnboardingPending: isFirstLaunchOnboardingPending,
       AppFinishFirstLaunchOnboarding: ({ createDefaultProject }) =>
         finishFirstLaunchOnboarding(createDefaultProject).pipe(Effect.orDie),
@@ -51,9 +63,9 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetNativeTranslations: ({ value }, context) =>
         Effect.sync(() => {
           const contents = sender(handoff, context)
-          const win = BrowserWindow.fromWebContents(contents)
+          const win = getWindowFromWebContents(contents)
 
-          if (!win || win.isDestroyed() || win.webContents !== contents) {
+          if (!win || win.isDestroyed() || getPrimaryWebContents(win) !== contents) {
             throw new Error("Invalid native translation sender")
           }
 
@@ -65,6 +77,7 @@ export const appHandlers = AppRpcs.toLayer(
           setNativeTranslations(bundle)
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
+      AppQuit: () => background.stop.pipe(Effect.ensuring(Effect.sync(lifecycle.quit))),
     })
   }),
 )
