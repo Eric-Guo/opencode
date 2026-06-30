@@ -1,16 +1,16 @@
-import type { BrowserWindow } from "electron"
+import type { BrowserWindow, WebContents } from "electron"
 import { write as writeLog } from "./logging"
 
 const sampleInterval = 1000
 const samplePeriod = 15000
 
-export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
+export function createUnresponsiveSampler(win: BrowserWindow, name: string, contents: WebContents = win.webContents) {
   let sampleTimer: ReturnType<typeof setTimeout> | undefined
   let stopTimer: ReturnType<typeof setTimeout> | undefined
   let sampling = false
   const samples = new Map<string, number>()
 
-  const active = () => sampling && !win.isDestroyed() && !win.webContents.isDestroyed()
+  const active = () => sampling && !win.isDestroyed() && !contents.isDestroyed()
   const clearTimers = () => {
     if (sampleTimer) clearTimeout(sampleTimer)
     if (stopTimer) clearTimeout(stopTimer)
@@ -26,7 +26,7 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
 
   const collect = async () => {
     if (!active()) return
-    const stack = await win.webContents.mainFrame.collectJavaScriptCallStack().catch((error) => {
+    const stack = await contents.mainFrame.collectJavaScriptCallStack().catch((error) => {
       writeLog("window", "failed to collect unresponsive sample", { window: name, error }, "error")
       return undefined
     })
@@ -46,7 +46,7 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
     const message = [
       "renderer unresponsive samples",
       `Window: ${name}`,
-      `URL: ${win.isDestroyed() ? "<destroyed>" : win.webContents.getURL()}`,
+      `URL: ${win.isDestroyed() || contents.isDestroyed() ? "<destroyed>" : contents.getURL()}`,
       ...entries.map((entry) => `<${entry[1]}> ${entry[0]}`),
       `Total Samples: ${total}`,
     ].join("\n")
@@ -56,7 +56,7 @@ export function createUnresponsiveSampler(win: BrowserWindow, name: string) {
   }
 
   const start = () => {
-    if (sampling || win.isDestroyed() || win.webContents.isDestroyed() || win.webContents.isDevToolsOpened()) return
+    if (sampling || win.isDestroyed() || contents.isDestroyed() || contents.isDevToolsOpened()) return
     sampling = true
     samples.clear()
     schedule()
