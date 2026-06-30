@@ -79,7 +79,7 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
-        input: { index: "src/preload/index.ts" },
+        input: { index: "src/preload/index.ts", tabbar: "src/preload/tabbar.ts" },
         output: {
           format: "cjs",
           entryFileNames: "[name].js",
@@ -96,6 +96,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           main: "src/renderer/index.html",
+          tabbar: "src/renderer/tabbar.html",
         },
       },
     },
