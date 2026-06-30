@@ -16,6 +16,12 @@ describe("sidecar authorization", () => {
     expect(ready(sidecar)).toEqual({ url: sidecar.url })
   })
 
+  test("does not forward extension secrets through the core sidecar boundary", () => {
+    expect(ready(Object.assign({}, sidecar, { ssoJwtSecretKey: "sso-token" }))).toEqual({
+      url: sidecar.url,
+    })
+  })
+
   test("adds nothing before the sidecar is known or when it has no password", () => {
     expect(authorization(undefined, "http://127.0.0.1:4096/api/session")).toBeUndefined()
     expect(authorization({ url: sidecar.url, password: null }, "http://127.0.0.1:4096/api/session")).toBeUndefined()

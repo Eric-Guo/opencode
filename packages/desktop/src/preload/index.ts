@@ -1,3 +1,4 @@
+import "#desktop-preload-extension"
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import {
   DragCancelEvent,
