@@ -4,6 +4,7 @@
 import {
   AppBaseProviders,
   AppInterface,
+  DialogUserLogin,
   currentRoute,
   PlatformProvider,
   preloadRoute,
@@ -17,6 +18,8 @@ import {
   type LayoutRoute,
   type Platform,
 } from "@opencode/app/desktop"
+import { useDialog } from "@opencode/ui/context/dialog"
+import extension from "#desktop-renderer-extension"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
@@ -144,8 +147,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
         locale={selectStartupLocale(startup.state())}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
         onThemeApplied={(mode, scheme) => {
-          void props.api.setTitlebar({ mode, scheme })
-          startup.dispatch({ type: "theme.applied" })
+          void props.api.setTitlebar({ mode, scheme }).finally(() => startup.dispatch({ type: "theme.applied" }))
         }}
       >
         <DesktopShell />
@@ -276,7 +278,19 @@ function DesktopStartupReady(props: { dispatch: (event: StartupEvent) => void })
 
 function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "linux" | undefined }) {
   const command = useCommand()
-  onCleanup(bindDesktopMenu((id) => command.trigger(id)))
+  const dialog = useDialog()
+
+  const effects = extension.setup?.({
+    showLogin: (onLogin) => {
+      void dialog.show(() => <DialogUserLogin onLogin={onLogin} onExit={() => props.api.quit()} />)
+    },
+  })
+
+  onCleanup(
+    bindDesktopMenu((id) => {
+      if (!effects?.command(id)) command.trigger(id)
+    }),
+  )
   const theme = useTheme()
   const language = useLanguage()
   const activity = useWindowTabActivity()
