@@ -123,18 +123,18 @@ test("retains permissions across all live windows on a shared session and revoke
 })
 
 test("hands the plugin port only to the app's own document, never to a page the window went to", () => {
-  const window = (url: string, destroyed = false) => ({
+  const contents = (url: string, destroyed = false) => ({
     isDestroyed: () => destroyed,
-    webContents: { isDestroyed: () => false, mainFrame: { url } },
+    mainFrame: { url },
   })
 
-  expect(receivesPluginPort(window(url))).toBe(true)
-  expect(receivesPluginPort(window("oc://renderer/settings.html#/browser"))).toBe(true)
+  expect(receivesPluginPort(contents(url))).toBe(true)
+  expect(receivesPluginPort(contents("oc://renderer/settings.html#/browser"))).toBe(true)
   // A web page, a preview, another host on the app's scheme and an address that only looks like the app's.
-  expect(receivesPluginPort(window("https://evil.test/"))).toBe(false)
-  expect(receivesPluginPort(window("oc-preview://file/index.html"))).toBe(false)
-  expect(receivesPluginPort(window("oc://evil/index.html"))).toBe(false)
-  expect(receivesPluginPort(window("https://renderer.evil.test/oc://renderer/index.html"))).toBe(false)
-  expect(receivesPluginPort(window(""))).toBe(false)
-  expect(receivesPluginPort(window(url, true))).toBe(false)
+  expect(receivesPluginPort(contents("https://evil.test/"))).toBe(false)
+  expect(receivesPluginPort(contents("oc-preview://file/index.html"))).toBe(false)
+  expect(receivesPluginPort(contents("oc://evil/index.html"))).toBe(false)
+  expect(receivesPluginPort(contents("https://renderer.evil.test/oc://renderer/index.html"))).toBe(false)
+  expect(receivesPluginPort(contents(""))).toBe(false)
+  expect(receivesPluginPort(contents(url, true))).toBe(false)
 })
