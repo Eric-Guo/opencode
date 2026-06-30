@@ -7,6 +7,7 @@ import { ensureKimiWebBridgeDaemon } from "../kimi-webbridge"
 import { DesktopLogging } from "../native/logging"
 import { configureProxyCommandLine, configureSessionProxy } from "../proxy"
 import { getStore } from "../storage/store"
+import extension from "#desktop-main-extension"
 import {
   loadProxyEnvironment,
   preferApplicationEnvironment,
@@ -48,6 +49,8 @@ export const layer = Layer.effect(
       yield* Effect.logInfo("electron session proxy applied", {
         hasBypassRules: Boolean(sessionProxy.proxyBypassRules),
       })
+    if (extension.apiVersion !== 1) throw new Error("Unsupported desktop extension API")
+    if (extension.initialize) yield* Effect.promise(() => extension.initialize!())
     yield* Effect.promise(() => ensureSsoUsername())
     yield* logging.startNetwork
     yield* prepareDesktop
