@@ -2,6 +2,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
+import { usePlatform } from "./platform"
 
 export interface NotificationSettings {
   agent: boolean
@@ -152,6 +153,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   name: "Settings",
   gate: false,
   init: () => {
+    const platform = usePlatform()
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
@@ -160,7 +162,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
-    const newLayoutDesigns = withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault)
+    const newLayoutDesigns = createMemo(() =>
+      platform.platform === "desktop" ? true : (store.general?.newLayoutDesigns ?? newLayoutDesignsDefault),
+    )
     const visible = (preference: () => boolean) => createMemo(() => !newLayoutDesigns() || preference())
 
     createEffect(() => {
@@ -250,6 +254,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
         newLayoutDesigns,
         setNewLayoutDesigns(value: boolean) {
+          if (platform.platform === "desktop") {
+            setStore("general", "newLayoutDesigns", true)
+            return
+          }
           setStore("general", "newLayoutDesigns", value)
         },
       },
