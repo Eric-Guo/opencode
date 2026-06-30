@@ -19,4 +19,10 @@ describe("sidecar authorization", () => {
   test("hands the renderer the origin only", () => {
     expect(ready(sidecar)).toEqual({ url: sidecar.url })
   })
+
+  test("does not forward extension secrets through the core sidecar boundary", () => {
+    expect(ready(Object.assign({}, sidecar, { ssoJwtSecretKey: "sso-token" }))).toEqual({
+      url: sidecar.url,
+    })
+  })
 })
