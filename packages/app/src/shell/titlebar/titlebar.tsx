@@ -63,8 +63,6 @@ const minTitlebarZoom = 0.25
 
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
 
-const macTrafficLightsBaseWidth = 74
-
 const macTrafficLightsTopClearance = 28
 
 // iOS blurs page content just below the status bar in Home Screen web apps, so with a top safe area the phone
@@ -188,8 +186,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
           ? "var(--shell-safe-area-bottom, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))"
           : "0px",
         "min-height": minHeight(),
-        // Keep native macOS traffic lights clear even when the desktop window is narrow.
-        "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
         width: windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         // Native Windows caption controls remain on the physical right in both writing directions.

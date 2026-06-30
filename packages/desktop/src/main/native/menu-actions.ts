@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron"
 import { nextDesktopZoomLevel, type DesktopMenuAction } from "@opencode/app/desktop-menu"
-import { setZoomLevel } from "../windows"
+import { getActiveWebContents, getPrimaryWebContents, navigateWindow, reloadWindow, setZoomLevel, updateTitlebar } from "../windows"
 
 export type DesktopMenuActionHandlers = Partial<{
   installCli: () => void
@@ -45,56 +45,75 @@ export function runDesktopMenuAction(
 
       return
     case "view.reload":
-      win?.reload()
-
+      reloadWindow(win)
+      return
+    case "history.back":
+      navigateWindow(win, "back")
+      return
+    case "history.forward":
+      navigateWindow(win, "forward")
       return
     case "view.toggleDevTools":
-      win?.webContents.toggleDevTools()
-
+      getContents(win)?.toggleDevTools()
       return
     case "view.resetZoom":
-      setZoomLevel(1)
-
+      setZoom(win, "reset")
       return
     case "view.zoomIn":
-      if (win) setZoomLevel(nextDesktopZoomLevel(win.webContents.getZoomFactor(), "in"))
-
+      setZoom(win, "in")
       return
     case "view.zoomOut":
-      if (win) setZoomLevel(nextDesktopZoomLevel(win.webContents.getZoomFactor(), "out"))
-
+      setZoom(win, "out")
       return
     case "view.toggleFullscreen":
       win?.setFullScreen(!win.isFullScreen())
 
       return
     case "edit.undo":
-      win?.webContents.undo()
-
+      getContents(win)?.undo()
       return
     case "edit.redo":
-      win?.webContents.redo()
-
+      getContents(win)?.redo()
       return
     case "edit.cut":
-      win?.webContents.cut()
-
+      getContents(win)?.cut()
       return
     case "edit.copy":
-      win?.webContents.copy()
-
+      getContents(win)?.copy()
       return
     case "edit.paste":
-      win?.webContents.paste()
-
+      getContents(win)?.paste()
       return
     case "edit.delete":
-      win?.webContents.delete()
+      getContents(win)?.delete()
 
       return
     case "edit.selectAll":
-      win?.webContents.selectAll()
+      getContents(win)?.selectAll()
 
       return
   }
+}
+
+function getContents(win: BrowserWindow | null) {
+  if (!win) return
+
+  return getActiveWebContents(win)
+}
+
+function setZoom(win: BrowserWindow | null, direction: "in" | "out" | "reset") {
+  if (!win) return
+  const contents = getActiveWebContents(win)
+
+  if (contents === getPrimaryWebContents(win)) {
+    setZoomLevel(direction === "reset" ? 1 : nextDesktopZoomLevel(contents.getZoomFactor(), direction))
+
+    return
+  }
+
+  // Browser tabs keep their own zoom without changing the saved application level.
+  contents.setZoomFactor(
+    direction === "reset" ? 1 : Math.min(Math.max(contents.getZoomFactor() + (direction === "in" ? 0.2 : -0.2), 0.2), 10),
+  )
+  updateTitlebar(win)
 }
