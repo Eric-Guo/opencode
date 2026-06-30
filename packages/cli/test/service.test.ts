@@ -84,6 +84,46 @@ test("service config manages environment variables", async () => {
   }
 })
 
+test.each([false, true])(
+  "unchanged CORS configuration keeps the managed service running (configured: %s)",
+  async (configured) => {
+    const service = await startManagedService(
+      "opencode-service-cors-",
+      false,
+      configured ? ["https://first.example", "https://second.example"] : undefined,
+    )
+    const layer = Global.layerWith({
+      config: path.join(service.root, "config", "opencode"),
+      state: path.join(service.root, "state", "opencode"),
+    })
+    const config = Bun.file(path.join(service.root, "config", "opencode", "service-local.json"))
+    const before = await config.text()
+    try {
+      await Effect.runPromise(
+        (configured
+          ? ServiceConfig.set("cors", " https://second.example,https://first.example,https://second.example ")
+          : ServiceConfig.unset("cors")
+        ).pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)),
+      )
+      expect(service.owner.exitCode).toBe(null)
+      expect(await Bun.file(service.registration).json()).toEqual(service.info)
+      expect(await config.text()).toBe(before)
+
+      await Effect.runPromise(
+        (configured ? ServiceConfig.unset("cors") : ServiceConfig.set("cors", "https://changed.example")).pipe(
+          Effect.provide(layer),
+          Effect.provide(NodeFileSystem.layer),
+        ),
+      )
+      expect(await waitForExit(service.owner)).toBe(true)
+      expect((await config.json()).cors).toEqual(configured ? undefined : ["https://changed.example"])
+    } finally {
+      await stopManagedService(service)
+    }
+  },
+  30_000,
+)
+
 test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
   expect(ServiceConfig.filename("dev")).toBe("service.json")
@@ -605,13 +645,13 @@ function serviceEnv(root: string) {
   }
 }
 
-async function startManagedService(prefix: string, failBoot = false) {
+async function startManagedService(prefix: string, failBoot = false, cors?: string[]) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), prefix))
   const port = await availablePort()
   const registration = path.join(root, "state", "opencode", "service-local.json")
   await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
   if (failBoot) await fs.mkdir(path.join(root, "database"))
-  await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port }))
+  await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port, cors }))
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
     env: failBoot ? { ...serviceEnv(root), OPENCODE_DB: path.join(root, "database") } : serviceEnv(root),
     stderr: "pipe",
