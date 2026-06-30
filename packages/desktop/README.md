@@ -18,7 +18,9 @@ bundle the assets as an application. The resulting app will be in `dist/`.
 bun run build && bun run package
 ```
 
-All channels build the embedded server sidecar from source during prebuild, along with its assets and the 7777 UI.
+The desktop prebuild prepares the embedded server sidecar and desktop assets. Optional renderer bundles such as 7777 are built by their distribution extension.
+
+See [EXTENSIONS.md](./EXTENSIONS.md) for the optional desktop extension API. The SigmaAgents tab shell is maintained in the separate `packages/desktop-tab` checkout; build it with `OPENCODE_DESKTOP_EXTENSION=../desktop-tab bun run build`.
 Production builds use the same flow:
 
 ```bash
