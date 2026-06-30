@@ -1,7 +1,7 @@
 import { NodeFileSystem, NodePath, NodeRuntime } from "@effect/platform-node"
 import { app } from "electron"
 import { Effect, Layer } from "effect"
-import { Extensions } from "./extension"
+import { Extensions } from "./extension/index"
 import { Ipc } from "./ipc"
 import { DesktopInitialization } from "./lifecycle/desktop-initialization"
 import { installContextMenu } from "./lifecycle/environment"

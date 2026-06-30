@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { ImageView, screen, type BrowserWindow, type WebContentsView } from "electron"
 import type { BridgeLayout } from "@opencode/gui-extensions/sdk/bridge"
 import type { Embed } from "@opencode/gui-extensions/sdk/main"
+import { getContentView } from "../windows/content"
 import { createCornerImages } from "../native/corners"
 import type { Instance } from "./lifecycle"
 
@@ -111,8 +112,8 @@ export function createEmbeds() {
 
     if (entry.window.isDestroyed()) return
     entry.view.setVisible(false)
-    entry.corners.forEach((corner) => entry.window.contentView.removeChildView(corner))
-    entry.window.contentView.removeChildView(entry.view)
+    entry.corners.forEach((corner) => getContentView(entry.window).removeChildView(corner))
+    getContentView(entry.window).removeChildView(entry.view)
   }
 
   const owned = (windowID: number, id: string) => {
@@ -132,13 +133,13 @@ export function createEmbeds() {
 
       const corners = [new ImageView(), new ImageView()]
       view.setVisible(false)
-      window.contentView.addChildView(view)
+      getContentView(window).addChildView(view)
       corners.forEach((corner) => {
         // Painting above a WebContentsView needs a composited layer; a zero blur creates one
         // without an animated bounds update.
         corner.setBackgroundBlur(0)
         corner.setVisible(false)
-        window.contentView.addChildView(corner)
+        getContentView(window).addChildView(corner)
       })
 
       const entry: Entry = {
