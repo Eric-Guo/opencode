@@ -265,6 +265,8 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `ctx.embeds` (main)          | `Embeds`                                                       | `create(view, window)` places a web page                          |
 | `ctx.cli` (main)             | `Cli`                                                          | The opencode CLI the app runs                                     |
 
+`ctx.windows.contents(window)` returns the app renderer, including when a distribution hosts it in a child view. Use it for app IPC, focus and navigation listeners.
+
 ## Ipc: main ↔ window
 
 An `Ipc` is the typed contract between an extension's main entry and its windows. Its schemas encode every value that crosses the bridge.
