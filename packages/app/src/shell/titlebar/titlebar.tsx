@@ -30,7 +30,6 @@ const titlebarHeight = 36
 const windowsTitlebarHeight = 44 // Includes the content inset; matches the native Windows overlay.
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
-const macTrafficLightsBaseWidth = 84
 
 export type TitlebarUpdate = {
   version: string | undefined
@@ -139,8 +138,6 @@ export function Titlebar(props: {
       }}
       style={{
         "min-height": minHeight(),
-        // Keep native macOS traffic lights clear even when the desktop window is narrow.
-        "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
         width: windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         // Native Windows caption controls remain on the physical right in both writing directions.
