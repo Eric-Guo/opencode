@@ -1,10 +1,11 @@
-import { app, BrowserWindow } from "electron"
+import { app } from "electron"
 import { Effect } from "effect"
 import { ExtensionRpcs } from "../../shared/ipc-rpc"
 import { ExtensionError, extensionFailure } from "../extension/error"
 import type { ExtensionHost } from "../extension/host"
-import { Extensions } from "../extension"
+import { Extensions } from "../extension/index"
 import { IpcPortHandoff } from "../ipc-transport"
+import { getWindowFromWebContents, getPrimaryWebContents } from "../windows/content"
 import { isRendererUrl } from "../windows/scheme"
 import { sender, type RpcContext } from "./context"
 
@@ -15,8 +16,9 @@ export const extensionHandlers = ExtensionRpcs.toLayer(
     // Remotes scope state and events by the calling app window.
     const caller = (context: RpcContext) => {
       const contents = sender(handoff, context)
-      const win = BrowserWindow.fromWebContents(contents)
-      if (!win || win.isDestroyed() || win.webContents !== contents || !isRendererUrl(contents.getURL()))
+      const win = getWindowFromWebContents(contents)
+
+      if (!win || win.isDestroyed() || getPrimaryWebContents(win) !== contents || !isRendererUrl(contents.getURL()))
         throw new Error("extension.caller.invalid")
       return win.id
     }
