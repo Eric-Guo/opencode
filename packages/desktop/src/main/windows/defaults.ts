@@ -13,8 +13,8 @@ const oc2Background = {
   light: resolveThemeVariant(oc2Theme.light, false)["background-base"],
   dark: resolveThemeVariant(oc2Theme.dark, true)["background-base"],
 }
-// Match the renderer's 36px titlebar plus its former 8px content inset.
-export const titlebarHeight = 44
+// Match the desktop shell's 40px native-control area.
+export const titlebarHeight = 40
 
 export function tone() {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light"
