@@ -34,6 +34,7 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
 
       return fetch(input, init)
     },
+    quit: () => api.quit(),
     webviewZoom,
     windowFullscreen,
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),
@@ -44,6 +45,8 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
       return () => window.removeEventListener(DragCancelEvent, callback)
     },
     runDesktopMenuAction: createDesktopMenuAction(api),
+    getDesktopMenuHistory: () => api.getDesktopMenuHistory(),
+    goToDesktopMenuHistory: (index) => api.goToDesktopMenuHistory(index),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
     },

@@ -1,4 +1,4 @@
-import type { BrowserWindow, NativeImage, WebContentsView } from "electron"
+import type { BrowserWindow, NativeImage, WebContents, WebContentsView } from "electron"
 import type { Schema } from "effect"
 import {
   Registry,
@@ -25,6 +25,13 @@ export * from "./scope"
 
 /** The app's main windows. */
 export interface Windows {
+  /**
+   * The app renderer, which may be hosted in a child view inside the window.
+   * Use this for app IPC, focus and navigation listeners instead of the window's own web contents.
+   *
+   * @param window - The main window whose app renderer is needed.
+   */
+  contents(window: BrowserWindow): WebContents
   /**
    * A main window by id.
    *
