@@ -81,14 +81,22 @@ test("ensureSsoUsername populates the runtime environment", async () => {
   await ensureSsoUsername()
 
   expect(process.env.THAPE_SSO_USER_NAME).toBe("Test User")
+  expect(process.env.THAPE_SSO_CLERK_CODE).toBe("123456")
   expect(process.env.OPENCODE_API_KEY).toBe("opencode-key")
+  expect(process.env.KIMI_API_KEY).toBe("kimi-key")
   expect(process.env.KIMI_API_KEY_2).toBe("kimi-key-2")
   expect(process.env.KIMI_API_KEY_3).toBe("kimi-key-3")
   expect(process.env.KIMI_API_KEY_4).toBe("kimi-key-4")
+  expect(process.env.DEEPSEEK_API_KEY).toBe("deepseek-key")
   expect(process.env.VIPAI_API_KEY).toBe("vipai-key")
+  expect(Bun.env.THAPE_SSO_USER_NAME).toBe("Test User")
+  expect(Bun.env.THAPE_SSO_CLERK_CODE).toBe("123456")
+  expect(Bun.env.OPENCODE_API_KEY).toBe("opencode-key")
+  expect(Bun.env.KIMI_API_KEY).toBe("kimi-key")
   expect(Bun.env.KIMI_API_KEY_2).toBe("kimi-key-2")
   expect(Bun.env.KIMI_API_KEY_3).toBe("kimi-key-3")
   expect(Bun.env.KIMI_API_KEY_4).toBe("kimi-key-4")
+  expect(Bun.env.DEEPSEEK_API_KEY).toBe("deepseek-key")
   expect(Bun.env.VIPAI_API_KEY).toBe("vipai-key")
   expect(ssoHideAgents()).toEqual(["bid-assistant", "7777"])
   expect(process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()
@@ -133,3 +141,18 @@ test.each([[], null, undefined, "not-an-array"].map((kimi_api_keys) => ({ kimi_a
     expect(process.env.KIMI_API_KEY_4).toBeUndefined()
   },
 )
+
+test("ensureSsoUsername clears an unauthorized bearer key", async () => {
+  process.env.THAPE_SSO_BEARER_API_KEY = "expired-token"
+  Bun.env.THAPE_SSO_BEARER_API_KEY = "expired-token"
+
+  globalThis.fetch = Object.assign(async () => new Response(undefined, { status: 401 }), {
+    preconnect: originalFetch.preconnect,
+  }) as typeof fetch
+
+  await ensureSsoUsername()
+
+  expect(process.env.THAPE_SSO_BEARER_API_KEY).toBeUndefined()
+  expect(Bun.env.THAPE_SSO_BEARER_API_KEY).toBeUndefined()
+  expect(ssoHideAgents()).toEqual([])
+})
