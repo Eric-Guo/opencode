@@ -71,7 +71,8 @@ export function createBrowserPane(input: {
 
       if (!win || entries.has(binding)) throw new Error("browser.pane.owner.invalid")
 
-      if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
+      if (win.isDestroyed() || input.windows.contents(win).isDestroyed())
+        throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
       const saved = restore.load(storageKey)
@@ -127,12 +128,12 @@ export function createBrowserPane(input: {
         if (event.isMainFrame && !event.isSameDocument) stop()
       }
 
-      win.webContents.once("destroyed", stop)
-      win.webContents.on("did-start-navigation", navigate)
+      input.windows.contents(win).once("destroyed", stop)
+      input.windows.contents(win).on("did-start-navigation", navigate)
       entry.cleanup = () => {
         if (win.isDestroyed()) return
-        win.webContents.off("destroyed", stop)
-        win.webContents.off("did-start-navigation", navigate)
+        input.windows.contents(win).off("destroyed", stop)
+        input.windows.contents(win).off("did-start-navigation", navigate)
       }
 
       entries.set(binding, entry)
@@ -364,7 +365,8 @@ export function createBrowserPane(input: {
   }
 
   function publish(entry: Entry, event: PaneEvent) {
-    if (!entries.has(entry.binding) || entry.win.isDestroyed() || entry.win.webContents.isDestroyed()) return
+    if (!entries.has(entry.binding) || entry.win.isDestroyed() || input.windows.contents(entry.win).isDestroyed())
+      return
     input.emit(entry.window, { binding: entry.binding, event })
   }
 
@@ -482,6 +484,7 @@ export function createBrowserPane(input: {
       fileRoots: () => entry.fileRoots,
       shared,
       embeds: input.embeds,
+      windows: input.windows,
       fail,
       publish: (error) => {
         if (entry.pages.has(id)) publishState(entry, error)
