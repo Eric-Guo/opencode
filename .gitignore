@@ -25,6 +25,7 @@ a.out
 target
 .scripts
 .direnv/
+packages/7777/
 
 # Local dev files
 opencode-dev
