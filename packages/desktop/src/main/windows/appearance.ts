@@ -8,7 +8,10 @@ import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import { storedBackgroundColor, titlebarOverlay, tone } from "./defaults"
 
+import { getPrimaryWebContents } from "./content"
+
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
+const controlColors = new WeakMap<BrowserWindow, string>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 const maxZoomLevel = 10
 const minZoomLevel = 0.2
@@ -73,17 +76,26 @@ export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = 
   updateTitlebar(win)
 }
 
+export function setControlColor(win: BrowserWindow, color?: string) {
+  if (color) controlColors.set(win, color)
+  if (!color) controlColors.delete(win)
+  updateTitlebar(win)
+}
+
 export function updateTitlebar(win: BrowserWindow) {
   if (process.platform !== "win32") return
-  win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
+  win.setTitleBarOverlay({
+    ...overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor()),
+    ...(controlColors.has(win) ? { symbolColor: controlColors.get(win)! } : {}),
+  })
 }
 
 export function setPinchZoomEnabled(enabled: boolean) {
   getStore().set(PINCH_ZOOM_ENABLED_KEY, enabled)
   BrowserWindow.getAllWindows().forEach((win) => {
     pinchZoomEnabled.set(win, enabled)
-    emitIpcEvent(win.webContents, new WindowPinchZoomChanged({ enabled }))
-    if (!enabled && win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    emitIpcEvent(getPrimaryWebContents(win), new WindowPinchZoomChanged({ enabled }))
+    if (!enabled && getPrimaryWebContents(win).getZoomFactor() !== 1) getPrimaryWebContents(win).setZoomFactor(1)
     updateZoom(win)
   })
 }
@@ -93,30 +105,30 @@ export function getPinchZoomEnabled() {
 }
 
 export function setZoomFactor(win: BrowserWindow, factor: number) {
-  win.webContents.setZoomFactor(clampZoom(factor))
+  getPrimaryWebContents(win).setZoomFactor(clampZoom(factor))
   updateZoom(win)
 }
 
 export function wireZoom(win: BrowserWindow) {
   pinchZoomEnabled.set(win, getPinchZoomEnabled())
-  win.webContents.setZoomFactor(1)
-  win.webContents.on("zoom-changed", (event, direction) => {
+  getPrimaryWebContents(win).setZoomFactor(1)
+  getPrimaryWebContents(win).on("zoom-changed", (event, direction) => {
     event.preventDefault()
     if (pinchZoomEnabled.get(win)) {
       const delta = direction === "in" ? 0.2 : -0.2
-      win.webContents.setZoomFactor(clampZoom(win.webContents.getZoomFactor() + delta))
+      getPrimaryWebContents(win).setZoomFactor(clampZoom(getPrimaryWebContents(win).getZoomFactor() + delta))
       updateZoom(win)
       return
     }
-    if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    if (getPrimaryWebContents(win).getZoomFactor() !== 1) getPrimaryWebContents(win).setZoomFactor(1)
     updateZoom(win)
   })
 }
 
 export function wireFullscreen(win: BrowserWindow) {
   const send = (fullscreen: boolean) => {
-    if (win.isDestroyed() || win.webContents.isDestroyed()) return
-    emitIpcEvent(win.webContents, new WindowFullscreenChanged({ fullscreen }))
+    if (win.isDestroyed() || getPrimaryWebContents(win).isDestroyed()) return
+    emitIpcEvent(getPrimaryWebContents(win), new WindowFullscreenChanged({ fullscreen }))
   }
   win.on("enter-full-screen", () => send(true))
   win.on("leave-full-screen", () => send(false))
@@ -140,5 +152,8 @@ function clampZoom(value: number) {
 
 function updateZoom(win: BrowserWindow) {
   updateTitlebar(win)
-  emitIpcEvent(win.webContents, new WindowZoomChanged({ factor: win.webContents.getZoomFactor() }))
+  emitIpcEvent(
+    getPrimaryWebContents(win),
+    new WindowZoomChanged({ factor: getPrimaryWebContents(win).getZoomFactor() }),
+  )
 }
