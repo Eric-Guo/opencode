@@ -1,8 +1,21 @@
 import windowState from "electron-window-state"
+import contextMenu from "electron-context-menu"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
-import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
+import {
+  app,
+  BrowserWindow,
+  WebContentsView,
+  dialog,
+  ipcMain,
+  net,
+  nativeImage,
+  nativeTheme,
+  protocol,
+  shell,
+} from "electron"
+import type { WebContents } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
@@ -44,9 +57,57 @@ let relaunchHandler = () => {
 }
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
+const primaryWebContents = new WeakMap<BrowserWindow, WebContents>()
+const webContentsOwners = new Map<number, BrowserWindow>()
 const titlebarHeight = 40
+const tabbarWidth = 72
 const maxZoomLevel = 10
 const minZoomLevel = 0.2
+const helpURL = "https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"
+const desktopTabs = [
+  { id: "opencode", title: "OpenCode", label: "OC" },
+  {
+    id: "plm",
+    title: "PLM",
+    label: "PLM",
+    url: "https://plm.thape.com.cn",
+    partition: "persist:desktop-tab-plm",
+  },
+] as const
+const desktopTabManagers = new Map<number, DesktopTabManager>()
+
+type DesktopTabID = (typeof desktopTabs)[number]["id"]
+type DesktopTabAction = "settings" | "help"
+type DesktopTabManager = ReturnType<typeof createDesktopTabManager>
+type DesktopTabsState = {
+  active: DesktopTabID
+  tabs: {
+    id: DesktopTabID
+    title: string
+    label: string
+  }[]
+  navigation: {
+    canGoBack: boolean
+    canGoForward: boolean
+  }
+}
+
+let desktopTabsIpcRegistered = false
+
+export function getPrimaryWebContents(win: BrowserWindow) {
+  return primaryWebContents.get(win) ?? win.webContents
+}
+
+export function getWindowFromWebContents(contents: WebContents) {
+  return BrowserWindow.fromWebContents(contents) ?? webContentsOwners.get(contents.id) ?? null
+}
+
+function trackWebContents(win: BrowserWindow, contents: WebContents) {
+  webContentsOwners.set(contents.id, win)
+  contents.once("destroyed", () => {
+    webContentsOwners.delete(contents.id)
+  })
+}
 
 export function setRelaunchHandler(handler: () => void) {
   relaunchHandler = handler
@@ -94,17 +155,18 @@ export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = 
 
 export function updateTitlebar(win: BrowserWindow) {
   if (process.platform !== "win32") return
-  win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
+  win.setTitleBarOverlay(overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor()))
 }
 
 export function setPinchZoomEnabled(enabled: boolean) {
   getStore().set(PINCH_ZOOM_ENABLED_KEY, enabled)
-  for (const win of BrowserWindow.getAllWindows()) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    const contents = getPrimaryWebContents(win)
     pinchZoomEnabled.set(win, enabled)
-    win.webContents.send("pinch-zoom-enabled-changed", enabled)
-    if (!enabled && win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    contents.send("pinch-zoom-enabled-changed", enabled)
+    if (!enabled && contents.getZoomFactor() !== 1) contents.setZoomFactor(1)
     updateZoom(win)
-  }
+  })
 }
 
 export function getPinchZoomEnabled() {
@@ -155,27 +217,31 @@ export function createMainWindow() {
     },
   })
 
-  allowRendererPermissions(win)
-  wireWindowRecovery(win, "main")
+  const openCodeView = createOpenCodeView(win)
+  const tabbarView = createTabbarView(win)
+  const tabManager = createDesktopTabManager(win, openCodeView, tabbarView)
 
-  win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+  allowRendererPermissions(openCodeView.webContents)
+  wireWindowRecovery(win, openCodeView.webContents, "main")
+
+  openCodeView.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
     upsertKeyValue(requestHeaders, "Access-Control-Allow-Origin", ["*"])
     callback({ requestHeaders })
   })
 
-  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+  openCodeView.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const { responseHeaders = {} } = details
     addRendererHeaders(details.url, responseHeaders)
     callback({ responseHeaders })
   })
 
   state.manage(win)
-  loadWindow(win, "index.html")
-  wireZoom(win)
+  wireZoom(win, openCodeView.webContents)
+  tabManager.load()
 
-  win.once("ready-to-show", () => {
-    win.show()
+  void loadWebContents(openCodeView.webContents, "index.html").finally(() => {
+    if (!win.isDestroyed()) win.show()
   })
 
   return win
@@ -221,20 +287,270 @@ export function registerRendererProtocol() {
   })
 }
 
-function loadWindow(win: BrowserWindow, html: string) {
+function loadWebContents(contents: WebContents, html: string) {
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (devUrl) {
     const url = new URL(html, devUrl)
-    void win.loadURL(url.toString())
-    return
+    return contents.loadURL(url.toString())
   }
 
-  void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
+  return contents.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
 }
 
-function wireWindowRecovery(win: BrowserWindow, name: string) {
+function createOpenCodeView(win: BrowserWindow) {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: join(root, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  primaryWebContents.set(win, view.webContents)
+  trackWebContents(win, view.webContents)
+  registerViewContextMenu(view)
+  view.setBackgroundColor(backgroundColor ?? defaultBackgroundColor())
+  win.contentView.addChildView(view)
+  return view
+}
+
+function createTabbarView(win: BrowserWindow) {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: join(root, "../preload/tabbar.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  trackWebContents(win, view.webContents)
+  registerViewContextMenu(view)
+  view.setBackgroundColor("#111315")
+  win.contentView.addChildView(view)
+  return view
+}
+
+function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsView, tabbarView: WebContentsView) {
+  registerDesktopTabsIpc()
+  const tabbarWebContents = tabbarView.webContents
+  const tabbarWebContentsId = tabbarWebContents.id
+  tabbarWebContents.once("destroyed", () => {
+    desktopTabManagers.delete(tabbarWebContentsId)
+  })
+
+  let active: DesktopTabID = "opencode"
+  const externalViews = new Map<DesktopTabID, WebContentsView>()
+
+  function getView(id: DesktopTabID) {
+    if (id === "opencode") return openCodeView
+    return externalViews.get(id)
+  }
+
+  function getActiveView() {
+    return getView(active) ?? openCodeView
+  }
+
+  function getExternalTab(id: DesktopTabID) {
+    return desktopTabs.find(
+      (tab): tab is Extract<(typeof desktopTabs)[number], { url: string }> => tab.id === id && "url" in tab,
+    )
+  }
+
+  function ensureView(id: DesktopTabID) {
+    if (id === "opencode") return openCodeView
+    const cached = externalViews.get(id)
+    if (cached) return cached
+    const tab = getExternalTab(id)
+    if (!tab) return openCodeView
+    const view = createExternalView(win, tab, sendState)
+    externalViews.set(id, view)
+    win.contentView.addChildView(view)
+    view.setVisible(false)
+    layout()
+    return view
+  }
+
+  function state(): DesktopTabsState {
+    const contents = getActiveView().webContents
+    return {
+      active,
+      tabs: desktopTabs.map((tab) => ({
+        id: tab.id,
+        title: tab.title,
+        label: tab.label,
+      })),
+      navigation: {
+        canGoBack: contents.canGoBack(),
+        canGoForward: contents.canGoForward(),
+      },
+    }
+  }
+
+  function sendState() {
+    if (tabbarWebContents.isDestroyed()) return
+    tabbarWebContents.send("desktop-tabs-state", state())
+  }
+
+  function layout() {
+    if (win.isDestroyed()) return
+    const bounds = win.getContentBounds()
+    const contentWidth = Math.max(0, bounds.width - tabbarWidth)
+    tabbarView.setBounds({ x: 0, y: 0, width: tabbarWidth, height: bounds.height })
+    openCodeView.setBounds({ x: tabbarWidth, y: 0, width: contentWidth, height: bounds.height })
+    externalViews.forEach((view) => {
+      view.setBounds({ x: tabbarWidth, y: 0, width: contentWidth, height: bounds.height })
+    })
+  }
+
+  function activate(id: DesktopTabID) {
+    if (!desktopTabs.some((tab) => tab.id === id)) return
+    active = id
+    const activeView = ensureView(id)
+    openCodeView.setVisible(id === "opencode")
+    externalViews.forEach((view, viewID) => {
+      view.setVisible(viewID === id)
+    })
+    win.contentView.addChildView(tabbarView)
+    layout()
+    sendState()
+    activeView.webContents.focus()
+  }
+
+  function navigate(direction: "back" | "forward") {
+    const contents = getActiveView().webContents
+    if (direction === "back" && contents.canGoBack()) contents.goBack()
+    if (direction === "forward" && contents.canGoForward()) contents.goForward()
+    sendState()
+  }
+
+  function runAction(action: DesktopTabAction) {
+    if (action === "settings") {
+      activate("opencode")
+      openCodeView.webContents.send("menu-command", "settings.open")
+      return
+    }
+    if (action === "help") {
+      void shell.openExternal(helpURL)
+    }
+  }
+
+  const managerValue = {
+    load() {
+      layout()
+      openCodeView.webContents.on("did-navigate", sendState)
+      openCodeView.webContents.on("did-navigate-in-page", sendState)
+      openCodeView.webContents.on("did-stop-loading", sendState)
+      void loadWebContents(tabbarWebContents, "tabbar.html").catch((error) => {
+        writeLog("window", "tabbar load failed", { error }, "error")
+      })
+      sendState()
+    },
+    activate,
+    back: () => navigate("back"),
+    forward: () => navigate("forward"),
+    reload: () => {
+      getActiveView().webContents.reload()
+    },
+    action: runAction,
+    sendState,
+  }
+
+  desktopTabManagers.set(tabbarWebContentsId, managerValue)
+  win.on("resize", layout)
+  win.on("closed", () => {
+    desktopTabManagers.delete(tabbarWebContentsId)
+  })
+  return managerValue
+}
+
+function createExternalView(
+  win: BrowserWindow,
+  tab: Extract<(typeof desktopTabs)[number], { url: string }>,
+  sendState: () => void,
+) {
+  const view = new WebContentsView({
+    webPreferences: {
+      partition: tab.partition,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  trackWebContents(win, view.webContents)
+  registerViewContextMenu(view)
+  view.setBackgroundColor("#ffffff")
+  view.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false)
+  })
+  view.webContents.session.setPermissionCheckHandler(() => false)
+  view.webContents.setWindowOpenHandler((details) => {
+    void view.webContents.loadURL(details.url)
+    return { action: "deny" }
+  })
+  view.webContents.on("did-navigate", sendState)
+  view.webContents.on("did-navigate-in-page", sendState)
+  view.webContents.on("did-stop-loading", sendState)
+  view.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return
+    writeLog(
+      "window",
+      "external tab load failed",
+      { tab: tab.id, errorCode, errorDescription, validatedURL },
+      "error",
+    )
+  })
+  void view.webContents.loadURL(tab.url).catch((error) => {
+    writeLog("window", "external tab initial load failed", { tab: tab.id, error }, "error")
+  })
+  return view
+}
+
+function registerViewContextMenu(view: WebContentsView) {
+  contextMenu({
+    window: view,
+    showSaveImageAs: true,
+    showLookUpSelection: false,
+    showSearchWithGoogle: false,
+    append: () => [
+      {
+        label: "Debug",
+        click: () => {
+          view.webContents.openDevTools()
+        },
+      },
+    ],
+  })
+}
+
+function registerDesktopTabsIpc() {
+  if (desktopTabsIpcRegistered) return
+  desktopTabsIpcRegistered = true
+
+  ipcMain.on("desktop-tabs-subscribe", (event) => {
+    desktopTabManagers.get(event.sender.id)?.sendState()
+  })
+  ipcMain.on("desktop-tabs-unsubscribe", () => {})
+  ipcMain.on("desktop-tabs-select", (event, id: DesktopTabID) => {
+    desktopTabManagers.get(event.sender.id)?.activate(id)
+  })
+  ipcMain.on("desktop-tabs-back", (event) => {
+    desktopTabManagers.get(event.sender.id)?.back()
+  })
+  ipcMain.on("desktop-tabs-forward", (event) => {
+    desktopTabManagers.get(event.sender.id)?.forward()
+  })
+  ipcMain.on("desktop-tabs-reload", (event) => {
+    desktopTabManagers.get(event.sender.id)?.reload()
+  })
+  ipcMain.on("desktop-tabs-action", (event, action: DesktopTabAction) => {
+    if (action !== "settings" && action !== "help") return
+    desktopTabManagers.get(event.sender.id)?.action(action)
+  })
+}
+
+function wireWindowRecovery(win: BrowserWindow, contents: WebContents, name: string) {
   let showing = false
-  const sampler = createUnresponsiveSampler(win, name)
+  const sampler = createUnresponsiveSampler(win, name, contents)
 
   const handle = async (button: string | undefined, wait: boolean) => {
     if (button === "Export Logs") {
@@ -293,7 +609,7 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
         errorCode,
         errorDescription,
         validatedURL,
-        currentURL: win.webContents.getURL(),
+        currentURL: contents.getURL(),
         isMainFrame,
       },
       "error",
@@ -307,18 +623,18 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
     )
   }
 
-  win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  contents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     failed("did-fail-load", errorCode, errorDescription, validatedURL, isMainFrame)
   })
-  win.webContents.on("did-fail-provisional-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  contents.on("did-fail-provisional-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     failed("did-fail-provisional-load", errorCode, errorDescription, validatedURL, isMainFrame)
   })
-  win.webContents.on("render-process-gone", (_event, details) => {
+  contents.on("render-process-gone", (_event, details) => {
     sampler.stopAndFlush()
     writeLog(
       "window",
       "renderer process gone",
-      { window: name, currentURL: win.webContents.getURL(), details },
+      { window: name, currentURL: contents.getURL(), details },
       "error",
     )
     void show(
@@ -327,21 +643,21 @@ function wireWindowRecovery(win: BrowserWindow, name: string) {
       false,
     )
   })
-  win.on("unresponsive", () => {
-    writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+  contents.on("unresponsive", () => {
+    writeLog("window", "renderer unresponsive", { window: name, currentURL: contents.getURL() }, "error")
     sampler.start()
     void show("OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
   })
-  win.on("responsive", () => {
-    writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+  contents.on("responsive", () => {
+    writeLog("window", "renderer responsive", { window: name, currentURL: contents.getURL() }, "error")
     sampler.stopAndFlush()
   })
-  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+  contents.on("console-message", (_event, level, message, line, sourceId) => {
     if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
       writeLog("pty", "console", { window: name, level, message, line, sourceId })
     }
   })
-  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+  contents.on("preload-error", (_event, preloadPath, error) => {
     writeLog("preload", "preload error", { window: name, preloadPath, error }, "error")
   })
 }
@@ -353,17 +669,17 @@ function addDocumentPolicy(response: Response, file: string) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-function allowRendererPermissions(win: BrowserWindow) {
-  const webContentsId = win.webContents.id
+function allowRendererPermissions(contents: WebContents) {
+  const webContentsId = contents.id
 
-  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+  contents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
       rendererPermissions.has(permission) &&
         isTrustedRendererUrl(details.requestingUrl) &&
         webContents.id === webContentsId,
     )
   })
-  win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+  contents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     if (!rendererPermissions.has(permission)) return false
     if (webContents && webContents.id !== webContentsId) return false
     return isTrustedRendererUrl(details.requestingUrl) || isTrustedRendererUrl(requestingOrigin)
@@ -390,17 +706,17 @@ function isRendererUrl(value?: string, html = false) {
   return url.origin === new URL(devUrl).origin
 }
 
-function wireZoom(win: BrowserWindow) {
+function wireZoom(win: BrowserWindow, contents: WebContents) {
   pinchZoomEnabled.set(win, getPinchZoomEnabled())
-  win.webContents.setZoomFactor(1)
-  win.webContents.on("zoom-changed", (event, zoomDirection) => {
+  contents.setZoomFactor(1)
+  contents.on("zoom-changed", (event, zoomDirection) => {
     event.preventDefault()
     if (pinchZoomEnabled.get(win)) {
-      win.webContents.setZoomFactor(clampZoom(win.webContents.getZoomFactor() + (zoomDirection === "in" ? 0.2 : -0.2)))
+      contents.setZoomFactor(clampZoom(contents.getZoomFactor() + (zoomDirection === "in" ? 0.2 : -0.2)))
       updateZoom(win)
       return
     }
-    if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
+    if (contents.getZoomFactor() !== 1) contents.setZoomFactor(1)
     updateZoom(win)
   })
 }
@@ -410,8 +726,9 @@ function clampZoom(value: number) {
 }
 
 function updateZoom(win: BrowserWindow) {
+  const contents = getPrimaryWebContents(win)
   updateTitlebar(win)
-  win.webContents.send("zoom-factor-changed", win.webContents.getZoomFactor())
+  contents.send("zoom-factor-changed", contents.getZoomFactor())
 }
 
 function upsertKeyValue(obj: Record<string, any>, keyToChange: string, value: any) {
