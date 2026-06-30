@@ -1,10 +1,10 @@
 import { defineConfig } from "electron-vite"
 import type { Plugin } from "vite"
-import { cp, rm } from "node:fs/promises"
+import { desktopExtension } from "./scripts/extension"
+import { resolve } from "node:path"
 import { pickerPlugin } from "./scripts/picker"
 
-const SEVEN_SEVEN_DIST = "../7777/dist"
-const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
+const extension = desktopExtension()
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -73,8 +73,10 @@ export default defineConfig(({ command }) => ({
   main: {
     resolve: {
       dedupe: ["effect"],
+      alias: { "#desktop-main-extension": extension?.main ?? resolve("src/main/extension.ts") },
     },
     define: {
+      "import.meta.env.OPENCODE_DESKTOP_EXTENSION": JSON.stringify(!!extension),
       // Local renderer/server mode still uses the dev application identity and updater policy.
       "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel === "local" ? "dev" : channel),
     },
@@ -117,10 +119,14 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     ],
   },
   preload: {
+    resolve: { alias: { "#desktop-preload-extension": extension?.preload ?? resolve("src/preload/extension.ts") } },
     build: {
       minify: command === "build",
       rolldownOptions: {
-        input: { index: "src/preload/index.ts" },
+        input: {
+          index: "src/preload/index.ts",
+          ...extension?.preloads,
+        },
         output: {
           format: "cjs",
           // The package is "type": "module". Under --no-sandbox Electron loads the preload
@@ -132,6 +138,10 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     },
   },
   renderer: {
+    resolve: {
+      dedupe: ["solid-js"],
+      alias: { "#desktop-renderer-extension": extension?.renderer ?? resolve("src/renderer/extension.ts") },
+    },
     experimental: {
       bundledDev: true,
     },
@@ -146,14 +156,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       { ...pickerPlugin(), transformIndexHtml: undefined },
       appPlugin,
       initialChunk,
-      {
-        name: "opencode:copy-7777-renderer",
-        apply: "build",
-        async writeBundle() {
-          await rm(SEVEN_SEVEN_RENDERER_OUT, { recursive: true, force: true })
-          await cp(SEVEN_SEVEN_DIST, SEVEN_SEVEN_RENDERER_OUT, { recursive: true })
-        },
-      },
+      extension?.assetsPlugin,
       sentry,
     ],
     publicDir: "../../../app/public",
