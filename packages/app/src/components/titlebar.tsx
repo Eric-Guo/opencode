@@ -229,8 +229,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       }}
       style={{
         "min-height": minHeight(),
-        // Keep native macOS traffic lights clear even when the desktop window is narrow.
-        "padding-left": mac() ? `${84 / zoom()}px` : 0,
         width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": electronWindows()
           ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))`
