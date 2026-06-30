@@ -1,4 +1,4 @@
-import { BrowserWindow } from "electron"
+import { getWindowFromWebContents, getPrimaryWebContents } from "../windows/content"
 import { Effect } from "effect"
 import { EventRpcs } from "../../shared/ipc-rpc"
 import { createBrowserPane } from "../browser-pane"
@@ -23,8 +23,13 @@ export const eventHandlers = EventRpcs.toLayer(
       BrowserPane: ({ request }, context) =>
         Effect.tryPromise(async () => {
           const contents = sender(handoff, context)
-          const win = BrowserWindow.fromWebContents(contents)
-          if (!win || win.isDestroyed() || win.webContents !== contents || !isRendererUrl(contents.getURL())) {
+          const win = getWindowFromWebContents(contents)
+          if (
+            !win ||
+            win.isDestroyed() ||
+            getPrimaryWebContents(win) !== contents ||
+            !isRendererUrl(contents.getURL())
+          ) {
             throw new Error("browser.pane.owner.invalid")
           }
           if (request.type === "register") return browser.register(win, request.bindingID, request.target)

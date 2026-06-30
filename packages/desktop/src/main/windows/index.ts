@@ -1,6 +1,6 @@
 import windowState from "electron-window-state"
 import { randomUUID } from "node:crypto"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, WebContentsView } from "electron"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
@@ -22,10 +22,27 @@ import {
   wireFullscreen,
   wireZoom,
 } from "./appearance"
-import { loadWindow, registerRendererProtocol } from "./protocol"
+import { loadWebContents, registerRendererOrigin, registerRendererProtocol } from "./protocol"
 import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
+
+import extension from "#desktop-main-extension"
+import { emitIpcEvent } from "../ipc-events"
+import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
+import { getPrimaryWebContents, trackWebContents, setWindowExtension, notifyNavigationHistory } from "./content"
+import { setControlColor } from "./appearance"
+export {
+  getPrimaryWebContents,
+  getActiveWebContents,
+  getWindowFromWebContents,
+  subscribeWebContents,
+  navigateWindow,
+  reloadWindow,
+  getNavigationHistory,
+  goToNavigationHistory,
+  subscribeNavigationHistory,
+} from "./content"
 
 const themeReady = new WeakMap<BrowserWindow, () => void>()
 const registry = createWindowRegistry<BrowserWindow>({
@@ -104,14 +121,57 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       },
     })
 
-    allowRendererPermissions(win)
-    wireWindowRecovery(win, id, () => relaunchHandler())
-    wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
-    wireRendererHeaders(win)
+    const openExternal = (url: string) => {
+      runFork(openExternalURL(url))
+    }
+    const wire = (contents: Electron.WebContents, name: string) => {
+      trackWebContents(win, contents, true)
+      allowRendererPermissions(contents)
+      wireWindowRecovery(win, contents, name, () => relaunchHandler())
+      wireNavigationPolicy(contents, openExternal)
+      wireRendererHeaders(contents)
+    }
+    const shell = extension.createWindow?.({
+      window: win,
+      id,
+      preloadRoot: paths.preloadRoot,
+      storage: storage.state,
+      createRenderer(options) {
+        registerRendererOrigin(options.devURL)
+        const view = new WebContentsView({
+          webPreferences: {
+            ...appearance.webPreferences,
+            additionalArguments: [windowIDArgument(id)],
+          },
+        })
+        wire(view.webContents, options.id)
+        view.setBackgroundColor(appearance.backgroundColor)
+        // The primary renderer is loaded after reveal listeners and theme readiness are installed.
+        if (options.id !== "opencode")
+          void loadWebContents(view.webContents, options.html, options).catch((error) =>
+            runFork(Effect.logError("renderer load failed", { error })),
+          )
+        return view
+      },
+      trackContents: (contents) => trackWebContents(win, contents),
+      load: loadWebContents,
+      openExternal,
+      command: (id) => emitIpcEvent(getPrimaryWebContents(win), new MenuCommandTriggered({ id })),
+      setControlColor: (color) => {
+        setControlColor(win, color)
+        notifyNavigationHistory()
+      },
+      log: (message, error) => {
+        runFork(Effect.logError(message, { error }))
+      },
+    })
+    if (shell) setWindowExtension(win, shell)
+    if (!shell) wire(win.webContents, id)
+    win.on("focus", notifyNavigationHistory)
+    win.on("closed", () => shell?.dispose())
     state.manage(win)
-    register(win, id)
+    register(win, id, () => shell?.forget?.())
     wireFullscreen(win)
-    loadWindow(win, "index.html")
     wireZoom(win)
     let contentReady = false
     let appliedTheme = false
@@ -131,18 +191,22 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       reveal()
     })
     win.once("ready-to-show", ready)
-    if (process.platform === "linux") win.webContents.once("did-finish-load", ready)
+    if (process.platform === "linux") getPrimaryWebContents(win).once("did-finish-load", ready)
     win.once("closed", () => themeReady.delete(win))
+    void loadWebContents(getPrimaryWebContents(win), "index.html")
+      .catch((error) => runFork(Effect.logError("renderer load failed", { error })))
+      .finally(ready)
     return win
   }
 
-  const register = (win: BrowserWindow, id: string) => {
+  const register = (win: BrowserWindow, id: string, forget: () => void) => {
     registry.register(id, win)
     win.on("focus", () => registry.focused(id))
     // Windows emits session-end, but not before-quit, during shutdown and logoff.
     win.on("session-end", () => registry.setQuitting())
     win.on("closed", () => {
       if (!registry.closed(id)) return
+      forget()
       runFork(
         Effect.gen(function* () {
           yield* Effect.try(() => storage.state.clear(windowDataFile(id)))
