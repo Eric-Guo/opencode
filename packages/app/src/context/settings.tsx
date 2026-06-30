@@ -251,6 +251,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       layoutTransitionState(!!sunset, layoutTransitionEligible(), oldInterfaceRetired(), newInterfaceNoticeDismissed()),
     )
     const newLayoutDesigns = createMemo(() => {
+      if (platform.platform === "desktop") return true
       if (layoutUpgrade()) return true
       if (!ready() && !oldInterfaceRetired()) return legacyNewLayoutDesignsDefault
       if (!layoutTransitionClassified()) {
@@ -405,6 +406,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
         newLayoutDesigns,
         setNewLayoutDesigns(value: boolean) {
+          if (platform.platform === "desktop") {
+            setStore("general", "newLayoutDesigns", true)
+            return
+          }
           const next = oldInterfaceRetired() ? true : value
           if (newLayoutDesigns() === next) return
           setStore("general", "newLayoutDesigns", next)
