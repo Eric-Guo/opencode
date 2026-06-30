@@ -17,6 +17,8 @@ import {
   type Policy,
 } from "./browser/policy"
 
+import { getContentView } from "./windows/content"
+
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
 // Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
@@ -292,12 +294,12 @@ export function createBrowserPage(
   })
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   view.setVisible(false)
-  win.contentView.addChildView(view)
+  getContentView(win).addChildView(view)
   const corners = [new electron.ImageView(), new electron.ImageView()]
   let cornerKey = ""
   corners.forEach((corner) => {
     corner.setVisible(false)
-    win.contentView.addChildView(corner)
+    getContentView(win).addChildView(corner)
   })
   let visible = false
   const updateVisibility = () => {
@@ -436,8 +438,8 @@ export function createBrowserPage(
       cdp.dispose()
       refs.clear()
       if (!win.isDestroyed()) {
-        corners.forEach((corner) => win.contentView.removeChildView(corner))
-        win.contentView.removeChildView(view)
+        corners.forEach((corner) => getContentView(win).removeChildView(corner))
+        getContentView(win).removeChildView(view)
       }
       if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })
       await files.dispose()
