@@ -3,6 +3,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
 import { Decimal } from "decimal.js"
@@ -488,7 +489,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | FSUtil.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -497,6 +498,12 @@ const layer: Layer.Layer<
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const fs = yield* FSUtil.Service
+
+    const ensureDirectory = Effect.fn("Session.ensureDirectory")(function* (session: Info) {
+      yield* fs.ensureDir(session.directory).pipe(Effect.orDie)
+      return session
+    })
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -542,7 +549,7 @@ const layer: Layer.Layer<
     const get = Effect.fn("Session.get")(function* (id: SessionID) {
       const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return yield* Effect.fail(new NotFoundError({ message: `Session not found: ${id}` }))
-      return fromRow(row)
+      return yield* ensureDirectory(fromRow(row))
     })
 
     const list = Effect.fn("Session.list")(function* (input?: ListInput) {
@@ -1012,7 +1019,7 @@ function listByProject(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, FSUtil.node],
 })
 
 export * as Session from "./session"
