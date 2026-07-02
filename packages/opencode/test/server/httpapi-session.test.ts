@@ -2,7 +2,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { mkdir } from "node:fs/promises"
+import { mkdir, rm } from "node:fs/promises"
 import path from "node:path"
 import { Cause, Config, Effect, Exit, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
@@ -550,6 +550,31 @@ describe("session HttpApi", () => {
         })
         expect(prompt.status).toBe(404)
         expect(yield* responseJson(prompt)).toEqual(expected)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns v2 public not found errors when session directory is gone",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const sessionDirectory = yield* tmpdirScoped({ git: true, config: { formatter: false, lsp: false } })
+        const session = yield* createSession({ title: "missing directory" }).pipe(
+          provideInstanceEffect(sessionDirectory),
+        )
+        yield* Effect.promise(() => rm(sessionDirectory, { recursive: true, force: true }))
+
+        const response = yield* request(`/api/session/${session.id}/permission`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+
+        expect(response.status).toBe(404)
+        expect(yield* responseJson(response)).toEqual({
+          _tag: "SessionNotFoundError",
+          sessionID: session.id,
+          message: `Session not found: ${session.id}`,
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
