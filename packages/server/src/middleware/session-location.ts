@@ -11,7 +11,7 @@ import { HttpRouter } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import { InvalidRequestError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
 import type { LocationServices } from "../location"
-import { stat } from "node:fs/promises"
+import { mkdir, stat } from "node:fs/promises"
 
 export class SessionLocationMiddleware extends HttpApiMiddleware.Service<
   SessionLocationMiddleware,
@@ -22,22 +22,27 @@ export class SessionLocationMiddleware extends HttpApiMiddleware.Service<
 
 const decodeSessionID = Schema.decodeUnknownEffect(Session.ID)
 
-function sessionNotFound(sessionID: SessionV2.ID) {
+function sessionNotFound(sessionID: Session.ID) {
   return new SessionNotFoundError({
     sessionID,
     message: `Session not found: ${sessionID}`,
   })
 }
 
-const requireDirectory = Effect.fn("SessionLocation.requireDirectory")(function* (
-  sessionID: SessionV2.ID,
+const ensureDirectory = Effect.fn("SessionLocation.ensureDirectory")(function* (
+  sessionID: Session.ID,
   directory: string,
 ) {
-  const info = yield* Effect.tryPromise({
+  yield* Effect.tryPromise({
+    try: () => mkdir(directory, { recursive: true }),
+    catch: () => sessionNotFound(sessionID),
+  })
+
+  const created = yield* Effect.tryPromise({
     try: () => stat(directory),
     catch: () => sessionNotFound(sessionID),
   })
-  if (info.isDirectory()) return
+  if (created.isDirectory()) return
   return yield* sessionNotFound(sessionID)
 })
 
@@ -66,7 +71,7 @@ export const sessionLocationLayer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
         if (!row) return yield* sessionNotFound(sessionID)
-        yield* requireDirectory(sessionID, row.directory)
+        yield* ensureDirectory(sessionID, row.directory)
 
         return yield* effect.pipe(
           Effect.provide(
