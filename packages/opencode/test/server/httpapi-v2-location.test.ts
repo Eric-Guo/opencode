@@ -5,6 +5,8 @@ import { Context, Schema } from "effect"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { mkdir, rm, stat } from "node:fs/promises"
+import path from "path"
 
 const context = Context.empty() as Context.Context<unknown>
 
@@ -72,6 +74,12 @@ async function readEventType(reader: AsyncIterator<typeof Event.Type>, type: str
   throw new Error(`timed out waiting for ${type}`)
 }
 
+async function isDirectory(directory: string) {
+  return stat(directory)
+    .then((info) => info.isDirectory())
+    .catch(() => false)
+}
+
 afterEach(async () => {
   await disposeAllInstances()
   await resetDatabase()
@@ -122,5 +130,24 @@ describe("v2 location HttpApi", () => {
       data: { sessionID: expect.any(String) },
     })
     await reader.return(undefined)
+  })
+
+  test("recreates a missing stored session directory before session-scoped routes resolve", async () => {
+    await using tmp = await tmpdir({ git: false })
+    const directory = path.join(tmp.path, "agent7777")
+    await mkdir(directory)
+
+    const created = await request("/session", directory, { method: "POST" })
+    expect(created.status).toBe(200)
+    const body = (await created.json()) as { id?: string; data?: { id?: string } }
+    const sessionID = body.id ?? body.data?.id
+    expect(sessionID).toBeTruthy()
+
+    await rm(directory, { recursive: true, force: true })
+    expect(await isDirectory(directory)).toBe(false)
+
+    const loaded = await request(`/session/${sessionID}`, tmp.path)
+    expect(loaded.status).toBe(200)
+    expect(await isDirectory(directory)).toBe(true)
   })
 })
