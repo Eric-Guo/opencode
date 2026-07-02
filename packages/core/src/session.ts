@@ -191,6 +191,7 @@ const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const fs = yield* FSUtil.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -203,12 +204,17 @@ const layer = Layer.effect(
             }),
         ),
       )
+    const ensureDirectory = Effect.fn("V2Session.ensureDirectory")(function* (session: SessionSchema.Info) {
+      yield* fs.ensureDir(session.location.directory).pipe(Effect.orDie)
+      return session
+    })
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
-        if (recorded) return recorded
+        if (recorded) return yield* ensureDirectory(recorded)
+        yield* fs.ensureDir(input.location.directory).pipe(Effect.orDie)
         const project = yield* projects.resolve(input.location.directory)
         yield* db
           .insert(ProjectTable)
@@ -263,7 +269,7 @@ const layer = Layer.effect(
       get: Effect.fn("V2Session.get")(function* (sessionID) {
         const session = yield* store.get(sessionID)
         if (!session) return yield* new NotFoundError({ sessionID })
-        return session
+        return yield* ensureDirectory(session)
       }),
       list: Effect.fn("V2Session.list")(function* (input = {}) {
         const direction = input.anchor?.direction ?? "next"
@@ -482,5 +488,6 @@ export const node = makeGlobalNode({
     SessionStore.node,
     LocationServiceMap.node,
     SessionProjector.node,
+    FSUtil.node,
   ],
 })
