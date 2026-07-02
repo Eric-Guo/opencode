@@ -334,17 +334,22 @@ const layer = Layer.effect(
             }),
         ),
       )
+    const ensureDirectory = Effect.fn("V2Session.ensureDirectory")(function* (session: SessionSchema.Info) {
+      yield* fs.ensureDir(session.location.directory).pipe(Effect.orDie)
+      return session
+    })
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
-        if (recorded) return recorded
+        if (recorded) return yield* ensureDirectory(recorded)
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
         const location = parent?.location ?? input.location
         if (location === undefined)
           return yield* Effect.die(new Error("V2Session.create requires either location or an existing parentID"))
+        yield* fs.ensureDir(location.directory).pipe(Effect.orDie)
         const project = yield* projects.resolve(location.directory)
         yield* db
           .insert(ProjectTable)
@@ -422,7 +427,7 @@ const layer = Layer.effect(
       get: Effect.fn("V2Session.get")(function* (sessionID) {
         const session = yield* store.get(sessionID)
         if (!session) return yield* new NotFoundError({ sessionID })
-        return session
+        return yield* ensureDirectory(session)
       }),
       remove: Effect.fn("V2Session.remove")(function* (sessionID) {
         yield* result.get(sessionID)
