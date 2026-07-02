@@ -32,6 +32,7 @@ import { SessionShell } from "./shell.js"
 import { SessionSkill } from "./skill.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 
 type PromptRequest = SessionPrompt.Input & {
   id?: SessionMessage.ID
@@ -51,10 +52,12 @@ export const make = Effect.fn("Session.make")(function* () {
   const admission = yield* SessionInbox.Service
   const fs = yield* FSUtil.Service
   const scope = yield* Scope.Scope
+  const fs = yield* FSUtil.Service
 
   const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
     const session = yield* store.get(sessionID)
     if (!session) return yield* new NotFoundError({ sessionID })
+    yield* fs.ensureDir(session.location.directory).pipe(Effect.orDie)
     return session
   })
   const message = Effect.fn("Session.message")(function* (sessionID: SessionSchema.ID, messageID: SessionMessage.ID) {
