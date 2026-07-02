@@ -238,6 +238,16 @@ function useHomeSessionHeaderOpacity(groups: () => HomeSessionGroup[]) {
   return { setViewport, setContentRef, setHeaderRef, update, titleOpacity }
 }
 
+const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
+// Cmd+click on macOS (Ctrl+click elsewhere) opens a session tab in the
+// background without navigating, matching browser conventions.
+function isBackgroundOpen(event: MouseEvent) {
+  return IS_MAC ? event.metaKey : event.ctrlKey
+}
+
+type OpenSessionOptions = { background?: boolean }
+
 export function NewHome() {
   const sync = useServerSync()
   const layout = useLayout()
@@ -373,9 +383,11 @@ export function NewHome() {
     setState("searchFocused", false)
   }
 
-  function selectSearchSession(session: Session) {
-    openSession(session)
-    closeSearch()
+  function selectSearchSession(session: Session, options?: OpenSessionOptions) {
+    openSession(session, options)
+    // Background opens keep the search visible so several results can be
+    // opened in a row.
+    if (!options?.background) closeSearch()
   }
 
   command.register("home", () => [
@@ -460,7 +472,7 @@ export function NewHome() {
       .forEach((directory) => state.project.markViewed(directory))
   }
 
-  function openSession(session: Session) {
+  function openSession(session: Session, options?: OpenSessionOptions) {
     const project = projectForSession(session, projects(), projectByID())
     const conn = focusedServer()
     if (!conn) return
@@ -468,6 +480,10 @@ export function NewHome() {
     const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
+    if (options?.background) {
+      tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
+      return
+    }
     startTransition(() => {
       const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
       tabs.select(tab)
@@ -1031,7 +1047,7 @@ function HomeSessionSearch(props: {
   onInput: (value: string) => void
   onFocus: () => void
   onClose: () => void
-  onSelect: (session: Session) => void
+  onSelect: (session: Session, options?: OpenSessionOptions) => void
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({ active: "" })
@@ -1145,7 +1161,7 @@ function HomeSessionSearch(props: {
                                 server={props.server}
                                 selected={store.active === homeSessionSearchKey(record)}
                                 onHighlight={() => setStore("active", homeSessionSearchKey(record))}
-                                onSelect={(session) => props.onSelect(session)}
+                                onSelect={(session, options) => props.onSelect(session, options)}
                               />
                             )}
                           </For>
@@ -1225,7 +1241,7 @@ function HomeSessionSearchResultRow(props: {
   server: ServerConnection.Key
   selected: boolean
   onHighlight: () => void
-  onSelect: (session: Session) => void
+  onSelect: (session: Session, options?: OpenSessionOptions) => void
 }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName && props.record.projectName
@@ -1246,7 +1262,7 @@ function HomeSessionSearchResultRow(props: {
         group: !!showProjectName(),
       }}
       onMouseEnter={() => props.onHighlight()}
-      onClick={() => props.onSelect(props.record.session)}
+      onClick={(event) => props.onSelect(props.record.session, { background: isBackgroundOpen(event) })}
     >
       <HomeSessionLeading
         project={props.record.project}
@@ -1290,7 +1306,7 @@ function HomeSessionRow(props: {
   record: HomeSessionRecord
   showProjectName: boolean
   server: ServerConnection.Key
-  openSession: (session: Session) => void
+  openSession: (session: Session, options?: OpenSessionOptions) => void
   archiveSession: (session: Session) => Promise<void>
 }) {
   const language = useLanguage()
@@ -1306,7 +1322,7 @@ function HomeSessionRow(props: {
         type="button"
         data-component="home-session-row"
         class={`${HOME_ROW} h-10 min-w-0 flex-1 gap-2 py-3 pl-3 pr-10`}
-        onClick={() => props.openSession(props.record.session)}
+        onClick={(event) => props.openSession(props.record.session, { background: isBackgroundOpen(event) })}
       >
         <HomeSessionLeading
           project={props.record.project}
