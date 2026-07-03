@@ -11,6 +11,7 @@ import {
   createMemo,
   createEffect,
   createComputed,
+  createSignal,
   on,
   onMount,
   type ParentProps,
@@ -77,6 +78,11 @@ import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import {
+  clampSessionPanelWidth,
+  SESSION_PANEL_WIDTH_MIN,
+  sessionPanelWidthMax,
+} from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
@@ -443,9 +449,37 @@ export default function Page() {
       }),
   )
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  let panelRow: HTMLDivElement | undefined
+  const [panelRowWidth, setPanelRowWidth] = createSignal<number>()
+  createResizeObserver(
+    () => panelRow,
+    ({ width }) => setPanelRowWidth(width),
+  )
+  const splitReview = createMemo(() => layout.review.diffStyle() === "split")
+  // The observer reports the content-box width, which already excludes the row
+  // padding; only the flex gap between the panels remains to subtract.
+  const sessionPanelAvailable = createMemo(() => {
+    const width = panelRowWidth()
+    if (width === undefined) return undefined
+    return width - (settings.general.newLayoutDesigns() ? 8 : 0)
+  })
+  const sessionPanelMax = createMemo(() => {
+    const available = sessionPanelAvailable()
+    if (available === undefined) return 1000
+    return sessionPanelWidthMax({ available, split: splitReview() })
+  })
+  // Clamp at render time so window or sidebar resizes squeeze the chat panel
+  // instead of the review pane, without overwriting the persisted width.
+  const sessionPanelResizedWidth = createMemo(() =>
+    clampSessionPanelWidth({
+      width: layout.session.width(),
+      available: sessionPanelAvailable(),
+      split: splitReview(),
+    }),
+  )
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return "100%"
-    if (desktopReviewOpen()) return `${layout.session.width()}px`
+    if (desktopReviewOpen()) return `${sessionPanelResizedWidth()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
@@ -2095,6 +2129,7 @@ export default function Page() {
     <SessionRouteFrame>
       <SessionHeader />
       <div
+        ref={panelRow}
         class="flex-1 min-h-0 flex flex-col md:flex-row"
         classList={{
           "gap-2 p-2": settings.general.newLayoutDesigns(),
@@ -2133,9 +2168,9 @@ export default function Page() {
                   "-right-1": settings.general.newLayoutDesigns(),
                 }}
                 direction="horizontal"
-                size={layout.session.width()}
-                min={450}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+                size={sessionPanelResizedWidth()}
+                min={SESSION_PANEL_WIDTH_MIN}
+                max={sessionPanelMax()}
                 onResize={(width) => {
                   size.touch()
                   layout.session.resize(width)
