@@ -80,7 +80,14 @@ const minZoomLevel = 0.2
 const helpURL = "https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"
 const desktopTabs = [
   { id: "opencode", title: "OpenCode", label: "OC" },
-  { id: "7777", title: "7777", label: "7777", html: "7777/index.html", devHtml: "index.html" },
+  {
+    id: "7777",
+    title: "7777",
+    label: "7777",
+    html: "7777/index.html",
+    devHtml: "index.html",
+    releaseWhenLostFocus: true,
+  },
   {
     id: "plm",
     title: "PLM",
@@ -423,6 +430,10 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     return getView(active) ?? openCodeView
   }
 
+  function getTab(id: DesktopTabID) {
+    return desktopTabs.find((tab) => tab.id === id)
+  }
+
   function getExternalTab(id: DesktopTabID) {
     return desktopTabs.find(
       (tab): tab is Extract<(typeof desktopTabs)[number], { url: string }> => tab.id === id && "url" in tab,
@@ -456,6 +467,16 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     view.setVisible(false)
     layout()
     return view
+  }
+
+  function releaseView(id: DesktopTabID) {
+    const tab = getTab(id)
+    if (!tab || !("releaseWhenLostFocus" in tab) || !tab.releaseWhenLostFocus) return
+    const view = tabViews.get(id)
+    if (!view) return
+    tabViews.delete(id)
+    win.contentView.removeChildView(view)
+    if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false })
   }
 
   function state(): DesktopTabsState {
@@ -492,12 +513,14 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
 
   function activate(id: DesktopTabID) {
     if (!desktopTabs.some((tab) => tab.id === id)) return
+    const previous = active
     active = id
     const activeView = ensureView(id)
     openCodeView.setVisible(id === "opencode")
     tabViews.forEach((view, viewID) => {
       view.setVisible(viewID === id)
     })
+    if (previous !== id) releaseView(previous)
     win.contentView.addChildView(tabbarView)
     layout()
     sendState()
