@@ -614,80 +614,79 @@ export function createServerSession(client: OpencodeClient, options?: { retry?: 
     messageLoads.set(sessionID, load)
     setMeta("loading", sessionID, true)
     let applied = false
-    await (async () => {
+    try {
       const page = await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load))
       const first = page.session.reduce<Message | undefined>(
         (oldest, message) => (!oldest || cmpMessage(message, oldest) < 0 ? message : oldest),
         undefined,
       )
-      if (mode === "prepend" || generations.get(sessionID) !== active) return { page, first }
+      if (generations.get(sessionID) !== active) return
 
-      const users = new Set([
-        ...page.session.filter((message) => message.role === "user").map((message) => message.id),
-        ...(data.message[sessionID] ?? [])
-          .filter((message) => {
-            if (message.role !== "user") return false
-            const item = optimistic.get(sessionID)?.get(message.id)
-            return !item || item.confirmedMessage === true
-          })
-          .map((message) => message.id),
-      ])
-      const parentIDs = [
-        ...new Set(
-          page.session.flatMap((message) =>
-            message.role === "assistant" && !users.has(message.parentID) ? [message.parentID] : [],
-          ),
-        ),
-      ]
       const parents = [] as Awaited<ReturnType<typeof fetchMessage>>[]
-      for (const parentID of parentIDs) {
-        if (generations.get(sessionID) !== active) break
-        const parent = await fetchMessage(sessionID, parentID, () =>
-          resetMessageLoad(sessionID, load, messageLoadBaseline(load, parentID)),
-        )
-        if (parent.message.role !== "user") throw new Error(`Assistant parent is not a user message: ${parentID}`)
-        parents.push(parent)
-      }
-      return {
-        first,
-        page: {
-          ...page,
-          session: merge(
-            page.session,
-            parents.map((parent) => parent.message),
+      if (mode !== "prepend") {
+        const users = new Set([
+          ...page.session.filter((message) => message.role === "user").map((message) => message.id),
+          ...(data.message[sessionID] ?? [])
+            .filter((message) => {
+              if (message.role !== "user") return false
+              const item = optimistic.get(sessionID)?.get(message.id)
+              return load.touchedMessages.has(message.id) && (!item || item.confirmedMessage === true)
+            })
+            .map((message) => message.id),
+        ])
+        const parentIDs = [
+          ...new Set(
+            page.session.flatMap((message) =>
+              message.role === "assistant" && !users.has(message.parentID) ? [message.parentID] : [],
+            ),
           ),
-          part: merge(
-            page.part,
-            parents.map((parent) => ({ id: parent.message.id, part: parent.parts })),
-          ),
-        },
-      }
-    })()
-      .then(({ page, first }) => {
-        if (generations.get(sessionID) !== active) return
-        const preserveUnfetched =
-          mode === "prepend" || (!page.complete && (!first || ((message: Message) => cmpMessage(message, first) < 0)))
-        applyMessagePage(
-          sessionID,
-          page,
-          messageLoads.get(sessionID) === load ? load : undefined,
-          preserveUnfetched,
-          mode !== "prepend",
-        )
-        applied = true
-      })
-      .finally(() => {
-        if (!applied && generations.get(sessionID) === active && messageLoads.get(sessionID) === load) {
-          for (const messageID of load.orphanParents) {
-            if (!orphanParts.get(sessionID)?.has(messageID)) continue
-            setData(produce((draft) => deleteMessageParts(draft, messageID)))
-            orphanParts.get(sessionID)?.delete(messageID)
-          }
-          if (orphanParts.get(sessionID)?.size === 0) orphanParts.delete(sessionID)
+        ]
+        for (const parentID of parentIDs) {
+          if (generations.get(sessionID) !== active) break
+          const parent = await fetchMessage(sessionID, parentID, () =>
+            resetMessageLoad(sessionID, load, messageLoadBaseline(load, parentID)),
+          )
+          if (parent.message.role !== "user") throw new Error(`Assistant parent is not a user message: ${parentID}`)
+          parents.push(parent)
         }
-        if (messageLoads.get(sessionID) === load) messageLoads.delete(sessionID)
-        if (generations.get(sessionID) === active) setMeta("loading", sessionID, false)
-      })
+      }
+      if (generations.get(sessionID) !== active) return
+      const result =
+        mode === "prepend"
+          ? page
+          : {
+              ...page,
+              session: merge(
+                page.session,
+                parents.map((parent) => parent.message),
+              ),
+              part: merge(
+                page.part,
+                parents.map((parent) => ({ id: parent.message.id, part: parent.parts })),
+              ),
+            }
+      const preserveUnfetched =
+        mode === "prepend" || (!result.complete && (!first || ((message: Message) => cmpMessage(message, first) < 0)))
+      applyMessagePage(
+        sessionID,
+        result,
+        messageLoads.get(sessionID) === load ? load : undefined,
+        preserveUnfetched,
+        mode !== "prepend",
+      )
+      applied = true
+    } finally {
+      if (!applied && generations.get(sessionID) === active && messageLoads.get(sessionID) === load) {
+        for (const messageID of load.orphanParents) {
+          if (!orphanParts.get(sessionID)?.has(messageID)) continue
+          setData(produce((draft) => deleteMessageParts(draft, messageID)))
+          orphanParts.get(sessionID)?.delete(messageID)
+        }
+        if (orphanParts.get(sessionID)?.size === 0) orphanParts.delete(sessionID)
+      }
+      if (messageLoads.get(sessionID) === load) messageLoads.delete(sessionID)
+      if (generations.get(sessionID) === active) setMeta("loading", sessionID, false)
+    }
   }
 
   const sync = (sessionID: string, options?: { force?: boolean; messageLimit?: number }) => {

@@ -4,8 +4,12 @@ import { mockOpenCodeServer } from "../../utils/mock-server"
 import { benchmark, expect, withBenchmarkPage } from "../benchmark"
 import { fixture } from "./session-timeline-stress.fixture"
 import { installStressSessionTabs, stressSessionHref } from "./timeline-test-helpers"
-import { waitForStableTimeline } from "./session-tab-switch-probe"
+import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
+type ParentHydrationBenchmarkMode = "natural" | "candidate"
+
+const mode = process.env.SESSION_PARENT_HYDRATION_BENCHMARK_MODE ?? "natural"
+if (mode !== "natural" && mode !== "candidate") throw new Error(`Unknown parent hydration benchmark mode: ${mode}`)
 const userID = "msg_parent_hydration_user"
 const user = {
   ...fixture.messages[fixture.targetID][0]!,
@@ -43,24 +47,32 @@ benchmark("hydrates an orphaned latest turn after a cold session click", async (
   benchmark.setTimeout(180_000)
   const results = [] as Awaited<ReturnType<typeof trial>>[]
   for (let run = 0; run < 5; run++) {
-    results.push(await withBenchmarkPage(browser, `session-parent-hydration-${run}`, trial, testInfo))
+    results.push(
+      await withBenchmarkPage(browser, `session-parent-hydration-${mode}-${run}`, (page) => trial(page, mode), testInfo),
+    )
   }
-  const timing = results.map((result) => result.metrics.firstCorrectObservedMs).sort((a, b) => a - b)
-  report({
-    results,
-    summary: {
-      firstCorrectObservedMs: { min: timing[0], median: timing[2], max: timing.at(-1) },
-      blankSamples: results.map((result) => result.metrics.blankSamples),
-      listRequests: results.map(
-        (result) => result.requests.filter((request) => request.type === "list" && request.phase === "start").length,
-      ),
-      parentRequests: results.map((result) => result.requests.filter((request) => request.type === "parent").length),
+  const timing = results.map((result) => result.metrics.firstCorrectObservedMs!).sort((a, b) => a - b)
+  report(
+    {
+      results: results.map((result) => ({ ...result.metrics, historyGateCount: result.historyGateCount })),
+      summary: {
+        firstCorrectObservedMs: { min: timing[0], median: timing[2], max: timing.at(-1) },
+        blankSamples: results.map((result) => result.metrics.blankSamples),
+        requestCounts: {
+          list: results.map((result) => result.requestCounts.list),
+          parent: results.map((result) => result.requestCounts.parent),
+        },
+        historyGateCount: results.map((result) => result.historyGateCount),
+      },
     },
-  })
+    { mode },
+  )
 })
 
-async function trial(page: Page) {
-  const requests: { type: "list" | "parent"; before?: string; phase?: "start" | "end" }[] = []
+async function trial(page: Page, mode: ParentHydrationBenchmarkMode) {
+  const requests: { type: "list" | "parent"; before?: string }[] = []
+  const history = mode === "candidate" ? Promise.withResolvers<void>() : undefined
+  let historyGates = 0
   await mockOpenCodeServer(page, {
     sessions: fixture.sessions.filter((session) => session.id === fixture.sourceID),
     provider: fixture.provider,
@@ -68,7 +80,20 @@ async function trial(page: Page) {
     project: fixture.project,
     messageDelay: 50,
     onMessages: (request) => {
-      if (request.sessionID === fixture.targetID) requests.push({ type: "list", before: request.before, phase: request.phase })
+      if (request.sessionID === fixture.targetID && request.phase === "start")
+        requests.push({ type: "list", before: request.before })
+    },
+    beforeMessagesResponse: (request) => {
+      if (mode !== "candidate" || request.sessionID !== fixture.targetID || !request.before) return Promise.resolve()
+      historyGates++
+      return history!.promise
+    },
+    onMessage: (request) => {
+      if (request.sessionID === fixture.targetID && request.messageID === userID) requests.push({ type: "parent" })
+    },
+    message: (sessionID, messageID) => {
+      if (sessionID !== fixture.targetID || messageID !== userID) return
+      return user
     },
     pageMessages: (sessionID, limit, before) => {
       const items = sessionID === fixture.targetID ? messages : fixture.messages[fixture.sourceID]
@@ -80,10 +105,6 @@ async function trial(page: Page) {
   await page.route(`**/session/${fixture.targetID}`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(target) }),
   )
-  await page.route(`**/session/${fixture.targetID}/message/${userID}*`, (route) => {
-    requests.push({ type: "parent" })
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(user) })
-  })
   await installStressSessionTabs(page, { sessionIDs: [fixture.sourceID] })
   await page.goto(stressSessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
@@ -100,101 +121,26 @@ async function trial(page: Page) {
     },
     { href, title: target.title },
   )
-  const metrics = await measureFirstCorrect(page, {
+  const metrics = await measureSessionSwitch(page, {
     destinationIDs: messages.map((message) => message.info.id),
     sourceIDs: fixture.messages[fixture.sourceID].map((message) => message.info.id),
     lastID,
-    lastPartID,
+    requiredPartID: lastPartID,
+    requireBottomAnchor: false,
     href,
     switch: async () => {
       await page.locator("#parent-hydration-target").click()
       await expectSessionTitle(page, target.title)
     },
-  })
+  }).finally(() => history?.resolve())
   expect(metrics.firstCorrectObservedMs).not.toBeNull()
-  return { metrics, requests }
-}
-
-async function measureFirstCorrect(
-  page: Page,
-  input: {
-    destinationIDs: string[]
-    sourceIDs: string[]
-    lastID: string
-    lastPartID: string
-    href: string
-    switch: () => Promise<void>
-  },
-) {
-  await page.evaluate(({ destinationIDs, sourceIDs, lastID, lastPartID, href }) => {
-    const destination = new Set(destinationIDs)
-    const source = new Set(sourceIDs)
-    const samples: { observedAtMs: number; destination: string[]; source: string[]; last: boolean }[] = []
-    document.addEventListener(
-      "click",
-      (event) => {
-        const link = event.target instanceof Element ? event.target.closest("a") : undefined
-        if (link?.getAttribute("href") !== href) return
-        const started = performance.now()
-        const sample = () => {
-          setTimeout(() => {
-            const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
-              element.querySelector("[data-timeline-row]"),
-            )
-            const visible = root
-              ? [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-                  .filter((element) => {
-                    const view = root.getBoundingClientRect()
-                    const rect = element.getBoundingClientRect()
-                    return rect.bottom > view.top && rect.top < view.bottom
-                  })
-                  .map((element) => element.dataset.messageId!)
-              : []
-            const latest = root?.querySelector<HTMLElement>(`[data-timeline-part-id="${lastPartID}"]`)
-            samples.push({
-              observedAtMs: performance.now() - started,
-              destination: visible.filter((id) => destination.has(id)),
-              source: visible.filter((id) => source.has(id)),
-              last: visible.includes(lastID) && !!latest && latest.getBoundingClientRect().height > 0,
-            })
-            requestAnimationFrame(sample)
-          }, 0)
-        }
-        requestAnimationFrame(sample)
-      },
-      { capture: true, once: true },
-    )
-    ;(
-      window as Window & {
-        __parentHydrationProbe?: typeof samples
-      }
-    ).__parentHydrationProbe = samples
-  }, {
-    destinationIDs: input.destinationIDs,
-    sourceIDs: input.sourceIDs,
-    lastID: input.lastID,
-    lastPartID: input.lastPartID,
-    href: input.href,
-  })
-  await input.switch()
-  await page.waitForFunction(() =>
-    (
-      window as Window & {
-        __parentHydrationProbe?: { destination: string[]; source: string[]; last: boolean }[]
-      }
-    ).__parentHydrationProbe?.some((sample) => sample.destination.length > 0 && sample.source.length === 0 && sample.last),
-  )
-  return page.evaluate(() => {
-    const samples = (
-      window as Window & {
-        __parentHydrationProbe?: { observedAtMs: number; destination: string[]; source: string[]; last: boolean }[]
-      }
-    ).__parentHydrationProbe!
-    return {
-      firstCorrectObservedMs: samples.find(
-        (sample) => sample.destination.length > 0 && sample.source.length === 0 && sample.last,
-      )!.observedAtMs,
-      blankSamples: samples.filter((sample) => sample.destination.length === 0 && sample.source.length === 0).length,
-    }
-  })
+  const requestCounts = {
+    list: requests.filter((request) => request.type === "list").length,
+    parent: requests.filter((request) => request.type === "parent").length,
+  }
+  if (mode === "candidate") {
+    expect(requestCounts.parent).toBe(1)
+    expect(historyGates).toBe(1)
+  }
+  return { metrics, requestCounts, historyGateCount: historyGates }
 }

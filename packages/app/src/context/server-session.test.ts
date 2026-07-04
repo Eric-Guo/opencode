@@ -266,6 +266,64 @@ describe("server session", () => {
     expect(store.data.message.child).toEqual([user, cached, assistant])
   })
 
+  test("refreshes a cached parent omitted by an assistant-only replacement page", async () => {
+    const stale = userMessage("message-1", { summary: { title: "stale", diffs: [] } })
+    const fresh = { ...stale, summary: { title: "fresh", diffs: [] } }
+    const stalePart = textPart(stale.id, { text: "stale" })
+    const freshPart = { ...stalePart, text: "fresh" }
+    const assistant = assistantMessage("message-2", stale.id)
+    const client = rootMessageClient(
+      [response([{ info: stale, parts: [stalePart] }]), response([{ info: assistant, parts: [] }], "older")],
+      [singleResponse(fresh, [freshPart])],
+    )
+    const store = createServerSession(client)
+    await store.sync("child")
+
+    await store.sync("child", { force: true })
+
+    expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: stale.id }])
+    expect(store.data.message.child).toEqual([fresh, assistant])
+    expect(store.data.part[stale.id]).toEqual([freshPart])
+  })
+
+  test("refreshes a confirmed optimistic parent while preserving pending parts", async () => {
+    const stale = userMessage("message-1", { summary: { title: "stale", diffs: [] } })
+    const fresh = { ...stale, summary: { title: "fresh", diffs: [] } }
+    const confirmed = textPart(stale.id, { id: "confirmed", text: "stale" })
+    const refreshed = { ...confirmed, text: "fresh" }
+    const pending = textPart(stale.id, { id: "pending", text: "pending" })
+    const assistant = assistantMessage("message-2", stale.id)
+    const client = rootMessageClient(
+      [response([{ info: stale, parts: [confirmed] }]), response([{ info: assistant, parts: [] }], "older")],
+      [singleResponse(fresh, [refreshed])],
+    )
+    const store = createServerSession(client)
+    store.optimistic.add({ sessionID: "child", message: stale, parts: [confirmed, pending] })
+    await store.sync("child")
+
+    await store.sync("child", { force: true })
+
+    expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: stale.id }])
+    expect(store.data.message.child).toEqual([fresh, assistant])
+    expect(store.data.part[stale.id]).toEqual([refreshed, pending])
+  })
+
+  test("uses a parent received by SSE during the replacement load", async () => {
+    const pending = deferredResponse()
+    const user = userMessage("message-1")
+    const assistant = assistantMessage("message-2", user.id)
+    const client = rootMessageClient([pending.promise], [])
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+
+    store.apply({ type: "message.updated", properties: { info: user } })
+    pending.resolve(response([{ info: assistant, parts: [] }], "older"))
+    await loading
+
+    expect(client.rootRequests).toEqual([])
+    expect(store.data.message.child).toEqual([user, assistant])
+  })
+
   test("uses a successful retry over events received by a failed backfill attempt", async () => {
     const failed = deferredResponse()
     const user = userMessage("message-1")
@@ -1133,6 +1191,26 @@ describe("server session", () => {
     await loading
 
     expect(store.data.message.child).toEqual([latest])
+  })
+
+  test("does not scan cached messages for user roots during history prepend", async () => {
+    const guard = { active: false }
+    const latest = new Proxy(userMessage("message-2", { time: { created: 2 } }), {
+      get(target, property, receiver) {
+        if (guard.active && property === "role") throw new Error("cached role accessed")
+        return Reflect.get(target, property, receiver)
+      },
+    })
+    const older = userMessage("message-1")
+    const store = createServerSession(
+      messageClient(response([{ info: latest, parts: [] }], "older"), response([{ info: older, parts: [] }])),
+    )
+    await store.sync("child")
+    guard.active = true
+
+    await store.history.loadMore("child")
+
+    expect(store.data.message.child).toEqual([older, latest])
   })
 
   test("preserves loaded history during an incomplete refresh", async () => {

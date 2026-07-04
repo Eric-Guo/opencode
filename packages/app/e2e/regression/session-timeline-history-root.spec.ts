@@ -28,6 +28,7 @@ const assistants = Array.from({ length: 14 }, (_, index) =>
 const messages = [userMessage(), ...assistants]
 const lastAssistant = assistants.at(-1)!
 const lastPartID = assistants.at(-1)!.parts[0]!.id
+const userPartID = `prt_${userID}_text`
 const completed = {
   ...lastAssistant.info,
   time: { ...lastAssistant.info.time, completed: lastAssistant.info.time.created + 15_000 },
@@ -77,7 +78,7 @@ for (const scenario of scenarios) {
       },
       sessions: [session()],
       sessionStatus: { [sessionID]: { type: "busy" } },
-      messageDelay: (request) => (request.before ? history.promise : Promise.resolve()),
+      beforeMessagesResponse: (request) => (request.before ? history.promise : Promise.resolve()),
       onMessages: (request) => {
         requests.push(request)
         sequence.push(`messages:${request.phase}:${request.before ?? "latest"}`)
@@ -100,32 +101,42 @@ for (const scenario of scenarios) {
         }
       },
     })
-    await page.addInitScript(() => {
-      const state = { armed: false, blank: false, stop: false }
-      ;(window as Window & { __historyRootProbe?: typeof state }).__historyRootProbe = state
-      const sample = () => {
-        if (state.armed) {
-          const virtual = document.querySelector<HTMLElement>("[data-timeline-virtual-content]")
-          const viewport = virtual?.closest<HTMLElement>(".scroll-view__viewport")
-          const visible = viewport
-            ? [...viewport.querySelectorAll<HTMLElement>("[data-timeline-key]")].some((row) => {
-                const view = viewport.getBoundingClientRect()
-                const rect = row.getBoundingClientRect()
-                return rect.width > 0 && rect.height > 0 && rect.bottom > view.top && rect.top < view.bottom
-              })
-            : false
-          if (!virtual || !visible) state.blank = true
+    await page.addInitScript(
+      ({ userPartID, lastPartID }) => {
+        const state = { armed: false, hidden: false, samples: 0, stop: false }
+        ;(window as Window & { __historyRootProbe?: typeof state }).__historyRootProbe = state
+        const sample = () => {
+          if (state.armed) {
+            const virtual = document.querySelector<HTMLElement>("[data-timeline-virtual-content]")
+            const viewport = virtual?.closest<HTMLElement>(".scroll-view__viewport")
+            const view = viewport?.getBoundingClientRect()
+            const visible = (partID: string) => {
+              const part = viewport?.querySelector<HTMLElement>(`[data-timeline-part-id="${partID}"]`)
+              const rect = part?.getBoundingClientRect()
+              return (
+                !!rect &&
+                !!view &&
+                rect.width > 0 &&
+                rect.height > 0 &&
+                rect.bottom > view.top &&
+                rect.top < view.bottom
+              )
+            }
+            if (!virtual || !visible(userPartID) || !visible(lastPartID)) state.hidden = true
+            state.samples++
+          }
+          if (!state.stop) requestAnimationFrame(() => setTimeout(sample, 0))
         }
-        if (!state.stop) requestAnimationFrame(() => setTimeout(sample, 0))
-      }
-      requestAnimationFrame(() => setTimeout(sample, 0))
-    })
+        requestAnimationFrame(() => setTimeout(sample, 0))
+      },
+      { userPartID, lastPartID },
+    )
 
     await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
     await transport.waitForConnection()
     await expectSessionTitle(page, title)
     await expect(page.locator(`[data-timeline-part-id="${lastPartID}"]`)).toBeVisible()
-    await expect(page.locator(`[data-timeline-part-id="prt_${userID}_text"]`)).toBeVisible()
+    await expect(page.locator(`[data-timeline-part-id="${userPartID}"]`)).toBeVisible()
     await expect.poll(() => requests.filter((request) => request.phase === "start").length).toBe(2)
     expect(requests.filter((request) => request.phase === "end")).toHaveLength(1)
     expect(sequence.slice(0, 4)).toEqual([
@@ -141,20 +152,25 @@ for (const scenario of scenarios) {
         }
       ).__historyRootProbe!.armed = true
     })
+    await waitForProbeSamples(page, 0)
+    expect(await historyRootHidden(page)).toBe(false)
+    const beforeHistory = await probeSamples(page)
     history.resolve()
     await expect(page.locator('[data-timeline-part-id^="prt_history_root_"]')).toHaveCount(14)
     await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
+    await waitForProbeSamples(page, beforeHistory)
     expect(pages[0]).toEqual({ before: undefined, limit: 2 })
     expect(roots).toEqual([{ sessionID, messageID: userID }])
 
     const message = messageUpdated(scenario.info)
     const idle = status("idle")
     for (const event of scenario.idleFirst ? [idle, message] : [message, idle]) {
+      const beforeEvent = await probeSamples(page)
       await transport.send(event)
       if (event === idle) await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0)
       if (event === message && scenario.interrupted)
         await expect(page.getByText("Interrupted", { exact: true })).toBeVisible()
-      await page.waitForTimeout(100)
+      await waitForProbeSamples(page, beforeEvent)
       const current = await timelineState(page)
       expect(current, JSON.stringify(current)).toMatchObject({ virtual: true })
       expect(current.rows, JSON.stringify(current)).toBeGreaterThan(0)
@@ -167,11 +183,10 @@ for (const scenario of scenarios) {
     if (scenario.interrupted) await expect(page.getByText("Interrupted", { exact: true })).toBeVisible()
     expect(
       await page.evaluate(() => {
-        const state = (
-          window as Window & { __historyRootProbe?: { armed: boolean; blank: boolean; stop: boolean } }
-        ).__historyRootProbe!
+        const state = (window as Window & { __historyRootProbe?: { hidden: boolean; stop: boolean } })
+          .__historyRootProbe!
         state.stop = true
-        return state.blank
+        return state.hidden
       }),
     ).toBe(false)
   })
@@ -182,4 +197,24 @@ function timelineState(page: Page) {
     virtual: !!document.querySelector("[data-timeline-virtual-content]"),
     rows: document.querySelectorAll("[data-timeline-key]").length,
   }))
+}
+
+function probeSamples(page: Page) {
+  return page.evaluate(
+    () => (window as Window & { __historyRootProbe?: { samples: number } }).__historyRootProbe!.samples,
+  )
+}
+
+async function waitForProbeSamples(page: Page, after: number) {
+  await page.waitForFunction(
+    (after) =>
+      (window as Window & { __historyRootProbe?: { samples: number } }).__historyRootProbe!.samples >= after + 3,
+    after,
+  )
+}
+
+function historyRootHidden(page: Page) {
+  return page.evaluate(
+    () => (window as Window & { __historyRootProbe?: { hidden: boolean } }).__historyRootProbe!.hidden,
+  )
 }
