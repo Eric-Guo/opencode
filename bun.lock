@@ -402,6 +402,7 @@
       "name": "@opencode-ai/desktop",
       "version": "1.17.13",
       "dependencies": {
+        "@lydell/node-pty": "catalog:",
         "@zip.js/zip.js": "2.7.62",
         "effect": "catalog:",
         "electron-context-menu": "4.1.2",
@@ -409,11 +410,11 @@
         "electron-store": "11.0.2",
         "electron-updater": "6.8.9",
         "electron-window-state": "^5.0.3",
+        "jsonc-parser": "3.3.1",
         "marked": "^15",
       },
       "devDependencies": {
         "@actions/artifact": "4.0.0",
-        "@lydell/node-pty": "catalog:",
         "@opencode-ai/app": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@sentry/solid": "catalog:",
