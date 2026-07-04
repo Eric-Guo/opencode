@@ -10,8 +10,10 @@ export interface MockServerConfig {
   sessions: ({ id: string } & Record<string, unknown>)[]
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
   vcsDiff?: unknown[]
-  messageDelay?: number
+  messageDelay?: number | ((input: { sessionID: string; before?: string }) => Promise<void>)
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
+  message?: (sessionID: string, messageID: string) => unknown
+  onMessage?: (input: { sessionID: string; messageID: string }) => void
   events?: () => unknown[]
   eventRetry?: number
   todos?: (sessionID: string) => unknown[]
@@ -72,6 +74,14 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, session ?? {})
     }
 
+    const messageMatch = path.match(/^\/session\/([^/]+)\/message\/([^/]+)$/)
+    if (messageMatch) {
+      config.onMessage?.({ sessionID: messageMatch[1]!, messageID: messageMatch[2]! })
+      const message = config.message?.(messageMatch[1]!, messageMatch[2]!)
+      if (message === undefined) return json(route, { error: "Message not found" }, undefined, 404)
+      return json(route, message)
+    }
+
     const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
     if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
     if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
@@ -82,7 +92,9 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       const before = token ? cursors.get(token) : undefined
       if (token && !before) return json(route, { error: "Invalid cursor" }, undefined, 400)
       config.onMessages?.({ sessionID: messagesMatch[1], before, phase: "start" })
-      if (config.messageDelay) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
+      const delay = config.messageDelay
+      if (typeof delay === "number") await new Promise((resolve) => setTimeout(resolve, delay))
+      if (typeof delay === "function") await delay({ sessionID: messagesMatch[1]!, before })
       const limit = Number(url.searchParams.get("limit") ?? 80)
       const pageData = config.pageMessages(messagesMatch[1], limit, before)
       config.onMessages?.({ sessionID: messagesMatch[1], before, phase: "end" })
