@@ -35,6 +35,18 @@ type Listener = {
   stop(close?: boolean): void | Promise<void>
 }
 
+type ServerModule = {
+  Server: {
+    listen(options: {
+      port: number
+      hostname: string
+      username: string
+      password: string
+      cors: string[]
+    }): Promise<Listener>
+  }
+}
+
 const parentPort = getParentPort()
 let listener: Listener | undefined
 
@@ -54,9 +66,9 @@ async function start(command: StartCommand) {
     ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
-    const { Server } = await import("virtual:opencode-server")
+    const opencode = (await import(new URL("./chunks/node.js", import.meta.url).href)) as ServerModule
 
-    listener = await Server.listen({
+    listener = await opencode.Server.listen({
       port: command.port,
       hostname: command.hostname,
       username: "opencode",
