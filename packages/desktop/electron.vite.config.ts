@@ -1,6 +1,9 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
+import { cp, readdir } from "node:fs/promises"
+
+const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -64,6 +67,14 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         enforce: "pre",
         resolveId(s) {
           if (s === "@lydell/node-pty") return nodePtyPkg
+        },
+      },
+      {
+        name: "opencode:copy-server-dist",
+        async writeBundle() {
+          for (const file of await readdir(OPENCODE_SERVER_DIST)) {
+            await cp(`${OPENCODE_SERVER_DIST}/${file}`, `./out/main/chunks/${file}`, { force: true })
+          }
         },
       },
     ],
