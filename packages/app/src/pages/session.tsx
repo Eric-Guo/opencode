@@ -2138,6 +2138,7 @@ export default function Page() {
           diffsReady={reviewReady}
           empty={reviewEmptyText}
           hasReview={hasReview}
+          reviewHasFocusableContent={() => hasReview() || (newSessionDesign() && reviewV2State.sidebarOpened())}
           reviewCount={reviewCount}
           reviewPanel={() => (newSessionDesign() ? reviewPanelV2() : reviewPanel())}
           activeDiff={tree.activeDiff}

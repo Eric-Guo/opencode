@@ -14,6 +14,9 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
 import { SessionContextUsage } from "@/components/session-context-usage"
+
+const reviewTabID = "session-side-panel-review-tab"
+const reviewTabPanelID = "session-side-panel-review-tabpanel"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
@@ -45,6 +48,7 @@ export function SessionSidePanel(props: {
   diffsReady: () => boolean
   empty: () => string
   hasReview: () => boolean
+  reviewHasFocusableContent: () => boolean
   reviewCount: () => number
   reviewPanel: () => JSX.Element
   activeDiff?: string
@@ -262,7 +266,11 @@ export function SessionSidePanel(props: {
                         }}
                       >
                         <Show when={reviewTab() && props.canReview()}>
-                          <Tabs.Trigger value="review">
+                          <Tabs.Trigger
+                            value="review"
+                            id={reviewTabID}
+                            aria-controls={activeTab() === "review" ? reviewTabPanelID : undefined}
+                          >
                             <div class="flex items-center gap-1.5">
                               <div>{language.t("session.tab.review")}</div>
                               <Show when={props.hasReview()}>
@@ -325,10 +333,17 @@ export function SessionSidePanel(props: {
                       </Tabs.List>
                     </div>
 
-                    <Show when={reviewTab() && props.canReview()}>
-                      <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                        <Show when={reviewOpen() && activeTab() === "review"}>{props.reviewPanel()}</Show>
-                      </Tabs.Content>
+                    <Show when={reviewTab() && props.canReview() && reviewOpen() && activeTab() === "review"}>
+                      <div
+                        id={reviewTabPanelID}
+                        role="tabpanel"
+                        aria-labelledby={reviewTabID}
+                        tabIndex={props.reviewHasFocusableContent() ? undefined : 0}
+                        data-slot="tabs-content"
+                        class="flex flex-col h-full overflow-hidden contain-strict"
+                      >
+                        {props.reviewPanel()}
+                      </div>
                     </Show>
 
                     <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">

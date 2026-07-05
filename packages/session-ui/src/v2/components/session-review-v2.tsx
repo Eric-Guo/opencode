@@ -11,6 +11,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
+import { getWorkerPool } from "../../pierre/worker"
 import "./session-review-v2.css"
 
 export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT = 240
@@ -130,6 +131,10 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
 
 export function SessionReviewV2(props: SessionReviewV2Props) {
   const i18n = useI18n()
+
+  createEffect(() => {
+    getWorkerPool(props.diffStyle)
+  })
 
   const fileIndex = () => {
     const files = props.files
