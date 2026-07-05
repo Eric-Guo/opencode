@@ -139,6 +139,7 @@ export default function FileTreeV2(props: {
       return rows().length
     },
     getScrollElement: () => props.scrollElement ?? root()?.closest<HTMLDivElement>(".scroll-view__viewport") ?? null,
+    initialRect: { width: 0, height: 600 },
     estimateSize: () => 28,
     gap: 2,
     overscan: 10,

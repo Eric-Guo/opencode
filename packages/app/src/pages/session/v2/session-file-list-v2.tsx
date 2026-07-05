@@ -55,6 +55,7 @@ export function SessionFileListV2(props: {
       return props.files.length
     },
     getScrollElement: () => props.scrollElement ?? root()?.closest<HTMLDivElement>(".scroll-view__viewport") ?? null,
+    initialRect: { width: 0, height: 600 },
     estimateSize: () => 28,
     gap: 2,
     overscan: 10,

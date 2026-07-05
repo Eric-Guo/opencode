@@ -37,11 +37,13 @@ test("keeps the v2 review pane mounted when switching session tabs in a workspac
   await switchTab(page, titleB)
   await expectSessionTitle(page, titleB)
   await expectAppVisible(review)
+  await expectAppVisible(page.getByRole("button", { name: /example\.ts/ }))
   expect(await readProbe(page)).toBe(PROBE)
 
   await switchTab(page, titleA)
   await expectSessionTitle(page, titleA)
   await expectAppVisible(review)
+  await expectAppVisible(page.getByRole("button", { name: /example\.ts/ }))
   expect(await readProbe(page)).toBe(PROBE)
 })
 

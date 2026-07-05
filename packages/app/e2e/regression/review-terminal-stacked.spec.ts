@@ -64,7 +64,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       body: JSON.stringify(
         new URL(route.request().url()).searchParams.get("mode") === "branch"
           ? branchDiffs
-          : [fileDiff("src/git.ts", 1)],
+          : Array.from({ length: 7 }, (_, index) => fileDiff(`src/git-${index}.ts`, 1)),
       ),
     }),
   )
@@ -81,12 +81,16 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await page.routeWebSocket("**/pty/pty_review_terminal/connect", () => undefined)
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
+    localStorage.setItem(
+      "opencode.global.dat:layout",
+      JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),
+    )
   })
 
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
-  await page.getByRole("button", { name: "Toggle review" }).click()
-  await expect(page.getByRole("button", { name: "git.ts" })).toBeVisible()
+  await expect(page.locator("#review-panel")).toBeVisible()
+  await expectTree(page, 8, "git-0.ts")
 
   await page.keyboard.press("Control+Backquote")
   await expect(page.locator("#terminal-panel")).toBeVisible()
@@ -102,7 +106,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
     viewport.scrollTop = viewport.scrollHeight
   })
   await selectMode(page, "Branch changes", "Git changes")
-  await expectTree(page, 2, "git.ts")
+  await expectTree(page, 8, "git-0.ts")
   await selectMode(page, "Git changes", "Branch changes")
   await expectTree(page, 2_745, "action.yml")
 
@@ -133,6 +137,10 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await page.setViewportSize({ width: 1_000, height: 700 })
   await expectTree(page, 2_745, "action.yml")
   await expectStackGeometry(page)
+  await page.setViewportSize({ width: 1_000, height: 120 })
+  await page.setViewportSize({ width: 1_400, height: 900 })
+  await expectTree(page, 2_745, "action.yml")
+  await expectStackGeometry(page)
 })
 
 async function selectMode(page: Page, current: string, next: string) {
@@ -141,6 +149,11 @@ async function selectMode(page: Page, current: string, next: string) {
 }
 
 async function expectTree(page: Page, total: number, file: string) {
+  await expectMountedTree(page, total)
+  await expect(page.getByRole("button", { name: file })).toBeVisible()
+}
+
+async function expectMountedTree(page: Page, total: number) {
   const tree = page.locator('#review-panel [data-component="file-tree-v2"]')
   await expect(tree).toHaveAttribute("data-total-rows", String(total))
   await expect
@@ -155,7 +168,6 @@ async function expectTree(page: Page, total: number, file: string) {
   expect(state.root).toBeGreaterThan(0)
   expect(state.rows).toBeGreaterThan(0)
   expect(state.rows).toBeLessThanOrEqual(60)
-  await expect(page.getByRole("button", { name: file })).toBeVisible()
 }
 
 async function expectStackGeometry(page: Page) {
