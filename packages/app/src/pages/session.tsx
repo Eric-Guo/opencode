@@ -2175,10 +2175,10 @@ export default function Page() {
                     canReview={canReview}
                     diffs={reviewDiffs}
                     diffsReady={reviewReady}
-                     empty={reviewEmptyText}
-                     hasReview={hasReview}
-                     reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
-                     reviewCount={reviewCount}
+                    empty={reviewEmptyText}
+                    hasReview={hasReview}
+                    reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
+                    reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
                     activeDiff={tree.activeDiff}
                     focusReviewDiff={focusReviewDiff}
@@ -2206,14 +2206,19 @@ export default function Page() {
                 </div>
               </Show>
               <Show when={terminalOpen()}>
-                <div class="min-h-0 flex-1">
+                <div
+                  classList={{
+                    "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
+                    "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                  }}
+                >
                   <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
                 </div>
               </Show>
             </div>
-           </Show>
-         </Show>
-       </div>
+          </Show>
+        </Show>
+      </div>
 
       <Show when={!newSessionDesign()}>
         <TerminalPanel />

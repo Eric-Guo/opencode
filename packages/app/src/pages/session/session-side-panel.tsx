@@ -227,7 +227,7 @@ export function SessionSidePanel(props: {
         class="relative min-w-0 flex overflow-hidden bg-background-base"
         classList={{
           "h-full shrink-0": !props.stacked,
-          "min-h-0 flex-1": props.stacked,
+          "h-full min-h-0": props.stacked,
           "pointer-events-none": !open(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
