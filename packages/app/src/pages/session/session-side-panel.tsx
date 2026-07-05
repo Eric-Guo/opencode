@@ -79,6 +79,7 @@ export function SessionSidePanel(props: {
       }),
   )
   const open = createMemo(() => reviewOpen() || fileOpen())
+  const rendered = createMemo<boolean>((previous) => previous || open(), false)
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
@@ -159,6 +160,10 @@ export function SessionSidePanel(props: {
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
+  const reviewContentRendered = createMemo<boolean>(
+    (previous) => previous || (reviewOpen() && activeTab() === "review"),
+    false,
+  )
 
   const fileTreeTab = () => layout.fileTree.tab()
 
@@ -236,7 +241,7 @@ export function SessionSidePanel(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <Show when={open()}>
+        <Show when={rendered()}>
           <div
             class="size-full flex"
             classList={{
@@ -336,14 +341,17 @@ export function SessionSidePanel(props: {
                       </Tabs.List>
                     </div>
 
-                    <Show when={reviewTab() && props.canReview() && reviewOpen() && activeTab() === "review"}>
+                    <Show when={reviewTab() && props.canReview() && reviewContentRendered()}>
                       <div
                         id={reviewTabPanelID}
                         role="tabpanel"
                         aria-labelledby={reviewTabID}
+                        aria-hidden={activeTab() !== "review"}
+                        inert={activeTab() !== "review"}
                         tabIndex={props.reviewHasFocusableContent() ? undefined : 0}
                         data-slot="tabs-content"
                         class="flex flex-col h-full overflow-hidden contain-strict"
+                        classList={{ hidden: activeTab() !== "review" }}
                       >
                         {props.reviewPanel()}
                       </div>

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -14,6 +14,7 @@ const branchDiffs = [
 ]
 
 test("keeps the review tree and terminal sized when both panels are open", async ({ page }) => {
+  test.setTimeout(120_000)
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
     directory,
@@ -91,17 +92,73 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await expect(page.locator("#terminal-panel")).toBeVisible()
   // Terminal activation retries focus through 240ms; let that settle before opening the mode select.
   await page.waitForTimeout(300)
-  await page.getByRole("button", { name: "Git changes" }).click()
-  await page.getByRole("option", { name: "Branch changes" }).click()
+  await selectMode(page, "Git changes", "Branch changes")
   await expect(page.getByRole("tab", { name: "Review 2740" })).toBeVisible()
-  await expect(page.getByRole("button", { name: "action.yml" })).toBeVisible()
+  await expectTree(page, 2_745, "action.yml")
+  await expectStackGeometry(page)
 
+  await page.locator('#review-panel [data-component="file-tree-v2"]').evaluate((element) => {
+    const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
+    viewport.scrollTop = viewport.scrollHeight
+  })
+  await selectMode(page, "Branch changes", "Git changes")
+  await expectTree(page, 2, "git.ts")
+  await selectMode(page, "Git changes", "Branch changes")
+  await expectTree(page, 2_745, "action.yml")
+
+  const filter = page.getByRole("searchbox", { name: "Filter files" })
+  await filter.fill("generated-2738")
+  await expectTree(page, 1, "generated-2738.ts")
+  await filter.fill("")
+  await expectTree(page, 2_745, "action.yml")
+
+  await page.getByRole("button", { name: "Toggle file tree" }).click()
+  await expect(page.locator('[data-slot="session-review-v2-sidebar"]')).toHaveAttribute("aria-hidden", "true")
+  await expect(page.locator('#review-panel [data-component="file-tree-v2"]')).toHaveCount(1)
+  await page.getByRole("button", { name: "Toggle file tree" }).click()
+  await expectTree(page, 2_745, "action.yml")
+
+  await page.keyboard.press("Control+Backquote")
+  await expect(page.locator("#terminal-panel")).toHaveCount(0)
+  await expectTree(page, 2_745, "action.yml")
+  await page.keyboard.press("Control+Backquote")
+  await expect(page.locator("#terminal-panel")).toBeVisible()
+  await expectTree(page, 2_745, "action.yml")
+
+  await page.getByRole("button", { name: "Toggle review" }).click()
+  await expect(page.locator("#review-panel")).toHaveAttribute("aria-hidden", "true")
+  await expect(page.locator('#review-panel [data-component="file-tree-v2"]')).toHaveCount(1)
+  await page.getByRole("button", { name: "Toggle review" }).click()
+  await expectTree(page, 2_745, "action.yml")
+  await page.setViewportSize({ width: 1_000, height: 700 })
+  await expectTree(page, 2_745, "action.yml")
+  await expectStackGeometry(page)
+})
+
+async function selectMode(page: Page, current: string, next: string) {
+  await page.getByRole("button", { name: current }).click()
+  await page.getByRole("option", { name: next }).click()
+}
+
+async function expectTree(page: Page, total: number, file: string) {
   const tree = page.locator('#review-panel [data-component="file-tree-v2"]')
-  await expect(tree).toHaveAttribute("data-total-rows", "2745")
-  const renderedRows = await tree.locator('[data-slot="file-tree-v2-row"]').count()
-  expect(renderedRows).toBeGreaterThan(0)
-  expect(renderedRows).toBeLessThanOrEqual(60)
+  await expect(tree).toHaveAttribute("data-total-rows", String(total))
+  await expect
+    .poll(() => tree.evaluate((element) => element.querySelectorAll('[data-slot="file-tree-v2-row"]').length))
+    .toBeGreaterThan(0)
+  const state = await tree.evaluate((element) => ({
+    root: element.getBoundingClientRect().height,
+    viewport: element.closest<HTMLElement>(".scroll-view__viewport")!.getBoundingClientRect().height,
+    rows: element.querySelectorAll('[data-slot="file-tree-v2-row"]').length,
+  }))
+  expect(state.viewport).toBeGreaterThan(0)
+  expect(state.root).toBeGreaterThan(0)
+  expect(state.rows).toBeGreaterThan(0)
+  expect(state.rows).toBeLessThanOrEqual(60)
+  await expect(page.getByRole("button", { name: file })).toBeVisible()
+}
 
+async function expectStackGeometry(page: Page) {
   const geometry = await page.evaluate(() => {
     const review = document.querySelector<HTMLElement>("#review-panel")!
     const terminal = document.querySelector<HTMLElement>("#terminal-panel")!
@@ -116,7 +173,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   })
   expect(Math.abs(geometry.review - geometry.reviewParent)).toBeLessThanOrEqual(1)
   expect(Math.abs(geometry.terminal - geometry.terminalParent)).toBeLessThanOrEqual(1)
-})
+}
 
 function base64Encode(value: string) {
   return Buffer.from(value, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")

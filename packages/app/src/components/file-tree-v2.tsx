@@ -124,6 +124,7 @@ export default function FileTreeV2(props: {
   allowed?: readonly string[]
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
+  scrollElement?: HTMLDivElement
   onFileClick?: (file: FileNode) => void
 }) {
   const file = useFile()
@@ -137,7 +138,7 @@ export default function FileTreeV2(props: {
     get count() {
       return rows().length
     },
-    getScrollElement: () => root()?.closest<HTMLDivElement>(".scroll-view__viewport") ?? null,
+    getScrollElement: () => props.scrollElement ?? root()?.closest<HTMLDivElement>(".scroll-view__viewport") ?? null,
     estimateSize: () => 28,
     gap: 2,
     overscan: 10,

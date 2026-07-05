@@ -160,6 +160,7 @@ function ReviewPanelV2Sidebar(props: {
 }) {
   const language = useLanguage()
   const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
+  const [viewport, setViewport] = createSignal<HTMLDivElement>()
   const highlightedPath = createMemo(() => {
     if (!props.searching()) return undefined
     const files = props.filteredFiles()
@@ -189,6 +190,7 @@ function ReviewPanelV2Sidebar(props: {
       onWidthChange={props.state.resizeSidebar}
       minWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN}
       maxWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX}
+      viewportRef={setViewport}
     >
       <Show
         when={props.diffsReady()}
@@ -207,6 +209,7 @@ function ReviewPanelV2Sidebar(props: {
               kinds={props.kinds()}
               draggable={false}
               active={props.activeDiff()}
+              scrollElement={viewport()}
               onFileClick={(node) => props.onSelectFile(node.path)}
             />
           }
@@ -220,6 +223,7 @@ function ReviewPanelV2Sidebar(props: {
               kinds={props.kinds()}
               active={props.activeDiff()}
               highlighted={highlightedPath()}
+              scrollElement={viewport()}
               onFileClick={(path) => {
                 setExplicitHighlight(path)
                 props.onSelectFile(path)
