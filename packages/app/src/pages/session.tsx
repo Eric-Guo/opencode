@@ -2157,6 +2157,7 @@ export default function Page() {
             diffsReady={reviewReady}
             empty={reviewEmptyText}
             hasReview={hasReview}
+            reviewHasFocusableContent={hasReview}
             reviewCount={reviewCount}
             reviewPanel={reviewPanel}
             activeDiff={tree.activeDiff}
@@ -2174,9 +2175,10 @@ export default function Page() {
                     canReview={canReview}
                     diffs={reviewDiffs}
                     diffsReady={reviewReady}
-                    empty={reviewEmptyText}
-                    hasReview={hasReview}
-                    reviewCount={reviewCount}
+                     empty={reviewEmptyText}
+                     hasReview={hasReview}
+                     reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
+                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
                     activeDiff={tree.activeDiff}
                     focusReviewDiff={focusReviewDiff}
@@ -2209,9 +2211,9 @@ export default function Page() {
                 </div>
               </Show>
             </div>
-          </Show>
-        </Show>
-      </div>
+           </Show>
+         </Show>
+       </div>
 
       <Show when={!newSessionDesign()}>
         <TerminalPanel />
