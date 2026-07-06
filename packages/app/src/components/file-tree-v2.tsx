@@ -17,6 +17,7 @@ import { Icon } from "@opencode-ai/ui/v2/icon"
 import { pathToFileUrl, withFileDragImage, type Kind } from "@/components/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import { buildFileTreeV2Model, flattenFileTreeV2, normalizeFileTreeV2Path } from "@/components/file-tree-v2-model"
+import { virtualScrollElement } from "@/components/virtual-scroll-element"
 
 export type { Kind } from "@/components/file-tree"
 
@@ -124,7 +125,6 @@ export default function FileTreeV2(props: {
   allowed?: readonly string[]
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
-  scrollElement?: HTMLDivElement
   onFileClick?: (file: FileNode) => void
 }) {
   const file = useFile()
@@ -138,7 +138,7 @@ export default function FileTreeV2(props: {
     get count() {
       return rows().length
     },
-    getScrollElement: () => props.scrollElement ?? root()?.closest<HTMLDivElement>(".scroll-view__viewport") ?? null,
+    getScrollElement: () => virtualScrollElement(root()),
     initialRect: { width: 0, height: 600 },
     estimateSize: () => 28,
     gap: 2,

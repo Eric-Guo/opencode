@@ -92,19 +92,27 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await expect(page.locator("#review-panel")).toBeVisible()
   await expectTree(page, 8, "git-0.ts")
 
-  await page.keyboard.press("Control+Backquote")
-  await expect(page.locator("#terminal-panel")).toBeVisible()
-  // Terminal activation retries focus through 240ms; let that settle before opening the mode select.
-  await page.waitForTimeout(300)
   await selectMode(page, "Git changes", "Branch changes")
   await expect(page.getByRole("tab", { name: "Review 2740" })).toBeVisible()
+  await page.keyboard.press("Control+Backquote")
+  await expect(page.locator("#terminal-panel")).toBeVisible()
   await expectTree(page, 2_745, "action.yml")
   await expectStackGeometry(page)
 
-  await page.locator('#review-panel [data-component="file-tree-v2"]').evaluate((element) => {
-    const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
-    viewport.scrollTop = viewport.scrollHeight
+  const treeViewport = page.locator('#review-panel [data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
+  await treeViewport.hover()
+  await page.mouse.wheel(0, 100_000)
+  await expect
+    .poll(() => treeViewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+  const lastFile = page.getByRole("button", { name: "generated-2738.ts" })
+  await expect(lastFile).toBeVisible()
+  const bottomGap = await lastFile.evaluate((element) => {
+    const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!.getBoundingClientRect()
+    return viewport.bottom - element.getBoundingClientRect().bottom
   })
+  expect(bottomGap).toBeGreaterThanOrEqual(0)
+  expect(bottomGap).toBeLessThanOrEqual(16)
   await selectMode(page, "Branch changes", "Git changes")
   await expectTree(page, 8, "git-0.ts")
   await selectMode(page, "Git changes", "Branch changes")
@@ -145,7 +153,9 @@ test("keeps the review tree and terminal sized when both panels are open", async
 
 async function selectMode(page: Page, current: string, next: string) {
   await page.getByRole("button", { name: current }).click()
-  await page.getByRole("option", { name: next }).click()
+  const option = page.getByRole("option", { name: next })
+  await expect(option).toBeVisible()
+  await option.click()
 }
 
 async function expectTree(page: Page, total: number, file: string) {
