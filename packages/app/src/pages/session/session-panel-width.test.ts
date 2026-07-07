@@ -37,7 +37,9 @@ describe("clampSessionPanelWidth", () => {
 
   test("forces the width down when the window shrinks", () => {
     expect(clampSessionPanelWidth({ width: 1600, available: 1700, split: false })).toBe(1700 - REVIEW_PANE_WIDTH_MIN)
-    expect(clampSessionPanelWidth({ width: 1600, available: 1700, split: true })).toBe(1700 - REVIEW_PANE_WIDTH_MIN_SPLIT)
+    expect(clampSessionPanelWidth({ width: 1600, available: 1700, split: true })).toBe(
+      1700 - REVIEW_PANE_WIDTH_MIN_SPLIT,
+    )
   })
 
   test("holds the chat panel minimum when there is no room for both", () => {
