@@ -92,6 +92,7 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
 
   const activeItem = createMemo(() => {
     const source = sourceActiveItem()
+    if (loadedDiff.state !== "ready") return source
     const loaded = loadedDiff()
     if (loaded && loaded.source === source && loaded.version === props.diffVersion) return loaded.value
     return source
