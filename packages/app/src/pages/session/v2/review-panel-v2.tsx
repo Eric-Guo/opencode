@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js"
+import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
@@ -78,22 +78,17 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
     return files[0]
   })
   const sourceActiveItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
-  const [loadedDiff, setLoadedDiff] = createSignal<{ source: RenderDiff; version?: number; value: RenderDiff }>()
-  let loadToken = 0
-
-  createEffect(() => {
+  const detailSource = createMemo(() => {
     const diff = sourceActiveItem()
     const load = props.loadDiff
-    const version = props.diffVersion
-    const token = ++loadToken
-    setLoadedDiff(undefined)
     if (!diff || !load || !reviewDiffNeedsLoad(diff)) return
-    void load(diff.file, version).then((result) => {
-      if (token !== loadToken || result?.file !== diff.file) return
-      setLoadedDiff({ source: diff, version, value: result })
-    })
+    return { diff, load, version: props.diffVersion }
   })
-  onCleanup(() => loadToken++)
+  const [loadedDiff] = createResource(detailSource, async ({ diff, load, version }) => {
+    const value = await load(diff.file, version)
+    if (value?.file !== diff.file) return
+    return { source: diff, version, value }
+  })
 
   const activeItem = createMemo(() => {
     const source = sourceActiveItem()
