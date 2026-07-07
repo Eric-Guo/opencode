@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
@@ -25,6 +25,7 @@ import {
   filterRenderableDiff,
   filterReviewFiles,
   reviewDiffKinds,
+  reviewDiffNeedsLoad,
   type RenderDiff,
 } from "@/pages/session/v2/review-diff-kinds"
 import type { ReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
@@ -37,6 +38,8 @@ export type ReviewPanelV2Props = {
   empty?: JSX.Element
   diffs: () => ReviewDiff[]
   diffsReady: () => boolean
+  diffVersion?: number
+  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
   activeFile?: string
   onSelectFile: (path: string) => void
   diffStyle: SessionReviewDiffStyle
@@ -74,7 +77,30 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
     if (active && files.includes(active)) return active
     return files[0]
   })
-  const activeItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
+  const sourceActiveItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
+  const [loadedDiff, setLoadedDiff] = createSignal<{ source: RenderDiff; version?: number; value: RenderDiff }>()
+  let loadToken = 0
+
+  createEffect(() => {
+    const diff = sourceActiveItem()
+    const load = props.loadDiff
+    const version = props.diffVersion
+    const token = ++loadToken
+    setLoadedDiff(undefined)
+    if (!diff || !load || !reviewDiffNeedsLoad(diff)) return
+    void load(diff.file, version).then((result) => {
+      if (token !== loadToken || result?.file !== diff.file) return
+      setLoadedDiff({ source: diff, version, value: result })
+    })
+  })
+  onCleanup(() => loadToken++)
+
+  const activeItem = createMemo(() => {
+    const source = sourceActiveItem()
+    const loaded = loadedDiff()
+    if (loaded && loaded.source === source && loaded.version === props.diffVersion) return loaded.value
+    return source
+  })
 
   const readFile = async (path: string) =>
     sdk()
