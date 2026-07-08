@@ -27,6 +27,7 @@ export type SessionCommandContext = {
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
   review?: () => boolean
+  fileBrowser?: () => boolean
 }
 
 const withCategory = (category: string) => {
@@ -86,6 +87,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     normalizeTab,
     review: actions.review,
     hasReview,
+    fileBrowser: actions.fileBrowser,
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab

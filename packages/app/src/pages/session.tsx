@@ -1027,6 +1027,7 @@ export default function Page() {
     setActiveMessage,
     focusInput,
     review: reviewTab,
+    fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
   })
 
   const openReviewFile = createOpenReviewFile({
@@ -2185,6 +2186,7 @@ export default function Page() {
                     reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
+                    fileBrowserState={reviewV2State}
                     activeDiff={tree.activeDiff}
                     focusReviewDiff={focusReviewDiff}
                     reviewSnap={ui.reviewSnap}
