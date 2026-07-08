@@ -106,7 +106,6 @@ type VcsMode = "git" | "branch"
 const sessionViewState = () => ({
   messageId: undefined as string | undefined,
   mobileTab: "session" as "session" | "changes",
-  changes: "git" as ChangeMode,
 })
 
 function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
@@ -353,6 +352,8 @@ export default function Page() {
   const location = useLocation()
   const navigate = useNavigate()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
+  const reviewMode = () => view().review.mode() ?? "git"
+  const reviewFile = () => view().review.file()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
@@ -642,7 +643,8 @@ export default function Page() {
       : store.mobileTab === "changes",
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
-    if (store.changes === "git" || store.changes === "branch") return store.changes
+    const mode = reviewMode()
+    if (mode === "git" || mode === "branch") return mode
   })
   const vcsKey = createMemo(
     () =>
@@ -669,15 +671,21 @@ export default function Page() {
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
-    if (store.changes === "git" || store.changes === "branch")
+    if (reviewMode() === "git" || reviewMode() === "branch")
       // avoids suspense
       return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
     return turnDiffs()
   }
+  const activeReviewFile = () => {
+    const diffs = reviewDiffs()
+    const selected = reviewFile()
+    if (selected && diffs.some((diff) => diff.file === selected)) return selected
+    return diffs[0]?.file
+  }
   const reviewCount = () => reviewDiffs().length
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
-    if (store.changes === "git" || store.changes === "branch") return !vcsQuery.isPending
+    if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
     return true
   }
 
@@ -997,12 +1005,15 @@ export default function Page() {
   }
 
   createEffect(() => {
+    if (!layout.ready()) return
+    if (sync().status !== "complete") return
     if (!sync().project) return
     const list = changesOptions()
-    if (list.includes(store.changes)) return
+    const mode = reviewMode()
+    if (list.includes(mode)) return
     const next = list[0]
     if (!next) return
-    setStore("changes", next)
+    view().review.setMode(next)
   })
 
   createEffect(
@@ -1022,7 +1033,6 @@ export default function Page() {
   const [tree, setTree] = createStore({
     reviewScroll: undefined as HTMLDivElement | undefined,
     pendingDiff: undefined as string | undefined,
-    activeDiff: undefined as string | undefined,
   })
 
   createEffect(
@@ -1032,7 +1042,6 @@ export default function Page() {
         setTree({
           reviewScroll: undefined,
           pendingDiff: undefined,
-          activeDiff: undefined,
         })
       },
       { defer: true },
@@ -1079,9 +1088,9 @@ export default function Page() {
     return (
       <Select
         options={changesOptions()}
-        current={store.changes}
+        current={reviewMode()}
         label={changesLabel}
-        onSelect={(option) => option && setStore("changes", option)}
+        onSelect={(option) => option && view().review.setMode(option)}
         variant="ghost"
         size="small"
         valueClass="text-14-medium"
@@ -1098,11 +1107,11 @@ export default function Page() {
       <SelectV2
         appearance="inline"
         options={changesOptions()}
-        current={store.changes}
+        current={reviewMode()}
         label={changesLabel}
         placement="bottom-start"
         gutter={6}
-        onSelect={(option) => option && setStore("changes", option)}
+        onSelect={(option) => option && view().review.setMode(option)}
       />
     )
   }
@@ -1130,18 +1139,18 @@ export default function Page() {
   )
 
   const reviewEmptyText = createMemo(() => {
-    if (store.changes === "git") return language.t("session.review.noUncommittedChanges")
-    if (store.changes === "branch") return language.t("session.review.noBranchChanges")
+    if (reviewMode() === "git") return language.t("session.review.noUncommittedChanges")
+    if (reviewMode() === "branch") return language.t("session.review.noBranchChanges")
     return language.t("session.review.noChanges")
   })
 
   const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
-    if (store.changes === "git" || store.changes === "branch") {
+    if (reviewMode() === "git" || reviewMode() === "branch") {
       if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
       return empty(reviewEmptyText())
     }
 
-    if (store.changes === "turn") {
+    if (reviewMode() === "turn") {
       if (nogit()) return createGit(input)
       return empty(reviewEmptyText())
     }
@@ -1154,10 +1163,10 @@ export default function Page() {
   }
 
   const reviewEmptyV2 = () => {
-    if ((store.changes === "git" || store.changes === "branch") && !reviewReady()) {
+    if ((reviewMode() === "git" || reviewMode() === "branch") && !reviewReady()) {
       return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
     }
-    if (store.changes === "turn" && nogit()) {
+    if (reviewMode() === "turn" && nogit()) {
       return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
     }
     return <SessionReviewEmptyChangesV2 />
@@ -1179,7 +1188,7 @@ export default function Page() {
         diffStyle={input.diffStyle}
         onDiffStyleChange={input.onDiffStyleChange}
         onScrollRef={(el) => setTree("reviewScroll", el)}
-        focusedFile={tree.activeDiff}
+        focusedFile={activeReviewFile()}
         onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
         onLineCommentUpdate={updateCommentInContext}
         onLineCommentDelete={removeCommentFromContext}
@@ -1211,7 +1220,7 @@ export default function Page() {
     diffs: reviewDiffs,
     diffsReady: reviewReady,
     get activeFile() {
-      return tree.activeDiff
+      return activeReviewFile()
     },
     onSelectFile: focusReviewDiff,
     get diffStyle() {
@@ -1324,7 +1333,8 @@ export default function Page() {
   const focusReviewDiff = (path: string) => {
     openReviewPanel()
     view().review.openPath(path)
-    setTree({ activeDiff: path, pendingDiff: path })
+    view().review.setFile(path)
+    setTree("pendingDiff", path)
   }
 
   createEffect(() => {
@@ -2189,7 +2199,7 @@ export default function Page() {
             reviewHasFocusableContent={hasReview}
             reviewCount={reviewCount}
             reviewPanel={reviewPanel}
-            activeDiff={tree.activeDiff}
+            activeDiff={activeReviewFile()}
             focusReviewDiff={focusReviewDiff}
             reviewSnap={ui.reviewSnap}
             size={size}
@@ -2214,7 +2224,7 @@ export default function Page() {
                     reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
                     reviewCount={reviewCount}
                     reviewPanel={reviewPanelV2}
-                    activeDiff={tree.activeDiff}
+                    activeDiff={activeReviewFile()}
                     focusReviewDiff={focusReviewDiff}
                     reviewSnap={ui.reviewSnap}
                     size={size}
