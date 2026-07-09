@@ -3,6 +3,7 @@ import {
   assistantMessage,
   setupTimeline,
   shell,
+  textPart,
   toolPart,
   userMessage,
 } from "../performance/timeline-stability/fixture"
@@ -117,6 +118,44 @@ test("keeps the patch card inside a fractionally short virtual row", async ({ pa
   expect(edges.luminance.bottom).toBeLessThan(245)
   expect(Math.abs(edges.luminance.bottom - edges.luminance.top)).toBeLessThan(10)
   expect(geometry.clipMargin).toBe("0.5px")
+})
+
+test("allows paint rounding for every framed row but not fixed turn gaps", async ({ page }) => {
+  const secondUserID = "msg_outline_second_user"
+  await setupTimeline(page, {
+    messages: [
+      userMessage(undefined, {
+        summary: {
+          diffs: [
+            {
+              file: "src/summary.ts",
+              additions: 1,
+              deletions: 1,
+              patch: "@@ -1 +1 @@\n-export const value = 1\n+export const value = 2",
+            },
+          ],
+        },
+      }),
+      assistantMessage([textPart("prt_outline_text", "Assistant text")]),
+      userMessage(undefined, { id: secondUserID, created: 1700000010000 }),
+      assistantMessage([], {
+        id: "msg_outline_second_assistant",
+        parentID: secondUserID,
+        created: 1700000011000,
+      }),
+    ],
+  })
+  await expect(page.locator('[data-timeline-row="DiffSummary"]')).toBeVisible()
+  await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
+
+  const rows = await page.locator("[data-timeline-key]").evaluateAll((elements) =>
+    elements.map((element) => ({
+      tag: element.querySelector<HTMLElement>("[data-timeline-row]")?.dataset.timelineRow,
+      clipMargin: getComputedStyle(element).overflowClipMargin,
+    })),
+  )
+  expect(rows.filter((row) => row.tag !== "TurnGap").every((row) => row.clipMargin === "0.5px")).toBe(true)
+  expect(rows.filter((row) => row.tag === "TurnGap")).toEqual([{ tag: "TurnGap", clipMargin: "0px" }])
 })
 
 async function captureCardEdges(page: Page, card: Locator) {
