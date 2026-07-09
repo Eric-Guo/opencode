@@ -46,7 +46,7 @@ const layer = Layer.effect(
         .flatMap((item) => item.info.watcher?.ignore ?? [])
       const home = path.resolve(location.directory) === path.resolve(os.homedir())
 
-      if (!home && location.vcs) {
+      if (!home) {
         yield* watcher
           .subscribe({
             path: location.directory,
