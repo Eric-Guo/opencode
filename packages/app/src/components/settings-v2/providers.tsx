@@ -107,7 +107,7 @@ export const SettingsProvidersV2: Component<{ onBack?: () => void }> = (props) =
       .catch((err: unknown) => {
         serverSync().set("config", "disabled_providers", before)
         const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
+        showToast({ variant: "error", title: language.t("common.requestFailed"), description: message })
       })
   }
 
@@ -132,7 +132,7 @@ export const SettingsProvidersV2: Component<{ onBack?: () => void }> = (props) =
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
+        showToast({ variant: "error", title: language.t("common.requestFailed"), description: message })
       })
   }
 

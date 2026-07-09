@@ -161,7 +161,7 @@ export function CustomProviderForm() {
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : String(err)
-      showToast({ title: language.t("common.requestFailed"), description: message })
+      showToast({ variant: "error", title: language.t("common.requestFailed"), description: message })
     },
   }))
 

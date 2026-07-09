@@ -327,6 +327,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           .then((x) => x.data)
           .catch((err) => {
             showToast({
+              variant: "error",
               title: language.t("prompt.toast.worktreeCreateFailed.title"),
               description: errorMessage(err),
             })
@@ -335,6 +336,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
         if (!createdWorktree?.directory) {
           showToast({
+            variant: "error",
             title: language.t("prompt.toast.worktreeCreateFailed.title"),
             description: language.t("common.requestFailed"),
           })
@@ -366,6 +368,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         .then((x) => x.data ?? undefined)
         .catch((err) => {
           showToast({
+            variant: "error",
             title: language.t("prompt.toast.sessionCreateFailed.title"),
             description: errorMessage(err),
           })
@@ -385,6 +388,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
     if (!session) {
       showToast({
+        variant: "error",
         title: language.t("prompt.toast.promptSendFailed.title"),
         description: language.t("prompt.toast.promptSendFailed.description"),
       })
@@ -449,6 +453,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         })
         .catch((err) => {
           showToast({
+            variant: "error",
             title: language.t("prompt.toast.shellSendFailed.title"),
             description: errorMessage(err),
           })
@@ -481,6 +486,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
           .catch((err) => {
             showToast({
+              variant: "error",
               title: language.t("prompt.toast.commandSendFailed.title"),
               description: formatServerError(err, language.t, language.t("common.requestFailed")),
             })
@@ -576,6 +582,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         sync().set("session_status", session.id, { type: "idle" })
       }
       showToast({
+        variant: "error",
         title: language.t("prompt.toast.promptSendFailed.title"),
         description: errorMessage(err),
       })

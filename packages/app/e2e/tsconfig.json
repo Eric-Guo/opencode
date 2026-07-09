@@ -6,11 +6,14 @@
     "types": ["node", "bun"]
   },
   "include": [
+    "./fixtures.ts",
     "./performance/timeline-stability/**/*.spec.ts",
     "./performance/timeline-stability/fixture.test.ts",
     "./performance/timeline-stability/fixture.ts",
     "./performance/unit/visual-stability.test.ts",
     "./regression/new-session-panel-corner.spec.ts",
+    "./regression/error-toast-guard.spec.ts",
+    "./regression/session-request-docks.spec.ts",
     "./regression/session-timeline-context-resize.spec.ts",
     "./utils/**/*.ts"
   ]

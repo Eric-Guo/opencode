@@ -72,7 +72,7 @@ export const DialogFork: Component = () => {
       .client.session.fork({ sessionID, messageID: item.id })
       .then((forked) => {
         if (!forked.data) {
-          showToast({ title: language.t("common.requestFailed") })
+          showToast({ variant: "error", title: language.t("common.requestFailed") })
           return
         }
         dialog.close()
@@ -81,7 +81,7 @@ export const DialogFork: Component = () => {
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
+        showToast({ variant: "error", title: language.t("common.requestFailed"), description: message })
       })
   }
 

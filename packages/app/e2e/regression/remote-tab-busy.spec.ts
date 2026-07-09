@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test"
+import { expect, test, type Page, type Route } from "../fixtures"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 
 const serverA = "http://127.0.0.1:4096"
