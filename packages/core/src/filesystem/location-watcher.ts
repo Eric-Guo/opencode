@@ -45,7 +45,7 @@ const layer = Layer.effect(
         .flatMap((item) => item.info.watcher?.ignore ?? [])
       const home = Protected.isHome(location.directory)
 
-      if (!home && location.vcs) {
+      if (!home) {
         const updates = yield* watcher.subscribe({
           path: location.directory,
           type: "directory",
