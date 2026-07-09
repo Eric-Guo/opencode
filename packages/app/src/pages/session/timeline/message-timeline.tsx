@@ -1279,8 +1279,8 @@ export function MessageTimeline(props: {
           width: "100%",
           height: `${item().size}px`,
           overflow: "clip",
-          // Rounded virtual measurements can otherwise clip the shell card's outer border pixel.
-          "overflow-clip-margin": tool()?.tool === "bash" ? "0.5px" : undefined,
+          // Rounded virtual measurements can otherwise clip a tool card's outer border pixel.
+          "overflow-clip-margin": tool() ? "0.5px" : undefined,
         }}
       >
         <div
