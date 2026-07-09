@@ -1,5 +1,5 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { expect, test, type Page } from "../fixtures"
+import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 import { startTimelineDiagnostics, type TimelineDiagnostics } from "../utils/timeline-cdp-diagnostics"
