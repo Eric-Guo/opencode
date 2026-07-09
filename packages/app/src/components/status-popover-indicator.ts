@@ -1,7 +1,9 @@
-type McpStatus = "connected" | "disabled" | "failed" | "needs_auth" | "needs_client_registration"
-type LspStatus = "connected" | "error"
+import type { LspStatus, McpStatus } from "@opencode-ai/sdk/v2/client"
 
-export function hasNonBlockingServiceIssue(input: { mcp: McpStatus[]; lsp: LspStatus[] }) {
+export function hasNonBlockingServiceIssue(input: {
+  mcp: Array<McpStatus["status"]>
+  lsp: Array<LspStatus["status"]>
+}) {
   return (
     input.mcp.some((status) => status !== "connected" && status !== "disabled") ||
     input.lsp.some((status) => status === "error")
