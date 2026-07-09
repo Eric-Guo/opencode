@@ -44,7 +44,7 @@ export function useUpdaterAction() {
         })
       }
       if (state?.status === "error") {
-        showToast({ variant: "error", title: language.t("common.requestFailed"), description: state.message })
+        showToast({ title: language.t("common.requestFailed"), description: state.message })
       }
     },
   }

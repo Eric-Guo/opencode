@@ -145,7 +145,6 @@ export function TabNavItem(props: {
     } catch (err) {
       props.onTitleChangeFailed?.(original)
       showToast({
-        variant: "error",
         title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : undefined,
       })

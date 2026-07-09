@@ -90,7 +90,6 @@ export interface ToastV2Options {
   title?: string
   description?: string
   icon?: JSX.Element
-  variant?: "default" | "success" | "error" | "loading"
   duration?: number
   persistent?: boolean
   actions?: ToastV2Action[]
@@ -101,12 +100,7 @@ export function showToastV2(options: ToastV2Options | string) {
   return toaster.show((props) => {
     const resolvedIcon = children(() => opts.icon)
     return (
-      <ToastV2
-        toastId={props.toastId}
-        duration={opts.duration}
-        persistent={opts.persistent}
-        data-variant={opts.variant ?? "default"}
-      >
+      <ToastV2 toastId={props.toastId} duration={opts.duration} persistent={opts.persistent}>
         <div data-slot="toast-v2-header">
           <Show when={resolvedIcon()}>
             <ToastV2.Icon>{resolvedIcon()}</ToastV2.Icon>

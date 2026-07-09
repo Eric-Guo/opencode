@@ -85,7 +85,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
       .client.permission.respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
       .catch((err: unknown) => {
         const description = err instanceof Error ? err.message : String(err)
-        showToast({ variant: "error", title: language.t("common.requestFailed"), description })
+        showToast({ title: language.t("common.requestFailed"), description })
       })
       .finally(() => {
         setStore("responding", (id) => (id === perm.id ? undefined : id))

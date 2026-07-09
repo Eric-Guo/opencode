@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "../fixtures"
+import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 
 const serverA = "http://127.0.0.1:4096"
@@ -45,9 +45,7 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   ).toBe(true)
 })
 
-test("legacy session routes preserve an existing tab's server", async ({ page, errorToasts }) => {
-  // The legacy route bootstraps against the default server before redirecting to the persisted tab server.
-  errorToasts.allow(/server-b.*InvalidDirectory/)
+test("legacy session routes preserve an existing tab's server", async ({ page }) => {
   await mockServers(page, [])
   await page.addInitScript(
     ({ serverB, sessionB }) => {
@@ -83,12 +81,11 @@ async function mockServers(page: Page, requests: string[]) {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
     requests.push(url.toString())
-    const directory = url.searchParams.get("directory")
     const current = url.origin === serverA ? sessionA : sessionB
+    const directory = url.searchParams.get("directory")
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
     if (url.pathname === "/global/event" || url.pathname === "/event") return sse(route)
     if (url.pathname === "/global/health") return json(route, { healthy: true })
-    if (url.pathname === "/session/status") return json(route, {})
     if (url.pathname === "/session") return json(route, [current])
     if (url.pathname === `/session/${current.id}`) return json(route, current)
     if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)

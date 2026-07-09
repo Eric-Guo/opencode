@@ -1,4 +1,4 @@
-import { expect, test } from "../fixtures"
+import { expect, test } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 

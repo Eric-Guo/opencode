@@ -1,4 +1,4 @@
-import { expect, guardPage, test as base, type Browser, type Page, type TestInfo } from "../fixtures"
+import { expect, test as base, type Browser, type Page, type TestInfo } from "@playwright/test"
 import { startChromeTrace } from "./chrome-trace"
 
 type BenchmarkFixtures = {
@@ -101,21 +101,16 @@ export async function withBenchmarkPage<T>(
   browser: Browser,
   name: string,
   run: (page: Page) => Promise<T>,
-  testInfo: TestInfo,
+  testInfo?: TestInfo,
 ) {
   const context = await browser.newContext()
   try {
     const page = await context.newPage()
-    const toastGuard = await guardPage(page, testInfo)
     const diagnostics = await observePerformancePage(page, name)
     try {
       return await run(page)
     } finally {
-      try {
-        await reportPerformancePage(name, diagnostics, testInfo)
-      } finally {
-        await toastGuard?.finish()
-      }
+      await reportPerformancePage(name, diagnostics, testInfo)
     }
   } finally {
     await context.close()

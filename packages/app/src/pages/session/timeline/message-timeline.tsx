@@ -15,12 +15,7 @@ import { createStore, produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
-import {
-  createVirtualizer,
-  defaultRangeExtractor,
-  elementScroll,
-  type VirtualItem,
-} from "@tanstack/solid-virtual"
+import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
@@ -679,7 +674,6 @@ export function MessageTimeline(props: {
     },
     onError: (err) => {
       showToast({
-        variant: "error",
         title: language.t("common.requestFailed"),
         description: errorMessage(err),
       })
@@ -714,7 +708,6 @@ export function MessageTimeline(props: {
       )
       .catch((err: unknown) =>
         showToast({
-          variant: "error",
           title: language.t("common.requestFailed"),
           description: errorMessage(err),
         }),
@@ -827,7 +820,6 @@ export function MessageTimeline(props: {
       })
       .catch((err) => {
         showToast({
-          variant: "error",
           title: language.t("common.requestFailed"),
           description: errorMessage(err),
         })
@@ -847,7 +839,6 @@ export function MessageTimeline(props: {
       .then((x) => x.data)
       .catch((err) => {
         showToast({
-          variant: "error",
           title: language.t("session.delete.failed.title"),
           description: errorMessage(err),
         })

@@ -1391,7 +1391,6 @@ export default function LegacyLayout(props: ParentProps) {
       .then((x) => x.data)
       .catch((err) => {
         showToast({
-          variant: "error",
           title: language.t("workspace.delete.failed.title"),
           description: errorMessage(err, language.t("common.requestFailed")),
         })
@@ -1465,7 +1464,6 @@ export default function LegacyLayout(props: ParentProps) {
       .then((x) => x.data)
       .catch((err) => {
         showToast({
-          variant: "error",
           title: language.t("workspace.reset.failed.title"),
           description: errorMessage(err, language.t("common.requestFailed")),
         })
@@ -1828,7 +1826,6 @@ export default function LegacyLayout(props: ParentProps) {
       .then((x) => x.data)
       .catch((err) => {
         showToast({
-          variant: "error",
           title: language.t("workspace.create.failed.title"),
           description: errorMessage(err, language.t("common.requestFailed")),
         })

@@ -518,7 +518,6 @@ export function NewHome() {
         ),
       onError: (error) =>
         showToast({
-          variant: "error",
           title: language.t("common.requestFailed"),
           description: errorMessage(error, language.t("common.requestFailed")),
         }),

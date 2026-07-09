@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "../fixtures"
+import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 
 const server = "http://127.0.0.1:4096"
@@ -58,7 +58,6 @@ async function mockServer(page: Page) {
     if (url.origin !== server) return route.fallback()
     if (url.pathname === "/global/event" || url.pathname === "/event") return sse(route)
     if (url.pathname === "/global/health") return json(route, { healthy: true })
-    if (url.pathname === "/session/status") return json(route, {})
     if (url.pathname === "/session") return json(route, sessions)
     const byId = sessions.find((item) => url.pathname === `/session/${item.id}`)
     if (byId) return json(route, byId)

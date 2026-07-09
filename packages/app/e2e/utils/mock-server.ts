@@ -20,7 +20,6 @@ export interface MockServerConfig {
   todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
-  onQuestionReply?: (input: { requestID: string; answers?: string[][] }) => unknown | Promise<unknown>
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
@@ -64,7 +63,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
     if (path === "/session/status") return json(route, config.sessionStatus ?? {})
     if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
-    if (path === "/file") return json(route, (await config.fileList?.(url.searchParams.get("path") ?? "")) ?? [])
+    if (path === "/file" && config.fileList)
+      return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
     if (path === "/file/content" && config.fileContent)
       return json(route, await config.fileContent(url.searchParams.get("path") ?? ""))
     if (path === "/find/file" && config.findFiles)
@@ -109,18 +109,6 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
     if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
     if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
-
-    const permissionRespondMatch = path.match(/^\/session\/([^/]+)\/permissions\/([^/]+)$/)
-    if (permissionRespondMatch && route.request().method() === "POST") return json(route, true)
-
-    const questionReplyMatch = path.match(/^\/question\/([^/]+)\/reply$/)
-    if (questionReplyMatch && route.request().method() === "POST") {
-      const body = route.request().postDataJSON() as { answers?: string[][] }
-      return json(
-        route,
-        (await config.onQuestionReply?.({ requestID: questionReplyMatch[1]!, answers: body.answers })) ?? true,
-      )
-    }
 
     const messagesMatch = path.match(/^\/session\/([^/]+)\/message$/)
     if (messagesMatch) {
