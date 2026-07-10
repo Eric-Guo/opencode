@@ -125,9 +125,11 @@ export function createHomeSessionIndexCache(queryClient: QueryClient, server: st
   }
 }
 
-// TODO(v2): Once released, load projects with client.v2.project.list() and use
-// client.v2.session.list({ parentID: null, order: "desc" }). Then remove this
-// full-table adapter, synthetic V1 fields, and client-side child filtering.
+// TODO(v2): This deliberately dumb full-table scan is necessary because the
+// current V2 API orders by creation time and cannot filter roots, archives, or
+// multiple directories. A bounded page could omit an old session updated today.
+// Once released, use client.v2.project.list() and client.v2.session.list({
+// parentID: null, order: "desc" }), then remove this adapter and its V1 fields.
 export function parseHomeSessionIndex(sessions: SessionV2Info[]): Session[] {
   return sessions.flatMap((item) => {
     if (item.parentID || item.time.archived !== undefined) return []
