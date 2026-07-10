@@ -66,19 +66,26 @@ test("initial rect projects rows before a scroll element connects", () => {
   })
 })
 
-test("clamps an oversized initial offset to a full final viewport range", () => {
-  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>({
+test("clamps oversized offsets with scroll margin and padding changes", () => {
+  const options = (paddingEnd: number) => ({
     count: 20,
     estimateSize: () => 60,
     initialOffset: Number.MAX_SAFE_INTEGER,
     initialRect: { width: 800, height: 600 },
+    scrollMargin: 64,
+    paddingEnd,
+    overscan: 1,
     getScrollElement: () => null,
     scrollToFn: () => {},
     observeElementRect: () => {},
     observeElementOffset: () => {},
   })
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options(64))
 
-  expect(virtualizer.getVirtualItems().map((item) => item.index)).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+  expect(virtualizer.getVirtualItems().map((item) => item.index)).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+
+  virtualizer.setOptions(options(600))
+  expect(virtualizer.getVirtualItems().map((item) => item.index)).toEqual([18, 19])
 })
 
 test("stale pinned indexes do not produce missing virtual items after count shrinks", () => {

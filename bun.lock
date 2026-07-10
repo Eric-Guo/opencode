@@ -1066,7 +1066,6 @@
   "patchedDependencies": {
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
-    "@ai-sdk/xai@3.0.102": "patches/@ai-sdk%2Fxai@3.0.102.patch",
     "pacote@21.5.0": "patches/pacote@21.5.0.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
@@ -1076,6 +1075,7 @@
     "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch",
     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",
+    "@ai-sdk/xai@3.0.102": "patches/@ai-sdk%2Fxai@3.0.102.patch",
   },
   "overrides": {
     "@opentui/core": "catalog:",
