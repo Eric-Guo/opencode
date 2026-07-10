@@ -2,37 +2,53 @@ import type { Session, SessionV2Info } from "@opencode-ai/sdk/v2/client"
 import { trimSessions } from "@/context/global-sync/session-trim"
 import { pathKey } from "@/utils/path-key"
 
-export const HOME_V2_SESSION_LIMIT = 5_000
+export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
 
-export class HomeSessionSnapshotUnsupported extends Error {
+export class HomeSessionIndexInvalid extends Error {
   constructor(message: string) {
     super(message)
-    this.name = "HomeSessionSnapshotUnsupported"
+    this.name = "HomeSessionIndexInvalid"
   }
 }
 
-export async function loadHomeSessionSnapshot(
-  list: (input: { limit: number; order: "desc" }) => Promise<{ data?: unknown }>,
+export async function loadHomeSessionIndex(
+  list: (input: { limit: number; order: "desc"; cursor?: string }) => Promise<{ data?: unknown }>,
 ) {
-  const response = await list({ limit: HOME_V2_SESSION_LIMIT, order: "desc" })
-  return parseHomeSessionSnapshot(response.data)
+  const data: unknown[] = []
+  const cursors = new Set<string>()
+  let cursor: string | undefined
+
+  for (;;) {
+    const response = await list({
+      limit: HOME_V2_SESSION_PAGE_LIMIT,
+      order: "desc",
+      ...(cursor ? { cursor } : {}),
+    })
+    if (!isRecord(response.data) || !Array.isArray(response.data.data))
+      throw new HomeSessionIndexInvalid("Invalid V2 response")
+    data.push(...response.data.data)
+    if (response.data.data.length < HOME_V2_SESSION_PAGE_LIMIT) return parseHomeSessionIndex({ data })
+
+    const next = isRecord(response.data.cursor) ? response.data.cursor.next : undefined
+    if (typeof next !== "string" || cursors.has(next)) throw new HomeSessionIndexInvalid("Invalid V2 pagination cursor")
+    cursors.add(next)
+    cursor = next
+  }
 }
 
-// TODO(v2): Once the released V2 server supports project.list plus root-only,
-// updated-time session listing, replace this full-table compatibility adapter
-// and remove its synthetic legacy fields, client filtering, and 5,000-row guard.
-export function parseHomeSessionSnapshot(value: unknown): Session[] {
-  if (!isRecord(value) || !Array.isArray(value.data)) throw new HomeSessionSnapshotUnsupported("Invalid V2 response")
-  if (value.data.length >= HOME_V2_SESSION_LIMIT)
-    throw new HomeSessionSnapshotUnsupported("V2 session snapshot exceeded the safe single-page limit")
+// TODO(v2): Once released, load projects with client.v2.project.list() and use
+// client.v2.session.list({ parentID: null, order: "desc" }). Then remove this
+// full-table adapter, synthetic V1 fields, and client-side child filtering.
+export function parseHomeSessionIndex(value: unknown): Session[] {
+  if (!isRecord(value) || !Array.isArray(value.data)) throw new HomeSessionIndexInvalid("Invalid V2 response")
 
   const seen = new Map<string, string>()
   return value.data.flatMap((item) => {
-    if (!isV2Session(item)) throw new HomeSessionSnapshotUnsupported("Invalid V2 session")
+    if (!isV2Session(item)) throw new HomeSessionIndexInvalid("Invalid V2 session")
     const directory = item.location.directory
     const previous = seen.get(item.id)
     if (previous !== undefined && pathKey(previous) !== pathKey(directory))
-      throw new HomeSessionSnapshotUnsupported("Conflicting V2 session directories")
+      throw new HomeSessionIndexInvalid("Conflicting V2 session directories")
     seen.set(item.id, directory)
     if (item.parentID || item.time.archived !== undefined) return []
     return [toLegacySummary(item)]

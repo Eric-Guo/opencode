@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   applyHomeSessionEvent,
-  HOME_V2_SESSION_LIMIT,
-  HomeSessionSnapshotUnsupported,
-  loadHomeSessionSnapshot,
-  parseHomeSessionSnapshot,
+  HOME_V2_SESSION_PAGE_LIMIT,
+  HomeSessionIndexInvalid,
+  loadHomeSessionIndex,
+  parseHomeSessionIndex,
   retainHomeSessions,
-} from "./home-session-snapshot"
+} from "./home-session-index"
 
 const session = (input: {
   id: string
@@ -25,20 +25,42 @@ const session = (input: {
   location: { directory: input.directory ?? "/project" },
 })
 
-describe("Home V2 session snapshot", () => {
-  test("loads the Home snapshot with one global V2 request", async () => {
+describe("Home V2 session index", () => {
+  test("loads the Home index with one global V2 request", async () => {
     const calls: unknown[] = []
-    const result = await loadHomeSessionSnapshot(async (input) => {
+    const result = await loadHomeSessionIndex(async (input) => {
       calls.push(input)
       return { data: { data: [session({ id: "root" })], cursor: {} } }
     })
 
     expect(result).toHaveLength(1)
-    expect(calls).toEqual([{ limit: HOME_V2_SESSION_LIMIT, order: "desc" }])
+    expect(calls).toEqual([{ limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc" }])
   })
 
-  test("maps visible roots without creating incomplete legacy cache entries", () => {
-    const result = parseHomeSessionSnapshot({
+  test("loads subsequent pages until the session index is complete", async () => {
+    const calls: unknown[] = []
+    const result = await loadHomeSessionIndex(async (input) => {
+      calls.push(input)
+      if (!("cursor" in input)) {
+        return {
+          data: {
+            data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) => session({ id: `page-1-${index}` })),
+            cursor: { next: "next-page" },
+          },
+        }
+      }
+      return { data: { data: [session({ id: "page-2" })], cursor: {} } }
+    })
+
+    expect(result).toHaveLength(HOME_V2_SESSION_PAGE_LIMIT + 1)
+    expect(calls).toEqual([
+      { limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc" },
+      { limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc", cursor: "next-page" },
+    ])
+  })
+
+  test("maps visible roots to Home session summaries", () => {
+    const result = parseHomeSessionIndex({
       data: [
         session({ id: "root", updated: 30 }),
         session({ id: "child", parentID: "root", updated: 40 }),
@@ -60,20 +82,14 @@ describe("Home V2 session snapshot", () => {
     ])
   })
 
-  test("rejects malformed and potentially truncated snapshots", () => {
-    expect(() => parseHomeSessionSnapshot({ data: "bad", cursor: {} })).toThrow(HomeSessionSnapshotUnsupported)
-    expect(() =>
-      parseHomeSessionSnapshot({
-        data: Array.from({ length: HOME_V2_SESSION_LIMIT }, (_, index) => session({ id: `session-${index}` })),
-        cursor: { next: "more" },
-      }),
-    ).toThrow(HomeSessionSnapshotUnsupported)
+  test("rejects malformed indexes", () => {
+    expect(() => parseHomeSessionIndex({ data: "bad", cursor: {} })).toThrow(HomeSessionIndexInvalid)
   })
 
   test("preserves the per-directory Home retention limit", () => {
     const now = 10 * 60 * 60 * 1000
     const sessions = Array.from({ length: 80 }, (_, index) => ({
-      ...parseHomeSessionSnapshot({ data: [session({ id: `session-${index}`, updated: index + 1 })], cursor: {} })[0],
+      ...parseHomeSessionIndex({ data: [session({ id: `session-${index}`, updated: index + 1 })], cursor: {} })[0],
       directory: index % 2 === 0 ? "/one" : "/two",
     }))
 
@@ -82,8 +98,8 @@ describe("Home V2 session snapshot", () => {
     expect(retained.filter((item) => item.directory === "/two")).toHaveLength(10)
   })
 
-  test("replays session events over an in-flight snapshot", () => {
-    const initial = parseHomeSessionSnapshot({ data: [session({ id: "old" })], cursor: {} })
+  test("replays session events over the loaded index", () => {
+    const initial = parseHomeSessionIndex({ data: [session({ id: "old" })], cursor: {} })
     const created = { ...initial[0], id: "new", slug: "new", title: "new", time: { created: 2, updated: 2 } }
 
     expect(

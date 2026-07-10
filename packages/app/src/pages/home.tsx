@@ -40,7 +40,7 @@ import { DialogSelectServer, useServerManagementController } from "@/components/
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { ServerConnection, serverName, useServer } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
-import { useServerSync, type ServerSync } from "@/context/server-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import {
@@ -50,7 +50,6 @@ import {
   getProjectAvatarSource,
   homeProjectDirectories,
   projectForSession,
-  sortedRootSessions,
   toggleHomeProjectSelection,
 } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
@@ -69,7 +68,7 @@ import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
 import { fileManagerApp } from "@/utils/file-manager"
-import { applyHomeSessionEvent, loadHomeSessionSnapshot, retainHomeSessions } from "./home-session-snapshot"
+import { applyHomeSessionEvent, loadHomeSessionIndex, retainHomeSessions } from "./home-session-index"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
@@ -107,19 +106,13 @@ const HOME_SEARCH_RESULT_META =
 let pendingHomeNavigation: { server: ServerConnection.Key; href: string } | undefined
 
 function buildHomeSessionRecords(input: {
-  sessions?: () => Session[] | undefined
-  sync: Pick<ServerSync, "child">
+  sessions: () => Session[]
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
 }) {
   const directories = new Set(input.projectDirectories().map(pathKey))
-  const snapshot = input.sessions?.()
-  const sessions = snapshot
-    ? snapshot.filter((session) => directories.has(pathKey(session.directory)))
-    : input
-        .projectDirectories()
-        .flatMap((directory) => sortedRootSessions(input.sync.child(directory, { bootstrap: false })[0], Date.now()))
+  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
     .flatMap((session) => {
@@ -335,25 +328,12 @@ export function NewHome() {
     queryFn: async () => {
       const ctx = focusedServerCtx()
       if (!ctx) return []
-      return loadHomeSessionSnapshot((input) => ctx.sdk.client.v2.session.list(input))
+      return loadHomeSessionIndex((input) => ctx.sdk.client.v2.session.list(input))
     },
     retry: false,
     refetchOnMount: "always",
     refetchOnReconnect: true,
   }))
-  const fallbackSessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions-v1-fallback", selection().server, ...projectDirectories()] as const,
-    enabled: sessionLoad.isError,
-    queryFn: async () => {
-      await Promise.all(
-        projectDirectories().map((directory) =>
-          focusedSync().project.loadSessions(directory, { limit: HOME_SESSION_LIMIT }),
-        ),
-      )
-      return null
-    },
-  }))
-
   createEffect(() => {
     const ctx = focusedServerCtx()
     const conn = focusedServer()
@@ -378,14 +358,13 @@ export function NewHome() {
   )
   const snapshotSessions = createMemo(() => {
     const sessions = sessionLoad.data
-    if (!sessions) return
+    if (!sessions) return []
     const events = sessionEvents[selection().server] ?? []
     return retainHomeSessions(events.reduce(applyHomeSessionEvent, sessions), HOME_SESSION_LIMIT, Date.now())
   })
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
       sessions: snapshotSessions,
-      sync: focusedSync(),
       projectDirectories,
       projects,
       projectByID,
@@ -633,7 +612,7 @@ export function NewHome() {
             value={state.search}
             placeholder={searchPlaceholder()}
             open={searchOpen()}
-            loading={sessionLoad.isLoading || (sessionLoad.isError && fallbackSessionLoad.isLoading)}
+            loading={sessionLoad.isLoading}
             results={searchResults()}
             showProjectName={!selectedProject()}
             server={selection().server}
@@ -666,7 +645,7 @@ export function NewHome() {
               </div>
             </Show>
             <Show
-              when={!sessionLoad.isLoading && !(sessionLoad.isError && fallbackSessionLoad.isLoading)}
+              when={!sessionLoad.isLoading}
               fallback={
                 <div class="pt-3">
                   <HomeSessionSkeleton label={language.t("common.loading")} />
