@@ -1,4 +1,5 @@
-import type { Event, Session, SessionV2Info } from "@opencode-ai/sdk/v2/client"
+import type { Event, Session, SessionV2Info, V2SessionListResponse } from "@opencode-ai/sdk/v2/client"
+import type { QueryClient } from "@tanstack/solid-query"
 import { trimSessions } from "./session-trim"
 import { pathKey } from "@/utils/path-key"
 
@@ -20,7 +21,7 @@ export type HomeSessionIndex = {
 export const homeSessionIndexKey = (server: string) => ["home", "session-index", server] as const
 export const homeSessionEventsKey = (server: string) => ["home", "session-events", server] as const
 
-type HomeSessionPage = { data?: { data: SessionV2Info[]; cursor: { next?: string } } }
+type HomeSessionPage = { data?: V2SessionListResponse }
 
 export async function loadHomeSessionIndex(
   list: (
@@ -77,6 +78,50 @@ export function homeSessionIndexRefresh(event: Event["type"], connected: boolean
   return {
     connected,
     refetch: event === "global.disposed" || event === "session.next.moved",
+  }
+}
+
+export function createHomeSessionIndexCache(queryClient: QueryClient, server: string) {
+  const indexKey = homeSessionIndexKey(server)
+  const eventsKey = homeSessionEventsKey(server)
+  let connected = false
+
+  return {
+    indexKey,
+    eventsKey,
+    eventSequence() {
+      return queryClient.getQueryData<HomeSessionEvents>(eventsKey)?.sequence ?? 0
+    },
+    complete(sequence: number) {
+      // Keep events received after the fetch began so its response cannot overwrite them.
+      queryClient.setQueryData<HomeSessionEvents>(eventsKey, (current) => trimHomeSessionEvents(current, sequence))
+    },
+    sessions(index: HomeSessionIndex | undefined, events: HomeSessionEvents | undefined) {
+      return homeSessionIndexSessions(index, events)
+    },
+    apply(event: HomeSessionEvent) {
+      if (!queryClient.getQueryState(indexKey)) return
+      const next = appendHomeSessionEvent(queryClient.getQueryData<HomeSessionEvents>(eventsKey), event)
+      if (queryClient.isFetching({ queryKey: indexKey, exact: true }) > 0) {
+        queryClient.setQueryData(eventsKey, next)
+        return
+      }
+
+      const index = queryClient.getQueryData<HomeSessionIndex>(indexKey)
+      if (index) {
+        queryClient.setQueryData<HomeSessionIndex>(indexKey, {
+          sessions: homeSessionIndexSessions(index, next),
+          eventSequence: next.sequence,
+        })
+      }
+      queryClient.setQueryData<HomeSessionEvents>(eventsKey, { sequence: next.sequence, entries: [] })
+    },
+    refresh(event: Event["type"]) {
+      const result = homeSessionIndexRefresh(event, connected)
+      connected = result.connected
+      if (!result.refetch) return
+      void queryClient.refetchQueries({ queryKey: indexKey, exact: true, type: "active" })
+    },
   }
 }
 

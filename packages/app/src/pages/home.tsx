@@ -16,7 +16,7 @@ import {
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore, produce } from "solid-js/store"
-import { useQuery, useQueryClient } from "@tanstack/solid-query"
+import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -69,12 +69,8 @@ import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
 import { fileManagerApp } from "@/utils/file-manager"
 import {
-  homeSessionEventsKey,
-  homeSessionIndexKey,
-  homeSessionIndexSessions,
   loadHomeSessionIndex,
   retainHomeSessions,
-  trimHomeSessionEvents,
   type HomeSessionEvents,
 } from "@/context/global-sync/home-session-index"
 
@@ -284,7 +280,6 @@ export function NewHome() {
     search: "",
     searchFocused: false,
   })
-  const queryClient = useQueryClient()
   const selection = layout.home.selection
 
   const focusedServer = createMemo(
@@ -296,6 +291,7 @@ export function NewHome() {
     return global.ensureServerCtx(conn)
   })
   const focusedSync = () => focusedServerCtx()?.sync ?? sync()
+  const homeSessions = () => focusedSync().homeSessions
   const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
   const recentlyClosed = createMemo(
     () => focusedServerCtx()?.projects.recentlyClosed() ?? layout.projects.recentlyClosed(),
@@ -329,25 +325,25 @@ export function NewHome() {
     return language.t("home.sessions.search.placeholder")
   })
   const sessionEventLoad = useQuery(() => ({
-    queryKey: homeSessionEventsKey(selection().server),
+    queryKey: homeSessions().eventsKey,
     queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
     initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
     enabled: false,
   }))
   const sessionLoad = useQuery(() => ({
-    queryKey: homeSessionIndexKey(selection().server),
+    queryKey: homeSessions().indexKey,
     enabled: !!focusedServerCtx(),
     queryFn: async ({ signal }) => {
       const ctx = focusedServerCtx()
       if (!ctx) return { sessions: [], eventSequence: 0 }
-      const eventsKey = homeSessionEventsKey(selection().server)
-      const eventSequence = queryClient.getQueryData<HomeSessionEvents>(eventsKey)?.sequence ?? 0
+      const cache = homeSessions()
+      const eventSequence = cache.eventSequence()
       const index = await loadHomeSessionIndex(
         (input, options) => ctx.sdk.client.v2.session.list(input, options),
         eventSequence,
         signal,
       )
-      queryClient.setQueryData<HomeSessionEvents>(eventsKey, (current) => trimHomeSessionEvents(current, eventSequence))
+      cache.complete(eventSequence)
       return index
     },
     retry: false,
@@ -361,7 +357,7 @@ export function NewHome() {
   )
   const indexedSessions = createMemo(() =>
     retainHomeSessions(
-      homeSessionIndexSessions(sessionLoad.data, sessionEventLoad.data),
+      homeSessions().sessions(sessionLoad.data, sessionEventLoad.data),
       HOME_SESSION_LIMIT,
       Date.now(),
     ),
