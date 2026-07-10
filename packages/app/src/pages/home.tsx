@@ -69,6 +69,7 @@ import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
 import { fileManagerApp } from "@/utils/file-manager"
+import { applyHomeSessionEvent, loadHomeSessionSnapshot, retainHomeSessions } from "./home-session-snapshot"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
@@ -106,22 +107,30 @@ const HOME_SEARCH_RESULT_META =
 let pendingHomeNavigation: { server: ServerConnection.Key; href: string } | undefined
 
 function buildHomeSessionRecords(input: {
+  sessions?: () => Session[] | undefined
   sync: Pick<ServerSync, "child">
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
 }) {
-  return [
-    ...new Map(
-      input
+  const directories = new Set(input.projectDirectories().map(pathKey))
+  const snapshot = input.sessions?.()
+  const sessions = snapshot
+    ? snapshot.filter((session) => directories.has(pathKey(session.directory)))
+    : input
         .projectDirectories()
         .flatMap((directory) => sortedRootSessions(input.sync.child(directory, { bootstrap: false })[0], Date.now()))
-        .map((session) => [`${pathKey(session.directory)}:${session.id}`, session] as const),
-    ).values(),
-  ]
+  return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
     .flatMap((session) => {
-      const project = projectForSession(session, input.projects(), input.projectByID())
+      const directory = pathKey(session.directory)
+      const project =
+        input
+          .projects()
+          .find(
+            (item) =>
+              pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+          ) ?? projectForSession(session, input.projects(), input.projectByID())
       if (!project) return []
       return {
         session,
@@ -274,6 +283,9 @@ export function NewHome() {
     search: "",
     searchFocused: false,
   })
+  const [sessionEvents, setSessionEvents] = createStore<Record<string, Array<{ type: string; properties?: unknown }>>>(
+    {},
+  )
   const selection = layout.home.selection
 
   const focusedServer = createMemo(
@@ -318,7 +330,20 @@ export function NewHome() {
     return language.t("home.sessions.search.placeholder")
   })
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions", selection().server, ...projectDirectories()] as const,
+    queryKey: ["home", "sessions-v2", selection().server] as const,
+    enabled: !!focusedServerCtx(),
+    queryFn: async () => {
+      const ctx = focusedServerCtx()
+      if (!ctx) return []
+      return loadHomeSessionSnapshot((input) => ctx.sdk.client.v2.session.list(input))
+    },
+    retry: false,
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
+  }))
+  const fallbackSessionLoad = useQuery(() => ({
+    queryKey: ["home", "sessions-v1-fallback", selection().server, ...projectDirectories()] as const,
+    enabled: sessionLoad.isError,
     queryFn: async () => {
       await Promise.all(
         projectDirectories().map((directory) =>
@@ -329,11 +354,37 @@ export function NewHome() {
     },
   }))
 
+  createEffect(() => {
+    const ctx = focusedServerCtx()
+    const conn = focusedServer()
+    if (!ctx || !conn) return
+    const key = ServerConnection.key(conn)
+    const unsubscribe = ctx.sdk.event.listen((item) => {
+      const event = item.details
+      if (event.type !== "session.created" && event.type !== "session.updated" && event.type !== "session.deleted")
+        return
+      setSessionEvents(
+        produce((draft) => {
+          const list = (draft[key] ??= [])
+          list.push(event)
+        }),
+      )
+    })
+    onCleanup(unsubscribe)
+  })
+
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
+  const snapshotSessions = createMemo(() => {
+    const sessions = sessionLoad.data
+    if (!sessions) return
+    const events = sessionEvents[selection().server] ?? []
+    return retainHomeSessions(events.reduce(applyHomeSessionEvent, sessions), HOME_SESSION_LIMIT, Date.now())
+  })
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
+      sessions: snapshotSessions,
       sync: focusedSync(),
       projectDirectories,
       projects,
@@ -362,8 +413,7 @@ export function NewHome() {
         prefetched.add(key)
         createRoot((dispose) => {
           try {
-            const directory = ctx.sync.ensureDirSyncContext(record.session.directory)
-            void directory.session
+            void ctx.sync.session
               .sync(record.session.id)
               .then(() => {
                 return Promise.all(
@@ -483,7 +533,13 @@ export function NewHome() {
   }
 
   function openSession(session: Session, options?: OpenSessionOptions) {
-    const project = projectForSession(session, projects(), projectByID())
+    const directoryKey = pathKey(session.directory)
+    const project =
+      projects().find(
+        (item) =>
+          pathKey(item.worktree) === directoryKey ||
+          item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
+      ) ?? projectForSession(session, projects(), projectByID())
     const conn = focusedServer()
     if (!conn) return
     const directory = project?.worktree ?? session.directory
@@ -577,7 +633,7 @@ export function NewHome() {
             value={state.search}
             placeholder={searchPlaceholder()}
             open={searchOpen()}
-            loading={sessionLoad.isLoading}
+            loading={sessionLoad.isLoading || (sessionLoad.isError && fallbackSessionLoad.isLoading)}
             results={searchResults()}
             showProjectName={!selectedProject()}
             server={selection().server}
@@ -610,7 +666,7 @@ export function NewHome() {
               </div>
             </Show>
             <Show
-              when={!sessionLoad.isLoading}
+              when={!sessionLoad.isLoading && !(sessionLoad.isError && fallbackSessionLoad.isLoading)}
               fallback={
                 <div class="pt-3">
                   <HomeSessionSkeleton label={language.t("common.loading")} />

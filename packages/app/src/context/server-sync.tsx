@@ -390,6 +390,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       if (event.type === "server.connected" || event.type === "global.disposed") {
         if (recent) return
         for (const directory of Object.keys(children.children)) {
+          if (!children.queries(directory)) continue
           queue.push(directory)
         }
       }
@@ -405,15 +406,19 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       directory,
       store,
       setStore,
-      push: queue.push,
+      push: (directory) => {
+        if (children.queries(directory)) queue.push(directory)
+      },
       retainedLimit: sessionMeta.get(key)?.limit,
       sessionContent: false,
       permission: session.data.permission,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
+        if (!children.queries(key)) return
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))
       },
       loadReferences: () => {
+        if (!children.queries(key)) return
         void queryClient.fetchQuery(queryOptionsApi.references(key))
       },
     })

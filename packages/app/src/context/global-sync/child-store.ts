@@ -45,6 +45,8 @@ export function createChildStoreManager(input: {
   const disposers = new Map<string, () => void>()
   const mcpDirectories = new Set<string>()
   const mcpToggles = new Map<string, (enabled: boolean) => void>()
+  const queryDirectories = new Set<string>()
+  const queryToggles = new Map<string, (enabled: boolean) => void>()
 
   const markKey = (key: DirectoryKey) => {
     if (!key) return
@@ -118,6 +120,8 @@ export function createChildStoreManager(input: {
     lifecycle.delete(key)
     mcpDirectories.delete(key)
     mcpToggles.delete(key)
+    queryDirectories.delete(key)
+    queryToggles.delete(key)
     const dispose = disposers.get(key)
     if (dispose) {
       dispose()
@@ -182,20 +186,21 @@ export function createChildStoreManager(input: {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
           const [mcpEnabled, setMcpEnabled] = createSignal(false)
+          const [queriesEnabled, setQueriesEnabled] = createSignal(false)
 
-          const pathQuery = useQuery(() => input.queryOptions.path(key))
+          const pathQuery = useQuery(() => ({ ...input.queryOptions.path(key), enabled: queriesEnabled() }))
           const mcpQuery = useQuery(() => ({ ...input.queryOptions.mcp(key), enabled: mcpEnabled() }))
           const mcpResourceQuery = useQuery(() => ({ ...input.queryOptions.mcpResources(key), enabled: mcpEnabled() }))
-          const lspQuery = useQuery(() => input.queryOptions.lsp(key))
-          const providerQuery = useQuery(() => input.queryOptions.providers(key))
-          const referenceQuery = useQuery(() => input.queryOptions.references(key))
+          const lspQuery = useQuery(() => ({ ...input.queryOptions.lsp(key), enabled: queriesEnabled() }))
+          const providerQuery = useQuery(() => ({ ...input.queryOptions.providers(key), enabled: queriesEnabled() }))
+          const referenceQuery = useQuery(() => ({ ...input.queryOptions.references(key), enabled: queriesEnabled() }))
 
           const child = createStore<State>({
             project: "",
             projectMeta: initialMeta,
             icon: initialIcon,
             get provider_ready() {
-              return !providerQuery.isLoading
+              return queriesEnabled() && !providerQuery.isLoading
             },
             get provider() {
               const EMPTY = { all: new Map(), connected: [], default: {} }
@@ -236,7 +241,7 @@ export function createChildStoreManager(input: {
               return mcpResourceQuery.isLoading ? {} : (mcpResourceQuery.data ?? {})
             },
             get lsp_ready() {
-              return !lspQuery.isLoading
+              return queriesEnabled() && !lspQuery.isLoading
             },
             get lsp() {
               return lspQuery.isLoading ? [] : (lspQuery.data ?? [])
@@ -250,6 +255,7 @@ export function createChildStoreManager(input: {
           children[key] = child
           disposers.set(key, dispose)
           mcpToggles.set(key, setMcpEnabled)
+          queryToggles.set(key, setQueriesEnabled)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
@@ -290,6 +296,7 @@ export function createChildStoreManager(input: {
     pinForOwner(key)
     if (options.mcp) enableMcp(directory, key, childStore)
     const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap) enableQueries(key)
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
     }
@@ -301,6 +308,7 @@ export function createChildStoreManager(input: {
     const childStore = ensureChild(directory)
     if (options.mcp) enableMcp(directory, key, childStore)
     const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap) enableQueries(key)
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
     }
@@ -312,6 +320,16 @@ export function createChildStoreManager(input: {
     mcpDirectories.add(key)
     mcpToggles.get(key)?.(true)
     if (childStore[0].status !== "loading") input.onMcp(directory, childStore[1])
+  }
+
+  // Passive Home/project metadata reads must not initialize the directory.
+  // A real directory access enables these queries once for the store lifetime.
+  // TODO(v2): When Home uses released v2.project.list and root-filtered
+  // v2.session.list, remove its legacy child creation instead of relying on this guard.
+  function enableQueries(key: DirectoryKey) {
+    if (queryDirectories.has(key)) return
+    queryDirectories.add(key)
+    queryToggles.get(key)?.(true)
   }
 
   function disableMcp(directory: string) {
@@ -360,6 +378,7 @@ export function createChildStoreManager(input: {
     unpin,
     pinned,
     mcp: (directory: string) => mcpDirectories.has(directoryKey(directory)),
+    queries: (directory: string) => queryDirectories.has(directoryKey(directory)),
     disableMcp,
     disposeDirectory,
     runEviction,
