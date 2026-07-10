@@ -50,6 +50,7 @@ import {
   homeSessionIndexRefresh,
   homeSessionIndexSessions,
   type HomeSessionEvents,
+  type HomeSessionEvent,
   type HomeSessionIndex,
 } from "./global-sync/home-session-index"
 import { persisted } from "@/utils/persist"
@@ -225,7 +226,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
   const session = createServerSession(serverSDK.client)
 
-  const applyHomeEvent = (event: { type: string; properties?: unknown }) => {
+  const applyHomeEvent = (event: HomeSessionEvent) => {
     if (!queryClient.getQueryState(homeIndexKey)) return
     const next = appendHomeSessionEvent(queryClient.getQueryData<HomeSessionEvents>(homeEventsKey), event)
     if (queryClient.isFetching({ queryKey: homeIndexKey, exact: true }) > 0) {

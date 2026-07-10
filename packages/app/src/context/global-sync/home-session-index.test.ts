@@ -3,7 +3,6 @@ import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,
   HOME_V2_SESSION_PAGE_LIMIT,
-  HomeSessionIndexInvalid,
   loadHomeSessionIndex,
   homeSessionIndexSessions,
   homeSessionIndexRefresh,
@@ -73,14 +72,11 @@ describe("Home V2 session index", () => {
   })
 
   test("maps visible roots to Home session summaries", () => {
-    const result = parseHomeSessionIndex({
-      data: [
-        session({ id: "root", updated: 30 }),
-        session({ id: "child", parentID: "root", updated: 40 }),
-        session({ id: "archived", archived: 50, updated: 50 }),
-      ],
-      cursor: {},
-    })
+    const result = parseHomeSessionIndex([
+      session({ id: "root", updated: 30 }),
+      session({ id: "child", parentID: "root", updated: 40 }),
+      session({ id: "archived", archived: 50, updated: 50 }),
+    ])
 
     expect(result).toEqual([
       expect.objectContaining({
@@ -95,14 +91,10 @@ describe("Home V2 session index", () => {
     ])
   })
 
-  test("rejects malformed indexes", () => {
-    expect(() => parseHomeSessionIndex({ data: "bad", cursor: {} })).toThrow(HomeSessionIndexInvalid)
-  })
-
   test("preserves the per-directory Home retention limit", () => {
     const now = 10 * 60 * 60 * 1000
     const sessions = Array.from({ length: 80 }, (_, index) => ({
-      ...parseHomeSessionIndex({ data: [session({ id: `session-${index}`, updated: index + 1 })], cursor: {} })[0],
+      ...parseHomeSessionIndex([session({ id: `session-${index}`, updated: index + 1 })])[0],
       directory: index % 2 === 0 ? "/one" : "/two",
     }))
 
@@ -112,23 +104,33 @@ describe("Home V2 session index", () => {
   })
 
   test("replays session events over the loaded index", () => {
-    const initial = parseHomeSessionIndex({ data: [session({ id: "old" })], cursor: {} })
+    const initial = parseHomeSessionIndex([session({ id: "old" })])
     const created = { ...initial[0], id: "new", slug: "new", title: "new", time: { created: 2, updated: 2 } }
 
+    const afterCreate = applyHomeSessionEvent(initial, {
+      type: "session.created",
+      properties: { sessionID: created.id, info: created },
+    })
     expect(
-      [
-        { type: "session.created", properties: { info: created } },
-        { type: "session.deleted", properties: { info: initial[0] } },
-      ].reduce(applyHomeSessionEvent, initial),
+      applyHomeSessionEvent(afterCreate, {
+        type: "session.deleted",
+        properties: { sessionID: initial[0]!.id, info: initial[0]! },
+      }),
     ).toEqual([created])
   })
 
   test("applies only events newer than the index baseline", () => {
-    const initial = parseHomeSessionIndex({ data: [session({ id: "old" })], cursor: {} })
+    const initial = parseHomeSessionIndex([session({ id: "old" })])
     const stale = { ...initial[0], title: "stale" }
     const current = { ...initial[0], title: "current" }
-    const first = appendHomeSessionEvent(undefined, { type: "session.updated", properties: { info: stale } })
-    const events = appendHomeSessionEvent(first, { type: "session.updated", properties: { info: current } })
+    const first = appendHomeSessionEvent(undefined, {
+      type: "session.updated",
+      properties: { sessionID: stale.id, info: stale },
+    })
+    const events = appendHomeSessionEvent(first, {
+      type: "session.updated",
+      properties: { sessionID: current.id, info: current },
+    })
 
     expect(homeSessionIndexSessions({ sessions: initial, eventSequence: 1 }, events)[0]?.title).toBe("current")
   })
