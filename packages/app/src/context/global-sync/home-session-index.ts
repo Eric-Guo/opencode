@@ -1,8 +1,21 @@
 import type { Session, SessionV2Info } from "@opencode-ai/sdk/v2/client"
-import { trimSessions } from "@/context/global-sync/session-trim"
+import { trimSessions } from "./session-trim"
 import { pathKey } from "@/utils/path-key"
 
 export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
+
+export type HomeSessionEvent = { type: string; properties?: unknown }
+export type HomeSessionEvents = {
+  sequence: number
+  entries: Array<{ sequence: number; event: HomeSessionEvent }>
+}
+export type HomeSessionIndex = {
+  sessions: Session[]
+  eventSequence: number
+}
+
+export const homeSessionIndexKey = (server: string) => ["home", "session-index", server] as const
+export const homeSessionEventsKey = (server: string) => ["home", "session-events", server] as const
 
 export class HomeSessionIndexInvalid extends Error {
   constructor(message: string) {
@@ -12,27 +25,66 @@ export class HomeSessionIndexInvalid extends Error {
 }
 
 export async function loadHomeSessionIndex(
-  list: (input: { limit: number; order: "desc"; cursor?: string }) => Promise<{ data?: unknown }>,
+  list: (
+    input: { limit: number; order: "desc"; cursor?: string },
+    options: { signal?: AbortSignal },
+  ) => Promise<{ data?: unknown }>,
+  eventSequence = 0,
+  signal?: AbortSignal,
 ) {
   const data: unknown[] = []
   const cursors = new Set<string>()
   let cursor: string | undefined
 
   for (;;) {
-    const response = await list({
-      limit: HOME_V2_SESSION_PAGE_LIMIT,
-      order: "desc",
-      ...(cursor ? { cursor } : {}),
-    })
+    const response = await list(
+      {
+        limit: HOME_V2_SESSION_PAGE_LIMIT,
+        order: "desc",
+        ...(cursor ? { cursor } : {}),
+      },
+      { signal },
+    )
     if (!isRecord(response.data) || !Array.isArray(response.data.data))
       throw new HomeSessionIndexInvalid("Invalid V2 response")
     data.push(...response.data.data)
-    if (response.data.data.length < HOME_V2_SESSION_PAGE_LIMIT) return parseHomeSessionIndex({ data })
+    if (response.data.data.length < HOME_V2_SESSION_PAGE_LIMIT)
+      return { sessions: parseHomeSessionIndex({ data }), eventSequence }
 
     const next = isRecord(response.data.cursor) ? response.data.cursor.next : undefined
     if (typeof next !== "string" || cursors.has(next)) throw new HomeSessionIndexInvalid("Invalid V2 pagination cursor")
     cursors.add(next)
     cursor = next
+  }
+}
+
+export function appendHomeSessionEvent(current: HomeSessionEvents | undefined, event: HomeSessionEvent) {
+  const sequence = (current?.sequence ?? 0) + 1
+  return {
+    sequence,
+    entries: [...(current?.entries ?? []), { sequence, event }],
+  }
+}
+
+export function trimHomeSessionEvents(current: HomeSessionEvents | undefined, sequence: number): HomeSessionEvents {
+  return {
+    sequence: current?.sequence ?? sequence,
+    entries: (current?.entries ?? []).filter((entry) => entry.sequence > sequence),
+  }
+}
+
+export function homeSessionIndexSessions(index: HomeSessionIndex | undefined, events: HomeSessionEvents | undefined) {
+  if (!index) return []
+  return (events?.entries ?? [])
+    .filter((entry) => entry.sequence > index.eventSequence)
+    .reduce((sessions, entry) => applyHomeSessionEvent(sessions, entry.event), index.sessions)
+}
+
+export function homeSessionIndexRefresh(event: string, connected: boolean) {
+  if (event === "server.connected") return { connected: true, refetch: connected }
+  return {
+    connected,
+    refetch: event === "global.disposed" || event === "session.next.moved",
   }
 }
 
@@ -60,7 +112,7 @@ export function retainHomeSessions(sessions: Session[], limit: number, now: numb
   return [...grouped.values()].flatMap((items) => trimSessions(items, { limit, permission: {}, now }))
 }
 
-export function applyHomeSessionEvent(sessions: Session[], event: { type: string; properties?: unknown }) {
+export function applyHomeSessionEvent(sessions: Session[], event: HomeSessionEvent) {
   if (!isRecord(event.properties) || !isLegacySummary(event.properties.info)) return sessions
   const info = event.properties.info
   const index = sessions.findIndex((session) => session.id === info.id)

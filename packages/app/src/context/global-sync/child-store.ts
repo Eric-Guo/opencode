@@ -324,8 +324,8 @@ export function createChildStoreManager(input: {
 
   // Passive Home/project metadata reads must not initialize the directory.
   // A real directory access enables these queries once for the store lifetime.
-  // TODO(v2): When Home uses released v2.project.list and root-filtered
-  // v2.session.list, remove its legacy child creation instead of relying on this guard.
+  // TODO(v2): After Home switches to v2.project.list and root-filtered,
+  // updated-time v2.session.list, remove any Home-only passive child creation.
   function enableQueries(key: DirectoryKey) {
     if (queryDirectories.has(key)) return
     queryDirectories.add(key)

@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   applyHomeSessionEvent,
+  appendHomeSessionEvent,
   HOME_V2_SESSION_PAGE_LIMIT,
   HomeSessionIndexInvalid,
   loadHomeSessionIndex,
+  homeSessionIndexSessions,
+  homeSessionIndexRefresh,
   parseHomeSessionIndex,
   retainHomeSessions,
 } from "./home-session-index"
@@ -33,29 +36,39 @@ describe("Home V2 session index", () => {
       return { data: { data: [session({ id: "root" })], cursor: {} } }
     })
 
-    expect(result).toHaveLength(1)
+    expect(result.sessions).toHaveLength(1)
     expect(calls).toEqual([{ limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc" }])
   })
 
   test("loads subsequent pages until the session index is complete", async () => {
     const calls: unknown[] = []
-    const result = await loadHomeSessionIndex(async (input) => {
-      calls.push(input)
-      if (!("cursor" in input)) {
-        return {
-          data: {
-            data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) => session({ id: `page-1-${index}` })),
-            cursor: { next: "next-page" },
-          },
+    const controller = new AbortController()
+    const result = await loadHomeSessionIndex(
+      async (input, options) => {
+        calls.push({ input, signal: options.signal })
+        if (!("cursor" in input)) {
+          return {
+            data: {
+              data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) =>
+                session({ id: `page-1-${index}` }),
+              ),
+              cursor: { next: "next-page" },
+            },
+          }
         }
-      }
-      return { data: { data: [session({ id: "page-2" })], cursor: {} } }
-    })
+        return { data: { data: [session({ id: "page-2" })], cursor: {} } }
+      },
+      0,
+      controller.signal,
+    )
 
-    expect(result).toHaveLength(HOME_V2_SESSION_PAGE_LIMIT + 1)
+    expect(result.sessions).toHaveLength(HOME_V2_SESSION_PAGE_LIMIT + 1)
     expect(calls).toEqual([
-      { limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc" },
-      { limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc", cursor: "next-page" },
+      { input: { limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc" }, signal: controller.signal },
+      {
+        input: { limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc", cursor: "next-page" },
+        signal: controller.signal,
+      },
     ])
   })
 
@@ -108,5 +121,22 @@ describe("Home V2 session index", () => {
         { type: "session.deleted", properties: { info: initial[0] } },
       ].reduce(applyHomeSessionEvent, initial),
     ).toEqual([created])
+  })
+
+  test("applies only events newer than the index baseline", () => {
+    const initial = parseHomeSessionIndex({ data: [session({ id: "old" })], cursor: {} })
+    const stale = { ...initial[0], title: "stale" }
+    const current = { ...initial[0], title: "current" }
+    const first = appendHomeSessionEvent(undefined, { type: "session.updated", properties: { info: stale } })
+    const events = appendHomeSessionEvent(first, { type: "session.updated", properties: { info: current } })
+
+    expect(homeSessionIndexSessions({ sessions: initial, eventSequence: 1 }, events)[0]?.title).toBe("current")
+  })
+
+  test("refetches after reconnect, disposal, and session moves", () => {
+    expect(homeSessionIndexRefresh("server.connected", false)).toEqual({ connected: true, refetch: false })
+    expect(homeSessionIndexRefresh("server.connected", true)).toEqual({ connected: true, refetch: true })
+    expect(homeSessionIndexRefresh("global.disposed", true).refetch).toBe(true)
+    expect(homeSessionIndexRefresh("session.next.moved", true).refetch).toBe(true)
   })
 })

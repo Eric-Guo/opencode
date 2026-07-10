@@ -43,6 +43,15 @@ import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
 import { retry } from "@opencode-ai/core/util/retry"
 import type { ServerScope } from "@/utils/server-scope"
+import {
+  appendHomeSessionEvent,
+  homeSessionEventsKey,
+  homeSessionIndexKey,
+  homeSessionIndexRefresh,
+  homeSessionIndexSessions,
+  type HomeSessionEvents,
+  type HomeSessionIndex,
+} from "./global-sync/home-session-index"
 import { persisted } from "@/utils/persist"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession } from "./server-session"
@@ -153,9 +162,13 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   })
 
   const queryClient = useQueryClient()
+  const homeServerKey = ServerConnection.key(serverSDK.server)
+  const homeIndexKey = homeSessionIndexKey(homeServerKey)
+  const homeEventsKey = homeSessionEventsKey(homeServerKey)
 
   let bootedAt = 0
   let bootingRoot = false
+  let connected = false
   let eventFrame: number | undefined
   let eventTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -211,6 +224,27 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   })
 
   const session = createServerSession(serverSDK.client)
+
+  const applyHomeEvent = (event: { type: string; properties?: unknown }) => {
+    if (!queryClient.getQueryState(homeIndexKey)) return
+    const next = appendHomeSessionEvent(queryClient.getQueryData<HomeSessionEvents>(homeEventsKey), event)
+    if (queryClient.isFetching({ queryKey: homeIndexKey, exact: true }) > 0) {
+      queryClient.setQueryData(homeEventsKey, next)
+      return
+    }
+
+    const index = queryClient.getQueryData<HomeSessionIndex>(homeIndexKey)
+    if (index) {
+      queryClient.setQueryData<HomeSessionIndex>(homeIndexKey, {
+        sessions: homeSessionIndexSessions(index, next),
+        eventSequence: next.sequence,
+      })
+    }
+    queryClient.setQueryData<HomeSessionEvents>(homeEventsKey, { sequence: next.sequence, entries: [] })
+  }
+
+  const refetchHomeIndex = () =>
+    queryClient.refetchQueries({ queryKey: homeIndexKey, exact: true, type: "active" }).then(() => undefined)
 
   const children = createChildStoreManager({
     owner,
@@ -376,6 +410,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     session.apply(event)
+    if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.deleted") {
+      applyHomeEvent(event)
+    }
+    const homeRefresh = homeSessionIndexRefresh(event.type, connected)
+    connected = homeRefresh.connected
+    if (homeRefresh.refetch) void refetchHomeIndex()
 
     if (directory === "global") {
       applyGlobalEvent({

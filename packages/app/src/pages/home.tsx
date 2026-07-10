@@ -16,7 +16,7 @@ import {
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore, produce } from "solid-js/store"
-import { useQuery } from "@tanstack/solid-query"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -68,7 +68,15 @@ import { archiveHomeSession } from "./home-session-archive"
 import { shouldOpenSessionInBackground } from "./home-session-open"
 import { showToast } from "@/utils/toast"
 import { fileManagerApp } from "@/utils/file-manager"
-import { applyHomeSessionEvent, loadHomeSessionIndex, retainHomeSessions } from "./home-session-index"
+import {
+  homeSessionEventsKey,
+  homeSessionIndexKey,
+  homeSessionIndexSessions,
+  loadHomeSessionIndex,
+  retainHomeSessions,
+  trimHomeSessionEvents,
+  type HomeSessionEvents,
+} from "@/context/global-sync/home-session-index"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_SESSION_HEADER_STICKY_TOP = 12
@@ -276,9 +284,7 @@ export function NewHome() {
     search: "",
     searchFocused: false,
   })
-  const [sessionEvents, setSessionEvents] = createStore<Record<string, Array<{ type: string; properties?: unknown }>>>(
-    {},
-  )
+  const queryClient = useQueryClient()
   const selection = layout.home.selection
 
   const focusedServer = createMemo(
@@ -322,49 +328,47 @@ export function NewHome() {
     }
     return language.t("home.sessions.search.placeholder")
   })
+  const sessionEventLoad = useQuery(() => ({
+    queryKey: homeSessionEventsKey(selection().server),
+    queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
+    initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
+    enabled: false,
+  }))
   const sessionLoad = useQuery(() => ({
-    queryKey: ["home", "sessions-v2", selection().server] as const,
+    queryKey: homeSessionIndexKey(selection().server),
     enabled: !!focusedServerCtx(),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const ctx = focusedServerCtx()
-      if (!ctx) return []
-      return loadHomeSessionIndex((input) => ctx.sdk.client.v2.session.list(input))
+      if (!ctx) return { sessions: [], eventSequence: 0 }
+      const eventsKey = homeSessionEventsKey(selection().server)
+      const eventSequence = queryClient.getQueryData<HomeSessionEvents>(eventsKey)?.sequence ?? 0
+      const index = await loadHomeSessionIndex(
+        (input, options) => ctx.sdk.client.v2.session.list(input, options),
+        eventSequence,
+        signal,
+      )
+      queryClient.setQueryData<HomeSessionEvents>(eventsKey, (current) => trimHomeSessionEvents(current, eventSequence))
+      return index
     },
     retry: false,
-    refetchOnMount: "always",
+    staleTime: 30_000,
+    refetchOnMount: true,
     refetchOnReconnect: true,
   }))
-  createEffect(() => {
-    const ctx = focusedServerCtx()
-    const conn = focusedServer()
-    if (!ctx || !conn) return
-    const key = ServerConnection.key(conn)
-    const unsubscribe = ctx.sdk.event.listen((item) => {
-      const event = item.details
-      if (event.type !== "session.created" && event.type !== "session.updated" && event.type !== "session.deleted")
-        return
-      setSessionEvents(
-        produce((draft) => {
-          const list = (draft[key] ??= [])
-          list.push(event)
-        }),
-      )
-    })
-    onCleanup(unsubscribe)
-  })
 
   const projectByID = createMemo(
     () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
-  const snapshotSessions = createMemo(() => {
-    const sessions = sessionLoad.data
-    if (!sessions) return []
-    const events = sessionEvents[selection().server] ?? []
-    return retainHomeSessions(events.reduce(applyHomeSessionEvent, sessions), HOME_SESSION_LIMIT, Date.now())
-  })
+  const indexedSessions = createMemo(() =>
+    retainHomeSessions(
+      homeSessionIndexSessions(sessionLoad.data, sessionEventLoad.data),
+      HOME_SESSION_LIMIT,
+      Date.now(),
+    ),
+  )
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
-      sessions: snapshotSessions,
+      sessions: indexedSessions,
       projectDirectories,
       projects,
       projectByID,
