@@ -1,5 +1,5 @@
 {
-  "$schema": "https://v2-8-13.turborepo.dev/schema.json",
+  "$schema": "https://v2-10-11.turborepo.dev/schema.json",
   "globalDependencies": [
     "patches/**",
     "bunfig.toml",
@@ -33,6 +33,9 @@
     "build": {
       "dependsOn": [],
       "outputs": ["dist/**"]
+    },
+    "@opencode-ai/storybook#build": {
+      "outputs": ["storybook-static/**"]
     },
     "@opencode-ai/codemode#test": {
       "dependsOn": ["^build"],
