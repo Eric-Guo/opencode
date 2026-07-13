@@ -133,6 +133,7 @@ const desktopTabManagers = new Map<number, DesktopTabManager>()
 const externalTabSessionRestores = new Map<string, Promise<void>>()
 
 type DesktopTabID = (typeof desktopTabs)[number]["id"]
+type ExternalDesktopTab = Extract<(typeof desktopTabs)[number], { url: string }>
 type DesktopTabAction = "settings" | "help"
 type DesktopTabManager = ReturnType<typeof createDesktopTabManager>
 type DesktopTabsState = {
@@ -481,7 +482,7 @@ function createDesktopTabManager(
 
   function getExternalTab(id: DesktopTabID) {
     return desktopTabs.find(
-      (tab): tab is Extract<(typeof desktopTabs)[number], { url: string }> => tab.id === id && "url" in tab,
+      (tab): tab is ExternalDesktopTab => tab.id === id && "url" in tab,
     )
   }
 
@@ -507,12 +508,15 @@ function createDesktopTabManager(
     const tab = getExternalTab(id)
     if (!tab) return openCodeView
     const savedURL = getStore(desktopTabStateFile(windowID)).get(id)
+    const url = typeof savedURL === "string" && isDesktopTabURL(tab, savedURL) ? savedURL : tab.url
     const view = createExternalView(
       win,
       tab,
       sendState,
-      typeof savedURL === "string" ? savedURL : tab.url,
-      (url) => getStore(desktopTabStateFile(windowID)).set(id, url),
+      url,
+      (url) => {
+        if (isDesktopTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
+      },
     )
     tabViews.set(id, view)
     win.contentView.addChildView(view)
@@ -528,7 +532,7 @@ function createDesktopTabManager(
     if (!view) return
     if ("url" in tab) {
       const url = view.webContents.getURL()
-      if (url) getStore(desktopTabStateFile(windowID)).set(id, url)
+      if (isDesktopTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
     }
     tabViews.delete(id)
     win.contentView.removeChildView(view)
@@ -666,7 +670,7 @@ function createRendererTabView(
 
 function createExternalView(
   win: BrowserWindow,
-  tab: Extract<(typeof desktopTabs)[number], { url: string }>,
+  tab: ExternalDesktopTab,
   sendState: () => void,
   url: string,
   saveURL: (url: string) => void,
@@ -716,7 +720,11 @@ function createExternalView(
   return view
 }
 
-function restoreExternalTabSession(tab: Extract<(typeof desktopTabs)[number], { url: string }>) {
+function isDesktopTabURL(tab: ExternalDesktopTab, url: string) {
+  return URL.canParse(url) && new URL(url).hostname === new URL(tab.url).hostname
+}
+
+function restoreExternalTabSession(tab: ExternalDesktopTab) {
   const cached = externalTabSessionRestores.get(tab.partition)
   if (cached) return cached
 
