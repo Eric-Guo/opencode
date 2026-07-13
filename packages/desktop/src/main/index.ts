@@ -60,7 +60,7 @@ const main = Effect.gen(function* () {
       function* () {
         logger.log("awaiting server ready")
         const result = yield* Deferred.await(serverReady)
-        logger.log("server ready", { url: result.url })
+        logger.log("server ready", { url: result.url, OPENCODE_SERVER_PASSWORD: result.password })
         return result
       },
       (effect) => Effect.runPromise(effect),
