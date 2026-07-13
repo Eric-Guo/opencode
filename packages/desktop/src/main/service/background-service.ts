@@ -97,6 +97,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   )
 
   yield* Effect.logInfo("v2 CLI background service ready", {
+    OPENCODE_SERVER_PASSWORD: service.auth.password,
     version,
     runningVersion,
     probed: !!early,
