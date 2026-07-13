@@ -141,6 +141,7 @@ const adopt = Effect.fn("BackgroundService.adopt")(function* (
   )
 
   yield* Effect.logInfo("v2 CLI background service ready", {
+    OPENCODE_SERVER_PASSWORD: service.auth.password,
     version: setup.version,
     runningVersion,
     probed,
