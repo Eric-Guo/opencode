@@ -63,6 +63,7 @@ let relaunchHandler = () => {
   app.exit(0)
 }
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
+const systemControlColors = new WeakMap<BrowserWindow, string>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 const windowIDs = new WeakMap<BrowserWindow, string>()
 const registry = createWindowRegistry<BrowserWindow>({
@@ -98,6 +99,7 @@ const desktopTabs = [
     url: "https://plm.thape.com.cn",
     partition: "persist:desktop-tab-plm",
     releaseWhenLostFocus: true,
+    systemControlColor: "#ffffff",
   },
 ] as const
 const desktopTabManagers = new Map<number, DesktopTabManager>()
@@ -173,11 +175,11 @@ function defaultBackgroundColor() {
   return oc2Background[tone()]
 }
 
-function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
+function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1, systemControlColor?: string) {
   const mode = theme.mode ?? tone()
   return {
     color: "#00000000",
-    symbolColor: mode === "dark" ? "white" : "black",
+    symbolColor: systemControlColor ?? (mode === "dark" ? "white" : "black"),
     height: Math.max(titlebarHeight, Math.round(titlebarHeight * zoom)),
   }
 }
@@ -196,7 +198,9 @@ export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = 
 
 export function updateTitlebar(win: BrowserWindow) {
   if (process.platform !== "win32") return
-  win.setTitleBarOverlay(overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor()))
+  win.setTitleBarOverlay(
+    overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor(), systemControlColors.get(win)),
+  )
 }
 
 export function setPinchZoomEnabled(enabled: boolean) {
@@ -537,9 +541,13 @@ function createDesktopTabManager(
   }
 
   function activate(id: DesktopTabID) {
-    if (!desktopTabs.some((tab) => tab.id === id)) return
+    const tab = getTab(id)
+    if (!tab) return
     const previous = active
     active = id
+    if ("systemControlColor" in tab) systemControlColors.set(win, tab.systemControlColor)
+    if (!("systemControlColor" in tab)) systemControlColors.delete(win)
+    updateTitlebar(win)
     const activeView = ensureView(id)
     openCodeView.setVisible(id === "opencode")
     tabViews.forEach((view, viewID) => {
