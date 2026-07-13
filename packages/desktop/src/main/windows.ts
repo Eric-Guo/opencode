@@ -15,15 +15,17 @@ import {
   nativeImage,
   nativeTheme,
   protocol,
+  safeStorage,
+  session,
   shell,
 } from "electron"
-import type { WebContents } from "electron"
+import type { Cookie, WebContents } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 import { exportDebugLogs, write as writeLog } from "./logging"
 import { getStore, removeStoreFile } from "./store"
-import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
+import { DESKTOP_TAB_COOKIES_STORE, PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { createWindowRegistry } from "./window-registry"
 
@@ -69,6 +71,7 @@ const registry = createWindowRegistry<BrowserWindow>({
   cleanup: (id) => {
     rmSync(join(app.getPath("userData"), windowStateFile(id)), { force: true })
     removeStoreFile(windowDataFile(id))
+    removeStoreFile(desktopTabStateFile(id))
   },
 })
 const primaryWebContents = new WeakMap<BrowserWindow, WebContents>()
@@ -98,6 +101,7 @@ const desktopTabs = [
   },
 ] as const
 const desktopTabManagers = new Map<number, DesktopTabManager>()
+const externalTabSessionRestores = new Map<string, Promise<void>>()
 
 type DesktopTabID = (typeof desktopTabs)[number]["id"]
 type DesktopTabAction = "settings" | "help"
@@ -274,7 +278,7 @@ export function createMainWindow(id: string = randomUUID()) {
 
   const openCodeView = createOpenCodeView(win)
   const tabbarView = createTabbarView(win)
-  const tabManager = createDesktopTabManager(win, openCodeView, tabbarView)
+  const tabManager = createDesktopTabManager(win, id, openCodeView, tabbarView)
 
   allowRendererPermissions(openCodeView.webContents)
   wireWindowRecovery(win, openCodeView.webContents, "main")
@@ -322,6 +326,10 @@ function windowStateFile(id: string) {
 // the per-window renderer store this window persists its tabs into.
 function windowDataFile(id: string) {
   return `opencode.window.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
+}
+
+function desktopTabStateFile(id: string) {
+  return `opencode.desktop-tabs.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
 }
 
 export function registerRendererProtocol() {
@@ -411,7 +419,12 @@ function createTabbarView(win: BrowserWindow) {
   return view
 }
 
-function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsView, tabbarView: WebContentsView) {
+function createDesktopTabManager(
+  win: BrowserWindow,
+  windowID: string,
+  openCodeView: WebContentsView,
+  tabbarView: WebContentsView,
+) {
   registerDesktopTabsIpc()
   const tabbarWebContents = tabbarView.webContents
   const tabbarWebContentsId = tabbarWebContents.id
@@ -421,7 +434,6 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
 
   let active: DesktopTabID = "opencode"
   const tabViews = new Map<DesktopTabID, WebContentsView>()
-  const externalTabURLs = new Map<DesktopTabID, string>()
 
   function getView(id: DesktopTabID) {
     if (id === "opencode") return openCodeView
@@ -463,7 +475,14 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     }
     const tab = getExternalTab(id)
     if (!tab) return openCodeView
-    const view = createExternalView(win, tab, sendState, externalTabURLs.get(id) ?? tab.url)
+    const savedURL = getStore(desktopTabStateFile(windowID)).get(id)
+    const view = createExternalView(
+      win,
+      tab,
+      sendState,
+      typeof savedURL === "string" ? savedURL : tab.url,
+      (url) => getStore(desktopTabStateFile(windowID)).set(id, url),
+    )
     tabViews.set(id, view)
     win.contentView.addChildView(view)
     view.setVisible(false)
@@ -478,7 +497,7 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     if (!view) return
     if ("url" in tab) {
       const url = view.webContents.getURL()
-      if (url) externalTabURLs.set(id, url)
+      if (url) getStore(desktopTabStateFile(windowID)).set(id, url)
     }
     tabViews.delete(id)
     win.contentView.removeChildView(view)
@@ -615,6 +634,7 @@ function createExternalView(
   tab: Extract<(typeof desktopTabs)[number], { url: string }>,
   sendState: () => void,
   url: string,
+  saveURL: (url: string) => void,
 ) {
   const view = new WebContentsView({
     webPreferences: {
@@ -635,8 +655,14 @@ function createExternalView(
     void view.webContents.loadURL(details.url)
     return { action: "deny" }
   })
-  view.webContents.on("did-navigate", sendState)
-  view.webContents.on("did-navigate-in-page", sendState)
+  view.webContents.on("did-navigate", (_event, url) => {
+    saveURL(url)
+    sendState()
+  })
+  view.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+    if (isMainFrame) saveURL(url)
+    sendState()
+  })
   view.webContents.on("did-stop-loading", sendState)
   view.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame || errorCode === -3) return
@@ -647,10 +673,111 @@ function createExternalView(
       "error",
     )
   })
-  void view.webContents.loadURL(url).catch((error) => {
-    writeLog("window", "external tab initial load failed", { tab: tab.id, error }, "error")
-  })
+  void restoreExternalTabSession(tab)
+    .then(() => view.webContents.loadURL(url))
+    .catch((error) => {
+      writeLog("window", "external tab initial load failed", { tab: tab.id, error }, "error")
+    })
   return view
+}
+
+function restoreExternalTabSession(tab: Extract<(typeof desktopTabs)[number], { url: string }>) {
+  const cached = externalTabSessionRestores.get(tab.partition)
+  if (cached) return cached
+
+  // Persistent partitions retain durable cookies, but Chromium drops session cookies on exit.
+  // Restore the encrypted snapshot before the first request so authentication is already available.
+  const externalSession = session.fromPartition(tab.partition)
+  const cookies = new Map(
+    readExternalTabCookies(tab.partition).map((cookie) => [externalTabCookieKey(cookie), cookie] as const),
+  )
+  externalSession.cookies.on("changed", (_event, cookie, _cause, removed) => {
+    if (removed) cookies.delete(externalTabCookieKey(cookie))
+    if (!removed) cookies.set(externalTabCookieKey(cookie), cookie)
+    writeExternalTabCookies(tab.partition, [...cookies.values()])
+  })
+  const restored = Promise.allSettled(
+    [...cookies.values()]
+      .filter(
+        (cookie): cookie is Cookie & { domain: string } =>
+          Boolean(cookie.domain) && (!cookie.expirationDate || cookie.expirationDate > Date.now() / 1000),
+      )
+      .map((cookie) =>
+        externalSession.cookies.set({
+          url: `${cookie.secure ? "https" : "http"}://${cookie.domain.replace(/^\./, "")}${cookie.path ?? "/"}`,
+          name: cookie.name,
+          value: cookie.value,
+          ...(!cookie.hostOnly && cookie.domain ? { domain: cookie.domain } : {}),
+          ...(cookie.path ? { path: cookie.path } : {}),
+          ...(cookie.secure ? { secure: true } : {}),
+          ...(cookie.httpOnly ? { httpOnly: true } : {}),
+          ...(cookie.sameSite ? { sameSite: cookie.sameSite } : {}),
+          ...(!cookie.session && cookie.expirationDate ? { expirationDate: cookie.expirationDate } : {}),
+        }),
+      ),
+  )
+    .then(async (results) => {
+      results.forEach((result) => {
+        if (result.status === "rejected") {
+          writeLog(
+            "window",
+            "external tab cookie restore failed",
+            { partition: tab.partition, error: result.reason },
+            "warn",
+          )
+        }
+      })
+      cookies.clear()
+      ;(await externalSession.cookies.get({})).forEach((cookie) => cookies.set(externalTabCookieKey(cookie), cookie))
+      writeExternalTabCookies(tab.partition, [...cookies.values()])
+    })
+    .catch((error) => {
+      writeLog("window", "external tab session restore failed", { partition: tab.partition, error }, "error")
+    })
+  externalTabSessionRestores.set(tab.partition, restored)
+  return restored
+}
+
+function externalTabCookieKey(cookie: Cookie) {
+  return [cookie.name, cookie.domain ?? "", cookie.path ?? ""].join("\n")
+}
+
+function readExternalTabCookies(partition: string) {
+  const value = getStore(DESKTOP_TAB_COOKIES_STORE).get(partition)
+  if (typeof value !== "string" || !safeStorage.isEncryptionAvailable()) return []
+  try {
+    const parsed: unknown = JSON.parse(safeStorage.decryptString(Buffer.from(value, "base64")))
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isExternalTabCookie)
+  } catch (error) {
+    writeLog("window", "external tab cookies restore failed", { partition, error }, "error")
+    return []
+  }
+}
+
+function writeExternalTabCookies(partition: string, cookies: Cookie[]) {
+  if (!safeStorage.isEncryptionAvailable()) {
+    writeLog("window", "external tab cookies encryption unavailable", { partition }, "warn")
+    return
+  }
+  try {
+    getStore(DESKTOP_TAB_COOKIES_STORE).set(
+      partition,
+      safeStorage.encryptString(JSON.stringify(cookies)).toString("base64"),
+    )
+  } catch (error) {
+    writeLog("window", "external tab cookies save failed", { partition, error }, "error")
+  }
+}
+
+function isExternalTabCookie(value: unknown): value is Cookie {
+  if (!value || typeof value !== "object") return false
+  const cookie = value as Record<string, unknown>
+  return (
+    typeof cookie.name === "string" &&
+    typeof cookie.value === "string" &&
+    ["unspecified", "no_restriction", "lax", "strict"].includes(String(cookie.sameSite))
+  )
 }
 
 function registerViewContextMenu(view: WebContentsView) {
