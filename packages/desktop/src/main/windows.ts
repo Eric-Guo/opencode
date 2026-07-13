@@ -94,6 +94,7 @@ const desktopTabs = [
     label: "PLM",
     url: "https://plm.thape.com.cn",
     partition: "persist:desktop-tab-plm",
+    releaseWhenLostFocus: true,
   },
 ] as const
 const desktopTabManagers = new Map<number, DesktopTabManager>()
@@ -420,6 +421,7 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
 
   let active: DesktopTabID = "opencode"
   const tabViews = new Map<DesktopTabID, WebContentsView>()
+  const externalTabURLs = new Map<DesktopTabID, string>()
 
   function getView(id: DesktopTabID) {
     if (id === "opencode") return openCodeView
@@ -461,7 +463,7 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     }
     const tab = getExternalTab(id)
     if (!tab) return openCodeView
-    const view = createExternalView(win, tab, sendState)
+    const view = createExternalView(win, tab, sendState, externalTabURLs.get(id) ?? tab.url)
     tabViews.set(id, view)
     win.contentView.addChildView(view)
     view.setVisible(false)
@@ -474,6 +476,10 @@ function createDesktopTabManager(win: BrowserWindow, openCodeView: WebContentsVi
     if (!tab || !("releaseWhenLostFocus" in tab) || !tab.releaseWhenLostFocus) return
     const view = tabViews.get(id)
     if (!view) return
+    if ("url" in tab) {
+      const url = view.webContents.getURL()
+      if (url) externalTabURLs.set(id, url)
+    }
     tabViews.delete(id)
     win.contentView.removeChildView(view)
     if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false })
@@ -608,6 +614,7 @@ function createExternalView(
   win: BrowserWindow,
   tab: Extract<(typeof desktopTabs)[number], { url: string }>,
   sendState: () => void,
+  url: string,
 ) {
   const view = new WebContentsView({
     webPreferences: {
@@ -640,7 +647,7 @@ function createExternalView(
       "error",
     )
   })
-  void view.webContents.loadURL(tab.url).catch((error) => {
+  void view.webContents.loadURL(url).catch((error) => {
     writeLog("window", "external tab initial load failed", { tab: tab.id, error }, "error")
   })
   return view
