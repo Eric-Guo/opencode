@@ -298,7 +298,7 @@ const main = Effect.gen(function* () {
       function* () {
         logger.log("awaiting server ready")
         const res = yield* Deferred.await(serverReady)
-        logger.log("server ready", { url: res.url })
+        logger.log("server ready", { url: res.url, OPENCODE_SERVER_PASSWORD: res.password })
         return res
       },
       (e) => Effect.runPromise(e),
