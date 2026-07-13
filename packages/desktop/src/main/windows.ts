@@ -691,8 +691,7 @@ function createExternalView(
   })
   view.webContents.session.setPermissionCheckHandler(() => false)
   view.webContents.setWindowOpenHandler((details) => {
-    if (isDesktopTabURL(tab, details.url)) void view.webContents.loadURL(details.url)
-    else void shell.openExternal(details.url)
+    void shell.openExternal(details.url)
     return { action: "deny" }
   })
   view.webContents.on("will-navigate", (event, url) => {
