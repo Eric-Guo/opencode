@@ -72,6 +72,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
   yield* Effect.logInfo("v2 CLI background service ready", {
+    OPENCODE_SERVER_PASSWORD: service.auth.password,
     version,
     probed: !!early,
     ...endpoint(url.origin),
