@@ -984,7 +984,7 @@ const ProviderInterleaved = Schema.Union([
 const ProviderReasoningOption = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("effort"),
-    values: Schema.Array(Schema.NullOr(Schema.String)),
+    values: Schema.Array(Schema.String),
   }),
   Schema.Struct({
     type: Schema.Literal("toggle"),
@@ -1234,7 +1234,7 @@ function normalizeReasoningOption(option: unknown): ReasoningOption | undefined 
     if (!Array.isArray(option.values)) return
     return {
       type: "effort",
-      values: option.values.filter((value): value is string | null => value === null || typeof value === "string"),
+      values: option.values.filter((value): value is string => typeof value === "string"),
     }
   }
   if (option.type === "toggle") return { type: "toggle" }
@@ -1920,18 +1920,9 @@ const layer = Layer.effect(
       const provider = s.providers[providerID]
       if (!provider) return undefined
 
-      const experimental = yield* plugin.trigger<"experimental.provider.small_model">(
-        "experimental.provider.small_model",
-        { provider: toPublicInfo(provider) },
-        { model: undefined },
-      )
-      if (experimental.model) {
-        return {
-          ...experimental.model,
-          id: ModelV2.ID.make(experimental.model.id),
-          providerID: ProviderV2.ID.make(experimental.model.providerID),
-        }
-      }
+      const experimental = { model: undefined as Model | undefined }
+      yield* plugin.trigger("experimental.provider.small_model", { provider: toPublicInfo(provider) }, experimental)
+      if (experimental.model) return experimental.model
 
       // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
       if (providerID === ProviderV2.ID.azure || providerID === ProviderV2.ID.make("azure-cognitive-services")) {
