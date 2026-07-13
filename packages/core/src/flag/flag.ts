@@ -1,5 +1,3 @@
-import { Config } from "effect"
-
 export function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
   return value === "true" || value === "1"
