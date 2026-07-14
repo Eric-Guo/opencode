@@ -1,4 +1,4 @@
-import type { Agent, Project, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
+import type { Agent, ModelInfo, Project, Provider, ProviderV2Info } from "@opencode-ai/sdk/v2/client"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/path-key"
 
@@ -18,22 +18,88 @@ export function normalizeAgentList(input: unknown): Agent[] {
   return Object.values(input).filter(isAgent)
 }
 
-export function normalizeProviderList(input: ProviderListResponse): NormalizedProviderListResponse {
+export function normalizeProviderList(input: {
+  providers: ProviderV2Info[]
+  models: ModelInfo[]
+  defaultModel: ModelInfo | null
+}): NormalizedProviderListResponse {
+  const models = input.models
+    .filter((model) => model.status !== "deprecated")
+    .reduce<Map<string, ModelInfo[]>>((result, model) => {
+      result.set(model.providerID, [...(result.get(model.providerID) ?? []), model])
+      return result
+    }, new Map())
   return {
-    ...input,
     all: new Map(
-      input.all.map(
-        (provider) =>
-          [
-            provider.id,
-            {
-              ...provider,
-              models: Object.fromEntries(
-                Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
+      input.providers.map((provider) => [provider.id, normalizeProvider(provider, models.get(provider.id) ?? [])]),
+    ),
+    connected: input.providers.map((provider) => provider.id),
+    default: input.defaultModel ? { [input.defaultModel.providerID]: input.defaultModel.id } : {},
+  }
+}
+
+function normalizeProvider(provider: ProviderV2Info, models: ModelInfo[]): Provider {
+  return {
+    id: provider.id,
+    name: provider.name,
+    source: "api",
+    env: [],
+    options: provider.settings ?? {},
+    models: Object.fromEntries(
+      models.map((model) => {
+        const cost = model.cost.find((item) => !item.tier) ?? model.cost[0]
+        const input = new Set(model.capabilities.input)
+        const output = new Set(model.capabilities.output)
+        return [
+          model.id,
+          {
+            id: model.id,
+            providerID: model.providerID,
+            api: {
+              id: model.modelID,
+              url: typeof model.settings?.baseURL === "string" ? model.settings.baseURL : "",
+              npm: model.package ?? provider.package,
+            },
+            name: model.name,
+            family: model.family,
+            capabilities: {
+              temperature: false,
+              reasoning: model.variants.length > 0,
+              attachment: [...input].some((item) => item !== "text"),
+              toolcall: model.capabilities.tools,
+              input: {
+                text: input.has("text"),
+                audio: input.has("audio"),
+                image: input.has("image"),
+                video: input.has("video"),
+                pdf: input.has("pdf"),
+              },
+              output: {
+                text: output.has("text"),
+                audio: output.has("audio"),
+                image: output.has("image"),
+                video: output.has("video"),
+                pdf: output.has("pdf"),
+              },
+              interleaved: false,
+            },
+            cost: {
+              input: cost?.input ?? 0,
+              output: cost?.output ?? 0,
+              cache: cost?.cache ?? { read: 0, write: 0 },
+              tiers: model.cost.flatMap((item) =>
+                item.tier ? [{ input: item.input, output: item.output, cache: item.cache, tier: item.tier }] : [],
               ),
             },
-          ] as const,
-      ),
+            limit: model.limit,
+            status: model.status,
+            options: model.settings ?? {},
+            headers: model.headers ?? {},
+            release_date: model.time.released ? new Date(model.time.released).toISOString() : "",
+            variants: Object.fromEntries(model.variants.map((variant) => [variant.id, variant.settings ?? {}])),
+          },
+        ] as const
+      }),
     ),
   }
 }
