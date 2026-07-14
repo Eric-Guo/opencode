@@ -12,7 +12,7 @@
     "bench:test": "bun run script/bench-test-suite.ts",
     "profile:test": "bun run script/profile-test-files.ts",
     "build": "bun run script/build.ts",
-    "dev": "bun run --conditions=browser ./src/index.ts",
+    "dev": "bun run --conditions=browser ../cli/src/index.ts",
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
