@@ -26,7 +26,7 @@ import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/se
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { Database } from "@opencode-ai/core/database/database"
-import { SessionPendingTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, SessionPendingTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Agent } from "@opencode-ai/schema/agent"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -173,6 +173,61 @@ const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
       ])
       .run()
       .pipe(Effect.orDie)
+  })
+
+const insertLegacyMessageV2Assistant = (sessionID: SessionIDType, parentID: MessageID) =>
+  Effect.gen(function* () {
+    const id = MessageID.ascending()
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(MessageTable)
+      .values({
+        id,
+        session_id: sessionID,
+        time_created: 1,
+        time_updated: 1,
+        data: {
+          role: "assistant",
+          time: { created: 1, completed: 1 },
+          parentID,
+          modelID: ModelV2.ID.make("test"),
+          providerID: ProviderV2.ID.make("test"),
+          mode: "build",
+          path: { cwd: "/tmp", root: "/tmp" },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+        } as unknown as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
+      })
+      .run()
+      .pipe(Effect.orDie)
+    return id
+  })
+
+const insertLegacyMessageV2User = (sessionID: SessionIDType) =>
+  Effect.gen(function* () {
+    const id = MessageID.ascending()
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(MessageTable)
+      .values({
+        id,
+        session_id: sessionID,
+        time_created: 1,
+        time_updated: 1,
+        data: {
+          role: "user",
+          time: { created: 1 },
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
+        } as unknown as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
+      })
+      .run()
+      .pipe(Effect.orDie)
+    return id
   })
 
 const setLegacySummaryDiff = (sessionID: SessionIDType) =>
@@ -708,6 +763,41 @@ describe("session HttpApi", () => {
         })
         expect((contextBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
         expect(JSON.stringify(contextBody)).not.toContain("assistant")
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "serves legacy messages missing agent",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "legacy messages" })
+        const userID = yield* insertLegacyMessageV2User(session.id)
+        const assistantID = yield* insertLegacyMessageV2Assistant(session.id, userID)
+
+        const response = yield* request(`${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=80`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const messages = yield* json<SessionV1.WithParts[]>(response)
+
+        expect(response.status).toBe(200)
+        expect(messages.find((item) => item.info.role === "user")?.info).toMatchObject({
+          role: "user",
+          agent: "build",
+          model: { providerID: "test", modelID: "test" },
+        })
+        expect(messages.find((item) => item.info.role === "assistant")?.info).toMatchObject({
+          role: "assistant",
+          agent: "build",
+        })
+
+        const message = yield* request(
+          pathFor(SessionPaths.message, { sessionID: session.id, messageID: assistantID }),
+          { headers: { "x-opencode-directory": test.directory } },
+        )
+        expect(message.status).toBe(200)
+        expect((yield* json<SessionV1.WithParts>(message)).info.agent).toBe("build")
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
