@@ -181,7 +181,15 @@ function warmSessions(input: {
 export const loadProvidersQuery = (scope: ServerScope, directory: string | null, sdk: OpencodeClient) =>
   queryOptions({
     queryKey: [scope, directory, "providers"],
-    queryFn: () => retry(() => sdk.provider.list().then((x) => normalizeProviderList(x.data!))),
+    queryFn: () =>
+      retry(async () => {
+        const defaultModel = await sdk.v2.model.default().then((response) => response.data!.data)
+        const [providers, models] = await Promise.all([
+          sdk.v2.provider.list().then((response) => response.data!.data),
+          sdk.v2.model.list().then((response) => response.data!.data),
+        ])
+        return normalizeProviderList({ providers, models, defaultModel })
+      }),
   })
 
 export const loadAgentsQuery = (scope: ServerScope, directory: string | null, sdk: OpencodeClient) =>
