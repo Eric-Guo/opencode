@@ -73,14 +73,20 @@ describe("bootstrapDirectory", () => {
         },
         permission: { list: async () => ({ data: [] }) },
         question: { list: async () => ({ data: [] }) },
-        v2: { reference: { list: async () => ({ data: { data: [] } }) } },
+        v2: {
+          reference: { list: async () => ({ data: { data: [] } }) },
+          model: {
+            default: async () => ({ data: { data: null } }),
+            list: async () => ({ data: { data: [] } }),
+          },
+          provider: { list: async () => ({ data: { data: [] } }) },
+        },
         mcp: {
           status: async () => {
             mcpReads.push("status")
             return { data: {} }
           },
         },
-        provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
       } as unknown as OpencodeClient,
       store,
       setStore,
@@ -112,9 +118,15 @@ describe("bootstrapDirectory", () => {
       command: { list: async () => ({ data: [] }) },
       permission: { list: async () => ({ data: [] }) },
       question: { list: async () => ({ data: [] }) },
-      v2: { reference: { list: async () => ({ data: { data: [] } }) } },
+      v2: {
+        reference: { list: async () => ({ data: { data: [] } }) },
+        model: {
+          default: async () => ({ data: { data: null } }),
+          list: async () => ({ data: { data: [] } }),
+        },
+        provider: { list: async () => ({ data: { data: [] } }) },
+      },
       mcp: { status: async () => ({ data: {} }) },
-      provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
     } as unknown as OpencodeClient
     const session = createServerSession(client)
     const stale: Session = {
@@ -171,5 +183,64 @@ describe("query keys", () => {
       null,
       "providers",
     ])
+  })
+
+  test("loads the provider catalog from V2 after model initialization", async () => {
+    const calls: string[] = []
+    const model = {
+      id: "claude-sonnet",
+      modelID: "claude-sonnet-4",
+      providerID: "anthropic",
+      name: "Claude Sonnet",
+      capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+      variants: [{ id: "high", settings: { effort: "high" } }],
+      time: { released: Date.parse("2026-01-02") },
+      cost: [{ input: 3, output: 15, cache: { read: 0.3, write: 3.75 } }],
+      status: "active",
+      enabled: true,
+      limit: { context: 200_000, output: 64_000 },
+    }
+    const client = {
+      provider: {
+        list: () => {
+          throw new Error("legacy provider endpoint called")
+        },
+      },
+      v2: {
+        model: {
+          default: async () => {
+            calls.push("default")
+            return { data: { data: model } }
+          },
+          list: async () => {
+            calls.push("models")
+            return { data: { data: [model] } }
+          },
+        },
+        provider: {
+          list: async () => {
+            calls.push("providers")
+            return {
+              data: {
+                data: [{ id: "anthropic", name: "Anthropic", package: "@ai-sdk/anthropic" }],
+              },
+            }
+          },
+        },
+      },
+    } as unknown as OpencodeClient
+
+    const result = await new QueryClient().fetchQuery(loadProvidersQuery(ServerScope.local, "/repo", client))
+
+    expect(calls[0]).toBe("default")
+    expect(new Set(calls.slice(1))).toEqual(new Set(["providers", "models"]))
+    expect(result.connected).toEqual(["anthropic"])
+    expect(result.default).toEqual({ anthropic: "claude-sonnet" })
+    expect(result.all.get("anthropic")?.models["claude-sonnet"]).toMatchObject({
+      id: "claude-sonnet",
+      api: { id: "claude-sonnet-4", npm: "@ai-sdk/anthropic" },
+      capabilities: { attachment: true, toolcall: true, reasoning: true },
+      variants: { high: { effort: "high" } },
+    })
   })
 })
