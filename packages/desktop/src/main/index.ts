@@ -1,5 +1,5 @@
+import { ensureSsoUsername } from "@opencode-ai/core/thape-sso"
 import { app, session } from "electron"
-import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
 import { Deferred, Effect, Fiber } from "effect"
 import type { ServerReadyData } from "../shared/ipc-contract"
 import { checkAppExists, resolveAppPath } from "./files/apps"
