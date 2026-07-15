@@ -10,7 +10,7 @@ import { Location } from "../../location"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
 import { Ripgrep } from "../../ripgrep"
-import { RelativePath } from "../../schema"
+import { PositiveInt, RelativePath } from "../../schema"
 
 export const name = "grep"
 
@@ -26,7 +26,7 @@ export const Input = Schema.Struct({
   include: FileSystem.GrepInput.fields.include.annotate({
     description: 'Glob pattern to filter files (for example, "*.js" or "*.{ts,tsx}")',
   }),
-  limit: FileSystem.GrepInput.fields.limit.annotate({
+  limit: Schema.NullOr(PositiveInt).pipe(Schema.optional).annotate({
     description: `Maximum number of matching lines to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
   }),
 })
