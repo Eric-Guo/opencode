@@ -9,7 +9,7 @@ import { Location } from "../../location"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
 import { SessionInstructions } from "../../session/instructions"
-import { AbsolutePath } from "../../schema"
+import { AbsolutePath, NonNegativeInt } from "../../schema"
 import { ReadToolFileSystem } from "../read-filesystem"
 
 export const name = "read"
@@ -17,12 +17,14 @@ const FILENAME = "AGENTS.md"
 const SUPPORTED_MEDIA_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"])
 const LocationInput = Schema.Struct({
   path: Schema.String.annotate({ description: "File or directory to read" }),
-  offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
+  offset: Schema.NullOr(NonNegativeInt).pipe(Schema.optional).annotate({
     description: "The line or directory entry to start reading from (1-based)",
   }),
-  limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
-    description: "The maximum number of lines or directory entries to read (defaults to 2000)",
-  }),
+  limit: Schema.NullOr(NonNegativeInt.check(Schema.isLessThanOrEqualTo(ReadToolFileSystem.MAX_READ_LINES)))
+    .pipe(Schema.optional)
+    .annotate({
+      description: "The maximum number of lines or directory entries to read (defaults to 2000)",
+    }),
 })
 export const Input = LocationInput
 const Output = Schema.Union([
@@ -82,10 +84,13 @@ export const Plugin = {
                 )
                 const content =
                   type === "directory"
-                    ? yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
+                    ? yield* reader.list(absolute, {
+                        offset: input.offset ?? undefined,
+                        limit: input.limit ?? undefined,
+                      })
                     : yield* reader.read(absolute, resource, {
-                        offset: input.offset,
-                        limit: input.limit,
+                        offset: input.offset ?? undefined,
+                        limit: input.limit ?? undefined,
                       })
                 // After a successful read, discover nearby AGENTS.md walking up to the Location
                 // root exclusive and inject them as durable synthetic instructions. For a
@@ -118,7 +123,7 @@ export const Plugin = {
               }).pipe(
                 Effect.map((output) => ({
                   output,
-                  content: toModelContent(input.path, input.offset, output),
+                  content: toModelContent(input.path, input.offset ?? undefined, output),
                 })),
                 Effect.mapError((error) => {
                   if (error instanceof ToolFailure) return error
