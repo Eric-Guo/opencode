@@ -1,6 +1,7 @@
 import { app } from "electron"
 import { Context, Effect, Exit, Layer, Path } from "effect"
 import type { ServerReadyData } from "../../shared/ipc-contract"
+import { loadDesktopTabs } from "../desktop-tabs"
 import { cleanStages, DesktopCli } from "./desktop-cli"
 
 export * as BackgroundService from "./background-service"
@@ -31,6 +32,20 @@ const start = Effect.fn("BackgroundService.start")(function* () {
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  const cors = loadDesktopTabs().flatMap((tab) => ("url" in tab && tab.localServer ? [new URL(tab.url).origin] : []))
+  const command = [...cli.command, "service", "set", "cors", JSON.stringify(cors)]
+  yield* Effect.logInfo("v2 CLI command started", { command })
+  const configured = yield* Effect.tryPromise(async () => {
+    const child = Bun.spawn(command, { stdout: "pipe", stderr: "pipe" })
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    if (exitCode !== 0) throw new Error(stderr.trim() || `command exited with code ${exitCode}`)
+    return { stdout: stdout.trim(), stderr: stderr.trim() }
+  })
+  yield* Effect.logInfo("v2 CLI command completed", { command, ...configured })
   const client = yield* Effect.promise(() => import("@opencode-ai/client/service"))
   const service = yield* Effect.tryPromise(() =>
     client.Service.ensure({
