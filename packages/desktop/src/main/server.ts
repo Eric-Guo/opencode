@@ -21,6 +21,7 @@ const SIDECAR_STOP_TIMEOUT = 6_000
 
 type SpawnLocalServerOptions = {
   userDataPath: string
+  cors: string[]
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
@@ -155,7 +156,14 @@ export async function spawnLocalServer(
     child.on("exit", onExit)
     refreshTimeout()
     if (state.processGone) return failProcessGone(state.processGone)
-    child.postMessage({ type: "start", hostname, port, password, userDataPath: options.userDataPath })
+    child.postMessage({
+      type: "start",
+      hostname,
+      port,
+      password,
+      userDataPath: options.userDataPath,
+      cors: options.cors,
+    })
   }).catch((error) => {
     if (!state.exited) child.kill()
     throw error
