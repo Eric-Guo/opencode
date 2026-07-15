@@ -22,6 +22,7 @@ export type RendererDesktopTab = DesktopTabBase & {
 export type ExternalDesktopTab = DesktopTabBase & {
   url: string
   partition: string
+  localServer?: boolean
 }
 
 type DesktopTab = OpenCodeDesktopTab | RendererDesktopTab | ExternalDesktopTab
@@ -55,6 +56,7 @@ function parseDesktopTab(value: unknown, index: number, source: string): Desktop
     throw invalidTab(index, source)
   }
   if (value.systemControlColor !== undefined && !isString(value.systemControlColor)) throw invalidTab(index, source)
+  if (value.localServer !== undefined && typeof value.localServer !== "boolean") throw invalidTab(index, source)
 
   const base = {
     id: value.id,
@@ -64,7 +66,12 @@ function parseDesktopTab(value: unknown, index: number, source: string): Desktop
     ...(value.systemControlColor === undefined ? {} : { systemControlColor: value.systemControlColor }),
   }
   if (isString(value.url) && isString(value.partition) && URL.canParse(value.url)) {
-    return { ...base, url: value.url, partition: value.partition }
+    return {
+      ...base,
+      url: value.url,
+      partition: value.partition,
+      ...(value.localServer === undefined ? {} : { localServer: value.localServer }),
+    }
   }
   if (isString(value.html) && (value.devHtml === undefined || isString(value.devHtml))) {
     return { ...base, html: value.html, ...(value.devHtml === undefined ? {} : { devHtml: value.devHtml }) }
