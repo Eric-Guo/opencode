@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { usePlugin } from "../../plugin/context"
 import { Slot } from "../../plugin/render"
@@ -70,7 +70,7 @@ function Plugins(props: { context: Plugin.Context }) {
 
 function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const user = createMemo(() => Bun.env.THAPE_SSO_USER_NAME ?? props.context.app.version)
+  const user = process.env.THAPE_SSO_USER_NAME ?? props.context.app.version
 
   return (
     <Show when={dimensions().height >= 12 && dimensions().width >= 44}>
@@ -89,7 +89,7 @@ function View(props: { context: Plugin.Context }) {
         <Slot path="home.footer.status" />
         <box flexGrow={1} />
         <box flexShrink={0}>
-          <text fg={props.context.theme.text.muted}>{user()}</text>
+          <text fg={props.context.theme.text.muted}>{user}</text>
         </box>
       </box>
     </Show>
