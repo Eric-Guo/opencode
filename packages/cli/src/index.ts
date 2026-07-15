@@ -18,6 +18,7 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
+import { ensureSsoUsername } from "@opencode/core/thape-sso"
 
 ensurePluginRuntime()
 
@@ -102,6 +103,7 @@ Effect.gen(function* () {
       process.off("unhandledRejection", unhandledRejection)
     }),
   )
+  yield* Effect.promise(() => ensureSsoUsername())
   yield* Effect.logInfo("cli starting", {
     version: OPENCODE_VERSION,
     channel: OPENCODE_CHANNEL,
