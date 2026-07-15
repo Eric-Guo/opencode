@@ -18,7 +18,7 @@ if (!(await Bun.file(path.join(opencode, "package.json")).exists())) {
   process.exit(0)
 }
 
-await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
+await $`bun run --conditions=browser ./src/index.ts generate > ${dir}/openapi.json`.cwd(opencode)
 await $`bun -e ${`
   import { OpenApi } from "effect/unstable/httpapi"
   import { ClientApi } from "@opencode-ai/protocol/client"
