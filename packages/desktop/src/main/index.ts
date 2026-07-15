@@ -13,6 +13,7 @@ import { Deferred, Effect, Fiber } from "effect"
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
 import { CHANNEL } from "./constants"
+import { loadDesktopTabs } from "./desktop-tabs"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { ensureKimiWebBridgeDaemon } from "./kimi-webbridge"
@@ -367,6 +368,9 @@ const main = Effect.gen(function* () {
     const spawned = yield* Effect.promise(() =>
       spawnLocalServer(hostname, port, password, {
         userDataPath: app.getPath("userData"),
+        cors: loadDesktopTabs().flatMap((tab) =>
+          "url" in tab && tab.localServer ? [new URL(tab.url).origin] : [],
+        ),
         onStdout: (message) => writeLog("server", "stdout", { message }),
         onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
         onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
