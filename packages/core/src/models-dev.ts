@@ -36,7 +36,7 @@ type ReasoningOption =
 
 type Modality = "text" | "audio" | "image" | "video" | "pdf"
 
-type SourceModel = {
+export type SourceModel = {
   readonly id: string
   readonly name: string
   readonly family?: string
@@ -68,7 +68,7 @@ type SourceModel = {
   readonly provider?: { readonly npm?: string; readonly api?: string }
 }
 
-type SourceProvider = {
+export type SourceProvider = {
   readonly api?: string
   readonly name: string
   readonly env: readonly string[]
@@ -81,6 +81,12 @@ export type Snapshot = {
   readonly info: ProviderV2.Info
   readonly models: readonly ModelV2.Info[]
   readonly environment: readonly string[]
+}
+
+const sources = new WeakMap<Snapshot, SourceProvider>()
+
+export function source(snapshot: Snapshot) {
+  return sources.get(snapshot)
 }
 
 function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
@@ -111,7 +117,9 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
         )
       }
     }
-    providers.push({ info, models, environment: [...item.env] })
+    const snapshot = { info, models, environment: [...item.env] }
+    sources.set(snapshot, item)
+    providers.push(snapshot)
   }
   return providers
 }
@@ -551,8 +559,7 @@ const layer = Layer.effect(
     // Desktop builds embed the default models.dev snapshot, so startup should not
     // spend time refreshing the same catalog over the network.
     const runtimeFetchDisabled =
-      Flag.OPENCODE_DISABLE_MODELS_FETCH ||
-      (Flag.OPENCODE_CLIENT === "desktop" && source === "https://models.dev")
+      Flag.OPENCODE_DISABLE_MODELS_FETCH || (Flag.OPENCODE_CLIENT === "desktop" && source === "https://models.dev")
     const filepath = path.join(
       Global.Path.cache,
       source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
