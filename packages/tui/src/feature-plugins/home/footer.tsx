@@ -1,11 +1,11 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 
 function Mcp(props: { context: Plugin.Context }) {
-  const list = createMemo(() => props.context.data.location.mcp.server.list(props.context.location) ?? [])
-  const failed = createMemo(() => list().some((item) => item.status.status === "failed"))
-  const count = createMemo(() => list().filter((item) => item.status.status === "connected").length)
+  const list = () => props.context.data.location.mcp.server.list(props.context.location) ?? []
+  const failed = () => list().some((item) => item.status.status === "failed")
+  const count = () => list().filter((item) => item.status.status === "connected").length
 
   return (
     <Show when={list().length}>
@@ -36,7 +36,7 @@ function Mcp(props: { context: Plugin.Context }) {
 
 function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const user = createMemo(() => Bun.env.THAPE_SSO_USER_NAME ?? props.context.app.version)
+  const user = process.env.THAPE_SSO_USER_NAME ?? props.context.app.version
 
   return (
     <Show when={dimensions().height >= 12 && dimensions().width >= 44}>
@@ -53,7 +53,7 @@ function View(props: { context: Plugin.Context }) {
         <Mcp context={props.context} />
         <box flexGrow={1} />
         <box flexShrink={0}>
-          <text fg={props.context.theme.text.subdued}>{user()}</text>
+          <text fg={props.context.theme.text.subdued}>{user}</text>
         </box>
       </box>
     </Show>
