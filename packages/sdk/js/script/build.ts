@@ -12,7 +12,7 @@ import { createClient } from "@hey-api/openapi-ts"
 const opencode = path.resolve(dir, "../../opencode")
 const client = path.resolve(dir, "../../client")
 
-await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
+await $`bun run --conditions=browser ./src/index.ts generate > ${dir}/openapi.json`.cwd(opencode)
 await $`bun -e ${`
   import { OpenApi } from "effect/unstable/httpapi"
   import { ClientApi } from "@opencode-ai/protocol/client"
