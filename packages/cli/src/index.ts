@@ -14,6 +14,7 @@ import { Config } from "./config"
 import { Npm } from "@opencode-ai/util/npm"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
+import { ensureSsoUsername } from "@opencode-ai/core/thape-sso"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -78,6 +79,7 @@ Effect.gen(function* () {
       process.off("unhandledRejection", unhandledRejection)
     }),
   )
+  yield* Effect.promise(() => ensureSsoUsername())
   yield* Effect.logInfo("cli starting", {
     version: OPENCODE_VERSION,
     channel: OPENCODE_CHANNEL,
