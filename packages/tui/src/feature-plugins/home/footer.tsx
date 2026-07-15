@@ -13,11 +13,9 @@ export function homeFooterVisibility(width: number) {
 }
 
 function Mcp(props: { context: Plugin.Context }) {
-  const dimensions = useTerminalDimensions()
-  const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
-  const list = createMemo(() => props.context.data.location.mcp.server.list(props.context.location) ?? [])
-  const failed = createMemo(() => list().filter((item) => item.status.status === "failed").length)
-  const count = createMemo(() => list().filter((item) => item.status.status === "connected").length)
+  const list = () => props.context.data.location.mcp.server.list(props.context.location) ?? []
+  const failed = () => list().filter((item) => item.status.status === "failed").length
+  const count = () => list().filter((item) => item.status.status === "connected").length
 
   return (
     <Show when={list().length}>
@@ -41,9 +39,7 @@ function Mcp(props: { context: Plugin.Context }) {
             </Match>
           </Switch>
         </text>
-        <Show when={visibility().mcpCommand}>
-          <text fg={props.context.theme.text.muted}>/mcps</text>
-        </Show>
+        <text fg={props.context.theme.text.muted}>/mcps</text>
       </box>
     </Show>
   )
@@ -51,13 +47,11 @@ function Mcp(props: { context: Plugin.Context }) {
 
 function Plugins(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
+  const visibility = () => homeFooterVisibility(dimensions().width)
   const plugins = usePlugin()
-  const failed = createMemo(
-    () =>
-      plugins.list().filter((item) => item.status === "failed").length +
-      plugins.server().filter((item) => item.state.status === "failed").length,
-  )
+  const failed = () =>
+    plugins.list().filter((item) => item.status === "failed").length +
+    plugins.server().filter((item) => item.state.status === "failed").length
 
   return (
     <Show when={failed()}>
