@@ -2,7 +2,7 @@ export * as DesktopInitialization from "./desktop-initialization"
 
 import { app, session } from "electron"
 import { Context, Effect, Layer } from "effect"
-import { ensureSsoUsername } from "../../../opencode/src/util/thape_sso"
+import { ensureSsoUsername } from "@opencode-ai/core/thape-sso"
 import { ensureKimiWebBridgeDaemon } from "../kimi-webbridge"
 import { DesktopLogging } from "../native/logging"
 import { configureProxyCommandLine, configureSessionProxy } from "../proxy"
