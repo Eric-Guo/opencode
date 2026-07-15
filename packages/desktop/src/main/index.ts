@@ -5,6 +5,7 @@ import type { ServerReadyData } from "../shared/ipc-contract"
 import { checkAppExists, resolveAppPath } from "./files/apps"
 import { registerIpcHandlers, registerUpdaterIpcHandlers, registerWslIpcHandlers } from "./ipc"
 import { ensureKimiWebBridgeDaemon } from "./kimi-webbridge"
+import { loadDesktopTabs } from "./desktop-tabs"
 import {
   acquireApplicationLock,
   configureApplication,
@@ -94,7 +95,13 @@ const main = Effect.gen(function* () {
   const loadingTask = yield* Effect.gen(function* () {
     loadProxyEnvironment(logger)
     logger.log("starting v2 background service")
-    const background = yield* Effect.promise(() => startBackgroundCli(logger))
+    const background = yield* Effect.promise(() =>
+      startBackgroundCli(logger, {
+        cors: loadDesktopTabs().flatMap((tab) =>
+          "url" in tab && tab.localServer ? [new URL(tab.url).origin] : [],
+        ),
+      }),
+    )
     const wsl = yield* Effect.promise(() => startWsl(background, logger))
     registerWslIpcHandlers(wsl.ipc)
     wsl.start()
