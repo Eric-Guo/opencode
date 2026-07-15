@@ -31,7 +31,7 @@ type ReasoningOption =
 
 type Modality = "text" | "audio" | "image" | "video" | "pdf"
 
-type SourceModel = {
+export type SourceModel = {
   readonly id: string
   readonly name: string
   readonly family?: string
@@ -63,7 +63,7 @@ type SourceModel = {
   readonly provider?: { readonly npm?: string; readonly api?: string }
 }
 
-type SourceProvider = {
+export type SourceProvider = {
   readonly api?: string
   readonly name: string
   readonly env: readonly string[]
@@ -76,6 +76,12 @@ export type Snapshot = {
   readonly info: Provider.Info
   readonly models: readonly Model.Info[]
   readonly environment: readonly string[]
+}
+
+const sources = new WeakMap<Snapshot, SourceProvider>()
+
+export function source(snapshot: Snapshot) {
+  return sources.get(snapshot)
 }
 
 function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
@@ -106,7 +112,9 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
         )
       }
     }
-    providers.push({ info, models, environment: [...item.env] })
+    const snapshot = { info, models, environment: [...item.env] }
+    sources.set(snapshot, item)
+    providers.push(snapshot)
   }
   return providers
 }
