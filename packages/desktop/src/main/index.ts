@@ -13,6 +13,7 @@ import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
 import { startBackgroundCli } from "./background-cli"
 import { CHANNEL, VERSION } from "./constants"
+import { loadDesktopTabs } from "./desktop-tabs"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { ensureKimiWebBridgeDaemon } from "./kimi-webbridge"
@@ -318,7 +319,9 @@ const main = Effect.gen(function* () {
     const server = yield* Effect.promise(() =>
       startBackgroundCli(logger, {
         shellStateHome: startupEnv.XDG_STATE_HOME,
-        cors: [],
+        cors: loadDesktopTabs().flatMap((tab) =>
+          "url" in tab && tab.localServer ? [new URL(tab.url).origin] : [],
+        ),
       }),
     )
     stopWslServers = yield* Effect.promise(() =>
