@@ -42,7 +42,7 @@ type Cost = {
 
 type Modality = "text" | "audio" | "image" | "video" | "pdf"
 
-type SourceModel = {
+export type SourceModel = {
   readonly id: string
   readonly name: string
   readonly type?: CatalogModelType
@@ -82,7 +82,7 @@ type SourceModel = {
   }
 }
 
-type SourceProvider = {
+export type SourceProvider = {
   readonly api?: string
   readonly name: string
   readonly env: readonly string[]
@@ -108,6 +108,12 @@ function nativePackage(provider: SourceProvider, model?: SourceModel) {
       shape: model?.provider?.shape,
     }) ?? Provider.aisdk(npm)
   )
+}
+
+const sources = new WeakMap<Snapshot, SourceProvider>()
+
+export function source(snapshot: Snapshot) {
+  return sources.get(snapshot)
 }
 
 function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
@@ -146,7 +152,9 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
         if (model.type) types.set(modeID, model.type)
       }
     }
-    providers.push({ info, models, environment: [...item.env], types })
+    const snapshot = { info, models, environment: [...item.env], types }
+    sources.set(snapshot, item)
+    providers.push(snapshot)
   }
   return providers
 }
