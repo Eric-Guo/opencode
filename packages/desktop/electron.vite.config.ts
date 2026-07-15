@@ -83,7 +83,11 @@ const require = __cjs_mod__.createRequire(import.meta.url);
   preload: {
     build: {
       rollupOptions: {
-        input: { index: "src/preload/index.ts", tabbar: "src/preload/tabbar.ts" },
+        input: {
+          index: "src/preload/index.ts",
+          tabbar: "src/preload/tabbar.ts",
+          "external-tab": "src/preload/external-tab.ts",
+        },
         output: {
           format: "cjs",
           entryFileNames: "[name].js",
