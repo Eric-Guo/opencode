@@ -651,7 +651,7 @@ function createExternalView(
       Boolean(
         tab.localServer &&
           webContents === view.webContents &&
-          isLocalServerPermission(permission) &&
+          isExternalTabPermission(permission) &&
           isDesktopTabURL(tab, details.requestingUrl),
       ),
     )
@@ -660,7 +660,7 @@ function createExternalView(
     Boolean(
       tab.localServer &&
         webContents === view.webContents &&
-        isLocalServerPermission(permission) &&
+        isExternalTabPermission(permission) &&
         isDesktopTabURL(tab, requestingOrigin),
     ),
   )
@@ -705,8 +705,11 @@ function isDesktopTabURL(tab: ExternalDesktopTab, url: string) {
   return new URL(url).hostname === new URL(tab.url).hostname
 }
 
-function isLocalServerPermission(permission: string) {
-  return ["local-network-access", "local-network", "loopback-network"].includes(permission)
+function isExternalTabPermission(permission: string) {
+  return (
+    permission === clipboardWritePermission ||
+    ["local-network-access", "local-network", "loopback-network"].includes(permission)
+  )
 }
 
 function restoreExternalTabSession(tab: ExternalDesktopTab) {
