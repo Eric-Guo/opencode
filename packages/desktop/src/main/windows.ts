@@ -675,6 +675,7 @@ function createExternalView(
   const view = new WebContentsView({
     webPreferences: {
       partition: tab.partition,
+      ...(tab.localServer ? { preload: join(root, "../preload/external-tab.js") } : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -683,10 +684,24 @@ function createExternalView(
   trackWebContents(win, view.webContents)
   registerViewContextMenu(view)
   view.setBackgroundColor("#ffffff")
-  view.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false)
+  view.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(
+      Boolean(
+        tab.localServer &&
+          webContents === view.webContents &&
+          isLocalServerPermission(permission) &&
+          isDesktopTabURL(tab, details.requestingUrl),
+      ),
+    )
   })
-  view.webContents.session.setPermissionCheckHandler(() => false)
+  view.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin) =>
+    Boolean(
+      tab.localServer &&
+        webContents === view.webContents &&
+        isLocalServerPermission(permission) &&
+        isDesktopTabURL(tab, requestingOrigin),
+    ),
+  )
   view.webContents.setWindowOpenHandler((details) => {
     openExternalURL(details.url)
     return { action: "deny" }
@@ -723,7 +738,13 @@ function createExternalView(
 }
 
 function isDesktopTabURL(tab: ExternalDesktopTab, url: string) {
-  return URL.canParse(url) && new URL(url).hostname === new URL(tab.url).hostname
+  if (!URL.canParse(url)) return false
+  if (tab.localServer) return new URL(url).origin === new URL(tab.url).origin
+  return new URL(url).hostname === new URL(tab.url).hostname
+}
+
+function isLocalServerPermission(permission: string) {
+  return ["local-network-access", "local-network", "loopback-network"].includes(permission)
 }
 
 function restoreExternalTabSession(tab: ExternalDesktopTab) {
