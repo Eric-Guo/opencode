@@ -13,6 +13,7 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/util/npm"
 import { Heap } from "./heap"
+import { ensureSsoUsername } from "@opencode-ai/core/thape-sso"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -57,6 +58,7 @@ const Handlers = Runtime.handlers(Commands, {
 
 Effect.gen(function* () {
   yield* Heap.listen
+  yield* Effect.promise(() => ensureSsoUsername())
   yield* Effect.logInfo("cli starting", {
     version: OPENCODE_VERSION,
     channel: OPENCODE_CHANNEL,
