@@ -11,7 +11,7 @@ import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
 import { SessionInstructions } from "../session/instructions"
-import { AbsolutePath } from "../schema"
+import { AbsolutePath, PositiveInt } from "../schema"
 import { ReadToolFileSystem } from "./read-filesystem"
 import { Tool } from "./tool"
 
@@ -20,12 +20,14 @@ const FILENAME = "AGENTS.md"
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const LocationInput = Schema.Struct({
   path: Schema.String,
-  offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
+  offset: Schema.NullOr(PositiveInt).pipe(Schema.optional).annotate({
     description: "The 1-based directory entry or text line offset to start reading from",
   }),
-  limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
-    description: "The maximum number of directory entries or text lines to read",
-  }),
+  limit: Schema.NullOr(PositiveInt.check(Schema.isLessThanOrEqualTo(ReadToolFileSystem.MAX_READ_LINES)))
+    .pipe(Schema.optional)
+    .annotate({
+      description: "The maximum number of directory entries or text lines to read",
+    }),
 })
 const Input = LocationInput
 const Output = Schema.Union([FileSystem.Content, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
@@ -87,10 +89,13 @@ export const Plugin = {
                 })
                 const content =
                   type === "directory"
-                    ? yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
+                    ? yield* reader.list(absolute, {
+                        offset: input.offset ?? undefined,
+                        limit: input.limit ?? undefined,
+                      })
                     : yield* reader.read(absolute, resource, {
-                        offset: input.offset,
-                        limit: input.limit,
+                        offset: input.offset ?? undefined,
+                        limit: input.limit ?? undefined,
                       })
                 // After a successful read, discover nearby AGENTS.md walking up to the Location
                 // root exclusive and inject them as durable synthetic instructions. For a
