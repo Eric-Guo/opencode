@@ -24,7 +24,8 @@ if (outdir === dir) throw new Error("--outdir must not be the package directory"
 if (outdir === path.join(dir, "dist-node")) {
   throw new Error("--outdir must not be dist-node because it contains temporary files")
 }
-const bundleOnly = process.argv.includes("--bundle-only")
+const sidecarOnly = process.argv.includes("--sidecar-only")
+const bundleOnly = process.argv.includes("--bundle-only") || sidecarOnly
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
 const requested = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
@@ -54,7 +55,8 @@ process.chdir(dir)
 if (!skipInstall) run(process.execPath, ["install", "--os=*", "--cpu=*"])
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
-  !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)
+  !sidecarOnly &&
+  (!bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch))
     ? await resolveHostNode()
     : undefined
 
@@ -65,12 +67,12 @@ for (const target of targets) {
   const assetHash = await hashNodeAssets(assets)
   const input = { version: Script.version, channel: Script.channel, models: modelsData, assetHash, target }
   await copyNodeAssets(assets)
-  await build(mainConfig(input))
+  if (!sidecarOnly) await build(mainConfig(input))
   await build(sidecarConfig(input))
   await writeFile("dist-node/models-dev-api.json", modelsData)
 
   const host = target.platform === process.platform && target.arch === process.arch
-  if (host) {
+  if (host && !sidecarOnly) {
     if (!builder) throw new Error("Node SEA builder is unavailable")
     run(builder, [...nodeExecArgv, "dist-node/opencode.mjs", "--version"])
     run(builder, [...nodeExecArgv, "dist-node/opencode.mjs", "--help"])
