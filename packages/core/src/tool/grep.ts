@@ -9,7 +9,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 import { Ripgrep } from "../ripgrep"
-import { RelativePath } from "../schema"
+import { NonNegativeInt, PositiveInt, RelativePath } from "../schema"
 import { Tool } from "./tool"
 
 export const name = "grep"
@@ -24,7 +24,7 @@ export const Input = Schema.Struct({
   include: FileSystem.GrepInput.fields.include.annotate({
     description: 'File glob to include in the search (for example, "*.js" or "*.{ts,tsx}")',
   }),
-  limit: FileSystem.GrepInput.fields.limit.annotate({
+  limit: Schema.NullOr(PositiveInt).pipe(Schema.optional).annotate({
     description: `Maximum matches to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
   }),
 })
