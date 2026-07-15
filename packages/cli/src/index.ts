@@ -12,6 +12,7 @@ import { Global } from "@opencode-ai/core/global"
 import { AppProcess } from "@opencode-ai/core/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/core/npm"
+import { ensureSsoUsername } from "@opencode-ai/core/thape-sso"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -50,12 +51,15 @@ const Handlers = Runtime.handlers(Commands, {
   serve: () => import("./commands/handlers/serve"),
 })
 
-Effect.logInfo("cli starting", {
-  version: InstallationVersion,
-  channel: InstallationChannel,
-  local: InstallationLocal,
-  args: process.argv.slice(2),
-}).pipe(
+Effect.promise(() => ensureSsoUsername()).pipe(
+  Effect.andThen(
+    Effect.logInfo("cli starting", {
+      version: InstallationVersion,
+      channel: InstallationChannel,
+      local: InstallationLocal,
+      args: process.argv.slice(2),
+    }),
+  ),
   Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: InstallationVersion })),
   Effect.annotateLogs({ role: "cli" }),
   Effect.provide(Config.layer),
