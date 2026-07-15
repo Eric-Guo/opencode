@@ -16,6 +16,7 @@ type StartCommand = {
   port: number
   password: string
   userDataPath: string
+  cors: string[]
 }
 
 type StopCommand = { type: "stop" }
@@ -84,7 +85,7 @@ async function start(command: StartCommand) {
       hostname: command.hostname,
       username: "opencode",
       password: command.password,
-      cors: ["oc://renderer"],
+      cors: ["oc://renderer", ...command.cors],
     })
     parentPort.postMessage({ type: "ready" })
   } catch (error) {
@@ -162,12 +163,14 @@ function parseCommand(value: unknown): SidecarCommand | undefined {
   if (typeof command.port !== "number") return
   if (typeof command.password !== "string") return
   if (typeof command.userDataPath !== "string") return
+  if (!Array.isArray(command.cors) || !command.cors.every((origin) => typeof origin === "string")) return
   return {
     type: "start",
     hostname: command.hostname,
     port: command.port,
     password: command.password,
     userDataPath: command.userDataPath,
+    cors: command.cors,
   }
 }
 
