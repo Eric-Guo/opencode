@@ -249,6 +249,31 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("accepts null pagination values", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-read-null-pagination",
+            name: "read",
+            input: { path: "README.md", offset: null, limit: null },
+          },
+        }),
+      ).toMatchObject({ type: "json", value: { content: "hello" } })
+      expect(readCalls).toEqual([
+        {
+          input: AbsolutePath.make(path.join(process.cwd(), "README.md")),
+          page: { offset: undefined, limit: undefined },
+        },
+      ])
+    }),
+  )
+
   it.effect("asks for external_directory approval before reading an external absolute path", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
