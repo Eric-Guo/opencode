@@ -141,6 +141,25 @@ describe("search tools", () => {
     ),
   )
 
+  it.live("grep accepts a null limit", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => Bun.write(`${tmp.path}/printer.txt`, "printer installation\n"))
+          const result = yield* withTools(tmp.path, (registry) =>
+            executeTool(registry, call("grep", { pattern: "printer", limit: null })),
+          )
+          expect(result).toMatchObject({
+            status: "completed",
+            output: [{ entry: { path: "printer.txt" }, line: 1, text: "printer installation\n" }],
+            metadata: { matches: 1, truncated: false },
+          })
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("handles explicit grep file and directory paths", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
