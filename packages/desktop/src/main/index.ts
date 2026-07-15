@@ -10,6 +10,7 @@ import {
   registerWslIpcHandlers,
 } from "./ipc"
 import { ensureKimiWebBridgeDaemon } from "./kimi-webbridge"
+import { loadDesktopTabs } from "./desktop-tabs"
 import {
   acquireApplicationLock,
   configureApplication,
@@ -44,7 +45,13 @@ const main = Effect.gen(function* () {
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
   const wslReady = Promise.withResolvers<void>()
   logger.log("starting v2 background service")
-  const backgroundTask = yield* Effect.promise(() => startBackgroundCli(logger)).pipe(Effect.forkChild)
+  const backgroundTask = yield* Effect.promise(() =>
+    startBackgroundCli(logger, {
+      cors: loadDesktopTabs().flatMap((tab) =>
+        "url" in tab && tab.localServer ? [new URL(tab.url).origin] : [],
+      ),
+    }),
+  ).pipe(Effect.forkChild)
 
   yield* Effect.promise(() => app.whenReady())
   void ensureKimiWebBridgeDaemon({
