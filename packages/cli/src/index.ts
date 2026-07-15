@@ -16,6 +16,7 @@ import { Npm } from "@opencode/util/npm"
 import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
+import { ensureSsoUsername } from "@opencode/core/thape-sso"
 
 if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
   const { askpass } = await import("./ssh-askpass")
@@ -96,6 +97,7 @@ Effect.gen(function* () {
       process.off("unhandledRejection", unhandledRejection)
     }),
   )
+  yield* Effect.promise(() => ensureSsoUsername())
   yield* Effect.logInfo("cli starting", {
     version: OPENCODE_VERSION,
     channel: OPENCODE_CHANNEL,
