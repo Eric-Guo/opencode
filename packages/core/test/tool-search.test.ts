@@ -99,6 +99,21 @@ describe("search tools", () => {
     ),
   )
 
+  it.live("grep accepts a null limit", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => Bun.write(`${tmp.path}/printer.txt`, "printer installation\n"))
+          const result = yield* withTools(tmp.path, (registry) =>
+            executeTool(registry, call("grep", { pattern: "printer", limit: null })),
+          )
+          expect(result).toMatchObject({ type: "text", value: expect.stringContaining("printer installation") })
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   for (const name of ["glob", "grep"] as const) {
     it.live(`${name} reports a missing search path`, () =>
       Effect.acquireUseRelease(
