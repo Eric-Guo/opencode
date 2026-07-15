@@ -116,7 +116,7 @@ const SourceModel = Schema.Struct({
     Schema.Struct({ modes: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
   ),
 })
-type SourceModel = typeof SourceModel.Type
+export type SourceModel = typeof SourceModel.Type
 
 const SourceProvider = Schema.Struct({
   id: Schema.String,
@@ -124,6 +124,8 @@ const SourceProvider = Schema.Struct({
   env: Schema.Array(Schema.String),
   models: Schema.Record(Schema.String, Schema.Unknown),
 })
+
+export type SourceProvider = typeof SourceProvider.Type
 
 // The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request.
 const TYPES: readonly string[] = ["chat", "decision", "image"]
@@ -142,6 +144,12 @@ export type Snapshot = {
   readonly info: Provider.Info
   readonly models: readonly Model.Info[]
   readonly environment: readonly string[]
+}
+
+const providerSources = new WeakMap<Snapshot, SourceProvider>()
+
+export function source(snapshot: Snapshot) {
+  return providerSources.get(snapshot)
 }
 
 type Route = {
@@ -218,7 +226,9 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>)
         ),
       ]
     })
-    return [{ info, models, environment: [...item.env] }]
+    const snapshot = { info, models, environment: [...item.env] }
+    providerSources.set(snapshot, item)
+    return [snapshot]
   })
   if (failed.length > 0)
     yield* Effect.logWarning("Skipped models.dev models that failed to parse", {
