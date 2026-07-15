@@ -15,7 +15,7 @@ type Logger = {
   error(message: string, meta?: Record<string, unknown>): void
 }
 
-export async function startBackgroundCli(logger: Logger) {
+export async function startBackgroundCli(logger: Logger, options: { cors?: string[] } = {}) {
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
   const developmentVersion = process.env.OPENCODE_VERSION ?? "local"
@@ -34,6 +34,8 @@ export async function startBackgroundCli(logger: Logger) {
       }
     : await resolveBundledCli(isolated, logger)
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  if (options.cors)
+    await run(cli.command[0], [...cli.command.slice(1), "service", "set", "cors", JSON.stringify(options.cors)], logger)
   const service = await Service.ensure({
     file:
       isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
