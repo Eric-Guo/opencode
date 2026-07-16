@@ -16,7 +16,13 @@ import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { Updater } from "../updater"
-import { getLastFocusedWindow, getPrimaryWebContents, getWindowFromWebContents, setBackgroundColor } from "../windows"
+import {
+  getLastFocusedWindow,
+  getLocalAgentFromWebContents,
+  getPrimaryWebContents,
+  getWindowFromWebContents,
+  setBackgroundColor,
+} from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -29,7 +35,12 @@ export const appHandlers = AppRpcs.toLayer(
     const logging = yield* DesktopLogging.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
     return AppRpcs.of({
-      AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
+      AppAwaitInitialization: (_args, context) =>
+        Effect.gen(function* () {
+          const data = yield* background.connection.pipe(Effect.map(SidecarCredentials.ready))
+          const localAgent = getLocalAgentFromWebContents(sender(handoff, context))
+          return { ...data, ...(localAgent ? { localAgent } : {}) }
+        }),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
