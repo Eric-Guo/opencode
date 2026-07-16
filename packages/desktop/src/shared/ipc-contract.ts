@@ -1,6 +1,7 @@
 // The sidecar password never crosses into the renderer; the main process adds it to sidecar requests.
 export type ServerReadyData = {
   url: string
+  localAgent?: string
 }
 
 export type TitlebarTheme = {
