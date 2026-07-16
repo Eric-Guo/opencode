@@ -79,7 +79,7 @@ const registry = createWindowRegistry<BrowserWindow>({
 })
 const primaryWebContents = new WeakMap<BrowserWindow, WebContents>()
 const webContentsOwners = new Map<number, BrowserWindow>()
-const webContentsLocalAgents = new WeakMap<WebContents, string>()
+const webContentsLocalAgents = new Map<number, string>()
 const titlebarHeight = 40
 const tabbarWidth = 72
 const maxZoomLevel = 10
@@ -116,14 +116,15 @@ export function getWindowFromWebContents(contents: WebContents) {
 
 function trackWebContents(win: BrowserWindow, contents: WebContents, localAgent?: string) {
   webContentsOwners.set(contents.id, win)
-  if (localAgent) webContentsLocalAgents.set(contents, localAgent)
+  if (localAgent) webContentsLocalAgents.set(contents.id, localAgent)
   contents.once("destroyed", () => {
     webContentsOwners.delete(contents.id)
+    webContentsLocalAgents.delete(contents.id)
   })
 }
 
 export function getLocalAgentFromWebContents(contents: WebContents) {
-  return webContentsLocalAgents.get(contents)
+  return webContentsLocalAgents.get(contents.id)
 }
 
 export function setRelaunchHandler(handler: () => void) {
