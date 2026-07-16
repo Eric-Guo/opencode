@@ -3,6 +3,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
 const ServerReadyData = Schema.Struct({
   url: Schema.String,
+  localAgent: Schema.optionalKey(Schema.String),
 })
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
