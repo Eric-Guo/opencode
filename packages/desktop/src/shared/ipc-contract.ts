@@ -1,6 +1,7 @@
 export type ServerReadyData = {
   url: string
   password: string | null
+  localAgent?: string
 }
 
 export type TitlebarTheme = {
