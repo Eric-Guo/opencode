@@ -12,6 +12,7 @@ import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
 import {
+  getLocalAgentFromWebContents,
   getPinchZoomEnabled,
   getPrimaryWebContents,
   getWindowID,
@@ -60,7 +61,14 @@ export function registerIpcHandlers(deps: Deps) {
   app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
-  ipcMain.handle("await-initialization", () => deps.awaitInitialization())
+  ipcMain.handle("await-initialization", async (event) => {
+    const data = await deps.awaitInitialization()
+    const localAgent = getLocalAgentFromWebContents(event.sender)
+    return {
+      ...data,
+      ...(localAgent ? { localAgent } : {}),
+    }
+  })
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
   ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
