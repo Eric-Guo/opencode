@@ -638,6 +638,7 @@ function createExternalView(
     webPreferences: {
       partition: tab.partition,
       ...(tab.localServer ? { preload: join(root, "../preload/external-tab.js") } : {}),
+      ...(tab.localAgent ? { additionalArguments: [`--local-agent=${tab.localAgent}`] } : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
