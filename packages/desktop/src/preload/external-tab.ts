@@ -1,16 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron"
-import type { ElectronAPI, ServerReadyData } from "./types"
-
-const localAgent = process.argv
-  .find((argument) => argument.startsWith("--local-agent="))
-  ?.slice("--local-agent=".length)
+import type { ElectronAPI } from "./types"
 
 const api: Pick<ElectronAPI, "awaitInitialization"> = {
-  awaitInitialization: () =>
-    ipcRenderer.invoke("await-initialization").then((data: ServerReadyData) => ({
-      ...data,
-      ...(localAgent ? { localAgent } : {}),
-    })),
+  awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
 }
 
 contextBridge.exposeInMainWorld("api", api)
