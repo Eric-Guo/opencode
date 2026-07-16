@@ -80,6 +80,7 @@ const registry = createWindowRegistry<BrowserWindow>({
 })
 const primaryWebContents = new WeakMap<BrowserWindow, WebContents>()
 const webContentsOwners = new Map<number, BrowserWindow>()
+const webContentsLocalAgents = new Map<number, string>()
 const titlebarHeight = 40
 const tabbarWidth = 72
 const maxZoomLevel = 10
@@ -114,11 +115,17 @@ export function getWindowFromWebContents(contents: WebContents) {
   return BrowserWindow.fromWebContents(contents) ?? webContentsOwners.get(contents.id) ?? null
 }
 
-function trackWebContents(win: BrowserWindow, contents: WebContents) {
+function trackWebContents(win: BrowserWindow, contents: WebContents, localAgent?: string) {
   webContentsOwners.set(contents.id, win)
+  if (localAgent) webContentsLocalAgents.set(contents.id, localAgent)
   contents.once("destroyed", () => {
     webContentsOwners.delete(contents.id)
+    webContentsLocalAgents.delete(contents.id)
   })
+}
+
+export function getLocalAgentFromWebContents(contents: WebContents) {
+  return webContentsLocalAgents.get(contents.id)
 }
 
 export function setRelaunchHandler(handler: () => void) {
@@ -611,7 +618,7 @@ function createRendererTabView(
       sandbox: true,
     },
   })
-  trackWebContents(win, view.webContents)
+  trackWebContents(win, view.webContents, tab.localAgent)
   registerViewContextMenu(view)
   allowRendererPermissions(view.webContents)
   wireWindowRecovery(win, view.webContents, tab.id)
@@ -638,13 +645,13 @@ function createExternalView(
   const view = new WebContentsView({
     webPreferences: {
       partition: tab.partition,
-      ...(tab.localServer ? { preload: join(root, "../preload/external-tab.js") } : {}),
+      ...(tab.localServer || tab.localAgent ? { preload: join(root, "../preload/external-tab.js") } : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   })
-  trackWebContents(win, view.webContents)
+  trackWebContents(win, view.webContents, tab.localAgent)
   registerViewContextMenu(view)
   view.setBackgroundColor("#ffffff")
   view.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
