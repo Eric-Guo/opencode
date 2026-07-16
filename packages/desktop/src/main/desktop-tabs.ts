@@ -6,6 +6,7 @@ type DesktopTabBase = {
   id: string
   title: string
   label: string
+  localAgent?: string
   releaseWhenLostFocus?: boolean
   systemControlColor?: string
 }
@@ -57,11 +58,13 @@ function parseDesktopTab(value: unknown, index: number, source: string): Desktop
   }
   if (value.systemControlColor !== undefined && !isString(value.systemControlColor)) throw invalidTab(index, source)
   if (value.localServer !== undefined && typeof value.localServer !== "boolean") throw invalidTab(index, source)
+  if (value.localAgent !== undefined && !isString(value.localAgent)) throw invalidTab(index, source)
 
   const base = {
     id: value.id,
     title: value.title,
     label: value.label,
+    ...(value.localAgent === undefined ? {} : { localAgent: value.localAgent }),
     ...(value.releaseWhenLostFocus === undefined ? {} : { releaseWhenLostFocus: value.releaseWhenLostFocus }),
     ...(value.systemControlColor === undefined ? {} : { systemControlColor: value.systemControlColor }),
   }
