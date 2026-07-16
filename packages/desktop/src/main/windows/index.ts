@@ -24,7 +24,12 @@ import { loadWindow, registerRendererProtocol } from "./protocol"
 import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
-import { getPrimaryWebContents, getWindowFromWebContents, trackWebContents } from "./content"
+import {
+  getLocalAgentFromWebContents,
+  getPrimaryWebContents,
+  getWindowFromWebContents,
+  trackWebContents,
+} from "./content"
 
 const themeReady = new WeakMap<BrowserWindow, () => void>()
 const registry = createWindowRegistry<BrowserWindow>({
@@ -47,7 +52,7 @@ export {
   setTitlebar,
   updateTitlebar,
 }
-export { getPrimaryWebContents, getWindowFromWebContents }
+export { getLocalAgentFromWebContents, getPrimaryWebContents, getWindowFromWebContents }
 
 export function setRelaunchHandler(handler: () => void) {
   const previous = relaunchHandler
@@ -102,7 +107,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       },
     })
 
-    trackWebContents(win, win.webContents, true)
+    trackWebContents(win, win.webContents, { primary: true })
     allowRendererPermissions(win)
     wireWindowRecovery(win, id, () => relaunchHandler())
     wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
