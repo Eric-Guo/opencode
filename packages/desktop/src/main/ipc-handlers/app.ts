@@ -13,7 +13,13 @@ import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../
 import { BackgroundService } from "../service/background-service"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { Updater } from "../updater"
-import { getLastFocusedWindow, getPrimaryWebContents, getWindowFromWebContents, setBackgroundColor } from "../windows"
+import {
+  getLastFocusedWindow,
+  getLocalAgentFromWebContents,
+  getPrimaryWebContents,
+  getWindowFromWebContents,
+  setBackgroundColor,
+} from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -25,7 +31,12 @@ export const appHandlers = AppRpcs.toLayer(
     const logging = yield* DesktopLogging.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
     return AppRpcs.of({
-      AppAwaitInitialization: () => background.connection,
+      AppAwaitInitialization: (_args, context) =>
+        Effect.gen(function* () {
+          const data = yield* background.connection
+          const localAgent = getLocalAgentFromWebContents(sender(handoff, context))
+          return { ...data, ...(localAgent ? { localAgent } : {}) }
+        }),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
       AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),
