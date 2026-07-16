@@ -605,6 +605,7 @@ function createRendererTabView(
   const view = new WebContentsView({
     webPreferences: {
       preload: join(root, "../preload/index.js"),
+      ...(tab.localAgent ? { additionalArguments: [`--local-agent=${tab.localAgent}`] } : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -637,7 +638,7 @@ function createExternalView(
   const view = new WebContentsView({
     webPreferences: {
       partition: tab.partition,
-      ...(tab.localServer ? { preload: join(root, "../preload/external-tab.js") } : {}),
+      ...(tab.localServer || tab.localAgent ? { preload: join(root, "../preload/external-tab.js") } : {}),
       ...(tab.localAgent ? { additionalArguments: [`--local-agent=${tab.localAgent}`] } : {}),
       contextIsolation: true,
       nodeIntegration: false,
