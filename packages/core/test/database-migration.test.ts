@@ -42,6 +42,15 @@ describe("DatabaseMigration", () => {
         { concurrency: "unbounded" },
       ).pipe(Effect.provideService(Global.Service, Global.make({ data: tmp.path }))),
     )
+    expect(
+      await Effect.runPromise(
+        Database.Service.use((service) => service.db.get<{ foreign_keys: number }>(sql`PRAGMA foreign_keys`)).pipe(
+          Effect.provide(Database.layer({ path: filename })),
+          Effect.scoped,
+          Effect.provideService(Global.Service, Global.make({ data: tmp.path })),
+        ),
+      ),
+    ).toEqual({ foreign_keys: 1 })
   })
 
   if (process.platform === "linux") {
