@@ -351,6 +351,17 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT id FROM session_message`)).toBeUndefined()
         expect(yield* db.get(sql`SELECT id FROM event`)).toBeUndefined()
         expect(yield* db.get(sql`SELECT aggregate_id FROM event_sequence`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id FROM __discard_event_20260703090000`)).toEqual({ id: "event" })
+        expect(yield* db.get(sql`SELECT aggregate_id FROM __discard_event_sequence_20260703090000`)).toEqual({
+          aggregate_id: "session",
+        })
+        expect(
+          yield* db.all<{ name: string }>(sql`
+            SELECT name FROM sqlite_master
+            WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx')
+            ORDER BY name
+          `),
+        ).toEqual([{ name: "event_aggregate_seq_idx" }, { name: "event_aggregate_type_seq_idx" }])
       }),
     )
   })
