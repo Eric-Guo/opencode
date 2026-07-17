@@ -141,6 +141,7 @@ const nativeLayer = (config: Config) =>
   Layer.effect(
     Sqlite.Native,
     Effect.gen(function* () {
+      if (process.env.OPENCODE_STARTUP_TRACE === "1") console.log("[database] opening native database")
       const native = new DatabaseSync(config.filename, {
         readOnly: config.readonly,
         timeout: config.timeout,
@@ -148,8 +149,13 @@ const nativeLayer = (config: Config) =>
         enableForeignKeyConstraints: true,
         open: true,
       })
+      if (process.env.OPENCODE_STARTUP_TRACE === "1") console.log("[database] native database opened")
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
-      if (config.disableWAL !== true && config.readonly !== true) native.exec("PRAGMA journal_mode = WAL;")
+      if (config.disableWAL !== true && config.readonly !== true) {
+        if (process.env.OPENCODE_STARTUP_TRACE === "1") console.log("[database] setting native journal mode")
+        native.exec("PRAGMA journal_mode = WAL;")
+        if (process.env.OPENCODE_STARTUP_TRACE === "1") console.log("[database] native journal mode set")
+      }
       return native
     }),
   )
