@@ -12,6 +12,7 @@ const lock = Semaphore.makeUnsafe(1)
 
 export type Migration = {
   id: string
+  foreignKeys?: boolean
   up: (tx: Transaction) => Effect.Effect<void, unknown>
 }
 
@@ -73,7 +74,7 @@ export function applyOnly(db: Database, input: Migration[]) {
     for (const migration of input) {
       if (completed.has(migration.id)) continue
       yield* startupTrace(`applying ${migration.id}`)
-      yield* db.transaction((tx) =>
+      const apply = db.transaction((tx) =>
         Effect.gen(function* () {
           yield* migration.up(tx)
           yield* tx.run(
@@ -81,6 +82,12 @@ export function applyOnly(db: Database, input: Migration[]) {
           )
         }),
       )
+      yield* (migration.foreignKeys === false
+        ? db.run("PRAGMA foreign_keys = OFF").pipe(
+            Effect.andThen(apply),
+            Effect.ensuring(db.run("PRAGMA foreign_keys = ON").pipe(Effect.orDie)),
+          )
+        : apply)
       yield* startupTrace(`applied ${migration.id}`)
     }
   })

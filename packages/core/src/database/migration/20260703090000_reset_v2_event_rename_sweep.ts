@@ -3,6 +3,10 @@ import type { DatabaseMigration } from "../migration"
 
 export default {
   id: "20260703090000_reset_v2_event_rename_sweep",
+  // These tables contain disposable beta projections and event history. With
+  // foreign keys enabled, SQLite deletes large Windows databases row by row.
+  // Disabling enforcement around the transaction enables its truncate path.
+  foreignKeys: false,
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`DELETE FROM \`session_input\`;`)
