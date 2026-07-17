@@ -27,6 +27,7 @@ interface Config {
   readonly create?: boolean
   readonly readwrite?: boolean
   readonly disableWAL?: boolean
+  readonly enableForeignKeyConstraints?: boolean
   readonly spanAttributes?: Record<string, unknown>
   readonly transformResultNames?: (str: string) => string
   readonly transformQueryNames?: (str: string) => string
