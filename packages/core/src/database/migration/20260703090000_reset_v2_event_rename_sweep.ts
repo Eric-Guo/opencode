@@ -9,9 +9,13 @@ export default {
   foreignKeys: false,
   up(tx) {
     return Effect.gen(function* () {
+      yield* startupTrace("deleting session_input")
       yield* tx.run(`DELETE FROM \`session_input\`;`)
+      yield* startupTrace("deleting session_message")
       yield* tx.run(`DELETE FROM \`session_message\`;`)
+      yield* startupTrace("deleting event")
       yield* tx.run(`DELETE FROM \`event\`;`)
+      yield* startupTrace("deleting event_sequence")
       yield* tx.run(`DELETE FROM \`event_sequence\`;`)
       // `created` column is added by the generated 20260703181610_event_created_column
       // migration, which runs after this wipe (NOT NULL without default is safe on the
@@ -19,3 +23,8 @@ export default {
     })
   },
 } satisfies DatabaseMigration.Migration
+
+function startupTrace(message: string) {
+  if (process.env.OPENCODE_STARTUP_TRACE !== "1") return Effect.void
+  return Effect.sync(() => console.log(`[database] reset history: ${message}`))
+}

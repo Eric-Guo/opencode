@@ -74,6 +74,10 @@ export function applyOnly(db: Database, input: Migration[]) {
     for (const migration of input) {
       if (completed.has(migration.id)) continue
       yield* startupTrace(`applying ${migration.id}`)
+      const foreignKeys =
+        migration.foreignKeys === false
+          ? yield* db.get<{ foreign_keys: number }>("PRAGMA foreign_keys")
+          : undefined
       const apply = db.transaction((tx) =>
         Effect.gen(function* () {
           yield* migration.up(tx)
@@ -82,7 +86,7 @@ export function applyOnly(db: Database, input: Migration[]) {
           )
         }),
       )
-      yield* (migration.foreignKeys === false
+      yield* (foreignKeys?.foreign_keys === 1
         ? db.run("PRAGMA foreign_keys = OFF").pipe(
             Effect.andThen(apply),
             Effect.ensuring(db.run("PRAGMA foreign_keys = ON").pipe(Effect.orDie)),

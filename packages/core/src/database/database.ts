@@ -33,13 +33,13 @@ const databaseLayer = Layer.effect(
     yield* db.run("PRAGMA busy_timeout = 5000")
     yield* startupTrace("setting cache size")
     yield* db.run("PRAGMA cache_size = -64000")
-    yield* startupTrace("enabling foreign keys")
-    yield* db.run("PRAGMA foreign_keys = ON")
     yield* startupTrace("checkpointing WAL")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
     yield* startupTrace("applying migrations")
     yield* DatabaseMigration.apply(db)
     yield* startupTrace("migrations applied")
+    yield* startupTrace("enabling foreign keys")
+    yield* db.run("PRAGMA foreign_keys = ON")
 
     return { db }
   }).pipe(Effect.orDie),
@@ -51,7 +51,7 @@ function startupTrace(message: string) {
 }
 
 export function layerFromPath(filename: string) {
-  return databaseLayer.pipe(Layer.provide(layer({ filename })))
+  return databaseLayer.pipe(Layer.provide(layer({ filename, enableForeignKeyConstraints: false })))
 }
 
 export function path() {

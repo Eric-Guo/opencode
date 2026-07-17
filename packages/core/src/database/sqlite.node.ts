@@ -26,6 +26,7 @@ interface Config {
   readonly create?: boolean
   readonly readwrite?: boolean
   readonly disableWAL?: boolean
+  readonly enableForeignKeyConstraints?: boolean
   readonly timeout?: number
   readonly allowExtension?: boolean
   readonly spanAttributes?: Record<string, unknown>
@@ -146,7 +147,7 @@ const nativeLayer = (config: Config) =>
         readOnly: config.readonly,
         timeout: config.timeout,
         allowExtension: config.allowExtension,
-        enableForeignKeyConstraints: true,
+        enableForeignKeyConstraints: config.enableForeignKeyConstraints ?? true,
         open: true,
       })
       if (process.env.OPENCODE_STARTUP_TRACE === "1") console.log("[database] native database opened")
