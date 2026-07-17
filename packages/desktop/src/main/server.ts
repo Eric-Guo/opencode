@@ -124,6 +124,7 @@ export async function spawnLocalServer(
     const onMessage = (message: SidecarMessage) => {
       if (message.type === "starting") {
         stage = message.stage
+        options.onStdout?.(`sidecar startup: ${stage}`)
         refreshTimeout()
         return
       }
