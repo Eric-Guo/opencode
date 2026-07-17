@@ -10,6 +10,8 @@ import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
 export type HealthCheck = { wait: Promise<void> }
 
 type SidecarMessage =
+  | { type: "starting"; stage: string }
+  | { type: "diagnostic"; message: string }
   | { type: "ready" }
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
@@ -76,11 +78,15 @@ export async function spawnLocalServer(
     stdio: "pipe",
   })
   let exited = false
+  let processGone: Details | undefined
+  let failProcessGone: ((details: Details) => void) | undefined
   const exit = defer<number>()
 
   const onProcessGone = (_event: unknown, details: Details) => {
     if (details.type !== "Utility" || details.name !== SIDECAR_SERVICE_NAME) return
+    processGone = details
     options.onStderr?.(`utility process gone reason=${details.reason} exitCode=${details.exitCode}`)
+    failProcessGone?.(details)
   }
 
   app.on("child-process-gone", onProcessGone)
@@ -98,6 +104,7 @@ export async function spawnLocalServer(
   await new Promise<void>((resolve, reject) => {
     let done = false
     let timeout: NodeJS.Timeout
+    let stage = "launching utility process"
 
     const fail = (error: Error) => {
       if (done) return
@@ -109,11 +116,21 @@ export async function spawnLocalServer(
     const refreshTimeout = () => {
       clearTimeout(timeout)
       timeout = setTimeout(() => {
-        fail(new Error(`Sidecar did not become ready within ${SIDECAR_START_STALL_TIMEOUT}ms: ${sidecar}`))
+        fail(new Error(`Sidecar stalled for ${SIDECAR_START_STALL_TIMEOUT}ms while ${stage}: ${sidecar}`))
       }, SIDECAR_START_STALL_TIMEOUT)
     }
 
     const onMessage = (message: SidecarMessage) => {
+      if (message.type === "starting") {
+        stage = message.stage
+        options.onStdout?.(`sidecar startup: ${stage}`)
+        refreshTimeout()
+        return
+      }
+      if (message.type === "diagnostic") {
+        options.onStdout?.(message.message)
+        return
+      }
       if (message.type === "ready") {
         if (done) return
         done = true
@@ -130,13 +147,22 @@ export async function spawnLocalServer(
     }
     const cleanup = () => {
       clearTimeout(timeout)
+      failProcessGone = undefined
       child.off("message", onMessage)
       child.off("exit", onExit)
     }
 
+    failProcessGone = (details) => {
+      fail(
+        new Error(
+          `Sidecar utility process terminated before ready reason=${details.reason} exitCode=${details.exitCode}: ${sidecar}`,
+        ),
+      )
+    }
     child.on("message", onMessage)
     child.on("exit", onExit)
     refreshTimeout()
+    if (processGone) return failProcessGone(processGone)
     child.postMessage({
       type: "start",
       hostname,
