@@ -19,6 +19,7 @@ interface Config extends Sqlite.ClientConfig {
   readonly create?: boolean
   readonly readwrite?: boolean
   readonly disableWAL?: boolean
+  readonly enableForeignKeyConstraints?: boolean
 }
 
 const make = (options: Config) =>
