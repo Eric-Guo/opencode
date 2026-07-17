@@ -36,7 +36,7 @@ const channel = (() => {
 })()
 
 const APP_IDS = {
-  dev: "ai.opencode.desktop.dev",
+  dev: "ai.opencode.desktop",
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 } as const
@@ -46,7 +46,7 @@ const iconDir = `icons/${iconChannel}`
 const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: "SigmaAgents-${os}-${arch}-${version}.${ext}",
   beforePack: async () => {
     await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
     await mkdir(generatedDir, { recursive: true })
