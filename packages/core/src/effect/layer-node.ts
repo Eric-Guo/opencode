@@ -1,4 +1,4 @@
-import { Brand, Context, Layer } from "effect"
+import { Brand, Context, Effect, Layer } from "effect"
 
 type AnyNode = Node<unknown, unknown, any>
 type RuntimeLayer = Layer.Layer<never, unknown, unknown>
@@ -259,7 +259,7 @@ export function compile<A, E, const Items extends Replacements = readonly []>(
       (node, context) => {
         if (node.kind === "unbound") throw new Error(`Unbound layer node: ${node.name}`)
         const dependencies = node.dependencies.flatMap(flatten).map(context.visit)
-        const implementation = node.implementation! as RuntimeLayer
+        const implementation = trace(node.name, node.implementation! as RuntimeLayer)
         return dependencies.length === 0
           ? implementation
           : implementation.pipe(Layer.provide(dependencies as [RuntimeLayer, ...RuntimeLayer[]]))
@@ -270,6 +270,32 @@ export function compile<A, E, const Items extends Replacements = readonly []>(
   const layer = layers.reduce<RuntimeLayer>((result, layer) => layer.pipe(Layer.provideMerge(result)), Layer.empty)
   return layer as Layer.Layer<A, E>
 }
+
+function trace(name: string, implementation: RuntimeLayer) {
+  if (process.env.OPENCODE_STARTUP_TRACE !== "1") return implementation
+  const id = ++traceSequence
+  let started = false
+  let completed = false
+  return Layer.unwrap(
+    Effect.sync(() => {
+      if (!started) {
+        started = true
+        console.log(`[startup:${id}] building ${name}`)
+      }
+      return implementation.pipe(
+        Layer.tap(() =>
+          Effect.sync(() => {
+            if (completed) return
+            completed = true
+            console.log(`[startup:${id}] built ${name}`)
+          }),
+        ),
+      )
+    }),
+  ) as RuntimeLayer
+}
+
+let traceSequence = 0
 
 function replacementMapFrom(replacements?: Replacements) {
   return (

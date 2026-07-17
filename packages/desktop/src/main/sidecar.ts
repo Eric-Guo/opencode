@@ -23,6 +23,7 @@ type SidecarCommand = StartCommand | StopCommand
 
 type SidecarMessage =
   | { type: "starting"; stage: string }
+  | { type: "diagnostic"; message: string }
   | { type: "ready" }
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
@@ -62,6 +63,12 @@ parentPort.on("message", (event) => {
 })
 
 async function start(command: StartCommand) {
+  const diagnostic = setInterval(() => {
+    parentPort.postMessage({
+      type: "diagnostic",
+      message: `sidecar event loop responsive; active resources: ${process.getActiveResourcesInfo().join(", ")}`,
+    })
+  }, 10_000)
   try {
     parentPort.postMessage({ type: "starting", stage: "preparing environment" })
     prepareSidecarEnv(command.password, command.userDataPath)
@@ -83,6 +90,8 @@ async function start(command: StartCommand) {
   } catch (error) {
     parentPort.postMessage({ type: "error", error: serializeError(error) })
     setImmediate(() => process.exit(1))
+  } finally {
+    clearInterval(diagnostic)
   }
 }
 
@@ -100,6 +109,7 @@ function prepareSidecarEnv(password: string, userDataPath: string) {
   Object.assign(process.env, {
     OPENCODE_SERVER_USERNAME: "opencode",
     OPENCODE_SERVER_PASSWORD: password,
+    OPENCODE_STARTUP_TRACE: "1",
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
 }

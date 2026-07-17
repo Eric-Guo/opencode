@@ -11,6 +11,7 @@ export type HealthCheck = { wait: Promise<void> }
 
 type SidecarMessage =
   | { type: "starting"; stage: string }
+  | { type: "diagnostic"; message: string }
   | { type: "ready" }
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
@@ -126,6 +127,10 @@ export async function spawnLocalServer(
         stage = message.stage
         options.onStdout?.(`sidecar startup: ${stage}`)
         refreshTimeout()
+        return
+      }
+      if (message.type === "diagnostic") {
+        options.onStdout?.(message.message)
         return
       }
       if (message.type === "ready") {
