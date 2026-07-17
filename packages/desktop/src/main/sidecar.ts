@@ -22,6 +22,7 @@ type StopCommand = { type: "stop" }
 type SidecarCommand = StartCommand | StopCommand
 
 type SidecarMessage =
+  | { type: "starting"; stage: string }
   | { type: "ready" }
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
@@ -62,12 +63,15 @@ parentPort.on("message", (event) => {
 
 async function start(command: StartCommand) {
   try {
+    parentPort.postMessage({ type: "starting", stage: "preparing environment" })
     prepareSidecarEnv(command.password, command.userDataPath)
     ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
+    parentPort.postMessage({ type: "starting", stage: "loading server module" })
     const opencode = (await import(new URL("./chunks/node.js", import.meta.url).href)) as ServerModule
 
+    parentPort.postMessage({ type: "starting", stage: "starting server" })
     listener = await opencode.Server.listen({
       port: command.port,
       hostname: command.hostname,
