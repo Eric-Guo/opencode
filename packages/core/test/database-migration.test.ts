@@ -15,6 +15,7 @@ import eventSourcedSessionPendingMigration from "@opencode-ai/core/database/migr
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionPendingMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import resetEventRenameMigration from "@opencode-ai/core/database/migration/20260703090000_reset_v2_event_rename_sweep"
 import resetSessionEventsMigration from "@opencode-ai/core/database/migration/20260703200000_reset_v2_session_events"
 import durableSessionInboxMigration from "@opencode-ai/core/database/migration/20260707010146_durable_session_inbox"
 import migratePrelaunchV2StateMigration from "@opencode-ai/core/database/migration/20260707120000_migrate_prelaunch_v2_state"
@@ -324,6 +325,50 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("disables foreign keys while truncating incompatible V2 history", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`PRAGMA foreign_keys = ON`)
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(
+          sql`CREATE TABLE session_input (id text PRIMARY KEY, session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE)`,
+        )
+        yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL REFERENCES event_sequence(aggregate_id) ON DELETE CASCADE)`,
+        )
+        yield* db.run(sql`INSERT INTO session VALUES ('session')`)
+        yield* db.run(sql`INSERT INTO session_input VALUES ('input', 'session')`)
+        yield* db.run(sql`INSERT INTO session_message VALUES ('message', 'session')`)
+        yield* db.run(sql`INSERT INTO event_sequence VALUES ('session', 1)`)
+        yield* db.run(sql`INSERT INTO event VALUES ('event', 'session')`)
+
+        yield* DatabaseMigration.applyOnly(db, [resetEventRenameMigration])
+
+        expect(yield* db.get<{ foreign_keys: number }>(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 })
+        expect(yield* db.get(sql`SELECT id FROM session_input`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id FROM session_message`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id FROM event`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT aggregate_id FROM event_sequence`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id FROM __discard_event_20260703090000`)).toEqual({ id: "event" })
+        expect(yield* db.get(sql`SELECT aggregate_id FROM __discard_event_sequence_20260703090000`)).toEqual({
+          aggregate_id: "session",
+        })
+        expect(
+          yield* db.all<{ name: string }>(sql`
+            SELECT name FROM sqlite_master
+            WHERE type = 'index' AND name IN ('event_aggregate_seq_idx', 'event_aggregate_type_seq_idx')
+            ORDER BY name
+          `),
+        ).toEqual([{ name: "event_aggregate_seq_idx" }, { name: "event_aggregate_type_seq_idx" }])
+      }),
+    )
+  })
+
   test("serializes concurrent embedded initialization for one database path", async () => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "embedded.sqlite")
@@ -335,6 +380,14 @@ describe("DatabaseMigration", () => {
         { concurrency: "unbounded" },
       ),
     )
+    expect(
+      await Effect.runPromise(
+        Database.Service.use((service) => service.db.get<{ foreign_keys: number }>(sql`PRAGMA foreign_keys`)).pipe(
+          Effect.provide(Database.layerFromPath(filename)),
+          Effect.scoped,
+        ),
+      ),
+    ).toEqual({ foreign_keys: 1 })
   })
   if (process.platform === "linux") {
     test("declared schema has no ungenerated migrations", async () => {
