@@ -3,6 +3,7 @@ import type { DatabaseMigration } from "../migration"
 
 export default {
   id: "20260703200000_reset_v2_session_events",
+  foreignKeys: false,
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`DELETE FROM \`session_input\`;`)
