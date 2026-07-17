@@ -23,9 +23,11 @@ export function apply(db: Database) {
     Effect.gen(function* () {
       // OpenCode owns the unprefixed table namespace. Embedders sharing this
       // database may own underscore-prefixed tables, which bootstrap ignores.
+      yield* startupTrace("reading schema")
       const tables = yield* db.all<{ name: string }>(
         sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 1) <> '_'`,
       )
+      yield* startupTrace("schema read")
       if (tables.some((table) => table.name === "session" || table.name === "session_v2"))
         return yield* applyOnly(db, migrations)
       if (tables.length > 0) return yield* Effect.die(new Error("Database is not empty and has no session table"))
@@ -54,12 +56,14 @@ export function apply(db: Database) {
 
 export function applyOnly(db: Database, input: Migration[]) {
   return Effect.gen(function* () {
+    yield* startupTrace("ensuring migration journal")
     yield* db.run(
       sql`CREATE TABLE IF NOT EXISTS ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
     )
     let completed = new Set(
       (yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`)).map((row) => row.id),
     )
+    yield* startupTrace("migration journal read")
     if (completed.size === 0) {
       // Existing installs used Drizzle's migration journal. Seed the new
       // journal once so TypeScript migrations don't replay old SQL.
@@ -80,6 +84,7 @@ export function applyOnly(db: Database, input: Migration[]) {
 
     for (const migration of input) {
       if (completed.has(migration.id)) continue
+      yield* startupTrace(`applying ${migration.id}`)
       const started = Date.now()
       yield* Effect.logInfo("database migration started", { migration: migration.id })
       const apply = db.transaction((tx) =>
@@ -104,6 +109,7 @@ export function applyOnly(db: Database, input: Migration[]) {
           migration: migration.id,
           durationMs: Date.now() - started,
         })
+        yield* startupTrace(`applied ${migration.id}`)
         continue
       }
       // Durable Object SQLite rejects the foreign_keys toggle; the closest
@@ -127,6 +133,12 @@ export function applyOnly(db: Database, input: Migration[]) {
         migration: migration.id,
         durationMs: Date.now() - started,
       })
+      yield* startupTrace(`applied ${migration.id}`)
     }
   })
+}
+
+function startupTrace(message: string) {
+  if (process.env.OPENCODE_STARTUP_TRACE !== "1") return Effect.void
+  return Effect.sync(() => console.log(`[database] ${message}`))
 }
