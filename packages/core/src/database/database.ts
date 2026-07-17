@@ -32,19 +32,31 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
+      yield* startupTrace("creating client")
       const db = yield* makeDatabase
+      yield* startupTrace("client created")
 
       if (supportsTuningPragmas) {
+        yield* startupTrace("setting journal mode")
         yield* db.run("PRAGMA journal_mode = WAL")
+        yield* startupTrace("setting synchronous mode")
         yield* db.run("PRAGMA synchronous = NORMAL")
+        yield* startupTrace("setting busy timeout")
         yield* db.run("PRAGMA busy_timeout = 5000")
+        yield* startupTrace("setting cache size")
         yield* db.run("PRAGMA cache_size = -64000")
+        yield* startupTrace("checkpointing WAL")
         yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
       }
-      // Durable Object SQLite always enforces foreign keys and rejects the pragma.
-      if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
+      yield* startupTrace("applying migrations")
       const semaphore = yield* lock
       yield* semaphore.withPermit(DatabaseMigration.apply(db))
+      yield* startupTrace("migrations applied")
+      // Durable Object SQLite always enforces foreign keys and rejects the pragma.
+      if (supportsForeignKeyToggle) {
+        yield* startupTrace("enabling foreign keys")
+        yield* db.run("PRAGMA foreign_keys = ON")
+      }
 
       return { db }
     }).pipe(Effect.orDie),
@@ -67,7 +79,7 @@ export function layer(options: Options = { path: ":memory:" }) {
     Effect.gen(function* () {
       const provide = (filename: string) =>
         databaseLayer(filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename))).pipe(
-          Layer.provide(sqliteLayer({ filename })),
+          Layer.provide(sqliteLayer({ filename, enableForeignKeyConstraints: false })),
         )
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
@@ -85,6 +97,11 @@ export function layer(options: Options = { path: ":memory:" }) {
 export const layerFromClient: Layer.Layer<Service, never, SqlClient.SqlClient | Global.Service> = databaseLayer(
   Semaphore.make(1),
 )
+
+function startupTrace(message: string) {
+  if (process.env.OPENCODE_STARTUP_TRACE !== "1") return Effect.void
+  return Effect.sync(() => console.log(`[database] ${message}`))
+}
 
 export function configured(options?: Options) {
   return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node] })
