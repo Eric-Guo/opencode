@@ -27,7 +27,7 @@ export function initLogging() {
       run,
       `${safeLogName(message?.scope ?? (message?.variables?.processType === "renderer" ? "renderer" : "main"))}.log`,
     )
-  log.initialize({ preload: false, spyRendererConsole: true })
+  log.initialize({ preload: false })
   initConsoleTransport()
   cleanup()
   return (logger = log)
