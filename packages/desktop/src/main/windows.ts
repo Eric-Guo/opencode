@@ -965,14 +965,20 @@ function wireWindowRecovery(win: BrowserWindow, contents: WebContents, name: str
     writeLog("window", "renderer responsive", { window: name, currentURL: contents.getURL() }, "error")
     sampler.stopAndFlush()
   })
-  contents.on("console-message", (event) => {
-    if (event.message.toLowerCase().includes("terminal") || event.sourceId.toLowerCase().includes("terminal")) {
+  contents.on("console-message", ({ level, message, lineNumber, sourceId }) => {
+    writeLog(
+      "renderer",
+      message,
+      { window: name, line: lineNumber, sourceId },
+      level === "error" ? "error" : level === "warning" ? "warn" : "info",
+    )
+    if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
       writeLog("pty", "console", {
         window: name,
-        level: event.level,
-        message: event.message,
-        line: event.lineNumber,
-        sourceId: event.sourceId,
+        level,
+        message,
+        line: lineNumber,
+        sourceId,
       })
     }
   })
