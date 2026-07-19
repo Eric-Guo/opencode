@@ -950,6 +950,8 @@ export type GlobalEvent = {
           error: SessionStructuredError
           cost?: MoneyUsd
           tokens?: TokenUsageInfo
+          snapshot?: string
+          files?: Array<string>
         }
       }
     | {
@@ -2920,6 +2922,44 @@ export type ProviderNotFoundError = {
   message: string
 }
 
+export type McpLocalConfig2 = {
+  type: "local"
+  command: Array<string>
+  cwd?: string
+  environment?: {
+    [key: string]: string
+  }
+  disabled?: boolean
+  codemode?: boolean
+  timeout?: McpTimeoutConfig
+}
+
+export type McpOAuthConfig2 = {
+  client_id?: string
+  client_secret?: string
+  scope?: string
+  callback_port?: number
+  redirect_uri?: string
+}
+
+export type McpRemoteConfig2 = {
+  type: "remote"
+  url: string
+  headers?: {
+    [key: string]: string
+  }
+  oauth?: McpOAuthConfig2 | false
+  disabled?: boolean
+  codemode?: boolean
+  timeout?: McpTimeoutConfig
+}
+
+export type McpServerNotFoundError1 = {
+  _tag: "McpServerNotFoundError"
+  server: string
+  message: string
+}
+
 export type McpResource2 = {
   server: string
   name: string
@@ -4033,6 +4073,8 @@ export type SyncEventSessionStepFailed = {
       error: SessionStructuredError
       cost?: MoneyUsd
       tokens?: TokenUsageInfo
+      snapshot?: string
+      files?: Array<string>
     }
   }
 }
@@ -5171,6 +5213,8 @@ export type SessionStepFailed = {
     error: SessionStructuredError
     cost?: MoneyUsd
     tokens?: TokenUsageInfo
+    snapshot?: string
+    files?: Array<string>
   }
 }
 
@@ -5898,6 +5942,12 @@ export type McpServer = {
     | McpStatusNeedsAuth2
     | McpStatusNeedsClientRegistration2
   integrationID?: string
+}
+
+export type McpTimeoutConfig = {
+  startup?: number
+  catalog?: number
+  execution?: number
 }
 
 export type McpResourceTemplate = {
@@ -7403,6 +7453,8 @@ export type EventSessionStepFailed = {
     error: SessionStructuredError
     cost?: MoneyUsd
     tokens?: TokenUsageInfo
+    snapshot?: string
+    files?: Array<string>
   }
 }
 
@@ -8255,6 +8307,12 @@ export type SessionMessagesResponseV2 = {
     previous?: string | null
     next?: string | null
   }
+}
+
+export type McpServerNotFoundErrorV2 = {
+  _tag: "McpServerNotFoundError"
+  server: string
+  message: string
 }
 
 export type OutputFormatV2 =
@@ -9513,6 +9571,8 @@ export type SessionStepFailedV2 = {
     error: SessionStructuredError
     cost?: MoneyUsd
     tokens?: TokenUsageInfo
+    snapshot?: string
+    files?: Array<string>
   }
 }
 
@@ -9950,6 +10010,62 @@ export type EventLogSyncedV2 = {
   type: "log.synced"
   aggregateID: string
   seq?: number
+}
+
+export type McpTimeoutConfigV2 = {
+  /**
+   * Maximum time in milliseconds to establish and initialize the MCP server.
+   */
+  startup?: number | null
+  /**
+   * Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list.
+   */
+  catalog?: number | null
+  /**
+   * Maximum time in milliseconds to wait for MCP tool and prompt execution.
+   */
+  execution?: number | null
+}
+
+export type McpLocalConfigV2 = {
+  type: "local"
+  command: Array<string>
+  /**
+   * Working directory for the MCP server process. Relative paths resolve from the workspace directory.
+   */
+  cwd?: string | null
+  environment?: {
+    [key: string]: string
+  } | null
+  disabled?: boolean | null
+  /**
+   * Expose this server's tools through Code Mode. Defaults to true.
+   */
+  codemode?: boolean | null
+  timeout?: McpTimeoutConfigV2 | null
+}
+
+export type McpOAuthConfigV2 = {
+  client_id?: string | null
+  client_secret?: string | null
+  scope?: string | null
+  callback_port?: number | null
+  redirect_uri?: string | null
+}
+
+export type McpRemoteConfigV2 = {
+  type: "remote"
+  url: string
+  headers?: {
+    [key: string]: string
+  } | null
+  oauth?: McpOAuthConfigV2 | false | null
+  disabled?: boolean | null
+  /**
+   * Expose this server's tools through Code Mode. Defaults to true.
+   */
+  codemode?: boolean | null
+  timeout?: McpTimeoutConfigV2 | null
 }
 
 export type McpResourceV2 = {
@@ -17352,6 +17468,164 @@ export type V2McpListResponses = {
 }
 
 export type V2McpListResponse = V2McpListResponses[keyof V2McpListResponses]
+
+export type V2McpRemoveData = {
+  body?: never
+  path: {
+    server: string
+  }
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/mcp/{server}"
+}
+
+export type V2McpRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * McpServerNotFoundError
+   */
+  404: McpServerNotFoundErrorV2
+}
+
+export type V2McpRemoveError = V2McpRemoveErrors[keyof V2McpRemoveErrors]
+
+export type V2McpRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2McpRemoveResponse = V2McpRemoveResponses[keyof V2McpRemoveResponses]
+
+export type V2McpAddData = {
+  body: {
+    config: McpLocalConfigV2 | McpRemoteConfigV2
+  }
+  path: {
+    server: string
+  }
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/mcp/{server}"
+}
+
+export type V2McpAddErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2McpAddError = V2McpAddErrors[keyof V2McpAddErrors]
+
+export type V2McpAddResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2McpAddResponse = V2McpAddResponses[keyof V2McpAddResponses]
+
+export type V2McpConnectData = {
+  body?: never
+  path: {
+    server: string
+  }
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/mcp/{server}/connect"
+}
+
+export type V2McpConnectErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * McpServerNotFoundError
+   */
+  404: McpServerNotFoundErrorV2
+}
+
+export type V2McpConnectError = V2McpConnectErrors[keyof V2McpConnectErrors]
+
+export type V2McpConnectResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2McpConnectResponse = V2McpConnectResponses[keyof V2McpConnectResponses]
+
+export type V2McpDisconnectData = {
+  body?: never
+  path: {
+    server: string
+  }
+  query?: {
+    location?: {
+      directory?: string | null
+      workspace?: string | null
+    } | null
+  }
+  url: "/api/mcp/{server}/disconnect"
+}
+
+export type V2McpDisconnectErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * McpServerNotFoundError
+   */
+  404: McpServerNotFoundErrorV2
+}
+
+export type V2McpDisconnectError = V2McpDisconnectErrors[keyof V2McpDisconnectErrors]
+
+export type V2McpDisconnectResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2McpDisconnectResponse = V2McpDisconnectResponses[keyof V2McpDisconnectResponses]
 
 export type V2McpResourceCatalogData = {
   body?: never

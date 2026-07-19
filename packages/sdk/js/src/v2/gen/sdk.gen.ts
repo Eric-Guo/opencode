@@ -111,7 +111,9 @@ import type {
   McpDisconnectErrors,
   McpDisconnectResponses,
   McpLocalConfig,
+  McpLocalConfigV2,
   McpRemoteConfig,
+  McpRemoteConfigV2,
   McpStatusErrors,
   McpStatusResponses,
   ModelRef,
@@ -318,8 +320,16 @@ import type {
   V2IntegrationOauthStatusResponses,
   V2LocationGetErrors,
   V2LocationGetResponses,
+  V2McpAddErrors,
+  V2McpAddResponses,
+  V2McpConnectErrors,
+  V2McpConnectResponses,
+  V2McpDisconnectErrors,
+  V2McpDisconnectResponses,
   V2McpListErrors,
   V2McpListResponses,
+  V2McpRemoveErrors,
+  V2McpRemoveResponses,
   V2McpResourceCatalogErrors,
   V2McpResourceCatalogResponses,
   V2MessageListErrors,
@@ -7352,6 +7362,145 @@ export class Mcp2 extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
     return (options?.client ?? this.client).get<V2McpListResponses, V2McpListErrors, ThrowOnError>({
       url: "/api/mcp",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove MCP server
+   *
+   * Stop an MCP server and remove it from the runtime set until restart.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      server: string
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "server" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<V2McpRemoveResponses, V2McpRemoveErrors, ThrowOnError>({
+      url: "/api/mcp/{server}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add MCP server
+   *
+   * Add an MCP server at runtime or replace an existing one, connecting it immediately.
+   */
+  public add<ThrowOnError extends boolean = false>(
+    parameters: {
+      server: string
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+      config?: McpLocalConfigV2 | McpRemoteConfigV2
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "server" },
+            { in: "query", key: "location" },
+            { in: "body", key: "config" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<V2McpAddResponses, V2McpAddErrors, ThrowOnError>({
+      url: "/api/mcp/{server}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Connect MCP server
+   *
+   * Connect an MCP server at runtime, overriding a disabled configuration until restart.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters: {
+      server: string
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "server" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2McpConnectResponses, V2McpConnectErrors, ThrowOnError>({
+      url: "/api/mcp/{server}/connect",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Disconnect MCP server
+   *
+   * Disconnect an MCP server at runtime, removing its tools until reconnected.
+   */
+  public disconnect<ThrowOnError extends boolean = false>(
+    parameters: {
+      server: string
+      location?: {
+        directory?: string | null
+        workspace?: string | null
+      } | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "server" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2McpDisconnectResponses, V2McpDisconnectErrors, ThrowOnError>({
+      url: "/api/mcp/{server}/disconnect",
       ...options,
       ...params,
     })
