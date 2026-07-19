@@ -184,7 +184,7 @@ export const Plugin = {
                   command: input.command,
                   cwd: target.canonical,
                   timeout,
-                  metadata: { sessionID: context.sessionID },
+                  metadata: { sessionID: context.sessionID, protectThapeSsoApiKeys: true },
                 })
                 yield* context.progress({ shellID: info.id })
 
