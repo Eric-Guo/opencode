@@ -11,6 +11,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
 import { CybrosTrace } from "./cybros"
+import { ThapeSsoProtection } from "./thape-sso-protection"
 import { Session } from "@/session/session"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
@@ -238,6 +239,17 @@ const layer = Layer.effect(
             }),
           )
         }
+
+        const protection = yield* Effect.tryPromise({
+          try: () => ThapeSsoProtection(),
+          catch: errorMessage,
+        }).pipe(
+          Effect.tapError((error) =>
+            Effect.logError("failed to load required plugin", { name: "ThapeSsoProtection", error }),
+          ),
+          Effect.option,
+        )
+        if (protection._tag === "Some") hooks.push(protection.value)
 
         // Notify plugins of current config
         for (const hook of hooks) {

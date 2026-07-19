@@ -73,6 +73,30 @@ const triggerSystemTransform = Effect.fn("PluginTriggerTest.triggerSystemTransfo
 })
 
 describe("plugin.trigger", () => {
+  it.instance("keeps SSO protection enabled when default plugins are disabled", () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      yield* plugin.init()
+
+      const env = yield* plugin.trigger(
+        "shell.env",
+        { cwd: ".", sessionID: "session", callID: "call" },
+        { env: {} as Record<string, string> },
+      )
+      expect(env.env.OPENCODE_API_KEY).toBe("")
+      expect(env.env.THAPE_SSO_BEARER_API_KEY).toBeUndefined()
+
+      const read = yield* Effect.exit(
+        plugin.trigger(
+          "tool.execute.before",
+          { tool: "read", sessionID: "session", callID: "call" },
+          { args: { filePath: ".env.local" } },
+        ),
+      )
+      expect(read._tag).toBe("Failure")
+    }),
+  )
+
   it.instance("runs synchronous hooks without crashing", () =>
     withProject(
       [
