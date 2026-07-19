@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { ensureSsoUsername } from "../src/thape-sso"
+import { API_KEY_ENV_NAMES, ensureSsoUsername } from "../src/thape-sso"
 
 const keys = [
   "THAPE_SSO_BEARER_API_KEY",
@@ -20,6 +20,11 @@ const keys = [
 const originalEnv = new Map(keys.map((key) => [key, process.env[key]]))
 const originalBunEnv = new Map(keys.map((key) => [key, Bun.env[key]]))
 const originalFetch = globalThis.fetch
+
+test("keeps the bearer key available to tools", () => {
+  expect(API_KEY_ENV_NAMES).not.toContain("THAPE_SSO_BEARER_API_KEY")
+  expect(API_KEY_ENV_NAMES).toContain("OPENCODE_API_KEY")
+})
 
 afterEach(() => {
   for (const key of keys) {
