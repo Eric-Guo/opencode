@@ -950,6 +950,8 @@ export type GlobalEvent = {
           error: SessionStructuredError
           cost?: MoneyUsd
           tokens?: TokenUsageInfo
+          snapshot?: string
+          files?: Array<string>
         }
       }
     | {
@@ -4033,6 +4035,8 @@ export type SyncEventSessionStepFailed = {
       error: SessionStructuredError
       cost?: MoneyUsd
       tokens?: TokenUsageInfo
+      snapshot?: string
+      files?: Array<string>
     }
   }
 }
@@ -5171,6 +5175,8 @@ export type SessionStepFailed = {
     error: SessionStructuredError
     cost?: MoneyUsd
     tokens?: TokenUsageInfo
+    snapshot?: string
+    files?: Array<string>
   }
 }
 
@@ -7403,6 +7409,8 @@ export type EventSessionStepFailed = {
     error: SessionStructuredError
     cost?: MoneyUsd
     tokens?: TokenUsageInfo
+    snapshot?: string
+    files?: Array<string>
   }
 }
 
@@ -9513,6 +9521,8 @@ export type SessionStepFailedV2 = {
     error: SessionStructuredError
     cost?: MoneyUsd
     tokens?: TokenUsageInfo
+    snapshot?: string
+    files?: Array<string>
   }
 }
 
