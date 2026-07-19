@@ -20,8 +20,8 @@ export async function ThapeSsoProtection(): Promise<Hooks> {
         return value ? [value] : []
       })
       if (secrets.length === 0) return
-      output.title = redactString(output.title, secrets)
-      output.output = redactString(output.output, secrets)
+      if (typeof output.title === "string") output.title = redactString(output.title, secrets)
+      if (typeof output.output === "string") output.output = redactString(output.output, secrets)
       output.metadata = redact(output.metadata, secrets)
     },
   }
