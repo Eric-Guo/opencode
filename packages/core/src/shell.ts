@@ -12,6 +12,7 @@ import { EventV2 } from "./event"
 import { Location } from "./location"
 import { Global } from "@opencode-ai/util/global"
 import { ShellSelect } from "./shell/select"
+import { API_KEY_ENV_NAMES } from "./thape-sso"
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -172,7 +173,12 @@ export const layer = (options?: ShellSelect.Options) => Layer.effect(
       const args = ShellSelect.args(shell, input.command)
       const file = path.join(outputDir, `${id}.out`)
       const env = {
-        ...process.env,
+        ...Object.fromEntries(
+          Object.entries(process.env).filter(
+            ([key]) =>
+              input.metadata?.protectThapeSsoApiKeys !== true || !API_KEY_ENV_NAMES.some((name) => name === key),
+          ),
+        ),
         TERM: "xterm-256color",
         OPENCODE_TERMINAL: "1",
       } as Record<string, string>
