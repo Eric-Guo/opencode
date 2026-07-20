@@ -16,7 +16,7 @@ import { setForceFocus } from "./native/debug"
 import { runDesktopMenuAction } from "./native/menu-actions"
 import { createDesktopStorage } from "./storage"
 import {
-  getLocalAgentFromWebContents,
+  getDesktopTabInitializationFromWebContents,
   getPinchZoomEnabled,
   getPrimaryWebContents,
   getWindowFromWebContents,
@@ -68,8 +68,7 @@ export function registerIpcHandlers(deps: Deps) {
 
   handle(Ipc.app.awaitInitialization, async (event) => {
     const data = await deps.awaitInitialization()
-    const localAgent = getLocalAgentFromWebContents(event.sender)
-    return { ...data, ...(localAgent ? { localAgent } : {}) }
+    return { ...data, ...getDesktopTabInitializationFromWebContents(event.sender) }
   })
   handle(Ipc.app.consumeInitialDeepLinks, () => deps.consumeInitialDeepLinks())
   handle(Ipc.app.getDefaultServerUrl, () => deps.getDefaultServerUrl())
