@@ -5,7 +5,10 @@ const ServerReadyData = Schema.Struct({
   url: Schema.String,
   username: Schema.NullOr(Schema.String),
   password: Schema.NullOr(Schema.String),
+  ssoJwtSecretKey: Schema.optionalKey(Schema.String),
   localAgent: Schema.optionalKey(Schema.String),
+  welcomeText: Schema.optionalKey(Schema.String),
+  suggestedQuestions: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
