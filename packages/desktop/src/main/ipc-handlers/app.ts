@@ -18,7 +18,7 @@ import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-sett
 import { Updater } from "../updater"
 import {
   getLastFocusedWindow,
-  getLocalAgentFromWebContents,
+  getDesktopTabInitializationFromWebContents,
   getPrimaryWebContents,
   getWindowFromWebContents,
   setBackgroundColor,
@@ -38,8 +38,7 @@ export const appHandlers = AppRpcs.toLayer(
       AppAwaitInitialization: (_args, context) =>
         Effect.gen(function* () {
           const data = yield* background.connection.pipe(Effect.map(SidecarCredentials.ready))
-          const localAgent = getLocalAgentFromWebContents(sender(handoff, context))
-          return { ...data, ...(localAgent ? { localAgent } : {}) }
+          return { ...data, ...getDesktopTabInitializationFromWebContents(sender(handoff, context)) }
         }),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
