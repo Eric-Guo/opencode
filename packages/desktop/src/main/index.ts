@@ -114,6 +114,9 @@ const main = Effect.gen(function* () {
       url: background.url,
       username: background.username,
       password: background.password,
+      ...(process.env.THAPE_SSO_BEARER_API_KEY
+        ? { ssoJwtSecretKey: process.env.THAPE_SSO_BEARER_API_KEY }
+        : {}),
     })
     logger.log("loading task finished")
 
