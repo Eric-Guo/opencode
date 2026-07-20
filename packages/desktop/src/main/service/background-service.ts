@@ -79,6 +79,9 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   return {
     url: url.origin,
     password: service.auth.password,
+    ...(process.env.THAPE_SSO_BEARER_API_KEY
+      ? { ssoJwtSecretKey: process.env.THAPE_SSO_BEARER_API_KEY }
+      : {}),
   } satisfies ServerReadyData
 })
 

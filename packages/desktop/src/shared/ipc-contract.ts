@@ -1,7 +1,10 @@
 export type ServerReadyData = {
   url: string
   password: string | null
+  ssoJwtSecretKey?: string
   localAgent?: string
+  welcomeText?: string
+  suggestedQuestions?: string[]
 }
 
 export type TitlebarTheme = {
