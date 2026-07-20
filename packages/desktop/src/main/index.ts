@@ -385,6 +385,9 @@ const main = Effect.gen(function* () {
       url,
       username: "opencode",
       password,
+      ...(process.env.THAPE_SSO_BEARER_API_KEY
+        ? { ssoJwtSecretKey: process.env.THAPE_SSO_BEARER_API_KEY }
+        : {}),
     })
 
     if (process.platform === "win32") {
