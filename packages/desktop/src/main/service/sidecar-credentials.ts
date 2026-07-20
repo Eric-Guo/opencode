@@ -17,9 +17,9 @@ export function get() {
   return current
 }
 
-/** What the renderer learns about the sidecar: its origin, never its credential. */
+/** Renderer initialization data excludes the sidecar credential. */
 export function ready(data: Data): ServerReadyData {
-  return { url: data.url }
+  return { url: data.url, ...(data.ssoJwtSecretKey ? { ssoJwtSecretKey: data.ssoJwtSecretKey } : {}) }
 }
 
 /** The Basic credential for a request to the sidecar origin, or undefined for any other URL. */
