@@ -2,11 +2,16 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { parse, type ParseError } from "jsonc-parser"
 
-type DesktopTabBase = {
+export type DesktopTabInitialization = {
+  localAgent?: string
+  welcomeText?: string
+  suggestedQuestions?: string[]
+}
+
+type DesktopTabBase = DesktopTabInitialization & {
   id: string
   title: string
   label: string
-  localAgent?: string
   releaseWhenLostFocus?: boolean
   systemControlColor?: string
 }
@@ -59,12 +64,21 @@ function parseDesktopTab(value: unknown, index: number, source: string): Desktop
   if (value.systemControlColor !== undefined && !isString(value.systemControlColor)) throw invalidTab(index, source)
   if (value.localServer !== undefined && typeof value.localServer !== "boolean") throw invalidTab(index, source)
   if (value.localAgent !== undefined && !isString(value.localAgent)) throw invalidTab(index, source)
+  if (value.welcomeText !== undefined && !isString(value.welcomeText)) throw invalidTab(index, source)
+  if (
+    value.suggestedQuestions !== undefined &&
+    (!Array.isArray(value.suggestedQuestions) || !value.suggestedQuestions.every(isString))
+  ) {
+    throw invalidTab(index, source)
+  }
 
   const base = {
     id: value.id,
     title: value.title,
     label: value.label,
     ...(value.localAgent === undefined ? {} : { localAgent: value.localAgent }),
+    ...(value.welcomeText === undefined ? {} : { welcomeText: value.welcomeText }),
+    ...(value.suggestedQuestions === undefined ? {} : { suggestedQuestions: value.suggestedQuestions }),
     ...(value.releaseWhenLostFocus === undefined ? {} : { releaseWhenLostFocus: value.releaseWhenLostFocus }),
     ...(value.systemControlColor === undefined ? {} : { systemControlColor: value.systemControlColor }),
   }
