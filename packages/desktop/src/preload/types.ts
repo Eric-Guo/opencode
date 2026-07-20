@@ -20,7 +20,10 @@ export type ServerReadyData = {
   url: string
   username: string | null
   password: string | null
+  ssoJwtSecretKey?: string
   localAgent?: string
+  welcomeText?: string
+  suggestedQuestions?: string[]
 }
 
 export type WslServersAPI = WslServersPlatform
