@@ -29,6 +29,12 @@ import {
   type ExternalDesktopTab,
   type RendererDesktopTab,
 } from "./desktop-tabs"
+import {
+  clipboardWritePermission,
+  createExternalTabNavigationHandler,
+  isExternalTabPermissionAllowed,
+  isExternalTabURL,
+} from "./external-tab-policy"
 import { exportDebugLogs, write as writeLog } from "./logging"
 import { getStore, removeStoreFile } from "./store"
 import { DESKTOP_TAB_COOKIES_STORE, PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
@@ -42,7 +48,6 @@ const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
-const clipboardWritePermission = "clipboard-sanitized-write"
 const notificationPermission = "notifications"
 const rendererPermissions = new Set([clipboardWritePermission, notificationPermission])
 const oc2Theme = oc2ThemeJson as DesktopTheme
@@ -525,14 +530,14 @@ function createDesktopTabManager(
     const tab = getExternalTab(id)
     if (!tab) return openCodeView
     const savedURL = getStore(desktopTabStateFile(windowID)).get(id)
-    const url = typeof savedURL === "string" && isDesktopTabURL(tab, savedURL) ? savedURL : tab.url
+    const url = typeof savedURL === "string" && isExternalTabURL(tab, savedURL) ? savedURL : tab.url
     const view = createExternalView(
       win,
       tab,
       sendState,
       url,
       (url) => {
-        if (isDesktopTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
+        if (isExternalTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
       },
     )
     tabViews.set(id, view)
@@ -549,7 +554,7 @@ function createDesktopTabManager(
     if (!view) return
     if ("url" in tab) {
       const url = view.webContents.getURL()
-      if (isDesktopTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
+      if (isExternalTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
     }
     tabViews.delete(id)
     win.contentView.removeChildView(view)
@@ -713,30 +718,23 @@ function createExternalView(
   view.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
       Boolean(
-        tab.localServer &&
-          webContents === view.webContents &&
-          isExternalTabPermission(permission) &&
-          isDesktopTabURL(tab, details.requestingUrl),
+        webContents === view.webContents &&
+          isExternalTabPermissionAllowed(tab, permission, details.requestingUrl),
       ),
     )
   })
   view.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin) =>
     Boolean(
-      tab.localServer &&
-        webContents === view.webContents &&
-        isExternalTabPermission(permission) &&
-        isDesktopTabURL(tab, requestingOrigin),
+      webContents === view.webContents && isExternalTabPermissionAllowed(tab, permission, requestingOrigin),
     ),
   )
   view.webContents.setWindowOpenHandler((details) => {
     openExternalURL(details.url)
     return { action: "deny" }
   })
-  view.webContents.on("will-navigate", (event, url) => {
-    if (isDesktopTabURL(tab, url)) return
-    event.preventDefault()
-    openExternalURL(url)
-  })
+  const handleNavigation = createExternalTabNavigationHandler(tab, (url) => openExternalURL(url))
+  view.webContents.on("will-navigate", handleNavigation)
+  view.webContents.on("will-redirect", handleNavigation)
   view.webContents.on("did-navigate", (_event, url) => {
     saveURL(url)
     sendState()
@@ -761,19 +759,6 @@ function createExternalView(
       writeLog("window", "external tab initial load failed", { tab: tab.id, error }, "error")
     })
   return view
-}
-
-function isDesktopTabURL(tab: ExternalDesktopTab, url: string) {
-  if (!URL.canParse(url)) return false
-  if (tab.localServer) return new URL(url).origin === new URL(tab.url).origin
-  return new URL(url).hostname === new URL(tab.url).hostname
-}
-
-function isExternalTabPermission(permission: string) {
-  return (
-    permission === clipboardWritePermission ||
-    ["local-network-access", "local-network", "loopback-network"].includes(permission)
-  )
 }
 
 function restoreExternalTabSession(tab: ExternalDesktopTab) {
