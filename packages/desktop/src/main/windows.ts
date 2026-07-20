@@ -23,7 +23,12 @@ import type { Cookie, WebContents } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
-import { loadDesktopTabs, type ExternalDesktopTab, type RendererDesktopTab } from "./desktop-tabs"
+import {
+  loadDesktopTabs,
+  type DesktopTabInitialization,
+  type ExternalDesktopTab,
+  type RendererDesktopTab,
+} from "./desktop-tabs"
 import { exportDebugLogs, write as writeLog } from "./logging"
 import { getStore, removeStoreFile } from "./store"
 import { DESKTOP_TAB_COOKIES_STORE, PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
@@ -82,7 +87,7 @@ const registry = createWindowRegistry<BrowserWindow>({
 })
 const primaryWebContents = new WeakMap<BrowserWindow, WebContents>()
 const webContentsOwners = new Map<number, BrowserWindow>()
-const webContentsLocalAgents = new Map<number, string>()
+const webContentsInitializations = new Map<number, DesktopTabInitialization>()
 const titlebarHeight = 40
 const tabbarWidth = 72
 const maxZoomLevel = 10
@@ -117,17 +122,25 @@ export function getWindowFromWebContents(contents: WebContents) {
   return BrowserWindow.fromWebContents(contents) ?? webContentsOwners.get(contents.id) ?? null
 }
 
-function trackWebContents(win: BrowserWindow, contents: WebContents, localAgent?: string) {
+function trackWebContents(win: BrowserWindow, contents: WebContents, initialization?: DesktopTabInitialization) {
   webContentsOwners.set(contents.id, win)
-  if (localAgent) webContentsLocalAgents.set(contents.id, localAgent)
+  if (initialization) {
+    webContentsInitializations.set(contents.id, {
+      ...(initialization.localAgent === undefined ? {} : { localAgent: initialization.localAgent }),
+      ...(initialization.welcomeText === undefined ? {} : { welcomeText: initialization.welcomeText }),
+      ...(initialization.suggestedQuestions === undefined
+        ? {}
+        : { suggestedQuestions: initialization.suggestedQuestions }),
+    })
+  }
   contents.once("destroyed", () => {
     webContentsOwners.delete(contents.id)
-    webContentsLocalAgents.delete(contents.id)
+    webContentsInitializations.delete(contents.id)
   })
 }
 
-export function getLocalAgentFromWebContents(contents: WebContents) {
-  return webContentsLocalAgents.get(contents.id)
+export function getDesktopTabInitializationFromWebContents(contents: WebContents) {
+  return webContentsInitializations.get(contents.id)
 }
 
 export function setRelaunchHandler(handler: () => void) {
@@ -655,7 +668,7 @@ function createRendererTabView(
       sandbox: true,
     },
   })
-  trackWebContents(win, view.webContents, tab.localAgent)
+  trackWebContents(win, view.webContents, tab)
   registerViewContextMenu(view)
   allowRendererPermissions(view.webContents)
   wireWindowRecovery(win, view.webContents, tab.id)
@@ -682,13 +695,19 @@ function createExternalView(
   const view = new WebContentsView({
     webPreferences: {
       partition: tab.partition,
-      ...(tab.localServer || tab.localAgent ? { preload: join(root, "../preload/external-tab.js") } : {}),
+      ...(tab.localServer ||
+        tab.localAgent ||
+        tab.welcomeText ||
+        tab.suggestedQuestions ||
+        process.env.THAPE_SSO_BEARER_API_KEY
+        ? { preload: join(root, "../preload/external-tab.js") }
+        : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   })
-  trackWebContents(win, view.webContents, tab.localAgent)
+  trackWebContents(win, view.webContents, tab)
   registerViewContextMenu(view)
   view.setBackgroundColor("#ffffff")
   view.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
