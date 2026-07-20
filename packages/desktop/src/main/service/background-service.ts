@@ -76,7 +76,13 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     ...endpoint(url.origin),
   })
   if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
-  const ready = { url: url.origin, password: service.auth.password } satisfies SidecarCredentials.Data
+  const ready = {
+    url: url.origin,
+    password: service.auth.password,
+    ...(process.env.THAPE_SSO_BEARER_API_KEY
+      ? { ssoJwtSecretKey: process.env.THAPE_SSO_BEARER_API_KEY }
+      : {}),
+  } satisfies SidecarCredentials.Data
   SidecarCredentials.set(ready)
   return ready
 })
