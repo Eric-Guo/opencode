@@ -20,6 +20,8 @@ export type ServerReadyData = {
   username: string | null
   password: string | null
   localAgent?: string
+  welcomeText?: string
+  suggestedQuestions?: string[]
 }
 
 export type WslServersAPI = WslServersPlatform

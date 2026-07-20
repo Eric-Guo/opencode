@@ -10,7 +10,7 @@ import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
 import {
-  getLocalAgentFromWebContents,
+  getDesktopTabInitializationFromWebContents,
   getPinchZoomEnabled,
   getPrimaryWebContents,
   getWindowID,
@@ -58,10 +58,9 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", async (event) => {
     const data = await deps.awaitInitialization()
-    const localAgent = getLocalAgentFromWebContents(event.sender)
     return {
       ...data,
-      ...(localAgent ? { localAgent } : {}),
+      ...getDesktopTabInitializationFromWebContents(event.sender),
     }
   })
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
