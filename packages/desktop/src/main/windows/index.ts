@@ -24,7 +24,7 @@ import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 import {
-  getLocalAgentFromWebContents,
+  getDesktopTabInitializationFromWebContents,
   getPrimaryWebContents,
   getWindowFromWebContents,
   trackWebContents,
@@ -52,7 +52,7 @@ export {
   setTitlebar,
   updateTitlebar,
 }
-export { getLocalAgentFromWebContents, getPrimaryWebContents, getWindowFromWebContents }
+export { getDesktopTabInitializationFromWebContents, getPrimaryWebContents, getWindowFromWebContents }
 
 export function setRelaunchHandler(handler: () => void) {
   const previous = relaunchHandler
