@@ -16,6 +16,13 @@ describe("sidecar authorization", () => {
     expect(ready(sidecar)).toEqual({ url: sidecar.url })
   })
 
+  test("preserves SSO initialization data without the sidecar password", () => {
+    expect(ready({ ...sidecar, ssoJwtSecretKey: "sso-token" })).toEqual({
+      url: sidecar.url,
+      ssoJwtSecretKey: "sso-token",
+    })
+  })
+
   test("adds nothing before the sidecar is known or when it has no password", () => {
     expect(authorization(undefined, "http://127.0.0.1:4096/api/session")).toBeUndefined()
     expect(authorization({ url: sidecar.url, password: null }, "http://127.0.0.1:4096/api/session")).toBeUndefined()
