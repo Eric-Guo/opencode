@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 const childProcess = require("child_process")
 const fs = require("fs")
@@ -7,8 +7,16 @@ const os = require("os")
 
 const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 
-function run(target) {
-  const child = childProcess.spawn(target, process.argv.slice(2), { stdio: "inherit" })
+if (!process.versions.bun) {
+  const result = childProcess.spawnSync(process.env.OPENCODE_BUN_PATH || "bun", [__filename, ...process.argv.slice(2)], {
+    stdio: "inherit",
+  })
+  if (result.error) console.error(result.error.message)
+  process.exit(result.status ?? 1)
+}
+
+function run(target, args = []) {
+  const child = childProcess.spawn(target, [...args, ...process.argv.slice(2)], { stdio: "inherit" })
   child.on("error", (error) => {
     console.error(error.message)
     process.exit(1)
@@ -122,7 +130,14 @@ function findBinary(startDir) {
 }
 
 const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
-if (!resolved) {
+const source = path.join(scriptDir, "..", "src", "index.ts")
+const config = path.join(scriptDir, "..", "bunfig.toml")
+const invocation = resolved
+  ? [resolved]
+  : fs.existsSync(source)
+    ? [process.env.OPENCODE_BUN_PATH || "bun", "run", `--config=${config}`, "--conditions=browser", source]
+    : undefined
+if (!invocation) {
   console.error(
     `It seems that your package manager failed to install the right ${command} CLI package. Try manually installing ` +
       names.map((name) => `"${name}"`).join(" or ") +
@@ -130,4 +145,4 @@ if (!resolved) {
   )
   process.exit(1)
 }
-run(resolved)
+run(invocation[0], invocation.slice(1))
