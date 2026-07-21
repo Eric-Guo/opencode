@@ -50,6 +50,9 @@ const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel
 
 const getBase = (appId: string): Configuration => ({
   artifactName: "SigmaAgents-${os}-${arch}-${version}.${ext}",
+  // Native dependencies are shipped as platform-specific prebuilt packages. Rebuilding them
+  // prevents packaging another platform because node-gyp does not support cross-compilation.
+  npmRebuild: false,
   beforePack: async () => {
     await execFileAsync("bun", ["install", "--cwd", thapeConfigDir])
     await mkdir(generatedDir, { recursive: true })
