@@ -701,6 +701,7 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.File.Generated, (event) => run(db, event))
     yield* events.project(SessionEvent.RetryScheduled, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Ended, (event) =>
