@@ -19,7 +19,7 @@ bun install
 # Start development server for the core CLI package
 bun dev
 
-# To test opencode in the `packages/opencode` directory you can run `bun dev`
+# To run the V2 CLI from `packages/cli`, use `bun dev`
 
 # Run type checking across all packages
 bun typecheck
@@ -31,12 +31,12 @@ bun turbo build
 bun test
 
 # Run a single test file
-bun test packages/opencode/test/tool/tool.test.ts
+cd packages/core && bun test
 ```
 
 **Package-Specific Development:**
 
-- **Core CLI**: `cd packages/opencode && bun dev`
+- **Core CLI**: `cd packages/cli && bun dev`
 - **Web Console**: `cd packages/console/app && bun dev`
 - **Desktop App**: `cd packages/desktop && bun dev`
 - **Documentation**: `cd packages/web && bun dev`
@@ -45,7 +45,9 @@ bun test packages/opencode/test/tool/tool.test.ts
 
 The OpenCode project is a monorepo with the following key packages:
 
-- `packages/opencode`: The core CLI application and AI agent logic.
+- `packages/core`: Core AI agent and session logic.
+- `packages/cli`: The command-line entrypoint and TUI launcher.
+- `packages/server`: The HTTP server.
 - `packages/console`: The web-based console for managing projects, which includes:
   - `app`: The main SolidStart console application.
   - `core`: Database and business logic.
@@ -55,7 +57,7 @@ The OpenCode project is a monorepo with the following key packages:
 - `sdks`: SDKs for JavaScript/TypeScript, Go, and Python.
 
 **Client/Server Architecture:**
-The terminal UI can run locally while being controlled remotely. The Go TUI communicates with the TypeScript server via a Stainless SDK. When adding or modifying server endpoints in `packages/opencode/src/server/server.ts`, a new client SDK must be generated.
+The terminal UI can run locally while being controlled remotely. After changing the public Protocol or Server `HttpApi`, regenerate the client from `packages/client` with `bun run generate`.
 
 ## Code Style and Conventions
 
@@ -63,7 +65,7 @@ The terminal UI can run locally while being controlled remotely. The Go TUI comm
 - **Error Handling**: Use `Result` patterns and avoid throwing exceptions in tools.
 - **Validation**: Use Zod for runtime validation of inputs.
 - **Dependency Injection**: Use the `App.provide()` pattern for dependency injection.
-- **API Client**: When modifying server endpoints in `packages/opencode/src/server/server.ts`, ask the user to generate a new client SDK.
+- **API Client**: After modifying public endpoints in `packages/protocol` or `packages/server`, run `bun run generate` from `packages/client`.
 - **General Principles**:
   - Keep logic in single functions unless composition is needed.
   - Avoid unnecessary destructuring.
