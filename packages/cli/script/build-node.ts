@@ -10,6 +10,7 @@ import { Script } from "@opencode/script"
 import pkg from "../package.json"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
 import { appArchiveAsset, mainConfig } from "../vite.node.config"
+import { sidecarConfig } from "../vite.sidecar.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact } from "./verify-artifact"
@@ -100,6 +101,7 @@ for (const target of targets) {
   await writeFile(path.join("dist-node", "assets", appArchiveAsset), appArchive)
   await build(mainConfig(input))
   await assertTextImportsInlined("dist-node/opencode.mjs")
+  await build(sidecarConfig(input))
   if (bundleOnly) await verifyArtifact("dist-node/opencode.mjs")
 
   const host = target.platform === process.platform && target.arch === process.arch
