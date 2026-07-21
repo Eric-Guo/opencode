@@ -61,7 +61,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
 `,
         },
       },
-      externalizeDeps: { include: [nodePtyPkg] },
+      externalizeDeps: { exclude: ["@opencode-ai/core"], include: [nodePtyPkg] },
     },
     plugins: [
       {
