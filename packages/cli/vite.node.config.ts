@@ -8,7 +8,7 @@ import { verifySimulationGraph } from "./script/verify-artifact"
 
 const dir = import.meta.dirname
 
-function rawTextPlugin(): Plugin {
+export function rawTextPlugin(): Plugin {
   return {
     name: "opencode:raw-text",
     // "pre" is load-bearing for .txt: Vite's built-in asset plugin claims
@@ -36,7 +36,7 @@ function appAssetsPlugin(archive: string): Plugin {
   }
 }
 
-function runtimeRequirePlugin(): Plugin {
+export function runtimeRequirePlugin(): Plugin {
   return {
     name: "opencode:runtime-require",
     enforce: "pre",
@@ -96,7 +96,7 @@ ${code.slice(start)}`
   }
 }
 
-const resolve = {
+export const resolve = {
   alias: [
     { find: /^solid-js\/store$/, replacement: "solid-js/store/dist/store.js" },
     { find: /^solid-js$/, replacement: "solid-js/dist/solid.js" },
@@ -108,14 +108,14 @@ const resolve = {
   conditions: ["node"],
 }
 
-const output = (entryFileNames: string, banner?: string) => ({
+export const output = (entryFileNames: string, banner?: string) => ({
   format: "esm" as const,
   entryFileNames,
   inlineDynamicImports: true,
   banner,
 })
 
-function nodePrelude(input: NodeBuildInput) {
+export function nodePrelude(input: NodeBuildInput) {
   const nodePtySpawnHelper =
     input.target.platform === "darwin"
       ? `${input.target.nodePtyPackage}/prebuilds/darwin-${input.target.arch}/spawn-helper`
