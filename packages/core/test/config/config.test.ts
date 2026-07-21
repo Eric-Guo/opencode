@@ -1,4 +1,5 @@
 import path from "path"
+import os from "os"
 import fs from "fs/promises"
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Logger, PubSub, Schema, Stream } from "effect"
@@ -118,6 +119,11 @@ describe("Config", () => {
       Effect.provide(Config.testLayer([new Document({ type: "document", info: new Info({ shell: "virtual" }) })])),
     ),
   )
+  it.effect("uses the Thape SSO identity as the config fallback", () =>
+    Effect.sync(() => {
+      expect(Config.latest([], "username")).toBe(process.env.THAPE_SSO_USER_NAME?.trim() || os.userInfo().username)
+      expect(Config.latest([], "clerk_code")).toBe(process.env.THAPE_SSO_CLERK_CODE?.trim() || undefined)
+    }))
 
   it.live("loads explicit file and content overrides in priority order", () =>
     Effect.acquireRelease(
@@ -1055,6 +1061,7 @@ describe("Config", () => {
                 share: "disabled",
                 enterprise: { url: "https://share.example.com" },
                 username: "test-user",
+                clerk_code: "123456",
                 permissions: [
                   { action: "bash", resource: "*", effect: "ask" },
                   { action: "bash", resource: "git status", effect: "allow" },
@@ -1142,6 +1149,7 @@ describe("Config", () => {
             expect(documents[0]?.info.share).toBe("disabled")
             expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
             expect(documents[0]?.info.username).toBe("test-user")
+            expect(documents[0]?.info.clerk_code).toBe("123456")
             expect(documents[0]?.info.permissions).toEqual([
               { action: "bash", resource: "*", effect: "ask" },
               { action: "bash", resource: "git status", effect: "allow" },
