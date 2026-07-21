@@ -2207,6 +2207,7 @@ export type ConfigEntry =
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
+        clerk_code?: string
         permissions?: PermissionRuleset
         policies?: Array<{
           action: "provider.use" | "tool.use" | "integration.use"
