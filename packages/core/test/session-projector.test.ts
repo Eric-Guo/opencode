@@ -67,7 +67,7 @@ const seedSession = (overrides?: Partial<typeof SessionTable.$inferInsert>) =>
     const db = (yield* Database.Service).db
     yield* db
       .insert(ProjectTable)
-      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make(process.cwd()), sandboxes: [] })
       .run()
     yield* db
       .insert(SessionTable)
@@ -75,7 +75,7 @@ const seedSession = (overrides?: Partial<typeof SessionTable.$inferInsert>) =>
         id: sessionID,
         project_id: Project.ID.global,
         slug: "test",
-        directory: "/project",
+        directory: process.cwd(),
         title: "test",
         version: "test",
         ...overrides,
@@ -729,6 +729,17 @@ describe("SessionProjector", () => {
         assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
         ordinal: 0,
       })
+      yield* service.publish(SessionEvent.File.Generated, {
+        sessionID,
+        assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
+        file: {
+          type: "file",
+          id: "generated-file",
+          mime: "image/png",
+          filename: "generated.png",
+          url: "data:image/png;base64,aW1hZ2U=",
+        },
+      })
 
       const rows = yield* db
         .select()
@@ -746,7 +757,16 @@ describe("SessionProjector", () => {
           type: "assistant",
           agent: build,
           model,
-          content: [SessionMessage.AssistantText.make({ type: "text", text: "" })],
+          content: [
+            SessionMessage.AssistantText.make({ type: "text", text: "" }),
+            SessionMessage.AssistantFile.make({
+              type: "file",
+              id: "generated-file",
+              mime: "image/png",
+              filename: "generated.png",
+              url: "data:image/png;base64,aW1hZ2U=",
+            }),
+          ],
           time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
         }),
         SessionMessage.Assistant.make({
