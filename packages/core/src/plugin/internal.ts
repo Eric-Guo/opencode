@@ -56,6 +56,8 @@ import { SystemPromptPlugin } from "./system-prompt"
 import { ThapeSsoProtection } from "./thape-sso-protection"
 import { VariantPlugin } from "./variant"
 import { WellKnownPlugin } from "../wellknown/plugin"
+import { CybrosTrace } from "./cybros"
+import { SessionStore } from "../session/store"
 
 const services = Effect.fn("PluginInternal.services")(function* () {
   const agent = yield* AgentV2.Service
@@ -81,6 +83,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const reference = yield* Reference.Service
   const ripgrep = yield* Ripgrep.Service
   const instructions = yield* SessionInstructions.Service
+  const sessions = yield* SessionStore.Service
   const shell = yield* Shell.Service
   const skill = yield* SkillV2.Service
   const tools = yield* Tools.Service
@@ -110,6 +113,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Reference.Service, reference),
     Context.make(Ripgrep.Service, ripgrep),
     Context.make(SessionInstructions.Service, instructions),
+    Context.make(SessionStore.Service, sessions),
     Context.make(Shell.Service, shell),
     Context.make(SkillV2.Service, skill),
     Context.make(Tools.Service, tools),
@@ -131,6 +135,7 @@ const pre = [
   SkillPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
+  CybrosTrace.Plugin,
   ...ProviderPlugins,
   PatchTool.Plugin,
   EditTool.Plugin,

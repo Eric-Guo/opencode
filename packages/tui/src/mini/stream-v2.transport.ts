@@ -605,8 +605,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             {
               kind: "reasoning",
               source: "reasoning",
-              text:
-                update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
+              text: update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
               phase: "progress",
               messageID: message.id,
               partID: fragment.partID,
@@ -614,6 +613,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           ])
         continue
       }
+      if (item.type === "file") continue
       renderTool(message.id, item, render)
     }
     if (render && message.error && !state.errors.has(message.id)) {

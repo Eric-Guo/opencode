@@ -44,6 +44,7 @@ import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
+import { CorsConfig } from "./cors"
 
 const applicationServices = LayerNode.group([
   Database.node,
@@ -135,6 +136,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(authorizationLayer),
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
+        Layer.provide(Layer.succeed(CorsConfig, options)),
         Layer.provide(Observability.layer({ ...options.observability, client: options.client })),
         HttpRouter.provideRequest(requestServices),
         Layer.provideMerge(services),

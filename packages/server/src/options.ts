@@ -6,10 +6,9 @@ import { Schema } from "effect"
 export const ServerOptions = Schema.Struct({
   client: Schema.optional(Schema.String),
   hostname: Schema.optional(Schema.String),
-  port: Schema.optional(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535)),
-  ),
+  port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
+  cors: Schema.optional(Schema.Array(Schema.String)),
   simulation: Schema.optional(Schema.Boolean),
   database: Schema.optional(Database.Options),
   models: Schema.optional(ModelsDev.Options),

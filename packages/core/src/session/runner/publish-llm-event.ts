@@ -61,6 +61,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   let stepFailed = false
   let providerFailed = false
   let retryEvidence = false
+  let nextFile = 0
   let stepFailure: SessionError.Error | undefined
   let stepSettlement:
     | {
@@ -243,11 +244,7 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
   const failTools = Effect.fnUntraced(function* (error: SessionError.Error, mode: "all" | "hosted" | "uncalled") {
     let failed = false
     for (const [callID, tool] of tools) {
-      if (
-        tool.settled ||
-        (mode === "hosted" && !tool.providerExecuted) ||
-        (mode === "uncalled" && tool.called)
-      )
+      if (tool.settled || (mode === "hosted" && !tool.providerExecuted) || (mode === "uncalled" && tool.called))
         continue
       tool.settled = true
       failed = true
@@ -350,6 +347,24 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
       case "reasoning-end":
         yield* reasoning.end(event.id, providerState(event.providerMetadata))
         return
+      case "file": {
+        retryEvidence = true
+        const messageID = yield* startAssistant()
+        const index = nextFile++
+        const id = `generated-${messageID}-${index}`
+        yield* events.publish(SessionEvent.File.Generated, {
+          sessionID: input.sessionID,
+          assistantMessageID: messageID,
+          file: {
+            type: "file",
+            id,
+            mime: event.mediaType,
+            filename: `${id}.${fileExtension(event.mediaType)}`,
+            url: fileDataUrl(event),
+          },
+        })
+        return
+      }
       case "tool-input-start":
         retryEvidence = true
         yield* startToolInput(event)
@@ -484,4 +499,19 @@ export const createLLMEventPublisher = (events: Pick<EventV2.Interface, "publish
     startAssistant,
     assistantMessageID: assistantMessageIDForTool,
   }
+}
+
+function fileDataUrl(event: Extract<LLMEvent, { type: "file" }>) {
+  if (typeof event.data === "string") {
+    if (event.data.startsWith("data:")) return event.data
+    return `data:${event.mediaType};base64,${event.data}`
+  }
+  return `data:${event.mediaType};base64,${Buffer.from(event.data).toString("base64")}`
+}
+
+function fileExtension(mediaType: string) {
+  const subtype = mediaType.split(";")[0]?.split("/")[1]?.toLowerCase()
+  if (subtype === "jpeg") return "jpg"
+  if (subtype === "svg+xml") return "svg"
+  return subtype?.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "bin"
 }

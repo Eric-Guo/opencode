@@ -128,6 +128,7 @@ const serialize = (message: SessionMessage.Info) => {
       .flatMap((part) => {
         if (part.type === "text") return [`[Assistant]: ${part.text}`]
         if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
+        if (part.type === "file") return [`[Assistant file]: ${part.filename ?? part.mime}`]
         const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
         if (part.state.status === "completed")
           return [
@@ -391,16 +392,17 @@ const make = (dependencies: Dependencies) => {
   })
 }
 
-export const layer = (options?: SessionModelHeaders.Options) => Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const events = yield* EventV2.Service
-    const llm = yield* LLMClient.Service
-    const config = yield* Config.Service
-    const models = yield* SessionRunnerModel.Service
-    return make({ events, llm, models, config: settings(yield* config.entries()), headers: options })
-  }),
-)
+export const layer = (options?: SessionModelHeaders.Options) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const llm = yield* LLMClient.Service
+      const config = yield* Config.Service
+      const models = yield* SessionRunnerModel.Service
+      return make({ events, llm, models, config: settings(yield* config.entries()), headers: options })
+    }),
+  )
 
 export function configured(options?: SessionModelHeaders.Options) {
   return makeLocationNode({
