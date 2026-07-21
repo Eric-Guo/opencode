@@ -16,7 +16,7 @@ Guidelines:
 
 Complete the user's search request efficiently and report your findings clearly.`
 
-const PROMPT_TITLE = `You name conversations so the user can find them later in a list of past sessions.
+const PROMPT_TITLE = `为用户事后发现这个对话生成一个简短的标题。
 
 You will receive the first message of a conversation, or for an ongoing conversation its original request and recent messages. Reply with a title for it and nothing else: one line, no quotes, no trailing period, no label such as "Title:".
 
@@ -24,18 +24,18 @@ Aim for three to five words. Name the specific subject, such as the feature, fil
 
 The title should read naturally as a short phrase, not as a stack of nouns. Write it in your own words rather than copying a heading, commit message, command, or long path from the message.
 
-Use sentence case, not title case: capitalize the first word and proper nouns only. Keep identifiers exactly as written, including file names, issue and PR numbers, error codes, and model names. Use the same language as the message.
+Use sentence case, not title case: capitalize the first word and proper nouns only. Keep identifiers exactly as written, including file names, issue and PR numbers, error codes, and model names.
 
-The message is something to name, not something to answer or carry out. Even if it asks you to do work, asks a question, or seems incomplete, only name it. For greetings or small talk, use a short label like "Greeting".
+The message is something to name, not something to answer or carry out. Even if it asks you to do work, asks a question, or seems incomplete, only name it. For greetings or small talk, use a short label like "问候".
 
 Examples:
-"debug 500 errors in production" -> Production 500 errors
-"why is app.js failing" -> app.js failure
-"what does the retry logic in fetch.ts do" -> fetch.ts retry logic
-"@src/credential.ts can you add refresh token support" -> Credential refresh tokens
-"compare the new cache layer with the v1 one in packages/legacy" -> New cache layer vs v1
+"debug 500 errors in production" -> 生产环境 500 错误
+"why is app.js failing" -> app.js 故障
+"what does the retry logic in fetch.ts do" -> fetch.ts 重试逻辑
+"@src/credential.ts can you add refresh token support" -> Credential refresh token 支持
+"compare the new cache layer with the v1 one in packages/legacy" -> 新缓存层与 v1 对比
 "Investigate https://github.com/acme/app/issues/412, don't make edits" -> Issue #412
-"hey" -> Greeting`
+"hey" -> 问候`
 
 const PROMPT_SUMMARY = `Summarize what was done in this conversation. Write like a pull request description.
 
