@@ -55,6 +55,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   timezone: Schema.String.pipe(optional).annotate({
     description: "IANA time zone for schedules, e.g. America/Los_Angeles. Defaults to the server's local zone",
   }),
+  clerk_code: Schema.String.pipe(optional).annotate({
+    description: "Employee code displayed with the configured username",
+  }),
   permissions: Permission.Ruleset.pipe(optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
   }),
