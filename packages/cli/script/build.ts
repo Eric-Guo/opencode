@@ -63,7 +63,7 @@ const targets =
           if (item.avx2 === false) return baselineFlag
           return item.abi === undefined
         })
-      : allTargets
+      : allTargets.filter((item) => item.os === "darwin" && item.arch === "arm64")
 if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
 if (!skipInstall)
@@ -206,6 +206,12 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   }
   verifySimulationGraph(simulationInputs)
   await NativeArch.verify(path.join(outdir, name, "bin", item.os === "win32" ? `${binary}.exe` : binary), item.arch)
+
+  if (item.os === "darwin") {
+    const executable = path.join(outdir, name, "bin", binary)
+    await $`codesign --remove-signature ${executable}`
+    await $`codesign --sign - --force ${executable}`
+  }
 
   await Bun.write(
     path.join(outdir, name, "package.json"),
