@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
 
-import { downloadCliToResources, resolveChannel } from "./utils"
+import { resolveChannel } from "./utils"
 
 const channel = resolveChannel()
 await $`bun ./scripts/copy-icons.ts ${channel}`
 await $`bun ./scripts/copy-metainfo.ts ${channel}`
 
-if (channel === "dev") await downloadCliToResources()
+await $`cd ../cli && bun script/build-node.ts --bundle-only --skip-install`
+await $`cd ../7777 && bun run build`
