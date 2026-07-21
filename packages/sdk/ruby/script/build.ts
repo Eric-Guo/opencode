@@ -6,8 +6,15 @@ process.chdir(dir)
 import { $ } from "bun"
 import path from "path"
 
-// Generate OpenAPI spec from opencode package
-await $`bun dev generate > ${dir}/openapi.json`.cwd(path.resolve(dir, "../../opencode"))
+// Generate the V2 OpenAPI spec from the canonical Protocol definition.
+await $`bun -e ${`
+  import { OpenApi } from "effect/unstable/httpapi"
+  import { ClientApi } from "@opencode-ai/protocol/client"
+
+  const output = process.argv.at(-1)
+  if (!output) throw new Error("Missing OpenAPI output path")
+  await Bun.write(output, JSON.stringify(OpenApi.fromApi(ClientApi)))
+`} ${path.join(dir, "openapi.json")}`.cwd(path.resolve(dir, "../../client"))
 
 // Generate Ruby SDK using OpenAPI Generator CLI jar
 const outputDir = "/Users/guochunzhong/git/oss/opencode_client_ruby"
