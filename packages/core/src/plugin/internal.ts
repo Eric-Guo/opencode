@@ -89,6 +89,8 @@ import { VariantPlugin } from "./variant.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
+import { CybrosTrace } from "./cybros.js"
+import { SessionStore } from "../session/store.js"
 
 const services = [
   Agent.Service,
@@ -125,6 +127,7 @@ const services = [
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
+  SessionStore.Service,
   Shell.Service,
   ShellSelect.Service,
   Snapshot.Service,
@@ -173,6 +176,7 @@ export const requirements = LayerNode.group([
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
+  SessionStore.node,
   Shell.node,
   ShellSelect.node,
   Snapshot.node,
@@ -198,6 +202,7 @@ const pre = [
   VcsHgPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
+  CybrosTrace.Plugin,
   ...ProviderPlugins,
   ...WebSearchPlugins,
   PatchTool.Plugin,
