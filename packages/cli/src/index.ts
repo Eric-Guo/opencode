@@ -13,6 +13,7 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/util/npm"
 import { ensureSsoUsername } from "@opencode-ai/core/thape-sso"
+import { configDirectory } from "./config-directory"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -22,6 +23,7 @@ const Handlers = Runtime.handlers(Commands, {
     connect: () => import("./commands/handlers/auth/connect"),
   },
   debug: {
+    agent: () => import("./commands/handlers/debug/agent"),
     agents: () => import("./commands/handlers/debug/agents"),
   },
   console: {
@@ -66,10 +68,7 @@ Effect.promise(() => ensureSsoUsername()).pipe(
   Effect.provide(Updater.layer),
   Effect.provide(
     LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node]), [
-      [
-        Global.node,
-        Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
-      ],
+      [Global.node, Global.layerWith({ config: configDirectory() })],
     ]),
   ),
   Effect.provide(
