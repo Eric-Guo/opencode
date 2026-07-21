@@ -222,7 +222,7 @@ export async function spawnLocalServer(
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
   let healthUrl: URL
   try {
-    healthUrl = new URL("/api/health", url)
+    healthUrl = new URL("/global/health", url)
   } catch {
     return false
   }
