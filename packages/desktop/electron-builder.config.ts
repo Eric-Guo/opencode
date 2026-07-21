@@ -112,7 +112,7 @@ const getBase = (appId: string): Configuration => ({
       to: "app-update.yml",
     },
     {
-      from: "../cli/dist-node/models-dev-api.json",
+      from: "../opencode/dist/node/models-dev-api.json",
       to: "models-dev/api.json",
     },
   ],
