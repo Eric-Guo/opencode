@@ -52,6 +52,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   username: Schema.String.pipe(optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
   }),
+  clerk_code: Schema.String.pipe(optional).annotate({
+    description: "Employee code displayed with the configured username",
+  }),
   permissions: Permission.Ruleset.pipe(optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
   }),
