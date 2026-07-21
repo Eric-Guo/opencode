@@ -151,6 +151,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.AssistantTool, SessionMessage.AssistantTool],
     [coreSessionMessage.AssistantText, SessionMessage.AssistantText],
     [coreSessionMessage.AssistantReasoning, SessionMessage.AssistantReasoning],
+    [coreSessionMessage.AssistantFile, SessionMessage.AssistantFile],
     [coreSessionMessage.AssistantContent, SessionMessage.AssistantContent],
     [coreSessionMessage.Assistant, SessionMessage.Assistant],
     [coreSessionMessage.Compaction, SessionMessage.Compaction],
