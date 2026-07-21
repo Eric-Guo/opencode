@@ -2,6 +2,7 @@ import path from "node:path"
 import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
+import { Installation } from "@opencode-ai/core/installation"
 import solid from "vite-plugin-solid"
 import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "./src/node/target"
 
@@ -254,7 +255,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
 }
 
 export default mainConfig({
-  version: process.env.OPENCODE_VERSION ?? "local",
+  version: process.env.OPENCODE_VERSION ?? Installation.version,
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   models: "undefined",
   assetHash: "local",
