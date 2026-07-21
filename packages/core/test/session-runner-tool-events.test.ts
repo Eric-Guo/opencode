@@ -163,6 +163,23 @@ test("provider metadata is flattened using the route key", async () => {
   })
 })
 
+test("model-generated files are persisted as assistant content", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    publisher.publish(LLMEvent.file({ mediaType: "image/png", data: new TextEncoder().encode("image") })),
+  )
+
+  expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.file.generated.1"])
+  expect(published.at(-1)?.data).toMatchObject({
+    sessionID,
+    file: {
+      type: "file",
+      mime: "image/png",
+      url: "data:image/png;base64,aW1hZ2U=",
+    },
+  })
+})
+
 test("reasoning state from start, empty delta, and end is merged", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
