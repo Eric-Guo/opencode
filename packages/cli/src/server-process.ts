@@ -13,6 +13,7 @@ import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { Updater } from "./services/updater"
+import { configDirectory } from "./config-directory"
 
 export type Mode = "default" | "service" | "stdio"
 
@@ -28,10 +29,7 @@ export const run = Effect.fnUntraced(function* (options: Options) {
     Effect.provide(Updater.layer),
     Effect.provide(
       LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), [
-        [
-          Global.node,
-          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
-        ],
+        [Global.node, Global.layerWith({ config: configDirectory() })],
       ]),
     ),
     Effect.provide(NodeServices.layer),
@@ -97,7 +95,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
           },
           config: {
-            directory: process.env.OPENCODE_CONFIG_DIR,
+            directory: configDirectory(),
             project: !truthy(
               process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
             ),
@@ -108,9 +106,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             gitbash: process.env.OPENCODE_GIT_BASH_PATH,
           },
           fs: {
-            filewatcher: !truthy(
-              process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER,
-            ),
+            filewatcher: !truthy(process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER),
             fff:
               process.env.OPENCODE_DISABLE_FFF === undefined
                 ? process.platform !== "win32"
