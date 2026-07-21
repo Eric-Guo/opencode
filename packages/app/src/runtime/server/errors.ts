@@ -64,11 +64,22 @@ function unwrapNamedError(cause: unknown) {
 export function isSessionNotFoundError(cause: unknown, sessionID: string) {
   const unwrapped = unwrapNamedError(cause)
 
-  return (
-    Predicate.isObjectOrArray(unwrapped) &&
+  if (!Predicate.isObjectOrArray(unwrapped)) return false
+
+  if (
     Predicate.isTagged(unwrapped, "SessionNotFoundError") &&
     Predicate.hasProperty(unwrapped, "sessionID") &&
     unwrapped.sessionID === sessionID
+  )
+    return true
+
+  return (
+    Predicate.hasProperty(unwrapped, "name") &&
+    unwrapped.name === "NotFoundError" &&
+    Predicate.hasProperty(unwrapped, "data") &&
+    Predicate.isObjectOrArray(unwrapped.data) &&
+    Predicate.hasProperty(unwrapped.data, "message") &&
+    unwrapped.data.message === `Session not found: ${sessionID}`
   )
 }
 
