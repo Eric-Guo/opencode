@@ -73,7 +73,7 @@ export default defineConfig(async ({ command }) => {
         },
         externalizeDeps: {
           // Bundle the Effect family together.
-          exclude: ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
+          exclude: ["@opencode/core", "effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
           include: [nodePtyPkg],
         },
       },
