@@ -3,7 +3,6 @@ import { Config } from "@/config/config"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 
-import { mapValues } from "remeda"
 import { Effect, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -42,16 +41,16 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       const all = yield* ModelsDev.Service.use((s) => s.get())
       const disabled = new Set(config.disabled_providers ?? [])
       const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
-      // @ts-expect-error dead V1 expects a provider-keyed record, not normalized ModelsDev snapshots.
-      const filtered: Record<string, (typeof all)[string]> = {}
-      for (const [key, value] of Object.entries(all)) {
-        if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
+      const filtered: Record<string, Provider.Info> = {}
+      for (const snapshot of all) {
+        const key = snapshot.info.id
+        const source = ModelsDev.source(snapshot)
+        if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+          filtered[key] = source ? Provider.fromModelsDevProvider(source) : Provider.fromModelsDevSnapshot(snapshot)
+        }
       }
       const connected = yield* provider.list()
-      const providers = Object.assign(
-        mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
-        connected,
-      )
+      const providers = Object.assign(filtered, connected)
       return {
         all: Object.values(providers).map(Provider.toPublicInfo),
         default: Provider.defaultModelIDs(providers),
