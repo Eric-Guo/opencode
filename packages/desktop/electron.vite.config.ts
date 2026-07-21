@@ -1,5 +1,9 @@
 import { defineConfig } from "electron-vite"
+import { cp, rm } from "node:fs/promises"
 import { pickerPlugin } from "./scripts/picker"
+
+const SEVEN_SEVEN_DIST = "../7777/dist"
+const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -99,7 +103,19 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
     },
-    plugins: [pickerPlugin(), appPlugin, sentry],
+    plugins: [
+      { ...pickerPlugin(), transformIndexHtml: undefined },
+      appPlugin,
+      {
+        name: "opencode:copy-7777-renderer",
+        apply: "build",
+        async writeBundle() {
+          await rm(SEVEN_SEVEN_RENDERER_OUT, { recursive: true, force: true })
+          await cp(SEVEN_SEVEN_DIST, SEVEN_SEVEN_RENDERER_OUT, { recursive: true })
+        },
+      },
+      sentry,
+    ],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {
