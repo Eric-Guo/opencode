@@ -18,6 +18,7 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ensureSsoUsername } from "@opencode/core/thape-sso"
+import { configDirectory } from "./config-directory"
 
 ensurePluginRuntime()
 
@@ -121,11 +122,7 @@ Effect.gen(function* () {
   Effect.provide(Updater.layer),
   Effect.provide(
     LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node, EffectFlock.node]), {
-      replacements: [
-        Global.node.replace(
-          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
-        ),
-      ],
+      replacements: [Global.node.replace(Global.layerWith({ config: configDirectory() }))],
     }),
   ),
   Effect.provide(
