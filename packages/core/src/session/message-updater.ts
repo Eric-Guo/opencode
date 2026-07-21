@@ -440,6 +440,11 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
+      "session.file.generated": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          draft.content.push(castDraft(event.data.file))
+        })
+      },
       "session.retry.scheduled": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.retry = {

@@ -1,5 +1,10 @@
 import { $ } from "bun"
+import { cp, mkdir, rm } from "node:fs/promises"
 
 await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
 
-await $`cd ../opencode && bun script/build-node.ts`
+await $`cd ../cli && bun script/build-node.ts --bundle-only --skip-install`
+await $`cd ../7777 && bun run build`
+await rm("out/renderer/7777", { recursive: true, force: true })
+await mkdir("out/renderer", { recursive: true })
+await cp("../7777/dist", "out/renderer/7777", { recursive: true })

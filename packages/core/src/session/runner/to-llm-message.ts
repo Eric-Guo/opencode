@@ -136,6 +136,7 @@ const assistant = (message: SessionMessage.Assistant, model: ModelV2.Ref, provid
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
+    if (item.type === "file") return [{ type: "media", mediaType: item.mime, data: item.url, filename: item.filename }]
     const reuseToolProviderMetadata =
       reuseProviderMetadata ||
       (sameModel &&

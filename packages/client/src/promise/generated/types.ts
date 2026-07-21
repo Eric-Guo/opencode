@@ -102,6 +102,8 @@ export type SessionMessageAssistantText = { type: "text"; text: string }
 
 export type SessionMessageProviderState = { [x: string]: JsonValue }
 
+export type SessionMessageAssistantFile = { type: "file"; id: string; mime: string; filename?: string; url: string }
+
 export type SessionMessageToolStateStreaming = { status: "streaming"; input: string }
 
 export type ToolTextContent = { type: "text"; text: string }
@@ -1241,6 +1243,16 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionFileGenerated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.file.generated"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; file: SessionMessageAssistantFile }
+}
+
 export type LLMToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
@@ -2095,7 +2107,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: string
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantFile
+    | SessionMessageAssistantTool
+  >
   snapshot?: { start?: string; end?: string; files?: Array<string> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   cost?: MoneyUSD
@@ -2222,6 +2239,7 @@ export type SessionEventDurable =
   | SessionTextEnded
   | SessionReasoningStarted
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputEnded
   | SessionToolCalled
@@ -2319,6 +2337,7 @@ export type V2Event =
   | SessionReasoningStarted
   | SessionReasoningDelta
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputDelta
   | SessionToolInputEnded
