@@ -35,10 +35,10 @@ describe("checkServerHealth", () => {
       const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
       paths.push(url.pathname)
       if (url.pathname === "/api/health") return new Response(undefined, { status: 404 })
-      return Response.json({ healthy: true, version: "1.18.5" })
+      return Response.json({ healthy: true, version: "1.18.7" })
     }) as unknown as typeof globalThis.fetch
 
-    expect(await checkServerHealth(server, fetch)).toEqual({ healthy: true, version: "1.18.5" })
+    expect(await checkServerHealth(server, fetch)).toEqual({ healthy: true, version: "1.18.7" })
     expect(paths).toEqual(["/api/health", "/global/health"])
   })
 
@@ -48,10 +48,10 @@ describe("checkServerHealth", () => {
       const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
       paths.push(url.pathname)
       if (url.pathname === "/api/health") return Response.json({})
-      return Response.json({ healthy: true, version: "1.18.5" })
+      return Response.json({ healthy: true, version: "1.18.7" })
     }) as unknown as typeof globalThis.fetch
 
-    expect(await checkServerHealth(server, fetch)).toEqual({ healthy: true, version: "1.18.5" })
+    expect(await checkServerHealth(server, fetch)).toEqual({ healthy: true, version: "1.18.7" })
     expect(paths).toEqual(["/api/health", "/global/health"])
   })
 
