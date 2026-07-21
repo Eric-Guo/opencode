@@ -747,10 +747,17 @@ function streamPartEvents(
     case "stream-start":
     case "response-metadata":
     case "raw":
-    case "file":
     case "source":
     case "tool-approval-request":
       return Effect.succeed([])
+    case "file":
+      return Effect.succeed([
+        LLMEvent.file({
+          mediaType: event.mediaType,
+          data: event.data,
+          providerMetadata: providerMetadata(event.providerMetadata),
+        }),
+      ])
     case "text-start":
       return Effect.succeed(openFragment(state, "text", event.id, providerMetadata(event.providerMetadata)))
     case "text-delta":
