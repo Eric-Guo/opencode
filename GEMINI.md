@@ -8,7 +8,9 @@ This is a monorepo containing the OpenCode project. It is built with TypeScript 
 
 The monorepo is structured as follows:
 
-- `packages/opencode`: The core CLI application.
+- `packages/core`: Core AI agent and session logic.
+- `packages/cli`: The command-line application.
+- `packages/server`: The HTTP server.
 - `packages/function`: The serverless API, deployed as a Cloudflare Worker.
 - `packages/web`: The documentation website, built with Astro.
 - `packages/console`: The web-based console, built with SolidStart.
