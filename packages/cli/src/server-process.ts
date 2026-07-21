@@ -14,6 +14,7 @@ import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { Updater } from "./services/updater"
 import { WebUi } from "./services/web-ui"
+import { configDirectory } from "./config-directory"
 
 export type Mode = "default" | "service" | "stdio"
 
@@ -29,10 +30,7 @@ export const run = Effect.fnUntraced(function* (options: Options) {
     Effect.provide(Updater.layer),
     Effect.provide(
       LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), [
-        [
-          Global.node,
-          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
-        ],
+        [Global.node, Global.layerWith({ config: configDirectory() })],
       ]),
     ),
     Effect.provide(NodeServices.layer),
@@ -96,7 +94,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
           },
           config: {
-            directory: process.env.OPENCODE_CONFIG_DIR,
+            directory: configDirectory(),
             project: !truthy(
               process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
             ),
