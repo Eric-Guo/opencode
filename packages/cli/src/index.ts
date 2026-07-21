@@ -6,7 +6,7 @@ import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
 import { Observability } from "@opencode-ai/core/observability"
 import { Updater } from "./services/updater"
-import { InstallationChannel, InstallationVersion, InstallationLocal } from "@opencode-ai/core/installation/version"
+import { Installation } from "@opencode-ai/core/installation"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { AppProcess } from "@opencode-ai/core/process"
@@ -56,13 +56,13 @@ const Handlers = Runtime.handlers(Commands, {
 Effect.promise(() => ensureSsoUsername()).pipe(
   Effect.andThen(
     Effect.logInfo("cli starting", {
-      version: InstallationVersion,
-      channel: InstallationChannel,
-      local: InstallationLocal,
+      version: Installation.version,
+      channel: Installation.channel,
+      local: Installation.local,
       args: process.argv.slice(2),
     }),
   ),
-  Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: InstallationVersion })),
+  Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: Installation.version })),
   Effect.annotateLogs({ role: "cli" }),
   Effect.provide(Config.layer),
   Effect.provide(Updater.layer),
