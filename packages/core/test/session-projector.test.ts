@@ -749,6 +749,17 @@ describe("SessionProjector", () => {
         assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
         ordinal: 0,
       })
+      yield* service.publish(SessionEvent.File.Generated, {
+        sessionID,
+        assistantMessageID: SessionMessage.ID.make("msg_assistant_completed"),
+        file: {
+          type: "file",
+          id: "generated-file",
+          mime: "image/png",
+          filename: "generated.png",
+          url: "data:image/png;base64,aW1hZ2U=",
+        },
+      })
 
       const rows = yield* db
         .select()
@@ -766,7 +777,16 @@ describe("SessionProjector", () => {
           type: "assistant",
           agent: build,
           model,
-          content: [SessionMessage.AssistantText.make({ type: "text", text: "" })],
+          content: [
+            SessionMessage.AssistantText.make({ type: "text", text: "" }),
+            SessionMessage.AssistantFile.make({
+              type: "file",
+              id: "generated-file",
+              mime: "image/png",
+              filename: "generated.png",
+              url: "data:image/png;base64,aW1hZ2U=",
+            }),
+          ],
           time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
         }),
         SessionMessage.Assistant.make({
