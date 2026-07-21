@@ -68,7 +68,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       },
       externalizeDeps: {
         // Bundle the Effect family together; native MessagePack acceleration stays optional and external.
-        exclude: ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
+        exclude: ["@opencode-ai/core", "effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
         include: [nodePtyPkg, "msgpackr-extract"],
       },
     },
