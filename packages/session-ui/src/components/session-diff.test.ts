@@ -39,7 +39,9 @@ describe("session diff", () => {
       })
 
       expect(result.exitCode, result.stderr.toString()).toBe(0)
-      expect(JSON.parse(result.stdout.toString())).toEqual(patches.map(() => ({ before: "old\n", after: "new\n" })))
+      expect(JSON.parse(result.stdout.toString())).toEqual(
+        patches.map(() => ({ before: "old\n", after: "new\n" })),
+      )
     },
     10_000,
   )
@@ -141,6 +143,32 @@ describe("session diff", () => {
     expect(fileDiff.hunks).toEqual(
       parseDiffFromFile({ name: "a.ts", contents: before.join("") }, { name: "a.ts", contents: after.join("") }).hunks,
     )
+  })
+
+  test("keeps oversized whole-file patches complete without re-diffing", () => {
+    const line = `+${"x".repeat(256_000)}\n`
+
+    const fileDiff = resolveFileDiff({
+      file: "large.ts",
+      patch: `diff --git a/large.ts b/large.ts\n--- a/large.ts\n+++ b/large.ts\n@@ -0,0 +1 @@\n${line}`,
+    })
+
+    expect(fileDiff.isPartial).toBe(false)
+    expect(fileDiff.additionLines).toEqual([line.slice(1)])
+  })
+
+  test("keeps complex whole-file patches complete without re-diffing", () => {
+    const deletions = Array.from({ length: 317 }, (_, index) => `-old ${index}\n`).join("")
+    const additions = Array.from({ length: 317 }, (_, index) => `+new ${index}\n`).join("")
+
+    const fileDiff = resolveFileDiff({
+      file: "complex.ts",
+      patch: `diff --git a/complex.ts b/complex.ts\n--- a/complex.ts\n+++ b/complex.ts\n@@ -1,317 +1,317 @@\n${deletions}${additions}`,
+    })
+
+    expect(fileDiff.isPartial).toBe(false)
+    expect(fileDiff.deletionLines).toHaveLength(317)
+    expect(fileDiff.additionLines).toHaveLength(317)
   })
 
   test("keeps ordinary leading tool patches partial", () => {
