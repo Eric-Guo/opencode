@@ -3,7 +3,7 @@ import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
 import { cp, readdir, rm } from "node:fs/promises"
 
-const OPENCODE_SERVER_DIST = "../cli/dist-node"
+const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 const SEVEN_SEVEN_DIST = "../7777/dist"
 const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
