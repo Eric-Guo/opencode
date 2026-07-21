@@ -981,7 +981,7 @@
     },
     "packages/updates": {
       "name": "@opencode-ai/updates",
-      "version": "1.18.9",
+      "version": "1.18.7",
       "dependencies": {
         "jose": "6.0.11",
       },
