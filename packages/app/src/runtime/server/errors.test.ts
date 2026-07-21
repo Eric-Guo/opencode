@@ -165,6 +165,19 @@ describe("isSessionNotFoundError", () => {
     expect(isSessionNotFoundError(new Error("Unknown error", { cause: body }), body.sessionID)).toBe(true)
   })
 
+  test("matches the legacy server error for the requested session", () => {
+    const body = {
+      name: "NotFoundError",
+      data: {
+        message: "Session not found: ses_missing",
+      },
+    }
+
+    expect(isSessionNotFoundError(new Error(body.data.message, { cause: { body, status: 404 } }), "ses_missing")).toBe(
+      true,
+    )
+  })
+
   test("rejects errors for other sessions and other 404 responses", () => {
     const body = {
       _tag: "SessionNotFoundError",
@@ -173,6 +186,17 @@ describe("isSessionNotFoundError", () => {
     } satisfies SessionNotFoundError
 
     expect(isSessionNotFoundError(new Error(body.message, { cause: { body, status: 404 } }), "ses_tab")).toBe(false)
+    expect(
+      isSessionNotFoundError(
+        new Error("Session not found: ses_parent", {
+          cause: {
+            body: { name: "NotFoundError", data: { message: "Session not found: ses_parent" } },
+            status: 404,
+          },
+        }),
+        "ses_tab",
+      ),
+    ).toBe(false)
     expect(
       isSessionNotFoundError(
         new Error("Provider not found", {
