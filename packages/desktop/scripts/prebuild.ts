@@ -7,5 +7,5 @@ const channel = resolveChannel()
 await $`bun ./scripts/copy-icons.ts ${channel}`
 await $`bun ./scripts/copy-metainfo.ts ${channel}`
 
-await $`cd ../cli && bun script/build-node.ts --bundle-only --skip-install`
+await $`cd ../cli && bun script/build-node.ts`
 await $`cd ../7777 && bun run build`
