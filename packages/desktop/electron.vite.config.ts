@@ -1,7 +1,7 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
-import { cp, rm } from "node:fs/promises"
+import { cp, readdir, rm } from "node:fs/promises"
 
 const OPENCODE_SERVER_DIST = "../cli/dist-node"
 const SEVEN_SEVEN_DIST = "../7777/dist"
@@ -74,8 +74,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       {
         name: "opencode:copy-server-dist",
         async writeBundle() {
-          await cp(`${OPENCODE_SERVER_DIST}/sidecar.mjs`, "./out/main/chunks/sidecar.mjs", { force: true })
-          await cp(`${OPENCODE_SERVER_DIST}/assets`, "./out/main/chunks/assets", { recursive: true, force: true })
+          for (const file of await readdir(OPENCODE_SERVER_DIST)) {
+            await cp(`${OPENCODE_SERVER_DIST}/${file}`, `./out/main/chunks/${file}`, { recursive: true, force: true })
+          }
         },
       },
     ],
@@ -83,11 +84,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
   preload: {
     build: {
       rollupOptions: {
-        input: {
-          index: "src/preload/index.ts",
-          tabbar: "src/preload/tabbar.ts",
-          "external-tab": "src/preload/external-tab.ts",
-        },
+        input: { index: "src/preload/index.ts" },
         output: {
           format: "cjs",
           entryFileNames: "[name].js",
@@ -115,7 +112,6 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       rollupOptions: {
         input: {
           main: "src/renderer/index.html",
-          tabbar: "src/renderer/tabbar.html",
         },
       },
     },
