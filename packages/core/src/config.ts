@@ -1,6 +1,7 @@
 export * as Config from "./config"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import os from "os"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
@@ -66,6 +67,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     }),
   username: Schema.String.pipe(Schema.optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
+  }),
+  clerk_code: Schema.String.pipe(Schema.optional).annotate({
+    description: "Employee code displayed with the configured username",
   }),
   permissions: Permission.Ruleset.pipe(Schema.optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
@@ -151,9 +155,12 @@ export class ClaudeDirectory extends Schema.Class<ClaudeDirectory>("Config.Claud
 export type Entry = Document | Directory | File | AgentsDirectory | ClaudeDirectory
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
-  return entries
+  const configured = entries
     .filter((entry): entry is Document => entry.type === "document")
     .findLast((entry) => entry.info[key] !== undefined)?.info[key]
+  if (configured !== undefined) return configured
+  if (key === "username") return (process.env.THAPE_SSO_USER_NAME?.trim() || os.userInfo().username) as Info[K]
+  if (key === "clerk_code") return (process.env.THAPE_SSO_CLERK_CODE?.trim() || undefined) as Info[K]
 }
 
 export interface Interface {
