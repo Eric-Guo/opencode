@@ -57,7 +57,7 @@ const targets =
           if (item.avx2 === false) return baselineFlag
           return item.abi === undefined
         })
-      : allTargets
+      : allTargets.filter((item) => item.os === "darwin" && item.arch === "arm64")
 if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
 if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
@@ -107,7 +107,7 @@ for (const item of targets) {
     external: ["node-gyp"],
     format: "esm",
     minify: true,
-    sourcemap: "inline",
+    sourcemap: "linked",
     splitting: true,
     compile: {
       autoloadBunfig: false,
@@ -135,6 +135,12 @@ for (const item of targets) {
     process.exit(1)
   }
   verifySimulationGraph(simulationInputs)
+
+  if (item.os === "darwin") {
+    const executable = path.join(outdir, name, "bin", binary)
+    await $`codesign --remove-signature ${executable}`
+    await $`codesign --sign - --force ${executable}`
+  }
 
   await Bun.write(
     path.join(outdir, name, "package.json"),
