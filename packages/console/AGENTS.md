@@ -2,18 +2,18 @@
 
 ## Project Structure & Module Organization
 
-- Monorepo managed with Bun/Turbo. Core CLI lives in `packages/opencode`, Solid TUI console here in `packages/console`, marketing site in `packages/web`, shared UI in `packages/ui`, infra in `infra/`, specs in `specs/`, and SDKs in `sdks/`.
-- Console app layout: `packages/console/app/` (SolidStart app), `core/` (data/business logic), `function/` (Cloudflare Workers), and `mail/` (email flows). Tests for the CLI sit under `packages/opencode/test/`.
+- Monorepo managed with Bun/Turbo. V2 runtime code lives in `packages/core`, `packages/cli`, and `packages/server`; Solid TUI console code lives here in `packages/console`, with shared UI in `packages/ui`.
+- Console app layout: `packages/console/app/` (SolidStart app), `core/` (data/business logic), `function/` (Cloudflare Workers), and `mail/` (email flows). Runtime tests live in their owning V2 packages.
 - Keep integrations (`packages/plugin`, `packages/slack`, `packages/desktop`) self-contained while reusing primitives from shared packages.
 
 ## Build, Test, and Development Commands
 
 - `bun install`: install workspace deps from `bun.lock`.
-- `bun run dev`: proxies to `packages/opencode/src/index.ts` for fast CLI iterations.
+- `cd packages/cli && bun dev`: runs the V2 CLI entrypoint.
 - `bun run typecheck`: runs `bun turbo typecheck` across all workspaces.
-- `cd packages/opencode && bun run build`: build CLI binaries via `script/build.ts`.
-- `cd packages/opencode && bun run test`: Bun test runner for CLI suites.
-- Debug console locally from `packages/opencode` with `bun dev` (CLI entry) or run SolidStart dev server from `packages/console` via your preferred workflow.
+- `cd packages/cli && bun run build:bun --single`: build the current-platform V2 CLI binary.
+- Run tests from the owning package, such as `cd packages/core && bun run test`.
+- Debug the CLI locally from `packages/cli` with `bun dev`, or run the SolidStart dev server from `packages/console`.
 
 ## Coding Style & Naming Conventions
 
@@ -23,8 +23,8 @@
 
 ## Testing Guidelines
 
-- Tests use Bun’s `describe/test/expect`. Suites mirror features; CLI coverage in `packages/opencode/test/*` with fixtures under `fixture/`, `session/`, `snapshot/`.
-- Every new command, adapter, or regression fix needs a targeted test plus fixture updates. Run `cd packages/opencode && bun run test` before pushing; add failing seed instructions when filing bugs.
+- Tests use Bun’s `describe/test/expect`. Suites and fixtures live in the V2 package that owns the feature.
+- Every new command, adapter, or regression fix needs a targeted test plus fixture updates. Run the owning package's test command before pushing.
 
 ## Commit & Pull Request Guidelines
 
