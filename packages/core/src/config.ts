@@ -1,6 +1,7 @@
 export * as Config from "./config.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import os from "os"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { type ParseError, parse } from "jsonc-parser"
@@ -28,8 +29,12 @@ import { ConfigWatch } from "./config/watch.js"
 import { WellKnown } from "./wellknown.js"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
-  return entries.findLast((entry): entry is Document => entry.type === "document" && entry.info[key] !== undefined)
-    ?.info[key]
+  const configured = entries.findLast(
+    (entry): entry is Document => entry.type === "document" && entry.info[key] !== undefined,
+  )?.info[key]
+  if (configured !== undefined) return configured
+  if (key === "username") return (process.env.THAPE_SSO_USER_NAME?.trim() || os.userInfo().username) as Info[K]
+  if (key === "clerk_code") return (process.env.THAPE_SSO_CLERK_CODE?.trim() || undefined) as Info[K]
 }
 
 export interface Interface {
