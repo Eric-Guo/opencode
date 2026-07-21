@@ -1,6 +1,10 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
+import { cp, rm } from "node:fs/promises"
+
+const SEVEN_SEVEN_DIST = "../7777/dist"
+const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -71,7 +75,11 @@ const require = __cjs_mod__.createRequire(import.meta.url);
   preload: {
     build: {
       rollupOptions: {
-        input: { index: "src/preload/index.ts" },
+        input: {
+          index: "src/preload/index.ts",
+          tabbar: "src/preload/tabbar.ts",
+          "external-tab": "src/preload/external-tab.ts",
+        },
         output: {
           format: "cjs",
           entryFileNames: "[name].js",
@@ -80,7 +88,18 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     },
   },
   renderer: {
-    plugins: [appPlugin, sentry],
+    plugins: [
+      appPlugin,
+      {
+        name: "opencode:copy-7777-renderer",
+        apply: "build",
+        async writeBundle() {
+          await rm(SEVEN_SEVEN_RENDERER_OUT, { recursive: true, force: true })
+          await cp(SEVEN_SEVEN_DIST, SEVEN_SEVEN_RENDERER_OUT, { recursive: true })
+        },
+      },
+      sentry,
+    ],
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {
@@ -88,6 +107,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       rollupOptions: {
         input: {
           main: "src/renderer/index.html",
+          tabbar: "src/renderer/tabbar.html",
         },
       },
     },
