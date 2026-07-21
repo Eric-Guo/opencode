@@ -46,7 +46,7 @@ const errorResponseLogger = HttpMiddleware.make((app) =>
   ),
 )
 
-export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
+export const start = Effect.fn("ServerProcess.start")(function* <E = never, R = never>(
   options: ServerOptions,
   lifecycle?: Lifecycle<E, R>,
   transform?: Transform,

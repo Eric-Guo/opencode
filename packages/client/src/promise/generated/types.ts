@@ -2365,6 +2365,7 @@ export type ConfigEntry =
         enterprise?: { url?: string }
         username?: string
         timezone?: string
+        clerk_code?: string
         permissions?: PermissionRuleset
         policies?: Array<{
           action:
