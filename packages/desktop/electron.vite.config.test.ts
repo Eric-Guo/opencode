@@ -39,7 +39,7 @@ test("minifies only builds, previews onboarding only in development, and ships s
       process.env.OPENCODE_CLI_TARGET = item.target
       const main = (await load("build")).config.main
       expect(main?.build?.externalizeDeps).toEqual({
-        exclude: bundled,
+        exclude: ["@opencode/core", ...bundled],
         include: [nodePtyPackage(item.target)],
       })
     }
