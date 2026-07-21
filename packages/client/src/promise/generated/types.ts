@@ -2552,6 +2552,7 @@ export type ConfigEntry =
         username?: string
         timezone?: string
         automations?: boolean
+        clerk_code?: string
         permissions?: PermissionRuleset
         policies?: Array<{
           action:
