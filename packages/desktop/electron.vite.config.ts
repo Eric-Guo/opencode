@@ -3,7 +3,7 @@ import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
 import { cp, readdir, rm } from "node:fs/promises"
 
-const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+const OPENCODE_SERVER_DIST = "../cli/dist-node"
 const SEVEN_SEVEN_DIST = "../7777/dist"
 const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
@@ -75,7 +75,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         name: "opencode:copy-server-dist",
         async writeBundle() {
           for (const file of await readdir(OPENCODE_SERVER_DIST)) {
-            await cp(`${OPENCODE_SERVER_DIST}/${file}`, `./out/main/chunks/${file}`, { force: true })
+            await cp(`${OPENCODE_SERVER_DIST}/${file}`, `./out/main/chunks/${file}`, { recursive: true, force: true })
           }
         },
       },
