@@ -1,4 +1,5 @@
 import path from "path"
+import os from "os"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
 import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream, Tracer } from "effect"
@@ -390,6 +391,12 @@ describe("Config", () => {
     ).toEqual({ share: "disabled" })
   })
 
+  it.effect("uses the Thape SSO identity as the config fallback", () =>
+    Effect.sync(() => {
+      expect(Config.latest([], "username")).toBe(process.env.THAPE_SSO_USER_NAME?.trim() || os.userInfo().username)
+      expect(Config.latest([], "clerk_code")).toBe(process.env.THAPE_SSO_CLERK_CODE?.trim() || undefined)
+    }))
+
   it.live("loads explicit file and content overrides in priority order", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
@@ -400,7 +407,7 @@ describe("Config", () => {
           await fs.mkdir(global, { recursive: true })
           await fs.mkdir(project, { recursive: true })
           await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
-          await fs.writeFile(explicit, JSON.stringify({ shell: "explicit" }))
+          await fs.writeFile(explicit, JSON.stringify({ shell: "explicit", clerk_code: "123456" }))
           await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
         }).pipe(
           Effect.andThen(
@@ -411,6 +418,7 @@ describe("Config", () => {
                 entries.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
               ).toEqual(["global", "explicit", "project", "content"])
               expect(Config.latest(entries, "shell")).toBe("content")
+              expect(Config.latest(entries, "clerk_code")).toBe("123456")
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
