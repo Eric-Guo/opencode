@@ -1,4 +1,5 @@
 import { defineConfig, type UserConfig } from "vite"
+import { Installation } from "@opencode-ai/core/installation"
 import { nodeTarget } from "./src/node/target"
 import {
   nodePrelude,
@@ -37,7 +38,7 @@ export function sidecarConfig(input: NodeBuildInput): UserConfig {
 }
 
 export default sidecarConfig({
-  version: process.env.OPENCODE_VERSION ?? "local",
+  version: process.env.OPENCODE_VERSION ?? Installation.version,
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
