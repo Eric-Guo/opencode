@@ -25,6 +25,8 @@ export type ViewDiff = {
 }
 
 const diffCacheLimit = 16
+const diffInputLimit = 256_000
+const diffEditComplexityLimit = 100_000
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
@@ -60,9 +62,10 @@ function fileDiffFromPatch(file: string, patch: string) {
     return hit
   }
 
-  const contents = completePatchContents(patch)
-  const input = contents ? undefined : patchInput(file, patch)
-  const value = contents
+  const input = patchInput(file, patch)
+  const contents = patch.length <= diffInputLimit ? completePatchContents(patch) : undefined
+  // Re-diffing full contents is synchronous and can freeze the renderer. Parsing the existing patch stays linear.
+  const value = contents && contents.additions * contents.deletions <= diffEditComplexityLimit
     ? fileDiffFromContent(file, contents.before, contents.after)
     : ((input ? parsePatchFiles(input)[0]?.files[0] : undefined) ?? emptyFileDiff(file))
   patchFileDiffCache.set(key, value)
@@ -116,7 +119,12 @@ function completePatchContents(patch: string) {
 
     const text = (lines: Array<{ text: string; newline: boolean }>) =>
       lines.map((line) => line.text + (line.newline ? "\n" : "")).join("")
-    return { before: text(before), after: text(after) }
+    return {
+      before: text(before),
+      after: text(after),
+      additions: hunk.lines.filter((line) => line.startsWith("+")).length,
+      deletions: hunk.lines.filter((line) => line.startsWith("-")).length,
+    }
   } catch {
     return
   }
