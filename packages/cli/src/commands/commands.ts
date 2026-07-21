@@ -139,6 +139,12 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             ),
           },
         }),
+        Spec.make("agent", {
+          description: "Show an agent's tool permissions and MCP status",
+          params: {
+            name: Argument.string("name").pipe(Argument.withDescription("Agent ID")),
+          },
+        }),
       ],
     }),
     Spec.make("auth", {
