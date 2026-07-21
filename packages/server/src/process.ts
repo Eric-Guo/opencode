@@ -38,7 +38,7 @@ const errorResponseLogger = HttpMiddleware.make((app) =>
   ),
 )
 
-export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
+export const start = Effect.fn("ServerProcess.start")(function* <E = never, R = never>(
   options: ServerOptions,
   lifecycle?: Lifecycle<E, R>,
   transform?: Transform,
@@ -55,7 +55,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   yield* bound.http
     .serve(
       dispatch(password, status, application, options.app?.version ?? "unknown").pipe(
-        HttpMiddleware.cors({ allowedOrigins: isAllowedCorsOrigin, maxAge: 86_400 }),
+        HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
       errorResponseLogger,
     )
