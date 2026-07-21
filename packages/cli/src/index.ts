@@ -6,7 +6,7 @@ import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
 import { Observability } from "@opencode-ai/util/observability"
 import { Updater } from "./services/updater"
-import { OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "./version"
+import { Installation } from "@opencode-ai/core/installation"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
@@ -79,12 +79,12 @@ Effect.gen(function* () {
   )
   yield* Effect.promise(() => ensureSsoUsername())
   yield* Effect.logInfo("cli starting", {
-    version: OPENCODE_VERSION,
-    channel: OPENCODE_CHANNEL,
-    local: OPENCODE_LOCAL,
+    version: Installation.version,
+    channel: Installation.channel,
+    local: Installation.local,
     args: process.argv.slice(2),
   })
-  return yield* Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })
+  return yield* Runtime.run(Commands, Handlers, { version: Installation.version })
 }).pipe(
   Effect.catchCause((cause) =>
     Effect.logError("cli process failed", {
@@ -105,8 +105,8 @@ Effect.gen(function* () {
       endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
       headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
       client: process.env.OPENCODE_CLIENT ?? "cli",
-      version: OPENCODE_VERSION,
-      channel: OPENCODE_CHANNEL,
+      version: Installation.version,
+      channel: Installation.channel,
     }),
   ),
   Effect.provide(NodeServices.layer),
