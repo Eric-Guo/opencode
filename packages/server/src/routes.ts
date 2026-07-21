@@ -44,6 +44,7 @@ import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
 import { modalWorkspaceDriver, provider as modalProvider } from "./workspace/modal-workspace"
+import { CorsConfig } from "./cors"
 
 const applicationServices = LayerNode.group([
   Global.node,
@@ -148,6 +149,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(authorizationLayer),
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
+        Layer.provide(Layer.succeed(CorsConfig, options)),
         HttpRouter.provideRequest(requestServices),
         Layer.provideMerge(services),
         Layer.provideMerge(HttpRouter.layer),
