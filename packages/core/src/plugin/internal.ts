@@ -88,6 +88,8 @@ import { VariantPlugin } from "./variant.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
+import { CybrosTrace } from "./cybros.js"
+import { SessionStore } from "../session/store.js"
 
 const services = Effect.fn("PluginInternal.services")(function* () {
   const agent = yield* Agent.Service
@@ -123,6 +125,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const ripgrep = yield* Ripgrep.Service
   const compaction = yield* SessionCompaction.Service
   const instructions = yield* SessionInstructions.Service
+  const sessions = yield* SessionStore.Service
   const shell = yield* Shell.Service
   const shellSelect = yield* ShellSelect.Service
   const snapshot = yield* Snapshot.Service
@@ -166,6 +169,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Ripgrep.Service, ripgrep),
     Context.make(SessionCompaction.Service, compaction),
     Context.make(SessionInstructions.Service, instructions),
+    Context.make(SessionStore.Service, sessions),
     Context.make(Shell.Service, shell),
     Context.make(ShellSelect.Service, shellSelect),
     Context.make(Snapshot.Service, snapshot),
@@ -216,6 +220,7 @@ export const requirements = LayerNode.group([
   Ripgrep.node,
   SessionCompaction.node,
   SessionInstructions.node,
+  SessionStore.node,
   Shell.node,
   ShellSelect.node,
   Snapshot.node,
@@ -241,6 +246,7 @@ const pre = [
   VcsHgPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
+  CybrosTrace.Plugin,
   ...ProviderPlugins,
   ...WebSearchPlugins,
   PatchTool.Plugin,
