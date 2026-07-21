@@ -86,11 +86,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     build: {
       minify: command === "build",
       rolldownOptions: {
-        input: {
-          index: "src/preload/index.ts",
-          tabbar: "src/preload/tabbar.ts",
-          "external-tab": "src/preload/external-tab.ts",
-        },
+        input: { index: "src/preload/index.ts" },
         output: {
           format: "cjs",
           entryFileNames: "[name].js",
@@ -127,7 +123,6 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       rolldownOptions: {
         input: {
           main: "src/renderer/index.html",
-          tabbar: "src/renderer/tabbar.html",
         },
       },
     },
