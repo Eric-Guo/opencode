@@ -11,6 +11,7 @@ import pkg from "../package.json"
 import { modelsData } from "./generate"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
 import { mainConfig } from "../vite.node.config"
+import { sidecarConfig } from "../vite.sidecar.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 
 const NODE_VERSION = "26.4.0"
@@ -64,6 +65,8 @@ for (const target of targets) {
   const input = { version: Script.version, channel: Script.channel, models: modelsData, assetHash, target }
   await copyNodeAssets(assets)
   await build(mainConfig(input))
+  await build(sidecarConfig(input))
+  await writeFile("dist-node/models-dev-api.json", modelsData)
 
   const host = target.platform === process.platform && target.arch === process.arch
   if (host) {

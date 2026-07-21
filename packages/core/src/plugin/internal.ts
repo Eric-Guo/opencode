@@ -69,6 +69,8 @@ import { SystemPromptPlugin } from "./system-prompt"
 import { VariantPlugin } from "./variant"
 import { WarmingPlugin } from "./warming"
 import { WellKnownPlugin } from "../wellknown/plugin"
+import { CybrosTrace } from "./cybros"
+import { SessionStore } from "../session/store"
 
 const services = Effect.fn("PluginInternal.services")(function* () {
   const agent = yield* Agent.Service
@@ -100,6 +102,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const websearch = yield* WebSearch.Service
   const ripgrep = yield* Ripgrep.Service
   const instructions = yield* SessionInstructions.Service
+  const sessions = yield* SessionStore.Service
   const shell = yield* Shell.Service
   const skill = yield* Skill.Service
   const skillDiscovery = yield* SkillDiscovery.Service
@@ -136,6 +139,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(WebSearch.Service, websearch),
     Context.make(Ripgrep.Service, ripgrep),
     Context.make(SessionInstructions.Service, instructions),
+    Context.make(SessionStore.Service, sessions),
     Context.make(Shell.Service, shell),
     Context.make(Skill.Service, skill),
     Context.make(SkillDiscovery.Service, skillDiscovery),
@@ -179,6 +183,7 @@ export const requirements = LayerNode.group([
   WebSearch.node,
   Ripgrep.node,
   SessionInstructions.node,
+  SessionStore.node,
   Shell.node,
   Skill.node,
   SkillDiscovery.node,
@@ -196,6 +201,7 @@ const pre = [
   SkillPlugin.Plugin,
   ...SystemPromptPlugin.Plugins,
   ModelsDevPlugin,
+  CybrosTrace.Plugin,
   ...ProviderPlugins,
   ...WebSearchPlugins,
   PatchTool.Plugin,
