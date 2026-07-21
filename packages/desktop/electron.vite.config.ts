@@ -1,9 +1,9 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
-import { cp, rm } from "node:fs/promises"
+import { cp, readdir, rm } from "node:fs/promises"
 
-const OPENCODE_SERVER_DIST = "../cli/dist-node"
+const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 const SEVEN_SEVEN_DIST = "../7777/dist"
 const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
@@ -74,8 +74,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       {
         name: "opencode:copy-server-dist",
         async writeBundle() {
-          await cp(`${OPENCODE_SERVER_DIST}/sidecar.mjs`, "./out/main/chunks/sidecar.mjs", { force: true })
-          await cp(`${OPENCODE_SERVER_DIST}/assets`, "./out/main/chunks/assets", { recursive: true, force: true })
+          for (const file of await readdir(OPENCODE_SERVER_DIST)) {
+            await cp(`${OPENCODE_SERVER_DIST}/${file}`, `./out/main/chunks/${file}`, { force: true })
+          }
         },
       },
     ],
