@@ -36,10 +36,9 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
 }
 
 function unwrapNamedError(error: unknown): unknown {
-  if (error instanceof Error && error.cause && typeof error.cause === "object" && "body" in error.cause) {
-    return (error.cause as Record<string, unknown>).body
-  }
-  return error
+  if (!(error instanceof Error) || !error.cause || typeof error.cause !== "object") return error
+  if ("body" in error.cause) return (error.cause as Record<string, unknown>).body
+  return error.cause
 }
 
 // Client-synthesized session not-found errors share one constructor and
@@ -60,7 +59,9 @@ export function isSessionNotFoundError(error: unknown, sessionID: string) {
   const unwrapped = unwrapNamedError(error)
   if (typeof unwrapped !== "object" || unwrapped === null) return false
   const value = unwrapped as Record<string, unknown>
-  return value._tag === "SessionNotFoundError" && value.sessionID === sessionID
+  if (value._tag === "SessionNotFoundError" && value.sessionID === sessionID) return true
+  if (value.name !== "NotFoundError" || typeof value.data !== "object" || value.data === null) return false
+  return (value.data as Record<string, unknown>).message === sessionNotFoundMessage(sessionID)
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
