@@ -31,20 +31,19 @@ bun turbo typecheck
 # Build all packages
 bun turbo build
 # Or build single package
-cd packages/opencode && bun build
+cd packages/cli && bun run build:bun --single
 
 # Run all tests
 bun test
 # Run a specific test file
-bun test packages/opencode/test/tool/tool.test.ts
-bun test packages/opencode/test/session/session.test.ts
+cd packages/core && bun test
 ```
 
 ### Package-Specific Development
 
 ```bash
 # Core CLI and AI agent logic
-cd packages/opencode && bun dev
+cd packages/cli && bun dev
 
 # Web console (SolidStart app)
 cd packages/console/app && bun dev
@@ -60,13 +59,11 @@ cd packages/web && bun dev
 
 ### Monorepo Structure
 
-- **packages/opencode**: Core CLI application, server, and AI agent logic
-  - `src/cli/`: CLI commands (run, generate, auth, agent, serve, debug, etc.)
-  - `src/server/`: Server endpoints (when modified, requires SDK regeneration)
-  - `src/tui/`: Terminal UI code (SolidJS with OpenTUI)
-  - `src/tool/`: Tool implementations for AI agent
-  - `src/session/`: Session management
-  - `test/`: Unit tests using Bun test
+- **packages/core**: Core AI agent, tools, configuration, and session logic
+- **packages/cli**: CLI commands and process entrypoints
+- **packages/server**: HTTP API implementation
+- **packages/protocol**: Public API definitions
+- **packages/tui**: Terminal UI code (SolidJS with OpenTUI)
 
 - **packages/console**: Web-based console for managing projects
   - `app/`: SolidStart application
@@ -113,7 +110,7 @@ The terminal UI can run locally while being controlled remotely. The Go TUI comm
 ### Error Handling
 
 - Use `Result` patterns and avoid throwing exceptions in tools
-- When modifying server endpoints in `packages/opencode/src/server/server.ts`, regenerate the client SDK
+- When modifying the public Protocol or Server `HttpApi`, regenerate the client from `packages/client`
 
 ### Validation
 
@@ -122,7 +119,7 @@ The terminal UI can run locally while being controlled remotely. The Go TUI comm
 
 ### Testing
 
-- Unit tests located in `packages/opencode/test/`
+- Unit tests live in the V2 package that owns the implementation
 - Test files follow the pattern `*.test.ts`
 - Run tests with `bun test` from package directories
 - Key test areas: snapshot testing, utilities, configuration, file operations
@@ -139,10 +136,10 @@ The terminal UI can run locally while being controlled remotely. The Go TUI comm
 
 ### SDK Regeneration
 
-After touching `packages/opencode/src/server/server.ts`, run:
+After changing the public Protocol or Server `HttpApi`, run:
 
 ```bash
-./packages/sdk/js/script/build.ts
+cd packages/client && bun run generate
 ```
 
 This regenerates the JavaScript SDK for client-server communication.
@@ -156,7 +153,7 @@ The project supports Model Context Protocol (MCP) servers configured in `.openco
 
 ## Available CLI Commands
 
-The OpenCode CLI includes these commands (see `packages/opencode/src/index.ts`):
+The OpenCode V2 CLI commands are defined under `packages/cli/src/commands`:
 
 - `acp`: Agent Control Protocol
 - `mcp`: Model Context Protocol management
