@@ -230,6 +230,7 @@ export function normalize(input: unknown): Result {
     username: Info.fields.username,
     timezone: Info.fields.timezone,
     automations: Info.fields.automations,
+    clerk_code: Info.fields.clerk_code,
     snapshots: Info.fields.snapshots,
     media: Info.fields.media,
     tool_output: Info.fields.tool_output,
