@@ -12,7 +12,10 @@ import { Npm } from "@opencode-ai/util/npm"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
 
-export default Runtime.handler(Commands, (input) =>
+export const runDefault = (
+  input: Runtime.Input<typeof Commands>,
+  options: { readonly standaloneCommand?: ReadonlyArray<string> } = {},
+) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
@@ -23,6 +26,7 @@ export default Runtime.handler(Commands, (input) =>
       server: requestedServer,
       standalone: input.standalone,
       mismatch: "replace",
+      standaloneCommand: options.standaloneCommand,
       onStart: (reason, previousVersion) => {
         if (reason === "version-mismatch" && preflight.begin(previousVersion)) return
         process.stderr.write(
@@ -91,5 +95,6 @@ export default Runtime.handler(Commands, (input) =>
         runFork(effect)
       },
     }).pipe(Effect.provide(LayerNode.compile(Global.node)))
-  }),
-)
+  })
+
+export default Runtime.handler(Commands, runDefault)
