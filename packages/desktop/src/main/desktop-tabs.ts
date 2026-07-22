@@ -12,6 +12,7 @@ type DesktopTabBase = DesktopTabInitialization & {
   id: string
   title: string
   label: string
+  skipDisplay: boolean
   releaseWhenLostFocus?: boolean
   systemControlColor?: string
 }
@@ -58,6 +59,7 @@ export function loadDesktopTabs() {
 function parseDesktopTab(value: unknown, index: number, source: string): DesktopTab {
   if (!isRecord(value)) throw invalidTab(index, source)
   if (!isString(value.id) || !isString(value.title) || !isString(value.label)) throw invalidTab(index, source)
+  if (value.skipDisplay !== undefined && typeof value.skipDisplay !== "boolean") throw invalidTab(index, source)
   if (value.releaseWhenLostFocus !== undefined && typeof value.releaseWhenLostFocus !== "boolean") {
     throw invalidTab(index, source)
   }
@@ -76,6 +78,7 @@ function parseDesktopTab(value: unknown, index: number, source: string): Desktop
     id: value.id,
     title: value.title,
     label: value.label,
+    skipDisplay: value.skipDisplay ?? false,
     ...(value.localAgent === undefined ? {} : { localAgent: value.localAgent }),
     ...(value.welcomeText === undefined ? {} : { welcomeText: value.welcomeText }),
     ...(value.suggestedQuestions === undefined ? {} : { suggestedQuestions: value.suggestedQuestions }),
