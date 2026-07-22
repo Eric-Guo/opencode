@@ -294,18 +294,52 @@ it.instance("loads config with defaults when no files exist", () =>
   }),
 )
 
-it.instance("falls back to generic username when system user info is unavailable", () =>
-  Effect.gen(function* () {
-    const userInfo = spyOn(os, "userInfo").mockImplementation(() => {
-      throw Object.assign(new Error("missing passwd entry"), { code: "ENOENT" })
-    })
-    try {
+it.instance("uses the SSO identity when config does not override it", () =>
+  withProcessEnvs(
+    {
+      THAPE_SSO_USER_NAME: "  Test User  ",
+      THAPE_SSO_CLERK_CODE: "  123456  ",
+    },
+    Effect.gen(function* () {
       const config = yield* Config.use.get()
-      expect(config.username).toBe("user")
-    } finally {
-      userInfo.mockRestore()
-    }
-  }),
+      expect(config.username).toBe("Test User")
+      expect(config.clerk_code).toBe("123456")
+    }),
+  ),
+)
+
+it.instance(
+  "prefers the configured identity over SSO",
+  withProcessEnvs(
+    {
+      THAPE_SSO_USER_NAME: "SSO User",
+      THAPE_SSO_CLERK_CODE: "123456",
+    },
+    Effect.gen(function* () {
+      const config = yield* Config.use.get()
+      expect(config.username).toBe("Configured User")
+      expect(config.clerk_code).toBe("654321")
+    }),
+  ),
+  { config: { username: "Configured User", clerk_code: "654321" } },
+)
+
+it.instance("falls back to generic username when system user info is unavailable", () =>
+  withProcessEnv(
+    "THAPE_SSO_USER_NAME",
+    undefined,
+    Effect.gen(function* () {
+      const userInfo = spyOn(os, "userInfo").mockImplementation(() => {
+        throw Object.assign(new Error("missing passwd entry"), { code: "ENOENT" })
+      })
+      try {
+        const config = yield* Config.use.get()
+        expect(config.username).toBe("user")
+      } finally {
+        userInfo.mockRestore()
+      }
+    }),
+  ),
 )
 
 it.effect("creates global jsonc config with schema when no global configs exist", () =>
