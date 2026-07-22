@@ -9,6 +9,7 @@ import { Standalone } from "./standalone"
 export type Args = {
   readonly server?: string
   readonly standalone?: boolean
+  readonly standaloneCommand?: ReadonlyArray<string>
   readonly mismatch?: "replace" | "ignore" | "error"
   readonly onStart?: EnsureOptions["onStart"]
 }
@@ -19,7 +20,7 @@ export type Resolved = {
 }
 
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args) {
-  if (args.server !== undefined && args.standalone)
+  if (args.server !== undefined && (args.standalone || args.standaloneCommand !== undefined))
     return yield* Effect.fail(new Error("--server and --standalone cannot be combined"))
   if (args.server !== undefined) {
     const password = yield* Env.password
@@ -38,8 +39,8 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
       )
     return { endpoint } satisfies Resolved
   }
-  if (args.standalone) {
-    return { endpoint: yield* Standalone.start() } satisfies Resolved
+  if (args.standalone || args.standaloneCommand !== undefined) {
+    return { endpoint: yield* Standalone.start({ command: args.standaloneCommand }) } satisfies Resolved
   }
 
   const options = yield* ServiceConfig.options()
