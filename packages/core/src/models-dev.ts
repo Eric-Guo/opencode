@@ -540,6 +540,7 @@ export const Options = Schema.Struct({
   url: Schema.optional(Schema.String),
   file: Schema.optional(Schema.String),
   fetch: Schema.optional(Schema.Boolean),
+  bundledOnly: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -551,7 +552,7 @@ export const layer = (options?: Options) =>
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const bus = yield* Bus.Service
-      const app = yield* App.Metadata
+    const app = yield* App.Metadata
     const http = HttpClient.filterStatusOk(
       (yield* HttpClient.HttpClient).pipe(
         HttpClient.retryTransient({
@@ -564,7 +565,8 @@ export const layer = (options?: Options) =>
 
     const source = options?.url || "https://models.dev"
     const fetch = options?.fetch ?? true
-      const userAgent = App.useragent(app)
+    const bundledOnly = options?.bundledOnly ?? false
+    const userAgent = App.useragent(app)
     const filepath = path.join(
       Global.Path.cache,
       source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
@@ -618,6 +620,10 @@ export const layer = (options?: Options) =>
     })
 
     const populate = Effect.gen(function* () {
+      if (bundledOnly) {
+        const bundled = yield* loadSnapshot
+        return bundled ? normalize(bundled) : []
+      }
       const fromDisk = yield* loadFromDisk
       if (fromDisk) return normalize(fromDisk)
       const bundled = yield* loadSnapshot
@@ -638,6 +644,7 @@ export const layer = (options?: Options) =>
     const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
     const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+      if (bundledOnly) return
       if (!force && (yield* fresh())) return
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -655,7 +662,7 @@ export const layer = (options?: Options) =>
       )
     })
 
-    if (fetch && !process.argv.includes("--get-yargs-completions")) {
+    if (fetch && !bundledOnly && !process.argv.includes("--get-yargs-completions")) {
       // Schedule.spaced runs the effect once, then waits between completions.
       yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced(ttl)), Effect.ignore))
     }
