@@ -523,6 +523,7 @@ describe("acp event behavior", () => {
       "user_message_chunk",
       "agent_message_chunk",
       "agent_thought_chunk",
+      "agent_message_chunk",
       "tool_call",
       "tool_call_update",
       "tool_call",
@@ -542,7 +543,15 @@ describe("acp event behavior", () => {
     expect(updates[2]?.update).toMatchObject({
       content: { type: "resource", resource: { mimeType: "text/plain", text: "hello" } },
     })
-    expect(updates[6]?.update).toMatchObject({
+    expect(updates[5]?.update).toMatchObject({
+      content: {
+        type: "resource_link",
+        uri: "file:///workspace/report.txt",
+        name: "report.txt",
+        mimeType: "text/plain",
+      },
+    })
+    expect(updates[7]?.update).toMatchObject({
       toolCallId: "call_done",
       status: "completed",
       content: [
@@ -551,13 +560,13 @@ describe("acp event behavior", () => {
       ],
       rawOutput: { metadata: { exit: 0 } },
     })
-    expect(updates[8]?.update).toMatchObject({
+    expect(updates[9]?.update).toMatchObject({
       toolCallId: "call_running",
       status: "in_progress",
       title: "pwd",
       locations: [{ path: "/workspace" }],
     })
-    expect(updates[10]?.update).toMatchObject({
+    expect(updates[11]?.update).toMatchObject({
       toolCallId: "call_failed",
       status: "failed",
       content: [
@@ -795,6 +804,13 @@ function replayFixtureMessages(): SessionMessageInfo[] {
       content: [
         { type: "text", text: "answer" },
         { type: "reasoning", text: "thinking" },
+        {
+          type: "file",
+          id: "generated-report",
+          mime: "text/plain",
+          filename: "report.txt",
+          url: "file:///workspace/report.txt",
+        },
         {
           type: "tool",
           id: "call_done",
