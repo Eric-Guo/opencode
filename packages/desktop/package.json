@@ -28,7 +28,8 @@
     "electron-log": "^5",
     "electron-store": "11.0.2",
     "electron-updater": "6.8.9",
-    "electron-window-state": "^5.0.3"
+    "electron-window-state": "^5.0.3",
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "@brendonovich/vite-plugin-opencode": "0.1.1",
