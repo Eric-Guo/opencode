@@ -630,6 +630,7 @@ function createDesktopTabManager(
     }
     if (action === "help") {
       void shell.openExternal(helpURL)
+      return
     }
   }
 
