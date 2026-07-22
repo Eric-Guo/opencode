@@ -564,12 +564,21 @@ const layer = Layer.effect(
         }
 
         if (!result.username) {
-          try {
-            result.username = os.userInfo().username || "user"
-          } catch (err) {
-            yield* Effect.logWarning("failed to read system username, using fallback", { err })
-            result.username = "user"
+          const username = process.env.THAPE_SSO_USER_NAME?.trim()
+          if (username) result.username = username
+          if (!username) {
+            try {
+              result.username = os.userInfo().username || "user"
+            } catch (err) {
+              yield* Effect.logWarning("failed to read system username, using fallback", { err })
+              result.username = "user"
+            }
           }
+        }
+
+        if (!result.clerk_code) {
+          const clerk = process.env.THAPE_SSO_CLERK_CODE?.trim()
+          if (clerk) result.clerk_code = clerk
         }
 
         if (result.autoshare === true && !result.share) {
