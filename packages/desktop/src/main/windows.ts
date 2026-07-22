@@ -108,6 +108,7 @@ type DesktopTabsState = {
     id: DesktopTabID
     title: string
     label: string
+    skipDisplay: boolean
   }[]
   navigation: {
     canGoBack: boolean
@@ -532,6 +533,7 @@ function createDesktopTabManager(
         id: tab.id,
         title: tab.title,
         label: tab.label,
+        skipDisplay: tab.skipDisplay,
       })),
       navigation: {
         canGoBack: contents.navigationHistory.canGoBack(),
