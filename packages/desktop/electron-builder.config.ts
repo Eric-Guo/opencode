@@ -96,10 +96,6 @@ const getBase = (appId: string): Configuration => ({
       from: "out/generated/app-update.yml",
       to: "app-update.yml",
     },
-    {
-      from: "../opencode/dist/node/models-dev-api.json",
-      to: "models-dev/api.json",
-    },
   ],
   mac: {
     category: "public.app-category.developer-tools",

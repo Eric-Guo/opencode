@@ -62,10 +62,6 @@ function packagedConfigDir() {
   return join(dirname(fileURLToPath(import.meta.url)), "../../resources/thape-config")
 }
 
-function packagedModelsPath() {
-  return join(process.resourcesPath, "models-dev", "api.json")
-}
-
 export async function spawnLocalServer(
   hostname: string,
   port: number,
@@ -253,10 +249,13 @@ function createSidecarEnv(): Record<string, string> {
   delete env.DEBUG
   if (process.platform === "linux") delete env.LD_PRELOAD
   if (!app.isPackaged) env.OPENCODE_DISABLE_CHANNEL_DB = "1"
-  if (app.isPackaged && !env.OPENCODE_MODELS_PATH && !env.OPENCODE_MODELS_URL) {
-    env.OPENCODE_MODELS_PATH = packagedModelsPath()
+  if (app.isPackaged) {
+    delete env.OPENCODE_MODELS_PATH
+    delete env.OPENCODE_MODELS_URL
+    env.OPENCODE_MODELS_BUNDLED_ONLY = "1"
+    env.OPENCODE_DISABLE_MODELS_FETCH = "1"
   }
-  if (!env.OPENCODE_MODELS_URL && !env.OPENCODE_DISABLE_MODELS_FETCH) {
+  if (!app.isPackaged && !env.OPENCODE_MODELS_URL && !env.OPENCODE_DISABLE_MODELS_FETCH) {
     env.OPENCODE_DISABLE_MODELS_FETCH = "1"
   }
   return env
