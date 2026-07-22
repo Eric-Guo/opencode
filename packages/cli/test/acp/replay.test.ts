@@ -3,7 +3,7 @@ import type { SessionMessage } from "@opencode/schema/session-message"
 import { assistantMessage, makeSession, rpcError, startWire } from "./wire-fixture"
 
 describe("acp session replay over the wire", () => {
-  test("replays user, text, reasoning, and tool messages in order on session/load", async () => {
+  test("replays user, text, reasoning, file, and tool messages in order on session/load", async () => {
     await using acp = await startWire()
     acp.server.sessions.set("ses_replay", makeSession("ses_replay"))
     acp.server.messages.set("ses_replay", replayFixtureMessages())
@@ -19,6 +19,7 @@ describe("acp session replay over the wire", () => {
       "user_message_chunk",
       "agent_message_chunk",
       "agent_thought_chunk",
+      "agent_message_chunk",
       "tool_call",
       "tool_call_update",
       "tool_call",
@@ -34,7 +35,15 @@ describe("acp session replay over the wire", () => {
       content: { type: "resource", resource: { mimeType: "text/plain", text: "hello" } },
     })
     expect(updates[4]?.update).toMatchObject({ messageId: "msg_assistant:reasoning:0" })
-    expect(updates[6]?.update).toMatchObject({
+    expect(updates[5]?.update).toMatchObject({
+      content: {
+        type: "resource_link",
+        uri: "file:///workspace/report.txt",
+        name: "report.txt",
+        mimeType: "text/plain",
+      },
+    })
+    expect(updates[7]?.update).toMatchObject({
       toolCallId: "call_done",
       status: "completed",
       content: [
@@ -43,13 +52,13 @@ describe("acp session replay over the wire", () => {
       ],
       rawOutput: { metadata: { exit: 0 } },
     })
-    expect(updates[8]?.update).toMatchObject({
+    expect(updates[9]?.update).toMatchObject({
       toolCallId: "call_running",
       status: "in_progress",
       title: "pwd",
       locations: [{ path: "/workspace" }],
     })
-    expect(updates[10]?.update).toMatchObject({
+    expect(updates[11]?.update).toMatchObject({
       toolCallId: "call_failed",
       status: "failed",
       content: [
@@ -57,7 +66,7 @@ describe("acp session replay over the wire", () => {
         { type: "content", content: { type: "text", text: "failed hard" } },
       ],
     })
-    expect(updates[11]?.update).toMatchObject({ toolCallId: "call_streaming", status: "pending", rawInput: {} })
+    expect(updates[12]?.update).toMatchObject({ toolCallId: "call_streaming", status: "pending", rawInput: {} })
   })
 
   test("fails the load and detaches when a message page does not decode", async () => {
@@ -120,6 +129,13 @@ function replayFixtureMessages(): Array<typeof SessionMessage.Info.Encoded> {
       content: [
         { type: "text", text: "answer" },
         { type: "reasoning", text: "thinking" },
+        {
+          type: "file",
+          id: "generated-report",
+          mime: "text/plain",
+          filename: "report.txt",
+          url: "file:///workspace/report.txt",
+        },
         {
           type: "tool",
           id: "call_done",
