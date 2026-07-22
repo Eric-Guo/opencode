@@ -149,7 +149,7 @@
 
       function render() {
         tabs.replaceChildren(
-          ...state.tabs.map((tab) => {
+          ...state.tabs.filter((tab) => !tab.skipDisplay).map((tab) => {
             const button = document.createElement("button")
             button.type = "button"
             button.textContent = tab.label
