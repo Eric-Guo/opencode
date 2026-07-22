@@ -18,7 +18,10 @@ import { errorMessage } from "../../util/error"
 
 export const runDefault = (
   input: Runtime.Input<typeof Commands>,
-  options: { readonly standaloneCommand?: ReadonlyArray<string> } = {},
+  options: {
+    readonly autoUpdate?: boolean
+    readonly standaloneCommand?: ReadonlyArray<string>
+  } = {},
 ) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
@@ -70,24 +73,26 @@ export const runDefault = (
     const resultListeners = new Set<(result: Updater.RunResult) => void>()
     // Background checks, `/update` lookups, and manual installs take turns so two installs never overlap.
     const checking = yield* Semaphore.make(1)
-    yield* updater
-      .run((version) => {
-        installing = version
-        installListeners.forEach((notify) => notify(version))
-      })
-      .pipe(
-        Effect.ensuring(Effect.sync(() => (installing = undefined))),
-        Effect.tap((result) =>
-          Effect.sync(() => {
-            if (!result || (result.type === latest?.type && result.version === latest.version)) return
-            latest = result
-            resultListeners.forEach((notify) => notify(result))
-          }),
-        ),
-        checking.withPermits(1),
-        Effect.repeat(Schedule.spaced("10 minutes")),
-        Effect.forkScoped({ startImmediately: true }),
-      )
+    if (options.autoUpdate !== false) {
+      yield* updater
+        .run((version) => {
+          installing = version
+          installListeners.forEach((notify) => notify(version))
+        })
+        .pipe(
+          Effect.ensuring(Effect.sync(() => (installing = undefined))),
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              if (!result || (result.type === latest?.type && result.version === latest.version)) return
+              latest = result
+              resultListeners.forEach((notify) => notify(result))
+            }),
+          ),
+          checking.withPermits(1),
+          Effect.repeat(Schedule.spaced("10 minutes")),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+    }
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -124,22 +129,25 @@ export const runDefault = (
         get: () => runPromise(config.get()),
         update: (update) => runPromise(config.update(update)),
       },
-      updater: {
-        remote: requestedServer !== undefined,
-        subscribe: (notify) => {
-          if (latest) notify(latest)
-          resultListeners.add(notify)
-          return () => resultListeners.delete(notify)
-        },
-        check: (signal, notify) => {
-          if (installing) notify(installing)
-          installListeners.add(notify)
-          return runPromise(checking.withPermits(1)(updater.check()), { signal }).finally(() =>
-            installListeners.delete(notify),
-          )
-        },
-        apply: (version) => runPromise(checking.withPermits(1)(updater.apply(version))),
-      },
+      updater:
+        options.autoUpdate === false
+          ? undefined
+          : {
+              remote: requestedServer !== undefined,
+              subscribe: (notify) => {
+                if (latest) notify(latest)
+                resultListeners.add(notify)
+                return () => resultListeners.delete(notify)
+              },
+              check: (signal, notify) => {
+                if (installing) notify(installing)
+                installListeners.add(notify)
+                return runPromise(checking.withPermits(1)(updater.check()), { signal }).finally(() =>
+                  installListeners.delete(notify),
+                )
+              },
+              apply: (version) => runPromise(checking.withPermits(1)(updater.apply(version))),
+            },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },
