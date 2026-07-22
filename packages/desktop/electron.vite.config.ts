@@ -75,6 +75,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         name: "opencode:copy-server-dist",
         async writeBundle() {
           for (const file of await readdir(OPENCODE_SERVER_DIST)) {
+            if (file === "models-dev-api.json") continue
             await cp(`${OPENCODE_SERVER_DIST}/${file}`, `./out/main/chunks/${file}`, { recursive: true, force: true })
           }
         },
