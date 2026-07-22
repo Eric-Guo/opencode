@@ -1,8 +1,9 @@
 import { NodeServices } from "@effect/platform-node"
-import { LayerNode } from "@opencode/core/effect/layer-node"
-import { Global } from "@opencode/core/global"
-import { Npm } from "@opencode/core/npm"
-import { AppProcess } from "@opencode/core/process"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
+import { Global } from "@opencode/util/global"
+import { Npm } from "@opencode/util/npm"
+import { AppProcess } from "@opencode/util/process"
 import { Effect, Option } from "effect"
 import path from "node:path"
 import { runDefault } from "./commands/handlers/default"
@@ -26,6 +27,7 @@ export function runV1TuiBridge(input: V1TuiCommandInput) {
         directory: directory === undefined ? Option.none() : Option.some(directory),
         continue: input.continue ?? false,
         session: input.session === undefined ? Option.none() : Option.some(input.session),
+        prompt: Option.none(),
         server: Option.none(),
         standalone: true,
         auto: false,
@@ -37,9 +39,9 @@ export function runV1TuiBridge(input: V1TuiCommandInput) {
       Effect.provide(Config.layer),
       Effect.provide(Updater.layer),
       Effect.provide(
-        LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node]), [
-          [Global.node, Global.layerWith({ config: configDirectory() })],
-        ]),
+        LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node, EffectFlock.node]), {
+          replacements: [Global.node.replace(Global.layerWith({ config: configDirectory() }))],
+        }),
       ),
       Effect.provide(NodeServices.layer),
       Effect.scoped,
