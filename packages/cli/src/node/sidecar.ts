@@ -64,9 +64,9 @@ export const Server = {
       }),
     ).pipe(
       Effect.provide(
-        LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), [
-          [Global.node, Global.layerWith({ config: configDirectory() })],
-        ]),
+        LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
+          replacements: [Global.node.replace(Global.layerWith({ config: configDirectory() }))],
+        }),
       ),
       Effect.provide(NodeServices.layer),
     )
