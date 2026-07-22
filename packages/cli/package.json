@@ -12,7 +12,8 @@
   ],
   "exports": {
     "./run": "./src/run/index.ts",
-    "./server-process": "./src/server-process.ts"
+    "./server-process": "./src/server-process.ts",
+    "./tui": "./src/tui.ts"
   },
   "scripts": {
     "build:bun": "bun run script/build.ts",
