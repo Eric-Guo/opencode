@@ -11,7 +11,10 @@ import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode-ai/util/npm"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 
-export default Runtime.handler(Commands, (input) =>
+export const runDefault = (
+  input: Runtime.Input<typeof Commands>,
+  options: { readonly standaloneCommand?: ReadonlyArray<string> } = {},
+) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
@@ -22,6 +25,7 @@ export default Runtime.handler(Commands, (input) =>
     const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
+      standaloneCommand: options.standaloneCommand,
       onStart: (reason, previousVersion) => {
         if (reason === "version-mismatch" && preflight.begin(previousVersion)) return
         process.stderr.write(
@@ -87,5 +91,6 @@ export default Runtime.handler(Commands, (input) =>
         runFork(effect)
       },
     }).pipe(Effect.provide(LayerNode.compile(Global.node)))
-  }),
-)
+  })
+
+export default Runtime.handler(Commands, runDefault)
