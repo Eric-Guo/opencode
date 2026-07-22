@@ -32,7 +32,7 @@ export function runV1TuiBridge(input: V1TuiCommandInput) {
         yolo: false,
         dangerouslySkipPermissions: false,
       },
-      { standaloneCommand: input.standaloneCommand },
+      { autoUpdate: false, standaloneCommand: input.standaloneCommand },
     ).pipe(
       Effect.provide(Config.layer),
       Effect.provide(Updater.layer),
