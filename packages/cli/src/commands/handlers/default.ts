@@ -13,7 +13,10 @@ import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 
 export const runDefault = (
   input: Runtime.Input<typeof Commands>,
-  options: { readonly standaloneCommand?: ReadonlyArray<string> } = {},
+  options: {
+    readonly autoUpdate?: boolean
+    readonly standaloneCommand?: ReadonlyArray<string>
+  } = {},
 ) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
@@ -39,7 +42,7 @@ export const runDefault = (
       ),
     )
     const updater = yield* Updater.Service
-    yield* updater.check().pipe(Effect.forkScoped)
+    if (options.autoUpdate !== false) yield* updater.check().pipe(Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
