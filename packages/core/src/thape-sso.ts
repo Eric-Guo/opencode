@@ -1,5 +1,5 @@
 import { Effect, ManagedRuntime } from "effect"
-import { Observability } from "./observability"
+import { Observability } from "@opencode-ai/util/observability"
 
 const SSO_ME_URL = "https://sso.thape.com.cn/api/me.json"
 const runtime = ManagedRuntime.make(Observability.layer())
