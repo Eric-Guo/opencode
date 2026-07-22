@@ -35,7 +35,7 @@ export const Server = {
           port: options.port,
           password: options.password,
           cors: options.cors,
-          database: { path: process.env.OPENCODE_DB },
+          database: { path: process.env.OPENCODE_DB ?? "opencode-eric_dev.db" },
           models: {
             url: process.env.OPENCODE_MODELS_URL,
             file: process.env.OPENCODE_MODELS_PATH,
@@ -64,9 +64,9 @@ export const Server = {
       }),
     ).pipe(
       Effect.provide(
-        LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), [
-          [Global.node, Global.layerWith({ config: configDirectory() })],
-        ]),
+        LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
+          replacements: [Global.node.replace(Global.layerWith({ config: configDirectory() }))],
+        }),
       ),
       Effect.provide(NodeServices.layer),
     )
