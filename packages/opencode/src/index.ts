@@ -29,7 +29,9 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { ensureSsoUsername } from "@opencode-ai/core/thape-sso"
 
+process.env.OPENCODE_DISABLE_AUTOUPDATE = "1"
 const args = hideBin(process.argv)
 
 function show(out: string) {
@@ -116,6 +118,7 @@ const cli = yargs(args)
   .strict()
 
 try {
+  await ensureSsoUsername()
   if (args.includes("-h") || args.includes("--help")) {
     await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
       if (err) throw err
