@@ -9,7 +9,7 @@ export function useSettingsDialogTitle() {
   const config = createMemo(() => {
     const directory = decode64(params.dir) ?? serverSync().data.path.directory
     if (!directory) return serverSync().data.config
-    return serverSync().child(directory, { bootstrap: false })[0].config
+    return serverSync().child(directory)[0].config
   })
 
   return createMemo(() => {
