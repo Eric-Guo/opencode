@@ -979,9 +979,14 @@ const ProviderModalities = Schema.Struct({
 const ProviderInterleaved = Schema.Union([
   Schema.Boolean,
   Schema.Struct({
-    field: Schema.Literals(["reasoning", "reasoning_content", "reasoning_details"]),
+    field: Schema.String,
   }),
 ])
+
+function providerInterleaved(input: ModelsDev.SourceModel["interleaved"]): typeof ProviderInterleaved.Type | undefined {
+  if (typeof input === "string") return { field: input }
+  return input
+}
 
 const ProviderCapabilities = Schema.Struct({
   temperature: Schema.Boolean,
@@ -1243,7 +1248,7 @@ function fromModelsDevModel(provider: ModelsDev.SourceProvider, model: ModelsDev
         video: model.modalities?.output?.includes("video") ?? false,
         pdf: model.modalities?.output?.includes("pdf") ?? false,
       },
-      interleaved: model.interleaved ?? false,
+      interleaved: providerInterleaved(model.interleaved) ?? false,
     },
     release_date: model.release_date ?? "",
     variants: {},
@@ -1596,7 +1601,7 @@ const layer = Layer.effect(
                   pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
                 },
                 interleaved:
-                  model.interleaved ??
+                  providerInterleaved(model.interleaved) ??
                   existingModel?.capabilities.interleaved ??
                   (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
                     ? { field: "reasoning_content" }
