@@ -1,10 +1,11 @@
 import { NodeServices } from "@effect/platform-node"
-import { LayerNode } from "@opencode/core/effect/layer-node"
-import { Global } from "@opencode/core/global"
-import { AppProcess } from "@opencode/core/process"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
+import { AppProcess } from "@opencode/util/process"
 import { ServerProcess } from "@opencode/server/process"
 import { Effect } from "effect"
 import { configDirectory } from "../config-directory"
+import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 
 export type Listener = {
   stop(close?: boolean): Promise<void>
@@ -25,7 +26,11 @@ export const Server = {
     const run = Effect.scoped(
       Effect.gen(function* () {
         yield* ServerProcess.start({
-          client: process.env.OPENCODE_CLIENT ?? "desktop",
+          app: {
+            name: process.env.OPENCODE_CLIENT ?? "desktop",
+            version: OPENCODE_VERSION,
+            channel: OPENCODE_CHANNEL,
+          },
           hostname: options.hostname,
           port: options.port,
           password: options.password,
