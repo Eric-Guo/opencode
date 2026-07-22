@@ -43,6 +43,7 @@ export type Event =
   | EventSessionReasoningStarted
   | EventSessionReasoningDelta
   | EventSessionReasoningEnded
+  | EventSessionFileGenerated
   | EventSessionToolInputStarted
   | EventSessionToolInputDelta
   | EventSessionToolInputEnded
@@ -1016,6 +1017,15 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.file.generated"
+        properties: {
+          sessionID: string
+          assistantMessageID: string
+          file: SessionMessageAssistantFile
+        }
+      }
+    | {
+        id: string
         type: "session.tool.input.started"
         properties: {
           sessionID: string
@@ -1695,6 +1705,7 @@ export type GlobalEvent = {
     | SyncEventSessionTextEnded
     | SyncEventSessionReasoningStarted
     | SyncEventSessionReasoningEnded
+    | SyncEventSessionFileGenerated
     | SyncEventSessionToolInputStarted
     | SyncEventSessionToolInputEnded
     | SyncEventSessionToolCalled
@@ -1840,9 +1851,10 @@ export type ProviderConfig = {
       temperature?: boolean
       tool_call?: boolean
       interleaved?:
-        | true
+        | boolean
+        | string
         | {
-            field: "reasoning" | "reasoning_content" | "reasoning_details"
+            field: string
           }
       cost?: {
         input: number
@@ -2130,7 +2142,7 @@ export type Model = {
     interleaved:
       | boolean
       | {
-          field: "reasoning" | "reasoning_content" | "reasoning_details"
+          field: string
         }
   }
   cost: {
@@ -3078,6 +3090,7 @@ export type V2Event =
   | SessionReasoningStarted
   | SessionReasoningDelta
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputDelta
   | SessionToolInputEnded
@@ -3432,6 +3445,14 @@ export type ShellInfo = {
 
 export type SessionMessageProviderState = {
   [key: string]: unknown
+}
+
+export type SessionMessageAssistantFile = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
 }
 
 export type ToolTextContent = {
@@ -4147,6 +4168,22 @@ export type SyncEventSessionReasoningEnded = {
   }
 }
 
+export type SyncEventSessionFileGenerated = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.file.generated.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      assistantMessageID: string
+      file: SessionMessageAssistantFile
+    }
+  }
+}
+
 export type SyncEventSessionToolInputStarted = {
   type: "sync"
   id: string
@@ -4727,7 +4764,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: string
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantFile
+    | SessionMessageAssistantTool
+  >
   snapshot?: {
     start?: string
     end?: string
@@ -5302,6 +5344,26 @@ export type SessionReasoningEnded = {
   }
 }
 
+export type SessionFileGenerated = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.file.generated"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: 1
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    assistantMessageID: string
+    file: SessionMessageAssistantFile
+  }
+}
+
 export type SessionToolInputStarted = {
   id: string
   created: number
@@ -5650,6 +5712,7 @@ export type SessionEventDurable =
   | SessionTextEnded
   | SessionReasoningStarted
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputEnded
   | SessionToolCalled
@@ -5670,6 +5733,12 @@ export type EventLogSynced = {
   type: "log.synced"
   aggregateID: string
   seq?: number
+}
+
+export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | string
+
+export type ModelCompatibility = {
+  reasoningField?: ModelReasoningField
 }
 
 export type ModelCapabilities = {
@@ -5712,6 +5781,7 @@ export type ModelInfo = {
   providerID: string
   family?: string
   name: string
+  compatibility?: ModelCompatibility
   package?: string
   settings?: {
     [key: string]: unknown
@@ -7524,6 +7594,16 @@ export type EventSessionReasoningEnded = {
   }
 }
 
+export type EventSessionFileGenerated = {
+  id: string
+  type: "session.file.generated"
+  properties: {
+    sessionID: string
+    assistantMessageID: string
+    file: SessionMessageAssistantFile
+  }
+}
+
 export type EventSessionToolInputStarted = {
   id: string
   type: "session.tool.input.started"
@@ -8776,6 +8856,7 @@ export type V2EventV2 =
   | SessionReasoningStartedV2
   | SessionReasoningDeltaV2
   | SessionReasoningEndedV2
+  | SessionFileGeneratedV2
   | SessionToolInputStartedV2
   | SessionToolInputDeltaV2
   | SessionToolInputEndedV2
@@ -9058,7 +9139,12 @@ export type SessionMessageAssistantV2 = {
   type: "assistant"
   agent: string
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantFile
+    | SessionMessageAssistantTool
+  >
   snapshot?: {
     start?: string
     end?: string
@@ -9665,6 +9751,26 @@ export type SessionReasoningEndedV2 = {
     ordinal: number
     text: string
     state?: SessionMessageProviderState4
+  }
+}
+
+export type SessionFileGeneratedV2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.file.generated"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: 1
+  }
+  location?: LocationRefV2
+  data: {
+    sessionID: string
+    assistantMessageID: string
+    file: SessionMessageAssistantFile
   }
 }
 
