@@ -14,7 +14,10 @@ import { Env } from "../../env"
 
 export const runDefault = (
   input: Runtime.Input<typeof Commands>,
-  options: { readonly standaloneCommand?: ReadonlyArray<string> } = {},
+  options: {
+    readonly autoUpdate?: boolean
+    readonly standaloneCommand?: ReadonlyArray<string>
+  } = {},
 ) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
@@ -86,14 +89,17 @@ export const runDefault = (
         get: () => runPromise(config.get()),
         update: (update) => runPromise(config.update(update)),
       },
-      updater: {
-        monitor: (notify, signal) =>
-          runPromise(
-            updater.monitor((version) => Effect.sync(() => notify(version))),
-            { signal },
-          ),
-        apply: (version) => runPromise(updater.apply(version)),
-      },
+      updater:
+        options.autoUpdate === false
+          ? undefined
+          : {
+              monitor: (notify, signal) =>
+                runPromise(
+                  updater.monitor((version) => Effect.sync(() => notify(version))),
+                  { signal },
+                ),
+              apply: (version) => runPromise(updater.apply(version)),
+            },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },
