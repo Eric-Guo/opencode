@@ -14,7 +14,10 @@ import { Env } from "../../env"
 
 export const runDefault = (
   input: Runtime.Input<typeof Commands>,
-  options: { readonly standaloneCommand?: ReadonlyArray<string> } = {},
+  options: {
+    readonly autoUpdate?: boolean
+    readonly standaloneCommand?: ReadonlyArray<string>
+  } = {},
 ) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
@@ -51,7 +54,9 @@ export const runDefault = (
       ),
     )
     const updater = yield* Updater.Service
-    const update = yield* updater.run().pipe(Effect.forkScoped)
+    const update = yield* (options.autoUpdate === false ? Effect.succeed(undefined) : updater.run()).pipe(
+      Effect.forkScoped,
+    )
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -87,18 +92,21 @@ export const runDefault = (
         get: () => runPromise(config.get()),
         update: (update) => runPromise(config.update(update)),
       },
-      updater: {
-        remote: requestedServer !== undefined,
-        subscribe: (notify, signal) =>
-          runPromise(
-            Fiber.join(update).pipe(
-              Effect.flatMap((result) => (result === undefined ? Effect.void : Effect.sync(() => notify(result)))),
-            ),
-            { signal },
-          ),
-        check: (signal) => runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.check())), { signal }),
-        apply: (version) => runPromise(updater.apply(version)),
-      },
+      updater:
+        options.autoUpdate === false
+          ? undefined
+          : {
+              remote: requestedServer !== undefined,
+              subscribe: (notify, signal) =>
+                runPromise(
+                  Fiber.join(update).pipe(
+                    Effect.flatMap((result) => (result === undefined ? Effect.void : Effect.sync(() => notify(result)))),
+                  ),
+                  { signal },
+                ),
+              check: (signal) => runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.check())), { signal }),
+              apply: (version) => runPromise(updater.apply(version)),
+            },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },
