@@ -53,6 +53,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { ModelsDevNode } from "./models-dev-node"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
@@ -104,6 +105,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     ShareNext.node,
     SessionShare.node,
   ]),
+  [ModelsDevNode.replacement],
 ).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer()))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
