@@ -14,7 +14,10 @@ import { Env } from "../../env"
 
 export const runDefault = (
   input: Runtime.Input<typeof Commands>,
-  options: { readonly standaloneCommand?: ReadonlyArray<string> } = {},
+  options: {
+    readonly autoUpdate?: boolean
+    readonly standaloneCommand?: ReadonlyArray<string>
+  } = {},
 ) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
@@ -53,12 +56,14 @@ export const runDefault = (
     const updater = yield* Updater.Service
     let installing: string | undefined
     const updateListeners = new Set<(version: string) => void>()
-    const update = yield* updater
-      .run((version) => {
-        installing = version
-        updateListeners.forEach((notify) => notify(version))
-      })
-      .pipe(Effect.ensuring(Effect.sync(() => (installing = undefined))), Effect.forkScoped)
+    const update = yield* (
+      options.autoUpdate === false
+        ? Effect.succeed(undefined)
+        : updater.run((version) => {
+            installing = version
+            updateListeners.forEach((notify) => notify(version))
+          })
+    ).pipe(Effect.ensuring(Effect.sync(() => (installing = undefined))), Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -94,24 +99,27 @@ export const runDefault = (
         get: () => runPromise(config.get()),
         update: (update) => runPromise(config.update(update)),
       },
-      updater: {
-        remote: requestedServer !== undefined,
-        subscribe: (notify, signal) =>
-          runPromise(
-            Fiber.join(update).pipe(
-              Effect.flatMap((result) => (result === undefined ? Effect.void : Effect.sync(() => notify(result)))),
-            ),
-            { signal },
-          ),
-        check: (signal, notify) => {
-          if (installing) notify(installing)
-          updateListeners.add(notify)
-          return runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.check())), { signal }).finally(() =>
-            updateListeners.delete(notify),
-          )
-        },
-        apply: (version) => runPromise(updater.apply(version)),
-      },
+      updater:
+        options.autoUpdate === false
+          ? undefined
+          : {
+              remote: requestedServer !== undefined,
+              subscribe: (notify, signal) =>
+                runPromise(
+                  Fiber.join(update).pipe(
+                    Effect.flatMap((result) => (result === undefined ? Effect.void : Effect.sync(() => notify(result)))),
+                  ),
+                  { signal },
+                ),
+              check: (signal, notify) => {
+                if (installing) notify(installing)
+                updateListeners.add(notify)
+                return runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.check())), { signal }).finally(() =>
+                  updateListeners.delete(notify),
+                )
+              },
+              apply: (version) => runPromise(updater.apply(version)),
+            },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },
