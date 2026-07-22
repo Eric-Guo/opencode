@@ -66,6 +66,7 @@ await build(
     ssr: { noExternal: true },
     build: {
       ssr: "src/server/server.ts",
+      ssrEmitAssets: true,
       target: "node24",
       outDir: "dist/node",
       emptyOutDir: true,
