@@ -1,8 +1,8 @@
 import { NodeServices } from "@effect/platform-node"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Global } from "@opencode-ai/core/global"
-import { Npm } from "@opencode-ai/core/npm"
-import { AppProcess } from "@opencode-ai/core/process"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
+import { Npm } from "@opencode-ai/util/npm"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Effect, Option } from "effect"
 import path from "node:path"
 import { runDefault } from "./commands/handlers/default"
@@ -26,6 +26,7 @@ export function runV1TuiBridge(input: V1TuiCommandInput) {
         directory: directory === undefined ? Option.none() : Option.some(directory),
         continue: input.continue ?? false,
         session: input.session === undefined ? Option.none() : Option.some(input.session),
+        prompt: Option.none(),
         server: Option.none(),
         standalone: true,
         auto: false,
