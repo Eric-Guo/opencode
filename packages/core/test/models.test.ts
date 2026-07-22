@@ -232,6 +232,24 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("bundled-only mode ignores disk and network", () =>
+    Effect.gen(function* () {
+      yield* writeCache(fixture)
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      const result = yield* Effect.gen(function* () {
+        const service = yield* ModelsDev.Service
+        const before = yield* service.get()
+        yield* service.refresh(true)
+        return { before, after: yield* service.get() }
+      }).pipe(
+        Effect.provide(buildLayer(state, { bundledOnly: true, fetch: true })),
+      )
+      expect(result).toEqual({ before: [], after: [] })
+      expect((yield* Ref.get(state)).calls).toEqual([])
+      expect(yield* Effect.promise(() => readFile(cacheFile, "utf8"))).toBe(JSON.stringify(fixture))
+    }),
+  )
+
   it.live("get() recovers from a corrupted cache file by fetching a fresh catalog", () =>
     Effect.gen(function* () {
       yield* writeCacheText("{")
