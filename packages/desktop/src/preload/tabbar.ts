@@ -8,6 +8,7 @@ type DesktopTabsState = {
     id: DesktopTabID
     title: string
     label: string
+    skipDisplay: boolean
   }[]
   navigation: {
     canGoBack: boolean
