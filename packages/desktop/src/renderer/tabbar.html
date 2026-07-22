@@ -7,13 +7,12 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #111315;
-        --panel: #1b1f23;
-        --panel-active: #f4f1ea;
-        --text: #f8f7f7;
-        --muted: #8e969f;
-        --accent: #4fb3a3;
-        --border: #2c3238;
+        --bg: #12121f;
+        --surface: #1b1b2e;
+        --text: #ffffff;
+        --muted: #a0a0c0;
+        --accent: #38bdf8;
+        --border: #3a3a5c;
       }
 
       * {
@@ -43,9 +42,9 @@
         align-items: center;
         width: 100%;
         height: 100%;
-        padding: 54px 8px 10px;
+        padding: 54px 8px 8px;
         border-right: 1px solid var(--border);
-        gap: 10px;
+        gap: 8px;
       }
 
       #tabs,
@@ -53,7 +52,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 8px;
+        gap: 4px;
         width: 100%;
       }
 
@@ -63,34 +62,95 @@
 
       button {
         -webkit-app-region: no-drag;
-        width: 56px;
-        min-width: 56px;
-        height: 48px;
-        min-height: 48px;
-        border: 1px solid transparent;
-        border-radius: 8px;
         appearance: none;
+        border: 0;
         background: transparent;
         color: var(--muted);
         font: inherit;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0;
-        line-height: 1;
-        cursor: default;
+        cursor: pointer;
       }
 
-      button:not(:disabled):hover {
-        border-color: var(--border);
-        background: var(--panel);
+      .tab-button {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        width: 56px;
+        min-width: 56px;
+        height: 56px;
+        min-height: 56px;
+        padding: 0;
+        border-radius: 12px;
+        transition: 0.25s;
+      }
+
+      .tab-button:hover {
+        background: var(--surface);
         color: var(--text);
       }
 
-      button[data-active="true"] {
-        border-color: transparent;
-        background: var(--panel-active);
-        color: #171717;
-        box-shadow: inset 3px 0 0 var(--accent);
+      .tab-button[data-active="true"] {
+        background: rgb(56 189 248 / 12%);
+        color: var(--accent);
+      }
+
+      .tab-button[data-active="true"]::before {
+        position: absolute;
+        top: 50%;
+        left: -8px;
+        width: 3px;
+        height: 24px;
+        border-radius: 0 2px 2px 0;
+        background: var(--accent);
+        content: "";
+        transform: translateY(-50%);
+      }
+
+      .tab-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      .tab-icon svg {
+        width: 24px;
+        height: 24px;
+        color: var(--text);
+      }
+
+      .tab-icon-inspiration,
+      .tab-icon-inspiration svg {
+        width: 36px;
+        height: 36px;
+      }
+
+      .tab-icon-opencode {
+        background: linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #38bdf8 100%);
+        background-clip: text;
+        color: transparent;
+        font-family: "Times New Roman", serif;
+        font-size: 24px;
+        font-weight: 700;
+        filter: drop-shadow(0 0 2px rgb(192 132 252 / 30%));
+      }
+
+      .tab-button[data-active="true"] .tab-icon-opencode {
+        filter: drop-shadow(0 0 4px rgb(56 189 248 / 50%));
+      }
+
+      .tab-label {
+        color: currentColor;
+        font-size: 10px;
+        font-weight: 500;
+        line-height: 1.2;
+        text-align: center;
+        transition: color 0.25s;
       }
 
       button:focus-visible {
@@ -103,15 +163,27 @@
       }
 
       .tool {
+        width: 56px;
+        min-width: 56px;
         height: 36px;
         min-height: 36px;
+        border-radius: 8px;
         font-size: 18px;
         font-weight: 500;
+      }
+
+      .tool:not(:disabled):hover {
+        background: var(--surface);
+        color: var(--text);
       }
 
       .app-tool {
         font-size: 12px;
         font-weight: 700;
+      }
+
+      #changelog {
+        margin-bottom: 4px;
       }
     </style>
   </head>
@@ -119,6 +191,10 @@
     <main>
       <nav id="tabs" aria-label="Tabs"></nav>
       <nav id="tools" aria-label="Navigation">
+        <button class="tab-button" id="changelog" title="更新日志" aria-label="更新日志">
+          <span class="tab-icon" aria-hidden="true">📋</span>
+          <span class="tab-label">更新日志</span>
+        </button>
         <button class="tool" id="back" title="Back" aria-label="Back">&lt;</button>
         <button class="tool" id="forward" title="Forward" aria-label="Forward">&gt;</button>
         <button class="tool" id="reload" title="Reload" aria-label="Reload">R</button>
@@ -132,14 +208,25 @@
       const back = document.getElementById("back")
       const forward = document.getElementById("forward")
       const reload = document.getElementById("reload")
+      const changelog = document.getElementById("changelog")
       const settings = document.getElementById("settings")
       const help = document.getElementById("help")
+      const icons = {
+        archx:
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="12" rx="10" ry="4.5"/><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(120 12 12)"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
+        inspiration:
+          '<svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12.5 24.5c-2.7-1.8-4.5-4.9-4.5-8.4a10 10 0 0 1 20 0c0 3.5-1.8 6.6-4.5 8.4-1.1.8-1.5 1.5-1.5 2.5h-8c0-1-.4-1.7-1.5-2.5Z"/><path d="M14 30h8M15.5 33h5M18 1v3M4.5 6.5l2.2 2.2M31.5 6.5l-2.2 2.2M2 17h3M31 17h3"/></svg>',
+        opencode: "Σ",
+        worktime:
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="12" r="8"/><path d="M10 7v5l-3 3M15.5 18.5l4.8-4.8 1.7 1.7-4.8 4.8-2.7.7.7-2.4Z"/></svg>',
+      }
       let state = {
         active: "opencode",
         tabs: [
-          { id: "opencode", title: "OpenCode", label: "OC" },
-          { id: "7777", title: "7777", label: "7777" },
-          { id: "plm", title: "PLM", label: "PLM" },
+          { id: "opencode", title: "OpenCode", label: "Sigema", skipDisplay: false },
+          { id: "worktime", title: "工时填报", label: "工时填报", skipDisplay: false },
+          { id: "archx", title: "ArchX", label: "ArchX", skipDisplay: false },
+          { id: "inspiration", title: "灵感采集", label: "灵感采集", skipDisplay: false },
         ],
         navigation: {
           canGoBack: false,
@@ -152,10 +239,19 @@
           ...state.tabs.filter((tab) => !tab.skipDisplay).map((tab) => {
             const button = document.createElement("button")
             button.type = "button"
-            button.textContent = tab.label
+            button.className = "tab-button"
             button.title = tab.title
             button.setAttribute("aria-label", tab.title)
             button.dataset.active = String(tab.id === state.active)
+            const icon = document.createElement("span")
+            icon.className = `tab-icon tab-icon-${tab.id}`
+            icon.setAttribute("aria-hidden", "true")
+            if (icons[tab.id]) icon.innerHTML = icons[tab.id]
+            if (!icons[tab.id]) icon.textContent = tab.label.slice(0, 1)
+            const label = document.createElement("span")
+            label.className = "tab-label"
+            label.textContent = tab.label
+            button.append(icon, label)
             button.addEventListener("click", () => api.select(tab.id))
             return button
           }),
@@ -168,6 +264,7 @@
       back.addEventListener("click", () => api.back())
       forward.addEventListener("click", () => api.forward())
       reload.addEventListener("click", () => api.reload())
+      changelog.addEventListener("click", () => api.action("changelog"))
       settings.addEventListener("click", () => api.action("settings"))
       help.addEventListener("click", () => api.action("help"))
       api.subscribe((next) => {
