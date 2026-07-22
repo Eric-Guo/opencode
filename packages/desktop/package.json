@@ -30,7 +30,8 @@
     "electron-context-menu": "5.0.0",
     "electron-log": "^5",
     "electron-updater": "6.8.9",
-    "lighthouse": "13.4.1"
+    "lighthouse": "13.4.1",
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "@brendonovich/vite-plugin-opencode": "0.1.3",
