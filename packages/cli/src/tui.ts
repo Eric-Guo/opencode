@@ -29,7 +29,7 @@ export function runV1TuiBridge(input: V1TuiCommandInput) {
         server: Option.none(),
         standalone: true,
       },
-      { standaloneCommand: input.standaloneCommand },
+      { autoUpdate: false, standaloneCommand: input.standaloneCommand },
     ).pipe(
       Effect.provide(Config.layer),
       Effect.provide(Updater.layer),
