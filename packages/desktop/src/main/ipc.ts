@@ -21,7 +21,12 @@ import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
 import { DesktopStorage } from "./storage"
 import { Updater } from "./updater"
-import { getLastFocusedWindow } from "./windows"
+import {
+  getDesktopTabHistory,
+  getLastFocusedWindow,
+  goToDesktopTabHistory,
+  subscribeDesktopTabHistory,
+} from "./windows"
 import { Wsl } from "./wsl/start"
 
 const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
@@ -57,6 +62,9 @@ export const registerIpcHandlers = Effect.gen(function* () {
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
     relaunch: lifecycle.relaunch,
+    getHistory: () => getDesktopTabHistory(getLastFocusedWindow()),
+    goToHistory: (index: number) => goToDesktopTabHistory(getLastFocusedWindow(), index),
+    onHistoryChange: subscribeDesktopTabHistory,
   }
   const wire = (_event: Electron.Event, win: BrowserWindow) => {
     win.webContents.on("did-finish-load", () => {
