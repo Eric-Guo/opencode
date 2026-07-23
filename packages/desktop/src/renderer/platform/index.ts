@@ -59,6 +59,8 @@ export function createDesktopPlatform(
       return () => window.removeEventListener(DragCancelEvent, callback)
     },
     runDesktopMenuAction: createDesktopMenuAction(api),
+    getDesktopMenuHistory: () => api.getDesktopMenuHistory(),
+    goToDesktopMenuHistory: (index) => api.goToDesktopMenuHistory(index),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
     },
