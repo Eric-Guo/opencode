@@ -37,13 +37,16 @@ import {
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
 import { safeWebContentsURL } from "./window-state"
 import {
+  getDesktopTabHistory,
   getLastFocusedWindow,
+  goToDesktopTabHistory,
   registerRendererProtocol,
   setRelaunchHandler,
   setAppQuitting,
   setBackgroundColor,
   setDockIcon,
   restoreMainWindows,
+  subscribeDesktopTabHistory,
 } from "./windows"
 import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
@@ -418,6 +421,9 @@ const main = Effect.gen(function* () {
       relaunch: () => {
         relaunch()
       },
+      getHistory: () => getDesktopTabHistory(getLastFocusedWindow()),
+      goToHistory: (index) => goToDesktopTabHistory(getLastFocusedWindow(), index),
+      onHistoryChange: subscribeDesktopTabHistory,
     })
   }
 })
