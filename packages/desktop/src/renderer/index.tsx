@@ -303,6 +303,10 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
 
     runDesktopMenuAction,
 
+    getDesktopMenuHistory: () => window.api.getDesktopMenuHistory(),
+
+    goToDesktopMenuHistory: (index) => window.api.goToDesktopMenuHistory(index),
+
     checkAppExists: async (appName: string) => {
       return window.api.checkAppExists(appName)
     },
