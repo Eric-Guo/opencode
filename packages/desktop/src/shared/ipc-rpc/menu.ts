@@ -12,6 +12,8 @@ const DesktopMenuAction = Schema.Literals([
   "edit.paste",
   "edit.delete",
   "edit.selectAll",
+  "history.back",
+  "history.forward",
   "view.reload",
   "view.toggleDevTools",
   "view.resetZoom",
@@ -27,4 +29,16 @@ const DesktopMenuAction = Schema.Literals([
 export const MenuRunAction = Rpc.make("MenuRunAction", {
   payload: { action: DesktopMenuAction },
 })
-export const MenuRpcs = RpcGroup.make(MenuRunAction)
+export const MenuGetHistory = Rpc.make("MenuGetHistory", {
+  success: Schema.Array(
+    Schema.Struct({
+      index: Schema.Number,
+      url: Schema.String,
+      active: Schema.Boolean,
+    }),
+  ),
+})
+export const MenuGoToHistory = Rpc.make("MenuGoToHistory", {
+  payload: { index: Schema.Number },
+})
+export const MenuRpcs = RpcGroup.make(MenuRunAction, MenuGetHistory, MenuGoToHistory)
