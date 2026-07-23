@@ -98,6 +98,7 @@ const minZoomLevel = 0.2
 const helpURL = "https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"
 const changelogURL = "https://changelog.thape.com.cn/opencode"
 const desktopTabManagers = new Map<number, DesktopTabManager>()
+const desktopTabManagersByWindow = new WeakMap<BrowserWindow, DesktopTabManager>()
 const externalTabSessionRestores = new Map<string, Promise<void>>()
 
 type DesktopTabID = string
@@ -111,16 +112,31 @@ type DesktopTabsState = {
     label: string
     skipDisplay: boolean
   }[]
-  navigation: {
-    canGoBack: boolean
-    canGoForward: boolean
-  }
 }
 
 let desktopTabsIpcRegistered = false
 
 export function getPrimaryWebContents(win: BrowserWindow) {
   return primaryWebContents.get(win) ?? win.webContents
+}
+
+export function navigateDesktopTab(win: BrowserWindow | null, direction: "back" | "forward") {
+  if (!win) return
+  if (direction === "back") {
+    desktopTabManagersByWindow.get(win)?.back()
+    return
+  }
+  desktopTabManagersByWindow.get(win)?.forward()
+}
+
+export function reloadDesktopTab(win: BrowserWindow | null) {
+  if (!win) return
+  const manager = desktopTabManagersByWindow.get(win)
+  if (manager) {
+    manager.reload()
+    return
+  }
+  getPrimaryWebContents(win).reload()
 }
 
 export function getWindowFromWebContents(contents: WebContents) {
@@ -485,7 +501,7 @@ function createDesktopTabManager(
     if (cached) return cached
     const rendererTab = getRendererTab(id)
     if (rendererTab) {
-      const view = createRendererTabView(win, rendererTab, sendState)
+      const view = createRendererTabView(win, rendererTab)
       tabViews.set(id, view)
       win.contentView.addChildView(view)
       view.setVisible(false)
@@ -499,7 +515,6 @@ function createDesktopTabManager(
     const view = createExternalView(
       win,
       tab,
-      sendState,
       url,
       (url) => {
         if (isExternalTabURL(tab, url)) getStore(desktopTabStateFile(windowID)).set(id, url)
@@ -527,7 +542,6 @@ function createDesktopTabManager(
   }
 
   function state(): DesktopTabsState {
-    const contents = getActiveView().webContents
     return {
       active,
       tabs: desktopTabs.map((tab) => ({
@@ -536,10 +550,6 @@ function createDesktopTabManager(
         label: tab.label,
         skipDisplay: tab.skipDisplay,
       })),
-      navigation: {
-        canGoBack: contents.navigationHistory.canGoBack(),
-        canGoForward: contents.navigationHistory.canGoForward(),
-      },
     }
   }
 
@@ -583,7 +593,6 @@ function createDesktopTabManager(
     const contents = getActiveView().webContents
     if (direction === "back" && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack()
     if (direction === "forward" && contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward()
-    sendState()
   }
 
   function runAction(action: DesktopTabAction) {
@@ -604,9 +613,6 @@ function createDesktopTabManager(
   const managerValue = {
     load() {
       layout()
-      openCodeView.webContents.on("did-navigate", sendState)
-      openCodeView.webContents.on("did-navigate-in-page", sendState)
-      openCodeView.webContents.on("did-stop-loading", sendState)
       void loadWebContents(tabbarWebContents, "tabbar.html").catch((error) => {
         writeLog("window", "tabbar load failed", { error }, "error")
       })
@@ -623,6 +629,7 @@ function createDesktopTabManager(
   }
 
   desktopTabManagers.set(tabbarWebContentsId, managerValue)
+  desktopTabManagersByWindow.set(win, managerValue)
   win.on("resize", layout)
   win.on("closed", () => {
     desktopTabManagers.delete(tabbarWebContentsId)
@@ -630,11 +637,7 @@ function createDesktopTabManager(
   return managerValue
 }
 
-function createRendererTabView(
-  win: BrowserWindow,
-  tab: RendererDesktopTab,
-  sendState: () => void,
-) {
+function createRendererTabView(win: BrowserWindow, tab: RendererDesktopTab) {
   const view = new WebContentsView({
     webPreferences: {
       preload: join(root, "../preload/index.js"),
@@ -648,9 +651,6 @@ function createRendererTabView(
   allowRendererPermissions(view.webContents)
   wireWindowRecovery(win, view.webContents, tab.id)
   view.setBackgroundColor(backgroundColor ?? defaultBackgroundColor())
-  view.webContents.on("did-navigate", sendState)
-  view.webContents.on("did-navigate-in-page", sendState)
-  view.webContents.on("did-stop-loading", sendState)
   void loadWebContents(view.webContents, tab.html, {
     devUrl: process.env.ELECTRON_7777_RENDERER_URL ?? false,
     devHtml: tab.devHtml,
@@ -663,7 +663,6 @@ function createRendererTabView(
 function createExternalView(
   win: BrowserWindow,
   tab: ExternalDesktopTab,
-  sendState: () => void,
   url: string,
   saveURL: (url: string) => void,
 ) {
@@ -707,13 +706,10 @@ function createExternalView(
   view.webContents.on("will-redirect", handleNavigation)
   view.webContents.on("did-navigate", (_event, url) => {
     saveURL(url)
-    sendState()
   })
   view.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (isMainFrame) saveURL(url)
-    sendState()
   })
-  view.webContents.on("did-stop-loading", sendState)
   view.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame || errorCode === -3) return
     writeLog(
@@ -857,15 +853,6 @@ function registerDesktopTabsIpc() {
   ipcMain.on("desktop-tabs-unsubscribe", () => {})
   ipcMain.on("desktop-tabs-select", (event, id: DesktopTabID) => {
     desktopTabManagers.get(event.sender.id)?.activate(id)
-  })
-  ipcMain.on("desktop-tabs-back", (event) => {
-    desktopTabManagers.get(event.sender.id)?.back()
-  })
-  ipcMain.on("desktop-tabs-forward", (event) => {
-    desktopTabManagers.get(event.sender.id)?.forward()
-  })
-  ipcMain.on("desktop-tabs-reload", (event) => {
-    desktopTabManagers.get(event.sender.id)?.reload()
   })
   ipcMain.on("desktop-tabs-action", (event, action: DesktopTabAction) => {
     if (action !== "settings" && action !== "help" && action !== "changelog") return
