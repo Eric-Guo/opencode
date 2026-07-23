@@ -10,6 +10,8 @@ export type DesktopMenuAction =
   | "edit.paste"
   | "edit.delete"
   | "edit.selectAll"
+  | "history.back"
+  | "history.forward"
   | "view.reload"
   | "view.toggleDevTools"
   | "view.resetZoom"
@@ -78,7 +80,6 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       { type: "item", role: "about" },
       { type: "item", label: "Check for Updates...", action: "app.checkForUpdates", enabled: "updater" },
       { type: "item", label: "Settings", command: "settings.open", accelerator: { macos: "Cmd+," } },
-      { type: "item", label: "Reload Webview", action: "view.reload" },
       { type: "item", label: "Restart", action: "app.relaunch" },
       { type: "item", label: "Export Logs...", command: "logs.export" },
       { type: "separator" },
@@ -145,7 +146,12 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       { type: "item", label: "Toggle Terminal", command: "terminal.toggle", accelerator: { macos: "Ctrl+`" } },
       { type: "item", label: "Toggle File Tree", command: "fileTree.toggle" },
       { type: "separator" },
-      { type: "item", label: "Reload", action: "view.reload", role: "reload" },
+      {
+        type: "item",
+        label: "Reload",
+        action: "view.reload",
+        accelerator: { macos: "Cmd+R", windows: "Ctrl+R" },
+      },
       { type: "item", label: "Toggle Developer Tools", action: "view.toggleDevTools", role: "toggleDevTools" },
       { type: "separator" },
       {
@@ -162,12 +168,27 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     ],
   },
   {
+    id: "history",
+    label: "History",
+    items: [
+      {
+        type: "item",
+        label: "Back",
+        action: "history.back",
+        accelerator: { macos: "Cmd+[", windows: "Alt+Left" },
+      },
+      {
+        type: "item",
+        label: "Forward",
+        action: "history.forward",
+        accelerator: { macos: "Cmd+]", windows: "Alt+Right" },
+      },
+    ],
+  },
+  {
     id: "go",
     label: "Go",
     items: [
-      { type: "item", label: "Back", command: "common.goBack", accelerator: { macos: "Cmd+[" } },
-      { type: "item", label: "Forward", command: "common.goForward", accelerator: { macos: "Cmd+]" } },
-      { type: "separator" },
       { type: "item", label: "Previous Session", command: "session.previous", accelerator: { macos: "Option+Up" } },
       { type: "item", label: "Next Session", command: "session.next", accelerator: { macos: "Option+Down" } },
       { type: "separator" },
