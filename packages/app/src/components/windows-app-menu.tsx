@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from "solid-js"
+import { createSignal, For, Show, type JSX } from "solid-js"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -6,7 +6,13 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 
 import { useCommand } from "@/context/command"
-import { DESKTOP_MENU, desktopMenuVisible, type DesktopMenuAction, type DesktopMenuEntry } from "@/desktop-menu"
+import {
+  DESKTOP_MENU,
+  desktopMenuVisible,
+  type DesktopMenuAction,
+  type DesktopMenuEntry,
+  type DesktopMenuHistoryEntry,
+} from "@/desktop-menu"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 
@@ -17,6 +23,7 @@ export function WindowsAppMenu(props: {
 }) {
   let lastFocused: HTMLElement | undefined
   const language = useLanguage()
+  const [history, setHistory] = createSignal<DesktopMenuHistoryEntry[]>([])
 
   const rememberFocus = () => {
     const active = document.activeElement
@@ -47,9 +54,24 @@ export function WindowsAppMenu(props: {
     }
     if (entry.href) props.platform.openExternal(entry.href)
   }
+  const loadHistory = () => {
+    const read = props.platform.getDesktopMenuHistory
+    if (!read) {
+      setHistory([])
+      return
+    }
+    void read().then(setHistory, () => setHistory([]))
+  }
 
   return (
-    <DropdownMenu gutter={4} modal={false} placement="bottom-start">
+    <DropdownMenu
+      gutter={4}
+      modal={false}
+      placement="bottom-start"
+      onOpenChange={(open) => {
+        if (open) loadHistory()
+      }}
+    >
       <Show
         when={props.variant === "v2"}
         fallback={
@@ -100,6 +122,19 @@ export function WindowsAppMenu(props: {
                       )
                     }}
                   </For>
+                  <Show when={menu.id === "history" && history().length > 0}>
+                    <DropdownMenu.Separator />
+                    <For each={history()}>
+                      {(entry) => (
+                        <DesktopMenuItem
+                          label={entry.url}
+                          title={entry.url}
+                          disabled={entry.active}
+                          onSelect={() => void props.platform.goToDesktopMenuHistory?.(entry.index)}
+                        />
+                      )}
+                    </For>
+                  </Show>
                 </DesktopMenuSubmenu>
               )}
             </For>
@@ -126,10 +161,16 @@ function DesktopMenuSubmenu(props: { label: string; children: JSX.Element }) {
   )
 }
 
-function DesktopMenuItem(props: { label: string; keybind?: string; disabled?: boolean; onSelect: () => void }) {
+function DesktopMenuItem(props: {
+  label: string
+  title?: string
+  keybind?: string
+  disabled?: boolean
+  onSelect: () => void
+}) {
   return (
     <DropdownMenu.Item disabled={props.disabled} onSelect={props.onSelect}>
-      <DropdownMenu.ItemLabel>{props.label}</DropdownMenu.ItemLabel>
+      <DropdownMenu.ItemLabel title={props.title}>{props.label}</DropdownMenu.ItemLabel>
       <Show when={props.keybind}>
         <span data-slot="desktop-app-menu-keybind">{props.keybind}</span>
       </Show>
