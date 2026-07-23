@@ -226,6 +226,7 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.file": "File",
   "desktop.menu.edit": "Edit",
   "desktop.menu.view": "View",
+  "desktop.menu.history": "History",
   "desktop.menu.go": "Go",
   "desktop.menu.window": "Window",
   "desktop.menu.help": "Help",
