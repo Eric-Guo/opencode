@@ -65,6 +65,8 @@
   }
 
   [data-component="menu-v2-content"].desktop-app-menu [data-slot="menu-v2-item-content"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
