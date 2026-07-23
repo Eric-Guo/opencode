@@ -2,6 +2,7 @@ import * as Tool from "./tool"
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Schema } from "effect"
 import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
+import { CodeModeCatalog } from "@opencode-ai/core/codemode/catalog"
 import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
 import { Agent } from "@/agent/agent"
@@ -56,12 +57,99 @@ function groupByServer(mcpTools: Record<string, MCP.McpTool>, servers: readonly 
 }
 
 export function describeCatalog(mcpTools: Record<string, MCP.McpTool>, servers: readonly string[]): string {
-  return CodeMode.make({
-    tools: toolTree(
-      [...groupByServer(mcpTools, servers).values()].flat(),
-      () => () => Effect.fail(toolError("Tool preview is not executable.")),
-    ),
-  }).instructions()
+  const catalog = CodeModeCatalog.summarize(
+    CodeMode.make({
+      tools: toolTree(
+        [...groupByServer(mcpTools, servers).values()].flat(),
+        () => () => Effect.fail(toolError("Tool preview is not executable.")),
+      ),
+    }).catalog(),
+  )
+  return renderCatalog(catalog)
+}
+
+function renderCatalog(catalog: CodeModeCatalog.Summary) {
+  const empty = catalog.total === 0
+  const complete = catalog.shown === catalog.total
+  const intro = empty
+    ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime."
+    : complete
+      ? "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the tools listed below; surrounding agent tools are not available."
+      : "This is a restricted JavaScript language for calling tools, not a general-purpose runtime. Inside the confined interpreter, `tools` contains the tools listed or searchable below; surrounding agent tools are not available."
+  const workflow = empty
+    ? []
+    : complete
+      ? [
+          "## Workflow",
+          "",
+          "1. Pick a tool from the list under `## Available tools` - each line is the exact call signature; use it as-is rather than guessing segments.",
+          "2. Call it using the exact signature shown: `const result = await tools.<namespace>.<tool>(input)`; bracket notation and quotes are part of the path.",
+          "3. Return only the fields you need from structured results; narrow unknown results before reading fields, and avoid returning large raw payloads.",
+        ]
+      : [
+          "## Workflow",
+          "",
+          '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
+          "2. In the next execution, copy a returned path exactly, call it, and return only the needed fields.",
+        ]
+  const toolSection = empty
+    ? ["## Available tools", "", "No tools are currently available."]
+    : [
+        complete
+          ? "## Available tools (COMPLETE list - every tool is shown below with its full call signature)"
+          : `## Available tools (PARTIAL - ${catalog.shown} of ${catalog.total} shown; find the rest with search(...))`,
+        "",
+        ...catalog.namespaces.flatMap((namespace) => {
+          const count = `${namespace.count} tool${namespace.count === 1 ? "" : "s"}`
+          const label =
+            namespace.entries.length === namespace.count
+              ? count
+              : namespace.entries.length === 0
+                ? `${count}, none shown`
+                : `${count}, ${namespace.entries.length} shown`
+          return [`- ${namespace.name} (${label})`, ...namespace.entries.map((entry) => entry.line)]
+        }),
+        ...(complete ? [] : ["", "Search returns complete callable signatures:", `- ${CodeMode.searchSignature}`]),
+      ]
+
+  return [
+    intro,
+    ...(empty
+      ? []
+      : ["Do not infer or normalize tool names; use only exact signatures shown below or returned by search."]),
+    "",
+    ...workflow,
+    ...(empty
+      ? []
+      : [
+          "",
+          "## Rules",
+          "",
+          complete
+            ? "- Only tools listed here are available; surrounding agent tools are not implicitly exposed."
+            : "- Only tools listed here or returned by the built-in `search` function are available; surrounding agent tools are not implicitly exposed.",
+          "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
+          "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
+          '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
+          "- Execution ends when the program returns; pending promises are interrupted, so await every call whose completion matters.",
+          "- `Object.keys(tools)` lists namespaces; `Object.keys(tools.<namespace>)` lists its tools; `for...in` works on both.",
+          ...(complete
+            ? []
+            : [
+                '- Browse one namespace: `search({ query: "", namespace: "<name>" })`.',
+                "- If search returns `next`, repeat the same search with `offset: next.offset`.",
+              ]),
+        ]),
+    "",
+    "## Language",
+    "",
+    "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls. Built-ins include Date, RegExp, Map, Set, URL, URLSearchParams, and URI encoding helpers.",
+    "Modules/imports, classes, timers, fetch, eval, prototype access, and unlisted methods are unavailable. Use tools for external operations. Use await with try/catch.",
+    "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
+    "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
+    "",
+    ...toolSection,
+  ].join("\n")
 }
 
 const lastSegment = (uri: string) => {
@@ -118,14 +206,14 @@ function projectMcpResult(result: CallToolResult, collect: (attachment: Attachme
 type Run = (input: unknown) => Effect.Effect<unknown, unknown>
 
 function toolTree(catalog: readonly CatalogEntry[], run: (entry: CatalogEntry) => Run) {
-  const tree: Record<string, Record<string, SandboxTool.Definition>> = {}
+  const tree: Record<string, Record<string, SandboxTool.Tool<never>>> = {}
   for (const entry of catalog) {
     const namespace = (tree[entry.server] ??= {})
     namespace[entry.local] = SandboxTool.make({
       description: entry.tool.def.description ?? "",
       input: entry.tool.def.inputSchema as SandboxTool.JsonSchema,
-      output: entry.tool.def.outputSchema as SandboxTool.JsonSchema | undefined,
-      run: run(entry),
+      output: (entry.tool.def.outputSchema as SandboxTool.JsonSchema | undefined) ?? Schema.Unknown,
+      execute: run(entry),
     })
   }
   return tree
