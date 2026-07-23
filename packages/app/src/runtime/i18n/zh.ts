@@ -7,6 +7,7 @@ export const dict = {
   "desktop.menu.file": "文件",
   "desktop.menu.edit": "编辑",
   "desktop.menu.view": "视图",
+  "desktop.menu.history": "历史记录",
   "desktop.menu.go": "转到",
   "desktop.menu.window": "窗口",
   "desktop.menu.help": "帮助",
