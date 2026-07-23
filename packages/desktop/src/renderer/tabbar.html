@@ -195,9 +195,6 @@
           <span class="tab-icon" aria-hidden="true">📋</span>
           <span class="tab-label">更新日志</span>
         </button>
-        <button class="tool" id="back" title="Back" aria-label="Back">&lt;</button>
-        <button class="tool" id="forward" title="Forward" aria-label="Forward">&gt;</button>
-        <button class="tool" id="reload" title="Reload" aria-label="Reload">R</button>
         <button class="tool app-tool" id="settings" title="Settings" aria-label="Settings">S</button>
         <button class="tool app-tool" id="help" title="Help" aria-label="Help">?</button>
       </nav>
@@ -205,9 +202,6 @@
     <script>
       const api = window.desktopTabs
       const tabs = document.getElementById("tabs")
-      const back = document.getElementById("back")
-      const forward = document.getElementById("forward")
-      const reload = document.getElementById("reload")
       const changelog = document.getElementById("changelog")
       const settings = document.getElementById("settings")
       const help = document.getElementById("help")
@@ -256,14 +250,8 @@
             return button
           }),
         )
-
-        back.disabled = !state.navigation.canGoBack
-        forward.disabled = !state.navigation.canGoForward
       }
 
-      back.addEventListener("click", () => api.back())
-      forward.addEventListener("click", () => api.forward())
-      reload.addEventListener("click", () => api.reload())
       changelog.addEventListener("click", () => api.action("changelog"))
       settings.addEventListener("click", () => api.action("settings"))
       help.addEventListener("click", () => api.action("help"))
