@@ -28,7 +28,13 @@ import { startBackgroundCli } from "./service/background-service"
 import { forwardInitializationFailure } from "./service/initialization"
 import { getDefaultServerUrl, setDefaultServerUrl } from "./service/server-settings"
 import { createUpdaterIpc, setupAutoUpdater, showUpdaterDialog, startAutoUpdater } from "./updater"
-import { getLastFocusedWindow, setBackgroundColor } from "./windows"
+import {
+  getDesktopTabHistory,
+  getLastFocusedWindow,
+  goToDesktopTabHistory,
+  setBackgroundColor,
+  subscribeDesktopTabHistory,
+} from "./windows"
 import { startWsl } from "./wsl/start"
 
 const main = Effect.gen(function* () {
@@ -70,6 +76,9 @@ const main = Effect.gen(function* () {
     },
     checkForUpdates: () => void showUpdaterDialog(updater),
     relaunch: lifecycle.relaunch,
+    getHistory: () => getDesktopTabHistory(getLastFocusedWindow()),
+    goToHistory: (index: number) => goToDesktopTabHistory(getLastFocusedWindow(), index),
+    onHistoryChange: subscribeDesktopTabHistory,
   }
   registerIpcHandlers({
     relaunch: lifecycle.relaunch,

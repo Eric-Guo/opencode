@@ -1,4 +1,4 @@
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { DesktopMenuAction, DesktopMenuHistoryEntry } from "@opencode-ai/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { WslServerConfig, WslServersEvent, WslServersState } from "@opencode-ai/app/wsl/types"
@@ -67,6 +67,8 @@ export const Ipc = {
   menu: {
     command: "menu-command",
     runAction: "run-desktop-menu-action",
+    getHistory: "get-desktop-menu-history",
+    goToHistory: "go-to-desktop-menu-history",
   },
   updater: {
     subscribe: "updater-subscribe",
@@ -195,6 +197,8 @@ export type IpcInvoke = {
   [Ipc.window.setPinchZoomEnabled]: { args: [enabled: boolean]; result: void }
   [Ipc.window.setTitlebar]: { args: [theme: TitlebarTheme]; result: void }
   [Ipc.menu.runAction]: { args: [action: DesktopMenuAction]; result: void }
+  [Ipc.menu.getHistory]: { args: []; result: DesktopMenuHistoryEntry[] }
+  [Ipc.menu.goToHistory]: { args: [index: number]; result: void }
 
   [Ipc.updater.subscribe]: { args: []; result: void }
   [Ipc.updater.unsubscribe]: { args: []; result: void }
