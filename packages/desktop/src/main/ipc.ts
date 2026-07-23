@@ -17,10 +17,12 @@ import { runDesktopMenuAction } from "./native/menu-actions"
 import { createDesktopStorage } from "./storage"
 import {
   getDesktopTabInitializationFromWebContents,
+  getDesktopTabHistory,
   getPinchZoomEnabled,
   getPrimaryWebContents,
   getWindowFromWebContents,
   getWindowID,
+  goToDesktopTabHistory,
   setPinchZoomEnabled,
   setTitlebar,
   updateTitlebar,
@@ -174,6 +176,10 @@ export function registerIpcHandlers(deps: Deps) {
       checkForUpdates: () => void deps.showUpdater(),
       relaunch: deps.relaunch,
     })
+  })
+  handle(Ipc.menu.getHistory, (event) => getDesktopTabHistory(getWindowFromWebContents(event.sender)))
+  handle(Ipc.menu.goToHistory, (event, index) => {
+    goToDesktopTabHistory(getWindowFromWebContents(event.sender), index)
   })
 }
 
