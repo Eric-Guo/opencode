@@ -54,6 +54,8 @@ export function createDesktopPlatform(
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),
     setPinchZoomEnabled,
     runDesktopMenuAction: createDesktopMenuAction(api),
+    getDesktopMenuHistory: () => api.getDesktopMenuHistory(),
+    goToDesktopMenuHistory: (index) => api.goToDesktopMenuHistory(index),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
     },
