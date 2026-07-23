@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron"
 
 type DesktopTabID = string
-type DesktopTabAction = "settings" | "help" | "changelog"
+type DesktopTabAction = "settings" | "help"
 type DesktopTabsState = {
   active: DesktopTabID
   tabs: {
@@ -13,7 +13,7 @@ type DesktopTabsState = {
 }
 
 const tabIDs = new Set<DesktopTabID>()
-const actions = new Set<DesktopTabAction>(["settings", "help", "changelog"])
+const actions = new Set<DesktopTabAction>(["settings", "help"])
 
 const api = {
   select: (id: DesktopTabID) => {
