@@ -192,9 +192,6 @@
     <main>
       <nav id="tabs" aria-label="Tabs"></nav>
       <nav id="tools" aria-label="Navigation">
-        <button class="tool" id="back" title="Back" aria-label="Back">&lt;</button>
-        <button class="tool" id="forward" title="Forward" aria-label="Forward">&gt;</button>
-        <button class="tool" id="reload" title="Reload" aria-label="Reload">R</button>
         <button class="tool app-tool" id="settings" title="Settings" aria-label="Settings">S</button>
         <button class="tool app-tool" id="help" title="Help" aria-label="Help">?</button>
       </nav>
@@ -202,9 +199,6 @@
     <script>
       const api = window.desktopTabs
       const tabs = document.getElementById("tabs")
-      const back = document.getElementById("back")
-      const forward = document.getElementById("forward")
-      const reload = document.getElementById("reload")
       const settings = document.getElementById("settings")
       const help = document.getElementById("help")
       const icons = {
@@ -252,14 +246,8 @@
             return button
           }),
         )
-
-        back.disabled = !state.navigation.canGoBack
-        forward.disabled = !state.navigation.canGoForward
       }
 
-      back.addEventListener("click", () => api.back())
-      forward.addEventListener("click", () => api.forward())
-      reload.addEventListener("click", () => api.reload())
       settings.addEventListener("click", () => api.action("settings"))
       help.addEventListener("click", () => api.action("help"))
       api.subscribe((next) => {
