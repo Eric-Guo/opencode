@@ -124,6 +124,8 @@ const api: ElectronAPI = {
   },
   setTitlebar: (theme) => ipcRenderer.invoke("set-titlebar", theme),
   runDesktopMenuAction: (action) => ipcRenderer.invoke("run-desktop-menu-action", action),
+  getDesktopMenuHistory: () => ipcRenderer.invoke("get-desktop-menu-history"),
+  goToDesktopMenuHistory: (index) => ipcRenderer.invoke("go-to-desktop-menu-history", index),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
