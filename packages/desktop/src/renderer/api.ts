@@ -23,8 +23,8 @@ const updaterHandler = (state: UpdaterState) => {
 }
 
 export const api: ElectronAPI = {
-  awaitInitialization: () => invoke("AppAwaitInitialization"),
-  reconnectService: () => invoke("AppReconnectService"),
+  awaitInitialization: () => invoke("AppAwaitInitialization").then(mutable),
+  reconnectService: () => invoke("AppReconnectService").then(mutable),
   browserPane: {
     request: (request) => invoke("BrowserPane", { request }),
     send: (request) => send("BrowserPane", { request }),
