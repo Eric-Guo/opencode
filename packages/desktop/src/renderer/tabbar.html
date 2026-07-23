@@ -185,10 +185,6 @@
     <main>
       <nav id="tabs" aria-label="Tabs"></nav>
       <nav id="tools" aria-label="Navigation">
-        <button class="tab-button" id="changelog" title="更新日志" aria-label="更新日志">
-          <span class="tab-icon" aria-hidden="true">📋</span>
-          <span class="tab-label">更新日志</span>
-        </button>
         <button class="tab-button" id="help" title="Help" aria-label="Help">
           <span class="tab-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -211,7 +207,6 @@
     <script>
       const api = window.desktopTabs
       const tabs = document.getElementById("tabs")
-      const changelog = document.getElementById("changelog")
       const settings = document.getElementById("settings")
       const help = document.getElementById("help")
       const icons = {
@@ -261,7 +256,6 @@
         )
       }
 
-      changelog.addEventListener("click", () => api.action("changelog"))
       settings.addEventListener("click", () => api.action("settings"))
       help.addEventListener("click", () => api.action("help"))
       api.subscribe((next) => {

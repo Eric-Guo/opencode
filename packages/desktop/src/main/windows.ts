@@ -100,14 +100,13 @@ const tabbarWidth = 72
 const maxZoomLevel = 10
 const minZoomLevel = 0.2
 const helpURL = "https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"
-const changelogURL = "https://changelog.thape.com.cn/opencode"
 const desktopTabManagers = new Map<number, DesktopTabManager>()
 const desktopTabManagersByWindow = new WeakMap<BrowserWindow, DesktopTabManager>()
 const desktopTabHistoryListeners = new Set<() => void>()
 const externalTabSessionRestores = new Map<string, Promise<void>>()
 
 type DesktopTabID = string
-type DesktopTabAction = "settings" | "help" | "changelog"
+type DesktopTabAction = "settings" | "help"
 type DesktopTabManager = ReturnType<typeof createDesktopTabManager>
 type DesktopTabsState = {
   active: DesktopTabID
@@ -678,9 +677,6 @@ function createDesktopTabManager(
       void shell.openExternal(helpURL)
       return
     }
-    if (action === "changelog") {
-      void shell.openExternal(changelogURL)
-    }
   }
 
   const managerValue = {
@@ -936,7 +932,7 @@ function registerDesktopTabsIpc() {
     desktopTabManagers.get(event.sender.id)?.activate(id)
   })
   ipcMain.on("desktop-tabs-action", (event, action: DesktopTabAction) => {
-    if (action !== "settings" && action !== "help" && action !== "changelog") return
+    if (action !== "settings" && action !== "help") return
     desktopTabManagers.get(event.sender.id)?.action(action)
   })
 }
