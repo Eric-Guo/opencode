@@ -119,6 +119,8 @@ export const api: ElectronAPI = {
   onZoomFactorChanged: (cb) => listen("WindowZoomChanged", (event) => cb(event.factor)),
   setTitlebar: (theme) => invoke("WindowSetTitlebar", { theme }),
   runDesktopMenuAction: (action) => invoke("MenuRunAction", { action }),
+  getDesktopMenuHistory: () => invoke("MenuGetHistory").then(mutable),
+  goToDesktopMenuHistory: (index) => invoke("MenuGoToHistory", { index }),
   setBackgroundColor: (color) => invoke("AppSetBackgroundColor", { color }),
   exportDebugLogs: () => invoke("AppExportDebugLogs"),
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),

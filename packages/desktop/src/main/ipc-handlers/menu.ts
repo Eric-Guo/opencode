@@ -4,7 +4,7 @@ import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { runDesktopMenuAction } from "../native/menu-actions"
 import { Updater } from "../updater"
-import { getWindowFromWebContents } from "../windows"
+import { getDesktopTabHistory, getWindowFromWebContents, goToDesktopTabHistory } from "../windows"
 import { sender } from "./context"
 
 export const menuHandlers = MenuRpcs.toLayer(
@@ -22,6 +22,10 @@ export const menuHandlers = MenuRpcs.toLayer(
             relaunch: lifecycle.relaunch,
           }),
         ),
+      MenuGetHistory: (_args, context) =>
+        Effect.sync(() => getDesktopTabHistory(getWindowFromWebContents(sender(handoff, context)))),
+      MenuGoToHistory: ({ index }, context) =>
+        Effect.sync(() => goToDesktopTabHistory(getWindowFromWebContents(sender(handoff, context)), index)),
     })
   }),
 )
