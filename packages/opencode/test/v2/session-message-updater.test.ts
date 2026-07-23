@@ -198,7 +198,6 @@ test.skip("tool completion stores completed timestamp", () => {
         sessionID,
         assistantMessageID,
         callID,
-        structured: {},
         content: [{ type: "text", text: "/tmp" }],
         executed: true,
         resultState: { status: "done" },

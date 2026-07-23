@@ -280,7 +280,7 @@ describe("session.llm.ai-sdk adapter", () => {
       {
         type: "step-finish",
         index: 0,
-        reason: "unknown",
+        reason: { normalized: "unknown", raw: "other" },
         usage: {
           inputTokens: 10,
           outputTokens: 5,
@@ -293,7 +293,7 @@ describe("session.llm.ai-sdk adapter", () => {
       },
       {
         type: "finish",
-        reason: "unknown",
+        reason: { normalized: "unknown", raw: "other" },
         usage: {
           inputTokens: 11,
           outputTokens: 6,
