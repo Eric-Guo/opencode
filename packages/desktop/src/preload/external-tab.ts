@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron"
-import type { ElectronAPI } from "./types"
+import type { ServerReadyData } from "../shared/ipc-contract"
 
-const api: Pick<ElectronAPI, "awaitInitialization"> = {
+const api: { awaitInitialization: () => Promise<ServerReadyData> } = {
   awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
 }
 
