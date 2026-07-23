@@ -1,5 +1,6 @@
 import windowState from "electron-window-state"
 import contextMenu from "electron-context-menu"
+import type { DesktopMenuHistoryEntry } from "@opencode-ai/app/desktop-menu"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
@@ -29,6 +30,7 @@ import {
   type ExternalDesktopTab,
   type RendererDesktopTab,
 } from "./desktop-tabs"
+import { recentDesktopTabHistory } from "./desktop-tab-history"
 import {
   clipboardWritePermission,
   createExternalTabNavigationHandler,
@@ -101,6 +103,7 @@ const helpURL = "https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shu
 const changelogURL = "https://changelog.thape.com.cn/opencode"
 const desktopTabManagers = new Map<number, DesktopTabManager>()
 const desktopTabManagersByWindow = new WeakMap<BrowserWindow, DesktopTabManager>()
+const desktopTabHistoryListeners = new Set<() => void>()
 const externalTabSessionRestores = new Map<string, Promise<void>>()
 
 type DesktopTabID = string
@@ -139,6 +142,25 @@ export function reloadDesktopTab(win: BrowserWindow | null) {
     return
   }
   getPrimaryWebContents(win).reload()
+}
+
+export function getDesktopTabHistory(win: BrowserWindow | null) {
+  if (!win) return []
+  return desktopTabManagersByWindow.get(win)?.history() ?? []
+}
+
+export function goToDesktopTabHistory(win: BrowserWindow | null, index: number) {
+  if (!win || !Number.isInteger(index)) return
+  desktopTabManagersByWindow.get(win)?.goToHistory(index)
+}
+
+export function subscribeDesktopTabHistory(listener: () => void) {
+  desktopTabHistoryListeners.add(listener)
+  return () => desktopTabHistoryListeners.delete(listener)
+}
+
+function notifyDesktopTabHistory() {
+  desktopTabHistoryListeners.forEach((listener) => listener())
 }
 
 export function getWindowFromWebContents(contents: WebContents) {
@@ -470,6 +492,8 @@ function createOpenCodeView(win: BrowserWindow) {
   primaryWebContents.set(win, view.webContents)
   trackWebContents(win, view.webContents)
   registerViewContextMenu(view)
+  view.webContents.on("did-navigate", notifyDesktopTabHistory)
+  view.webContents.on("did-navigate-in-page", notifyDesktopTabHistory)
   view.setBackgroundColor(backgroundColor ?? defaultBackgroundColor())
   win.contentView.addChildView(view)
   return view
@@ -624,12 +648,24 @@ function createDesktopTabManager(
     layout()
     sendState()
     activeView.webContents.focus()
+    notifyDesktopTabHistory()
   }
 
   function navigate(direction: "back" | "forward") {
     const contents = getActiveView().webContents
     if (direction === "back" && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack()
     if (direction === "forward" && contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward()
+  }
+
+  function history(): DesktopMenuHistoryEntry[] {
+    const history = getActiveView().webContents.navigationHistory
+    return recentDesktopTabHistory(history.getAllEntries(), history.getActiveIndex())
+  }
+
+  function goToHistory(index: number) {
+    const history = getActiveView().webContents.navigationHistory
+    if (index < 0 || index >= history.getAllEntries().length || index === history.getActiveIndex()) return
+    history.goToIndex(index)
   }
 
   function runAction(action: DesktopTabAction) {
@@ -661,13 +697,17 @@ function createDesktopTabManager(
     reload: () => {
       getActiveView().webContents.reload()
     },
+    history,
+    goToHistory,
     action: runAction,
     sendState,
   }
 
   desktopTabManagers.set(tabbarWebContentsId, managerValue)
   desktopTabManagersByWindow.set(win, managerValue)
+  notifyDesktopTabHistory()
   win.on("resize", layout)
+  win.on("focus", notifyDesktopTabHistory)
   win.on("closed", () => {
     desktopTabManagers.delete(tabbarWebContentsId)
   })
@@ -685,6 +725,8 @@ function createRendererTabView(win: BrowserWindow, tab: RendererDesktopTab) {
   })
   trackWebContents(win, view.webContents, tab)
   registerViewContextMenu(view)
+  view.webContents.on("did-navigate", notifyDesktopTabHistory)
+  view.webContents.on("did-navigate-in-page", notifyDesktopTabHistory)
   allowRendererPermissions(view.webContents)
   wireWindowRecovery(win, view.webContents, tab.id)
   view.setBackgroundColor(backgroundColor ?? defaultBackgroundColor())
@@ -720,6 +762,8 @@ function createExternalView(
   })
   trackWebContents(win, view.webContents, tab)
   registerViewContextMenu(view)
+  view.webContents.on("did-navigate", notifyDesktopTabHistory)
+  view.webContents.on("did-navigate-in-page", notifyDesktopTabHistory)
   view.setBackgroundColor("#ffffff")
   view.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(

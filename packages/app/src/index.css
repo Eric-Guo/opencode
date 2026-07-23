@@ -77,6 +77,8 @@
 
   [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-item-label"],
   [data-component="dropdown-menu-sub-content"].desktop-app-menu [data-slot="dropdown-menu-item-label"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
