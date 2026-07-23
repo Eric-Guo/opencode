@@ -96,7 +96,7 @@ const primaryWebContents = new WeakMap<BrowserWindow, WebContents>()
 const webContentsOwners = new Map<number, BrowserWindow>()
 const webContentsInitializations = new Map<number, DesktopTabInitialization>()
 const titlebarHeight = 40
-const tabbarWidth = 72
+const tabbarWidth = 80
 const maxZoomLevel = 10
 const minZoomLevel = 0.2
 const helpURL = "https://plm.thape.com.cn/projects/opencode/wiki/01-shi-yong-shuo-ming"
@@ -116,6 +116,10 @@ type DesktopTabsState = {
     label: string
     skipDisplay: boolean
   }[]
+  navigation: {
+    canGoBack: boolean
+    canGoForward: boolean
+  }
 }
 
 let desktopTabsIpcRegistered = false
@@ -160,6 +164,7 @@ export function subscribeDesktopTabHistory(listener: () => void) {
 
 function notifyDesktopTabHistory() {
   desktopTabHistoryListeners.forEach((listener) => listener())
+  desktopTabManagers.forEach((manager) => manager.sendState())
 }
 
 export function getWindowFromWebContents(contents: WebContents) {
@@ -602,6 +607,7 @@ function createDesktopTabManager(
   }
 
   function state(): DesktopTabsState {
+    const history = getActiveView().webContents.navigationHistory
     return {
       active,
       tabs: desktopTabs.map((tab) => ({
@@ -610,6 +616,10 @@ function createDesktopTabManager(
         label: tab.label,
         skipDisplay: tab.skipDisplay,
       })),
+      navigation: {
+        canGoBack: history.canGoBack(),
+        canGoForward: history.canGoForward(),
+      },
     }
   }
 
@@ -930,6 +940,15 @@ function registerDesktopTabsIpc() {
   ipcMain.on("desktop-tabs-unsubscribe", () => {})
   ipcMain.on("desktop-tabs-select", (event, id: DesktopTabID) => {
     desktopTabManagers.get(event.sender.id)?.activate(id)
+  })
+  ipcMain.on("desktop-tabs-back", (event) => {
+    desktopTabManagers.get(event.sender.id)?.back()
+  })
+  ipcMain.on("desktop-tabs-forward", (event) => {
+    desktopTabManagers.get(event.sender.id)?.forward()
+  })
+  ipcMain.on("desktop-tabs-reload", (event) => {
+    desktopTabManagers.get(event.sender.id)?.reload()
   })
   ipcMain.on("desktop-tabs-action", (event, action: DesktopTabAction) => {
     if (action !== "settings" && action !== "help") return
