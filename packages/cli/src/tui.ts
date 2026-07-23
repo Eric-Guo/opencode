@@ -26,6 +26,7 @@ export function runV1TuiBridge(input: V1TuiCommandInput) {
         directory: directory === undefined ? Option.none() : Option.some(directory),
         continue: input.continue ?? false,
         session: input.session === undefined ? Option.none() : Option.some(input.session),
+        prompt: Option.none(),
         server: Option.none(),
         standalone: true,
       },

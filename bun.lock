@@ -496,7 +496,9 @@
     "packages/docs": {
       "name": "@opencode-ai/docs",
       "devDependencies": {
+        "effect": "catalog:",
         "mint": "4.2.666",
+        "prettier": "3.6.2",
       },
     },
     "packages/effect-drizzle-sqlite": {
