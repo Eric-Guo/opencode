@@ -1,6 +1,11 @@
 import { BrowserWindow } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
-import { getPrimaryWebContents, updateTitlebar } from "../windows"
+import {
+  getPrimaryWebContents,
+  navigateDesktopTab,
+  reloadDesktopTab,
+  updateTitlebar,
+} from "../windows"
 
 export type DesktopMenuActionHandlers = Partial<{
   checkForUpdates: () => void
@@ -37,7 +42,13 @@ export function runDesktopMenuAction(
       win?.maximize()
       return
     case "view.reload":
-      getContents(win)?.reload()
+      reloadDesktopTab(win)
+      return
+    case "history.back":
+      navigateDesktopTab(win, "back")
+      return
+    case "history.forward":
+      navigateDesktopTab(win, "forward")
       return
     case "view.toggleDevTools":
       getContents(win)?.toggleDevTools()
