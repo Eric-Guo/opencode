@@ -440,12 +440,12 @@ const layer = Layer.effect(
               usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
-            ctx.assistantMessage.finish = value.reason
+            ctx.assistantMessage.finish = value.reason.normalized
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
             yield* session.updatePart({
               id: PartID.ascending(),
-              reason: value.reason,
+              reason: value.reason.normalized,
               snapshot: completedSnapshot,
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.assistantMessage.sessionID,

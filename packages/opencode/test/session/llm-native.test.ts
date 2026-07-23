@@ -568,7 +568,7 @@ describe("session.llm-native.request", () => {
           Stream.fromIterable([
             LLMEvent.toolCall({ id: "call-1", name: "lookup", input: {} }),
             LLMEvent.toolCall({ id: "call-2", name: "lookup", input: {} }),
-            LLMEvent.finish({ reason: "tool-calls" }),
+            LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
           ]),
         generate: () => Effect.die("unused"),
       } as LLMClientShape

@@ -201,8 +201,8 @@ const providerErrorLLM = Layer.succeed(
           result: { type: "error", value: "provider boom" },
           providerExecuted: true,
         }),
-        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
-        LLMEvent.finish({ reason: "stop" }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" } }),
+        LLMEvent.finish({ reason: { normalized: "stop" } }),
       ),
   }),
 )
