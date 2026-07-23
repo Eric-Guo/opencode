@@ -22,7 +22,12 @@ import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
 import { Updater } from "./updater"
-import { getLastFocusedWindow } from "./windows"
+import {
+  getDesktopTabHistory,
+  getLastFocusedWindow,
+  goToDesktopTabHistory,
+  subscribeDesktopTabHistory,
+} from "./windows"
 import { Wsl } from "./wsl/start"
 
 const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer, Ssh.layer)
@@ -59,6 +64,9 @@ export const registerIpcHandlers = Effect.gen(function* () {
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
     relaunch: lifecycle.relaunch,
+    getHistory: () => getDesktopTabHistory(getLastFocusedWindow()),
+    goToHistory: (index: number) => goToDesktopTabHistory(getLastFocusedWindow(), index),
+    onHistoryChange: subscribeDesktopTabHistory,
   }
   const wire = (_event: Electron.Event, win: BrowserWindow) => {
     win.webContents.on("before-input-event", (_event, input) => {
