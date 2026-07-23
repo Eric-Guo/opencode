@@ -13,10 +13,12 @@ import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attach
 import { getStore, removeStoreFileIfEmpty } from "./store"
 import {
   getDesktopTabInitializationFromWebContents,
+  getDesktopTabHistory,
   getPinchZoomEnabled,
   getPrimaryWebContents,
   getWindowID,
   getWindowFromWebContents,
+  goToDesktopTabHistory,
   openExternalURL,
   openLocalFileURL,
   setPinchZoomEnabled,
@@ -291,6 +293,12 @@ export function registerIpcHandlers(deps: Deps) {
       checkForUpdates: () => void deps.showUpdater(),
       relaunch: deps.relaunch,
     })
+  })
+  ipcMain.handle("get-desktop-menu-history", (event: IpcMainInvokeEvent) =>
+    getDesktopTabHistory(getWindowFromWebContents(event.sender)),
+  )
+  ipcMain.handle("go-to-desktop-menu-history", (event: IpcMainInvokeEvent, index: number) => {
+    goToDesktopTabHistory(getWindowFromWebContents(event.sender), index)
   })
 }
 

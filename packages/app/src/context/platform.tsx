@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
-import type { DesktopMenuAction } from "../desktop-menu"
+import type { DesktopMenuAction, DesktopMenuHistoryEntry } from "../desktop-menu"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
 import type { UpdaterPlatform } from "../updater"
@@ -106,6 +106,12 @@ type PlatformBase = {
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
+
+  /** Read the active desktop tab's in-memory URL history */
+  getDesktopMenuHistory?(): Promise<DesktopMenuHistoryEntry[]>
+
+  /** Navigate the active desktop tab to an in-memory history entry */
+  goToDesktopMenuHistory?(index: number): Promise<void> | void
 
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
