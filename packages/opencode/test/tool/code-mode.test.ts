@@ -218,23 +218,21 @@ describe("code mode execute", () => {
     expect(description).toContain(
       "tools.zeta.only_tool(input: {\n  /** Subject to look up */\n  topic: string,\n}): Promise<unknown>",
     )
-    expect(description).toContain("tools.$codemode.search(")
+    expect(description).toContain("search(input:")
     expect(description).toContain("  limit?: number,\n  offset?: number,")
     expect(description).toContain("  remaining: number,\n  next: {")
     expect(description).toContain("      offset: number,\n    } | null,")
     expect(description).toContain(
-      '1. If needed, discover tools: `return await tools.$codemode.search({ query: "<intent + key nouns>" })`.',
+      '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
     )
-    expect(description).toContain(
-      '- Browse one namespace: `await tools.$codemode.search({ query: "", namespace: "<name>" })`.',
-    )
+    expect(description).toContain('- Browse one namespace: `search({ query: "", namespace: "<name>" })`.')
     expect(description).not.toContain("total_count")
     expect(description).toContain("tools.alpha.op_0(")
     expect(description).not.toContain("tools.alpha.op_99(")
 
     const tool = await build(tools, ["alpha", "zeta"])
     const out = await Effect.runPromise(
-      tool.execute({ code: "return await tools.$codemode.search({ query: 'only tool', limit: 3, offset: 0 })" }, ctx),
+      tool.execute({ code: "return search({ query: 'only tool', limit: 3, offset: 0 })" }, ctx),
     )
     const result = JSON.parse(out.output)
     expect(result.items.map((i: any) => i.path)).toContain("tools.zeta.only_tool")
@@ -245,7 +243,7 @@ describe("code mode execute", () => {
     expect(signature).toContain("  /** Subject to look up */\n  topic: string")
     expect(description).toContain("/** Subject to look up */")
     expect(out.metadata.toolCalls).toEqual([
-      { tool: "$codemode.search", status: "completed", input: { query: "only tool", limit: 3, offset: 0 } },
+      { tool: "search", status: "completed", input: { query: "only tool", limit: 3, offset: 0 } },
     ])
   })
 
@@ -256,7 +254,7 @@ describe("code mode execute", () => {
     expect(output.metadata.toolCalls).toEqual([])
   })
 
-  test("Object.keys(tools) enumerates the MCP server and CodeMode namespaces", async () => {
+  test("Object.keys(tools) enumerates the MCP server namespaces", async () => {
     const tool = await build({
       github_list_issues: mcpTool("list_issues", () => ""),
       linear_search: mcpTool("search", () => ""),
@@ -267,7 +265,7 @@ describe("code mode execute", () => {
         ctx,
       ),
     )
-    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear", "$codemode"], count: 3 })
+    expect(JSON.parse(output.output)).toEqual({ namespaces: ["github", "linear"], count: 2 })
   })
 
   test("calls a namespaced MCP tool and flows its text result back into the program", async () => {

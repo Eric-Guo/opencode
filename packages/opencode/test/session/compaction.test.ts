@@ -326,11 +326,11 @@ function reply(
       LLMEvent.textEnd({ id: "txt-0" }),
       LLMEvent.stepFinish({
         index: 0,
-        reason: "stop",
+        reason: { normalized: "stop" },
         usage: basicUsage(),
       }),
       LLMEvent.finish({
-        reason: "stop",
+        reason: { normalized: "stop" },
         usage: basicUsage(),
       }),
     )
@@ -1295,8 +1295,8 @@ describe("session.compaction.process", () => {
           LLMEvent.textStart({ id: "txt-0" }),
           LLMEvent.textDelta({ id: "txt-0", text: "summary" }),
           LLMEvent.textEnd({ id: "txt-0" }),
-          LLMEvent.stepFinish({ index: 0, reason: "stop", usage: basicUsage() }),
-          LLMEvent.finish({ reason: "stop", usage: basicUsage() }),
+          LLMEvent.stepFinish({ index: 0, reason: { normalized: "stop" }, usage: basicUsage() }),
+          LLMEvent.finish({ reason: { normalized: "stop" }, usage: basicUsage() }),
         ),
       )
       return Effect.gen(function* () {
@@ -1331,11 +1331,11 @@ describe("session.compaction.process", () => {
           LLMEvent.toolCall({ id: "call-1", name: "_noop", input: {} }),
           LLMEvent.stepFinish({
             index: 0,
-            reason: "tool-calls",
+            reason: { normalized: "tool-calls" },
             usage: basicUsage(),
           }),
           LLMEvent.finish({
-            reason: "tool-calls",
+            reason: { normalized: "tool-calls" },
             usage: basicUsage(),
           }),
         ),
