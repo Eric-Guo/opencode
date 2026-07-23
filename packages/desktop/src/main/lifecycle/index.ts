@@ -7,7 +7,13 @@ import { DeepLinksOpened } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import {
+  getLastFocusedWindow,
+  getPrimaryWebContents,
+  makeMainWindows,
+  setAppQuitting,
+  setRelaunchHandler,
+} from "../windows"
 import { acquireApplicationLock, configureApplication } from "./environment"
 import { Shutdown } from "./shutdown"
 
@@ -36,7 +42,7 @@ const runtime = Layer.effect(
       if (!urls.length) return
       pendingDeepLinks.push(...urls)
       const win = getLastFocusedWindow()
-      if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
+      if (win) emitIpcEvent(getPrimaryWebContents(win), new DeepLinksOpened({ urls }))
     }
     const relaunch = () => {
       setAppQuitting()
