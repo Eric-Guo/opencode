@@ -12,6 +12,8 @@ export type DesktopMenuAction =
   | "edit.paste"
   | "edit.delete"
   | "edit.selectAll"
+  | "history.back"
+  | "history.forward"
   | "view.reload"
   | "view.toggleDevTools"
   | "view.resetZoom"
@@ -85,7 +87,6 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         enabled: "updater",
       },
       { type: "item", labelKey: "desktop.menu.settings", command: "settings.open", accelerator: { macos: "Cmd+," } },
-      { type: "item", labelKey: "desktop.menu.reloadWebview", action: "view.reload" },
       { type: "item", labelKey: "desktop.menu.restart", action: "app.relaunch" },
       { type: "item", labelKey: "desktop.menu.exportLogs", command: "logs.export" },
       { type: "separator" },
@@ -192,7 +193,12 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       },
       { type: "item", labelKey: "desktop.menu.toggleFileTree", command: "fileTree.toggle" },
       { type: "separator" },
-      { type: "item", labelKey: "desktop.menu.reload", action: "view.reload", role: "reload" },
+      {
+        type: "item",
+        labelKey: "desktop.menu.reload",
+        action: "view.reload",
+        accelerator: { macos: "Cmd+R", windows: "Ctrl+R" },
+      },
       {
         type: "item",
         labelKey: "desktop.menu.toggleDeveloperTools",
@@ -231,12 +237,27 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     ],
   },
   {
+    id: "history",
+    labelKey: "desktop.menu.history",
+    items: [
+      {
+        type: "item",
+        labelKey: "desktop.menu.back",
+        action: "history.back",
+        accelerator: { macos: "Cmd+[", windows: "Alt+Left" },
+      },
+      {
+        type: "item",
+        labelKey: "desktop.menu.forward",
+        action: "history.forward",
+        accelerator: { macos: "Cmd+]", windows: "Alt+Right" },
+      },
+    ],
+  },
+  {
     id: "go",
     labelKey: "desktop.menu.go",
     items: [
-      { type: "item", labelKey: "desktop.menu.back", command: "common.goBack", accelerator: { macos: "Cmd+[" } },
-      { type: "item", labelKey: "desktop.menu.forward", command: "common.goForward", accelerator: { macos: "Cmd+]" } },
-      { type: "separator" },
       {
         type: "item",
         labelKey: "desktop.menu.previousSession",
