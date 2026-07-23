@@ -42,9 +42,43 @@
         align-items: center;
         width: 100%;
         height: 100%;
-        padding: 54px 8px 8px;
-        border-right: 1px solid var(--border);
-        gap: 8px;
+        padding: 6px 8px 8px;
+        gap: 4px;
+      }
+
+      body[data-platform="darwin"] main {
+        padding-top: 40px;
+      }
+
+      #page-navigation {
+        display: flex;
+        align-items: center;
+        width: 60px;
+        height: 24px;
+        transform: translateX(1px);
+      }
+
+      .navigation-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        min-width: 20px;
+        height: 24px;
+        min-height: 24px;
+        padding: 0;
+        border-radius: 6px;
+      }
+
+      .navigation-button:not(:disabled):hover {
+        background: var(--surface);
+        color: var(--text);
+      }
+
+      .navigation-button svg {
+        display: block;
+        width: 18px;
+        height: 18px;
       }
 
       #tabs,
@@ -183,6 +217,32 @@
   </head>
   <body>
     <main>
+      <nav id="page-navigation" aria-label="Page navigation">
+        <button class="navigation-button" id="back" title="Back" aria-label="Back">
+          <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+            <path d="M12 15 7 10l5-5" stroke="currentColor" stroke-linecap="square" />
+          </svg>
+        </button>
+        <button class="navigation-button" id="reload" title="Refresh page" aria-label="Refresh page">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.25"
+            stroke-linecap="square"
+            stroke-linejoin="miter"
+          >
+            <path d="M15.7 7.2A6.25 6.25 0 1 0 16.25 10" />
+            <path d="M12.4 7.2h3.3V3.9" />
+          </svg>
+        </button>
+        <button class="navigation-button" id="forward" title="Forward" aria-label="Forward">
+          <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+            <path d="m8 15 5-5-5-5" stroke="currentColor" stroke-linecap="square" />
+          </svg>
+        </button>
+      </nav>
       <nav id="tabs" aria-label="Tabs"></nav>
       <nav id="tools" aria-label="Navigation">
         <button class="tab-button" id="help" title="Help" aria-label="Help">
@@ -206,7 +266,11 @@
     </main>
     <script>
       const api = window.desktopTabs
+      document.body.dataset.platform = api.platform
       const tabs = document.getElementById("tabs")
+      const back = document.getElementById("back")
+      const reload = document.getElementById("reload")
+      const forward = document.getElementById("forward")
       const settings = document.getElementById("settings")
       const help = document.getElementById("help")
       const icons = {
@@ -254,8 +318,14 @@
             return button
           }),
         )
+
+        back.disabled = !state.navigation.canGoBack
+        forward.disabled = !state.navigation.canGoForward
       }
 
+      back.addEventListener("click", () => api.back())
+      reload.addEventListener("click", () => api.reload())
+      forward.addEventListener("click", () => api.forward())
       settings.addEventListener("click", () => api.action("settings"))
       help.addEventListener("click", () => api.action("help"))
       api.subscribe((next) => {
