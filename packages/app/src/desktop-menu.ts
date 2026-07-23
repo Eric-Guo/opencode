@@ -1,5 +1,13 @@
 export type DesktopMenuPlatform = "macos" | "windows"
 
+export const DESKTOP_MENU_HISTORY_LIMIT = 10
+
+export type DesktopMenuHistoryEntry = {
+  index: number
+  url: string
+  active: boolean
+}
+
 export type DesktopMenuAction =
   | "app.checkForUpdates"
   | "app.relaunch"
