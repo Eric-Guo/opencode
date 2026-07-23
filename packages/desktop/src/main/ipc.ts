@@ -1,6 +1,7 @@
 export * as Ipc from "./ipc"
 
-import { app, BrowserWindow, MessageChannelMain } from "electron"
+import { ipcMain, MessageChannelMain } from "electron"
+import type { WebContents } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
@@ -22,11 +23,14 @@ import { DesktopCli } from "./service/desktop-cli"
 import { DesktopStorage } from "./storage"
 import { Updater } from "./updater"
 import {
+  getDesktopTabInitializationFromWebContents,
   getDesktopTabHistory,
   getLastFocusedWindow,
   goToDesktopTabHistory,
   subscribeDesktopTabHistory,
+  subscribeWebContents,
 } from "./windows"
+import { BackgroundService } from "./service/background-service"
 import { Wsl } from "./wsl/start"
 
 const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
@@ -50,8 +54,11 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const handoff = yield* IpcPortHandoff
   const lifecycle = yield* ApplicationLifecycle.Service
   const desktopCli = yield* DesktopCli.Service
+  const background = yield* BackgroundService.Service
   const updater = yield* Updater.Service
-  const runFork = Effect.runForkWith(yield* Effect.context())
+  const context = yield* Effect.context()
+  const runFork = Effect.runForkWith(context)
+  const runPromise = Effect.runPromiseWith(context)
   const menu = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -66,19 +73,27 @@ export const registerIpcHandlers = Effect.gen(function* () {
     goToHistory: (index: number) => goToDesktopTabHistory(getLastFocusedWindow(), index),
     onHistoryChange: subscribeDesktopTabHistory,
   }
-  const wire = (_event: Electron.Event, win: BrowserWindow) => {
-    win.webContents.on("did-finish-load", () => {
-      if (win.isDestroyed() || win.webContents.isDestroyed()) return
+  const wire = (contents: WebContents) => {
+    contents.on("did-finish-load", () => {
+      if (contents.isDestroyed()) return
       const channel = new MessageChannelMain()
-      handoff.bind(win.webContents, channel.port1)
-      win.webContents.postMessage(IpcTransportPort, null, [channel.port2])
+      handoff.bind(contents, channel.port1)
+      contents.postMessage(IpcTransportPort, null, [channel.port2])
     })
   }
-  yield* Effect.sync(() => {
-    app.on("browser-window-created", wire)
-    BrowserWindow.getAllWindows().forEach((win) => wire({} as Electron.Event, win))
-  })
-  yield* Effect.addFinalizer(() => Effect.sync(() => app.off("browser-window-created", wire)))
+  const unsubscribe = subscribeWebContents(wire)
+  const awaitInitialization = (event: Electron.IpcMainInvokeEvent) =>
+    runPromise(background.connection).then((data) => ({
+      ...data,
+      ...getDesktopTabInitializationFromWebContents(event.sender),
+    }))
+  yield* Effect.sync(() => ipcMain.handle("await-initialization", awaitInitialization))
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      unsubscribe()
+      ipcMain.removeHandler("await-initialization")
+    }),
+  )
   return {
     installMenu: () => createMenu(menu),
   }
