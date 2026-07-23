@@ -10,16 +10,24 @@ type DesktopTabsState = {
     label: string
     skipDisplay: boolean
   }[]
+  navigation: {
+    canGoBack: boolean
+    canGoForward: boolean
+  }
 }
 
 const tabIDs = new Set<DesktopTabID>()
 const actions = new Set<DesktopTabAction>(["settings", "help"])
 
 const api = {
+  platform: process.platform,
   select: (id: DesktopTabID) => {
     if (!tabIDs.has(id)) return
     ipcRenderer.send("desktop-tabs-select", id)
   },
+  back: () => ipcRenderer.send("desktop-tabs-back"),
+  forward: () => ipcRenderer.send("desktop-tabs-forward"),
+  reload: () => ipcRenderer.send("desktop-tabs-reload"),
   action: (action: DesktopTabAction) => {
     if (!actions.has(action)) return
     ipcRenderer.send("desktop-tabs-action", action)
