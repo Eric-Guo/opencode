@@ -17,11 +17,14 @@ import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { Updater } from "../updater"
 import {
+  getDesktopTabHistory,
   getLastFocusedWindow,
   getDesktopTabInitializationFromWebContents,
   getPrimaryWebContents,
   getWindowFromWebContents,
+  goToDesktopTabHistory,
   setBackgroundColor,
+  subscribeDesktopTabHistory,
 } from "../windows"
 import { sender } from "./context"
 
@@ -74,6 +77,9 @@ export const appHandlers = AppRpcs.toLayer(
             createWindow: lifecycle.createWindow,
             openExternal: (url) => runFork(openExternalURL(url)),
             relaunch: lifecycle.relaunch,
+            getHistory: () => getDesktopTabHistory(getLastFocusedWindow()),
+            goToHistory: (index) => goToDesktopTabHistory(getLastFocusedWindow(), index),
+            onHistoryChange: subscribeDesktopTabHistory,
           })
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
