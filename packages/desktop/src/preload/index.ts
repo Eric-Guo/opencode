@@ -37,6 +37,7 @@ const updaterHandler = (state: UpdaterState) => {
 
 const api: ElectronAPI = {
   awaitInitialization: () => invoke(Ipc.app.awaitInitialization),
+  getCybrosCurrentUser: () => invoke(Ipc.app.getCybrosCurrentUser),
   wslServers: {
     getState: () => invoke(Ipc.wsl.getState),
     subscribe: (cb) => {
