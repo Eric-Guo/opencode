@@ -8,6 +8,11 @@ export type ServerReadyData = {
   suggestedQuestions?: string[]
 }
 
+export type CybrosCurrentUser = {
+  chinese_name: string
+  clerk_code: string
+}
+
 export type TitlebarTheme = {
   mode: "light" | "dark"
   scheme?: "system" | "light" | "dark"
