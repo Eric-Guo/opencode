@@ -1,6 +1,6 @@
 export * as Ipc from "./ipc"
 
-import { ipcMain, MessageChannelMain } from "electron"
+import { ipcMain, MessageChannelMain, net } from "electron"
 import type { WebContents } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
@@ -18,19 +18,20 @@ import { wslHandlers } from "./ipc-handlers/wsl"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
 import { createMenu, sendMenuCommand } from "./native/menu"
+import { BackgroundService } from "./service/background-service"
 import { DesktopStorage } from "./storage"
 import { Updater } from "./updater"
 import {
-  getDesktopTabInitializationFromWebContents,
   getDesktopTabHistory,
+  getDesktopTabInitializationFromWebContents,
   getLastFocusedWindow,
   goToDesktopTabHistory,
   subscribeDesktopTabHistory,
   subscribeWebContents,
 } from "./windows"
-import { BackgroundService } from "./service/background-service"
 import { Wsl } from "./wsl/start"
 
+const cybrosCurrentUserURL = "https://cybros.thape.com.cn/api/sigma_agents/me.json"
 const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
 const handlers = Layer.mergeAll(
   appHandlers,
@@ -83,11 +84,28 @@ export const registerIpcHandlers = Effect.gen(function* () {
       ...data,
       ...getDesktopTabInitializationFromWebContents(event.sender),
     }))
-  yield* Effect.sync(() => ipcMain.handle("await-initialization", awaitInitialization))
+  const getCybrosCurrentUser = async () => {
+    const key = process.env.THAPE_SSO_BEARER_API_KEY
+    if (!key) throw new Error("Cybros SSO bearer key is not configured")
+    const response = await net.fetch(cybrosCurrentUserURL, {
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+    })
+    if (!response.ok) throw new Error(`Failed to load Cybros user: ${response.status}`)
+    return response.json()
+  }
+  yield* Effect.sync(() => {
+    ipcMain.handle("await-initialization", awaitInitialization)
+    ipcMain.handle("get-cybros-current-user", getCybrosCurrentUser)
+  })
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       unsubscribe()
       ipcMain.removeHandler("await-initialization")
+      ipcMain.removeHandler("get-cybros-current-user")
     }),
   )
   return {
