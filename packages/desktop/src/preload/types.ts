@@ -16,6 +16,7 @@ export type UpdaterAPI = {
 
 export type ElectronAPI = {
   awaitInitialization: IpcInvokeMethod<typeof Ipc.app.awaitInitialization>
+  getCybrosCurrentUser: IpcInvokeMethod<typeof Ipc.app.getCybrosCurrentUser>
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks: IpcInvokeMethod<typeof Ipc.app.consumeInitialDeepLinks>
