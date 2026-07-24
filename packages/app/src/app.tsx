@@ -68,6 +68,7 @@ import { createSessionLineage } from "@/pages/session/session-lineage"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome, LegacyHome } from "@/pages/home"
+import { StartupSplash } from "@/components/startup-splash"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
 
@@ -457,9 +458,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; start
         </Show>
       </Show>
       <Show when={loading()}>
-        <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-80 h-80 opacity-50 animate-pulse" />
-        </div>
+        <StartupSplash />
       </Show>
     </>
   )
