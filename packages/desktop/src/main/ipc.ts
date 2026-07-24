@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
 import { basename, join } from "node:path"
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
+import { app, BrowserWindow, clipboard, dialog, ipcMain, net, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
@@ -34,6 +34,7 @@ const pickerFilters = (ext?: string[]) => {
 }
 
 const pickedFiles = createPickedFileAuthorizations()
+const CYBROS_CURRENT_USER_URL = "https://cybros.thape.com.cn/api/sigma_agents/me.json"
 
 type Deps = {
   killSidecar: () => Promise<void> | void
@@ -69,6 +70,20 @@ export function registerIpcHandlers(deps: Deps) {
       ...data,
       ...getDesktopTabInitializationFromWebContents(event.sender),
     }
+  })
+  ipcMain.handle("get-cybros-current-user", async () => {
+    const ssoJwtSecretKey = process.env.THAPE_SSO_BEARER_API_KEY
+    if (!ssoJwtSecretKey) throw new Error("Cybros SSO bearer key is not configured")
+
+    const response = await net.fetch(CYBROS_CURRENT_USER_URL, {
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ssoJwtSecretKey}`,
+      },
+    })
+    if (!response.ok) throw new Error(`Failed to load Cybros user: ${response.status}`)
+    return response.json()
   })
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
