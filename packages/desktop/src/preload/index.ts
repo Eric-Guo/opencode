@@ -44,6 +44,7 @@ function invokeWsl<Channel extends WslInvoke>(channel: Channel, ...args: IpcInvo
 
 const api: ElectronAPI = {
   awaitInitialization: () => invoke(Ipc.app.awaitInitialization),
+  getCybrosCurrentUser: () => invoke(Ipc.app.getCybrosCurrentUser),
   wslServers: {
     getState: () => invokeWsl(Ipc.wsl.getState),
     subscribe: (cb) => {

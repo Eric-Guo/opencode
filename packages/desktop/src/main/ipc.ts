@@ -1,4 +1,4 @@
-import { ipcMain } from "electron"
+import { ipcMain, net } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 
@@ -32,6 +32,7 @@ import type { UpdaterIpc } from "./updater"
 import type { WslIpc } from "./wsl/ipc"
 
 type MaybePromise<Value> = Value | Promise<Value>
+const cybrosCurrentUserURL = "https://cybros.thape.com.cn/api/sigma_agents/me.json"
 
 function handle<Channel extends keyof IpcInvoke>(
   channel: Channel,
@@ -71,6 +72,19 @@ export function registerIpcHandlers(deps: Deps) {
   handle(Ipc.app.awaitInitialization, async (event) => {
     const data = await deps.awaitInitialization()
     return { ...data, ...getDesktopTabInitializationFromWebContents(event.sender) }
+  })
+  handle(Ipc.app.getCybrosCurrentUser, async () => {
+    const key = process.env.THAPE_SSO_BEARER_API_KEY
+    if (!key) throw new Error("Cybros SSO bearer key is not configured")
+    const response = await net.fetch(cybrosCurrentUserURL, {
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+    })
+    if (!response.ok) throw new Error(`Failed to load Cybros user: ${response.status}`)
+    return response.json()
   })
   handle(Ipc.app.consumeInitialDeepLinks, () => deps.consumeInitialDeepLinks())
   handle(Ipc.app.getDefaultServerUrl, () => deps.getDefaultServerUrl())
