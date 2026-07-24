@@ -6,6 +6,7 @@ import type { WslServerConfig, WslServersEvent, WslServersState } from "@opencod
 export const Ipc = {
   app: {
     awaitInitialization: "await-initialization",
+    getCybrosCurrentUser: "get-cybros-current-user",
     consumeInitialDeepLinks: "consume-initial-deep-links",
     deepLink: "deep-link",
     getDefaultServerUrl: "get-default-server-url",
@@ -106,6 +107,11 @@ export type ServerReadyData = {
   suggestedQuestions?: string[]
 }
 
+export type CybrosCurrentUser = {
+  chinese_name: string
+  clerk_code: string
+}
+
 export type TitlebarTheme = {
   mode: "light" | "dark"
   scheme?: "system" | "light" | "dark"
@@ -147,6 +153,7 @@ export type ClipboardImage = {
 
 export type IpcInvoke = {
   [Ipc.app.awaitInitialization]: { args: []; result: ServerReadyData }
+  [Ipc.app.getCybrosCurrentUser]: { args: []; result: CybrosCurrentUser }
   [Ipc.app.consumeInitialDeepLinks]: { args: []; result: string[] }
   [Ipc.app.getDefaultServerUrl]: { args: []; result: string | null }
   [Ipc.app.setDefaultServerUrl]: { args: [url: string | null]; result: void }
