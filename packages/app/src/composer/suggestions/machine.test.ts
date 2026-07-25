@@ -64,6 +64,23 @@ describe("Composer interaction machine", () => {
     expect(result.commands).toContainEqual({ type: "draft.setText", value: "" })
   })
 
+  test("keeps disabled triggers as ordinary prompt text", () => {
+    const capabilities = { commands: false, context: false, shell: false }
+
+    for (const value of ["!", "/review", "ask @src"]) {
+      const result = transitionComposer(
+        createComposerInteractionState(),
+        { type: "input.changed", value },
+        persisted(value),
+        capabilities,
+      )
+
+      expect(result.state.mode).toBe("normal")
+      expect(result.state.popover).toEqual({ type: "closed" })
+      expect(result.commands).toContainEqual({ type: "draft.setText", value })
+    }
+  })
+
   test("leaves shell mode with escape", () => {
     const state = { ...createComposerInteractionState(), mode: "shell" as const }
     const result = transitionComposer(
