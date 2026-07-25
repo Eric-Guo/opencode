@@ -16,7 +16,7 @@ export type ComposerStateStore = [
 
 export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStateStore>
 
-export function createComposerEditorActions(input: ComposerStateStoreInput) {
+export function createComposerEditorActions(input: ComposerStateStoreInput, onChange?: () => void) {
   const tuple = () => (typeof input === "function" ? input() : input)
 
   const store = () => {
@@ -38,14 +38,17 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
     setPrompt(prompt: ComposerPrompt, cursor?: number) {
       // Persisted setters encode on every call, even inside a reactive batch.
       batch(() => setStore()({ prompt, ...(cursor !== undefined ? { cursor } : {}), retry: undefined }))
+      onChange?.()
     },
     setCursor(cursor: number) {
       if (untrack(() => store().cursor) === cursor) return
       setStore()("cursor", cursor)
+      onChange?.()
     },
     setMode(mode: "normal" | "shell") {
       if (untrack(() => store().mode === mode && store().retry === undefined)) return
       setStore()({ mode, retry: undefined })
+      onChange?.()
     },
     setText(content: string) {
       batch(() =>
@@ -58,6 +61,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
           retry: undefined,
         })),
       )
+      onChange?.()
     },
     addText(content: string) {
       const cursor = store().cursor ?? promptLength(store().prompt)
@@ -68,10 +72,12 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
           retry: undefined,
         })),
       )
+      onChange?.()
     },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
       clearRetry()
+      onChange?.()
     },
     addMention(
       mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
@@ -86,10 +92,12 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
       setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
       clearRetry()
+      onChange?.()
     },
     removeAttachment(id: string) {
       setStore()("prompt", (parts) => parts.filter((part) => !isAttachment(part) || part.id !== id))
       clearRetry()
+      onChange?.()
     },
   }
 }

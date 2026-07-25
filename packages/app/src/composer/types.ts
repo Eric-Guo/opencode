@@ -34,6 +34,12 @@ export type ComposerHistory = {
   restore?: (metadata: unknown) => void
 }
 
+export type ComposerCapabilities = {
+  commands?: boolean
+  context?: boolean
+  shell?: boolean
+}
+
 export type ComposerOption = {
   id: string
   label: string
