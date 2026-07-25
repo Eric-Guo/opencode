@@ -55,7 +55,17 @@ const MobilePanelDrawer = lazy(async () => {
   return { default: MobilePanelDrawer }
 })
 
-type ComposerMode = "normal" | "shell"
+export type {
+  ComposerAttachment,
+  ComposerCapabilities,
+  ComposerComment,
+  ComposerOption,
+  ComposerPersistedState,
+  ComposerPrompt,
+  ComposerSuggestion,
+} from "../types"
+
+export type ComposerMode = "normal" | "shell"
 
 const COMPOSER_SUGGESTION_MAX_HEIGHT = 320
 
@@ -69,12 +79,32 @@ const COMPOSER_SUGGESTION_SEARCH_HEIGHT = 28
 
 const COMPOSER_SUGGESTION_CONTEXT_RESERVE = 80
 
+export type ComposerLabels = {
+  empty: string
+  commands: string
+  dropFiles: string
+  removeAttachment: string
+  prompt: string
+  normalPlaceholder: string
+  shellPlaceholder: string
+  add: string
+  attach: string
+  context: string
+  shell: string
+  chooseAgent: string
+  chooseModel: string
+  chooseVariant: string
+  send: string
+  stop: string
+}
+
 export type ComposerEditorProps = {
   controller: ComposerEditorModel
   disabled?: boolean
   readOnly?: boolean
   borderUnderlay?: boolean
   class?: string
+  agentControl?: JSX.Element
   modelControl?: JSX.Element
   modelControlsVisible?: boolean
   attachKeybind?: string[]
@@ -82,6 +112,7 @@ export type ComposerEditorProps = {
   alternateKeybind?: string[]
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
+  labels?: Partial<ComposerLabels>
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -91,6 +122,27 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const suggestionsID = createUniqueId()
   let composer: HTMLFormElement | undefined
   let content: HTMLDivElement | undefined
+
+  const labels = createMemo<ComposerLabels>(() => ({
+    empty: i18n.t("ui.promptInput.noMatchingItems"),
+    commands: i18n.t("ui.promptInput.commands"),
+    dropFiles: i18n.t("ui.promptInput.dropFiles"),
+    removeAttachment: i18n.t("ui.promptInput.removeAttachment"),
+    prompt: i18n.t("ui.promptInput.label"),
+    normalPlaceholder: i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }),
+    shellPlaceholder: i18n.t("ui.promptInput.placeholder.shell"),
+    add: i18n.t("ui.promptInput.add"),
+    attach: i18n.t("ui.promptInput.attachments"),
+    context: i18n.t("ui.promptInput.context"),
+    shell: i18n.t("ui.promptInput.shell"),
+    chooseAgent: i18n.t("ui.promptInput.chooseAgent"),
+    chooseModel: i18n.t("ui.promptInput.chooseModel"),
+    chooseVariant: i18n.t("ui.promptInput.chooseVariant"),
+    send: i18n.t("ui.promptInput.send"),
+    stop: i18n.t("ui.promptInput.stop"),
+    ...props.labels,
+  }))
+
   let editor: HTMLDivElement | undefined
   let viewport: HTMLDivElement | undefined
   let controlsViewport!: HTMLDivElement
@@ -186,7 +238,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
     return {
       value: state.popover.query,
-      label: i18n.t(state.popover.type === "history" ? "ui.promptInput.history" : "ui.promptInput.commands"),
+      label: state.popover.type === "history" ? i18n.t("ui.promptInput.history") : labels().commands,
       placeholder: state.popover.type === "history" ? i18n.t("ui.promptInput.history.search") : "/",
       onValueChange: props.controller.setQuery,
       onKeyDown: props.controller.onKeyDown,
@@ -210,7 +262,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
       <Show when={!view.draftOnly && state.popover.type !== "closed"}>
         <ComposerEditorPopover
           id={suggestionsID}
-          emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
+          emptyLabel={labels().empty}
           items={props.controller.suggestions()}
           boundary={props.suggestionBoundary}
           activeID={state.popover.type === "closed" ? undefined : state.popover.activeID}
@@ -236,11 +288,22 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
           if (!props.disabled) props.controller.submit()
         }}
-        onDragEnter={props.controller.onDragEnter}
-        onDragOver={props.controller.onDragOver}
+        onDragEnter={(event) => {
+          if (!props.disabled) props.controller.onDragEnter(event)
+        }}
+        onDragOver={(event) => {
+          if (!props.disabled) props.controller.onDragOver(event)
+        }}
         onDragLeave={props.controller.onDragLeave}
-        onDrop={props.controller.onDrop}
+        onDrop={(event) => {
+          if (!props.disabled) props.controller.onDrop(event)
+        }}
       >
+        <Show when={state.drag === "active"}>
+          <div class="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-xl bg-v2-background-bg-base/90 text-v2-text-text-base">
+            {labels().dropFiles}
+          </div>
+        </Show>
         <div
           ref={content}
           data-slot="composer-content"
@@ -257,7 +320,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
               comments={props.controller.comments()}
               files={props.controller.files()}
               activeCommentID={state.activeContextID}
-              removeLabel={i18n.t("ui.promptInput.removeAttachment")}
+              removeLabel={labels().removeAttachment}
+              disabled={props.disabled}
               onAttachmentClick={props.controller.openAttachment}
               preview={props.controller.previewAttachment}
               onAttachmentRemove={(attachment) => props.controller.removeAttachment(attachment.id)}
@@ -289,7 +353,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               data-component="composer-editor"
               role="textbox"
               aria-multiline="true"
-              aria-label={i18n.t("ui.promptInput.label")}
+              aria-label={labels().prompt}
               aria-controls={state.popover.type === "history" ? suggestionsID : undefined}
               dir={state.mode === "normal" ? "auto" : "ltr"}
               contenteditable={!props.disabled && !props.readOnly}
@@ -391,18 +455,18 @@ export function ComposerEditor(props: ComposerEditorProps) {
             style={buttons()}
           >
             <ComposerEditorAddMenu
-              disabled={view.draftOnly || state.mode === "shell"}
-              title={i18n.t("ui.promptInput.add")}
+              disabled={view.draftOnly || props.disabled || state.mode === "shell"}
+              title={labels().add}
               keybind={props.attachKeybind ?? ["Mod", "U"]}
-              attachLabel={i18n.t("ui.promptInput.attachments")}
+              attachLabel={labels().attach}
               attachShortcut={props.attachShortcut ?? "Mod+U"}
-              commandsLabel={i18n.t("ui.promptInput.commands")}
-              contextLabel={i18n.t("ui.promptInput.context")}
-              shellLabel={i18n.t("ui.promptInput.shell")}
+              commandsLabel={labels().commands}
+              contextLabel={labels().context}
+              shellLabel={labels().shell}
               onAttach={props.controller.attach}
-              onCommands={props.controller.openCommands}
-              onContext={props.controller.openContext}
-              onShell={props.controller.openShell}
+              onCommands={props.controller.capabilities.commands ? () => props.controller.openCommands() : undefined}
+              onContext={props.controller.capabilities.context ? () => props.controller.openContext() : undefined}
+              onShell={props.controller.capabilities.shell ? () => props.controller.openShell() : undefined}
             />
           </div>
           <div
@@ -419,14 +483,21 @@ export function ComposerEditor(props: ComposerEditorProps) {
             style={buttons()}
           >
             <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-0.5">
-              <Show when={view.agent} keyed>
-                {(control) => (
-                  <ComposerEditorConfiguredSelect
-                    title={i18n.t("ui.promptInput.chooseAgent")}
-                    keybind={["Mod", "."]}
-                    control={control}
-                  />
-                )}
+              <Show
+                when={props.agentControl}
+                fallback={
+                  <Show when={view.agent} keyed>
+                    {(control) => (
+                      <ComposerEditorConfiguredSelect
+                        title={labels().chooseAgent}
+                        keybind={["Mod", "."]}
+                        control={control}
+                      />
+                    )}
+                  </Show>
+                }
+              >
+                {props.agentControl}
               </Show>
               <Show when={props.modelControlsVisible ?? true}>
                 {props.modelControl}
@@ -435,7 +506,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     <Show when={control.options().length > 1}>
                       <ComposerEditorConfiguredSelect
                         mobileDrawer
-                        title={i18n.t("ui.promptInput.chooseVariant")}
+                        title={labels().chooseVariant}
                         keybind={["Shift", "Mod", "D"]}
                         control={control}
                         class={control.current() === "default" ? "composer-variant-default" : undefined}
@@ -475,9 +546,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
               mode={state.mode}
               stopping={view.submit.stopping()}
               held={view.submit.held?.() ?? false}
-              disabled={!props.controller.canSubmit()}
-              sendLabel={i18n.t("ui.promptInput.send")}
-              stopLabel={i18n.t("ui.promptInput.stop")}
+              disabled={props.disabled || !props.controller.canSubmit()}
+              sendLabel={labels().send}
+              stopLabel={labels().stop}
               onSubmit={() => props.controller.submit()}
               onStop={props.controller.stop}
             />
@@ -670,6 +741,7 @@ function ComposerAttachments(props: {
   files?: Extract<ComposerComment, { type: "file" }>[]
   activeCommentID?: string
   removeLabel: string
+  disabled?: boolean
   onAttachmentClick?: (attachment: ComposerAttachment, origin: HTMLElement) => void
   preview: (attachment: ComposerAttachment) => Promise<string | undefined>
   onAttachmentRemove: (attachment: ComposerAttachment) => void
@@ -747,11 +819,12 @@ function ComposerAttachments(props: {
                 </Tooltip>
                 <button
                   type="button"
+                  disabled={props.disabled}
                   onClick={() => {
                     if (props.editingQuote === comment.key) props.onEditQuote?.()
                     props.onCommentRemove?.(comment)
                   }}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100 disabled:hidden"
                   aria-label={props.removeLabel}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -827,8 +900,9 @@ function ComposerAttachments(props: {
                   </Tooltip>
                   <button
                     type="button"
+                    disabled={props.disabled}
                     onClick={() => props.onAttachmentRemove(attachment)}
-                    class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                    class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100 disabled:hidden"
                     aria-label={props.removeLabel}
                   >
                     <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -903,9 +977,9 @@ function ComposerEditorAddMenu(props: {
   contextLabel: string
   shellLabel: string
   onAttach: () => void
-  onCommands: () => void
-  onContext: () => void
-  onShell: () => void
+  onCommands?: () => void
+  onContext?: () => void
+  onShell?: () => void
 }) {
   const focus = pointerFocusReturn()
 
@@ -940,16 +1014,30 @@ function ComposerEditorAddMenu(props: {
             <Menu.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
               {props.attachLabel}
             </Menu.Item>
-            <Menu.Separator />
-            <Menu.Item onSelect={props.onCommands} shortcut="/">
-              {props.commandsLabel}
-            </Menu.Item>
-            <Menu.Item onSelect={props.onContext} shortcut="@">
-              {props.contextLabel}
-            </Menu.Item>
-            <Menu.Item onSelect={props.onShell} shortcut="!">
-              {props.shellLabel}
-            </Menu.Item>
+            <Show when={props.onCommands || props.onContext || props.onShell}>
+              <Menu.Separator />
+            </Show>
+            <Show when={props.onCommands}>
+              {(onCommands) => (
+                <Menu.Item onSelect={onCommands()} shortcut="/">
+                  {props.commandsLabel}
+                </Menu.Item>
+              )}
+            </Show>
+            <Show when={props.onContext}>
+              {(onContext) => (
+                <Menu.Item onSelect={onContext()} shortcut="@">
+                  {props.contextLabel}
+                </Menu.Item>
+              )}
+            </Show>
+            <Show when={props.onShell}>
+              {(onShell) => (
+                <Menu.Item onSelect={onShell()} shortcut="!">
+                  {props.shellLabel}
+                </Menu.Item>
+              )}
+            </Show>
           </Menu.Content>
         </Menu.Portal>
       </Menu>

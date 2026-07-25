@@ -9,6 +9,7 @@ import { resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { createComposerEditorActions, type ComposerStateStoreInput } from "./actions"
 import type {
   ComposerAttachment,
+  ComposerCapabilities,
   ComposerComment,
   ComposerHistory,
   ComposerHistoryEntry,
@@ -85,6 +86,8 @@ export function createComposerEditor(input: {
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
   attachments?: ComposerAttachmentConfig
+  capabilities?: ComposerCapabilities
+  onChange?: () => void
 }) {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
@@ -108,9 +111,15 @@ export function createComposerEditor(input: {
   }
 
   onCleanup(cancelFocus)
-  const draft = createComposerEditorActions(input.store)
+  const draft = createComposerEditorActions(input.store, input.onChange)
   const [localQuoteComment, setLocalQuoteComment] = createSignal<string>()
   const quoteComment = input.quoteComment ?? { key: localQuoteComment, set: setLocalQuoteComment }
+  const capabilities = {
+    commands: input.capabilities?.commands !== false,
+    context: input.capabilities?.context !== false,
+    shell: input.capabilities?.shell !== false,
+  }
+
   const [state, setState] = input.state ?? createComposerEditorState(draft.state.mode)
   const [savedHistory, setSavedHistory] = createStore<{ entry?: ComposerHistoryEntry; cursor?: number }>({})
   const [cycle, setCycle] = createStore<{ index: number; entry?: ComposerHistoryEntry; cursor?: number }>({ index: -1 })
@@ -341,7 +350,7 @@ export function createComposerEditor(input: {
     }
 
     const mode = state.mode
-    const result = transitionComposer(state, event, draft.state)
+    const result = transitionComposer(state, event, draft.state, capabilities)
     const action = event.type === "popover.select" ? input.onSuggestionSelect?.(event.item) : undefined
 
     if (event.type === "popover.select") {
@@ -538,6 +547,7 @@ export function createComposerEditor(input: {
   }
 
   return {
+    capabilities,
     state,
     view: input.view,
     suggestions,
