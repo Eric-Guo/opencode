@@ -5,6 +5,7 @@ import { createPromptInputV2Attachments, type PromptInputV2AttachmentConfig } fr
 import { createPromptInputV2Store, type PromptInputV2StoreInput } from "./store"
 import type {
   PromptInputV2Attachment,
+  PromptInputV2Capabilities,
   PromptInputV2Comment,
   PromptInputV2History,
   PromptInputV2HistoryEntry,
@@ -68,10 +69,17 @@ export function createPromptInputV2Controller(input: {
   onSuggestionSelect?: (item: PromptInputV2Suggestion) => (() => void) | void
   view: PromptInputV2ViewConfig
   attachments?: PromptInputV2AttachmentConfig
+  capabilities?: PromptInputV2Capabilities
+  onChange?: () => void
 }) {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
-  const draft = createPromptInputV2Store(input.store)
+  const draft = createPromptInputV2Store(input.store, input.onChange)
+  const capabilities = {
+    commands: input.capabilities?.commands !== false,
+    context: input.capabilities?.context !== false,
+    shell: input.capabilities?.shell !== false,
+  }
   const [state, setState] = input.state ?? createPromptInputV2State()
   if (input.identity) {
     createEffect(on(input.identity, () => setState(reconcile(createPromptInputV2InteractionState())), { defer: true }))
@@ -161,7 +169,7 @@ export function createPromptInputV2Controller(input: {
 
   function dispatch(event: PromptInputV2InteractionEvent) {
     const mode = state.mode
-    const result = transitionPromptInputV2(state, event, draft.state)
+    const result = transitionPromptInputV2(state, event, draft.state, capabilities)
     const action = event.type === "popover.select" ? input.onSuggestionSelect?.(event.item) : undefined
     if (event.type === "popover.select") {
       if (!action || state.popover.type !== "command-menu") result.commands.forEach(execute)
@@ -290,6 +298,7 @@ export function createPromptInputV2Controller(input: {
   }
 
   return {
+    capabilities,
     state,
     view: input.view,
     suggestions,
