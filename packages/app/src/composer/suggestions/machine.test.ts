@@ -418,3 +418,15 @@ test("the draft's mode is the only mode, and an outside change ends browsing", (
     type: "closed",
   })
 })
+
+test.each(["!", "/review", "ask @src"])("keeps disabled triggers as ordinary prompt text: %s", (value) => {
+  const result = transitionComposer(
+    createComposerInteractionState(),
+    { type: "input.changed", value },
+    persisted(value),
+    { commands: false, context: false, shell: false },
+  )
+
+  expect(result.state.popover).toEqual({ type: "closed" })
+  expect(result.commands).toEqual([{ type: "draft.setText", value }])
+})
