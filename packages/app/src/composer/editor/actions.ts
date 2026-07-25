@@ -15,7 +15,7 @@ export type ComposerStateStore = [
 
 export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStateStore>
 
-export function createComposerEditorActions(input: ComposerStateStoreInput) {
+export function createComposerEditorActions(input: ComposerStateStoreInput, onChange?: () => void) {
   const tuple = () => (typeof input === "function" ? input() : input)
   const store = () => {
     const value = tuple()[0]
@@ -34,13 +34,16 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
         if (cursor !== undefined) setStore()("cursor", cursor)
         clearRetry()
       })
+      onChange?.()
     },
     setCursor(cursor: number) {
       setStore()("cursor", cursor)
+      onChange?.()
     },
     setMode(mode: "normal" | "shell") {
       setStore()("mode", mode)
       clearRetry()
+      onChange?.()
     },
     setText(content: string) {
       batch(() => {
@@ -51,6 +54,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
         setStore()("cursor", content.length)
         clearRetry()
       })
+      onChange?.()
     },
     addText(content: string) {
       const cursor = store().cursor ?? promptLength(store().prompt)
@@ -59,10 +63,12 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
         setStore()("cursor", cursor + content.length)
         clearRetry()
       })
+      onChange?.()
     },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
       clearRetry()
+      onChange?.()
     },
     addMention(mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart) {
       const text = store()
@@ -73,10 +79,12 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
       setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
       clearRetry()
+      onChange?.()
     },
     removeAttachment(id: string) {
       setStore()("prompt", (parts) => parts.filter((part) => part.type !== "image" || part.id !== id))
       clearRetry()
+      onChange?.()
     },
   }
 }
