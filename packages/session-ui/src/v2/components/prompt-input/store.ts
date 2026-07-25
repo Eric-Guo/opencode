@@ -17,7 +17,7 @@ export type PromptInputV2StoreTuple = [
 
 export type PromptInputV2StoreInput = PromptInputV2StoreTuple | Accessor<PromptInputV2StoreTuple>
 
-export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
+export function createPromptInputV2Store(input: PromptInputV2StoreInput, onChange?: () => void) {
   const tuple = () => (typeof input === "function" ? input() : input)
   const store = () => {
     const value = tuple()[0]
@@ -34,9 +34,11 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
         setStore()("prompt", prompt)
         if (cursor !== undefined) setStore()("cursor", cursor)
       })
+      onChange?.()
     },
     setCursor(cursor: number) {
       setStore()("cursor", cursor)
+      onChange?.()
     },
     setText(content: string) {
       batch(() => {
@@ -46,6 +48,7 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
         ])
         setStore()("cursor", content.length)
       })
+      onChange?.()
     },
     addText(content: string) {
       const cursor = store().cursor ?? promptLength(store().prompt)
@@ -53,25 +56,32 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
         setStore()("prompt", (prompt) => insertText(prompt, cursor, content))
         setStore()("cursor", cursor + content.length)
       })
+      onChange?.()
     },
     reset() {
       batch(() => {
         setStore()("prompt", [{ type: "text", content: "", start: 0, end: 0 }])
         setStore()("cursor", 0)
       })
+      onChange?.()
     },
     setModel(model: PromptInputV2Model | undefined) {
       setStore()("model", model)
+      onChange?.()
     },
     setVariant(variant: string | null) {
-      if (store().model) setStore()("model", "variant", variant)
+      if (!store().model) return
+      setStore()("model", "variant", variant)
+      onChange?.()
     },
     addContext(item: PromptInputV2Comment) {
       if (store().context.items.some((entry) => entry.key === item.key)) return
       setStore()("context", "items", (items) => [...items, item])
+      onChange?.()
     },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
+      onChange?.()
     },
     addMention(mention: PromptInputV2FilePart | PromptInputV2AgentPart) {
       const text = store()
@@ -81,12 +91,15 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
       const start = text.slice(0, end).lastIndexOf("@")
       setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
       setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
+      onChange?.()
     },
     addAttachment(attachment: PromptInputV2Attachment) {
       setStore()("prompt", (prompt) => [...prompt, attachment])
+      onChange?.()
     },
     removeAttachment(id: string) {
       setStore()("prompt", (parts) => parts.filter((part) => part.type !== "image" || part.id !== id))
+      onChange?.()
     },
   }
 }
