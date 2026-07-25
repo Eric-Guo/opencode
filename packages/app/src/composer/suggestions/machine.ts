@@ -1,4 +1,4 @@
-import type { ComposerHistoryEntry, ComposerPersistedState, ComposerSuggestion } from "../types"
+import type { ComposerCapabilities, ComposerHistoryEntry, ComposerPersistedState, ComposerSuggestion } from "../types"
 import { isAttachment } from "../prompt-parts"
 
 export type ComposerMode = "normal" | "shell"
@@ -134,15 +134,18 @@ export function transitionComposer(
   state: ComposerInteractionState,
   event: ComposerInteractionEvent,
   persisted: ComposerPersistedState,
+  capabilities: ComposerCapabilities = {},
 ): ComposerEditorTransition {
-  if (event.type === "input.changed") return inputChanged(state, event.value, event.persist !== false, persisted)
+  if (event.type === "input.changed")
+    return inputChanged(state, event.value, event.persist !== false, persisted, capabilities)
 
   if (event.type === "draft.edited")
     return state.popover.type === "browsing" ? changed({ ...state, popover: CLOSED }) : unchanged(state)
 
-  if (event.type === "commands.open") return openCommands(state, persisted)
+  if (event.type === "commands.open")
+    return capabilities.commands === false ? unchanged(state) : openCommands(state, persisted)
 
-  if (event.type === "context.open") return openContext(state)
+  if (event.type === "context.open") return capabilities.context === false ? unchanged(state) : openContext(state)
 
   if (event.type === "history.open") return openHistory(state, event)
 
@@ -172,7 +175,8 @@ export function transitionComposer(
 
   if (event.type === "key.down") return keyDown(state, event, selectComposerMode(persisted))
 
-  if (event.type === "mode.shell") return enterShell(state, selectComposerMode(persisted))
+  if (event.type === "mode.shell")
+    return capabilities.shell === false ? unchanged(state) : enterShell(state, selectComposerMode(persisted))
 
   if (event.type === "mode.normal") return leaveShell(state, selectComposerMode(persisted))
 
@@ -206,8 +210,9 @@ function inputChanged(
   value: string,
   persist: boolean,
   persisted: ComposerPersistedState,
+  capabilities: ComposerCapabilities,
 ): ComposerEditorTransition {
-  if (selectComposerMode(persisted) === "normal" && value === "!") {
+  if (capabilities.shell !== false && selectComposerMode(persisted) === "normal" && value === "!") {
     return changed({ ...state, popover: CLOSED, focus: "editor" }, [SHELL, { type: "draft.setText", value: "" }])
   }
 
@@ -218,7 +223,7 @@ function inputChanged(
         .match(state.popover.type === "context" ? /(?:^|\s)@((?:[^\s@]+(?: [^\s@]+)* ?)?)$/ : /(?:^|\s)@([^\s@]*)$/)
     : null
 
-  if (context) {
+  if (capabilities.context !== false && context) {
     const query = context[1] ?? ""
 
     return changed({ ...state, popover: { type: "context", query }, focus: "editor" }, [
@@ -229,7 +234,7 @@ function inputChanged(
 
   const command = value.startsWith("/") ? value.match(/^\/(\S*)$/) : null
 
-  if (command) {
+  if (capabilities.commands !== false && command) {
     const query = command[1] ?? ""
 
     return changed({ ...state, popover: { type: "command-inline", query }, focus: "editor" }, [
