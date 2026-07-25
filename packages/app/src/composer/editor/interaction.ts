@@ -7,6 +7,7 @@ import type { Upload } from "../attachments/uploads"
 import { createComposerEditorActions, type ComposerStateStoreInput } from "./actions"
 import type {
   ComposerAttachment,
+  ComposerCapabilities,
   ComposerComment,
   ComposerHistory,
   ComposerHistoryEntry,
@@ -70,10 +71,19 @@ export function createComposerEditor(input: {
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
   attachments?: ComposerAttachmentConfig
+  capabilities?: ComposerCapabilities
+  onChange?: () => void
 }) {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
-  const draft = createComposerEditorActions(input.store)
+  const draft = createComposerEditorActions(input.store, input.onChange)
+
+  const capabilities = {
+    commands: input.capabilities?.commands !== false,
+    context: input.capabilities?.context !== false,
+    shell: input.capabilities?.shell !== false,
+  }
+
   const [state, setState] = input.state ?? createComposerEditorState(draft.state.mode)
 
   function addPart(part: ComposerPersistedState["prompt"][number]) {
@@ -200,7 +210,7 @@ export function createComposerEditor(input: {
 
   function dispatch(event: ComposerInteractionEvent) {
     const mode = state.mode
-    const result = transitionComposer(state, event, draft.state)
+    const result = transitionComposer(state, event, draft.state, capabilities)
     const action = event.type === "popover.select" ? input.onSuggestionSelect?.(event.item) : undefined
 
     if (event.type === "popover.select") {
@@ -366,6 +376,7 @@ export function createComposerEditor(input: {
   }
 
   return {
+    capabilities,
     state,
     view: input.view,
     suggestions,
