@@ -17,7 +17,7 @@ type ComposerStateStore = [
 
 export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStateStore>
 
-export function createComposerEditorActions(input: ComposerStateStoreInput) {
+export function createComposerEditorActions(input: ComposerStateStoreInput, onChange?: () => void) {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- this typed union explicitly accepts either a store tuple or an accessor
   const tuple = () => (typeof input === "function" ? input() : input)
 
@@ -37,14 +37,17 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
     setPrompt(prompt: ComposerPrompt, cursor?: number) {
       // Persisted setters encode on every call, even inside a reactive batch, so prompt and cursor go in one write.
       batch(() => setStore()(cursor === undefined ? { prompt } : { prompt, cursor }))
+      onChange?.()
     },
     setCursor(cursor: number) {
       if (untrack(() => store().cursor) === cursor) return
       setStore()("cursor", cursor)
+      onChange?.()
     },
     setMode(mode: "normal" | "shell") {
       if (untrack(() => (store().mode ?? "normal") === mode)) return
       setStore()("mode", mode)
+      onChange?.()
     },
     setText(content: string) {
       batch(() =>
@@ -53,6 +56,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
           cursor: content.length,
         })),
       )
+      onChange?.()
     },
     addText(content: string) {
       const cursor = store().cursor ?? promptLength(store().prompt)
@@ -62,6 +66,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
           cursor: cursor + content.length,
         })),
       )
+      onChange?.()
     },
     // Removes `content` from just before the cursor, when it is there, leaving every other part as it was.
     removeTextBefore(content: string) {
@@ -70,9 +75,11 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
 
       if (!prompt) return
       batch(() => setStore()({ prompt, cursor: cursor - content.length }))
+      onChange?.()
     },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
+      onChange?.()
     },
     addMention(
       mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
@@ -91,9 +98,11 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       const start = range?.start ?? (part && index >= 0 ? part.start + index : end)
       setStore()("prompt", insertMention(prompt, start, end, mention))
       setStore()("cursor", start + mention.content.length + 1)
+      onChange?.()
     },
     removeAttachment(id: string) {
       setStore()("prompt", (parts) => parts.filter((part) => !isAttachment(part) || part.id !== id))
+      onChange?.()
     },
   }
 }
