@@ -1,4 +1,9 @@
-import type { PromptInputV2HistoryEntry, PromptInputV2PersistedState, PromptInputV2Suggestion } from "./types"
+import type {
+  PromptInputV2Capabilities,
+  PromptInputV2HistoryEntry,
+  PromptInputV2PersistedState,
+  PromptInputV2Suggestion,
+} from "./types"
 
 export type PromptInputV2InteractionState = {
   mode: "normal" | "shell"
@@ -60,17 +65,26 @@ export function transitionPromptInputV2(
   state: PromptInputV2InteractionState,
   event: PromptInputV2InteractionEvent,
   persisted: PromptInputV2PersistedState,
+  capabilities: PromptInputV2Capabilities = {},
 ): PromptInputV2Transition {
-  if (event.type === "input.changed") return inputChanged(state, event.value, event.persist !== false, persisted.cursor)
-  if (event.type === "commands.open") return openCommands(state, persisted)
-  if (event.type === "context.open") return openContext(state, persisted)
+  if (event.type === "input.changed") {
+    return inputChanged(state, event.value, event.persist !== false, persisted.cursor, capabilities)
+  }
+  if (event.type === "commands.open")
+    return capabilities.commands === false ? unchanged(state) : openCommands(state, persisted)
+  if (event.type === "context.open")
+    return capabilities.context === false ? unchanged(state) : openContext(state, persisted)
   if (event.type === "popover.query") return queryChanged(state, event.value)
   if (event.type === "popover.results") return resultsChanged(state, event.ids)
   if (event.type === "popover.active") return activeChanged(state, event.id)
   if (event.type === "popover.close") return changed({ ...state, popover: { type: "closed" } })
   if (event.type === "popover.select") return suggestionSelected(state, event.item, persisted)
   if (event.type === "key.down") return keyDown(state, event)
-  if (event.type === "mode.shell") return changed({ ...state, mode: "shell", popover: { type: "closed" } })
+  if (event.type === "mode.shell") {
+    return capabilities.shell === false
+      ? unchanged(state)
+      : changed({ ...state, mode: "shell", popover: { type: "closed" } })
+  }
   if (event.type === "mode.normal") return changed({ ...state, mode: "normal" })
   if (event.type === "drag.enter") return changed({ ...state, drag: "active" })
   if (event.type === "drag.leave") return changed({ ...state, drag: "idle" })
@@ -86,15 +100,16 @@ function inputChanged(
   value: string,
   persist: boolean,
   cursor: number | undefined,
+  capabilities: PromptInputV2Capabilities,
 ): PromptInputV2Transition {
   const setText: PromptInputV2InteractionCommand[] = persist ? [{ type: "draft.setText", value }] : []
-  if (state.mode === "normal" && value === "!") {
+  if (capabilities.shell !== false && state.mode === "normal" && value === "!") {
     return changed({ ...state, mode: "shell", popover: { type: "closed" }, focus: "editor" }, [
       { type: "draft.setText", value: "" },
     ])
   }
   const context = value.slice(0, cursor ?? value.length).match(/(?:^|\s)@([^\s@]*)$/)
-  if (context) {
+  if (capabilities.context !== false && context) {
     const query = context[1] ?? ""
     return changed({ ...state, popover: { type: "context", query }, focus: "editor" }, [
       ...setText,
@@ -103,7 +118,7 @@ function inputChanged(
   }
 
   const command = value.match(/^\/(\S*)$/)
-  if (command) {
+  if (capabilities.commands !== false && command) {
     const query = command[1] ?? ""
     return changed({ ...state, popover: { type: "command-inline", query }, focus: "editor" }, [
       ...setText,
