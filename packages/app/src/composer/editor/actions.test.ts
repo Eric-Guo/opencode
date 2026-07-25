@@ -97,4 +97,20 @@ describe("Composer store", () => {
 
     expect(prompt.state.prompt).toEqual([{ type: "text", content: "old", start: 0, end: 3 }])
   })
+
+  test("reports persisted store changes", () => {
+    const changes: string[] = []
+    const [state, setState] = createStore<ComposerPersistedState>({
+      prompt: [{ type: "text", content: "", start: 0, end: 0 }],
+      cursor: 0,
+      context: { items: [] },
+    })
+    const prompt = createComposerEditorActions([state, setState], () => changes.push("changed"))
+
+    prompt.setText("hello")
+    prompt.setCursor(3)
+    prompt.setMode("shell")
+
+    expect(changes).toEqual(["changed", "changed", "changed"])
+  })
 })
