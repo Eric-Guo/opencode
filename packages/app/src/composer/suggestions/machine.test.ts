@@ -141,3 +141,15 @@ test.each<{
   if (row.command) expect(result.commands).toContainEqual(row.command)
   expect(result.handled).toBe(row.handled ?? false)
 })
+
+test.each(["!", "/review", "ask @src"])("keeps disabled triggers as ordinary prompt text: %s", (value) => {
+  const result = transitionComposer(
+    createComposerInteractionState(),
+    { type: "input.changed", value },
+    persisted(value),
+    { commands: false, context: false, shell: false },
+  )
+  expect(result.state.mode).toBe("normal")
+  expect(result.state.popover).toEqual({ type: "closed" })
+  expect(result.commands).toContainEqual({ type: "draft.setText", value })
+})
