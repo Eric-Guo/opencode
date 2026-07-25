@@ -86,6 +86,12 @@ export type PromptInputV2History = {
   restore?: (metadata: unknown) => void
 }
 
+export type PromptInputV2Capabilities = {
+  commands?: boolean
+  context?: boolean
+  shell?: boolean
+}
+
 export type PromptInputV2Option = {
   id: string
   label: string
