@@ -1,4 +1,4 @@
-import type { ComposerHistoryEntry, ComposerPersistedState, ComposerSuggestion } from "../types"
+import type { ComposerCapabilities, ComposerHistoryEntry, ComposerPersistedState, ComposerSuggestion } from "../types"
 import { isAttachment } from "../prompt-parts"
 
 export type ComposerInteractionState = {
@@ -62,12 +62,16 @@ export function transitionComposer(
   state: ComposerInteractionState,
   event: ComposerInteractionEvent,
   persisted: ComposerPersistedState,
+  capabilities: ComposerCapabilities = {},
 ): ComposerEditorTransition {
-  if (event.type === "input.changed") return inputChanged(state, event.value, event.persist !== false, persisted.cursor)
+  if (event.type === "input.changed") {
+    return inputChanged(state, event.value, event.persist !== false, persisted.cursor, capabilities)
+  }
 
-  if (event.type === "commands.open") return openCommands(state, persisted)
+  if (event.type === "commands.open")
+    return capabilities.commands === false ? unchanged(state) : openCommands(state, persisted)
 
-  if (event.type === "context.open") return openContext(state)
+  if (event.type === "context.open") return capabilities.context === false ? unchanged(state) : openContext(state)
 
   if (event.type === "popover.query") return queryChanged(state, event.value)
 
@@ -81,7 +85,11 @@ export function transitionComposer(
 
   if (event.type === "key.down") return keyDown(state, event)
 
-  if (event.type === "mode.shell") return changed({ ...state, mode: "shell", popover: { type: "closed" } })
+  if (event.type === "mode.shell") {
+    return capabilities.shell === false
+      ? unchanged(state)
+      : changed({ ...state, mode: "shell", popover: { type: "closed" } })
+  }
 
   if (event.type === "mode.normal") return changed({ ...state, mode: "normal" })
 
@@ -103,10 +111,11 @@ function inputChanged(
   value: string,
   persist: boolean,
   cursor: number | undefined,
+  capabilities: ComposerCapabilities,
 ): ComposerEditorTransition {
   const setText: ComposerInteractionCommand[] = persist ? [{ type: "draft.setText", value }] : []
 
-  if (state.mode === "normal" && value === "!") {
+  if (capabilities.shell !== false && state.mode === "normal" && value === "!") {
     return changed({ ...state, mode: "shell", popover: { type: "closed" }, focus: "editor" }, [
       { type: "draft.setText", value: "" },
     ])
@@ -114,7 +123,7 @@ function inputChanged(
 
   const context = value.slice(0, cursor ?? value.length).match(/(?:^|\s)@([^\s@]*)$/)
 
-  if (context) {
+  if (capabilities.context !== false && context) {
     const query = context[1] ?? ""
 
     return changed({ ...state, popover: { type: "context", query }, focus: "editor" }, [
@@ -125,7 +134,7 @@ function inputChanged(
 
   const command = value.match(/^\/(\S*)$/)
 
-  if (command) {
+  if (capabilities.commands !== false && command) {
     const query = command[1] ?? ""
 
     return changed({ ...state, popover: { type: "command-inline", query }, focus: "editor" }, [
