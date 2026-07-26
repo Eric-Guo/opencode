@@ -9,6 +9,7 @@ import type {
   ReferenceInfo,
   Session,
 } from "@opencode-ai/sdk/v2/client"
+import type { ModelInfo, OpenCodeClient, ProviderV2Info } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { retry } from "@opencode-ai/core/util/retry"
@@ -22,6 +23,8 @@ import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+
+type CatalogApi = Pick<OpenCodeClient, "model" | "provider">
 
 type GlobalStore = {
   ready: boolean
@@ -105,6 +108,7 @@ export const loadProjectsQuery = (scope: ServerScope, sdk: OpencodeClient) =>
 
 export async function bootstrapGlobal(input: {
   serverSDK: OpencodeClient
+  catalog: CatalogApi
   scope: ServerScope
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
@@ -114,7 +118,7 @@ export async function bootstrapGlobal(input: {
 }) {
   const slow = [
     () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope, input.serverSDK)),
-    () => input.queryClient.fetchQuery(loadProvidersQuery(input.scope, null, input.serverSDK)),
+    () => input.queryClient.fetchQuery(loadProvidersQuery(input.scope, null, input.serverSDK, input.catalog)),
     () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverSDK)),
     () =>
       input.queryClient
@@ -178,15 +182,38 @@ function warmSessions(input: {
   ).then(() => undefined)
 }
 
-export const loadProvidersQuery = (scope: ServerScope, directory: string | null, sdk: OpencodeClient) =>
+export const loadProvidersQuery = (
+  scope: ServerScope,
+  directory: string | null,
+  sdk: OpencodeClient,
+  catalog?: CatalogApi,
+) =>
   queryOptions({
     queryKey: [scope, directory, "providers"],
     queryFn: () =>
       retry(async () => {
-        const defaultModel = await sdk.v2.model.default().then((response) => response.data!.data)
+        if (catalog) {
+          const location = directory ? { directory } : undefined
+          const defaultModel = await catalog.model.default({ location }).then((response) => response.data)
+          const [providers, models] = await Promise.all([
+            catalog.provider.list({ location }).then((response) => response.data),
+            catalog.model.list({ location }).then((response) => response.data),
+          ])
+          return normalizeProviderList({ providers, models, defaultModel })
+        }
+        const legacy = sdk as unknown as {
+          v2: {
+            model: {
+              default(): Promise<{ data?: { data: ModelInfo | null } }>
+              list(): Promise<{ data?: { data: ModelInfo[] } }>
+            }
+            provider: { list(): Promise<{ data?: { data: ProviderV2Info[] } }> }
+          }
+        }
+        const defaultModel = await legacy.v2.model.default().then((response) => response.data!.data)
         const [providers, models] = await Promise.all([
-          sdk.v2.provider.list().then((response) => response.data!.data),
-          sdk.v2.model.list().then((response) => response.data!.data),
+          legacy.v2.provider.list().then((response) => response.data!.data),
+          legacy.v2.model.list().then((response) => response.data!.data),
         ])
         return normalizeProviderList({ providers, models, defaultModel })
       }),
@@ -216,6 +243,7 @@ export async function bootstrapDirectory(input: {
   scope: ServerScope
   mcp: boolean
   sdk: OpencodeClient
+  catalog?: CatalogApi
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
@@ -362,14 +390,16 @@ export async function bootstrapDirectory(input: {
       input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.scope, input.directory, input.sdk))),
       input.mcp && (() => input.queryClient.fetchQuery(loadMcpResourcesQuery(input.scope, input.directory, input.sdk))),
       () =>
-        input.queryClient.fetchQuery(loadProvidersQuery(input.scope, input.directory, input.sdk)).catch((err) => {
-          const project = getFilename(input.directory)
-          showToast({
-            variant: "error",
-            title: input.translate("toast.project.reloadFailed.title", { project }),
-            description: formatServerError(err, input.translate),
-          })
-        }),
+        input.queryClient
+          .fetchQuery(loadProvidersQuery(input.scope, input.directory, input.sdk, input.catalog))
+          .catch((err) => {
+            const project = getFilename(input.directory)
+            showToast({
+              variant: "error",
+              title: input.translate("toast.project.reloadFailed.title", { project }),
+              description: formatServerError(err, input.translate),
+            })
+          }),
     ].filter(Boolean) as (() => Promise<any>)[]
 
     await waitForPaint()
