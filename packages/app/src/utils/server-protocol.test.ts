@@ -11,7 +11,7 @@ describe("detectServerProtocol", () => {
   test("prefers the legacy health endpoint when both API generations exist", async () => {
     const fetcher = mockFetch((input) => {
       const path = new URL(input instanceof Request ? input.url : input).pathname
-      if (path === "/global/health") return Promise.resolve(json({ healthy: true, version: "1.18.4" }))
+      if (path === "/global/health") return Promise.resolve(json({ healthy: true, version: "1.18.5" }))
       return Promise.resolve(json({ healthy: true, version: "2.0.0", pid: 123 }))
     })
 
