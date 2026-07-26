@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
+import type { OpenCodeClient } from "@opencode-ai/client/promise"
 import type { Config, OpencodeClient, Project, Session } from "@opencode-ai/sdk/v2/client"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { bootstrapDirectory, loadPathQuery, loadProvidersQuery } from "./bootstrap"
@@ -200,37 +201,28 @@ describe("query keys", () => {
       enabled: true,
       limit: { context: 200_000, output: 64_000 },
     }
-    const client = {
+    const catalog = {
+      model: {
+        default: async () => {
+          calls.push("default")
+          return { data: model }
+        },
+        list: async () => {
+          calls.push("models")
+          return { data: [model] }
+        },
+      },
       provider: {
-        list: () => {
-          throw new Error("legacy provider endpoint called")
+        list: async () => {
+          calls.push("providers")
+          return { data: [{ id: "anthropic", name: "Anthropic", package: "@ai-sdk/anthropic" }] }
         },
       },
-      v2: {
-        model: {
-          default: async () => {
-            calls.push("default")
-            return { data: { data: model } }
-          },
-          list: async () => {
-            calls.push("models")
-            return { data: { data: [model] } }
-          },
-        },
-        provider: {
-          list: async () => {
-            calls.push("providers")
-            return {
-              data: {
-                data: [{ id: "anthropic", name: "Anthropic", package: "@ai-sdk/anthropic" }],
-              },
-            }
-          },
-        },
-      },
-    } as unknown as OpencodeClient
+    } as unknown as Pick<OpenCodeClient, "model" | "provider">
 
-    const result = await new QueryClient().fetchQuery(loadProvidersQuery(ServerScope.local, "/repo", client))
+    const result = await new QueryClient().fetchQuery(
+      loadProvidersQuery(ServerScope.local, "/repo", {} as OpencodeClient, catalog),
+    )
 
     expect(calls[0]).toBe("default")
     expect(new Set(calls.slice(1))).toEqual(new Set(["providers", "models"]))

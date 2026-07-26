@@ -1092,6 +1092,34 @@ export function toPublicInfo(provider: Info): Info {
   )
 }
 
+export function toPluginModel(model: Model): import("@opencode-ai/sdk/v2").Model {
+  return {
+    ...model,
+    capabilities: {
+      ...model.capabilities,
+      interleaved: pluginInterleaved(model.capabilities.interleaved),
+    },
+  }
+}
+
+function pluginInterleaved(
+  input: Model["capabilities"]["interleaved"],
+): import("@opencode-ai/sdk/v2").Model["capabilities"]["interleaved"] {
+  if (typeof input !== "object") return input
+  if (input.field === "reasoning" || input.field === "reasoning_content" || input.field === "reasoning_details") {
+    return { field: input.field }
+  }
+  return false
+}
+
+function toPluginProvider(provider: Info): import("@opencode-ai/sdk/v2").Provider {
+  const info = toPublicInfo(provider)
+  return {
+    ...info,
+    models: mapValues(info.models, toPluginModel),
+  }
+}
+
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
   return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
 }
@@ -1523,7 +1551,7 @@ const layer = Layer.effect(
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
-            const next = await models(toPublicInfo(provider), { auth: pluginAuth })
+            const next = await models(toPluginProvider(provider), { auth: pluginAuth })
             return Object.fromEntries(
               Object.entries(next).map(([id, model]) => [
                 id,
@@ -2006,10 +2034,15 @@ const layer = Layer.effect(
       const provider = s.providers[providerID]
       if (!provider) return undefined
 
-      const experimental = yield* plugin.trigger<"experimental.provider.small_model">(
+      const output: { model?: import("@opencode-ai/sdk/v2").Model } = { model: undefined }
+      const experimental = yield* plugin.trigger<
         "experimental.provider.small_model",
-        { provider: toPublicInfo(provider) },
-        { model: undefined },
+        { provider: import("@opencode-ai/sdk/v2").Provider },
+        typeof output
+      >(
+        "experimental.provider.small_model",
+        { provider: toPluginProvider(provider) },
+        output,
       )
       if (experimental.model) {
         return {

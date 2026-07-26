@@ -81,12 +81,13 @@ function makeQueryOptionsApi(
   scope: ServerScope,
   serverSDK: () => OpencodeClient,
   sdkFor: (dir: PathKey) => OpencodeClient,
+  catalog: ServerSDK["currentApi"],
 ) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope, serverSDK()),
     projects: () => loadProjectsQuery(scope, serverSDK()),
     providers: (directory: PathKey | null) =>
-      loadProvidersQuery(scope, directory, directory === null ? serverSDK() : sdkFor(directory)),
+      loadProvidersQuery(scope, directory, directory === null ? serverSDK() : sdkFor(directory), catalog),
     path: (directory: PathKey | null) =>
       loadPathQuery(scope, directory, directory === null ? serverSDK() : sdkFor(directory)),
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, sdkFor(directory)),
@@ -121,7 +122,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     return sdk
   }
 
-  const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, () => serverSDK.client, sdkFor)
+  const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, () => serverSDK.client, sdkFor, serverSDK.currentApi)
 
   const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
     queries: [queryOptionsApi.globalConfig(), queryOptionsApi.providers(null), queryOptionsApi.path(null)],
@@ -181,6 +182,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     queryFn: async () => {
       await bootstrapGlobal({
         serverSDK: serverSDK.client,
+        catalog: serverSDK.currentApi,
         scope: serverSDK.scope,
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,
@@ -351,6 +353,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
           provider: globalStore.provider,
         },
         sdk,
+        catalog: serverSDK.currentApi,
         store: child[0],
         setStore: child[1],
         vcsCache: cache,
