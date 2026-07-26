@@ -1,4 +1,5 @@
-import type { Agent, ModelInfo, Project, Provider, ProviderV2Info } from "@opencode-ai/sdk/v2/client"
+import type { ModelInfo, ProviderV2Info } from "@opencode-ai/client/promise"
+import type { Agent, Project, Provider } from "@opencode-ai/sdk/v2/client"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/path-key"
 

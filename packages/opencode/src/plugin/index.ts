@@ -148,7 +148,10 @@ const layer = Layer.effect(
         const cfg = yield* config.get()
         const input: PluginInput = {
           client,
-          project: ctx.project,
+          project: {
+            ...ctx.project,
+            vcs: ctx.project.vcs === "git" ? "git" : undefined,
+          },
           worktree: ctx.worktree,
           directory: ctx.directory,
           experimental_workspace: {
