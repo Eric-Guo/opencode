@@ -14,7 +14,9 @@ export function useSettingsDialogTitle() {
 
   return createMemo(() => {
     const name = config().username ?? serverSync().data.config.username ?? ""
-    const clerk = config().clerk_code ?? serverSync().data.config.clerk_code
+    const current = config() as { clerk_code?: string }
+    const global = serverSync().data.config as { clerk_code?: string }
+    const clerk = current.clerk_code ?? global.clerk_code
     return clerk ? `${name} (${clerk})` : name
   })
 }
