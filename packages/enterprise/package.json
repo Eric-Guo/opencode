@@ -1,6 +1,6 @@
 {
   "name": "@opencode/enterprise",
-  "version": "1.18.15",
+  "version": "1.18.17",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -16,7 +16,7 @@
     "@opencode/client": "workspace:*",
     "@opencode/core": "workspace:*",
     "@opencode/schema": "workspace:*",
-    "@opencode-ai/sdk": "1.18.21",
+    "@opencode/sdk": "1.18.21",
     "@opencode/session-ui": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@opencode/util": "workspace:*",
