@@ -53,14 +53,14 @@ const brokenPluginLayer = Layer.succeed(
 const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
   [Config.node, configLayer],
-  [RuntimeFlags.node, RuntimeFlags.layer()],
+  [RuntimeFlags.node, RuntimeFlags.layer({ experimentalCodeMode: false })],
 ] as const
 
 const it = testEffect(LayerNode.compile(root, replacements))
 const withCodeMode = testEffect(
   LayerNode.compile(root, [
     [Config.node, configLayer],
-    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalCodeMode: true })],
+    [RuntimeFlags.node, RuntimeFlags.layer()],
     [
       MCP.node,
       Layer.mock(MCP.Service, {
@@ -83,7 +83,7 @@ const withCodeMode = testEffect(
 const withEmptyCodeMode = testEffect(
   LayerNode.compile(root, [
     [Config.node, configLayer],
-    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalCodeMode: true })],
+    [RuntimeFlags.node, RuntimeFlags.layer()],
     [
       MCP.node,
       Layer.mock(MCP.Service, {
@@ -109,7 +109,7 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("does not expose execute unless code mode is enabled", () =>
+  it.instance("does not expose execute when code mode is explicitly disabled", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
@@ -118,7 +118,7 @@ describe("tool.registry", () => {
     }),
   )
 
-  withCodeMode.instance("exposes execute when code mode is enabled", () =>
+  withCodeMode.instance("exposes execute and search by default", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const agents = yield* Agent.Service
