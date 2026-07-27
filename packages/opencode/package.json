@@ -93,7 +93,7 @@
     "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "1.18.5",
+    "@opencode-ai/sdk": "1.18.7",
     "@opencode-ai/server": "workspace:*",
     "@opencode-ai/tui": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.9.0",
