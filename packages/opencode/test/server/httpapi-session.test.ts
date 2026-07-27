@@ -26,7 +26,7 @@ import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/se
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { Database } from "@opencode-ai/core/database/database"
-import { SessionPendingTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, SessionPendingTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Agent } from "@opencode-ai/schema/agent"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -169,6 +169,50 @@ const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
           seq: time,
           time_created: time,
           data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+        },
+      ])
+      .run()
+      .pipe(Effect.orDie)
+  })
+
+const insertLegacyMessages = (sessionID: SessionIDType) =>
+  Effect.gen(function* () {
+    const userID = MessageID.ascending()
+    const { db } = yield* Database.Service
+    yield* db
+      .insert(MessageTable)
+      .values([
+        {
+          id: userID,
+          session_id: sessionID,
+          time_created: 1,
+          time_updated: 1,
+          data: {
+            role: "user",
+            time: { created: 1 },
+          } as unknown as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
+        },
+        {
+          id: MessageID.ascending(),
+          session_id: sessionID,
+          time_created: 2,
+          time_updated: 2,
+          data: {
+            role: "assistant",
+            time: { created: 2, completed: 2 },
+            parentID: userID,
+            modelID: ModelV2.ID.make("test"),
+            providerID: ProviderV2.ID.make("test"),
+            mode: "build",
+            path: { cwd: "/tmp", root: "/tmp" },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+          } as unknown as NonNullable<(typeof MessageTable.$inferInsert)["data"]>,
         },
       ])
       .run()
@@ -701,6 +745,33 @@ describe("session HttpApi", () => {
 
         expect(response.status).toBe(200)
         expect((yield* json<Session.Info>(response)).summary?.diffs).toEqual([{ additions: 1, deletions: 0 }])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "serves legacy messages missing agent or model",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "legacy messages" })
+        yield* insertLegacyMessages(session.id)
+
+        const response = yield* request(`${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=20`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const messages = yield* json<SessionV1.WithParts[]>(response)
+
+        expect(response.status).toBe(200)
+        expect(messages.find((item) => item.info.role === "user")?.info).toMatchObject({
+          role: "user",
+          agent: "build",
+          model: { providerID: "test", modelID: "test" },
+        })
+        expect(messages.find((item) => item.info.role === "assistant")?.info).toMatchObject({
+          role: "assistant",
+          agent: "build",
+        })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
