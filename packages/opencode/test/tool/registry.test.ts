@@ -118,7 +118,7 @@ describe("tool.registry", () => {
     }),
   )
 
-  withCodeMode.instance("exposes execute and search by default", () =>
+  withCodeMode.instance("exposes execute and tool_search by default", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const agents = yield* Agent.Service
@@ -129,15 +129,15 @@ describe("tool.registry", () => {
         agent: yield* agents.defaultInfo(),
       })
       const execute = tools.find((tool) => tool.id === "execute")
-      const search = tools.find((tool) => tool.id === "search")
+      const search = tools.find((tool) => tool.id === "tool_search")
 
       expect(ids).toContain("execute")
-      expect(ids).toContain("search")
+      expect(ids).toContain("tool_search")
       expect(tools.map((tool) => tool.id)).toContain("execute")
-      expect(tools.map((tool) => tool.id)).toContain("search")
+      expect(tools.map((tool) => tool.id)).toContain("tool_search")
       expect(execute?.description).toContain("global `search(...)` function")
       expect(execute?.description).toContain("tools.weather.current(input: {\n  city: string,\n})")
-      expect(search?.description).toContain("Call this as a standalone tool")
+      expect(search?.description).toContain("Call `tool_search` as a standalone tool")
     }),
   )
 
@@ -152,7 +152,7 @@ describe("tool.registry", () => {
       })
 
       expect(tools.map((tool) => tool.id)).not.toContain("execute")
-      expect(tools.map((tool) => tool.id)).not.toContain("search")
+      expect(tools.map((tool) => tool.id)).not.toContain("tool_search")
     }),
   )
 

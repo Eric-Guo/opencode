@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import {
   CODE_MODE_TOOL,
-  CodeModeSearchTool,
   CodeModeTool,
+  CodeModeToolSearchTool,
   Parameters,
   SearchParameters,
   describeCatalog,
@@ -92,7 +92,7 @@ function build(
 function buildSearch(mcpTools: Record<string, MCP.McpTool>, servers?: string[]) {
   const names = serverNames(mcpTools, servers)
   return Effect.runPromise(
-    CodeModeSearchTool.pipe(Effect.flatMap(Tool.init), Effect.provide(harness({ mcpTools, servers: names }))),
+    CodeModeToolSearchTool.pipe(Effect.flatMap(Tool.init), Effect.provide(harness({ mcpTools, servers: names }))),
   )
 }
 
@@ -237,15 +237,15 @@ describe("code mode execute", () => {
     expect(description).toContain(
       "tools.zeta.only_tool(input: {\n  /** Subject to look up */\n  topic: string,\n}): Promise<unknown>",
     )
-    expect(description).toContain("search(input:")
+    expect(description).toContain("tool_search(input:")
     expect(description).toContain("  limit?: number,\n  offset?: number,")
     expect(description).toContain("  remaining: number,\n  next: {")
     expect(description).toContain("      offset: number,\n    } | null,")
     expect(description).toContain(
-      '1. Discover tools with the standalone `search` tool using `{ "query": "<intent + key nouns>" }`. It is not under `tools` and is not an MCP namespace.',
+      '1. Discover tools with the standalone `tool_search` tool using `{ "query": "<intent + key nouns>" }`. It is not under `tools` and is not an MCP namespace.',
     )
     expect(description).toContain(
-      '- Browse one namespace by calling `search` with `{ "query": "", "namespace": "<name>" }`.',
+      '- Browse one namespace by calling `tool_search` with `{ "query": "", "namespace": "<name>" }`.',
     )
     expect(description).not.toContain("total_count")
     expect(description).toContain("tools.alpha.op_0(")
@@ -269,10 +269,10 @@ describe("code mode execute", () => {
 
     const search = await buildSearch(tools, ["alpha", "zeta"])
     const discovered = await Effect.runPromise(search.execute({ query: "only tool", limit: 3, offset: 0 }, ctx))
-    expect(search.id).toBe("search")
+    expect(search.id).toBe("tool_search")
     expect(search.description).toContain("standalone tool")
     expect(JSON.parse(discovered.output)).toEqual(result)
-    expect(discovered.title).toBe("search")
+    expect(discovered.title).toBe("tool_search")
   })
 
   test("runs plain JavaScript and returns the value as text", async () => {

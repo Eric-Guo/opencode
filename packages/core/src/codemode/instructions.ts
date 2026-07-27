@@ -1,6 +1,6 @@
 export * as CodeModeInstructions from "./instructions"
 
-import { searchSignature, toolExpression } from "@opencode-ai/codemode"
+import { searchSignatureFor, toolExpression } from "@opencode-ai/codemode"
 import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index"
 import { CodeModeCatalog } from "./catalog"
@@ -10,9 +10,9 @@ const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is $
 
 ## Search
 
-Use \`search\` to discover exact paths and signatures for additional tools:
+Call the standalone \`tool_search\` tool to discover exact paths and signatures for additional tools. It is not under \`tools\` and is not a Code Mode namespace. Inside an \`execute\` script, the equivalent interpreter-global form is \`search(...)\`, not \`tools.search(...)\`:
 
-- ${searchSignature}` : ""}
+- ${searchSignatureFor("tool_search")}` : ""}
 
 ## Available tools`
 
@@ -74,7 +74,7 @@ ${render(current)}`
     }
     if (namespaces.changed.length > 0) {
       parts.push(
-        `The following namespace inventories changed; search them again before relying on previous results: ${namespaces.changed
+        `The following namespace inventories changed; call \`tool_search\` again before relying on previous results: ${namespaces.changed
           .map((change) => `\`${change.current.name}\` now has ${change.current.count} tools`)
           .join(", ")}.`,
       )
