@@ -483,7 +483,7 @@ export const Plugin = {
                       environment: target.environment,
                       timeout,
                       shell: yield* compatibleShell,
-                      metadata: { sessionID: context.sessionID },
+                      metadata: { sessionID: context.sessionID, protectThapeSsoApiKeys: true },
                       waited: timeoutBackgrounds,
                       toolCall: {
                         sessionID: context.sessionID,
