@@ -1763,6 +1763,7 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
       "direct_lookup",
       "direct_media",
       "execute",
+      "tool_search",
     ])
     expect(codeModeListings(toolSet.codeModeCatalog!).find((tool) => tool.path === "demo.search")?.line).toContain(
       "ok: boolean",
