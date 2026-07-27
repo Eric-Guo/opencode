@@ -415,7 +415,7 @@ export const Plugin = {
                       cwd: input.workdir,
                       timeout,
                       shell: yield* compatibleShell,
-                      metadata: { sessionID: context.sessionID },
+                      metadata: { sessionID: context.sessionID, protectThapeSsoApiKeys: true },
                       waited: !background,
                       toolCall: {
                         sessionID: context.sessionID,
