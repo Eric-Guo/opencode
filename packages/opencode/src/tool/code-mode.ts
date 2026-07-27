@@ -12,7 +12,8 @@ import { Plugin } from "@/plugin"
 
 export const CODE_MODE_TOOL = "execute"
 
-const DESCRIPTION = "Run a confined orchestration script with access to connected MCP tools."
+const DESCRIPTION =
+  "Run a confined orchestration script with access to connected MCP tools. Pass JavaScript in `code`; interpreter globals such as `search(...)` are not standalone tools."
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
@@ -89,7 +90,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
       : [
           "## Workflow",
           "",
-          '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
+          '1. To discover tools, invoke `execute` with code `return search({ query: "<intent + key nouns>" })`. `search` exists only inside that code; never call it as a standalone tool.',
           "2. In the next execution, copy a returned path exactly, call it, and return only the needed fields.",
         ]
   const toolSection = empty
@@ -97,7 +98,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
     : [
         complete
           ? "## Available tools (COMPLETE list - every tool is shown below with its full call signature)"
-          : `## Available tools (PARTIAL - ${catalog.shown} of ${catalog.total} shown; find the rest with search(...))`,
+          : `## Available tools (PARTIAL - ${catalog.shown} of ${catalog.total} shown; find the rest by running search(...) inside execute)`,
         "",
         ...catalog.namespaces.flatMap((namespace) => {
           const count = `${namespace.count} tool${namespace.count === 1 ? "" : "s"}`
@@ -127,7 +128,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
           "",
           complete
             ? "- Only tools listed here are available; surrounding agent tools are not implicitly exposed."
-            : "- Only tools listed here or returned by the built-in `search` function are available; surrounding agent tools are not implicitly exposed.",
+            : "- Only tools listed here or returned by `search(...)` inside an `execute` script are available; surrounding agent tools are not implicitly exposed.",
           "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
           "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
           '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
@@ -136,7 +137,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
           ...(complete
             ? []
             : [
-                '- Browse one namespace: `search({ query: "", namespace: "<name>" })`.',
+                '- Inside `execute`, browse one namespace with `search({ query: "", namespace: "<name>" })`.',
                 "- If search returns `next`, repeat the same search with `offset: next.offset`.",
               ]),
         ]),
