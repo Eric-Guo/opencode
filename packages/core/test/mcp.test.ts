@@ -1155,6 +1155,7 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
       "direct_lookup",
       "direct_media",
       "execute",
+      "tool_search",
     ])
     expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).toContain("ok: boolean")
     expect(execute?.description).not.toContain("tools.demo.search")
