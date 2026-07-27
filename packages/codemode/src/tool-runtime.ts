@@ -72,7 +72,7 @@ export type SafeObject = Record<string, unknown>
 const defaultSearchLimit = 10
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
-const SearchInput = Schema.Struct({
+export const SearchInput = Schema.Struct({
   query: Schema.optionalKey(Schema.String),
   namespace: Schema.optionalKey(Schema.String),
   limit: Schema.optionalKey(PositiveInt),
@@ -83,7 +83,7 @@ const SearchItem = Schema.Struct({
   description: Schema.String,
   signature: Schema.String,
 })
-const SearchOutput = Schema.Struct({
+export const SearchOutput = Schema.Struct({
   items: Schema.Array(SearchItem),
   remaining: NonNegativeInt,
   next: Schema.NullOr(Schema.Struct({ offset: NonNegativeInt })),
@@ -359,75 +359,79 @@ const termForms = (term: string): Array<string> => {
   return forms
 }
 
+export const discover = (
+  searchIndex: ReadonlyArray<SearchEntry>,
+  request: typeof SearchInput.Type,
+): typeof SearchOutput.Type => {
+  const query = request.query ?? ""
+  const offset = request.offset ?? 0
+  const scoped =
+    request.namespace === undefined
+      ? searchIndex
+      : searchIndex.filter(
+          (entry) =>
+            entry.description.path === request.namespace || entry.description.path.startsWith(`${request.namespace}.`),
+        )
+  const trimmed = query.trim()
+  const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
+  const exact =
+    pathQuery === ""
+      ? undefined
+      : scoped.find(
+          (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
+        )
+  const terms = tokenize(query).map(termForms)
+  const ranked =
+    exact !== undefined
+      ? [exact]
+      : scoped
+          .map((entry) => {
+            const path = entry.description.path.toLowerCase()
+            const description = entry.description.description.toLowerCase()
+            const score = terms.reduce(
+              (total, forms) =>
+                total +
+                (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
+                (forms.some((form) => path.includes(form)) ? 8 : 0) +
+                (forms.some((form) => description.includes(form)) ? 4 : 0) +
+                (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
+              0,
+            )
+            return { entry, score }
+          })
+          .filter(({ score }) => terms.length === 0 || score > 0)
+          .sort(
+            (left, right) =>
+              right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
+          )
+          .map(({ entry }) => entry)
+  const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
+    ...description,
+    path: toolExpression(description.path),
+  }))
+  const remaining = Math.max(0, ranked.length - offset - items.length)
+  return {
+    items,
+    remaining,
+    next: remaining > 0 ? { offset: offset + items.length } : null,
+  }
+}
+
 const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
   _tag: "CodeModeTool",
   description: "Search available tools",
   input: SearchInput,
   output: SearchOutput,
-  execute: (input) =>
-    Effect.sync(() => {
-      const request = input as typeof SearchInput.Type
-      const query = request.query ?? ""
-      const offset = request.offset ?? 0
-      const scoped =
-        request.namespace === undefined
-          ? searchIndex
-          : searchIndex.filter(
-              (entry) =>
-                entry.description.path === request.namespace ||
-                entry.description.path.startsWith(`${request.namespace}.`),
-            )
-      const trimmed = query.trim()
-      const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
-      const exact =
-        pathQuery === ""
-          ? undefined
-          : scoped.find(
-              (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
-            )
-      const terms = tokenize(query).map(termForms)
-      const ranked =
-        exact !== undefined
-          ? [exact]
-          : scoped
-              .map((entry) => {
-                const path = entry.description.path.toLowerCase()
-                const description = entry.description.description.toLowerCase()
-                const score = terms.reduce(
-                  (total, forms) =>
-                    total +
-                    (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
-                    (forms.some((form) => path.includes(form)) ? 8 : 0) +
-                    (forms.some((form) => description.includes(form)) ? 4 : 0) +
-                    (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
-                  0,
-                )
-                return { entry, score }
-              })
-              .filter(({ score }) => terms.length === 0 || score > 0)
-              .sort(
-                (left, right) =>
-                  right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
-              )
-              .map(({ entry }) => entry)
-      const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
-        ...description,
-        path: toolExpression(description.path),
-      }))
-      const remaining = Math.max(0, ranked.length - offset - items.length)
-      return {
-        items,
-        remaining,
-        next: remaining > 0 ? { offset: offset + items.length } : null,
-      }
-    }),
+  execute: (input) => Effect.sync(() => discover(searchIndex, input as typeof SearchInput.Type)),
 })
 
-/** Exact callable signature of the built-in `search` function, for host-owned instructions. */
-export const searchSignature = (() => {
+export const searchSignatureFor = (name: string) => {
   const tool = makeSearchTool([])
-  return `search(input: ${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
-})()
+  return `${name}(input: ${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
+}
+
+/** Exact callable signature of the built-in `search` function, for host-owned instructions. */
+export const searchSignature = searchSignatureFor("search")
 
 const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescription): SearchEntry => ({
   description,

@@ -6,7 +6,7 @@ import type { Tools } from "./tools.js"
 /** A tool call admitted during an execution. */
 export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescription } from "./tool-runtime.js"
 /** Signature-construction helpers for host-owned catalog instructions. */
-export { searchSignature, toolExpression } from "./tool-runtime.js"
+export { searchSignature, searchSignatureFor, toolExpression } from "./tool-runtime.js"
 
 /** Resource budgets enforced independently during each CodeMode program execution. */
 export type ExecutionLimits = {
@@ -53,6 +53,10 @@ export type Options<Provided extends Record<string, unknown> = {}> = Omit<Execut
 /** Schema for a host tool input containing CodeMode source. */
 export const Input = Schema.Struct({ code: Schema.String })
 export type Input = typeof Input.Type
+export const SearchInput = ToolRuntime.SearchInput
+export type SearchInput = typeof SearchInput.Type
+export const SearchOutput = ToolRuntime.SearchOutput
+export type SearchOutput = typeof SearchOutput.Type
 
 export const DiagnosticKind = Schema.Literals([
   "ParseError",
@@ -109,6 +113,7 @@ export type Result = typeof Result.Type
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
   readonly catalog: () => ReadonlyArray<ToolDescription>
+  readonly search: (input: SearchInput) => SearchOutput
   readonly execute: (code: string) => Effect.Effect<Result, never, R>
 }
 
@@ -143,6 +148,7 @@ export const make = <const Provided extends Record<string, unknown> = {}>(
 
   return {
     catalog: () => prepared.catalog,
+    search: (input) => ToolRuntime.discover(prepared.searchIndex, input),
     execute: (code) => executeWithLimits<Provided>({ ...options, code }, limits, prepared.searchIndex),
   }
 }
