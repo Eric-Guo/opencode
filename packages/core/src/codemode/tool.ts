@@ -57,11 +57,13 @@ export type Inventory = {
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
 }
 
+export const SEARCH_TOOL = "tool_search"
+
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
   "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
-  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by `search`. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the global `search(...)` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
   "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.all`.",
@@ -155,6 +157,21 @@ export const create = (
           metadata,
         }
       }),
+  } satisfies Info
+}
+
+export const createSearch = (inventory: Inventory) => {
+  const search = runtime(inventory, () => Effect.fail(toolError("Execute context is unavailable")))
+  return {
+    name: SEARCH_TOOL,
+    description:
+      "Discover exact paths and signatures for tools available inside Code Mode. Call `tool_search` as a standalone tool; inside execute scripts use the global `search(...)` function, not `tools.search(...)`.",
+    input: CodeMode.SearchInput,
+    output: CodeMode.SearchOutput,
+    execute: (input) => {
+      const output = search.search(input)
+      return Effect.succeed({ output, content: JSON.stringify(output, null, 2) })
+    },
   } satisfies Info
 }
 
