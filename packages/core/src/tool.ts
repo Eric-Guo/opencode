@@ -219,6 +219,7 @@ const layer = Layer.effect(
                 ),
               )
             : undefined
+          const toolSearch = codemodeEnabled && codemode.size > 0 ? CodeModeTool.createSearch(codemode) : undefined
           const codeModeCatalog = codemodeEnabled ? CodeModeTool.catalog(codemode) : undefined
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
@@ -227,6 +228,7 @@ const layer = Layer.effect(
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
                 .map(([, tool]) => definition(tool)),
               ...(codemodeTool ? [definition(codemodeTool)] : []),
+              ...(toolSearch ? [definition(toolSearch)] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
@@ -239,11 +241,17 @@ const layer = Layer.effect(
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codemodeTool?.name === event.tool))
+              if (
+                !requested &&
+                input.definitions &&
+                (direct.has(event.tool) || codemodeTool?.name === event.tool || toolSearch?.name === event.tool)
+              )
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
               if (name === "execute" && codemodeTool)
                 return yield* executeTool(codemodeTool, name, event.input, context)
+              if (name === CodeModeTool.SEARCH_TOOL && toolSearch)
+                return yield* executeTool(toolSearch, name, event.input, context)
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
               return yield* new Tool.Error({ message: `Unknown tool: ${name}` })
@@ -274,8 +282,8 @@ function registrationError(tool: Tool.Info) {
   const name = normalizedName(tool)
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) return new RegistrationError({ name, message: `Invalid tool name: ${name}` })
   const id = effectiveName(tool)
-  if (tool.options?.codemode === false && id === "execute")
-    return new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' })
+  if (tool.options?.codemode === false && ["execute", CodeModeTool.SEARCH_TOOL].includes(id))
+    return new RegistrationError({ name: id, message: `Tool name "${id}" is reserved for CodeMode` })
   const result = Result.try({
     try: () => ToolDefinition.make(definition(tool)),
     catch: (error) =>
