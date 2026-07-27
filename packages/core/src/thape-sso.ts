@@ -5,6 +5,16 @@ const SSO_ME_URL = "https://sso.thape.com.cn/api/me.json"
 const runtime = ManagedRuntime.make(Observability.layer())
 const bun = globalThis as typeof globalThis & { Bun?: { env: Record<string, string | undefined> } }
 
+export const API_KEY_ENV_NAMES = [
+  "OPENCODE_API_KEY",
+  "KIMI_API_KEY",
+  "DOC_MOONSHOT_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "SILICONFLOW_CN_API_KEY",
+  "EXA_API_KEY",
+  "CEREBRAS_API_KEY",
+] as const
+
 function runtimeEnv(key: string) {
   return bun.Bun?.env[key] ?? process.env[key]
 }
