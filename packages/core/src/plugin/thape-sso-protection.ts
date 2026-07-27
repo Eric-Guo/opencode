@@ -1,14 +1,14 @@
 export * as ThapeSsoProtection from "./thape-sso-protection"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/v2/effect/plugin"
-import type { LLM } from "@opencode-ai/schema/llm"
+import { define, type Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import type { Tool } from "@opencode-ai/schema/tool"
 import { Effect } from "effect"
 import { API_KEY_ENV_NAMES } from "../thape-sso"
 
 export const ID = "opencode.protection.thape-sso"
 export const REDACTED = "[REDACTED]"
 
-export const Plugin = {
+export const Plugin = define({
   id: ID,
   effect: Effect.fn("ThapeSsoProtection.Plugin")(function* (ctx: PluginContext) {
     yield* ctx.tool
@@ -30,21 +30,29 @@ export const Plugin = {
             return value ? [value] : []
           })
           if (secrets.length === 0) return
-          if (event.status === "error") event.error = redact(event.error, secrets)
-          if (event.content)
-            event.content = [
-              redactContent(event.content[0], secrets),
-              ...event.content.slice(1).map((item) => redactContent(item, secrets)),
-            ]
-          if (event.metadata) event.metadata = redact(event.metadata, secrets)
-          if (event.outputPaths) event.outputPaths = event.outputPaths.map((item) => redactString(item, secrets))
+          if (event.status === "error") {
+            event.error = redact(event.error, secrets)
+            return
+          }
+          event.result = {
+            ...(event.result.output === undefined ? {} : { output: redact(event.result.output, secrets) }),
+            ...(event.result.content === undefined
+              ? {}
+              : {
+                  content:
+                    typeof event.result.content === "string"
+                      ? redactString(event.result.content, secrets)
+                      : event.result.content.map((item) => redactContent(item, secrets)),
+                }),
+            ...(event.result.metadata === undefined ? {} : { metadata: redact(event.result.metadata, secrets) }),
+          }
         }),
       )
       .pipe(Effect.asVoid)
   }),
-}
+})
 
-function redactContent(content: LLM.ToolContent, secrets: readonly string[]): LLM.ToolContent {
+function redactContent(content: Tool.Content, secrets: readonly string[]): Tool.Content {
   if (content.type === "text") return { ...content, text: redactString(content.text, secrets) }
   return {
     ...content,

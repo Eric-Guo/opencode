@@ -31,7 +31,7 @@ describe("PluginSupervisor config", () => {
       { plugins: ["-*", "-opencode.protection.thape-sso"] },
       Effect.gen(function* () {
         yield* ready()
-        const plugins = yield* PluginV2.Service
+        const plugins = yield* Plugin.Service
         expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.protection.thape-sso"])
       }),
     ),
