@@ -139,7 +139,8 @@ describe("code mode execute", () => {
   test("the static base description carries no catalog; the registry appends it", async () => {
     const tool = await build({ github_list_issues: mcpTool("list_issues", () => "") })
     expect(tool.id).toBe(CODE_MODE_TOOL)
-    expect(tool.description).toBe("Run a confined orchestration script with access to connected MCP tools.")
+    expect(tool.description).toContain("Pass JavaScript in `code`")
+    expect(tool.description).toContain("`search(...)` are not standalone tools")
     expect(tool.description).not.toContain("Available tools")
     expect(tool.description).not.toContain("list_issues")
   })
@@ -223,9 +224,11 @@ describe("code mode execute", () => {
     expect(description).toContain("  remaining: number,\n  next: {")
     expect(description).toContain("      offset: number,\n    } | null,")
     expect(description).toContain(
-      '1. If needed, discover tools with the built-in search function: `return search({ query: "<intent + key nouns>" })`.',
+      '1. To discover tools, invoke `execute` with code `return search({ query: "<intent + key nouns>" })`. `search` exists only inside that code; never call it as a standalone tool.',
     )
-    expect(description).toContain('- Browse one namespace: `search({ query: "", namespace: "<name>" })`.')
+    expect(description).toContain(
+      '- Inside `execute`, browse one namespace with `search({ query: "", namespace: "<name>" })`.',
+    )
     expect(description).not.toContain("total_count")
     expect(description).toContain("tools.alpha.op_0(")
     expect(description).not.toContain("tools.alpha.op_99(")
