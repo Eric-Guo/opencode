@@ -397,6 +397,7 @@ describe("Plugin", () => {
         "context7_look_up",
         "plain",
         "execute",
+        "tool_search",
       ])
     }),
   )
