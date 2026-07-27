@@ -802,6 +802,12 @@ describe("CodeMode public contract", () => {
     )
     expect(result.ok).toBe(true)
     if (!result.ok) return
+    expect(result.value).toStrictEqual(
+      runtime.search({
+        query: "send message attachment upload file to current Discord thread",
+        limit: 2,
+      }),
+    )
     expect(result.value).toStrictEqual({
       items: [
         {
