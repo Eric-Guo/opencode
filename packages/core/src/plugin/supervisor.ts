@@ -273,11 +273,14 @@ const layer = Layer.effect(
       // Combine internal plugins with host-contributed SDK plugins in boot order.
       const pre = [...internal.pre.map((plugin) => ({ ...plugin, version: "internal" })), ...sdk.all()]
       const post = internal.post.map((plugin) => ({ ...plugin, version: "internal" }))
+      const required = internal.required.map((plugin) => ({ ...plugin, version: "required" }))
       const entries = yield* config.entries()
       const operations = yield* scan(entries)
       yield* watchConfiguredSources(entries, operations)
       // Apply config operations and load enabled package plugins into one ordered generation.
-      const plugins = yield* resolve(pre, post, operations)
+      const resolved = yield* resolve(pre, post, operations)
+      const protectedIDs = new Set(required.map((plugin) => plugin.id))
+      const plugins = [...resolved.filter((plugin) => !protectedIDs.has(plugin.id)), ...required]
       // Replace the active generation in one scoped, batched activation.
       yield* registry.activate(plugins)
     })
