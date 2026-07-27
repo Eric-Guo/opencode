@@ -1,5 +1,6 @@
 import { SessionID, MessageID } from "./schema"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import {
   APIError,
@@ -32,6 +33,7 @@ import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
+import { isRecord } from "@/util/record"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
@@ -77,12 +79,31 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) =>
-  ({
+function infoModel(input: unknown): User["model"] | undefined {
+  if (!isRecord(input) || typeof input.providerID !== "string") return
+  const modelID =
+    typeof input.modelID === "string" ? input.modelID : typeof input.id === "string" ? input.id : undefined
+  if (!modelID) return
+  return {
+    providerID: ProviderV2.ID.make(input.providerID),
+    modelID: ModelV2.ID.make(modelID),
+    ...(typeof input.variant === "string" ? { variant: input.variant } : {}),
+  }
+}
+
+const legacyModel = (input: unknown, fallback?: User["model"]) =>
+  infoModel(input) ?? fallback ?? { providerID: ProviderV2.ID.make("unknown"), modelID: ModelV2.ID.make("unknown") }
+
+const info = (row: typeof MessageTable.$inferSelect, fallbackModel?: User["model"]) => {
+  const data = row.data as typeof row.data & { agent?: unknown; mode?: unknown; model?: unknown }
+  return {
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
-  }) as Info
+    ...(typeof data.agent === "string" ? {} : { agent: typeof data.mode === "string" ? data.mode : "build" }),
+    ...(data.role === "user" ? { model: legacyModel(data.model, fallbackModel) } : {}),
+  } as Info
+}
 
 const part = (row: typeof PartTable.$inferSelect) =>
   ({
@@ -98,6 +119,20 @@ const older = (row: Cursor) =>
 function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$inferSelect)[]) {
   const ids = rows.map((row) => row.id)
   const partByMessage = new Map<string, Part[]>()
+  const modelByParent = new Map<string, User["model"]>()
+  for (const row of rows) {
+    const data = row.data as typeof row.data & {
+      modelID?: unknown
+      parentID?: unknown
+      providerID?: unknown
+      variant?: unknown
+    }
+    if (data.role !== "assistant" || typeof data.parentID !== "string") continue
+    modelByParent.set(
+      data.parentID,
+      legacyModel({ providerID: data.providerID, modelID: data.modelID, variant: data.variant }),
+    )
+  }
   return Effect.gen(function* () {
     if (ids.length > 0) {
       const partRows = yield* db
@@ -116,7 +151,7 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
     }
 
     return rows.map((row) => ({
-      info: info(row),
+      info: info(row, modelByParent.get(row.id)),
       parts: partByMessage.get(row.id) ?? [],
     }))
   })
