@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { CODE_MODE_TOOL, CodeModeTool, Parameters, describeCatalog } from "@/tool/code-mode"
+import {
+  CODE_MODE_TOOL,
+  CodeModeSearchTool,
+  CodeModeTool,
+  Parameters,
+  SearchParameters,
+  describeCatalog,
+} from "@/tool/code-mode"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
@@ -82,6 +89,13 @@ function build(
   )
 }
 
+function buildSearch(mcpTools: Record<string, MCP.McpTool>, servers?: string[]) {
+  const names = serverNames(mcpTools, servers)
+  return Effect.runPromise(
+    CodeModeSearchTool.pipe(Effect.flatMap(Tool.init), Effect.provide(harness({ mcpTools, servers: names }))),
+  )
+}
+
 function describeFor(mcpTools: Record<string, MCP.McpTool>, servers?: string[], permission: PermissionV1.Rule[] = []) {
   return describeCatalog(Permission.visibleTools(mcpTools, permission), serverNames(mcpTools, servers))
 }
@@ -105,6 +119,10 @@ describe("code mode execute", () => {
         },
       },
     })
+    await expect(
+      Effect.runPromise(Schema.decodeUnknownEffect(SearchParameters)({ query: "issues", limit: 5, offset: 0 })),
+    ).resolves.toEqual({ query: "issues", limit: 5, offset: 0 })
+    await expect(Effect.runPromise(Schema.decodeUnknownEffect(SearchParameters)({ limit: 0 }))).rejects.toThrow()
   })
 
   test("groups multi-underscore server names by longest matching prefix", () => {
@@ -140,7 +158,7 @@ describe("code mode execute", () => {
     const tool = await build({ github_list_issues: mcpTool("list_issues", () => "") })
     expect(tool.id).toBe(CODE_MODE_TOOL)
     expect(tool.description).toContain("Pass JavaScript in `code`")
-    expect(tool.description).toContain("`search(...)` are not standalone tools")
+    expect(tool.description).toContain("global `search(...)` function")
     expect(tool.description).not.toContain("Available tools")
     expect(tool.description).not.toContain("list_issues")
   })
@@ -224,10 +242,10 @@ describe("code mode execute", () => {
     expect(description).toContain("  remaining: number,\n  next: {")
     expect(description).toContain("      offset: number,\n    } | null,")
     expect(description).toContain(
-      '1. To discover tools, invoke `execute` with code `return search({ query: "<intent + key nouns>" })`. `search` exists only inside that code; never call it as a standalone tool.',
+      '1. Discover tools with the standalone `search` tool using `{ "query": "<intent + key nouns>" }`. It is not under `tools` and is not an MCP namespace.',
     )
     expect(description).toContain(
-      '- Inside `execute`, browse one namespace with `search({ query: "", namespace: "<name>" })`.',
+      '- Browse one namespace by calling `search` with `{ "query": "", "namespace": "<name>" }`.',
     )
     expect(description).not.toContain("total_count")
     expect(description).toContain("tools.alpha.op_0(")
@@ -248,6 +266,13 @@ describe("code mode execute", () => {
     expect(out.metadata.toolCalls).toEqual([
       { tool: "search", status: "completed", input: { query: "only tool", limit: 3, offset: 0 } },
     ])
+
+    const search = await buildSearch(tools, ["alpha", "zeta"])
+    const discovered = await Effect.runPromise(search.execute({ query: "only tool", limit: 3, offset: 0 }, ctx))
+    expect(search.id).toBe("search")
+    expect(search.description).toContain("standalone tool")
+    expect(JSON.parse(discovered.output)).toEqual(result)
+    expect(discovered.title).toBe("search")
   })
 
   test("runs plain JavaScript and returns the value as text", async () => {

@@ -129,11 +129,15 @@ describe("tool.registry", () => {
         agent: yield* agents.defaultInfo(),
       })
       const execute = tools.find((tool) => tool.id === "execute")
+      const search = tools.find((tool) => tool.id === "search")
 
       expect(ids).toContain("execute")
+      expect(ids).toContain("search")
       expect(tools.map((tool) => tool.id)).toContain("execute")
-      expect(execute?.description).toContain("`search(...)` are not standalone tools")
+      expect(tools.map((tool) => tool.id)).toContain("search")
+      expect(execute?.description).toContain("global `search(...)` function")
       expect(execute?.description).toContain("tools.weather.current(input: {\n  city: string,\n})")
+      expect(search?.description).toContain("Call this as a standalone tool")
     }),
   )
 
@@ -148,6 +152,7 @@ describe("tool.registry", () => {
       })
 
       expect(tools.map((tool) => tool.id)).not.toContain("execute")
+      expect(tools.map((tool) => tool.id)).not.toContain("search")
     }),
   )
 
