@@ -109,7 +109,7 @@ const layer = Layer.effect(
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
-    const codeModeSearchTool = codeMode ? yield* codeMode.CodeModeSearchTool : undefined
+    const codeModeToolSearchTool = codeMode ? yield* codeMode.CodeModeToolSearchTool : undefined
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -216,7 +216,7 @@ const layer = Layer.effect(
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
           ...(codeModeTool ? { execute: Tool.init(codeModeTool) } : {}),
-          ...(codeModeSearchTool ? { discovery: Tool.init(codeModeSearchTool) } : {}),
+          ...(codeModeToolSearchTool ? { discovery: Tool.init(codeModeToolSearchTool) } : {}),
         })
 
         return {
@@ -298,7 +298,7 @@ const layer = Layer.effect(
       const codeModeDescription = filtered.some((tool) => tool.id === "execute")
         ? yield* describeCodeMode(input)
         : undefined
-      const visible = filtered.filter((tool) => !["execute", "search"].includes(tool.id) || codeModeDescription)
+      const visible = filtered.filter((tool) => !["execute", "tool_search"].includes(tool.id) || codeModeDescription)
 
       return yield* Effect.forEach(
         visible,
