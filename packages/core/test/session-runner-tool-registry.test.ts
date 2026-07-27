@@ -110,6 +110,17 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("reserves execute and tool_search for Code Mode", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const execute = yield* transform(service, { execute: make() }, { codemode: false }).pipe(Effect.flip)
+      const toolSearch = yield* transform(service, { tool_search: make() }, { codemode: false }).pipe(Effect.flip)
+
+      expect(execute.message).toBe('Tool name "execute" is reserved for CodeMode')
+      expect(toolSearch.message).toBe('Tool name "tool_search" is reserved for CodeMode')
+    }),
+  )
+
   it.effect("canonicalizes effective definitions and keeps Code Mode last", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -135,7 +146,13 @@ describe("Tool", () => {
       ])
 
       expect(first).toEqual(second)
-      expect(first.map((definition) => definition.name)).toEqual(["alpha", "alpha_beta", "zeta", "execute"])
+      expect(first.map((definition) => definition.name)).toEqual([
+        "alpha",
+        "alpha_beta",
+        "zeta",
+        "execute",
+        "tool_search",
+      ])
     }),
   )
 
@@ -580,6 +597,23 @@ describe("Tool", () => {
       expect(toolSet.codeModeCatalog?.[0]?.signature).toContain("tools.echo")
       expect(execute?.description).toContain("confined Code Mode runtime")
       expect(execute?.description).not.toContain("Echo text")
+      expect(
+        yield* toolSet.execute({
+          ...call("tool_search"),
+          call: {
+            type: "tool-call",
+            id: "call-tool-search",
+            name: "tool_search",
+            input: { query: "echo" },
+          },
+        }),
+      ).toMatchObject({
+        output: {
+          items: [{ path: "tools.echo", description: "Echo text" }],
+          remaining: 0,
+          next: null,
+        },
+      })
       yield* Scope.close(scope, Exit.void)
       yield* transform(service, {
         echo: {
