@@ -13,7 +13,14 @@ import { Plugin } from "@/plugin"
 export const CODE_MODE_TOOL = "execute"
 
 const DESCRIPTION =
-  "Run a confined orchestration script with access to connected MCP tools. Pass JavaScript in `code`; interpreter globals such as `search(...)` are not standalone tools."
+  "Run a confined orchestration script with access to connected MCP tools. Pass JavaScript in `code`; call MCP tools through `tools`, while discovery uses the global `search(...)` function."
+
+export const SearchParameters = Schema.Struct({
+  query: Schema.optionalKey(Schema.String),
+  namespace: Schema.optionalKey(Schema.String),
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
+  offset: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+})
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
@@ -90,7 +97,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
       : [
           "## Workflow",
           "",
-          '1. To discover tools, invoke `execute` with code `return search({ query: "<intent + key nouns>" })`. `search` exists only inside that code; never call it as a standalone tool.',
+          '1. Discover tools with the standalone `search` tool using `{ "query": "<intent + key nouns>" }`. It is not under `tools` and is not an MCP namespace.',
           "2. In the next execution, copy a returned path exactly, call it, and return only the needed fields.",
         ]
   const toolSection = empty
@@ -98,7 +105,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
     : [
         complete
           ? "## Available tools (COMPLETE list - every tool is shown below with its full call signature)"
-          : `## Available tools (PARTIAL - ${catalog.shown} of ${catalog.total} shown; find the rest by running search(...) inside execute)`,
+          : `## Available tools (PARTIAL - ${catalog.shown} of ${catalog.total} shown; find the rest with the standalone search tool)`,
         "",
         ...catalog.namespaces.flatMap((namespace) => {
           const count = `${namespace.count} tool${namespace.count === 1 ? "" : "s"}`
@@ -128,7 +135,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
           "",
           complete
             ? "- Only tools listed here are available; surrounding agent tools are not implicitly exposed."
-            : "- Only tools listed here or returned by `search(...)` inside an `execute` script are available; surrounding agent tools are not implicitly exposed.",
+            : "- Only tools listed here or returned by the standalone `search` tool are available; surrounding agent tools are not implicitly exposed.",
           "- Filter, aggregate, and transform collections in code - never return them raw or call a tool per item across messages.",
           "- A result typed `Promise<unknown>` may be structured data or text. Before reading fields, check that it is a non-null object and not an array; otherwise handle the returned text or primitive directly.",
           '- Run independent calls in parallel: `await Promise.all(items.map((item) => tools.<namespace>.<tool>(item)))`, or use `tools.<namespace>["tool-name"](item)` when the listed signature uses bracket notation.',
@@ -137,7 +144,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
           ...(complete
             ? []
             : [
-                '- Inside `execute`, browse one namespace with `search({ query: "", namespace: "<name>" })`.',
+                '- Browse one namespace by calling `search` with `{ "query": "", "namespace": "<name>" }`.',
                 "- If search returns `next`, repeat the same search with `offset: next.offset`.",
               ]),
         ]),
@@ -395,5 +402,25 @@ export const CodeModeTool = Tool.define(
       }, Effect.orDie),
     }
     return init
+  }),
+)
+
+export const CodeModeSearchTool = Tool.define(
+  "search",
+  Effect.gen(function* () {
+    const executeInfo = yield* CodeModeTool
+    const execute = yield* executeInfo.init()
+    return {
+      description:
+        "Discover exact paths and signatures for connected MCP tools. Call this as a standalone tool; inside execute scripts the same function is `search(...)`, not `tools.search(...)`.",
+      parameters: SearchParameters,
+      execute: (params, ctx) =>
+        execute.execute({ code: `return search(${JSON.stringify(params)})` }, ctx).pipe(
+          Effect.map((result) => ({
+            ...result,
+            title: "search",
+          })),
+        ),
+    }
   }),
 )
