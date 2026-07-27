@@ -12,17 +12,17 @@ describe("CodeMode", () => {
       const tools = yield* Tool.Service
       yield* tools.transform((draft) =>
         draft.add({
-            name: "echo",
-            description: "Echo text",
-            input: Schema.Struct({ text: Schema.String }),
-            output: Schema.String,
-            options: { pinned: true },
-            execute: ({ text }) => Effect.succeed({ output: text }),
+          name: "echo",
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.String,
+          options: { pinned: true },
+          execute: ({ text }) => Effect.succeed({ output: text }),
         }),
       )
 
       const snapshot = yield* tools.snapshot()
-      expect(snapshot.definitions.some((tool) => tool.name === "execute")).toBe(true)
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute", "tool_search"])
       expect(snapshot.codeModeCatalog).toStrictEqual([
         {
           path: "echo",
