@@ -1,4 +1,5 @@
 export * as Provider from "./provider"
+export * as ProviderV2 from "./provider"
 
 import { Effect, Schema } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"

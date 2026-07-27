@@ -46,3 +46,4 @@ export function parse(input: string): { providerID: Provider.ID; modelID: ID } {
 }
 
 export * as Model from "./model"
+export * as ModelV2 from "./model"
