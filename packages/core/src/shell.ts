@@ -18,6 +18,7 @@ import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionSchema } from "./session/schema.js"
+import { API_KEY_ENV_NAMES } from "./thape-sso.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -232,7 +233,12 @@ const layer = () =>
           timeout: input.timeout,
           shell: yield* shell.preferred(),
           env: {
-            ...(sessionEnvironment ?? process.env),
+            ...Object.fromEntries(
+              Object.entries(sessionEnvironment ?? process.env).filter(
+                ([key]) =>
+                  input.metadata?.protectThapeSsoApiKeys !== true || !API_KEY_ENV_NAMES.some((name) => name === key),
+              ),
+            ),
             TERM: "xterm-256color",
             OPENCODE_TERMINAL: "1",
           },

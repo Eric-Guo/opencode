@@ -153,11 +153,18 @@ export const layer = Layer.effect(
         version: "internal",
         source: { type: "builtin" as const },
       }))
+      const required = internal.required.map((plugin) => ({
+        ...plugin,
+        version: "required",
+        source: { type: "builtin" as const },
+      }))
       const operations = yield* sources.operations()
       // Apply config operations and load enabled package plugins into one ordered generation.
       const resolved = yield* resolve(pre, post, operations)
+      const protectedIDs = new Set(required.map((plugin) => plugin.id))
+      const plugins = [...resolved.plugins.filter((plugin) => !protectedIDs.has(plugin.id)), ...required]
       // Replace the active generation in one scoped, batched activation.
-      yield* registry.activate(resolved.plugins, resolved.failures)
+      yield* registry.activate(plugins, resolved.failures)
     })
     const updates = Stream.merge(sources.changes(), bus.subscribe([Event.Updated, SdkPlugins.Updated])).pipe(
       // Make accepted work visible to flush before coalescing the burst.

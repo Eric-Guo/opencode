@@ -185,7 +185,7 @@ export const Plugin = {
                   command: input.command,
                   cwd: input.workdir,
                   timeout,
-                  metadata: { sessionID: context.sessionID },
+                  metadata: { sessionID: context.sessionID, protectThapeSsoApiKeys: true },
                 },
                 (invocation) =>
                   Effect.gen(function* () {
