@@ -144,10 +144,13 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           if (entry.tool.options?.namespace !== undefined) yield* validateNamespace(entry.tool.options.namespace)
           yield* validateName(normalizedName(entry.tool))
-          if (entry.tool.options?.codemode === false && entry.key === "execute")
+          if (
+            entry.tool.options?.codemode === false &&
+            ["execute", CodeModeTool.SEARCH_TOOL].includes(entry.key)
+          )
             return yield* new RegistrationError({
               name: entry.key,
-              message: 'Tool name "execute" is reserved for CodeMode',
+              message: `Tool name "${entry.key}" is reserved for CodeMode`,
             })
           yield* Effect.try({
             try: () => ToolDefinition.make(definition(entry.tool)),
@@ -211,6 +214,7 @@ const layer = Layer.effect(
             const codemodeTool = codemodeEnabled
               ? CodeModeTool.create(codemode, (name, tool, input, context) => executeTool(tool, name, input, context))
               : undefined
+            const toolSearch = codemodeEnabled && codemode.size > 0 ? CodeModeTool.createSearch(codemode) : undefined
             const codeModeCatalog = codemodeEnabled ? CodeModeTool.catalog(codemode) : undefined
             return {
               ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
@@ -219,6 +223,7 @@ const layer = Layer.effect(
                   .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
                   .map(([, tool]) => definition(tool)),
                 ...(codemodeTool ? [definition(codemodeTool)] : []),
+                ...(toolSearch ? [definition(toolSearch)] : []),
               ],
               execute: (input: {
                 readonly sessionID: SessionSchema.ID
@@ -236,6 +241,8 @@ const layer = Layer.effect(
                 }
                 if (input.call.name === "execute" && codemodeTool)
                   return executeTool(codemodeTool, input.call.name, input.call.input, context)
+                if (input.call.name === CodeModeTool.SEARCH_TOOL && toolSearch)
+                  return executeTool(toolSearch, input.call.name, input.call.input, context)
                 const tool = direct.get(input.call.name)
                 if (tool) return executeTool(tool, input.call.name, input.call.input, context)
                 return new Tool.Error({ message: `Unknown tool: ${input.call.name}` })
