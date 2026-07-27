@@ -85,6 +85,7 @@ import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { SystemPromptPlugin } from "./system-prompt.js"
+import { ThapeSsoProtection } from "./thape-sso-protection.js"
 import { VariantPlugin } from "./variant.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
@@ -239,6 +240,8 @@ const post = [
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 
+const required = [ThapeSsoProtection.Plugin] as const satisfies readonly InternalPlugin[]
+
 export const list = Effect.fn("PluginInternal.list")(function* () {
   // Capture only services; activation supplies the child Scope and batching context.
   const context = Context.pick(...services)(yield* Effect.context<Requirements>())
@@ -252,5 +255,6 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
   return {
     pre: resolve(pre),
     post: resolve(post),
+    required: resolve(required),
   }
 })
