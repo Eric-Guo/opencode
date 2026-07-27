@@ -250,7 +250,7 @@ describe("ReadTool", () => {
 
   it.effect("accepts null pagination values", () =>
     Effect.gen(function* () {
-      const registry = yield* ToolRegistry.Service
+      const registry = yield* Tool.Service
 
       expect(
         yield* executeTool(registry, {
@@ -263,7 +263,7 @@ describe("ReadTool", () => {
             input: { path: "README.md", offset: null, limit: null },
           },
         }),
-      ).toMatchObject({ type: "json", value: { content: "hello" } })
+      ).toMatchObject({ status: "completed", output: { content: "hello" } })
       expect(readCalls).toEqual([
         {
           input: AbsolutePath.make(path.join(process.cwd(), "README.md")),
