@@ -1,4 +1,5 @@
 export * as Project from "./project"
+export * as ProjectV2 from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
