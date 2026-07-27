@@ -480,7 +480,11 @@ export const Plugin = {
                       timeout,
                       shell: yield* compatibleShell,
                       // The call in the transcript that started the command, so clients can tell whose it is.
-                      metadata: { sessionID: context.sessionID, callID: (yield* CodeModeTool.Parent) ?? context.id },
+                      metadata: {
+                        sessionID: context.sessionID,
+                        callID: (yield* CodeModeTool.Parent) ?? context.id,
+                        protectThapeSsoApiKeys: true,
+                      },
                       waited: timeoutBackgrounds,
                       toolCall: {
                         sessionID: context.sessionID,
