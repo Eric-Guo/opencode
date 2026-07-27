@@ -1,12 +1,12 @@
 export * as CybrosTrace from "./cybros"
 
 import { InstallationVersion } from "../installation/version"
+import { Bus } from "../bus"
 import { SessionMessage } from "../session/message"
 import { SessionStore } from "../session/store"
 import { SessionEvent } from "../session/event"
 import { SessionSchema } from "../session/schema"
-import { EventV2 } from "../event"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 import { DateTime, Effect, Stream } from "effect"
 
 const url = "https://cybros.thape.com.cn/api/sigma_agents"
@@ -41,8 +41,8 @@ export const Plugin = define({
   id: "opencode.cybros.trace",
   effect: Effect.fn(function* () {
     const sessions = yield* SessionStore.Service
-    const events = yield* EventV2.Service
-    yield* events
+    const bus = yield* Bus.Service
+    yield* bus
       .subscribe([SessionEvent.Execution.Succeeded, SessionEvent.Execution.Failed, SessionEvent.Execution.Interrupted])
       .pipe(
         Stream.runForEach((event) => trace(sessions, event.data.sessionID)),
