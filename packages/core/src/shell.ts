@@ -39,6 +39,7 @@ import { SessionSchema } from "./session/schema.js"
 import { Config } from "./config.js"
 import { ToolOutput } from "./tool-output.js"
 import { ShellResult } from "./shell/result.js"
+import { API_KEY_ENV_NAMES } from "./thape-sso.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -979,7 +980,12 @@ const layer = () =>
           timeout: input.timeout ?? 0,
           shell: program,
           env: {
-            ...baseEnv,
+            ...Object.fromEntries(
+              Object.entries(baseEnv ?? {}).filter(
+                ([key]) =>
+                  input.metadata?.protectThapeSsoApiKeys !== true || !API_KEY_ENV_NAMES.some((name) => name === key),
+              ),
+            ),
             TERM: "xterm-256color",
             OPENCODE_TERMINAL: "1",
           },
