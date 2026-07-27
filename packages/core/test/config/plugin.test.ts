@@ -37,6 +37,17 @@ const staticIt = testEffect(
 )
 
 describe("PluginSupervisor config", () => {
+  it.live("keeps required SSO protection enabled after removal selectors", () =>
+    withLocation(
+      { plugins: ["-*", "-opencode.protection.thape-sso"] },
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.protection.thape-sso"])
+      }),
+    ),
+  )
+
   it.live("applies selectors in order", () =>
     withLocation(
       { plugins: ["-opencode.provider.*", "opencode.provider.openai"] },
@@ -386,6 +397,7 @@ describe("PluginSupervisor config", () => {
           expect(ids.indexOf("config-promise-plugin")).toBeLessThan(ids.indexOf("variant-source"))
           expect(ids.indexOf("variant-source")).toBeLessThan(ids.indexOf("opencode.config.provider"))
           expect(ids.indexOf("opencode.config.provider")).toBeLessThan(ids.indexOf("opencode.variant"))
+          expect(ids.at(-1)).toBe("opencode.protection.thape-sso")
 
           const catalog = yield* Catalog.Service
           expect(
