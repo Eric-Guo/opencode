@@ -1,4 +1,5 @@
 export * as Session from "./session"
+export * as SessionV2 from "./session"
 export * from "./session/schema"
 
 import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
