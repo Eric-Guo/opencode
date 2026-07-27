@@ -862,6 +862,7 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
       "direct_lookup",
       "direct_media",
       "execute",
+      "tool_search",
     ])
     expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).toContain("ok: boolean")
     expect(execute?.description).not.toContain("tools.demo.search")
@@ -930,16 +931,18 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const registry = yield* Tool.Service
     const toolSet = yield* waitForCodeModeTool(registry, "demo.search")
 
-    const fiber = yield* toolSet.execute({
-      sessionID: Session.ID.make("ses_mcp_permission"),
-      ...toolIdentity,
-      call: {
-        type: "tool-call",
-        id: "call_mcp_permission",
-        name: "execute",
-        input: { code: "return await tools.demo.search({})" },
-      },
-    }).pipe(Effect.forkScoped)
+    const fiber = yield* toolSet
+      .execute({
+        sessionID: Session.ID.make("ses_mcp_permission"),
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call_mcp_permission",
+          name: "execute",
+          input: { code: "return await tools.demo.search({})" },
+        },
+      })
+      .pipe(Effect.forkScoped)
     expect(yield* Deferred.await(assertion)).toEqual({
       action: "demo_search",
       resources: ["*"],
