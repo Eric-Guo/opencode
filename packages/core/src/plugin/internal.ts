@@ -100,6 +100,7 @@ import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { ToolInputRepairPlugin } from "./tool-input-repair.js"
 import { OptimizePlugin } from "./optimize.js"
+import { ThapeSsoProtection } from "./thape-sso-protection.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { VerbosityPlugin } from "./verbosity.js"
 import { WarmingPlugin } from "./warming.js"
@@ -277,6 +278,8 @@ const post = [
 // organization statements, so plugin remove operations skip these IDs.
 export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPolicyPlugin.Plugin.id])
 
+const required = [ThapeSsoProtection.Plugin] as const satisfies readonly InternalPlugin[]
+
 export const list = Effect.fn("PluginInternal.list")(function* () {
   // Capture only services; activation supplies the child Scope and batching context.
   const context = Context.pick(...services)(yield* Effect.context<Requirements>())
@@ -290,5 +293,6 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
   return {
     pre: resolve(pre),
     post: resolve(post),
+    required: resolve(required),
   }
 })
