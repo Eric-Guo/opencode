@@ -147,9 +147,15 @@ export const layer = Layer.effectDiscard(
         revision: "internal",
         source: { type: "builtin" as const },
       }))
+      const required = internal.required.map((plugin) => ({
+        ...plugin,
+        revision: "required",
+        source: { type: "builtin" as const },
+      }))
       const operations = yield* sources.operations()
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(pre, post, operations, false, running)
+      const protectedIDs = new Set(required.map((plugin) => plugin.id))
       const source = (source: Plugin.Source) =>
         source.type === "package"
           ? {
@@ -160,7 +166,9 @@ export const layer = Layer.effectDiscard(
           : source
       const apply = (resolved: typeof immediate) =>
         registry.activate(
-          resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
+          [...resolved.plugins.filter((plugin) => !protectedIDs.has(plugin.id)), ...required].map((plugin) =>
+            plugin.source ? { ...plugin, source: source(plugin.source) } : plugin,
+          ),
           resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
         )
       yield* apply(immediate)
