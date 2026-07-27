@@ -85,6 +85,7 @@ bracket notation, such as `tools.context7["resolve-library-id"](...)`.
 const runtime = CodeMode.make({ tools, limits: { timeoutMs: 30_000 } })
 
 runtime.catalog() // structured tool descriptions
+runtime.search({ query: "order lookup" }) // structured matching tool descriptions
 runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
 ```
 
@@ -158,12 +159,14 @@ copying error. Interruption propagates without becoming an error diagnostic.
 ## Discovery
 
 `runtime.catalog()` returns structured descriptors — exact path, description, and generated TypeScript signature — for
-every visible tool. Hosts render their own model-facing instructions from these descriptors; `CodeMode.searchSignature`
-and `CodeMode.toolExpression(path)` supply the exact callable forms.
+every visible tool. `runtime.search(input)` synchronously searches those descriptors for hosts that expose discovery as
+a standalone tool. Hosts render their own model-facing instructions from these descriptors;
+`CodeMode.searchSignatureFor(name)` and `CodeMode.toolExpression(path)` supply the exact callable forms.
 
-The synchronous `search(...)` built-in is always available. It supports exact-path lookup, namespace-scoped search,
-empty-query browsing, and pagination, and returns callable paths with full signatures. Search counts toward
-`maxToolCalls`. Search also matches descriptions from enclosing `Namespace` values.
+Inside an execution, the synchronous `search(...)` built-in is always available. It supports exact-path lookup,
+namespace-scoped search, empty-query browsing, and pagination, and returns callable paths with full signatures. Calls
+to the built-in count toward `maxToolCalls`; host calls to `runtime.search(...)` do not execute a Code Mode program.
+Search also matches descriptions from enclosing `Namespace` values.
 
 ## Execution Limits
 
