@@ -7,6 +7,7 @@ import { SessionStore } from "../session/store"
 import { SessionEvent } from "../session/event"
 import { SessionSchema } from "../session/schema"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { SessionStatusEvent } from "@opencode-ai/schema/session-status-event"
 import { DateTime, Effect, Stream } from "effect"
 
 const url = "https://cybros.thape.com.cn/api/sigma_agents"
@@ -42,8 +43,14 @@ export const Plugin = define({
   effect: Effect.fn(function* () {
     const sessions = yield* SessionStore.Service
     const bus = yield* Bus.Service
+    // The legacy runner still publishes Idle while v2 Sessions publish execution terminal events.
     yield* bus
-      .subscribe([SessionEvent.Execution.Succeeded, SessionEvent.Execution.Failed, SessionEvent.Execution.Interrupted])
+      .subscribe([
+        SessionStatusEvent.Idle,
+        SessionEvent.Execution.Succeeded,
+        SessionEvent.Execution.Failed,
+        SessionEvent.Execution.Interrupted,
+      ])
       .pipe(
         Stream.runForEach((event) => trace(sessions, event.data.sessionID)),
         Effect.forkScoped,
