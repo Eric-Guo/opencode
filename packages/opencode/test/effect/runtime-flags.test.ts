@@ -55,6 +55,7 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalLspTool).toBe(true)
       expect(flags.experimentalOxfmt).toBe(true)
       expect(flags.experimentalPlanMode).toBe(true)
+      expect(flags.experimentalCodeMode).toBe(true)
       expect(flags.experimentalEventSystem).toBe(true)
       expect(flags.experimentalWorkspaces).toBe(true)
       expect(flags.experimentalIconDiscovery).toBe(true)
@@ -113,6 +114,7 @@ describe("RuntimeFlags", () => {
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
+      expect(flags.experimentalCodeMode).toBe(true)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
       expect(flags.outputTokenMax).toBeUndefined()
@@ -127,6 +129,16 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
 
       expect(flags.experimentalIconDiscovery).toBe(false)
+    }),
+  )
+
+  it.effect("experimentalCodeMode defaults to true and supports explicit opt-out", () =>
+    Effect.gen(function* () {
+      const defaults = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+      const disabled = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_CODE_MODE: "false" })))
+
+      expect(defaults.experimentalCodeMode).toBe(true)
+      expect(disabled.experimentalCodeMode).toBe(false)
     }),
   )
 
