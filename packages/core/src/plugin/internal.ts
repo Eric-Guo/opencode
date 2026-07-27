@@ -57,6 +57,7 @@ import { WebSearchPlugins } from "./websearch"
 import { PluginRuntime } from "./runtime"
 import { SkillPlugin } from "./skill"
 import { SystemPromptPlugin } from "./system-prompt"
+import { ThapeSsoProtection } from "./thape-sso-protection"
 import { VariantPlugin } from "./variant"
 import { WarmingPlugin } from "./warming"
 import { WellKnownPlugin } from "../wellknown/plugin"
@@ -170,6 +171,8 @@ const post = [
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 
+const required = [ThapeSsoProtection.Plugin] as const satisfies readonly InternalPlugin[]
+
 export const list = Effect.fn("PluginInternal.list")(function* () {
   const context = yield* services()
   const resolve = (plugins: readonly InternalPlugin[]) =>
@@ -182,5 +185,6 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
   return {
     pre: resolve(pre),
     post: resolve(post),
+    required: resolve(required),
   }
 })

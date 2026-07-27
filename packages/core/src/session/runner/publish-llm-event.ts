@@ -392,7 +392,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         const messageID = yield* startAssistant()
         const index = nextFile++
         const id = `generated-${messageID}-${index}`
-        yield* events.publish(SessionEvent.File.Generated, {
+        yield* bus.publish(SessionEvent.File.Generated, {
           sessionID: input.sessionID,
           assistantMessageID: messageID,
           file: {
