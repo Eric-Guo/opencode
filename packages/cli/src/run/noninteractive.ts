@@ -1,7 +1,7 @@
 import type {
   EventSubscribeOutput,
   JsonValue,
-  LLMToolContent,
+  ToolContent,
   LocationRef,
   OpenCodeClient,
   SessionMessageAssistantTool,
@@ -56,7 +56,7 @@ type ToolState = StartedPart & {
   provider?: unknown
   providerState?: SessionMessageAssistantTool["providerState"]
   metadata: Record<string, JsonValue>
-  content: LLMToolContent[]
+  content: ToolContent[]
 }
 
 type V2Event = EventSubscribeOutput
