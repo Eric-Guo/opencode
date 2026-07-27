@@ -22,7 +22,7 @@ export class SessionLocationMiddleware extends HttpApiMiddleware.Service<
 
 const decodeSessionID = Schema.decodeUnknownEffect(Session.ID)
 
-function sessionNotFound(sessionID: SessionV2.ID) {
+function sessionNotFound(sessionID: Session.ID) {
   return new SessionNotFoundError({
     sessionID,
     message: `Session not found: ${sessionID}`,
@@ -30,7 +30,7 @@ function sessionNotFound(sessionID: SessionV2.ID) {
 }
 
 const ensureDirectory = Effect.fn("SessionLocation.ensureDirectory")(function* (
-  sessionID: SessionV2.ID,
+  sessionID: Session.ID,
   directory: string,
 ) {
   yield* Effect.tryPromise({
