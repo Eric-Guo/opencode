@@ -1,4 +1,5 @@
 export * as Skill from "./skill"
+export * as SkillV2 from "./skill"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
