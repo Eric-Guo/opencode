@@ -1,4 +1,4 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput } from "@opencode-ai/plugin/v1"
 import type { Model } from "@opencode-ai/sdk/v2"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"

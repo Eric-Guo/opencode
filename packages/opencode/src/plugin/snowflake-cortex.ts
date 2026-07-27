@@ -1,4 +1,4 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput } from "@opencode-ai/plugin/v1"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
