@@ -73,8 +73,15 @@ test("local channel stores service config with the local service filename", asyn
         Effect.provide(NodeFileSystem.layer),
       ),
     )
+    await Effect.runPromise(
+      ServiceConfig.set("cors", "https://cybros.example").pipe(
+        Effect.provide(Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
     expect(await Bun.file(path.join(root, "config", "service-local.json")).json()).toEqual({
       hostname: "127.0.0.2",
+      cors: ["https://cybros.example"],
     })
     expect(await Bun.file(path.join(root, "config", "service.json")).exists()).toBe(false)
   } finally {
@@ -742,6 +749,7 @@ function serviceEnv(root: string) {
     ...process.env,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: transpilerCache,
     HOME: root,
+    OPENCODE_CONFIG_DIR: path.join(root, "config", "opencode"),
     OPENCODE_DB: path.join(root, "opencode.db"),
     OPENCODE_TEST_HOME: root,
     XDG_CACHE_HOME: path.join(root, "cache"),
