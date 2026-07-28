@@ -61,6 +61,7 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
@@ -105,6 +106,7 @@ import { formLocationLayer } from "@opencode-ai/server/middleware/form-location"
 import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
 import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
 import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
+import { ServerInfo } from "@opencode-ai/server/server-info"
 import { workspaceHandlers } from "./handlers/workspace"
 import { instanceContextLayer } from "./middleware/instance-context"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
@@ -174,11 +176,13 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
 const instanceRoutes = instanceApiRoutes.pipe(
   Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, schemaErrorLayer]),
 )
-const serverRoutes = HttpApiBuilder.layer(Api).pipe(
-  Layer.provide(handlers),
-  Layer.provide(PluginPtyEnvironment.layer),
-  Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),
-)
+const serverRoutes = (serviceURLs: () => ReadonlyArray<string>) =>
+  HttpApiBuilder.layer(Api).pipe(
+    Layer.provide(handlers),
+    Layer.provide(PluginPtyEnvironment.layer),
+    Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),
+    Layer.provide(ServerInfo.layer(serviceURLs, { version: InstallationVersion })),
+  )
 
 // `OpenApi.fromApi` is non-trivial; defer until /doc is actually hit so
 // processes that never serve it (CLI, scripts) don't pay at module load.
@@ -269,6 +273,7 @@ const app = LayerNode.group([
 
 export function createRoutes(
   corsOptions?: CorsOptions,
+  serviceURLs: () => ReadonlyArray<string> = () => [],
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
   const locationServiceMapV2 = buildLocationServiceMap()
 
@@ -277,7 +282,7 @@ export function createRoutes(
     eventApiRoutes,
     ptyConnectApiRoutes,
     instanceRoutes,
-    serverRoutes,
+    serverRoutes(serviceURLs),
     docRoute,
     uiRoute,
   ).pipe(
