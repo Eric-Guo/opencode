@@ -8,7 +8,7 @@
         "@aws-sdk/client-s3": "3.933.0",
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/script": "workspace:*",
-        "@opencode-ai/sdk": "1.18.7",
+        "@opencode-ai/sdk": "1.18.9",
         "heap-snapshot-toolkit": "1.1.3",
         "typescript": "catalog:",
       },
@@ -139,7 +139,7 @@
     },
     "packages/cli": {
       "name": "@opencode-ai/cli",
-      "version": "1.18.4",
+      "version": "1.18.10",
       "bin": {
         "opencode2": "./bin/opencode2.cjs",
       },
@@ -222,7 +222,7 @@
     },
     "packages/codemode": {
       "name": "@opencode-ai/codemode",
-      "version": "1.18.4",
+      "version": "1.18.10",
       "dependencies": {
         "acorn": "8.15.0",
         "effect": "catalog:",
@@ -360,7 +360,7 @@
     },
     "packages/core": {
       "name": "@opencode-ai/core",
-      "version": "1.18.4",
+      "version": "1.18.10",
       "dependencies": {
         "@ai-sdk/alibaba": "1.0.17",
         "@ai-sdk/amazon-bedrock": "4.0.112",
@@ -451,6 +451,7 @@
         "@actions/artifact": "4.0.0",
         "@lydell/node-pty": "catalog:",
         "@opencode-ai/app": "workspace:*",
+        "@opencode-ai/client": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@sentry/solid": "catalog:",
@@ -594,7 +595,7 @@
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/protocol": "workspace:*",
         "@opencode-ai/schema": "workspace:*",
-        "@opencode-ai/sdk": "1.18.7",
+        "@opencode-ai/sdk": "1.18.9",
         "@standard-schema/spec": "catalog:",
         "effect": "catalog:",
         "zod": "catalog:",
@@ -685,7 +686,7 @@
     },
     "packages/server": {
       "name": "@opencode-ai/server",
-      "version": "1.18.4",
+      "version": "1.18.10",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -773,7 +774,7 @@
       "name": "@opencode-ai/slack",
       "version": "1.18.15",
       "dependencies": {
-        "@opencode-ai/sdk": "1.18.7",
+        "@opencode-ai/sdk": "1.18.9",
         "@slack/bolt": "^3.17.1",
       },
       "devDependencies": {
@@ -893,7 +894,7 @@
     },
     "packages/tui": {
       "name": "@opencode-ai/tui",
-      "version": "1.18.4",
+      "version": "1.18.10",
       "dependencies": {
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/core": "workspace:*",
@@ -974,7 +975,7 @@
     },
     "packages/updates": {
       "name": "@opencode-ai/updates",
-      "version": "1.18.7",
+      "version": "1.18.9",
       "dependencies": {
         "jose": "6.0.11",
       },
@@ -988,7 +989,7 @@
     },
     "packages/util": {
       "name": "@opencode-ai/util",
-      "version": "1.18.3",
+      "version": "1.18.9",
       "dependencies": {
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -2071,7 +2072,7 @@
 
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.18.7", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-5txVELvCxzC3O/MYnRKdTvBN3TqQjE3PaEks3kDRA/moWzMSUhdm15xCth/Mz/NPYyGTn2u4IdScdV9vLTfLRg=="],
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.18.9", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-oDJSmsmiGW+3lNLmZYj3EpUkpiT3ITZBKffH3mrmu2KMJXlkxQ/Nvv7jqPffSM7o8lCdBZS/aCE+2GkA3/92gQ=="],
 
     "@opencode-ai/sdk-next": ["@opencode-ai/sdk-next@workspace:packages/sdk-next"],
 
