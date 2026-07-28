@@ -273,6 +273,10 @@ const layer = Layer.effect(
                 return yield* executeTool(toolSearch, name, event.input, context)
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
+              if (codeModeTool && (name.startsWith("tools.") || name.startsWith("tools[")))
+                return yield* new Tool.Error({
+                  message: `Unknown tool: ${name}. Code Mode catalog expressions are JavaScript-only, not standalone tool names. Call execute with the expression inside its code input.`,
+                })
               return yield* new Tool.Error({ message: `Unknown tool: ${name}` })
             }),
           }
