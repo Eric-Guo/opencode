@@ -8,11 +8,15 @@ import { CodeModeCatalog } from "./catalog.js"
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
 
-${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalog is"} the complete set of tools callable inside \`execute\`. It does not affect tools exposed directly outside Code Mode.${hasMoreTools ? `
+${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalog is"} the complete set of tools callable inside \`execute\`. It does not affect tools exposed directly outside Code Mode.
+
+## Use
+
+Write a JavaScript orchestration script in the standalone \`execute\` tool's \`code\` input. Use the exact \`tools...\` expressions below to call one tool or combine several; loops such as \`for\` and \`while\` are supported. Never submit \`tools...\` expressions as standalone tool names.${hasMoreTools ? `
 
 ## Search
 
-Call the standalone \`tool_search\` tool to discover exact paths and signatures for additional tools. It is not under \`tools\` and is not a Code Mode namespace. Inside an \`execute\` script, the equivalent interpreter-global form is \`search(...)\`, not \`tools.search(...)\`:
+Call standalone \`tool_search\`, then use its returned \`tools...\` expression inside \`execute\` code. Inside that code, search with \`search(...)\`, not \`tools.search(...)\`:
 
 - ${searchSignatureFor("tool_search")}` : ""}
 
