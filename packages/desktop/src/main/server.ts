@@ -35,7 +35,8 @@ export function preferAppEnv() {
 }
 
 function packagedConfigDir() {
-  if (app.isPackaged && process.platform === "darwin") return join(dirname(app.getPath("exe")), "../Resources/thape-config")
+  if (app.isPackaged && process.platform === "darwin")
+    return join(dirname(app.getPath("exe")), "../Resources/thape-config")
   if (app.isPackaged) return join(process.resourcesPath, "thape-config")
   return join(dirname(fileURLToPath(import.meta.url)), "../../resources/thape-config")
 }
