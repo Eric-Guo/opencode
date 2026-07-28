@@ -13,46 +13,52 @@ export function resolveChannel(): Channel {
   return "dev"
 }
 
-export const CLI_BINARIES: Array<{ target: string; package: string; os: string; cpu: string }> = [
+export const CLI_BINARIES: Array<{ rustTarget: string; target: string; package: string; os: string; cpu: string }> = [
   {
-    target: "aarch64-apple-darwin",
+    rustTarget: "aarch64-apple-darwin",
+    target: "darwin-arm64",
     package: "@opencode-ai/cli-darwin-arm64",
     os: "darwin",
     cpu: "arm64",
   },
   {
-    target: "x86_64-apple-darwin",
+    rustTarget: "x86_64-apple-darwin",
+    target: "darwin-x64-baseline",
     package: "@opencode-ai/cli-darwin-x64-baseline",
     os: "darwin",
     cpu: "x64",
   },
   {
-    target: "aarch64-pc-windows-msvc",
+    rustTarget: "aarch64-pc-windows-msvc",
+    target: "windows-arm64",
     package: "@opencode-ai/cli-windows-arm64",
     os: "win32",
     cpu: "arm64",
   },
   {
-    target: "x86_64-pc-windows-msvc",
+    rustTarget: "x86_64-pc-windows-msvc",
+    target: "windows-x64-baseline",
     package: "@opencode-ai/cli-windows-x64-baseline",
     os: "win32",
     cpu: "x64",
   },
   {
-    target: "x86_64-unknown-linux-gnu",
+    rustTarget: "x86_64-unknown-linux-gnu",
+    target: "linux-x64-baseline",
     package: "@opencode-ai/cli-linux-x64-baseline",
     os: "linux",
     cpu: "x64",
   },
   {
-    target: "aarch64-unknown-linux-gnu",
+    rustTarget: "aarch64-unknown-linux-gnu",
+    target: "linux-arm64",
     package: "@opencode-ai/cli-linux-arm64",
     os: "linux",
     cpu: "arm64",
   },
 ]
 
-export const CLI_TARGET = Bun.env.OPENCODE_CLI_TARGET
+export const RUST_TARGET = Bun.env.RUST_TARGET
 
 function nativeTarget() {
   const { platform, arch } = process
@@ -62,8 +68,8 @@ function nativeTarget() {
   throw new Error(`Unsupported platform: ${platform}/${arch}`)
 }
 
-export function getCurrentCli(target = CLI_TARGET ?? nativeTarget()) {
-  const binaryConfig = CLI_BINARIES.find((item) => item.target === target)
+export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
+  const binaryConfig = CLI_BINARIES.find((item) => item.rustTarget === target)
   if (!binaryConfig) throw new Error(`CLI configuration not available for target '${target}'`)
 
   return binaryConfig
@@ -84,6 +90,37 @@ export async function downloadCliToResources(version = CLI_VERSION, dest = windo
   await prepareCli(dest)
 
   console.log(`Copied ${cli.package}@${version} to ${dest}`)
+}
+
+export async function buildCliToResources(dest = windowsify("resources/opencode-cli"), stateHome?: string) {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
+  const cli = getCurrentCli()
+  try {
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} ${`--target=opencode2-${cli.target}`} --skip-install --skip-web-ui --outdir=${directory}`.env(
+      {
+        ...process.env,
+        OPENCODE_VERSION: process.env.OPENCODE_VERSION,
+      },
+    )
+    if (stateHome && (await Bun.file(dest).exists())) {
+      const child = Bun.spawn([dest, "service", "stop"], {
+        env: { ...process.env, XDG_STATE_HOME: stateHome },
+        stdout: "inherit",
+        stderr: "inherit",
+      })
+      const exitCode = await child.exited
+      if (exitCode !== 0) throw new Error(`Failed to stop development service: ${exitCode}`)
+    }
+    await copyFile(
+      join(directory, `cli-${cli.target}`, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
+      dest,
+    )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+  await prepareCli(dest)
+
+  console.log(`Built ${cli.target} CLI at ${dest}`)
 }
 
 async function prepareCli(dest: string) {
