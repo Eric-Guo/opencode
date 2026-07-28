@@ -35,9 +35,11 @@ export const SEARCH_TOOL = "tool_search"
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
-  "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
+  "Write JavaScript in `{ code }` to call one catalog tool or combine several and return the result.",
+  "Normal control flow is supported, including `for` and `while` loops.",
   "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
   "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the global `search(...)` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+  "Expressions beginning with `tools` are JavaScript-only. Never submit one as a standalone agent tool call; invoke `execute` and put the expression inside its `{ code }` input.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
   "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.all`.",
@@ -139,7 +141,7 @@ export const createSearch = (registrations: ReadonlyMap<string, Info>) => {
   return {
     name: SEARCH_TOOL,
     description:
-      "Discover exact paths and signatures for tools available inside Code Mode. Call `tool_search` as a standalone tool; inside execute scripts use the global `search(...)` function, not `tools.search(...)`.",
+      "Find Code Mode tool signatures. Call `tool_search` standalone, then use the returned `tools...` expression inside `execute` code, never as a standalone tool name. Inside code use `search(...)`, not `tools.search(...)`.",
     input: CodeMode.SearchInput,
     output: CodeMode.SearchOutput,
     execute: (input) => {
