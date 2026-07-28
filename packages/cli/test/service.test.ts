@@ -30,8 +30,15 @@ test("local channel stores service config with the local service filename", asyn
         Effect.provide(NodeFileSystem.layer),
       ),
     )
+    await Effect.runPromise(
+      ServiceConfig.set("cors", "https://cybros.example").pipe(
+        Effect.provide(Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
     expect(await Bun.file(path.join(root, "config", "service-local.json")).json()).toEqual({
       hostname: "127.0.0.2",
+      cors: ["https://cybros.example"],
     })
     expect(await Bun.file(path.join(root, "config", "service.json")).exists()).toBe(false)
   } finally {
@@ -214,17 +221,7 @@ test("clean managed service shutdown removes its registration", async () => {
 
 test("concurrent service processes elect one server", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-election-"))
-  const database = path.join(root, "opencode.db")
-  const env = {
-    ...process.env,
-    HOME: root,
-    OPENCODE_DB: database,
-    OPENCODE_TEST_HOME: root,
-    XDG_CACHE_HOME: path.join(root, "cache"),
-    XDG_CONFIG_HOME: path.join(root, "config"),
-    XDG_DATA_HOME: path.join(root, "data"),
-    XDG_STATE_HOME: path.join(root, "state"),
-  }
+  const env = serviceEnv(root)
   const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
   const registration = path.join(root, "state", "opencode", "service-local.json")
   const port = await availablePort()
@@ -598,6 +595,7 @@ function serviceEnv(root: string) {
   return {
     ...process.env,
     HOME: root,
+    OPENCODE_CONFIG_DIR: path.join(root, "config", "opencode"),
     OPENCODE_DB: path.join(root, "opencode.db"),
     OPENCODE_TEST_HOME: root,
     XDG_CACHE_HOME: path.join(root, "cache"),
