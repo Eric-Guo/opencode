@@ -12,7 +12,7 @@ const legacyDesktopEntry = "resources/linux/opencode-desktop.desktop"
 const { FileMatcher } = createRequire(import.meta.resolve("electron-builder"))("app-builder-lib/out/fileMatcher")
 
 const channels = [
-  { channel: "dev", appId: "ai.opencode.desktop.dev" },
+  { channel: "dev", appId: "ai.opencode.desktop" },
   { channel: "beta", appId: "ai.opencode.desktop.beta" },
   { channel: "prod", appId: "ai.opencode.desktop" },
 ] as const
