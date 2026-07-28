@@ -23,6 +23,7 @@ await rm(outdir, { recursive: true, force: true })
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const requested = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
 const solidPlugin = createSolidTransformPlugin()
 
 const allTargets: {
@@ -45,13 +46,22 @@ const allTargets: {
   { os: "win32", arch: "x64", avx2: false },
 ]
 
-const targets = singleFlag
-  ? allTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) return false
-      if (item.avx2 === false) return baselineFlag
-      return item.abi === undefined
-    })
-  : allTargets.filter((item) => item.os === "darwin" && item.arch === "arm64")
+const targetName = (item: (typeof allTargets)[number]) =>
+  [item.os === "win32" ? "windows" : item.os, item.arch, item.avx2 === false ? "baseline" : undefined, item.abi]
+    .filter(Boolean)
+    .join("-")
+
+const targets = requested
+  ? allTargets.filter((item) => targetName(item) === requested)
+  : singleFlag
+    ? allTargets.filter((item) => {
+        if (item.os !== process.platform || item.arch !== process.arch) return false
+        if (item.avx2 === false) return baselineFlag
+        return item.abi === undefined
+      })
+    : allTargets.filter((item) => item.os === "darwin" && item.arch === "arm64")
+
+if (targets.length === 0) throw new Error(`Unknown CLI target: ${requested}`)
 
 if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
 
@@ -66,15 +76,7 @@ for (const item of targets) {
       }))
     },
   }
-  const target = [
-    binary,
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
+  const target = `${binary}-${targetName(item)}`
   const name = target.replace(binary, "cli")
   console.log(`building ${name}`)
   const result = await Bun.build({
