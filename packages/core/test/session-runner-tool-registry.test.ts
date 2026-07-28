@@ -189,7 +189,7 @@ describe("Tool", () => {
       )
 
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute", "tool_search"])
       expect(snapshot.codeModeCatalog?.[0]?.signature).toContain("tools.echo")
     }),
   )
@@ -312,6 +312,20 @@ describe("Tool", () => {
           call: { type: "tool-call", id: "missing", name: "missing", input: {} },
         }),
       ).toEqual({ status: "error", error: { type: "tool.execution", message: "Unknown tool: missing" } })
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "nested", name: 'tools["plm-mcp"].current_user', input: {} },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message:
+            'Unknown tool: tools["plm-mcp"].current_user. Code Mode catalog expressions are JavaScript-only, not standalone tool names. Call execute with the expression inside its code input.',
+        },
+      })
 
       yield* transform(
         service,
@@ -617,7 +631,7 @@ describe("Tool", () => {
       const toolSet = yield* service.snapshot()
       const execute = toolSet.definitions.find((tool) => tool.name === "execute")
       expect(toolSet.codeModeCatalog?.[0]?.signature).toContain("tools.echo")
-      expect(execute?.description).toContain("confined Code Mode runtime")
+      expect(execute?.description).toContain("Write JavaScript in `{ code }`")
       expect(execute?.description).not.toContain("Echo text")
       expect(
         yield* toolSet.execute({
