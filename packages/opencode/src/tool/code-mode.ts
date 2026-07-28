@@ -85,15 +85,15 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
       ? [
           "## Workflow",
           "",
-          "1. Pick a tool from the list under `## Available tools` - each line is the exact call signature; use it as-is rather than guessing segments.",
-          "2. Call it using the exact signature shown: `const result = await tools.<namespace>.<tool>(input)`; bracket notation and quotes are part of the path.",
+          "1. Write JavaScript in the standalone `execute` tool's `code` input.",
+          "2. Use the exact `tools...` signatures below to call one tool or combine several; never use them as standalone tool names.",
           "3. Return only the fields you need from structured results; narrow unknown results before reading fields, and avoid returning large raw payloads.",
         ]
       : [
           "## Workflow",
           "",
           '1. Discover tools with the standalone `tool_search` tool using `{ "query": "<intent + key nouns>" }`. It is not under `tools` and is not an MCP namespace.',
-          "2. In the next execution, copy a returned path exactly, call it, and return only the needed fields.",
+          "2. Then use the returned `tools...` expression inside standalone `execute` code, never as a standalone tool name.",
         ]
   const toolSection = empty
     ? ["## Available tools", "", "No tools are currently available."]
@@ -152,7 +152,7 @@ function renderCatalog(catalog: CodeModeCatalog.Summary) {
     "",
     "## Language",
     "",
-    "Use common JavaScript data operations, functions, control flow, selected standard-library methods, and awaited tool calls. Built-ins include Date, RegExp, Map, Set, URL, URLSearchParams, and URI encoding helpers.",
+    "Use common JavaScript data operations, functions, control flow including `for` and `while` loops, selected standard-library methods, and awaited tool calls. Built-ins include Date, RegExp, Map, Set, URL, URLSearchParams, and URI encoding helpers.",
     "Modules/imports, classes, timers, fetch, eval, prototype access, and unlisted methods are unavailable. Use tools for external operations. Use await with try/catch.",
     "Prefer explicit `return`; otherwise only the final top-level expression becomes the result.",
     "Dates and URLs serialize to strings at data boundaries; Map/Set/RegExp/URLSearchParams serialize to `{}`.",
@@ -413,7 +413,7 @@ export const CodeModeToolSearchTool = Tool.define(
     const execute = yield* executeInfo.init()
     return {
       description:
-        "Discover exact paths and signatures for connected MCP tools. Call `tool_search` as a standalone tool; inside execute scripts use the global `search(...)` function, not `tools.search(...)`.",
+        "Find MCP tool signatures. Call `tool_search` standalone, then use the returned `tools...` expression inside `execute` code, never as a standalone tool name. Inside code use `search(...)`, not `tools.search(...)`.",
       parameters: SearchParameters,
       execute: (params, ctx) =>
         execute.execute({ code: `return search(${JSON.stringify(params)})` }, ctx).pipe(

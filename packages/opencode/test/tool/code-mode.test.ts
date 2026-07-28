@@ -186,7 +186,8 @@ describe("code mode execute", () => {
     expect(description).not.toContain("$codemode")
     expect(description).not.toContain("Browse one namespace")
     expect(description).toContain("## Workflow")
-    expect(description).toContain("1. Pick a tool from the list under `## Available tools`")
+    expect(description).toContain("1. Write JavaScript in the standalone `execute` tool's `code` input.")
+    expect(description).toContain("call one tool or combine several")
     expect(description).not.toContain("JSON.parse(res)")
     expect(description).toContain("check that it is a non-null object and not an array")
     expect(description).toContain("Return only the fields you need")
@@ -232,6 +233,7 @@ describe("code mode execute", () => {
     const description = describeFor(tools, ["alpha", "zeta"])
 
     expect(description).toContain("Available tools (PARTIAL - ")
+    expect(description).toContain("control flow including `for` and `while` loops")
     expect(description).toMatch(/- alpha \(150 tools, \d+ shown\)/)
     expect(description).toContain("- zeta (1 tool)\n")
     expect(description).toContain(
@@ -243,6 +245,9 @@ describe("code mode execute", () => {
     expect(description).toContain("      offset: number,\n    } | null,")
     expect(description).toContain(
       '1. Discover tools with the standalone `tool_search` tool using `{ "query": "<intent + key nouns>" }`. It is not under `tools` and is not an MCP namespace.',
+    )
+    expect(description).toContain(
+      "2. Then use the returned `tools...` expression inside standalone `execute` code, never as a standalone tool name.",
     )
     expect(description).toContain(
       '- Browse one namespace by calling `tool_search` with `{ "query": "", "namespace": "<name>" }`.',

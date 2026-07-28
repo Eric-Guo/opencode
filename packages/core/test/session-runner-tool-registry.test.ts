@@ -286,6 +286,20 @@ describe("Tool", () => {
           call: { type: "tool-call", id: "missing", name: "missing", input: {} },
         }),
       ).toEqual({ status: "error", error: { type: "tool.execution", message: "Unknown tool: missing" } })
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "nested", name: 'tools["plm-mcp"].current_user', input: {} },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message:
+            'Unknown tool: tools["plm-mcp"].current_user. Code Mode catalog expressions are JavaScript-only, not standalone tool names. Call execute with the expression inside its code input.',
+        },
+      })
 
       yield* transform(
         service,
