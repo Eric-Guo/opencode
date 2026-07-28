@@ -59,6 +59,7 @@ describe("session message presentation", () => {
       content: [
         { type: "reasoning", text: "Thinking", time: { created: 2, completed: 3 } },
         { type: "text", text: "Result" },
+        { type: "file", id: "file_1", mime: "image/png", filename: "chart.png", url: "data:image/png;base64,AAAA" },
         {
           type: "tool",
           id: "call_1",
@@ -79,8 +80,14 @@ describe("session message presentation", () => {
 
     const parts = presentAssistantParts("ses_1", message)
 
-    expect(parts.map((part) => part.id)).toEqual(["msg_assistant:reasoning:0", "msg_assistant:text:0", "call_1"])
-    expect(parts[2]).toMatchObject({ type: "tool", tool: "read", state: { status: "completed", output: "hello" } })
+    expect(parts.map((part) => part.id)).toEqual([
+      "msg_assistant:reasoning:0",
+      "msg_assistant:text:0",
+      "file_1",
+      "call_1",
+    ])
+    expect(parts[2]).toMatchObject({ type: "file", mime: "image/png", filename: "chart.png" })
+    expect(parts[3]).toMatchObject({ type: "tool", tool: "read", state: { status: "completed", output: "hello" } })
   })
 
   test("adapts current edit fields only at the renderer boundary", () => {
