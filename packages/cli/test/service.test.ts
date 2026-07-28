@@ -29,8 +29,15 @@ test("local channel stores service config with the local service filename", asyn
         Effect.provide(NodeFileSystem.layer),
       ),
     )
+    await Effect.runPromise(
+      ServiceConfig.set("cors", JSON.stringify(["https://cybros.example"])).pipe(
+        Effect.provide(Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
     expect(await Bun.file(path.join(root, "config", "service-local.json")).json()).toEqual({
       hostname: "127.0.0.2",
+      cors: ["https://cybros.example"],
     })
     expect(await Bun.file(path.join(root, "config", "service.json")).exists()).toBe(false)
   } finally {
