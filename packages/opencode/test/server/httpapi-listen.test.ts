@@ -3,6 +3,7 @@ import net from "node:net"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { Flag } from "@/flag/flag"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
@@ -167,6 +168,22 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
 }
 
 describe("HttpApi Server.listen", () => {
+  test("serves V2 server metadata", async () => {
+    const listener = await startListener()
+    try {
+      const headers = { authorization: authorization() }
+      const health = await fetch(new URL("/api/health", listener.url), { headers })
+      expect(health.status).toBe(200)
+      expect(await health.json()).toEqual({ healthy: true, version: InstallationVersion, pid: process.pid })
+
+      const server = await fetch(new URL("/api/server", listener.url), { headers })
+      expect(server.status).toBe(200)
+      expect(await server.json()).toEqual({ urls: [listener.url.toString().replace(/\/$/, "")] })
+    } finally {
+      await stop(listener, "timed out cleaning up server metadata listener")
+    }
+  })
+
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()
