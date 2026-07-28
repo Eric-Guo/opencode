@@ -42,6 +42,7 @@ describe("normalizeSessionMessages", () => {
         content: [
           { type: "reasoning", text: "Thinking", time: { created: 4, completed: 5 } },
           { type: "text", text: "Result" },
+          { type: "file", id: "file_1", mime: "image/png", filename: "chart.png", url: "data:image/png;base64,AAAA" },
           {
             type: "tool",
             id: "call_1",
@@ -95,8 +96,18 @@ describe("normalizeSessionMessages", () => {
         text: { value: "@src/client.ts", start: 8, end: 22 },
       },
     })
-    expect(result.parts.get("msg_4")?.map((part) => part.id)).toEqual(["msg_4:reasoning:0", "msg_4:text:0", "call_1"])
+    expect(result.parts.get("msg_4")?.map((part) => part.id)).toEqual([
+      "msg_4:reasoning:0",
+      "msg_4:text:0",
+      "file_1",
+      "call_1",
+    ])
     expect(result.parts.get("msg_4")?.[2]).toMatchObject({
+      type: "file",
+      mime: "image/png",
+      filename: "chart.png",
+    })
+    expect(result.parts.get("msg_4")?.[3]).toMatchObject({
       type: "tool",
       tool: "read",
       state: { status: "completed", output: "hello" },
