@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.18.8",
+  "version": "1.18.10",
   "description": "",
   "type": "module",
   "exports": {
@@ -56,7 +56,6 @@
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/sdk": "file:vendor/opencode-ai-sdk-1.18.8-dev.tgz",
     "@opencode-ai/session-ui": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@opencode-ai/util": "workspace:*",
