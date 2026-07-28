@@ -77,7 +77,7 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
 })
 
 function configKey(key: string): Key {
-  if (key === "hostname" || key === "port" || key === "password" || key === "env") return key
+  if (key === "hostname" || key === "port" || key === "password" || key === "env" || key === "cors") return key
   throw new Error(`Unknown service config key: ${key}`)
 }
 
