@@ -381,6 +381,8 @@ export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
 
+export type GlobalConfig = { [x: string]: JsonValue }
+
 export type SessionMessageModelSelected = {
   id: string
   metadata?: { [x: string]: JsonValue }
@@ -5750,4 +5752,4 @@ export type ConfigGetInput = {
 
 export type ConfigGetOutput = Array<ConfigEntry>
 
-export type ConfigGlobalOutput = { [x: string]: any }
+export type ConfigGlobalOutput = GlobalConfig
