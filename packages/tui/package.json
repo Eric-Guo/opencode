@@ -38,6 +38,8 @@
     "./context/keymap": "./src/context/keymap.tsx",
     "./prompt/content": "./src/prompt/content.ts",
     "./prompt/display": "./src/prompt/display.ts",
+    "./plugin/runtime": "./src/plugin/runtime.tsx",
+    "./plugin/slots": "./src/plugin/slots.tsx",
     "./parsers-config": "./src/parsers-config.ts",
     "./util/error": "./src/util/error.ts",
     "./util/filetype": "./src/util/filetype.ts",
