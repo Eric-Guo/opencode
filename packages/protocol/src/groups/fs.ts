@@ -1,6 +1,6 @@
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Location } from "@opencode-ai/schema/location"
-import { PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
+import { NonNegativeInt, PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
@@ -16,6 +16,44 @@ const FindQuery = Schema.Struct({
   type: FileSystem.FindInput.fields.type,
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
 })
+
+const LegacyFileQuery = Schema.Struct({
+  directory: Schema.String.pipe(Schema.optional),
+  workspace: Schema.String.pipe(Schema.optional),
+  path: Schema.String,
+})
+
+export const LegacyFileNode = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  absolute: Schema.String,
+  type: Schema.Literals(["file", "directory"]),
+  ignored: Schema.Boolean,
+}).annotate({ identifier: "LegacyFileNode" })
+
+export const LegacyFileContent = Schema.Struct({
+  type: Schema.Literals(["text", "binary"]),
+  content: Schema.String,
+  diff: Schema.String.pipe(Schema.optional),
+  patch: Schema.Struct({
+    oldFileName: Schema.String,
+    newFileName: Schema.String,
+    oldHeader: Schema.String.pipe(Schema.optional),
+    newHeader: Schema.String.pipe(Schema.optional),
+    hunks: Schema.Array(
+      Schema.Struct({
+        oldStart: NonNegativeInt,
+        oldLines: NonNegativeInt,
+        newStart: NonNegativeInt,
+        newLines: NonNegativeInt,
+        lines: Schema.Array(Schema.String),
+      }),
+    ),
+    index: Schema.String.pipe(Schema.optional),
+  }).pipe(Schema.optional),
+  encoding: Schema.Literal("base64").pipe(Schema.optional),
+  mimeType: Schema.String.pipe(Schema.optional),
+}).annotate({ identifier: "LegacyFileContent" })
 
 export const FileSystemGroup = HttpApiGroup.make("server.fs")
   .add(
@@ -59,6 +97,30 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
           description: "Find recursively ranked filesystem entries relative to the requested location.",
         }),
       ),
+  )
+  .add(
+    HttpApiEndpoint.get("fs.listLegacy", "/file", {
+      query: LegacyFileQuery,
+      success: Schema.Array(LegacyFileNode),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.fs.listLegacy",
+        summary: "List directory for legacy clients",
+        description: "Compatibility route for desktop clients using the v1 file SDK.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("fs.readLegacy", "/file/content", {
+      query: LegacyFileQuery,
+      success: LegacyFileContent,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.fs.readLegacy",
+        summary: "Read file for legacy clients",
+        description: "Compatibility route for desktop clients using the v1 file SDK.",
+      }),
+    ),
   )
   .annotateMerge(
     OpenApi.annotations({
