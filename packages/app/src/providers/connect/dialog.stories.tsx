@@ -3,6 +3,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { mockProviderAuth } from "@/runtime/server/sync"
+import { SettingsProvider } from "@/settings/model"
 import { onCleanup, onMount } from "solid-js"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog"
 
@@ -38,7 +39,9 @@ function ProviderConnectionDialogStory(props) {
 function renderConnection(provider, methods) {
   return () => (
     <QueryClientProvider client={new QueryClient()}>
-      <ProviderConnectionDialogStory provider={provider} methods={methods} />
+      <SettingsProvider>
+        <ProviderConnectionDialogStory provider={provider} methods={methods} />
+      </SettingsProvider>
     </QueryClientProvider>
   )
 }
@@ -51,7 +54,9 @@ export default {
 export const Picker = {
   render: () => (
     <QueryClientProvider client={new QueryClient()}>
-      <ConnectProviderDialogStory />
+      <SettingsProvider>
+        <ConnectProviderDialogStory />
+      </SettingsProvider>
     </QueryClientProvider>
   ),
 }
