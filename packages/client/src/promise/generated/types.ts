@@ -305,6 +305,32 @@ export type PermissionSavedInfo = { id: string; projectID: string; action: strin
 
 export type FileSystemEntry = { path: string; type: "file" | "directory" }
 
+export type LegacyFileNode = {
+  name: string
+  path: string
+  absolute: string
+  type: "file" | "directory"
+  ignored: boolean
+}
+
+export type LegacyFileContent = {
+  type: "text" | "binary"
+  content: string
+  diff?: string | undefined
+  patch?:
+    | {
+        oldFileName: string
+        newFileName: string
+        oldHeader?: string | undefined
+        newHeader?: string | undefined
+        hunks: Array<{ oldStart: number; oldLines: number; newStart: number; newLines: number; lines: Array<string> }>
+        index?: string | undefined
+      }
+    | undefined
+  encoding?: "base64" | undefined
+  mimeType?: string | undefined
+}
+
 export type SkillInfo = {
   id: string
   name: string
@@ -5176,6 +5202,46 @@ export type FileFindOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<FileSystemEntry>
 }
+
+export type FileListLegacyInput = {
+  readonly directory?: {
+    readonly directory?: string | undefined
+    readonly workspace?: string | undefined
+    readonly path: string
+  }["directory"]
+  readonly workspace?: {
+    readonly directory?: string | undefined
+    readonly workspace?: string | undefined
+    readonly path: string
+  }["workspace"]
+  readonly path: {
+    readonly directory?: string | undefined
+    readonly workspace?: string | undefined
+    readonly path: string
+  }["path"]
+}
+
+export type FileListLegacyOutput = Array<LegacyFileNode>
+
+export type FileReadLegacyInput = {
+  readonly directory?: {
+    readonly directory?: string | undefined
+    readonly workspace?: string | undefined
+    readonly path: string
+  }["directory"]
+  readonly workspace?: {
+    readonly directory?: string | undefined
+    readonly workspace?: string | undefined
+    readonly path: string
+  }["workspace"]
+  readonly path: {
+    readonly directory?: string | undefined
+    readonly workspace?: string | undefined
+    readonly path: string
+  }["path"]
+}
+
+export type FileReadLegacyOutput = LegacyFileContent
 
 export type CommandListInput = {
   readonly location?: {
