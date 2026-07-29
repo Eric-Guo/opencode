@@ -76,7 +76,7 @@ async function start(command: StartCommand) {
     useSystemCertificates()
     useEnvProxy()
     parentPort.postMessage({ type: "starting", stage: "loading server module" })
-    const opencode = (await import(new URL("./chunks/node.js", import.meta.url).href)) as ServerModule
+    const opencode = (await import(new URL("./chunks/sidecar.mjs", import.meta.url).href)) as ServerModule
 
     parentPort.postMessage({ type: "starting", stage: "starting server" })
     listener = await opencode.Server.listen({
