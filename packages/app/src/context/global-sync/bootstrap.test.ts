@@ -9,6 +9,7 @@ import {
   bootstrapDirectory,
   loadAgentsQuery,
   loadCommands,
+  loadGlobalConfigQuery,
   loadPathQuery,
   loadProjectsQuery,
   loadProvidersQuery,
@@ -129,6 +130,44 @@ describe("bootstrapDirectory", () => {
     expect(store.status).toBe("complete")
     expect(mcpReads.sort()).toEqual(["command", "resource", "status"])
   })
+
+  test("does not call the legacy directory config endpoint for v2 servers", async () => {
+    const configReads: string[] = []
+    const [store, setStore] = directoryState()
+
+    await bootstrapDirectory({
+      directory: "/project",
+      scope: ServerScope.local,
+      mcp: false,
+      global: {
+        config: {} satisfies Config,
+        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+        project: [{ id: "project", worktree: "/project" } as Project],
+        provider,
+      },
+      legacy: {
+        config: {
+          directory: async () => {
+            configReads.push("config")
+            return {}
+          },
+        },
+      } as unknown as LegacyCapabilities,
+      api,
+      store,
+      setStore,
+      vcsCache: { setStore() {} } as unknown as VcsCache,
+      loadSessions() {},
+      translate: (key) => key,
+      queryClient: new QueryClient(),
+      protocol: Promise.resolve("v2"),
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(configReads).toEqual([])
+    expect(store.status).toBe("complete")
+  })
 })
 
 describe("query keys", () => {
@@ -148,6 +187,21 @@ describe("query keys", () => {
       "path",
     ])
     expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
+  })
+
+  test("loads the global config required by v2 desktop clients", async () => {
+    const configReads: string[] = []
+    const api = {
+      get: async () => {
+        configReads.push("config")
+        return { shell: "bash" }
+      },
+    } as unknown as ServerApi["server.config"]
+
+    const result = await new QueryClient().fetchQuery(loadGlobalConfigQuery(ServerScope.local, api))
+
+    expect(result).toEqual({ shell: "bash" })
+    expect(configReads).toEqual(["config"])
   })
 
   test("loads the current provider and model catalog", async () => {
