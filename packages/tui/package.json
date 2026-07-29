@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./src/index.tsx",
+    "./builtins": "./src/feature-plugins/builtins.ts",
     "./config": "./src/config/index.tsx",
     "./config/keybind": "./src/config/keybind.ts",
     "./config/v1": "./src/config/v1/index.tsx",
