@@ -8,6 +8,7 @@ import {
   bootstrapDirectory,
   loadAgentsQuery,
   loadCommands,
+  loadGlobalConfigQuery,
   loadPathQuery,
   loadProjectsQuery,
   loadProvidersQuery,
@@ -136,6 +137,44 @@ describe("bootstrapDirectory", () => {
     expect(store.status).toBe("complete")
     expect(mcpReads.sort()).toEqual(["command", "resource", "status"])
   })
+
+  test("does not call the legacy directory config endpoint for v2 servers", async () => {
+    const configReads: string[] = []
+    const [store, setStore] = directoryState()
+
+    await bootstrapDirectory({
+      directory: "/project",
+      scope: ServerScope.local,
+      mcp: false,
+      global: {
+        config: {} satisfies Config,
+        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+        project: [{ id: "project", worktree: "/project" } as Project],
+        provider,
+      },
+      sdk: {
+        config: {
+          get: async () => {
+            configReads.push("config")
+            return { data: {} }
+          },
+        },
+      } as unknown as OpencodeClient,
+      api,
+      store,
+      setStore,
+      vcsCache: { setStore() {} } as unknown as VcsCache,
+      loadSessions() {},
+      translate: (key) => key,
+      queryClient: new QueryClient(),
+      protocol: Promise.resolve("v2"),
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(configReads).toEqual([])
+    expect(store.status).toBe("complete")
+  })
 })
 
 describe("query keys", () => {
@@ -147,6 +186,27 @@ describe("query keys", () => {
     expect([...loadPathQuery(ServerScope.local, "/repo", client).queryKey]).toEqual(["local", "/repo", "path"])
     expect([...loadPathQuery(remote, "/repo", client).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
     expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
+  })
+
+  test("loads the global config required by v2 desktop clients", async () => {
+    const configReads: string[] = []
+    const sdk = {
+      global: {
+        config: {
+          get: async () => {
+            configReads.push("config")
+            return { data: { shell: "bash" } }
+          },
+        },
+      },
+    } as unknown as OpencodeClient
+
+    const result = await new QueryClient().fetchQuery(
+      loadGlobalConfigQuery(ServerScope.local, sdk),
+    )
+
+    expect(result).toEqual({ shell: "bash" })
+    expect(configReads).toEqual(["config"])
   })
 
   test("loads the current provider and model catalog", async () => {
