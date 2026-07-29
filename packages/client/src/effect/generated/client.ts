@@ -274,6 +274,7 @@ import type {
   ConfigUpdatePreferencesInput,
   ConfigUpdatePreferencesOutput,
   ConfigShellsOutput,
+  ConfigGlobalOutput,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1600,11 +1601,15 @@ const EndpointConfigUpdatePreferences = (raw: RawClient["server.config"]) => (in
 const EndpointConfigShells = (raw: RawClient["server.config"]) => () =>
   preserveEffect<ConfigShellsOutput>()(raw["config.shells"]({}).pipe(Effect.mapError(mapClientError)))
 
+const EndpointConfigGlobal = (raw: RawClient["server.config"]) => () =>
+  preserveEffect<ConfigGlobalOutput>()(raw["config.global"]({}).pipe(Effect.mapError(mapClientError)))
+
 const adaptGroupConfig = (raw: RawClient["server.config"]) => ({
   get: EndpointConfigGet(raw),
   preferences: EndpointConfigPreferences(raw),
   updatePreferences: EndpointConfigUpdatePreferences(raw),
   shells: EndpointConfigShells(raw),
+  global: EndpointConfigGlobal(raw),
 })
 
 const adaptClient = (raw: RawClient) => ({

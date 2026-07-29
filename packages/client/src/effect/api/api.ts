@@ -836,7 +836,7 @@ export type SessionLogOutput =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.input.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -2178,11 +2178,15 @@ export type ConfigShellsOutput = ReadonlyArray<{
 }>
 export type ConfigShellsOperation<E = never> = () => Effect.Effect<ConfigShellsOutput, E>
 
+export type ConfigGlobalOutput = { readonly [x: string]: unknown }
+export type ConfigGlobalOperation<E = never> = () => Effect.Effect<ConfigGlobalOutput, E>
+
 export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
   readonly preferences: ConfigPreferencesOperation<E>
   readonly updatePreferences: ConfigUpdatePreferencesOperation<E>
   readonly shells: ConfigShellsOperation<E>
+  readonly global: ConfigGlobalOperation<E>
 }
 
 export interface AppApi<E = never> {
