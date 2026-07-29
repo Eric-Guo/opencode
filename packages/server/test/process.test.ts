@@ -15,7 +15,17 @@ it.live("authenticates API requests behind the frontend transform while allowing
         cors: ["http://192.168.1.10:3001", "https://example.com"],
         app: { version: "test-version" },
         database: { path: ":memory:" },
-        config: { content: JSON.stringify({ username: "Test User", clerk_code: "123456" }) },
+        config: {
+          content: JSON.stringify({
+            username: "Test User",
+            clerk_code: "123456",
+            agents: {
+              build: {
+                permissions: [{ action: "websearch", resource: "*", effect: "allow" }],
+              },
+            },
+          }),
+        },
       },
       undefined,
       (api) =>
@@ -178,6 +188,11 @@ it.live("authenticates API requests behind the frontend transform while allowing
     expect(configBody).toMatchObject({
       username: "Test User",
       clerk_code: "123456",
+      agents: {
+        build: {
+          permissions: [{ action: "websearch", resource: "*", effect: "allow" }],
+        },
+      },
     })
   }),
 )
