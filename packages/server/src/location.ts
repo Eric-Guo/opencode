@@ -28,9 +28,11 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
 
 export function requestRef(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
-  const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
+  const workspaceID =
+    query.get("location[workspace]") || query.get("workspace") || request.headers["x-opencode-workspace"]
   const directory =
     query.get("location[directory]") ||
+    query.get("directory") ||
     (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
   return Location.Ref.make({
     directory: AbsolutePath.make(directory),
