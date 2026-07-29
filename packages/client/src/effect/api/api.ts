@@ -1629,7 +1629,7 @@ export type Endpoint29_0Input = {
 export type Endpoint29_0Output = ReadonlyArray<Config.Entry>
 export type ConfigGetOperation<E = never> = (input?: Endpoint29_0Input) => Effect.Effect<Endpoint29_0Output, E>
 
-export type Endpoint29_1Output = { readonly [x: string]: unknown }
+export type Endpoint29_1Output = { readonly [x: string]: Schema.Json }
 export type ConfigGlobalOperation<E = never> = () => Effect.Effect<Endpoint29_1Output, E>
 
 export interface ConfigApi<E = never> {
