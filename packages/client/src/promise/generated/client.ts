@@ -316,6 +316,7 @@ import type {
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
+  ConfigGlobalOutput,
   ExperimentalConfigUpdateInput,
   ExperimentalConfigUpdateOutput,
 } from "./types.js"
@@ -2660,6 +2661,17 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/config/shell`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      global: (requestOptions?: RequestOptions) =>
+        request<ConfigGlobalOutput>(
+          {
+            method: "GET",
+            path: `/global/config`,
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,
