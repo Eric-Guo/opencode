@@ -1,18 +1,20 @@
-import type { Config, Path } from "@/runtime/server/types"
-import type { LocationGetInput, LocationGetOutput, ProjectListOutput } from "@opencode/client/promise"
+import type { Path } from "@/runtime/server/types"
+import type { LocationGetInput, LocationGetOutput, ProjectListOutput, ConfigGlobalOutput } from "@opencode/client/promise"
 import { retry } from "@opencode/util/retry"
 import type { SetStoreFunction } from "solid-js/store"
 import type { GlobalStore } from "./types"
 import { normalizeProjectInfo } from "./utils"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import type { ServerScope } from "@/runtime/server/scope"
+import type { ServerApi } from "@/runtime/server/api"
 import { withWorktreeInventory, worktreeInventoryKey } from "@/workspaces/inventory"
 
-export const loadGlobalConfigQuery = (scope: ServerScope) =>
+type ConfigApi = { readonly global: () => Promise<ConfigGlobalOutput> }
+
+export const loadGlobalConfigQuery = (scope: ServerScope, api: ConfigApi) =>
   queryOptions({
-    queryKey: [scope, "config"],
-    // TODO: Restore config loading when the V2 client exposes a config API.
-    queryFn: async (): Promise<Config> => ({}),
+    queryKey: [scope, "config"] as const,
+    queryFn: () => retry(() => api.global()),
   })
 
 type ProjectApi = {
@@ -54,13 +56,14 @@ export async function bootstrapGlobal(input: {
   serverAPI: {
     readonly location: LocationApi
     readonly project: ProjectApi
+    readonly config: ServerApi["config"]
   }
   scope: ServerScope
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
 }) {
   await Promise.allSettled([
-    input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
+    input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope, input.serverAPI.config)),
     input.queryClient
       .fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location))
       .then((data) => input.setGlobalStore("path", data)),
