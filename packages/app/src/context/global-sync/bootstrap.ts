@@ -376,7 +376,11 @@ export async function bootstrapDirectory(input: {
           .ensureQueryData(loadAgentsQuery(input.scope, input.directory, input.api.agent, input.sdk, input.protocol))
           .then((data) => input.setStore("agent", data)),
       () =>
-        retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
+        retry(async () => {
+          if ((await input.protocol) !== "v1") return
+          const result = await input.sdk.config.get()
+          input.setStore("config", reconcile(result.data!, { merge: false }))
+        }),
       () =>
         retry(() =>
           (async () => {
