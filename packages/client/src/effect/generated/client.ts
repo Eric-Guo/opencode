@@ -173,6 +173,10 @@ import type {
   Endpoint16_0Output,
   Endpoint16_1Input,
   Endpoint16_1Output,
+  Endpoint16_2Input,
+  Endpoint16_2Output,
+  Endpoint16_3Input,
+  Endpoint16_3Output,
   Endpoint17_0Input,
   Endpoint17_0Output,
   Endpoint18_0Input,
@@ -1040,7 +1044,26 @@ const Endpoint16_1 = (raw: RawClient["server.fs"]) => (input: Endpoint16_1Input)
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup16 = (raw: RawClient["server.fs"]) => ({ list: Endpoint16_0(raw), find: Endpoint16_1(raw) })
+const Endpoint16_2 = (raw: RawClient["server.fs"]) => (input: Endpoint16_2Input) =>
+  preserveEffect<Endpoint16_2Output>()(
+    raw["fs.listLegacy"]({
+      query: { directory: input["directory"], workspace: input["workspace"], path: input["path"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const Endpoint16_3 = (raw: RawClient["server.fs"]) => (input: Endpoint16_3Input) =>
+  preserveEffect<Endpoint16_3Output>()(
+    raw["fs.readLegacy"]({
+      query: { directory: input["directory"], workspace: input["workspace"], path: input["path"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroup16 = (raw: RawClient["server.fs"]) => ({
+  list: Endpoint16_0(raw),
+  find: Endpoint16_1(raw),
+  listLegacy: Endpoint16_2(raw),
+  readLegacy: Endpoint16_3(raw),
+})
 
 const Endpoint17_0 = (raw: RawClient["server.command"]) => (input?: Endpoint17_0Input) =>
   preserveEffect<Endpoint17_0Output>()(
