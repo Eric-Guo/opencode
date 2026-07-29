@@ -22,13 +22,15 @@ async function probe(server: ServerConnection.HttpBase, fetch: typeof globalThis
 }
 
 export async function detectServerProtocol(
-  server: ServerConnection.HttpBase,
+  server: ServerConnection.HttpBase | ServerConnection.Any,
   fetch: typeof globalThis.fetch,
 ): Promise<ServerProtocol> {
-  const legacy = await probe(server, fetch, "/global/health").catch(() => undefined)
+  if ("type" in server && server.type === "sidecar") return "v2"
+  const http = "type" in server ? server.http : server
+  const legacy = await probe(http, fetch, "/global/health").catch(() => undefined)
   if (legacy && "healthy" in legacy && legacy.healthy === true) return "v1"
 
-  const current = await probe(server, fetch, "/api/health").catch(() => undefined)
+  const current = await probe(http, fetch, "/api/health").catch(() => undefined)
   if (current && "pid" in current && typeof current.pid === "number") return "v2"
   if (current && "healthy" in current && current.healthy === true) return "v1"
   return "v2"
