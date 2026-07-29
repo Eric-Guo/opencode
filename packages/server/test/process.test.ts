@@ -16,7 +16,17 @@ it.live("allows browser preflight requests without credentials", () =>
         cors: ["http://192.168.1.10:3001", "https://example.com"],
         app: { version: "test-version" },
         database: { path: ":memory:" },
-        config: { content: JSON.stringify({ username: "Test User", clerk_code: "123456" }) },
+        config: {
+          content: JSON.stringify({
+            username: "Test User",
+            clerk_code: "123456",
+            agents: {
+              build: {
+                permissions: [{ action: "websearch", resource: "*", effect: "allow" }],
+              },
+            },
+          }),
+        },
       },
       undefined,
       (api) =>
@@ -145,6 +155,11 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(configBody).toMatchObject({
       username: "Test User",
       clerk_code: "123456",
+      agents: {
+        build: {
+          permissions: [{ action: "websearch", resource: "*", effect: "allow" }],
+        },
+      },
     })
   }),
 )
