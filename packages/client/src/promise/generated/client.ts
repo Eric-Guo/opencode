@@ -2240,7 +2240,13 @@ export function make(options: ClientOptions) {
         ),
       global: (requestOptions?: RequestOptions) =>
         request<ConfigGlobalOutput>(
-          { method: "GET", path: `/global/config`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          {
+            method: "GET",
+            path: `/global/config`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
           requestOptions,
         ),
     },
