@@ -33,6 +33,7 @@ import { ConfigHandler } from "./handlers/config"
 
 export const handlers = Layer.mergeAll(
   ServerHandler,
+  ConfigHandler,
   DebugHandler,
   MigrationHandler,
   LocationHandler,
@@ -61,5 +62,4 @@ export const handlers = Layer.mergeAll(
   ReferenceHandler,
   WorktreeHandler,
   VcsHandler,
-  ConfigHandler,
 )
