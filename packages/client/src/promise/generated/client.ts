@@ -254,6 +254,7 @@ import type {
   ConfigShellsOutput,
   ConfigUpdateInput,
   ConfigUpdateOutput,
+  ConfigGlobalOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -2114,6 +2115,11 @@ export function make(options: ClientOptions) {
             declaredStatuses: [400, 401],
             empty: true,
           },
+          requestOptions,
+        ),
+      global: (requestOptions?: RequestOptions) =>
+        request<ConfigGlobalOutput>(
+          { method: "GET", path: `/global/config`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
           requestOptions,
         ),
     },

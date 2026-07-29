@@ -513,6 +513,15 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionMessageAssistantFile = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
+  state?: SessionMessageProviderState
+}
+
 export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
@@ -1316,6 +1325,15 @@ export type SessionReasoningEnded = {
   }
 }
 
+export type SessionMessageAssistantFile1 = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
+  state?: SessionMessageProviderState1
+}
+
 export type SessionToolCalled = {
   id: string
   created: number
@@ -1764,6 +1782,16 @@ export type SessionForked = {
   }
 }
 
+export type SessionFileGenerated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.file.generated"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; file: SessionMessageAssistantFile1 }
+}
+
 export type SessionToolSuccess = {
   id: string
   created: number
@@ -1953,6 +1981,7 @@ export type ConfigEntry =
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
+        clerk_code?: string
         permissions?: PermissionRuleset
         agents?: {
           [x: string]: {
@@ -2188,7 +2217,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: string
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantFile
+    | SessionMessageAssistantTool
+  >
   snapshot?: { start?: string; end?: string; files?: Array<string> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   rawFinish?: string
@@ -2202,6 +2236,7 @@ export type SessionMessageAssistant = {
 export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
+  | SessionMessageAssistantFile1
   | SessionMessageAssistantTool1
 
 export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
@@ -2297,6 +2332,7 @@ export type SessionEventDurable =
   | SessionTextEnded
   | SessionReasoningStarted
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputEnded
   | SessionToolCalled
@@ -2361,6 +2397,7 @@ export type V2Event =
   | SessionReasoningStarted
   | SessionReasoningDelta
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputDelta
   | SessionToolInputEnded
@@ -3071,6 +3108,14 @@ export type SessionImportInput = {
                 readonly time?: { readonly created: number; readonly completed?: number }
               }
             | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
+              }
+            | {
                 readonly type: "tool"
                 readonly id: string
                 readonly name: string
@@ -3388,6 +3433,14 @@ export type SessionImportInput = {
                 readonly time?: { readonly created: number; readonly completed?: number }
               }
             | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
+              }
+            | {
                 readonly type: "tool"
                 readonly id: string
                 readonly name: string
@@ -3703,6 +3756,14 @@ export type SessionImportInput = {
                 readonly text: string
                 readonly state?: { readonly [x: string]: JsonValue }
                 readonly time?: { readonly created: number; readonly completed?: number }
+              }
+            | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
               }
             | {
                 readonly type: "tool"
@@ -6231,3 +6292,5 @@ export type ConfigShellsOutput = Array<ConfigShellOption>
 export type ConfigUpdateInput = { readonly shell: { readonly shell: string | null }["shell"] }
 
 export type ConfigUpdateOutput = void
+
+export type ConfigGlobalOutput = { [x: string]: any }
