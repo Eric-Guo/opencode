@@ -1,4 +1,5 @@
 import { Config } from "@opencode-ai/core/config"
+import { GlobalConfig } from "@opencode-ai/protocol/groups/config"
 import { Info } from "@opencode-ai/schema/config"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -19,7 +20,7 @@ export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handler
         const username = Config.latest(entries, "username")
         const clerkCode = Config.latest(entries, "clerk_code")
 
-        return Object.fromEntries(
+        const response = Object.fromEntries(
           Object.entries({
             ...encoded,
             model:
@@ -32,6 +33,9 @@ export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handler
             username,
             clerk_code: clerkCode,
           }).filter((entry) => entry[1] !== undefined),
+        )
+        return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(GlobalConfig))(JSON.stringify(response)).pipe(
+          Effect.orDie,
         )
       }),
     ),
