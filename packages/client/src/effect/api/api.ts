@@ -2345,7 +2345,7 @@ export type ConfigUpdateInput = { readonly shell: string | null }
 export type ConfigUpdateOutput = void
 export type ConfigUpdateOperation<E = never> = (input: ConfigUpdateInput) => Effect.Effect<ConfigUpdateOutput, E>
 
-export type ConfigGlobalOutput = { readonly [x: string]: unknown }
+export type ConfigGlobalOutput = { readonly [x: string]: Schema.Json }
 export type ConfigGlobalOperation<E = never> = () => Effect.Effect<ConfigGlobalOutput, E>
 
 export interface ConfigApi<E = never> {
