@@ -3,6 +3,7 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { onMount } from "solid-js"
+import { SettingsProvider } from "@/settings/model"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog"
 
 function ConnectProviderDialogStory() {
@@ -37,7 +38,9 @@ function ProviderConnectionDialogStory(props) {
 function renderConnection(provider) {
   return () => (
     <QueryClientProvider client={new QueryClient()}>
-      <ProviderConnectionDialogStory provider={provider} />
+      <SettingsProvider>
+        <ProviderConnectionDialogStory provider={provider} />
+      </SettingsProvider>
     </QueryClientProvider>
   )
 }
@@ -50,7 +53,9 @@ export default {
 export const Picker = {
   render: () => (
     <QueryClientProvider client={new QueryClient()}>
-      <ConnectProviderDialogStory />
+      <SettingsProvider>
+        <ConnectProviderDialogStory />
+      </SettingsProvider>
     </QueryClientProvider>
   ),
 }
