@@ -20,6 +20,8 @@
     "./mini": "./src/mini/index.ts",
     "./mini/tool": "./src/mini/tool.public.ts",
     "./model-preference": "./src/model-preference.ts",
+    "./plugin/runtime": "./src/plugin/runtime.tsx",
+    "./plugin/slots": "./src/plugin/slots.tsx",
     "./util/form": "./src/util/form.ts",
     "./logo": "./src/logo.ts",
     "./component/spinner": "./src/component/spinner.tsx",
