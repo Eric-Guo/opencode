@@ -38,7 +38,7 @@ export const loadLspQuery = (scope: ServerScope, directory: string) =>
 
 function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
   return {
-    globalConfig: () => loadGlobalConfigQuery(scope),
+    globalConfig: () => loadGlobalConfigQuery(scope, serverAPI.config),
     path: () => loadPathQuery(scope, null, serverAPI.location),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory),
   }
