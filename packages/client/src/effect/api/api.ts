@@ -1608,7 +1608,7 @@ export interface WebsearchApi<E = never> {
   readonly query: WebsearchQueryOperation<E>
 }
 
-export type Endpoint28_0Output = { readonly [x: string]: unknown }
+export type Endpoint28_0Output = { readonly [x: string]: Schema.Json }
 export type ServerConfigGetOperation<E = never> = () => Effect.Effect<Endpoint28_0Output, E>
 
 export interface ServerConfigApi<E = never> {
