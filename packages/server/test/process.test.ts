@@ -16,7 +16,17 @@ it.live("authenticates API requests behind the frontend transform while allowing
         app: { version: "test-version" },
         database: { path: ":memory:" },
         models: { fetch: false },
-        config: { content: JSON.stringify({ username: "Test User", clerk_code: "123456" }) },
+        config: {
+          content: JSON.stringify({
+            username: "Test User",
+            clerk_code: "123456",
+            agents: {
+              build: {
+                permissions: [{ action: "websearch", resource: "*", effect: "allow" }],
+              },
+            },
+          }),
+        },
       },
       undefined,
       (api) =>
@@ -187,6 +197,11 @@ it.live("authenticates API requests behind the frontend transform while allowing
     expect(configBody).toMatchObject({
       username: "Test User",
       clerk_code: "123456",
+      agents: {
+        build: {
+          permissions: [{ action: "websearch", resource: "*", effect: "allow" }],
+        },
+      },
     })
   }),
 )
