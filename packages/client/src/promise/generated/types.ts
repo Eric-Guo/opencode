@@ -318,6 +318,8 @@ export type ConfigModelReasoning =
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
+export type GlobalConfig = { [x: string]: JsonValue }
+
 export type LocationPublicRef = { directory: AbsolutePath }
 
 export type FileSystemWrite = { path: AbsolutePath }
@@ -6083,4 +6085,4 @@ export type ConfigUpdateInput = { readonly shell: { readonly shell: string | nul
 
 export type ConfigUpdateOutput = void
 
-export type ConfigGlobalOutput = { [x: string]: any }
+export type ConfigGlobalOutput = GlobalConfig
