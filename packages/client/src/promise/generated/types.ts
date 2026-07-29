@@ -435,6 +435,8 @@ export type ConfigPreferences = { shell?: string; websearch?: false | { provider
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
+export type GlobalConfig = { [x: string]: JsonValue }
+
 export type ProviderRequest = {
   settings: ProviderSettings
   headers: { [x: string]: string }
@@ -6556,4 +6558,4 @@ export type ConfigUpdatePreferencesOutput = ConfigPreferences
 
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
-export type ConfigGlobalOutput = { [x: string]: any }
+export type ConfigGlobalOutput = GlobalConfig

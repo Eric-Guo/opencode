@@ -4,6 +4,8 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
+export const GlobalConfig = Schema.Record(Schema.String, Schema.Json).annotate({ identifier: "GlobalConfig" })
+
 export const ConfigGroup = HttpApiGroup.make("server.config")
   .add(
     HttpApiEndpoint.get("config.get", "/api/config", {
@@ -56,7 +58,7 @@ export const ConfigGroup = HttpApiGroup.make("server.config")
   )
   .add(
     HttpApiEndpoint.get("config.global", "/global/config", {
-      success: Schema.Record(Schema.String, Schema.Unknown),
+      success: GlobalConfig,
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.config.global",

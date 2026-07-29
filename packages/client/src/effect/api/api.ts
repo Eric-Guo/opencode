@@ -2178,7 +2178,7 @@ export type ConfigShellsOutput = ReadonlyArray<{
 }>
 export type ConfigShellsOperation<E = never> = () => Effect.Effect<ConfigShellsOutput, E>
 
-export type ConfigGlobalOutput = { readonly [x: string]: unknown }
+export type ConfigGlobalOutput = { readonly [x: string]: Schema.Json }
 export type ConfigGlobalOperation<E = never> = () => Effect.Effect<ConfigGlobalOutput, E>
 
 export interface ConfigApi<E = never> {
