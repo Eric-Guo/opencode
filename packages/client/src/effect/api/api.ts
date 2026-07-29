@@ -1445,9 +1445,55 @@ export type FileFindInput = {
 export type FileFindOutput = { readonly location: Location.Info; readonly data: ReadonlyArray<FileSystem.Entry> }
 export type FileFindOperation<E = never> = (input: FileFindInput) => Effect.Effect<FileFindOutput, E>
 
+export type FileListLegacyInput = {
+  readonly directory?: string | undefined
+  readonly workspace?: string | undefined
+  readonly path: string
+}
+export type FileListLegacyOutput = ReadonlyArray<{
+  readonly name: string
+  readonly path: string
+  readonly absolute: string
+  readonly type: "file" | "directory"
+  readonly ignored: boolean
+}>
+export type FileListLegacyOperation<E = never> = (input: FileListLegacyInput) => Effect.Effect<FileListLegacyOutput, E>
+
+export type FileReadLegacyInput = {
+  readonly directory?: string | undefined
+  readonly workspace?: string | undefined
+  readonly path: string
+}
+export type FileReadLegacyOutput = {
+  readonly type: "text" | "binary"
+  readonly content: string
+  readonly diff?: string | undefined
+  readonly patch?:
+    | {
+        readonly oldFileName: string
+        readonly newFileName: string
+        readonly oldHeader?: string | undefined
+        readonly newHeader?: string | undefined
+        readonly hunks: ReadonlyArray<{
+          readonly oldStart: number
+          readonly oldLines: number
+          readonly newStart: number
+          readonly newLines: number
+          readonly lines: ReadonlyArray<string>
+        }>
+        readonly index?: string | undefined
+      }
+    | undefined
+  readonly encoding?: "base64" | undefined
+  readonly mimeType?: string | undefined
+}
+export type FileReadLegacyOperation<E = never> = (input: FileReadLegacyInput) => Effect.Effect<FileReadLegacyOutput, E>
+
 export interface FileApi<E = never> {
   readonly list: FileListOperation<E>
   readonly find: FileFindOperation<E>
+  readonly listLegacy: FileListLegacyOperation<E>
+  readonly readLegacy: FileReadLegacyOperation<E>
 }
 
 export type CommandListInput = {
