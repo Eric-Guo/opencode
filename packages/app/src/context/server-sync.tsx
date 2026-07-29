@@ -172,7 +172,7 @@ function makeQueryOptionsApi(
   legacy: LegacyCapabilities,
 ) {
   return {
-    globalConfig: () => loadGlobalConfigQuery(scope, legacy, protocolKind() === "v1"),
+    globalConfig: () => loadGlobalConfigQuery(scope, serverAPI["server.config"]),
     projects: () => loadProjectsQuery(scope, serverAPI.project),
     providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
     path: (directory: PathKey | null) => loadPathQuery(scope, directory, serverAPI.location),
@@ -286,9 +286,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
       await bootstrapGlobal({
-        legacy: serverSDK.legacy,
         serverAPI: serverSDK.currentApi,
-        protocol: serverSDK.protocol,
         scope: serverSDK.scope,
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,

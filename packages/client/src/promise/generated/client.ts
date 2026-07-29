@@ -215,6 +215,7 @@ import type {
   WebsearchProvidersOutput,
   WebsearchQueryInput,
   WebsearchQueryOutput,
+  ServerConfigGetOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -1792,6 +1793,13 @@ export function make(options: ClientOptions) {
             declaredStatuses: [400, 503, 401],
             empty: false,
           },
+          requestOptions,
+        ),
+    },
+    "server.config": {
+      get: (requestOptions?: RequestOptions) =>
+        request<ServerConfigGetOutput>(
+          { method: "GET", path: `/global/config`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
     },
