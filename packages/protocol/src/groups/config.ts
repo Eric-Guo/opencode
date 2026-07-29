@@ -19,4 +19,15 @@ export const ConfigGroup = HttpApiGroup.make("server.config")
         }),
       ),
   )
-  .annotateMerge(OpenApi.annotations({ title: "config", description: "Location-scoped configuration routes." }))
+  .add(
+    HttpApiEndpoint.get("config.global", "/global/config", {
+      success: Schema.Record(Schema.String, Schema.Unknown),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.config.global",
+        summary: "Get global configuration",
+        description: "Retrieve global configuration required by desktop clients during migration to the current API.",
+      }),
+    ),
+  )
+  .annotateMerge(OpenApi.annotations({ title: "config", description: "Configuration routes." }))
