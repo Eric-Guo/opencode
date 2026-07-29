@@ -658,7 +658,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
 
   const updateConfigMutation = useMutation(() => ({
-    mutationFn: (config: Config) => serverSDK.client.global.config.update({ config }),
+    mutationFn: async (config: Config) => {
+      if ((await serverSDK.protocol) === "v1") return serverSDK.client.global.config.update({ config })
+      throw new Error(
+        `Config updates are unavailable for v2 servers: ${Object.keys(config).length} fields were not saved`,
+      )
+    },
     onSuccess: () => {
       bootstrap.refetch()
       // Invalidate all provider queries so newly configured custom providers
