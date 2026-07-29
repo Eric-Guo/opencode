@@ -2,7 +2,7 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { mockProviderAuth } from "@/runtime/server/sync"
+import { mockIntegrationMethods } from "@/runtime/server/client"
 import { SettingsProvider } from "@/settings/model"
 import { onCleanup, onMount } from "solid-js"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog"
@@ -21,7 +21,7 @@ function ConnectProviderDialogStory() {
 }
 
 function ProviderConnectionDialogStory(props) {
-  onCleanup(mockProviderAuth(props.provider, props.methods))
+  onCleanup(mockIntegrationMethods(props.provider, props.methods))
   const dialog = useDialog()
   const controller = useProviderConnectController()
   controller.select(props.provider)
@@ -71,9 +71,9 @@ export const OpenCodeZen = {
 
 export const LoginMethods = {
   render: renderConnection("openai", [
-    { type: "oauth", label: "Sign in with ChatGPT" },
-    { type: "oauth", label: "Codex browser (legacy)" },
-    { type: "oauth", label: "Codex device code (legacy)" },
+    { id: "0", type: "oauth", label: "Sign in with ChatGPT" },
+    { id: "1", type: "oauth", label: "Codex browser (legacy)" },
+    { id: "2", type: "oauth", label: "Codex device code (legacy)" },
     { type: "key", label: "API key" },
   ]),
 }
