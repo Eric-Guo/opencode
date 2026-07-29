@@ -1,3 +1,5 @@
+import type { IntegrationMethod } from "@opencode-ai/client/promise"
+
 const providers = [
   "opencode",
   "opencode-go",
@@ -14,6 +16,22 @@ const providers = [
   "alibaba-cn",
   "alibaba-coding-plan",
 ]
+
+const integrationMethods = Object.fromEntries(
+  providers.map((provider) => [provider, [{ type: "key" as const, label: "API key" }]]),
+) as Record<string, IntegrationMethod[]>
+
+export function mockIntegrationMethods(provider: string, methods: IntegrationMethod[]) {
+  const previous = integrationMethods[provider]
+  integrationMethods[provider] = methods
+  return () => {
+    if (previous) {
+      integrationMethods[provider] = previous
+      return
+    }
+    delete integrationMethods[provider]
+  }
+}
 
 const client = {
   provider: {
@@ -42,6 +60,40 @@ const client = {
   },
 }
 
+const api = {
+  integration: {
+    get: async (input: { integrationID: string }) => ({
+      data: {
+        id: input.integrationID,
+        name: input.integrationID,
+        methods: integrationMethods[input.integrationID] ?? [],
+        connections: [],
+      },
+    }),
+    connect: {
+      key: async () => {},
+    },
+    oauth: {
+      connect: async (input: { integrationID: string; methodID: string }) => ({
+        data: {
+          attemptID: `${input.integrationID}:${input.methodID}`,
+          url: "https://example.com/oauth",
+          instructions: input.methodID === "1" ? "Paste the authorization code" : "Confirmation code: ABCD-EFGH",
+          mode: input.methodID === "1" ? ("code" as const) : ("auto" as const),
+          time: { created: Date.now(), expires: Date.now() + 10 * 60 * 1000 },
+        },
+      }),
+      complete: async () => {},
+      status: async () => ({
+        data: {
+          status: "complete" as const,
+          time: { created: Date.now(), expires: Date.now() },
+        },
+      }),
+    },
+  },
+}
+
 export function useServerSDK() {
-  return () => ({ client })
+  return () => ({ api, client })
 }
