@@ -29,7 +29,7 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   const [configQuery, pathQuery] = useQueries(() => ({
     queries: [
-      { ...loadGlobalConfigQuery(serverSDK.scope), enabled: connected() },
+      { ...loadGlobalConfigQuery(serverSDK.scope, serverSDK.api.config), enabled: connected() },
       { ...loadPathQuery(serverSDK.scope, null, serverSDK.api.location), enabled: connected() },
     ],
   }))
