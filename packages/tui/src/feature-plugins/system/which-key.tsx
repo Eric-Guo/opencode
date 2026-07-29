@@ -1,0 +1,568 @@
+/** @jsxImportSource @opentui/solid */
+import { TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
+import { Plugin } from "@opencode-ai/plugin/tui"
+import type { KeymapActive } from "@opencode-ai/plugin/tui/context"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+
+const command = {
+  toggle: "which-key.toggle",
+  toggleLayout: "which-key.layout.toggle",
+  togglePending: "which-key.pending.toggle",
+  groupPrevious: "which-key.group.previous",
+  groupNext: "which-key.group.next",
+  scrollUp: "which-key.scroll.up",
+  scrollDown: "which-key.scroll.down",
+  pageUp: "which-key.page.up",
+  pageDown: "which-key.page.down",
+  home: "which-key.home",
+  end: "which-key.end",
+} as const
+
+const LAYER_PRIORITY = 900
+const toggleCommands = [command.toggle, command.toggleLayout, command.togglePending] as const
+const scrollCommands = [
+  command.scrollUp,
+  command.scrollDown,
+  command.pageUp,
+  command.pageDown,
+  command.home,
+  command.end,
+] as const
+const panelCommands = [command.groupPrevious, command.groupNext, ...scrollCommands] as const
+const COLUMN_GAP = 4
+const TAB_GAP = 3
+const MIN_TAB_GAP = 1
+const TAB_CONTENT_GAP = 1
+const MIN_COLUMN_WIDTH = 28
+const MAX_COLUMN_WIDTH = 44
+const PANEL_HEIGHT_RATIO = 0.3
+const MIN_PANEL_HEIGHT = 8
+const MAX_PANEL_HEIGHT = 16
+const PANEL_TOP_PADDING = 1
+const FOOTER_HEIGHT = 1
+const FOOTER_MARGIN = 1
+const UNKNOWN = "Unknown"
+
+type Layout = "dock" | "overlay"
+
+type Color = Plugin.Context["theme"]["text"]["default"]
+
+type Skin = {
+  panel: Color
+  text: Color
+  muted: Color
+  subtle: Color
+  accent: Color
+  tab: Color
+  tabText: Color
+}
+
+type Entry = {
+  type: "entry"
+  key: string
+  label: string
+  group: string
+  continues: boolean
+}
+
+type Group = {
+  label: string
+  entries: Entry[]
+}
+
+type HeaderItem = { type: "tab"; group: Group } | { type: "scroll" }
+
+type GroupHeader = {
+  type: "group"
+  label: string
+}
+
+type Item = Entry | GroupHeader
+
+function text(value: unknown) {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+function skin(context: Plugin.Context): Skin {
+  return {
+    panel: context.theme.background.surface.overlay,
+    text: context.theme.text.default,
+    muted: context.theme.text.subdued,
+    subtle: context.theme.border.default,
+    accent: context.theme.text.action.primary.default,
+    tab: context.theme.background.action.primary.selected,
+    tabText: context.theme.text.action.primary.selected,
+  }
+}
+
+function activeKeyLabel(active: KeymapActive) {
+  return text(active.title) ?? text(active.description) ?? text(active.key) ?? UNKNOWN
+}
+
+function activeKeyGroup(active: KeymapActive) {
+  if (active.continues) return "System"
+  return text(active.group) ?? UNKNOWN
+}
+
+function activeKeyEntry(active: KeymapActive): Entry {
+  const label = activeKeyLabel(active)
+  return {
+    type: "entry",
+    key: active.key,
+    label: active.continues ? `+${label}` : label,
+    group: activeKeyGroup(active),
+    continues: active.continues,
+  }
+}
+
+function grouped(entries: Entry[]): Group[] {
+  const map = new Map<string, Entry[]>()
+  for (const entry of entries) map.set(entry.group, [...(map.get(entry.group) ?? []), entry])
+  return [...map]
+    .map(([label, entries]) => ({
+      label,
+      entries: entries.toSorted(
+        (a, b) =>
+          Number(b.continues) - Number(a.continues) || a.label.localeCompare(b.label) || a.key.localeCompare(b.key),
+      ),
+    }))
+    .toSorted((a, b) => a.label.localeCompare(b.label))
+}
+
+function commandShortcut(context: Plugin.Context, name: string) {
+  return () => context.keymap.shortcuts(name)[0] ?? ""
+}
+
+function HomeHint(props: { context: Plugin.Context }) {
+  const trigger = commandShortcut(props.context, command.toggle)
+  const look = createMemo(() => skin(props.context))
+
+  return (
+    <box width="100%" maxWidth={75} alignItems="center" paddingTop={1} flexShrink={0}>
+      <text fg={look().muted} wrapMode="none">
+        Show keyboard shortcuts with <span style={{ fg: look().subtle }}>{trigger() || command.toggle}</span>
+      </text>
+    </box>
+  )
+}
+
+function WhichKeyPanel(props: {
+  context: Plugin.Context
+  layout: Layout
+  mode: () => Layout
+  pendingPreview: () => boolean
+  pinned: () => boolean
+}) {
+  const dimensions = useTerminalDimensions()
+  const [offset, setOffset] = createSignal(0)
+  const [activeGroup, setActiveGroup] = createSignal<string | undefined>()
+  const pending = () => props.context.keymap.pending()
+  const active = () => props.context.keymap.active()
+  const pendingActive = createMemo(() => pending().length > 0 && active().length > 0)
+  const pendingAutoVisible = createMemo(() => props.mode() === "overlay" && props.pendingPreview() && pendingActive())
+  const visible = createMemo(() => props.pinned() || pendingAutoVisible())
+  const pendingMode = createMemo(() => visible() && pendingActive())
+  const left = 0
+  const width = createMemo(() => Math.max(1, dimensions().width))
+  const panelHeight = createMemo(() =>
+    Math.max(MIN_PANEL_HEIGHT, Math.min(MAX_PANEL_HEIGHT, Math.floor(dimensions().height * PANEL_HEIGHT_RATIO))),
+  )
+  const contentWidth = createMemo(() => Math.max(1, width() - 2))
+  const columns = createMemo(() =>
+    Math.max(1, Math.min(3, Math.floor((contentWidth() + COLUMN_GAP) / (MAX_COLUMN_WIDTH + COLUMN_GAP)) || 1)),
+  )
+  const entries = createMemo(() => active().map(activeKeyEntry))
+  const groups = createMemo(() => grouped(entries()))
+  const tabsVisible = createMemo(() => !pendingMode() && groups().length > 0)
+  const headerVisible = createMemo(() => tabsVisible() || pendingMode())
+  const footerVisible = createMemo(() => !pendingMode())
+  const rows = createMemo(() =>
+    Math.max(
+      1,
+      panelHeight() -
+        PANEL_TOP_PADDING -
+        (headerVisible() ? 1 : 0) -
+        (tabsVisible() ? TAB_CONTENT_GAP : 0) -
+        (footerVisible() ? FOOTER_MARGIN + FOOTER_HEIGHT : 0),
+    ),
+  )
+  const pageSize = createMemo(() => rows() * columns())
+  const currentGroup = createMemo(() => {
+    const group = activeGroup()
+    return groups().find((item) => item.label === group) ?? groups()[0]
+  })
+  const activeEntries = createMemo(() => currentGroup()?.entries ?? [])
+  const items = createMemo<Item[]>(() => {
+    if (!pendingMode()) return activeEntries()
+    return groups().flatMap((group) => [{ type: "group", label: group.label } satisfies GroupHeader, ...group.entries])
+  })
+  const maxOffset = createMemo(() => Math.max(0, items().length - pageSize()))
+  const shown = createMemo(() => {
+    const columnsItems: Item[][] = []
+    let index = offset()
+    for (let column = 0; column < columns() && index < items().length; column++) {
+      const list: Item[] = []
+      while (list.length < rows() && index < items().length) {
+        list.push(items()[index]!)
+        index += 1
+      }
+      columnsItems.push(list)
+    }
+    return columnsItems
+  })
+  const rowIndexes = createMemo(() => Array.from({ length: rows() }, (_, index) => index))
+  const trigger = commandShortcut(props.context, command.toggle)
+  const modeTrigger = commandShortcut(props.context, command.toggleLayout)
+  const upActive = createMemo(() => offset() > 0)
+  const downActive = createMemo(() => offset() < maxOffset())
+  const scrollable = createMemo(() => maxOffset() > 0)
+  const headerItems = createMemo<HeaderItem[]>(() => [
+    ...(tabsVisible() ? groups().map((group) => ({ type: "tab" as const, group })) : []),
+    ...(scrollable() ? [{ type: "scroll" as const }] : []),
+  ])
+  const tabGap = createMemo(() => {
+    const itemCount = headerItems().length
+    if (itemCount <= 1) return 0
+    const itemWidth = headerItems().reduce(
+      (sum, item) => sum + (item.type === "tab" ? item.group.label.length + 2 : 3),
+      0,
+    )
+    return Math.max(MIN_TAB_GAP, Math.min(TAB_GAP, Math.floor((contentWidth() - itemWidth) / (itemCount - 1))))
+  })
+  const nextMode = createMemo(() => (props.mode() === "dock" ? "overlay" : "dock"))
+  const look = createMemo(() => skin(props.context))
+  const columnWidth = createMemo(() =>
+    Math.max(1, Math.min(MAX_COLUMN_WIDTH, Math.floor((contentWidth() - (columns() - 1) * COLUMN_GAP) / columns()))),
+  )
+  const clamp = (value: number) => Math.max(0, Math.min(maxOffset(), value))
+  const scroll = (delta: number) => setOffset((value) => clamp(value + delta))
+  const moveGroup = (delta: number) => {
+    if (pendingMode()) return
+    const list = groups()
+    if (!list.length) return
+    const index = Math.max(
+      0,
+      list.findIndex((item) => item.label === currentGroup()?.label),
+    )
+    setActiveGroup(list[(index + delta + list.length) % list.length]!.label)
+    setOffset(0)
+  }
+
+  props.context.keymap.layer(() => ({
+    priority: 1000,
+    enabled: visible(),
+    commands: [
+      {
+        id: command.groupPrevious,
+        bind: false,
+        title: "Previous key binding group",
+        description: "Show the previous which-key group",
+        group: "System",
+        run() {
+          moveGroup(-1)
+        },
+      },
+      {
+        id: command.groupNext,
+        bind: false,
+        title: "Next key binding group",
+        description: "Show the next which-key group",
+        group: "System",
+        run() {
+          moveGroup(1)
+        },
+      },
+      {
+        id: command.scrollUp,
+        bind: false,
+        title: "Scroll key bindings up",
+        description: "Scroll the which-key panel up",
+        group: "System",
+        run() {
+          scroll(-columns())
+        },
+      },
+      {
+        id: command.scrollDown,
+        bind: false,
+        title: "Scroll key bindings down",
+        description: "Scroll the which-key panel down",
+        group: "System",
+        run() {
+          scroll(columns())
+        },
+      },
+      {
+        id: command.pageUp,
+        bind: false,
+        title: "Page key bindings up",
+        description: "Page the which-key panel up",
+        group: "System",
+        run() {
+          scroll(-pageSize())
+        },
+      },
+      {
+        id: command.pageDown,
+        bind: false,
+        title: "Page key bindings down",
+        description: "Page the which-key panel down",
+        group: "System",
+        run() {
+          scroll(pageSize())
+        },
+      },
+      {
+        id: command.home,
+        bind: false,
+        title: "First key binding",
+        description: "Jump to the first which-key binding",
+        group: "System",
+        run() {
+          setOffset(0)
+        },
+      },
+      {
+        id: command.end,
+        bind: false,
+        title: "Last key binding",
+        description: "Jump to the last which-key binding",
+        group: "System",
+        run() {
+          setOffset(maxOffset())
+        },
+      },
+    ],
+    bindings: pendingMode() ? scrollCommands : panelCommands,
+  }))
+
+  createEffect(() => {
+    if (pendingMode()) return
+    const group = currentGroup()
+    if (group?.label === activeGroup()) return
+    setActiveGroup(group?.label)
+  })
+
+  createEffect(() => {
+    if (pendingMode()) return
+    activeGroup()
+    setOffset(0)
+  })
+
+  createEffect(() => {
+    if (!visible()) setOffset(0)
+  })
+
+  createEffect(() => {
+    pending()
+    setOffset(0)
+  })
+
+  createEffect(() => {
+    setOffset((value) => clamp(value))
+  })
+
+  return (
+    <Show when={visible()}>
+      <box
+        position={props.layout === "overlay" ? "absolute" : "relative"}
+        zIndex={3500}
+        left={left}
+        bottom={props.layout === "overlay" ? 0 : undefined}
+        width={dimensions().width}
+        height={panelHeight()}
+        backgroundColor={look().panel}
+        paddingLeft={1}
+        paddingRight={1}
+        paddingTop={1}
+        flexShrink={0}
+        flexDirection="column"
+      >
+        <Show when={headerVisible()}>
+          <box width="100%" flexDirection="row" justifyContent="center" gap={tabGap()} flexShrink={0}>
+            <For each={headerItems()}>
+              {(item) => (
+                <Show
+                  when={item.type === "tab" ? item.group : undefined}
+                  fallback={
+                    <box flexShrink={0}>
+                      <text wrapMode="none">
+                        <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
+                        <span style={{ fg: look().muted }}> </span>
+                        <span style={{ fg: downActive() ? look().text : look().muted }}>↓</span>
+                      </text>
+                    </box>
+                  }
+                >
+                  {(group) => {
+                    const selected = createMemo(() => currentGroup()?.label === group().label)
+                    return (
+                      <box
+                        paddingLeft={1}
+                        paddingRight={1}
+                        flexShrink={0}
+                        backgroundColor={selected() ? look().tab : undefined}
+                        onMouseDown={() => {
+                          setActiveGroup(group().label)
+                          setOffset(0)
+                        }}
+                      >
+                        <text
+                          fg={selected() ? look().tabText : look().muted}
+                          attributes={selected() ? TextAttributes.BOLD : undefined}
+                          wrapMode="none"
+                        >
+                          {group().label}
+                        </text>
+                      </box>
+                    )
+                  }}
+                </Show>
+              )}
+            </For>
+          </box>
+        </Show>
+        <Show when={tabsVisible()}>
+          <box height={TAB_CONTENT_GAP} flexShrink={0} />
+        </Show>
+        <box height={rows()} flexShrink={0} flexDirection="column">
+          <Show when={shown().length > 0} fallback={<text fg={look().muted}>No reachable bindings</text>}>
+            <For each={rowIndexes()}>
+              {(row) => (
+                <box width="100%" flexDirection="row" justifyContent="center" gap={COLUMN_GAP}>
+                  <For each={shown()}>
+                    {(column) => {
+                      const item = createMemo(() => column[row])
+                      const entry = createMemo(() => {
+                        const value = item()
+                        if (value?.type !== "entry") return undefined
+                        return value
+                      })
+                      return (
+                        <box width={columnWidth()} flexDirection="row" gap={1} justifyContent="space-between">
+                          <Show when={item()}>
+                            {(value) => (
+                              <Show
+                                when={entry()}
+                                fallback={
+                                  <text fg={look().accent} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                                    {value().label}
+                                  </text>
+                                }
+                              >
+                                {(binding) => (
+                                  <>
+                                    <box flexGrow={1} minWidth={0}>
+                                      <text
+                                        fg={binding().continues ? look().accent : look().muted}
+                                        wrapMode="none"
+                                        truncate
+                                      >
+                                        {binding().label}
+                                      </text>
+                                    </box>
+                                    <box flexShrink={0}>
+                                      <text fg={look().text} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                                        {binding().key}
+                                      </text>
+                                    </box>
+                                  </>
+                                )}
+                              </Show>
+                            )}
+                          </Show>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </box>
+              )}
+            </For>
+          </Show>
+        </box>
+        <Show when={footerVisible()}>
+          <box height={FOOTER_MARGIN} flexShrink={0} />
+          <box width="100%" flexDirection="row" justifyContent="space-between" flexShrink={0}>
+            <box>
+              <text fg={look().text} wrapMode="none">
+                toggle <span style={{ fg: look().subtle }}>{trigger() || command.toggle}</span>
+              </text>
+            </box>
+            <box>
+              <text fg={look().text} wrapMode="none">
+                {nextMode()} <span style={{ fg: look().subtle }}>{modeTrigger() || command.toggleLayout}</span>
+              </text>
+            </box>
+          </box>
+        </Show>
+      </box>
+    </Show>
+  )
+}
+
+function WhichKey(props: { context: Plugin.Context }) {
+  const [pinned, setPinned] = createSignal(false)
+  const [mode, setMode] = createSignal<Layout>("dock")
+  const [pendingPreview, setPendingPreview] = createSignal(false)
+
+  props.context.keymap.layer(() => ({
+    mode: "global",
+    priority: LAYER_PRIORITY,
+    commands: [
+      {
+        id: command.toggle,
+        title: "Show key bindings",
+        description: "Toggle which-key overlay",
+        group: "System",
+        run() {
+          setPinned((value) => !value)
+        },
+      },
+      {
+        id: command.toggleLayout,
+        title: "Toggle key bindings layout",
+        description: "Switch which-key between dock and overlay mode",
+        group: "System",
+        run() {
+          setMode((value) => {
+            const next = value === "dock" ? "overlay" : "dock"
+            return next
+          })
+        },
+      },
+      {
+        id: command.togglePending,
+        title: "Toggle pending key preview",
+        description: "Automatically show which-key for pending key sequences in overlay mode",
+        group: "System",
+        run() {
+          setPendingPreview((value) => {
+            return !value
+          })
+        },
+      },
+    ],
+    bindings: toggleCommands,
+  }))
+
+  return (
+    <WhichKeyPanel
+      context={props.context}
+      layout={mode()}
+      mode={mode}
+      pendingPreview={pendingPreview}
+      pinned={pinned}
+    />
+  )
+}
+
+export default Plugin.define({
+  id: "which-key",
+  setup(context) {
+    context.ui.slot({ append: "home.footer", render: () => <HomeHint context={context} /> })
+    context.ui.slot({ append: "app", render: () => <WhichKey context={context} /> })
+  },
+})
