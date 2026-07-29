@@ -431,6 +431,8 @@ export type WebSearchResult = { url: string; title?: string; content?: string; t
 
 export type ConfigWorktree = { directory: string }
 
+export type GlobalConfig = { [x: string]: JsonValue }
+
 export type ProviderRequest = {
   settings: ProviderSettings
   headers: { [x: string]: string }
@@ -6334,4 +6336,4 @@ export type ConfigGetInput = {
 
 export type ConfigGetOutput = Array<ConfigEntry>
 
-export type ConfigGlobalOutput = { [x: string]: any }
+export type ConfigGlobalOutput = GlobalConfig
