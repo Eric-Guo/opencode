@@ -2695,9 +2695,13 @@ export type ConfigShellsOutput = ReadonlyArray<{
 }>
 export type ConfigShellsOperation<E = never> = () => Effect.Effect<ConfigShellsOutput, E>
 
+export type ConfigGlobalOutput = { readonly [x: string]: unknown }
+export type ConfigGlobalOperation<E = never> = () => Effect.Effect<ConfigGlobalOutput, E>
+
 export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
   readonly shells: ConfigShellsOperation<E>
+  readonly global: ConfigGlobalOperation<E>
 
   /** @deprecated Use `client.experimental.config.update`. Removed in the next minor. */
   readonly update: ExperimentalConfigUpdateOperation<E>
