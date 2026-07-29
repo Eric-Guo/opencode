@@ -1485,6 +1485,7 @@ export type ConfigEntry =
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
+        clerk_code?: string
         permissions?: PermissionRuleset
         agents?: {
           [x: string]: {
@@ -5707,3 +5708,5 @@ export type ConfigGetInput = {
 }
 
 export type ConfigGetOutput = Array<ConfigEntry>
+
+export type ConfigGlobalOutput = { [x: string]: any }
