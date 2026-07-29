@@ -2,7 +2,7 @@
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { mockProviderAuth } from "@/context/server-sync"
+import { mockIntegrationMethods } from "@/context/server-sdk"
 import { SettingsProvider } from "@/context/settings"
 import { onCleanup, onMount } from "solid-js"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog-connect-provider"
@@ -21,7 +21,7 @@ function ConnectProviderDialogStory() {
 }
 
 function ProviderConnectionDialogStory(props) {
-  onCleanup(mockProviderAuth(props.provider, props.methods))
+  onCleanup(mockIntegrationMethods(props.provider, props.methods))
   const dialog = useDialog()
   const controller = useProviderConnectController()
   controller.select(props.provider)
@@ -62,17 +62,17 @@ export const V2 = {
 }
 
 export const ApiKey = {
-  render: renderConnection("openrouter", [{ type: "api", label: "API key" }]),
+  render: renderConnection("openrouter", [{ type: "key", label: "API key" }]),
 }
 
 export const OpenCodeZen = {
-  render: renderConnection("opencode", [{ type: "api", label: "API key" }]),
+  render: renderConnection("opencode", [{ type: "key", label: "API key" }]),
 }
 
 export const LoginMethods = {
   render: renderConnection("openai", [
-    { type: "oauth", label: "ChatGPT Pro/Plus (browser)" },
-    { type: "oauth", label: "ChatGPT Pro/Plus (headless)" },
-    { type: "api", label: "API key" },
+    { id: "0", type: "oauth", label: "ChatGPT Pro/Plus (browser)" },
+    { id: "1", type: "oauth", label: "ChatGPT Pro/Plus (headless)" },
+    { type: "key", label: "API key" },
   ]),
 }
