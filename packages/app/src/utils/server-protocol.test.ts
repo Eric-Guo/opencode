@@ -8,6 +8,22 @@ const mockFetch = (run: (input: string | URL | Request) => Promise<Response>) =>
   Object.assign(run, { preconnect: globalThis.fetch.preconnect })
 
 describe("detectServerProtocol", () => {
+  test("uses V2 for managed sidecars without probing legacy endpoints", async () => {
+    let requests = 0
+    const fetcher = mockFetch(() => {
+      requests++
+      return Promise.resolve(json({}, 500))
+    })
+
+    expect(
+      await detectServerProtocol(
+        { type: "sidecar", variant: "base", http: server },
+        fetcher,
+      ),
+    ).toBe("v2")
+    expect(requests).toBe(0)
+  })
+
   test("prefers the legacy health endpoint when both API generations exist", async () => {
     const fetcher = mockFetch((input) => {
       const path = new URL(input instanceof Request ? input.url : input).pathname
