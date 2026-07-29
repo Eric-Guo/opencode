@@ -5,6 +5,7 @@ import type {
   ProjectCurrentInput,
   ProjectCurrentOutput,
   ProjectListOutput,
+  ConfigGlobalOutput,
 } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -13,7 +14,7 @@ import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State } from "./types"
 import { cmp, normalizeProjectInfo } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
-import { QueryClient, queryOptions } from "@tanstack/solid-query"
+import { QueryClient, queryOptions, type SolidQueryOptions } from "@tanstack/solid-query"
 import type { ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
 import { sameDirectory } from "@/utils/workspace"
@@ -69,11 +70,19 @@ function showErrors(input: {
   })
 }
 
-export const loadGlobalConfigQuery = (scope: ServerScope) =>
+type ApiQueryOptions<T, K extends readonly unknown[]> = SolidQueryOptions<T, Error, T, K> & {
+  initialData?: undefined
+  queryKey: K
+}
+type ConfigApi = { readonly global: () => Promise<ConfigGlobalOutput> }
+
+export const loadGlobalConfigQuery = (
+  scope: ServerScope,
+  api: ConfigApi,
+): ApiQueryOptions<ConfigGlobalOutput, readonly [ServerScope, "config"]> =>
   queryOptions({
-    queryKey: [scope, "config"],
-    // TODO: Restore config loading when the V2 client exposes a config API.
-    queryFn: async (): Promise<Config> => ({}),
+    queryKey: [scope, "config"] as const,
+    queryFn: () => retry(() => api.global()),
   })
 
 type ProjectApi = {
@@ -124,6 +133,7 @@ export async function bootstrapGlobal(input: {
     readonly location: LocationApi
     readonly project: ProjectApi
     readonly worktree: WorktreeApi
+    readonly config: ServerApi["config"]
   }
   scope: ServerScope
   requestFailedTitle: string
@@ -133,7 +143,7 @@ export async function bootstrapGlobal(input: {
   queryClient: QueryClient
 }) {
   const slow = [
-    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
+    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope, input.serverAPI.config)),
     () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location)),
     () =>
       input.queryClient
