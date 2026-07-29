@@ -175,6 +175,10 @@ import type {
   FileListOutput,
   FileFindInput,
   FileFindOutput,
+  FileListLegacyInput,
+  FileListLegacyOutput,
+  FileReadLegacyInput,
+  FileReadLegacyOutput,
   CommandListInput,
   CommandListOutput,
   SkillListInput,
@@ -1092,7 +1096,26 @@ const EndpointFileFind = (raw: RawClient["server.fs"]) => (input: FileFindInput)
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupFile = (raw: RawClient["server.fs"]) => ({ list: EndpointFileList(raw), find: EndpointFileFind(raw) })
+const EndpointFileListLegacy = (raw: RawClient["server.fs"]) => (input: FileListLegacyInput) =>
+  preserveEffect<FileListLegacyOutput>()(
+    raw["fs.listLegacy"]({
+      query: { directory: input["directory"], workspace: input["workspace"], path: input["path"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointFileReadLegacy = (raw: RawClient["server.fs"]) => (input: FileReadLegacyInput) =>
+  preserveEffect<FileReadLegacyOutput>()(
+    raw["fs.readLegacy"]({
+      query: { directory: input["directory"], workspace: input["workspace"], path: input["path"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupFile = (raw: RawClient["server.fs"]) => ({
+  list: EndpointFileList(raw),
+  find: EndpointFileFind(raw),
+  listLegacy: EndpointFileListLegacy(raw),
+  readLegacy: EndpointFileReadLegacy(raw),
+})
 
 const EndpointCommandList = (raw: RawClient["server.command"]) => (input?: CommandListInput) =>
   preserveEffect<CommandListOutput>()(
