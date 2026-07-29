@@ -447,6 +447,8 @@ export type ConfigModelCapabilities = { tools?: boolean; input?: Array<string>; 
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
+export type GlobalConfig = { [x: string]: JsonValue }
+
 export type SessionMessageLocationSwitched = {
   id: string
   metadata?: { [x: string]: JsonValue }
@@ -6700,4 +6702,4 @@ export type ConfigUpdateInput = { readonly shell: { readonly shell: string | nul
 
 export type ConfigUpdateOutput = void
 
-export type ConfigGlobalOutput = { [x: string]: any }
+export type ConfigGlobalOutput = GlobalConfig
