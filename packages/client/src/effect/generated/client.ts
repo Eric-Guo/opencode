@@ -232,6 +232,7 @@ import type {
   Endpoint28_1Output,
   Endpoint29_0Input,
   Endpoint29_0Output,
+  Endpoint29_1Output,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1297,7 +1298,10 @@ const Endpoint29_0 = (raw: RawClient["server.config"]) => (input?: Endpoint29_0I
     raw["config.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup29 = (raw: RawClient["server.config"]) => ({ get: Endpoint29_0(raw) })
+const Endpoint29_1 = (raw: RawClient["server.config"]) => () =>
+  preserveEffect<Endpoint29_1Output>()(raw["config.global"]({}).pipe(Effect.mapError(mapClientError)))
+
+const adaptGroup29 = (raw: RawClient["server.config"]) => ({ get: Endpoint29_0(raw), global: Endpoint29_1(raw) })
 
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
