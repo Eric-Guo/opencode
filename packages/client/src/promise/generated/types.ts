@@ -4630,3 +4630,5 @@ export type WebsearchQueryOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: { providerID: string; results: Array<WebSearchResult> }
 }
+
+export type ServerConfigGetOutput = { [x: string]: any }

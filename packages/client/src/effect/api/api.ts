@@ -1608,6 +1608,13 @@ export interface WebsearchApi<E = never> {
   readonly query: WebsearchQueryOperation<E>
 }
 
+export type Endpoint28_0Output = { readonly [x: string]: unknown }
+export type ServerConfigGetOperation<E = never> = () => Effect.Effect<Endpoint28_0Output, E>
+
+export interface ServerConfigApi<E = never> {
+  readonly get: ServerConfigGetOperation<E>
+}
+
 export interface AppApi<E = never> {
   readonly health: HealthApi<E>
   readonly server: ServerApi<E>
@@ -1638,4 +1645,5 @@ export interface AppApi<E = never> {
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
+  readonly "server.config": ServerConfigApi<E>
 }

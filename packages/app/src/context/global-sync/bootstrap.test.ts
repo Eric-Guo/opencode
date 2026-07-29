@@ -5,6 +5,7 @@ import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/con
 import {
   loadAgentsQuery,
   loadCommands,
+  loadGlobalConfigQuery,
   loadPathQuery,
   loadProjectsQuery,
   loadProvidersQuery,
@@ -24,6 +25,21 @@ describe("query keys", () => {
     expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
     expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
     expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
+  })
+
+  test("loads the global config required by v2 desktop clients", async () => {
+    const configReads: string[] = []
+    const api = {
+      get: async () => {
+        configReads.push("config")
+        return { shell: "bash" }
+      },
+    } as unknown as ServerApi["server.config"]
+
+    const result = await new QueryClient().fetchQuery(loadGlobalConfigQuery(ServerScope.local, api))
+
+    expect(result).toEqual({ shell: "bash" })
+    expect(configReads).toEqual(["config"])
   })
 
   test("loads the current provider and model catalog", async () => {
