@@ -264,6 +264,7 @@ import type {
   WebsearchQueryOutput,
   ConfigGetInput,
   ConfigGetOutput,
+  ConfigGlobalOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -2174,6 +2175,11 @@ export function make(options: ClientOptions) {
             declaredStatuses: [401, 400],
             empty: false,
           },
+          requestOptions,
+        ),
+      global: (requestOptions?: RequestOptions) =>
+        request<ConfigGlobalOutput>(
+          { method: "GET", path: `/global/config`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
     },
