@@ -197,7 +197,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     fetch: eventFetch,
     server: server.http,
   })
-  const protocol = detectServerProtocol(server.http, platform.fetch ?? globalThis.fetch)
+  const protocol = detectServerProtocol(server, platform.fetch ?? globalThis.fetch)
   const [protocolKind] = createResource(
     () => protocol,
     (value) => value,
