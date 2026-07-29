@@ -184,7 +184,7 @@ export function reconcileActiveSessionStatuses(
 
 function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
   return {
-    globalConfig: () => loadGlobalConfigQuery(scope),
+    globalConfig: () => loadGlobalConfigQuery(scope, serverAPI.config),
     projects: () => loadProjectsQuery(scope, serverAPI.project),
     providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
     integrations: (directory: PathKey | null) => loadIntegrationsQuery(scope, directory, serverAPI.integration),
