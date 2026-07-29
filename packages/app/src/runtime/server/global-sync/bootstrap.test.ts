@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
 import { OpenCode } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { bootstrapGlobal, loadPathQuery, loadProjectsQuery } from "./bootstrap"
+import { bootstrapGlobal, loadGlobalConfigQuery, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
 import { createServerTransport } from "@/runtime/server/client"
@@ -111,6 +111,23 @@ test("recovers project metadata after the connection to the server is dropped", 
 })
 
 describe("query keys", () => {
+  test("loads the global config required by v2 desktop clients", async () => {
+    const configReads: string[] = []
+
+    const api = {
+      global: async () => {
+        configReads.push("config")
+
+        return { shell: "bash" }
+      },
+    } as unknown as ServerApi["config"]
+
+    const result = await new QueryClient().fetchQuery(loadGlobalConfigQuery(ServerScope.local, api))
+
+    expect(result).toEqual({ shell: "bash" })
+    expect(configReads).toEqual(["config"])
+  })
+
   test("partitions identical directories by server scope and loads current location metadata", async () => {
     const calls: unknown[] = []
 
