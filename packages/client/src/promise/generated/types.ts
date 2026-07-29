@@ -235,6 +235,8 @@ export type SessionInboxSyntheticPayload = { text: string; description?: string;
 
 export type FormMetadata = { [x: string]: JsonValue }
 
+export type GlobalConfig = { [x: string]: JsonValue }
+
 export type PromptFileAttachment = {
   data: PromptBase64
   mime: string
@@ -5853,4 +5855,4 @@ export type ConfigGetInput = {
 
 export type ConfigGetOutput = Array<ConfigEntry>
 
-export type ConfigGlobalOutput = { [x: string]: any }
+export type ConfigGlobalOutput = GlobalConfig
