@@ -1,10 +1,11 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
+import path from "path"
 import { HttpServer, HttpServerError, HttpServerResponse } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
-it.live("allows browser preflight requests without credentials", () =>
+it.live("serves browser and desktop compatibility endpoints", () =>
   Effect.gen(function* () {
     const server = yield* ServerProcess.start<never, never>(
       {
@@ -90,6 +91,40 @@ it.live("allows browser preflight requests without credentials", () =>
           permissions: [{ action: "websearch", resource: "*", effect: "allow" }],
         },
       },
+    })
+
+    const directory = path.resolve(import.meta.dir, "..")
+    const filesUrl = new URL("/file", HttpServer.formatAddress(server.address))
+    filesUrl.searchParams.set("path", "test")
+    filesUrl.searchParams.set("directory", directory)
+    const files = yield* Effect.promise(() =>
+      fetch(filesUrl, {
+        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+      }),
+    )
+    expect(files.status).toBe(200)
+    expect(yield* Effect.promise(() => files.json())).toContainEqual(
+      expect.objectContaining({
+        name: "process.test.ts",
+        path: "test/process.test.ts",
+        absolute: path.join(directory, "test/process.test.ts"),
+        type: "file",
+        ignored: false,
+      }),
+    )
+
+    const contentUrl = new URL("/file/content", HttpServer.formatAddress(server.address))
+    contentUrl.searchParams.set("path", "package.json")
+    contentUrl.searchParams.set("directory", directory)
+    const content = yield* Effect.promise(() =>
+      fetch(contentUrl, {
+        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+      }),
+    )
+    expect(content.status).toBe(200)
+    expect(yield* Effect.promise(() => content.json())).toMatchObject({
+      type: "text",
+      content: expect.stringContaining('"name": "@opencode-ai/server"'),
     })
   }),
 )
