@@ -45,7 +45,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.oauth)).toEqual(["connect", "status", "complete", "cancel"])
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
-  expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
+  expect(Object.keys(client.file)).toEqual(["read", "list", "find", "listLegacy", "readLegacy"])
   expect(Object.keys(client.vcs)).toEqual(["get", "status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
