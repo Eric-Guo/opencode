@@ -2401,10 +2401,14 @@ export type ConfigUpdateInput = { readonly shell: string | null }
 export type ConfigUpdateOutput = void
 export type ConfigUpdateOperation<E = never> = (input: ConfigUpdateInput) => Effect.Effect<ConfigUpdateOutput, E>
 
+export type ConfigGlobalOutput = { readonly [x: string]: unknown }
+export type ConfigGlobalOperation<E = never> = () => Effect.Effect<ConfigGlobalOutput, E>
+
 export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
   readonly shells: ConfigShellsOperation<E>
   readonly update: ConfigUpdateOperation<E>
+  readonly global: ConfigGlobalOperation<E>
 }
 
 export interface AppApi<E = never> {
