@@ -4536,3 +4536,5 @@ export type ConfigShellsOutput = Array<ConfigShellOption>
 export type ConfigUpdateInput = { readonly shell: string | null }
 
 export type ConfigUpdateOutput = void
+
+export type ConfigGlobalOutput = { [x: string]: any }
