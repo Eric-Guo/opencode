@@ -33,6 +33,7 @@ test("exposes every standard HTTP API group", () => {
     "vcs",
     "debug",
     "websearch",
+    "server.config",
   ])
   expect(Object.keys(client.debug)).toEqual(["location"])
   expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
@@ -43,7 +44,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.oauth)).toEqual(["connect", "status", "complete", "cancel"])
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
-  expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
+  expect(Object.keys(client.file)).toEqual(["read", "list", "find", "listLegacy", "readLegacy"])
   expect(Object.keys(client.vcs)).toEqual(["get", "status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
