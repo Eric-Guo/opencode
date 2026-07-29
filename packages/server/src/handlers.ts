@@ -36,6 +36,7 @@ import { WorkspaceHandler } from "./handlers/workspace"
 export const handlers = Layer.mergeAll(
   HealthHandler,
   ServerHandler,
+  ConfigHandler,
   DebugHandler,
   MigrationHandler,
   LocationHandler,
@@ -65,5 +66,4 @@ export const handlers = Layer.mergeAll(
   WorktreeHandler,
   WorkspaceHandler,
   VcsHandler,
-  ConfigHandler,
 )
