@@ -23,6 +23,7 @@ import type {
   ProjectListOutput,
   ReferenceListInput,
   ReferenceListOutput,
+  ServerConfigGetOutput,
   SessionApi,
 } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
@@ -40,7 +41,7 @@ import {
   normalizeProviderList,
 } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
-import { QueryClient, queryOptions } from "@tanstack/solid-query"
+import { QueryClient, queryOptions, type SolidQueryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
@@ -107,11 +108,19 @@ function showErrors(input: {
   })
 }
 
-export const loadGlobalConfigQuery = (scope: ServerScope, legacy: LegacyCapabilities, enabled = true) =>
+type ApiQueryOptions<T, K extends readonly unknown[]> = SolidQueryOptions<T, Error, T, K> & {
+  initialData?: undefined
+  queryKey: K
+}
+type ServerConfigApi = { readonly get: () => Promise<ServerConfigGetOutput> }
+
+export const loadGlobalConfigQuery = (
+  scope: ServerScope,
+  api: ServerConfigApi,
+): ApiQueryOptions<ServerConfigGetOutput, readonly [ServerScope, "config"]> =>
   queryOptions({
-    queryKey: [scope, "config"],
-    queryFn: () => retry(() => legacy.config.global()),
-    enabled,
+    queryKey: [scope, "config"] as const,
+    queryFn: () => retry(() => api.get()),
   })
 
 type ProjectApi = {
@@ -142,9 +151,11 @@ export const loadProjectsQuery = (scope: ServerScope, api: ProjectApi) =>
   })
 
 export async function bootstrapGlobal(input: {
-  legacy: LegacyCapabilities
-  serverAPI: CatalogApi & { readonly location: LocationApi; readonly project: ProjectApi }
-  protocol?: Promise<ServerProtocol>
+  serverAPI: CatalogApi & {
+    readonly location: LocationApi
+    readonly project: ProjectApi
+    readonly "server.config": ServerApi["server.config"]
+  }
   scope: ServerScope
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
@@ -152,9 +163,8 @@ export async function bootstrapGlobal(input: {
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
 }) {
-  const protocol = await input.protocol
   const slow = [
-    protocol === "v1" && (() => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope, input.legacy))),
+    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope, input.serverAPI["server.config"])),
     () =>
       input.queryClient.fetchQuery(
         loadProvidersQuery(input.scope, null, input.serverAPI),
@@ -167,7 +177,7 @@ export async function bootstrapGlobal(input: {
       input.queryClient
         .fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project))
         .then((data) => input.setGlobalStore("project", data)),
-  ].filter(Boolean) as Array<() => Promise<unknown>>
+  ]
   await runAll(slow)
   // showErrors({
   //   errors: errors(),
