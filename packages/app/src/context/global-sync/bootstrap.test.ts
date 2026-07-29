@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
-import { loadPathQuery, loadProjectsQuery } from "./bootstrap"
+import { loadGlobalConfigQuery, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
 
@@ -14,6 +14,21 @@ describe("query keys", () => {
 
     expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
     expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
+  })
+
+  test("loads the global config required by v2 desktop clients", async () => {
+    const configReads: string[] = []
+    const api = {
+      global: async () => {
+        configReads.push("config")
+        return { shell: "bash" }
+      },
+    } as unknown as ServerApi["config"]
+
+    const result = await new QueryClient().fetchQuery(loadGlobalConfigQuery(ServerScope.local, api))
+
+    expect(result).toEqual({ shell: "bash" })
+    expect(configReads).toEqual(["config"])
   })
 
   test("loads current location metadata", async () => {
