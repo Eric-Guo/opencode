@@ -12,6 +12,7 @@ it.live("allows browser preflight requests without credentials", () =>
       password: "secret",
       app: { version: "test-version" },
       database: { path: ":memory:" },
+      config: { content: JSON.stringify({ username: "Test User", clerk_code: "123456" }) },
     })
     const response = yield* Effect.promise(() =>
       fetch(new URL("/api/health", HttpServer.formatAddress(server.address)), {
@@ -40,5 +41,22 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(health.status).toBe(200)
     expect(health.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
     expect(yield* Effect.promise(() => health.json())).toMatchObject({ version: "test-version" })
+
+    const config = yield* Effect.promise(() =>
+      fetch(new URL("/global/config", HttpServer.formatAddress(server.address)), {
+        headers: {
+          authorization: `Basic ${btoa("opencode:secret")}`,
+          origin: "http://localhost:3000",
+        },
+      }),
+    )
+
+    const configBody = yield* Effect.promise(() => config.json())
+    expect({ status: config.status, body: configBody }).toMatchObject({ status: 200 })
+    expect(config.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+    expect(configBody).toMatchObject({
+      username: "Test User",
+      clerk_code: "123456",
+    })
   }),
 )
