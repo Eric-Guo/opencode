@@ -28,6 +28,7 @@ export function useServerSync() {
     set(key: "provider_auth", value: typeof data.provider_auth) {
       data[key] = value
     },
+    refreshProviders: async () => {},
     updateConfig: async () => {},
   })
 }
