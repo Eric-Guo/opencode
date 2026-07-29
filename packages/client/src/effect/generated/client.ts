@@ -270,6 +270,7 @@ import type {
   WebsearchQueryOutput,
   ConfigGetInput,
   ConfigGetOutput,
+  ConfigGlobalOutput,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1585,7 +1586,13 @@ const EndpointConfigGet = (raw: RawClient["server.config"]) => (input?: ConfigGe
     raw["config.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupConfig = (raw: RawClient["server.config"]) => ({ get: EndpointConfigGet(raw) })
+const EndpointConfigGlobal = (raw: RawClient["server.config"]) => () =>
+  preserveEffect<ConfigGlobalOutput>()(raw["config.global"]({}).pipe(Effect.mapError(mapClientError)))
+
+const adaptGroupConfig = (raw: RawClient["server.config"]) => ({
+  get: EndpointConfigGet(raw),
+  global: EndpointConfigGlobal(raw),
+})
 
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroupHealth(raw["server.health"]),
