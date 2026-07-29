@@ -1747,6 +1747,7 @@ export type ConfigEntry =
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
+        clerk_code?: string
         permissions?: PermissionRuleset
         agents?: {
           [x: string]: {
@@ -2662,6 +2663,14 @@ export type SessionImportInput = {
                 readonly time?: { readonly created: number; readonly completed?: number }
               }
             | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
+              }
+            | {
                 readonly type: "tool"
                 readonly id: string
                 readonly name: string
@@ -2913,6 +2922,14 @@ export type SessionImportInput = {
                 readonly time?: { readonly created: number; readonly completed?: number }
               }
             | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
+              }
+            | {
                 readonly type: "tool"
                 readonly id: string
                 readonly name: string
@@ -3162,6 +3179,14 @@ export type SessionImportInput = {
                 readonly text: string
                 readonly state?: { readonly [x: string]: JsonValue }
                 readonly time?: { readonly created: number; readonly completed?: number }
+              }
+            | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
               }
             | {
                 readonly type: "tool"
@@ -5715,3 +5740,5 @@ export type ConfigGetInput = {
 }
 
 export type ConfigGetOutput = Array<ConfigEntry>
+
+export type ConfigGlobalOutput = { [x: string]: any }

@@ -161,7 +161,7 @@ export function seedActiveSessionStatuses(
 
 function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
   return {
-    globalConfig: () => loadGlobalConfigQuery(scope),
+    globalConfig: () => loadGlobalConfigQuery(scope, serverAPI.config),
     projects: () => loadProjectsQuery(scope, serverAPI.project),
     providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
     path: (directory: PathKey | null) => loadPathQuery(scope, directory, serverAPI.location),
