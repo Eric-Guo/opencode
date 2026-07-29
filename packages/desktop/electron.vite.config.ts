@@ -1,9 +1,9 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
-import { cp, readdir, rm } from "node:fs/promises"
+import { cp, rm } from "node:fs/promises"
 
-const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+const OPENCODE_SERVER_DIST = "../cli/dist-node"
 const SEVEN_SEVEN_DIST = "../7777/dist"
 const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
@@ -48,7 +48,7 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: { index: "src/main/index.ts" },
+        input: { index: "src/main/index.ts", sidecar: "src/main/sidecar.ts" },
         // Keep this identical to electron-vite's Node 20.11+ shim. Its regex insertion can
         // corrupt bundled TypeScript, while a Rollup banner places the shim safely.
         output: {
@@ -74,10 +74,8 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       {
         name: "opencode:copy-server-dist",
         async writeBundle() {
-          for (const file of await readdir(OPENCODE_SERVER_DIST)) {
-            if (file === "models-dev-api.json") continue
-            await cp(`${OPENCODE_SERVER_DIST}/${file}`, `./out/main/chunks/${file}`, { recursive: true, force: true })
-          }
+          await cp(`${OPENCODE_SERVER_DIST}/sidecar.mjs`, "./out/main/chunks/sidecar.mjs", { force: true })
+          await cp(`${OPENCODE_SERVER_DIST}/assets`, "./out/main/chunks/assets", { recursive: true, force: true })
         },
       },
     ],
