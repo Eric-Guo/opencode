@@ -15,13 +15,20 @@ it.live("authenticates API requests behind the frontend transform while allowing
         cors: ["http://192.168.1.10:3001", "https://example.com"],
         app: { version: "test-version" },
         database: { path: ":memory:" },
+        models: { fetch: false },
+        config: { content: JSON.stringify({ username: "Test User", clerk_code: "123456" }) },
       },
       undefined,
       (api) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest
           const url = new URL(request.url, "http://localhost")
-          if (url.pathname === "/api" || url.pathname.startsWith("/api/") || url.pathname === "/openapi.json")
+          if (
+            url.pathname === "/api" ||
+            url.pathname.startsWith("/api/") ||
+            url.pathname === "/openapi.json" ||
+            url.pathname === "/global/config"
+          )
             return yield* api
           return HttpServerResponse.raw(fallback, { contentType: "text/plain" })
         }),
@@ -164,6 +171,23 @@ it.live("authenticates API requests behind the frontend transform while allowing
         )
       }),
     )
+
+    const config = yield* Effect.promise(() =>
+      fetch(new URL("/global/config", HttpServer.formatAddress(server.address)), {
+        headers: {
+          authorization: `Basic ${btoa("opencode:secret")}`,
+          origin: "http://localhost:3000",
+        },
+      }),
+    )
+
+    const configBody = yield* Effect.promise(() => config.json())
+    expect({ status: config.status, body: configBody }).toMatchObject({ status: 200 })
+    expect(config.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+    expect(configBody).toMatchObject({
+      username: "Test User",
+      clerk_code: "123456",
+    })
   }),
 )
 
