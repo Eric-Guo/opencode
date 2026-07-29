@@ -1,5 +1,6 @@
 import { Config } from "@opencode/core/config"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { GlobalConfig } from "@opencode/protocol/groups/config"
 import { Info } from "@opencode/schema/config"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -44,7 +45,7 @@ export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handler
         const username = Config.latest(entries, "username")
         const clerkCode = Config.latest(entries, "clerk_code")
 
-        return Object.fromEntries(
+        const response = Object.fromEntries(
           Object.entries({
             ...encoded,
             model:
@@ -57,6 +58,9 @@ export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handler
             username,
             clerk_code: clerkCode,
           }).filter((entry) => entry[1] !== undefined),
+        )
+        return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(GlobalConfig))(JSON.stringify(response)).pipe(
+          Effect.orDie,
         )
       }),
     ),
