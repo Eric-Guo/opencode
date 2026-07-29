@@ -167,6 +167,10 @@ import type {
   FileListOutput,
   FileFindInput,
   FileFindOutput,
+  FileListLegacyInput,
+  FileListLegacyOutput,
+  FileReadLegacyInput,
+  FileReadLegacyOutput,
   CommandListInput,
   CommandListOutput,
   SkillListInput,
@@ -1460,6 +1464,30 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/fs/find`,
             query: { location: input["location"], query: input["query"], type: input["type"], limit: input["limit"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      listLegacy: (input: FileListLegacyInput, requestOptions?: RequestOptions) =>
+        request<FileListLegacyOutput>(
+          {
+            method: "GET",
+            path: `/file`,
+            query: { directory: input["directory"], workspace: input["workspace"], path: input["path"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      readLegacy: (input: FileReadLegacyInput, requestOptions?: RequestOptions) =>
+        request<FileReadLegacyOutput>(
+          {
+            method: "GET",
+            path: `/file/content`,
+            query: { directory: input["directory"], workspace: input["workspace"], path: input["path"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
