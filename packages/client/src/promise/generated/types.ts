@@ -436,6 +436,8 @@ export type VcsFileStatus = {
 
 export type VcsBranchList = Array<string>
 
+export type LspStatus = { id: string; name: string; root: string; status: "connected" | "error" }
+
 export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
@@ -6059,6 +6061,13 @@ export type VcsDiffOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<FileDiffInfo>
 }
+
+export type LspStatusInput = {
+  readonly directory?: { readonly directory?: string | undefined; readonly workspace?: string | undefined }["directory"]
+  readonly workspace?: { readonly directory?: string | undefined; readonly workspace?: string | undefined }["workspace"]
+}
+
+export type LspStatusOutput = Array<LspStatus>
 
 export type DebugLocationListOutput = Array<LocationRef>
 
