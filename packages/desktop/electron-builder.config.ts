@@ -21,6 +21,29 @@ const generatedDir = path.join(packageDir, "out", "generated")
 
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
+const appFiles = [
+  "out/**/*",
+  "resources/**/*",
+  "!out/**/assets/wasm-*.js.map",
+  "!resources/opencode-cli*",
+  "!resources/thape-config/**",
+  "!resources/icons/**",
+  // Log export imports Zip.js as ESM. Keep index.js and lib, including its inline worker.
+  "!**/node_modules/@zip.js/zip.js/dist{,/**/*}",
+  "!**/node_modules/@zip.js/zip.js/{index.cjs,index.min.js,index-fflate.js,deno.json,eslint.config.mjs}",
+  // Nothing executes type declarations or source maps, and every entry costs startup time: the
+  // main process parses the whole asar header before it runs any JavaScript.
+  "!**/node_modules/**/*.d.{ts,cts,mts}",
+  "!**/node_modules/**/*.d.{ts,cts,mts}.map",
+  "!**/node_modules/**/*.{js,cjs,mjs}.map",
+  // These packages execute compiled JavaScript, not their sources.
+  "!**/node_modules/ajv/lib{,/**/*}",
+  "!**/node_modules/ajv-formats/src{,/**/*}",
+  // Keep js-yaml's CommonJS sources and dist/js-yaml.mjs ESM entry, not browser bundles or its CLI.
+  "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
+  "!**/node_modules/js-yaml/bin{,/**/*}",
+]
+
 const windowsNativeExclusions = [
   "@ff-labs/fff-bin-android-arm64",
   "@ff-labs/fff-bin-darwin-arm64",
@@ -43,6 +66,12 @@ const windowsNativeExclusions = [
   "@parcel/watcher-linux-arm64-musl",
   "@parcel/watcher-linux-x64-glibc",
   "@parcel/watcher-linux-x64-musl",
+  "@parcel/watcher-win32-ia32",
+  "@msgpackr-extract/msgpackr-extract-darwin-arm64",
+  "@msgpackr-extract/msgpackr-extract-darwin-x64",
+  "@msgpackr-extract/msgpackr-extract-linux-arm",
+  "@msgpackr-extract/msgpackr-extract-linux-arm64",
+  "@msgpackr-extract/msgpackr-extract-linux-x64",
   "@yuuang/ffi-rs-android-arm64",
   "@yuuang/ffi-rs-darwin-arm64",
   "@yuuang/ffi-rs-darwin-x64",
@@ -51,6 +80,7 @@ const windowsNativeExclusions = [
   "@yuuang/ffi-rs-linux-arm64-musl",
   "@yuuang/ffi-rs-linux-x64-gnu",
   "@yuuang/ffi-rs-linux-x64-musl",
+  "@yuuang/ffi-rs-win32-ia32-msvc",
 ].map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
 
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
@@ -107,10 +137,38 @@ const APP_IDS = {
 
 const getBase = (appId: string): Configuration => {
   const target = getCurrentCli()
+
+  const windowsArchitectureExclusions = (
+    target.rustTarget === "x86_64-pc-windows-msvc"
+      ? [
+          "@ff-labs/fff-bin-win32-arm64",
+          "@lydell/node-pty-win32-arm64",
+          "@parcel/watcher-win32-arm64",
+          "@yuuang/ffi-rs-win32-arm64-msvc",
+        ]
+      : target.rustTarget === "aarch64-pc-windows-msvc"
+        ? [
+            "@ff-labs/fff-bin-win32-x64",
+            "@lydell/node-pty-win32-x64",
+            "@msgpackr-extract/msgpackr-extract-win32-x64",
+            "@parcel/watcher-win32-x64",
+            "@yuuang/ffi-rs-win32-x64-msvc",
+          ]
+        : []
+  ).map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
+
   const channel = resolveChannel()
   const iconChannel = channel === "dev" ? "prod" : channel
   const iconDir = `icons/${iconChannel}`
   const updateUrl = `https://cybros.thape.com.cn/system/opencode/desktop/${channel}`
+
+  // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
+  const platformFiles = [
+    ...appFiles,
+    ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
+      (item) => `!**/node_modules/@lydell/node-pty-${item.os}-${item.cpu}{,/**/*}`,
+    ),
+  ]
 
   return {
     artifactName: "SigmaAgents-${os}-${arch}-${version}.${ext}",
@@ -138,31 +196,7 @@ const getBase = (appId: string): Configuration => {
     extraMetadata: {
       desktopName: `${appId}.desktop`,
     },
-    files: [
-      "out/**/*",
-      "resources/**/*",
-      "!resources/opencode-cli*",
-      "!resources/thape-config/**",
-      "!resources/icons/**",
-      // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
-      ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
-        (item) => `!**/node_modules/@lydell/node-pty-${item.os}-${item.cpu}{,/**/*}`,
-      ),
-      // Log export imports Zip.js as ESM. Keep index.js and lib, including its inline worker.
-      "!**/node_modules/@zip.js/zip.js/dist{,/**/*}",
-      "!**/node_modules/@zip.js/zip.js/{index.cjs,index.min.js,index-fflate.js,deno.json,eslint.config.mjs}",
-      // Nothing executes type declarations or source maps, and every entry costs startup time: the
-      // main process parses the whole asar header before it runs any JavaScript.
-      "!**/node_modules/**/*.d.{ts,cts,mts}",
-      "!**/node_modules/**/*.d.{ts,cts,mts}.map",
-      "!**/node_modules/**/*.{js,cjs,mjs}.map",
-      // These packages execute compiled JavaScript, not their sources.
-      "!**/node_modules/ajv/lib{,/**/*}",
-      "!**/node_modules/ajv-formats/src{,/**/*}",
-      // Keep js-yaml's CommonJS sources and dist/js-yaml.mjs ESM entry, not browser bundles or its CLI.
-      "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
-      "!**/node_modules/js-yaml/bin{,/**/*}",
-    ],
+    files: platformFiles,
     extraResources: [
       {
         from: "resources/",
@@ -172,16 +206,24 @@ const getBase = (appId: string): Configuration => {
       {
         from: iconDir,
         to: "icons",
+        filter: ["icon.ico", "icon.png", "dock.png"],
       },
       {
         from: "resources/thape-config",
         to: "thape-config",
-        filter: ["**/*", "!**/.git/**"],
+        filter: [
+          "**/*",
+          "!**/.git/**",
+          "!node_modules/**/*.d.ts",
+          "!node_modules/effect/src/**",
+          "!node_modules/zod/src/**",
+          "!node_modules/@opencode/plugin/node_modules/zod/src/**",
+        ],
       },
       {
         from: "resources/thape-config/node_modules",
         to: "thape-config/node_modules",
-        filter: ["**/*"],
+        filter: ["**/*", "!**/*.d.ts", "!effect/src/**", "!zod/src/**", "!@opencode/plugin/node_modules/zod/src/**"],
       },
       {
         from: "out/generated/app-update.yml",
@@ -254,7 +296,8 @@ const getBase = (appId: string): Configuration => {
     },
     win: {
       icon: `${iconDir}/icon.ico`,
-      files: windowsNativeExclusions,
+      electronLanguages: ["en-US", "zh-CN"],
+      files: [...platformFiles, ...windowsNativeExclusions, ...windowsArchitectureExclusions],
       signtoolOptions: {
         sign: signWindows,
       },
