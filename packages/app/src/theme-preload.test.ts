@@ -21,7 +21,8 @@ beforeEach(() => {
 
 describe("theme preload", () => {
   test.each([
-    { stored: undefined, systemDark: false, scheme: "light", background: "#fafafa" },
+    { stored: undefined, systemDark: false, scheme: "dark", background: "#080808" },
+    { stored: "system", systemDark: false, scheme: "light", background: "#fafafa" },
     { stored: "dark", systemDark: false, scheme: "dark", background: "#080808" },
     { stored: "light", systemDark: true, scheme: "light", background: "#fafafa" },
     { stored: "system", systemDark: true, scheme: "dark", background: "#080808" },
@@ -40,7 +41,7 @@ describe("theme preload", () => {
   )
 
   test.each([
-    { scheme: undefined, key: "opencode-theme-css-light", css: "--background-base:#fff;", expected: "light" },
+    { scheme: undefined, key: "opencode-theme-css-dark", css: "--background-base:#000;", expected: "dark" },
     { scheme: "dark", key: "opencode-theme-css-dark", css: "--background-base:#010203;", expected: "dark" },
   ])("restores the cached $expected css of a custom theme", ({ scheme, key, css, expected }) => {
     localStorage.setItem("opencode-theme-id", "nightowl")
