@@ -51,16 +51,20 @@ test("the new session screen does not show session details", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
 })
 
-test("the dark new session panel exposes no lighter background at its rounded corners", async ({ page }) => {
+test("the new session splash stays inside its panel and leaves the outer corners dark", async ({ page }) => {
   await page.setViewportSize({ width: 935, height: 522 })
   await openDraft(page, { name: "PanelCorner", seed: { theme: { id: "oc-2", scheme: "dark" } } })
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
-  const box = await page.locator('[data-component="new-session"]').boundingBox()
+  const panel = page.locator('[data-component="new-session"]')
+  const splash = panel.locator('[data-component="startup-splash"][data-variant="background"]')
+  await expect(splash).toBeVisible()
+  await expect.poll(() => splash.boundingBox()).toEqual(await panel.boundingBox())
+  const box = await panel.boundingBox()
 
   if (!box) throw new Error("New-session panel bounds are unavailable")
   const screenshot = await page.screenshot()
 
-  // Sample the four corner pixels, which lie outside the rounded panel.
+  // The customized splash fills the panel; its gradients must not bleed into the surrounding gutter.
   const corners = await page.evaluate(
     async ({ source, points }) => {
       const image = new Image()
@@ -77,10 +81,10 @@ test("the dark new session panel exposes no lighter background at its rounded co
     {
       source: `data:image/png;base64,${screenshot.toString("base64")}`,
       points: [
-        { x: Math.floor(box.x), y: Math.floor(box.y) },
-        { x: Math.ceil(box.x + box.width) - 1, y: Math.floor(box.y) },
-        { x: Math.floor(box.x), y: Math.ceil(box.y + box.height) - 1 },
-        { x: Math.ceil(box.x + box.width) - 1, y: Math.ceil(box.y + box.height) - 1 },
+        { x: Math.floor(box.x) - 1, y: Math.floor(box.y) - 1 },
+        { x: Math.ceil(box.x + box.width), y: Math.floor(box.y) - 1 },
+        { x: Math.floor(box.x) - 1, y: Math.ceil(box.y + box.height) },
+        { x: Math.ceil(box.x + box.width), y: Math.ceil(box.y + box.height) },
       ],
     },
   )
