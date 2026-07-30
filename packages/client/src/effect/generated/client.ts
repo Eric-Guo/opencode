@@ -224,6 +224,8 @@ import type {
   VcsStatusOutput,
   VcsDiffInput,
   VcsDiffOutput,
+  LspStatusInput,
+  LspStatusOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -1325,6 +1327,15 @@ const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   diff: EndpointVcsDiff(raw),
 })
 
+const EndpointLspStatus = (raw: RawClient["server.lsp"]) => (input?: LspStatusInput) =>
+  preserveEffect<LspStatusOutput>()(
+    raw["lsp.status"]({ query: { directory: input?.["directory"], workspace: input?.["workspace"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const adaptGroupLsp = (raw: RawClient["server.lsp"]) => ({ status: EndpointLspStatus(raw) })
+
 const EndpointDebugLocationList = (raw: RawClient["server.debug"]) => () =>
   preserveEffect<DebugLocationListOutput>()(raw["debug.location"]({}).pipe(Effect.mapError(mapClientError)))
 
@@ -1399,6 +1410,7 @@ const adaptClient = (raw: RawClient) => ({
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),
   vcs: adaptGroupVcs(raw["server.vcs"]),
+  lsp: adaptGroupLsp(raw["server.lsp"]),
   debug: adaptGroupDebug(raw["server.debug"]),
   migration: adaptGroupMigration(raw["server.migration"]),
   websearch: adaptGroupWebsearch(raw["server.websearch"]),
