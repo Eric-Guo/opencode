@@ -874,7 +874,7 @@ describe("CodeMode public contract", () => {
     if (!escaped.ok) expect(escaped.error.kind).toBe("InvalidDataValue")
   })
 
-  test("search defaults to 10 results and resolves exact tool paths", async () => {
+  test("browse queries list all tools while ranked search defaults to 10 results", async () => {
     const tool = (index: number) =>
       Tool.make({
         description: `Numbered tool ${index}`,
@@ -888,10 +888,25 @@ describe("CodeMode public contract", () => {
       },
     })
 
-    const browse = await Effect.runPromise(runtime.execute(`return search({})`))
-    expect(browse.ok).toBe(true)
-    if (browse.ok) {
-      const value = browse.value as {
+    for (const query of ["", "all", " ALL "]) {
+      const browse = await Effect.runPromise(runtime.execute(`return search({ query: ${JSON.stringify(query)} })`))
+      expect(browse.ok).toBe(true)
+      if (browse.ok) {
+        const value = browse.value as {
+          items: Array<{ path: string }>
+          remaining: number
+          next: { offset: number } | null
+        }
+        expect(value.items).toHaveLength(14)
+        expect(value.remaining).toBe(0)
+        expect(value.next).toBeNull()
+      }
+    }
+
+    const ranked = await Effect.runPromise(runtime.execute(`return search({ query: "numbered" })`))
+    expect(ranked.ok).toBe(true)
+    if (ranked.ok) {
+      const value = ranked.value as {
         items: Array<{ path: string }>
         remaining: number
         next: { offset: number } | null
