@@ -11,6 +11,7 @@ const Color = Schema.Union([
 
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
+    name: Schema.optional(Schema.String),
     model: Schema.optional(Schema.String),
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
