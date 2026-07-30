@@ -18,6 +18,7 @@ import { createPresence } from "@/runtime/presence"
 import { Composer } from "@/composer/composer"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { ComposerModel } from "@/composer/model"
+import { StartupSplashBackground } from "@/new-session/splash"
 import {
   PromptProjectAddButton,
   type PromptProject,
@@ -30,7 +31,6 @@ import { useProviders } from "@/providers/catalog/providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
-import { useSettings } from "@/settings/model"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
 import {
   CHECKOUT_PLACEHOLDER_DELAY_MS,
@@ -40,16 +40,6 @@ import {
   type CheckoutLabelEvent,
 } from "./workspace/checkout-machine"
 import { NewSessionBranch } from "./workspace/selector"
-import { NewSessionBrickBreaker } from "./brick-breaker"
-import { NewSessionPinBoard } from "./pin-board"
-import { NewSessionWordmark } from "./wordmark"
-import {
-  createWordmarkState,
-  selectBrickBreaker,
-  selectPinBoard,
-  transitionWordmark,
-  type WordmarkEvent,
-} from "./wordmark-machine"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
@@ -73,19 +63,6 @@ export function NewSessionView(props: {
     { used: false },
   )
 
-  const settings = useSettings()
-
-  const [wordmark, setWordmark] = createSignal(createWordmarkState(false))
-  const [logo, setLogo] = createSignal<HTMLDivElement>()
-
-  const dispatchWordmark = (event: WordmarkEvent) =>
-    untrack(() => {
-      const next = transitionWordmark(wordmark(), event)
-      setWordmark(next.state)
-
-      if (next.effects.some((effect) => effect.type === "focus.composer")) props.composer.restoreFocus()
-    })
-
   const location = (project?: PromptProject, step?: "worktrees" | "branches") =>
     props.location({
       project,
@@ -99,28 +76,16 @@ export function NewSessionView(props: {
 
   const onboardingVisible = () => onboardingReady() && !onboarding.used && props.workspace.bar.visible()
 
-  let panel!: HTMLDivElement
-
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
-      <div
-        ref={panel}
-        data-component="new-session"
-        class="relative isolate flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
-      >
+      <div data-component="new-session" class="relative isolate flex-1 min-h-0 overflow-hidden">
+        <StartupSplashBackground />
         <ComposerDropzone
           active={props.composer.state.drag === "active"}
           input={props.composer.model.selection.current()?.capabilities.input}
         />
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div class="absolute inset-x-0 top-[40%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <NewSessionWordmark
-              ref={setLogo}
-              state={wordmark}
-              onEvent={dispatchWordmark}
-              play
-              sound={settings.sounds.interfaceEnabled}
-            />
             <div class="mt-8 flex flex-col gap-3">
               <div data-slot="new-session-composer" class="flex flex-col gap-1">
                 <div class="relative z-10">
@@ -152,28 +117,6 @@ export function NewSessionView(props: {
             </div>
           </div>
         </div>
-        <Show when={selectPinBoard(wordmark(), logo())}>
-          {(board) => (
-            <NewSessionPinBoard
-              logo={board().logo}
-              sound={settings.sounds.interfaceEnabled}
-              entrance={board().entrance}
-              closing={board().closing}
-              ref={(handle) => dispatchWordmark({ type: "board.mounted", board: handle })}
-            />
-          )}
-        </Show>
-        <Show when={selectBrickBreaker(wordmark())}>
-          {(game) => (
-            <NewSessionBrickBreaker
-              panel={panel}
-              board={game().board}
-              ball={game().ball}
-              sound={settings.sounds.interfaceEnabled}
-              onDone={() => dispatchWordmark({ type: "game.done" })}
-            />
-          )}
-        </Show>
         <NewSessionTips selection={props.composer.model.selection} onDone={props.composer.restoreFocus} />
       </div>
     </div>
