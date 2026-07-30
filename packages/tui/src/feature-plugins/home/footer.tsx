@@ -1,13 +1,12 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { stringWidth } from "../../util/string-width"
 import { FadeFilePath } from "../../ui/fade-file-path"
 
 function Directory(props: { context: Plugin.Context; maxWidth: number }) {
-  const directory = createMemo(() =>
-    props.context.location ? props.context.ui.format.path(props.context.location.directory) : undefined,
-  )
+  const directory = () =>
+    props.context.location ? props.context.ui.format.path(props.context.location.directory) : undefined
 
   return (
     <FadeFilePath
@@ -20,9 +19,9 @@ function Directory(props: { context: Plugin.Context; maxWidth: number }) {
 }
 
 function Mcp(props: { context: Plugin.Context }) {
-  const list = createMemo(() => props.context.data.location.mcp.server.list(props.context.location) ?? [])
-  const failed = createMemo(() => list().some((item) => item.status.status === "failed"))
-  const count = createMemo(() => list().filter((item) => item.status.status === "connected").length)
+  const list = () => props.context.data.location.mcp.server.list(props.context.location) ?? []
+  const failed = () => list().some((item) => item.status.status === "failed")
+  const count = () => list().filter((item) => item.status.status === "connected").length
 
   return (
     <Show when={list().length}>
@@ -53,13 +52,13 @@ function Mcp(props: { context: Plugin.Context }) {
 
 function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const user = createMemo(() => Bun.env.THAPE_SSO_USER_NAME ?? props.context.app.version)
-  const mcpWidth = createMemo(() => {
+  const user = process.env.THAPE_SSO_USER_NAME ?? props.context.app.version
+  const mcpWidth = () => {
     const list = props.context.data.location.mcp.server.list(props.context.location) ?? []
     if (list.length === 0) return 0
     const count = list.filter((item) => item.status.status === "connected").length
     return stringWidth(`⊙ ${count} MCP /status`) + 2
-  })
+  }
 
   return (
     <box
@@ -74,12 +73,12 @@ function View(props: { context: Plugin.Context }) {
     >
       <Directory
         context={props.context}
-        maxWidth={Math.max(2, dimensions().width - 8 - stringWidth(user()) - mcpWidth())}
+        maxWidth={Math.max(2, dimensions().width - 8 - stringWidth(user) - mcpWidth())}
       />
       <Mcp context={props.context} />
       <box flexGrow={1} />
       <box flexShrink={0}>
-        <text fg={props.context.theme.text.subdued}>{user()}</text>
+        <text fg={props.context.theme.text.subdued}>{user}</text>
       </box>
     </box>
   )
