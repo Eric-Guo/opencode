@@ -151,7 +151,8 @@ a standalone tool. Hosts render their own model-facing instructions from these d
 `CodeMode.searchSignatureFor(name)` and `CodeMode.toolExpression(path)` supply the exact callable forms.
 
 Inside an execution, the synchronous `search(...)` built-in is always available. It supports exact-path lookup,
-namespace-scoped search, empty-query browsing, and pagination, and returns callable paths with full signatures. Calls
+namespace-scoped search, and pagination, and returns callable paths with full signatures. A query of `""` or `"all"`
+lists every tool in the selected namespace unless an explicit `limit` is supplied. Calls
 to the built-in count toward `maxToolCalls`; host calls to `runtime.search(...)` do not execute a Code Mode program.
 
 ## Execution Limits
