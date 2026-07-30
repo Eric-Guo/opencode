@@ -11,6 +11,8 @@ import type { ReferenceInfo } from "@opencode/client/promise"
 import type { CommandInfo, McpResource } from "@opencode/client/promise"
 import { ProjectState } from "../persistence"
 
+export type AppAgent = Agent & { displayName?: string }
+
 export type ProjectMeta = NonNullable<typeof ProjectState.Type.value>
 
 export type GlobalStore = {
@@ -21,7 +23,7 @@ export type GlobalStore = {
 }
 
 export type State = {
-  agent: Agent[]
+  agent: AppAgent[]
   command: CommandInfo[]
   reference: ReferenceInfo[]
   project: string
