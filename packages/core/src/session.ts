@@ -15,6 +15,7 @@ import { Bus } from "./bus"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
 import { SessionMessageTable, SessionTable } from "./session/sql"
+import { LegacyMessage } from "./session/legacy-message"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { Agent } from "./agent"
@@ -488,7 +489,7 @@ const layer = Layer.effect(
               .get()
               .pipe(Effect.orDie)
           : undefined
-        if (input.cursor && !anchor) return []
+        if (input.cursor && !anchor) return yield* LegacyMessage.list(db, input)
         const boundary = anchor
           ? order === "asc"
             ? gt(SessionMessageTable.seq, anchor.seq)
@@ -505,7 +506,9 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
+        if (rows.length > 0) return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
+        if (anchor) return []
+        return yield* LegacyMessage.list(db, input)
       }),
       message: Effect.fn("Session.message")(function* (input) {
         const stored = yield* store.message(input.messageID)

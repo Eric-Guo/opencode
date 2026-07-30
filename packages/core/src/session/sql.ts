@@ -18,8 +18,9 @@ import type { RevertV1 } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
-type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
-type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
+type OmitEach<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+type V1MessageData = OmitEach<SessionV1.Info, "id" | "sessionID">
+type V1PartData = OmitEach<SessionV1.Part, "id" | "sessionID" | "messageID">
 
 export const SessionTable = sqliteTable(
   "session",
