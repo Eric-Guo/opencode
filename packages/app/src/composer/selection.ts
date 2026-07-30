@@ -28,7 +28,7 @@ export function createComposerControls(input: { sessionKey: Accessor<string>; mo
     return {
       agents: {
         available: normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []),
-        options: local.agent.list().map((agent) => agent.name),
+        options: local.agent.list().map((agent) => ({ id: agent.name, label: agent.displayName ?? agent.name })),
         current: local.agent.current()?.name ?? "",
         visible: local.agent.visible(),
         select: local.agent.set,

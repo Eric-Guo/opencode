@@ -7,8 +7,8 @@ import type { createComposerSubmission } from "./submission-state"
 
 export type ComposerControls = {
   agents: {
-    available: { name: string; hidden?: boolean; mode: string }[]
-    options: string[]
+    available: { name: string; displayName?: string; hidden?: boolean; mode: string }[]
+    options: { id: string; label: string }[]
     current: string
     visible: boolean
     select: (name: string | undefined) => void

@@ -348,7 +348,7 @@ export function createComposerModel(adapter: ComposerAdapter): ComposerModel {
         const agents = adapter.controls().agents
         return agents.visible && agents.options.length > 0
           ? {
-              options: () => adapter.controls().agents.options.map((name) => ({ id: name, label: name })),
+              options: () => adapter.controls().agents.options,
               current: () => adapter.controls().agents.current,
               onSelect: (value: string) => adapter.controls().agents.select(value),
               keybind: () => command.keybindParts("agent.cycle"),
