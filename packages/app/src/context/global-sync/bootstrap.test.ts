@@ -131,9 +131,33 @@ describe("bootstrapDirectory", () => {
     expect(mcpReads.sort()).toEqual(["command", "resource", "status"])
   })
 
-  test("does not call the legacy directory config endpoint for v2 servers", async () => {
+  test("refreshes cached agents without calling the legacy config endpoint for v2 servers", async () => {
     const configReads: string[] = []
+    const agentReads: string[] = []
     const [store, setStore] = directoryState()
+    const queryClient = new QueryClient()
+    queryClient.setQueryData([ServerScope.local, "/project", "agents"], [])
+    const currentApi = {
+      ...api,
+      agent: {
+        list: async () => {
+          agentReads.push("agent")
+          return {
+            location: {},
+            data: [
+              {
+                id: "xiaotian",
+                name: "小天",
+                mode: "primary",
+                hidden: false,
+                request: { settings: {}, headers: {}, body: {} },
+                permissions: [],
+              },
+            ],
+          }
+        },
+      },
+    } as unknown as ServerApi
 
     await bootstrapDirectory({
       directory: "/project",
@@ -153,19 +177,21 @@ describe("bootstrapDirectory", () => {
           },
         },
       } as unknown as LegacyCapabilities,
-      api,
+      api: currentApi,
       store,
       setStore,
       vcsCache: { setStore() {} } as unknown as VcsCache,
       loadSessions() {},
       translate: (key) => key,
-      queryClient: new QueryClient(),
+      queryClient,
       protocol: Promise.resolve("v2"),
     })
 
     await new Promise((resolve) => setTimeout(resolve, 80))
 
     expect(configReads).toEqual([])
+    expect(agentReads).toEqual(["agent"])
+    expect(store.agent[0]).toMatchObject({ name: "xiaotian", displayName: "小天", native: false })
     expect(store.status).toBe("complete")
   })
 })
