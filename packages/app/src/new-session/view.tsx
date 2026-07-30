@@ -1,12 +1,12 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Wordmark } from "@opencode-ai/ui/wordmark"
 import { Show, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import createPresence from "solid-presence"
 import { Composer } from "@/composer/composer"
 import type { ComposerModel } from "@/composer/model"
+import { StartupSplashBackground } from "@/new-session/splash"
 import { PromptGitStatus, PromptWorkspaceSelector } from "@/new-session/workspace/selector"
 import {
   PromptProjectAddButton,
@@ -40,13 +40,10 @@ export function NewSessionView(props: {
 
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
-      <div
-        data-component="new-session"
-        class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-deep"
-      >
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+      <div data-component="new-session" class="relative isolate flex-1 min-h-0 overflow-hidden">
+        <StartupSplashBackground />
+        <div class="absolute inset-x-0 top-[40%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <Wordmark class="h-auto w-full text-v2-background-bg-inverse" />
             <div class="mt-8 flex flex-col gap-8">
               <Composer model={props.composer} />
               <Show when={props.project.empty()}>
