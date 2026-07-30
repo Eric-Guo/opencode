@@ -9,6 +9,7 @@ import { ConfigProvider } from "./provider.js"
 export const Color = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))
 
 export class Info extends Schema.Class<Info>("Config.Agent")({
+  name: Schema.String.pipe(optional),
   model: ConfigModel.Selection.pipe(optional),
   request: ConfigProvider.Request.pipe(optional),
   system: Schema.String.pipe(optional),
