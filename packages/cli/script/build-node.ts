@@ -32,6 +32,7 @@ const allTargets = [
   nodeTarget("linux", "arm64"),
   nodeTarget("linux", "x64"),
   nodeTarget("darwin", "arm64"),
+  nodeTarget("darwin", "x64"),
   nodeTarget("win32", "arm64"),
   nodeTarget("win32", "x64"),
 ]
@@ -39,13 +40,13 @@ const targets = requested
   ? allTargets.filter((target) => targetName(target) === requested)
   : single || bundleOnly
     ? [nodeTarget(process.platform, process.arch)]
-    : allTargets
+    : allTargets.filter((target) => target.platform !== "darwin" || target.arch !== "x64")
 
 if (targets.length === 0) {
   if (requested === "darwin-x64") throw new Error("Node 26.4 SEA does not support macOS x64")
   throw new Error(`Unknown Node target: ${requested}`)
 }
-if (!bundleOnly && targets.some((target) => target.platform === "darwin" && target.arch === "x64")) {
+if (!bundleOnly && !sidecarOnly && targets.some((target) => target.platform === "darwin" && target.arch === "x64")) {
   throw new Error("Node 26.4 SEA does not support macOS x64")
 }
 
