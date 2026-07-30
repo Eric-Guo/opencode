@@ -360,7 +360,7 @@ export async function bootstrapDirectory(input: {
       () => Promise.resolve(input.loadSessions(input.directory)),
       () =>
         input.queryClient
-          .ensureQueryData(loadAgentsQuery(input.scope, input.directory, input.api.agent))
+          .fetchQuery(loadAgentsQuery(input.scope, input.directory, input.api.agent))
           .then((data) => input.setStore("agent", data)),
       (await input.protocol) === "v1" &&
         (() =>
