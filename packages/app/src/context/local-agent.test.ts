@@ -1,14 +1,33 @@
 import { describe, expect, test } from "bun:test"
-import { hasCustomAgent, resolveAgent } from "./local-agent"
+import { hasCustomAgent, isNativeAgentID, resolveAgent } from "./local-agent"
 
 describe("hasCustomAgent", () => {
   test("detects explicitly custom agents", () => {
-    expect(hasCustomAgent([{ native: true }, { native: false }])).toBe(true)
+    expect(
+      hasCustomAgent([
+        { name: "build", native: true },
+        { name: "xiaotian", native: false },
+      ]),
+    ).toBe(true)
   })
 
-  test("ignores built-in and unclassified agents", () => {
-    expect(hasCustomAgent([{ native: true }, {}])).toBe(false)
+  test("ignores built-in agents when metadata is missing", () => {
+    expect(
+      hasCustomAgent([
+        { name: "build", native: true },
+        { name: "plan" },
+      ]),
+    ).toBe(false)
   })
+
+  test("detects custom agents when metadata is missing", () => {
+    expect(hasCustomAgent([{ name: "build" }, { name: "xiaotian" }])).toBe(true)
+  })
+})
+
+test("classifies native agent IDs", () => {
+  expect(isNativeAgentID("build")).toBe(true)
+  expect(isNativeAgentID("xiaotian")).toBe(false)
 })
 
 describe("resolveAgent", () => {
