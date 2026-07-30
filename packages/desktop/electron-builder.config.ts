@@ -12,6 +12,37 @@ const rootDir = path.resolve(packageDir, "../..")
 const thapeConfigDir = path.join(packageDir, "resources", "thape-config")
 const generatedDir = path.join(packageDir, "out", "generated")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
+const windowsNativeExclusions = [
+  "@ff-labs/fff-bin-android-arm64",
+  "@ff-labs/fff-bin-darwin-arm64",
+  "@ff-labs/fff-bin-darwin-x64",
+  "@ff-labs/fff-bin-linux-arm64-gnu",
+  "@ff-labs/fff-bin-linux-arm64-musl",
+  "@ff-labs/fff-bin-linux-x64-gnu",
+  "@ff-labs/fff-bin-linux-x64-musl",
+  "@lydell/node-pty-darwin-arm64",
+  "@lydell/node-pty-darwin-x64",
+  "@lydell/node-pty-linux-arm64",
+  "@lydell/node-pty-linux-x64",
+  "@parcel/watcher-android-arm64",
+  "@parcel/watcher-darwin-arm64",
+  "@parcel/watcher-darwin-x64",
+  "@parcel/watcher-freebsd-x64",
+  "@parcel/watcher-linux-arm-glibc",
+  "@parcel/watcher-linux-arm-musl",
+  "@parcel/watcher-linux-arm64-glibc",
+  "@parcel/watcher-linux-arm64-musl",
+  "@parcel/watcher-linux-x64-glibc",
+  "@parcel/watcher-linux-x64-musl",
+  "@yuuang/ffi-rs-android-arm64",
+  "@yuuang/ffi-rs-darwin-arm64",
+  "@yuuang/ffi-rs-darwin-x64",
+  "@yuuang/ffi-rs-linux-arm-gnueabihf",
+  "@yuuang/ffi-rs-linux-arm64-gnu",
+  "@yuuang/ffi-rs-linux-arm64-musl",
+  "@yuuang/ffi-rs-linux-x64-gnu",
+  "@yuuang/ffi-rs-linux-x64-musl",
+].map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
 // "opencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
 // pins still resolve after the canonical app id changes back to ai.opencode.desktop.
@@ -134,6 +165,7 @@ const getBase = (appId: string): Configuration => ({
   },
   win: {
     icon: `${iconDir}/icon.ico`,
+    files: windowsNativeExclusions,
     signtoolOptions: {
       sign: signWindows,
     },
