@@ -18,6 +18,8 @@ Write a JavaScript orchestration script in the standalone \`execute\` tool's \`c
 
 Call standalone \`tool_search\`, then use its returned \`tools...\` expression inside \`execute\` code. Inside that code, search with \`search(...)\`, not \`tools.search(...)\`:
 
+Use query \`""\` or \`"all"\` to list every available tool.
+
 - ${searchSignatureFor("tool_search")}` : ""}
 
 ## Available tools`

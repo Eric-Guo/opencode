@@ -373,14 +373,15 @@ export const discover = (
             entry.description.path === request.namespace || entry.description.path.startsWith(`${request.namespace}.`),
         )
   const trimmed = query.trim()
-  const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
+  const browse = trimmed === "" || trimmed.toLowerCase() === "all"
+  const pathQuery = browse ? "" : trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
   const exact =
     pathQuery === ""
       ? undefined
       : scoped.find(
           (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
         )
-  const terms = tokenize(query).map(termForms)
+  const terms = browse ? [] : tokenize(query).map(termForms)
   const ranked =
     exact !== undefined
       ? [exact]
@@ -405,7 +406,8 @@ export const discover = (
               right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
           )
           .map(({ entry }) => entry)
-  const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
+  const limit = request.limit ?? (browse ? ranked.length : defaultSearchLimit)
+  const items = ranked.slice(offset, offset + limit).map(({ description }) => ({
     ...description,
     path: toolExpression(description.path),
   }))
@@ -419,7 +421,7 @@ export const discover = (
 
 const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
   _tag: "CodeModeTool",
-  description: "Search available tools",
+  description: 'Search available tools. Use query "" or "all" to list every available tool.',
   input: SearchInput,
   output: SearchOutput,
   execute: (input) => Effect.sync(() => discover(searchIndex, input as typeof SearchInput.Type)),
