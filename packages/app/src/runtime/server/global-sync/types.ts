@@ -5,11 +5,13 @@ import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import { IconState, ProjectState, VcsState } from "../persistence"
 
+export type AppAgent = Agent & { displayName?: string }
+
 export type ProjectMeta = NonNullable<typeof ProjectState.Type.value>
 
 export type State = {
   status: "loading" | "partial" | "complete"
-  agent: Agent[]
+  agent: AppAgent[]
   command: CommandInfo[]
   reference: ReferenceInfo[]
   project: string
