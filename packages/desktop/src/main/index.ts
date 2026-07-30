@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { mkdirSync, rmSync } from "node:fs"
+import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
@@ -24,7 +25,13 @@ import {
   isFirstLaunchOnboardingPending,
   isOldLayoutEligible,
 } from "./onboarding"
-import { getDefaultServerUrl, preferAppEnv, setDefaultServerUrl } from "./server"
+import {
+  getDefaultServerUrl,
+  preferAppEnv,
+  setDefaultServerUrl,
+  spawnLocalServer,
+  type SidecarListener,
+} from "./server"
 import { registerUpdaterIpc, setupAutoUpdater, showUpdaterDialog } from "./updater"
 import { safeWebContentsURL } from "./window-state"
 import {
@@ -39,7 +46,6 @@ import {
 import { registerWslIpcHandlers } from "./wsl/ipc"
 import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
-import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
 import { configureNodeProxyFromEnv, configureProxyCommandLine, configureSessionProxy } from "./proxy"
 import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
@@ -58,6 +64,7 @@ const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
+let localServer: SidecarListener | null = null
 
 const pendingDeepLinks: string[] = []
 
@@ -75,6 +82,32 @@ function emitDeepLinks(urls: string[]) {
   pendingDeepLinks.push(...urls)
   const win = getLastFocusedWindow()
   if (win) sendDeepLinks(win, urls)
+}
+
+async function killSidecar() {
+  if (!localServer) return
+  const current = localServer
+  localServer = null
+  await current.stop()
+}
+
+function getSidecarPort() {
+  const configured = Number.parseInt(process.env.OPENCODE_PORT ?? "", 10)
+  if (!Number.isNaN(configured)) return Promise.resolve(configured)
+
+  return new Promise<number>((resolve, reject) => {
+    const listener = createServer()
+    listener.on("error", reject)
+    listener.listen(0, "127.0.0.1", () => {
+      const address = listener.address()
+      if (typeof address !== "object" || !address) {
+        listener.close()
+        reject(new Error("Failed to get sidecar port"))
+        return
+      }
+      listener.close(() => resolve(address.port))
+    })
+  })
 }
 
 function ensureLoopbackNoProxy() {
@@ -149,9 +182,13 @@ const main = Effect.gen(function* () {
   initCrashReporter()
 
   let stopWslServers = async () => {}
+  const stopSidecars = async () => {
+    await killSidecar()
+    await stopWslServers()
+  }
   const relaunch = () => {
     setAppQuitting()
-    void stopWslServers().finally(() => {
+    void stopSidecars().finally(() => {
       app.relaunch()
       app.quit()
     })
@@ -211,12 +248,12 @@ const main = Effect.gen(function* () {
 
   app.on("before-quit", () => {
     setAppQuitting()
-    void stopWslServers()
+    void stopSidecars()
   })
 
   app.on("will-quit", () => {
     setAppQuitting()
-    void stopWslServers()
+    void stopSidecars()
   })
 
   app.on("child-process-gone", (_event, details) => {
@@ -234,7 +271,7 @@ const main = Effect.gen(function* () {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
       setAppQuitting()
-      void stopWslServers().finally(() => app.quit())
+      void stopSidecars().finally(() => app.quit())
     })
   }
 
@@ -266,7 +303,7 @@ const main = Effect.gen(function* () {
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
-  const updater = setupAutoUpdater(() => stopWslServers())
+  const updater = setupAutoUpdater(stopSidecars)
   const menuDeps = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -276,7 +313,7 @@ const main = Effect.gen(function* () {
     relaunch,
   }
   registerIpcHandlers({
-    killSidecar: () => undefined,
+    killSidecar,
     relaunch,
     awaitInitialization: Effect.fnUntraced(
       function* () {
@@ -325,19 +362,56 @@ const main = Effect.gen(function* () {
     ),
   )
 
+  const port = yield* Effect.promise(getSidecarPort)
+  const hostname = "127.0.0.1"
+  const url = `http://${hostname}:${port}`
+  const password = randomUUID()
+
   const loadingTask = yield* Effect.gen(function* () {
+    logger.log("sidecar connection started", { url })
+
     ensureLoopbackNoProxy()
     useEnvProxy()
 
-    logger.log("starting v2 background service")
-    const background = yield* Effect.promise(() => startBackgroundCli(logger))
-    stopWslServers = yield* Effect.promise(() => startWslServers(background))
-
+    logger.log("spawning embedded sidecar", { url, node: process.versions.node })
+    const spawned = yield* Effect.promise(() =>
+      spawnLocalServer(hostname, port, password, {
+        userDataPath: app.getPath("userData"),
+        onStdout: (message) => writeLog("server", "stdout", { message }),
+        onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
+        onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
+      }),
+    )
+    localServer = spawned.listener
+    stopWslServers = yield* Effect.promise(() =>
+      startWslServers({
+        version: process.env.OPENCODE_VERSION ?? VERSION,
+        wslBuild:
+          app.isPackaged || !process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD || !process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT
+            ? undefined
+            : {
+                script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD,
+                output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT,
+              },
+      }),
+    )
     yield* Deferred.succeed(serverReady, {
-      url: background.url,
-      username: background.username,
-      password: background.password,
+      url,
+      username: "opencode",
+      password,
+      ...(process.env.THAPE_SSO_BEARER_API_KEY
+        ? { ssoJwtSecretKey: process.env.THAPE_SSO_BEARER_API_KEY }
+        : {}),
     })
+
+    yield* Effect.promise(() => spawned.health.wait).pipe(
+      Effect.timeout("30 seconds"),
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          logger.error("sidecar health check failed", String(error))
+        }),
+      ),
+    )
 
     logger.log("loading task finished")
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
