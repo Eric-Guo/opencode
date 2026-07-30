@@ -1,5 +1,6 @@
 import type { Session } from "@/types"
-import type { PermissionRequest, QuestionRequest } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest } from "@opencode-ai/client/promise"
+import { isQuestionForm } from "@/utils/question-form"
 
 function sessionTreeRequest<T>(
   session: Session[],
@@ -43,11 +44,11 @@ export function sessionPermissionRequest(
   return sessionTreeRequest(session, request, sessionID, include)
 }
 
-export function sessionQuestionRequest(
+export function sessionQuestionForm(
   session: Session[],
-  request: Record<string, QuestionRequest[] | undefined>,
+  request: Record<string, FormInfo[] | undefined>,
   sessionID?: string,
-  include?: (item: QuestionRequest) => boolean,
 ) {
-  return sessionTreeRequest(session, request, sessionID, include)
+  const form = sessionTreeRequest(session, request, sessionID, isQuestionForm)
+  if (form && isQuestionForm(form)) return form
 }
