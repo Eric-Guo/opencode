@@ -26,7 +26,7 @@ export function sidecarConfig(input: NodeBuildInput): UserConfig {
     ssr: { noExternal: true },
     build: {
       ssr: "src/node/sidecar.ts",
-      target: "node26",
+      target: "node24",
       outDir: "dist-node",
       emptyOutDir: false,
       minify: true,
@@ -44,4 +44,5 @@ export default sidecarConfig({
   assetHash: "local",
   appArchive: "{}",
   target: nodeTarget(process.platform, process.arch),
+  appArchive: "",
 })
