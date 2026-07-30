@@ -176,7 +176,7 @@ test("keeps a hidden prod launcher for old Linux pins", async () => {
   expect(desktop).toContain("NoDisplay=true")
 })
 
-for (const channel of ["dev", "beta"] as const) {
+for (const channel of ["dev", "beta", "prod"] as const) {
   test(`bundles the CLI outside the ${channel} app archive`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel
@@ -186,12 +186,36 @@ for (const channel of ["dev", "beta"] as const) {
     else process.env.OPENCODE_CHANNEL = previous
 
     expect(config.files).toContain("!resources/opencode-cli*")
-    expect(config.extraResources).toEqual([
-      {
-        from: "resources/",
-        to: "",
-        filter: ["opencode-cli", "opencode-cli.exe"],
-      },
-    ])
+    expect(config.extraResources).toContainEqual({
+      from: "resources/",
+      to: "",
+      filter: ["opencode-cli", "opencode-cli.exe"],
+    })
   })
 }
+
+test("excludes non-Windows native dependencies from Windows builds", async () => {
+  const module = await import("./electron-builder.config.ts?windows-native-dependencies")
+  const config = module.default as Configuration
+
+  expect(config.win?.files).toEqual(
+    expect.arrayContaining([
+      "!**/node_modules/@ff-labs/fff-bin-darwin-arm64{,/**/*}",
+      "!**/node_modules/@lydell/node-pty-linux-x64{,/**/*}",
+      "!**/node_modules/@parcel/watcher-android-arm64{,/**/*}",
+      "!**/node_modules/@yuuang/ffi-rs-linux-arm64-gnu{,/**/*}",
+    ]),
+  )
+  ;[
+    "@ff-labs/fff-bin-win32-arm64",
+    "@ff-labs/fff-bin-win32-x64",
+    "@lydell/node-pty-win32-arm64",
+    "@lydell/node-pty-win32-x64",
+    "@parcel/watcher-win32-arm64",
+    "@parcel/watcher-win32-x64",
+    "@yuuang/ffi-rs-win32-arm64-msvc",
+    "@yuuang/ffi-rs-win32-x64-msvc",
+  ].forEach((packageName) =>
+    expect(config.win?.files).not.toContain(`!**/node_modules/${packageName}{,/**/*}`),
+  )
+})
