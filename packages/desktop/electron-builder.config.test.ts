@@ -73,6 +73,32 @@ test("bundles the CLI outside the dev app archive", async () => {
   })
 })
 
+test("excludes non-Windows native dependencies from Windows builds", async () => {
+  const module = await import("./electron-builder.config.ts?windows-native-dependencies")
+  const config = module.default as Configuration
+
+  expect(config.win?.files).toEqual(
+    expect.arrayContaining([
+      "!**/node_modules/@ff-labs/fff-bin-darwin-arm64{,/**/*}",
+      "!**/node_modules/@lydell/node-pty-linux-x64{,/**/*}",
+      "!**/node_modules/@parcel/watcher-android-arm64{,/**/*}",
+      "!**/node_modules/@yuuang/ffi-rs-linux-arm64-gnu{,/**/*}",
+    ]),
+  )
+  ;[
+    "@ff-labs/fff-bin-win32-arm64",
+    "@ff-labs/fff-bin-win32-x64",
+    "@lydell/node-pty-win32-arm64",
+    "@lydell/node-pty-win32-x64",
+    "@parcel/watcher-win32-arm64",
+    "@parcel/watcher-win32-x64",
+    "@yuuang/ffi-rs-win32-arm64-msvc",
+    "@yuuang/ffi-rs-win32-x64-msvc",
+  ].forEach((packageName) =>
+    expect(config.win?.files).not.toContain(`!**/node_modules/${packageName}{,/**/*}`),
+  )
+})
+
 for (const channel of ["beta", "prod"] as const) {
   test(`does not bundle the CLI in ${channel} builds`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
