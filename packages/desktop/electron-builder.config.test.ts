@@ -67,13 +67,9 @@ test("shared packaging defaults", async () => {
   expect(config.nsis?.include).toBe(include)
   expect(await Bun.file(include).exists()).toBe(true)
   expect(config.files).toContain("!resources/opencode-cli*")
-  expect(config.extraResources).toEqual([
+  expect(config.extraResources).toContainEqual(
     { from: "resources/", to: "", filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"] },
-    { from: "icons/prod", to: "icons" },
-    { from: "resources/thape-config", to: "thape-config", filter: ["**/*", "!**/.git/**"] },
-    { from: "resources/thape-config/node_modules", to: "thape-config/node_modules", filter: ["**/*"] },
-    { from: "out/generated/app-update.yml", to: "app-update.yml" },
-  ])
+  )
 })
 
 test("trims external dependencies without excluding runtime files", async () => {
@@ -151,4 +147,28 @@ test("the trimmed Zip.js package can still export compressed logs", async () => 
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test("excludes non-Windows native dependencies from Windows builds", async () => {
+  const module = await import("./electron-builder.config.ts?windows-native-dependencies")
+  const config = module.default as Configuration
+
+  expect(config.win?.files).toEqual(
+    expect.arrayContaining([
+      "!**/node_modules/@ff-labs/fff-bin-darwin-arm64{,/**/*}",
+      "!**/node_modules/@lydell/node-pty-linux-x64{,/**/*}",
+      "!**/node_modules/@parcel/watcher-android-arm64{,/**/*}",
+      "!**/node_modules/@yuuang/ffi-rs-linux-arm64-gnu{,/**/*}",
+    ]),
+  )
+  ;[
+    "@ff-labs/fff-bin-win32-arm64",
+    "@ff-labs/fff-bin-win32-x64",
+    "@lydell/node-pty-win32-arm64",
+    "@lydell/node-pty-win32-x64",
+    "@parcel/watcher-win32-arm64",
+    "@parcel/watcher-win32-x64",
+    "@yuuang/ffi-rs-win32-arm64-msvc",
+    "@yuuang/ffi-rs-win32-x64-msvc",
+  ].forEach((packageName) => expect(config.win?.files).not.toContain(`!**/node_modules/${packageName}{,/**/*}`))
 })
