@@ -16,13 +16,15 @@ export const Info = Schema.Struct({
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  cors: Schema.optional(Schema.Array(Schema.String)),
 })
 export type Info = typeof Info.Type
 
-const keys = ["hostname", "port", "password", "env"] as const
+const keys = ["hostname", "port", "password", "env", "cors"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
+const decodeCors = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.String)))
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
 export function filename(channel = OPENCODE_CHANNEL) {
@@ -164,6 +166,9 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string, 
       const env = (yield* read()).env ?? {}
       return name === undefined ? JSON.stringify(env, null, 2) : (env[name] ?? "")
     }
+    case "cors": {
+      return JSON.stringify((yield* read()).cors ?? [])
+    }
   }
   throw new Error(`Unknown service config key: ${key}`)
 })
@@ -195,6 +200,15 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
       yield* Service.stop(yield* options())
       const existing = yield* read()
       yield* write({ ...existing, env: { ...existing.env, [value]: nestedValue } })
+      return
+    }
+    case "cors": {
+      const cors = yield* decodeCors(value).pipe(Effect.mapError(() => new Error("CORS must be a JSON string array")))
+      const existing = yield* read()
+      const current = existing.cors ?? []
+      if (current.length === cors.length && current.every((origin, index) => origin === cors[index])) return
+      yield* Service.stop(yield* options())
+      yield* write({ ...existing, cors })
       return
     }
   }
@@ -229,6 +243,12 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
       const { [name]: _removed, ...env } = existing.env ?? {}
       const { env: _existingEnv, ...rest } = existing
       yield* write(Object.keys(env).length === 0 ? rest : { ...rest, env })
+      return
+    }
+    case "cors": {
+      yield* Service.stop(yield* options())
+      const { cors: _cors, ...next } = yield* read()
+      yield* write(next)
       return
     }
   }
