@@ -29,6 +29,6 @@ if (built) await copyBuiltCliToResources(cli)
 
 if (!built) await downloadCliToResources(channel === "beta" ? "beta" : undefined)
 
-await $`bunx electron-vite build`
+await $`bunx electron-vite build`.env({ ...process.env, NODE_OPTIONS: "--max-old-space-size=16384" })
 
 await verifyBundles(path.join(dir, "out"))
