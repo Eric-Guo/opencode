@@ -30,7 +30,7 @@ export function createPromptInputController(input: {
     return {
       agents: {
         available: normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []),
-        options: local.agent.list().map((agent) => agent.name),
+        options: local.agent.list().map((agent) => ({ id: agent.name, label: agent.displayName ?? agent.name })),
         current: local.agent.current()?.name ?? "",
         loading: data.location.agent.list({ directory: sdk().directory }) === undefined,
         visible: local.agent.visible(),
