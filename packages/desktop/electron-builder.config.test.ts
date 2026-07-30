@@ -57,35 +57,61 @@ test("keeps a hidden prod launcher for old Linux pins", async () => {
   expect(desktop).toContain("NoDisplay=true")
 })
 
-for (const channel of ["dev", "beta"] as const) {
-  test(`bundles the CLI outside the ${channel} app archive`, async () => {
+test("bundles the CLI outside the dev app archive", async () => {
+  const previous = process.env.OPENCODE_CHANNEL
+  process.env.OPENCODE_CHANNEL = "dev"
+  const module = await import("./electron-builder.config.ts?cli-resource")
+  const config = module.default as Configuration
+  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+  else process.env.OPENCODE_CHANNEL = previous
+
+  expect(config.files).toContain("!resources/opencode-cli*")
+  expect(config.extraResources).toContainEqual({
+    from: "resources/",
+    to: "",
+    filter: ["opencode-cli*"],
+  })
+})
+
+test("excludes non-Windows native dependencies from Windows builds", async () => {
+  const module = await import("./electron-builder.config.ts?windows-native-dependencies")
+  const config = module.default as Configuration
+
+  expect(config.win?.files).toEqual(
+    expect.arrayContaining([
+      "!**/node_modules/@ff-labs/fff-bin-darwin-arm64{,/**/*}",
+      "!**/node_modules/@lydell/node-pty-linux-x64{,/**/*}",
+      "!**/node_modules/@parcel/watcher-android-arm64{,/**/*}",
+      "!**/node_modules/@yuuang/ffi-rs-linux-arm64-gnu{,/**/*}",
+    ]),
+  )
+  ;[
+    "@ff-labs/fff-bin-win32-arm64",
+    "@ff-labs/fff-bin-win32-x64",
+    "@lydell/node-pty-win32-arm64",
+    "@lydell/node-pty-win32-x64",
+    "@parcel/watcher-win32-arm64",
+    "@parcel/watcher-win32-x64",
+    "@yuuang/ffi-rs-win32-arm64-msvc",
+    "@yuuang/ffi-rs-win32-x64-msvc",
+  ].forEach((packageName) =>
+    expect(config.win?.files).not.toContain(`!**/node_modules/${packageName}{,/**/*}`),
+  )
+})
+
+for (const channel of ["beta", "prod"] as const) {
+  test(`does not bundle the CLI in ${channel} builds`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel
-    const module = await import(`./electron-builder.config.ts?cli-resource=${channel}`)
+    const module = await import(`./electron-builder.config.ts?no-cli-resource=${channel}`)
     const config = module.default as Configuration
     if (previous === undefined) delete process.env.OPENCODE_CHANNEL
     else process.env.OPENCODE_CHANNEL = previous
 
-    expect(config.files).toContain("!resources/opencode-cli*")
-    expect(config.extraResources).toContainEqual({
+    expect(config.extraResources).not.toContainEqual({
       from: "resources/",
       to: "",
       filter: ["opencode-cli*"],
     })
   })
 }
-
-test("does not bundle the CLI in prod builds", async () => {
-  const previous = process.env.OPENCODE_CHANNEL
-  process.env.OPENCODE_CHANNEL = "prod"
-  const module = await import("./electron-builder.config.ts?no-cli-resource=prod")
-  const config = module.default as Configuration
-  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-  else process.env.OPENCODE_CHANNEL = previous
-
-  expect(config.extraResources).not.toContainEqual({
-    from: "resources/",
-    to: "",
-    filter: ["opencode-cli*"],
-  })
-})
