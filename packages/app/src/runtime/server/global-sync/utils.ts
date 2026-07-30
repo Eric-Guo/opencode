@@ -19,6 +19,8 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
 
   return input.map((agent) => ({
     name: agent.id,
+    // The current API omits the legacy flag used to decide whether the agent selector is visible.
+    native: ["build", "plan", "general", "explore", "compaction", "title", "summary"].includes(agent.id),
     description: agent.description,
     mode: agent.mode,
     hidden: agent.hidden,
