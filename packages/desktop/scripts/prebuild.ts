@@ -1,7 +1,13 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
 
-import { buildCliToResources, copyBuiltCliToResources, downloadCliToResources, resolveChannel } from "./utils"
+import {
+  buildCliToResources,
+  buildEmbeddedSidecar,
+  copyBuiltCliToResources,
+  downloadCliToResources,
+  resolveChannel,
+} from "./utils"
 
 const channel = resolveChannel()
 if (channel === "prod" && !Bun.env.OPENCODE_CLI_DIST) {
@@ -16,4 +22,5 @@ if ((channel === "beta" || channel === "prod") && Bun.env.OPENCODE_CLI_DIST) {
   await copyBuiltCliToResources(Bun.env.OPENCODE_CLI_DIST)
 }
 if (channel === "beta" && !Bun.env.OPENCODE_CLI_DIST) await downloadCliToResources("beta")
+await buildEmbeddedSidecar()
 await $`cd ../7777 && bun run build`
