@@ -75,7 +75,11 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
-export async function downloadCliToResources(version = CLI_VERSION, dest = windowsify("resources/opencode-cli")) {
+export function getCliResourcePath(cli = getCurrentCli()) {
+  return cli.os === "win32" ? "resources/opencode-cli.exe" : "resources/opencode-cli"
+}
+
+export async function downloadCliToResources(version = CLI_VERSION, dest = getCliResourcePath()) {
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
   try {
@@ -92,9 +96,11 @@ export async function downloadCliToResources(version = CLI_VERSION, dest = windo
   console.log(`Copied ${cli.package}@${version} to ${dest}`)
 }
 
-export async function buildCliToResources(dest = windowsify("resources/opencode-cli"), stateHome?: string) {
+export async function buildCliToResources(dest?: string, stateHome?: string) {
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
   const cli = getCurrentCli()
+  const resource = dest ?? getCliResourcePath(cli)
+  if (!dest) await rm(cli.os === "win32" ? "resources/opencode-cli" : "resources/opencode-cli.exe", { force: true })
   try {
     await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} ${`--target=${cli.target}`} --skip-install --skip-web-ui --outdir=${directory}`.env(
       {
@@ -102,8 +108,8 @@ export async function buildCliToResources(dest = windowsify("resources/opencode-
         OPENCODE_VERSION: process.env.OPENCODE_VERSION,
       },
     )
-    if (stateHome && (await Bun.file(dest).exists())) {
-      const child = Bun.spawn([dest, "service", "stop"], {
+    if (stateHome && (await Bun.file(resource).exists())) {
+      const child = Bun.spawn([resource, "service", "stop"], {
         env: { ...process.env, XDG_STATE_HOME: stateHome },
         stdout: "inherit",
         stderr: "inherit",
@@ -113,14 +119,14 @@ export async function buildCliToResources(dest = windowsify("resources/opencode-
     }
     await copyFile(
       join(directory, `cli-${cli.target}`, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
-      dest,
+      resource,
     )
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
-  await prepareCli(dest)
+  await prepareCli(resource)
 
-  console.log(`Built ${cli.target} CLI at ${dest}`)
+  console.log(`Built ${cli.target} CLI at ${resource}`)
 }
 
 async function prepareCli(dest: string) {
