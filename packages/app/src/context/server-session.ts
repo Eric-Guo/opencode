@@ -1,12 +1,20 @@
 import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
-import type { OpenCodeEvent, SessionApi, SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
   Message,
   Part,
   Todo,
 } from "@/types"
-import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
+import type {
+  FileDiffInfo,
+  FormInfo,
+  OpenCodeEvent,
+  PermissionRequest,
+  SessionApi,
+  SessionInfo,
+  SessionMessageInfo,
+  SessionStatus,
+} from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { rootSession } from "@/utils/session-route"
@@ -192,7 +200,7 @@ export function createServerSession(
     session_diff: {} as Record<string, FileDiffInfo[]>,
     todo: {} as Record<string, Todo[]>,
     permission: {} as Record<string, PermissionRequest[]>,
-    question: {} as Record<string, QuestionRequest[]>,
+    form: {} as Record<string, FormInfo[]>,
     message: {} as Record<string, Message[]>,
     session_message: {} as Record<string, SessionMessageInfo[]>,
     part: {} as Record<string, Part[]>,
@@ -265,7 +273,7 @@ export function createServerSession(
         ...Object.entries(data.permission)
           .filter(([, items]) => items.length > 0)
           .map(([sessionID]) => sessionID),
-        ...Object.entries(data.question)
+        ...Object.entries(data.form)
           .filter(([, items]) => items.length > 0)
           .map(([sessionID]) => sessionID),
         ...Object.entries(data.session_status)
@@ -512,7 +520,7 @@ export function createServerSession(
       ...Object.entries(data.permission)
         .filter(([, items]) => items.length > 0)
         .map(([sessionID]) => sessionID),
-      ...Object.entries(data.question)
+      ...Object.entries(data.form)
         .filter(([, items]) => items.length > 0)
         .map(([sessionID]) => sessionID),
       ...Object.entries(data.session_status)
@@ -845,6 +853,14 @@ export function createServerSession(
       typeof properties.part.sessionID === "string"
     )
       return properties.part.sessionID
+    if (
+      "form" in properties &&
+      properties.form &&
+      typeof properties.form === "object" &&
+      "sessionID" in properties.form &&
+      typeof properties.form.sessionID === "string"
+    )
+      return properties.form.sessionID
   }
 
   const projectV2 = (reduction: V2SessionReduction) => {
@@ -1227,32 +1243,32 @@ export function createServerSession(
         )
         return
       }
-      case "question.asked": {
-        const question = event.properties as QuestionRequest
-        const questions = data.question[question.sessionID]
-        if (!questions) {
-          setData("question", question.sessionID, [question])
+      case "form.created": {
+        const form = (event.properties as { form: FormInfo }).form
+        const forms = data.form[form.sessionID]
+        if (!forms) {
+          setData("form", form.sessionID, [form])
           return
         }
-        const result = Binary.search(questions, question.id, (item) => item.id)
-        if (result.found) setData("question", question.sessionID, result.index, reconcile(question))
+        const result = Binary.search(forms, form.id, (item) => item.id)
+        if (result.found) setData("form", form.sessionID, result.index, reconcile(form))
         if (!result.found)
           setData(
-            "question",
-            question.sessionID,
-            produce((draft) => void draft.splice(result.index, 0, question)),
+            "form",
+            form.sessionID,
+            produce((draft) => void draft.splice(result.index, 0, form)),
           )
         return
       }
-      case "question.replied":
-      case "question.rejected": {
-        const props = event.properties as { sessionID: string; requestID: string }
+      case "form.replied":
+      case "form.cancelled": {
+        const props = event.properties as { sessionID: string; id: string }
         setData(
-          "question",
+          "form",
           props.sessionID,
           produce((draft) => {
             if (!draft) return
-            const result = Binary.search(draft, props.requestID, (item) => item.id)
+            const result = Binary.search(draft, props.id, (item) => item.id)
             if (result.found) draft.splice(result.index, 1)
           }),
         )

@@ -50,6 +50,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
 import { listAllSessions } from "@/utils/session"
+import { isQuestionForm } from "@/utils/question-form"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
@@ -390,45 +391,48 @@ export default function LegacyLayout(props: ParentProps) {
       }
 
       const unsub = serverSDK().event.listen((e) => {
-        if (
-          e.details?.type === "question.replied" ||
-          e.details?.type === "question.rejected" ||
-          e.details?.type === "permission.replied"
-        ) {
-          const props = e.details.properties as { sessionID: string }
-          const sessionKey = `${e.name}:${props.sessionID}`
+        const settledForm =
+          e.details?.current?.type === "form.replied" || e.details?.current?.type === "form.cancelled"
+            ? e.details.current.data
+            : undefined
+        const repliedPermission = e.details?.type === "permission.replied" ? e.details.properties : undefined
+        if (settledForm || repliedPermission) {
+          const sessionID = settledForm?.sessionID ?? repliedPermission?.sessionID
+          if (!sessionID) return
+          const sessionKey = `${e.name}:${sessionID}`
           dismissSessionAlert(sessionKey)
           return
         }
 
-        if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
-        const title =
-          e.details.type === "permission.asked"
-            ? language.t("notification.permission.title")
-            : language.t("notification.question.title")
-        const icon = e.details.type === "permission.asked" ? ("checklist" as const) : ("bubble-5" as const)
+        const form = e.details?.current?.type === "form.created" ? e.details.current.data.form : undefined
+        const askedPermission = e.details?.type === "permission.asked" ? e.details.properties : undefined
+        if (!askedPermission && (!form || !isQuestionForm(form))) return
+        const title = askedPermission
+          ? language.t("notification.permission.title")
+          : language.t("notification.question.title")
+        const icon = askedPermission ? ("checklist" as const) : ("bubble-5" as const)
         const directory = e.name
-        const props = e.details.properties
-        if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
+        const sessionID = form?.sessionID ?? askedPermission?.sessionID
+        if (!sessionID) return
+        if (askedPermission && permission.autoResponds(askedPermission, directory)) return
 
         const [store] = serverSync().child(directory, { bootstrap: false })
-        const session = store.session.find((s) => s.id === props.sessionID)
-        const sessionKey = `${directory}:${props.sessionID}`
+        const session = store.session.find((s) => s.id === sessionID)
+        const sessionKey = `${directory}:${sessionID}`
 
         const sessionTitle = session?.title ?? language.t("command.session.new")
         const projectName = getFilename(directory)
-        const description =
-          e.details.type === "permission.asked"
-            ? language.t("notification.permission.description", { sessionTitle, projectName })
-            : language.t("notification.question.description", { sessionTitle, projectName })
-        const href = `/${base64Encode(directory)}/session/${props.sessionID}`
+        const description = askedPermission
+          ? language.t("notification.permission.description", { sessionTitle, projectName })
+          : language.t("notification.question.description", { sessionTitle, projectName })
+        const href = `/${base64Encode(directory)}/session/${sessionID}`
 
         const now = Date.now()
         const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
         if (now - lastAlerted < cooldownMs) return
         alertedAtBySession.set(sessionKey, now)
 
-        if (e.details.type === "permission.asked") {
+        if (askedPermission) {
           if (settings.sounds.permissionsEnabled()) {
             void playSoundById(settings.sounds.permissions())
           }
@@ -437,14 +441,14 @@ export default function LegacyLayout(props: ParentProps) {
           }
         }
 
-        if (e.details.type === "question.asked") {
+        if (form) {
           if (settings.notifications.agent()) {
             void platform.notify(title, description, href)
           }
         }
 
         const currentSession = params.id
-        if (pathKey(directory) === pathKey(currentDir()) && props.sessionID === currentSession) return
+        if (pathKey(directory) === pathKey(currentDir()) && sessionID === currentSession) return
         if (pathKey(directory) === pathKey(currentDir()) && session?.parentID === currentSession) return
 
         dismissSessionAlert(sessionKey)
@@ -2176,7 +2180,11 @@ export default function LegacyLayout(props: ParentProps) {
                 </div>
               </div>
               <div data-component="getting-started-actions">
-                <Button size="large" icon="plus-small" onClick={() => platform.openLink("https://sso.thape.com.cn/jwts?audience=opencode&exp_hours=36000")}>
+                <Button
+                  size="large"
+                  icon="plus-small"
+                  onClick={() => platform.openLink("https://sso.thape.com.cn/jwts?audience=opencode&exp_hours=36000")}
+                >
                   {language.t("notification.permission.title")}
                 </Button>
                 <Button size="large" variant="ghost" onClick={() => setStore("gettingStartedDismissed", true)}>

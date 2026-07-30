@@ -6,7 +6,7 @@ import type {
   Project,
   Todo,
 } from "@/types"
-import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionInfo, SessionStatus } from "@opencode-ai/client/promise"
+import type { FileDiffInfo, FormInfo, PermissionRequest, SessionInfo, SessionStatus } from "@opencode-ai/client/promise"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
@@ -24,9 +24,9 @@ const SESSION_CONTENT_EVENTS = new Set([
   "message.part.delta",
   "permission.asked",
   "permission.replied",
-  "question.asked",
-  "question.replied",
-  "question.rejected",
+  "form.created",
+  "form.replied",
+  "form.cancelled",
 ])
 
 export function applyGlobalEvent(input: {
@@ -84,7 +84,7 @@ export function cleanupDroppedSessionCaches(
     ...Object.keys(store.session_diff),
     ...Object.keys(store.todo),
     ...Object.keys(store.permission),
-    ...Object.keys(store.question),
+    ...Object.keys(store.form),
     ...Object.keys(store.session_status),
     ...Object.values(store.part)
       .map((parts) => parts?.find((part) => !!part?.sessionID)?.sessionID)
@@ -424,36 +424,36 @@ export function applyDirectoryEvent(input: {
       )
       break
     }
-    case "question.asked": {
-      const question = event.properties as QuestionRequest
-      const questions = input.store.question[question.sessionID]
-      if (!questions) {
-        input.setStore("question", question.sessionID, [question])
+    case "form.created": {
+      const form = (event.properties as { form: FormInfo }).form
+      const forms = input.store.form[form.sessionID]
+      if (!forms) {
+        input.setStore("form", form.sessionID, [form])
         break
       }
-      const result = Binary.search(questions, question.id, (q) => q.id)
+      const result = Binary.search(forms, form.id, (item) => item.id)
       if (result.found) {
-        input.setStore("question", question.sessionID, result.index, reconcile(question))
+        input.setStore("form", form.sessionID, result.index, reconcile(form))
         break
       }
       input.setStore(
-        "question",
-        question.sessionID,
+        "form",
+        form.sessionID,
         produce((draft) => {
-          draft.splice(result.index, 0, question)
+          draft.splice(result.index, 0, form)
         }),
       )
       break
     }
-    case "question.replied":
-    case "question.rejected": {
-      const props = event.properties as { sessionID: string; requestID: string }
-      const questions = input.store.question[props.sessionID]
-      if (!questions) break
-      const result = Binary.search(questions, props.requestID, (q) => q.id)
+    case "form.replied":
+    case "form.cancelled": {
+      const props = event.properties as { sessionID: string; id: string }
+      const forms = input.store.form[props.sessionID]
+      if (!forms) break
+      const result = Binary.search(forms, props.id, (form) => form.id)
       if (!result.found) break
       input.setStore(
-        "question",
+        "form",
         props.sessionID,
         produce((draft) => {
           draft.splice(result.index, 1)
