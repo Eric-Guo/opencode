@@ -37,6 +37,7 @@ import type { Reference } from "@opencode-ai/schema/reference"
 import type { ProjectCopy } from "@opencode-ai/schema/project-copy"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
+import type { Lsp } from "@opencode-ai/schema/lsp"
 import type { WebSearch } from "@opencode-ai/schema/websearch"
 
 export type Endpoint0_0Output = { readonly healthy: true; readonly version: string; readonly pid: number }
@@ -1605,14 +1606,22 @@ export interface VcsApi<E = never> {
   readonly diff: VcsDiffOperation<E>
 }
 
-export type Endpoint26_0Output = ReadonlyArray<Location.Ref>
-export type DebugLocationListOperation<E = never> = () => Effect.Effect<Endpoint26_0Output, E>
+export type Endpoint26_0Input = { readonly directory?: string | undefined; readonly workspace?: string | undefined }
+export type Endpoint26_0Output = ReadonlyArray<Lsp.Status>
+export type LspStatusOperation<E = never> = (input?: Endpoint26_0Input) => Effect.Effect<Endpoint26_0Output, E>
 
-export type Endpoint26_1Input = {
+export interface LspApi<E = never> {
+  readonly status: LspStatusOperation<E>
+}
+
+export type Endpoint27_0Output = ReadonlyArray<Location.Ref>
+export type DebugLocationListOperation<E = never> = () => Effect.Effect<Endpoint27_0Output, E>
+
+export type Endpoint27_1Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint26_1Output = void
-export type DebugLocationEvictOperation<E = never> = (input?: Endpoint26_1Input) => Effect.Effect<Endpoint26_1Output, E>
+export type Endpoint27_1Output = void
+export type DebugLocationEvictOperation<E = never> = (input?: Endpoint27_1Input) => Effect.Effect<Endpoint27_1Output, E>
 
 export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
@@ -1654,8 +1663,8 @@ export interface WebsearchApi<E = never> {
   readonly query: WebsearchQueryOperation<E>
 }
 
-export type Endpoint28_0Output = { readonly [x: string]: Schema.Json }
-export type ServerConfigGetOperation<E = never> = () => Effect.Effect<Endpoint28_0Output, E>
+export type Endpoint29_0Output = { readonly [x: string]: Schema.Json }
+export type ServerConfigGetOperation<E = never> = () => Effect.Effect<Endpoint29_0Output, E>
 
 export interface ServerConfigApi<E = never> {
   readonly get: ServerConfigGetOperation<E>
@@ -1688,6 +1697,7 @@ export interface AppApi<E = never> {
   readonly reference: ReferenceApi<E>
   readonly projectCopy: ProjectCopyApi<E>
   readonly vcs: VcsApi<E>
+  readonly lsp: LspApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
