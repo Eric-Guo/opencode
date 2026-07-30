@@ -4,7 +4,6 @@ import type {
   PermissionRequest,
   Project,
   ProviderAuthResponse,
-  QuestionRequest,
   ReferenceInfo,
   Session,
 } from "@/types"
@@ -131,7 +130,7 @@ type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<Locatio
 
 type McpApi = ServerApi["mcp"]
 type PermissionApi = ServerApi["permission"]
-type QuestionApi = ServerApi["question"]
+type FormApi = ServerApi["form"]
 type VcsApi = ServerApi["vcs"]
 
 export const loadProjectsQuery = (scope: ServerScope, api: ProjectApi) =>
@@ -244,10 +243,7 @@ export const loadProvidersQuery = (
       retry(async () => {
         const location = directory ? { location: { directory } } : undefined
         const defaultModel = await sdk.model.default(location)
-        const [providers, models] = await Promise.all([
-          sdk.provider.list(location),
-          sdk.model.list(location),
-        ])
+        const [providers, models] = await Promise.all([sdk.provider.list(location), sdk.model.list(location)])
         return normalizeProviderList(providers.data, models.data, defaultModel.data)
       }),
   })
@@ -321,7 +317,7 @@ export async function bootstrapDirectory(input: {
     readonly mcp: McpApi
     readonly permission: PermissionApi
     readonly project: ProjectApi
-    readonly question: QuestionApi
+    readonly form: FormApi
     readonly reference: ReferenceListApi
     readonly session: SessionApi
     readonly vcs: VcsApi
@@ -429,33 +425,33 @@ export async function bootstrapDirectory(input: {
         ),
       () =>
         retry(() =>
-          input.api.question.request
-            .list({ location: { directory: input.directory } })
-            .then((result) => result.data)
-            .then((questions) => {
-            const ids = questions.map((question) => question.sessionID)
-            const grouped = groupBySession(
-              questions.filter((question) => !!question.id && !!question.sessionID) as QuestionRequest[],
-            )
+          (async () => {
+            if ((await input.protocol) === "v1") return []
+            return input.api.form.request
+              .list({ location: { directory: input.directory } })
+              .then((result) => result.data)
+          })().then((forms) => {
+            const ids = forms.map((form) => form.sessionID).filter((sessionID) => sessionID !== "global")
+            const grouped = groupBySession(forms.filter((form) => !!form.id && !!form.sessionID))
             const warm = input.session
               ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
               : warmSessions({ ids, store: input.store, setStore: input.setStore, api: input.api.session })
             return warm.then(() =>
               batch(() => {
-                const current = input.session?.data.question ?? input.store.question
+                const current = input.session?.data.form ?? input.store.form
                 for (const sessionID of Object.keys(current)) {
                   if (grouped[sessionID]) continue
                   if (input.session?.get(sessionID)?.directory !== input.directory) continue
-                  if (input.session) input.session.set("question", sessionID, [])
-                  if (!input.session) input.setStore("question", sessionID, [])
+                  if (input.session) input.session.set("form", sessionID, [])
+                  if (!input.session) input.setStore("form", sessionID, [])
                 }
-                for (const [sessionID, questions] of Object.entries(grouped)) {
+                for (const [sessionID, forms] of Object.entries(grouped)) {
                   const value = reconcile(
-                    questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
+                    forms.filter((form) => !!form?.id).sort((a, b) => cmp(a.id, b.id)),
                     { key: "id" },
                   )
-                  if (input.session) input.session.set("question", sessionID, value)
-                  if (!input.session) input.setStore("question", sessionID, value)
+                  if (input.session) input.session.set("form", sessionID, value)
+                  if (!input.session) input.setStore("form", sessionID, value)
                 }
               }),
             )
