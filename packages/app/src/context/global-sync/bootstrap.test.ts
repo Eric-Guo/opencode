@@ -232,11 +232,15 @@ describe("query keys", () => {
 
   test("loads the current provider and model catalog", async () => {
     const calls: unknown[] = []
+    let ready = false
     const api = {
       provider: {
         list: async (input: unknown) => {
           calls.push(["provider", input])
-          return { location: {}, data: [{ id: "openai", name: "OpenAI", package: "@ai-sdk/openai" }] }
+          return {
+            location: {},
+            data: ready ? [{ id: "openai", name: "OpenAI", package: "@ai-sdk/openai" }] : [],
+          }
         },
       },
       model: {
@@ -246,6 +250,7 @@ describe("query keys", () => {
         },
         default: async (input: unknown) => {
           calls.push(["default", input])
+          ready = true
           return { location: {}, data: null }
         },
       },
@@ -254,9 +259,9 @@ describe("query keys", () => {
     const result = await new QueryClient().fetchQuery(loadProvidersQuery(ServerScope.local, "/repo", api))
 
     expect(calls).toEqual([
+      ["default", { location: { directory: "/repo" } }],
       ["provider", { location: { directory: "/repo" } }],
       ["model", { location: { directory: "/repo" } }],
-      ["default", { location: { directory: "/repo" } }],
     ])
     expect(result.connected).toEqual(["openai"])
   })
