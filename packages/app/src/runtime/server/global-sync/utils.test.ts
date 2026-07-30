@@ -21,6 +21,7 @@ describe("normalizeAgentList", () => {
     expect(result).toEqual([
       {
         name: "build",
+        native: true,
         description: undefined,
         mode: "primary",
         hidden: false,
@@ -35,6 +36,21 @@ describe("normalizeAgentList", () => {
         steps: undefined,
       },
     ])
+  })
+
+  test("marks configured agents as custom", () => {
+    const result = normalizeAgentList([
+      {
+        id: "XiaoTian",
+        name: "XiaoTian",
+        mode: "primary",
+        hidden: false,
+        request: { settings: {}, headers: {}, body: {} },
+        permissions: [],
+      },
+    ] as AgentListOutput["data"])
+
+    expect(result[0]?.native).toBe(false)
   })
 })
 
