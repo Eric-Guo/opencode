@@ -3,6 +3,7 @@ import type { Agent, Project, Provider, ProviderListResponse } from "@/runtime/s
 import type { Project as CurrentProject } from "@opencode-ai/client/promise"
 import { unwrap } from "solid-js/store"
 import type { AppAgent } from "./types"
+import { isNativeAgentID } from "@/providers/models/agent"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/workspaces/path-key"
 
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
@@ -18,7 +19,7 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ap
     name: agent.id,
     displayName: agent.name,
     // The current API omits the legacy flag used to decide whether the agent selector is visible.
-    native: ["build", "plan", "general", "explore", "compaction", "title", "summary"].includes(agent.id),
+    native: isNativeAgentID(agent.id),
     description: agent.description,
     mode: agent.mode,
     hidden: agent.hidden,
