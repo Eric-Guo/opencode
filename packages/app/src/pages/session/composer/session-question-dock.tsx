@@ -6,7 +6,7 @@ import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { showToast } from "@/utils/toast"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/client/promise"
+import { questionFormAnswer, type QuestionForm } from "@/utils/question-form"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -14,7 +14,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
 import { ScopedKey } from "@/utils/server-scope"
 
-const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
+const cache = new Map<string, { tab: number; answers: string[][]; custom: string[]; customOn: boolean[] }>()
 
 function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseEvent) => void }) {
   return (
@@ -61,19 +61,30 @@ function Option(props: {
   )
 }
 
-export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
+export const SessionQuestionDock: Component<{ request: QuestionForm; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const cacheKey = ScopedKey.from(serverSDK().scope, props.request.id)
 
-  const questions = createMemo(() => props.request.questions)
+  const fields = createMemo(() => props.request.fields)
+  const questions = createMemo(() =>
+    fields().map((field) => ({
+      header: field.title ?? props.request.title,
+      question: field.description ?? field.title ?? props.request.title,
+      options: (field.options ?? []).map((option) => ({
+        label: option.label,
+        description: option.description,
+      })),
+      multiple: field.type === "multiselect",
+    })),
+  )
   const total = createMemo(() => questions().length)
 
   const cached = cache.get(cacheKey)
   const [store, setStore] = createStore({
     tab: cached?.tab ?? 0,
-    answers: cached?.answers ?? ([] as QuestionAnswer[]),
+    answers: cached?.answers ?? ([] as string[][]),
     custom: cached?.custom ?? ([] as string[]),
     customOn: cached?.customOn ?? ([] as boolean[]),
     editing: false,
@@ -223,8 +234,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) =>
-      sdk().api.question.reply({ sessionID: props.request.sessionID, requestID: props.request.id, answers }),
+    mutationFn: (answers: string[][]) =>
+      sdk().api.form.reply({
+        sessionID: props.request.sessionID,
+        formID: props.request.id,
+        answer: questionFormAnswer(props.request, answers),
+      }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -236,7 +251,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk().api.question.reject({ sessionID: props.request.sessionID, requestID: props.request.id }),
+    mutationFn: () => sdk().api.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -249,7 +264,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
 
-  const reply = async (answers: QuestionAnswer[]) => {
+  const reply = async (answers: string[][]) => {
     if (sending()) return
     await replyMutation.mutateAsync(answers)
   }
