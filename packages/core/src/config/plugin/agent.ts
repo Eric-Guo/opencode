@@ -96,6 +96,7 @@ export const Plugin = define({
           const exists = draft.get(agentID) !== undefined
           draft.update(agentID, (agent) => {
             if (!exists) agent.permissions.push(...permissions)
+            if (item.name !== undefined) agent.name = Agent.Name.make(item.name)
             if (item.model !== undefined)
               agent.model = {
                 id: item.model.model,
