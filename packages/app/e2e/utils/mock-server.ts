@@ -32,6 +32,7 @@ export interface MockServerConfig {
   todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
+  forms?: unknown[] | (() => unknown[])
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
@@ -194,6 +195,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         location: location(config),
         data: typeof config.questions === "function" ? config.questions() : (config.questions ?? []),
       })
+    if (path === "/api/form/request")
+      return json(route, {
+        location: location(config),
+        data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
+      })
     if (path === "/api/vcs")
       return json(route, { location: location(config), data: { branch: "main", defaultBranch: "main" } })
     if (path === "/api/vcs/status") return json(route, { location: location(config), data: [] })
@@ -276,6 +282,9 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
     if (/^\/api\/session\/[^/]+\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
+    if (/^\/api\/session\/[^/]+\/form\/[^/]+\/(reply|cancel)$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {

@@ -11,8 +11,8 @@ import type {
 } from "@/types"
 import type {
   FileDiffInfo,
+  FormInfo,
   PermissionRequest,
-  QuestionRequest,
   ReferenceInfo,
   SessionStatus,
 } from "@opencode-ai/client/promise"
@@ -61,8 +61,8 @@ export type State = {
   permission: {
     [sessionID: string]: PermissionRequest[]
   }
-  question: {
-    [sessionID: string]: QuestionRequest[]
+  form: {
+    [sessionID: string]: FormInfo[]
   }
   mcp_ready: boolean
   mcp: {
