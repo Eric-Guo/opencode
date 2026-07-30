@@ -15,13 +15,15 @@ export const Info = Schema.Struct({
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
+  cors: Schema.optional(Schema.Array(Schema.String)),
 })
 export type Info = typeof Info.Type
 
-const keys = ["hostname", "port", "password"] as const
+const keys = ["hostname", "port", "password", "cors"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
+const decodeCors = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Schema.String)))
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
 export function filename(channel = OPENCODE_CHANNEL) {
@@ -152,6 +154,9 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string) 
     case "password": {
       return yield* password()
     }
+    case "cors": {
+      return JSON.stringify((yield* read()).cors ?? [])
+    }
   }
   throw new Error(`Unknown service config key: ${key}`)
 })
@@ -175,6 +180,15 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
       yield* password(value)
       return
     }
+    case "cors": {
+      const cors = yield* decodeCors(value).pipe(Effect.mapError(() => new Error("CORS must be a JSON string array")))
+      const existing = yield* read()
+      const current = existing.cors ?? []
+      if (current.length === cors.length && current.every((origin, index) => origin === cors[index])) return
+      yield* Service.stop(yield* options())
+      yield* write({ ...existing, cors })
+      return
+    }
   }
 })
 
@@ -195,6 +209,12 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
     case "password": {
       yield* Service.stop(yield* options())
       const { password: _password, ...next } = yield* read()
+      yield* write(next)
+      return
+    }
+    case "cors": {
+      yield* Service.stop(yield* options())
+      const { cors: _cors, ...next } = yield* read()
       yield* write(next)
       return
     }
