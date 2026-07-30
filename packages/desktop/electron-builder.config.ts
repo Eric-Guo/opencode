@@ -13,6 +13,25 @@ const rootDir = path.resolve(packageDir, "../..")
 const thapeConfigDir = path.join(packageDir, "resources", "thape-config")
 const generatedDir = path.join(packageDir, "out", "generated")
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
+const appFiles = [
+  "out/**/*",
+  "resources/**/*",
+  "!out/**/assets/wasm-*.js.map",
+  "!resources/opencode-cli*",
+  "!resources/thape-config/**",
+  "!resources/icons/**",
+  // Log export imports Zip.js as ESM. Keep index.js and lib, including its inline worker.
+  "!**/node_modules/@zip.js/zip.js/dist{,/**/*}",
+  "!**/node_modules/@zip.js/zip.js/{index.cjs,index.min.js,index-fflate.js,deno.json,eslint.config.mjs}",
+  // These packages execute compiled JavaScript, not their sources or source maps.
+  "!**/node_modules/{electron-updater,builder-util-runtime,lazy-val}/out/**/*.js.map",
+  "!**/node_modules/ajv/lib{,/**/*}",
+  "!**/node_modules/ajv-formats/src{,/**/*}",
+  "!**/node_modules/{ajv,ajv-formats}/dist/**/*.js.map",
+  // Keep js-yaml's CommonJS sources and dist/js-yaml.mjs ESM entry, not browser bundles or its CLI.
+  "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
+  "!**/node_modules/js-yaml/bin{,/**/*}",
+]
 const windowsNativeExclusions = [
   "@ff-labs/fff-bin-android-arm64",
   "@ff-labs/fff-bin-darwin-arm64",
@@ -35,6 +54,12 @@ const windowsNativeExclusions = [
   "@parcel/watcher-linux-arm64-musl",
   "@parcel/watcher-linux-x64-glibc",
   "@parcel/watcher-linux-x64-musl",
+  "@parcel/watcher-win32-ia32",
+  "@msgpackr-extract/msgpackr-extract-darwin-arm64",
+  "@msgpackr-extract/msgpackr-extract-darwin-x64",
+  "@msgpackr-extract/msgpackr-extract-linux-arm",
+  "@msgpackr-extract/msgpackr-extract-linux-arm64",
+  "@msgpackr-extract/msgpackr-extract-linux-x64",
   "@yuuang/ffi-rs-android-arm64",
   "@yuuang/ffi-rs-darwin-arm64",
   "@yuuang/ffi-rs-darwin-x64",
@@ -43,7 +68,26 @@ const windowsNativeExclusions = [
   "@yuuang/ffi-rs-linux-arm64-musl",
   "@yuuang/ffi-rs-linux-x64-gnu",
   "@yuuang/ffi-rs-linux-x64-musl",
+  "@yuuang/ffi-rs-win32-ia32-msvc",
 ].map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
+const windowsArchitectureExclusions = (
+  process.env.RUST_TARGET === "x86_64-pc-windows-msvc"
+    ? [
+        "@ff-labs/fff-bin-win32-arm64",
+        "@lydell/node-pty-win32-arm64",
+        "@parcel/watcher-win32-arm64",
+        "@yuuang/ffi-rs-win32-arm64-msvc",
+      ]
+    : process.env.RUST_TARGET === "aarch64-pc-windows-msvc"
+      ? [
+          "@ff-labs/fff-bin-win32-x64",
+          "@lydell/node-pty-win32-x64",
+          "@msgpackr-extract/msgpackr-extract-win32-x64",
+          "@parcel/watcher-win32-x64",
+          "@yuuang/ffi-rs-win32-x64-msvc",
+        ]
+      : []
+).map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
 // "opencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
 // pins still resolve after the canonical app id changes back to ai.opencode.desktop.
@@ -119,24 +163,7 @@ const getBase = (appId: string): Configuration => ({
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: [
-    "out/**/*",
-    "resources/**/*",
-    "!resources/opencode-cli*",
-    "!resources/thape-config/**",
-    "!resources/icons/**",
-    // Log export imports Zip.js as ESM. Keep index.js and lib, including its inline worker.
-    "!**/node_modules/@zip.js/zip.js/dist{,/**/*}",
-    "!**/node_modules/@zip.js/zip.js/{index.cjs,index.min.js,index-fflate.js,deno.json,eslint.config.mjs}",
-    // These packages execute compiled JavaScript, not their sources or source maps.
-    "!**/node_modules/{electron-updater,builder-util-runtime,lazy-val}/out/**/*.js.map",
-    "!**/node_modules/ajv/lib{,/**/*}",
-    "!**/node_modules/ajv-formats/src{,/**/*}",
-    "!**/node_modules/{ajv,ajv-formats}/dist/**/*.js.map",
-    // Keep js-yaml's CommonJS sources and dist/js-yaml.mjs ESM entry, not browser bundles or its CLI.
-    "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
-    "!**/node_modules/js-yaml/bin{,/**/*}",
-  ],
+  files: appFiles,
   extraResources: [
     {
       from: "resources/",
@@ -146,16 +173,30 @@ const getBase = (appId: string): Configuration => ({
     {
       from: iconDir,
       to: "icons",
+      filter: ["icon.ico", "icon.png", "dock.png"],
     },
     {
       from: "resources/thape-config",
       to: "thape-config",
-      filter: ["**/*", "!**/.git/**"],
+      filter: [
+        "**/*",
+        "!**/.git/**",
+        "!node_modules/**/*.d.ts",
+        "!node_modules/effect/src/**",
+        "!node_modules/zod/src/**",
+        "!node_modules/@opencode-ai/plugin/node_modules/zod/src/**",
+      ],
     },
     {
       from: "resources/thape-config/node_modules",
       to: "thape-config/node_modules",
-      filter: ["**/*"],
+      filter: [
+        "**/*",
+        "!**/*.d.ts",
+        "!effect/src/**",
+        "!zod/src/**",
+        "!@opencode-ai/plugin/node_modules/zod/src/**",
+      ],
     },
     {
       from: "out/generated/app-update.yml",
@@ -193,7 +234,8 @@ const getBase = (appId: string): Configuration => ({
   },
   win: {
     icon: `${iconDir}/icon.ico`,
-    files: windowsNativeExclusions,
+    electronLanguages: ["en-US", "zh-CN"],
+    files: [...appFiles, ...windowsNativeExclusions, ...windowsArchitectureExclusions],
     signtoolOptions: {
       sign: signWindows,
     },
