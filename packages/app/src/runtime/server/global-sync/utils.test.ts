@@ -21,6 +21,7 @@ describe("normalizeAgentList", () => {
     expect(result).toEqual([
       {
         name: "build",
+        displayName: "Build",
         native: true,
         description: undefined,
         mode: "primary",
@@ -42,7 +43,7 @@ describe("normalizeAgentList", () => {
     const result = normalizeAgentList([
       {
         id: "XiaoTian",
-        name: "XiaoTian",
+        name: "小天",
         mode: "primary",
         hidden: false,
         request: { settings: {}, headers: {}, body: {} },
@@ -50,7 +51,7 @@ describe("normalizeAgentList", () => {
       },
     ] as AgentListOutput["data"])
 
-    expect(result[0]?.native).toBe(false)
+    expect(result[0]).toMatchObject({ name: "XiaoTian", displayName: "小天", native: false })
   })
 })
 
