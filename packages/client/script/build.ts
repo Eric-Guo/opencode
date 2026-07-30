@@ -13,6 +13,7 @@ import { Form } from "@opencode-ai/schema/form"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Location } from "@opencode-ai/schema/location"
+import { Lsp } from "@opencode-ai/schema/lsp"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { Model } from "@opencode-ai/schema/model"
 import { Permission } from "@opencode-ai/schema/permission"
@@ -54,6 +55,7 @@ const effectTypeReferences = [
   ...namespaceTypes("InstructionEntry", "@opencode-ai/schema/instruction-entry", InstructionEntry),
   ...namespaceTypes("Integration", "@opencode-ai/schema/integration", Integration),
   ...namespaceTypes("Location", "@opencode-ai/schema/location", Location),
+  ...namespaceTypes("Lsp", "@opencode-ai/schema/lsp", Lsp),
   ...namespaceTypes("Mcp", "@opencode-ai/schema/mcp", Mcp),
   ...namespaceTypes("Model", "@opencode-ai/schema/model", Model),
   ...namespaceTypes("Permission", "@opencode-ai/schema/permission", Permission),
