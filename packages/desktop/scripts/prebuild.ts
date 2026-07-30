@@ -16,5 +16,4 @@ if ((channel === "beta" || channel === "prod") && Bun.env.OPENCODE_CLI_DIST) {
   await copyBuiltCliToResources(Bun.env.OPENCODE_CLI_DIST)
 }
 if (channel === "beta" && !Bun.env.OPENCODE_CLI_DIST) await downloadCliToResources("beta")
-await $`cd ../opencode && bun script/bundle-node.ts`
 await $`cd ../7777 && bun run build`
