@@ -49,7 +49,11 @@ function PromptInputExample() {
   const inputControls = {
     agents: {
       available: [{ name: "review", hidden: false, mode: "subagent" }],
-      options: ["build", "review", "plan"],
+      options: [
+        { id: "build", label: "Build" },
+        { id: "review", label: "Review" },
+        { id: "plan", label: "Plan" },
+      ],
       get current() {
         return controls.agent
       },
@@ -127,7 +131,7 @@ function PromptInputWithOpenDock() {
   const inputControls = {
     agents: {
       available: [],
-      options: ["build"],
+      options: [{ id: "build", label: "Build" }],
       get current() {
         return controls.agent
       },

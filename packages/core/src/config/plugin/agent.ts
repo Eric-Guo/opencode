@@ -32,6 +32,7 @@ type PathAction =
   | typeof EditTool.name
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
 const agentKeys = new Set([
+  "name",
   "model",
   "variant",
   "request",
@@ -112,6 +113,7 @@ export const Plugin = define({
           const exists = draft.get(agentID) !== undefined
           draft.update(agentID, (agent) => {
             if (!exists) agent.permissions.push(...permissions)
+            if (item.name !== undefined) agent.name = Agent.Name.make(item.name)
             if (item.model !== undefined)
               agent.model = {
                 id: item.model.model,
