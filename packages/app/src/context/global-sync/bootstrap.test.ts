@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
-import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Project, Session } from "@opencode-ai/sdk/v2/client"
 import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import {
@@ -33,7 +33,7 @@ const api = {
     list: async () => [],
     current: async () => ({ id: "project", directory: "/project" }),
   },
-  question: { request: { list: async () => ({ location: {}, data: [] }) } },
+  form: { request: { list: async () => ({ location: {}, data: [] }) } },
   reference: { list: async () => ({ location: {}, data: [] }) },
   vcs: { get: async () => ({ location: {}, data: {} }) },
 } as unknown as ServerApi
@@ -60,7 +60,7 @@ function directoryState() {
     session_diff: {},
     todo: {},
     permission: {},
-    question: {},
+    form: {},
     mcp_ready: true,
     mcp: {},
     mcp_resource: {},
@@ -142,6 +142,7 @@ describe("bootstrapDirectory", () => {
     const configReads: string[] = []
     const agentReads: string[] = []
     const [store, setStore] = directoryState()
+    setStore("session", [{ id: "ses_form", directory: "/project" } as Session])
     const queryClient = new QueryClient()
     queryClient.setQueryData([ServerScope.local, "/project", "agents"], [])
     const currentApi = {
@@ -162,6 +163,22 @@ describe("bootstrapDirectory", () => {
               },
             ],
           }
+        },
+      },
+      form: {
+        request: {
+          list: async () => ({
+            location: {},
+            data: [
+              {
+                id: "frm_question",
+                sessionID: "ses_form",
+                title: "Questions",
+                metadata: { kind: "question" },
+                fields: [{ key: "q0", type: "string" as const }],
+              },
+            ],
+          }),
         },
       },
     } as unknown as ServerApi
@@ -199,6 +216,7 @@ describe("bootstrapDirectory", () => {
     expect(configReads).toEqual([])
     expect(agentReads).toEqual(["agent"])
     expect(store.agent[0]).toMatchObject({ name: "xiaotian", displayName: "小天", native: false })
+    expect(store.form.ses_form?.[0]?.id).toBe("frm_question")
     expect(store.status).toBe("complete")
   })
 })
@@ -227,9 +245,7 @@ describe("query keys", () => {
       },
     } as unknown as OpencodeClient
 
-    const result = await new QueryClient().fetchQuery(
-      loadGlobalConfigQuery(ServerScope.local, sdk),
-    )
+    const result = await new QueryClient().fetchQuery(loadGlobalConfigQuery(ServerScope.local, sdk))
 
     expect(result).toEqual({ shell: "bash" })
     expect(configReads).toEqual(["config"])
