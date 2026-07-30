@@ -141,6 +141,7 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
   return encodeAgent(
     decodeAgent(
       JSON.stringify({
+        name: info.name,
         model: modelSelection(info.model, info.variant),
         request: Object.keys(body).length ? { body } : undefined,
         system: info.prompt,
