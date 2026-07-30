@@ -342,6 +342,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
             await fs.writeFile(
               path.join(tmp.path, "agents", "reviewer.md"),
               `---
+name: 小天
 model: openrouter/openai/gpt-5
 description: Markdown description
 temperature: 0.5
@@ -385,6 +386,7 @@ Use native v2 fields.`,
           )
 
           expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({
+            name: "小天",
             model: { providerID: "openrouter", id: "openai/gpt-5" },
             system: "Review carefully.",
             description: "Markdown description",
