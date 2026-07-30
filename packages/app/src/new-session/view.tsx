@@ -10,6 +10,7 @@ import createPresence from "solid-presence"
 import { Composer } from "@/composer/composer"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { ComposerModel } from "@/composer/model"
+import { StartupSplashBackground } from "@/new-session/splash"
 import { PromptGitStatus, PromptWorkspaceSelector } from "@/new-session/workspace/selector"
 import {
   PromptProjectAddButton,
@@ -23,7 +24,6 @@ import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
-import { NewSessionWordmark } from "./wordmark"
 import { SummaryPopover } from "@/session/summary/popover"
 import type { DraftMcpControls } from "./mcp"
 
@@ -82,8 +82,9 @@ export function NewSessionView(props: {
         data-summary-open={store.summary}
         data-summary-resizing={store.summaryResizeTranslate !== undefined}
         style={{ "--session-summary-resize-translate": store.summaryResizeTranslate }}
-        class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
+        class="relative isolate flex-1 min-h-0 overflow-hidden"
       >
+        <StartupSplashBackground />
         <ComposerDropzone
           active={props.composer.state.drag === "active"}
           input={props.composer.model.selection.current()?.capabilities.input}
@@ -107,13 +108,12 @@ export function NewSessionView(props: {
             </Suspense>
           </SummaryPopover>
         </div>
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div class="absolute inset-x-0 top-[40%] flex justify-center px-6">
           <div
             ref={(element) => setStore("content", element)}
             data-slot="new-session-content"
             class={NEW_SESSION_CONTENT_WIDTH}
           >
-            <NewSessionWordmark />
             <div class="mt-8 flex flex-col gap-8">
               <Composer model={props.composer} />
               <Show when={props.project.empty()}>
