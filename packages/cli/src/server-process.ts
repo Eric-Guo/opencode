@@ -75,6 +75,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           hostname,
           port,
           password,
+          cors: config.cors,
           simulation: truthy(process.env.OPENCODE_SIMULATE),
           database: {
             path:
