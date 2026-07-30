@@ -326,7 +326,7 @@ export async function bootstrapDirectory(input: {
     () => Promise.resolve(input.loadSessions(input.directory)),
     () =>
       input.queryClient
-        .ensureQueryData(loadAgentsQuery(input.scope, directoryKey(input.directory), input.api.agent))
+        .fetchQuery(loadAgentsQuery(input.scope, directoryKey(input.directory), input.api.agent))
         .then((data) => input.setStore("agent", data)),
     !seededProject &&
       (() =>
