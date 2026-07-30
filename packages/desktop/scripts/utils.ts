@@ -58,6 +58,15 @@ export const CLI_BINARIES: Array<{ rustTarget: string; target: string; package: 
   },
 ]
 
+const SIDECAR_TARGETS = [
+  { rustTarget: "aarch64-apple-darwin", target: "darwin-arm64" },
+  { rustTarget: "x86_64-apple-darwin", target: "darwin-x64" },
+  { rustTarget: "aarch64-pc-windows-msvc", target: "windows-arm64" },
+  { rustTarget: "x86_64-pc-windows-msvc", target: "windows-x64" },
+  { rustTarget: "x86_64-unknown-linux-gnu", target: "linux-x64" },
+  { rustTarget: "aarch64-unknown-linux-gnu", target: "linux-arm64" },
+] as const
+
 export const RUST_TARGET = Bun.env.RUST_TARGET
 
 function nativeTarget() {
@@ -73,6 +82,12 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   if (!binaryConfig) throw new Error(`CLI configuration not available for target '${target}'`)
 
   return binaryConfig
+}
+
+export function getCurrentSidecarTarget(target = RUST_TARGET ?? nativeTarget()) {
+  const sidecar = SIDECAR_TARGETS.find((item) => item.rustTarget === target)
+  if (!sidecar) throw new Error(`Sidecar configuration not available for target '${target}'`)
+  return sidecar.target
 }
 
 export function getCliResourcePath(cli = getCurrentCli()) {
@@ -127,6 +142,10 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
   await prepareCli(resource)
 
   console.log(`Built ${cli.target} CLI at ${resource}`)
+}
+
+export async function buildEmbeddedSidecar() {
+  await $`bun ../cli/script/build-node.ts --sidecar-only --skip-install ${`--target=${getCurrentSidecarTarget()}`}`
 }
 
 async function prepareCli(dest: string) {
