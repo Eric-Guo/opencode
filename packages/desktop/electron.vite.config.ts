@@ -3,6 +3,7 @@ import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
 import { cp, rm } from "node:fs/promises"
 
+const OPENCODE_SERVER_DIST = "../cli/dist-node"
 const SEVEN_SEVEN_DIST = "../7777/dist"
 const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
@@ -47,7 +48,7 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: { index: "src/main/index.ts" },
+        input: { index: "src/main/index.ts", sidecar: "src/main/sidecar.ts" },
         // Keep this identical to electron-vite's Node 20.11+ shim. Its regex insertion can
         // corrupt bundled TypeScript, while a Rollup banner places the shim safely.
         output: {
@@ -68,6 +69,13 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         enforce: "pre",
         resolveId(s) {
           if (s === "@lydell/node-pty") return nodePtyPkg
+        },
+      },
+      {
+        name: "opencode:copy-server-dist",
+        async writeBundle() {
+          await cp(`${OPENCODE_SERVER_DIST}/sidecar.mjs`, "./out/main/chunks/sidecar.mjs", { force: true })
+          await cp(`${OPENCODE_SERVER_DIST}/assets`, "./out/main/chunks/assets", { recursive: true, force: true })
         },
       },
     ],
