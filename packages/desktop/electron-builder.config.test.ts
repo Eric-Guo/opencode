@@ -178,26 +178,32 @@ test("the trimmed Zip.js package can still export compressed logs", async () => 
   }
 })
 
-test("excludes non-Windows native dependencies from Windows builds", async () => {
-  const module = await import("./electron-builder.config.ts?windows-native-dependencies")
-  const config = module.default as Configuration
+test("excludes native dependencies for other platforms and Windows architectures", () => {
+  for (const target of CLI_BINARIES.filter((item) => item.os === "win32")) {
+    const config = load("prod", target.rustTarget)
 
-  expect(config.win?.files).toEqual(
-    expect.arrayContaining([
-      "!**/node_modules/@ff-labs/fff-bin-darwin-arm64{,/**/*}",
-      "!**/node_modules/@lydell/node-pty-linux-x64{,/**/*}",
-      "!**/node_modules/@parcel/watcher-android-arm64{,/**/*}",
-      "!**/node_modules/@yuuang/ffi-rs-linux-arm64-gnu{,/**/*}",
-    ]),
-  )
-  ;[
-    "@ff-labs/fff-bin-win32-arm64",
-    "@ff-labs/fff-bin-win32-x64",
-    "@lydell/node-pty-win32-arm64",
-    "@lydell/node-pty-win32-x64",
-    "@parcel/watcher-win32-arm64",
-    "@parcel/watcher-win32-x64",
-    "@yuuang/ffi-rs-win32-arm64-msvc",
-    "@yuuang/ffi-rs-win32-x64-msvc",
-  ].forEach((packageName) => expect(config.win?.files).not.toContain(`!**/node_modules/${packageName}{,/**/*}`))
+    expect(config.win?.files).toEqual(
+      expect.arrayContaining([
+        "!**/node_modules/@ff-labs/fff-bin-darwin-arm64{,/**/*}",
+        "!**/node_modules/@lydell/node-pty-linux-x64{,/**/*}",
+        "!**/node_modules/@parcel/watcher-android-arm64{,/**/*}",
+        "!**/node_modules/@yuuang/ffi-rs-linux-arm64-gnu{,/**/*}",
+      ]),
+    )
+
+    const filter = trimFilter(import.meta.dirname, { files: config.win?.files })
+
+    for (const cpu of ["arm64", "x64"]) {
+      for (const pkg of [
+        `@ff-labs/fff-bin-win32-${cpu}`,
+        `@lydell/node-pty-win32-${cpu}`,
+        `@parcel/watcher-win32-${cpu}`,
+        `@yuuang/ffi-rs-win32-${cpu}-msvc`,
+      ]) {
+        expect(
+          filter(path.join(import.meta.dirname, "node_modules", pkg, "index.js"), statSync(import.meta.filename)),
+        ).toBe(cpu === target.cpu)
+      }
+    }
+  }
 })
