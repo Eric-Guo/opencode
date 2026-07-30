@@ -36,6 +36,7 @@ import type { Reference } from "@opencode-ai/schema/reference"
 import type { Worktree } from "@opencode-ai/schema/worktree"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
+import type { Lsp } from "@opencode-ai/schema/lsp"
 import type { WebSearch } from "@opencode-ai/schema/websearch"
 import type { Config } from "@opencode-ai/schema/config"
 
@@ -1717,6 +1718,14 @@ export interface VcsApi<E = never> {
   readonly diff: VcsDiffOperation<E>
 }
 
+export type LspStatusInput = { readonly directory?: string | undefined; readonly workspace?: string | undefined }
+export type LspStatusOutput = ReadonlyArray<Lsp.Status>
+export type LspStatusOperation<E = never> = (input?: LspStatusInput) => Effect.Effect<LspStatusOutput, E>
+
+export interface LspApi<E = never> {
+  readonly status: LspStatusOperation<E>
+}
+
 export type DebugLocationListOutput = ReadonlyArray<Location.Ref>
 export type DebugLocationListOperation<E = never> = () => Effect.Effect<DebugLocationListOutput, E>
 
@@ -1813,6 +1822,7 @@ export interface AppApi<E = never> {
   readonly reference: ReferenceApi<E>
   readonly worktree: WorktreeApi<E>
   readonly vcs: VcsApi<E>
+  readonly lsp: LspApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
