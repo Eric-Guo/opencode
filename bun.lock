@@ -448,7 +448,6 @@
       "version": "1.18.8",
       "dependencies": {
         "@lydell/node-pty": "catalog:",
-        "@opencode-ai/core": "workspace:*",
         "@zip.js/zip.js": "2.7.62",
         "effect": "catalog:",
         "electron-context-menu": "4.1.2",
@@ -463,6 +462,7 @@
       "devDependencies": {
         "@actions/artifact": "4.0.0",
         "@opencode-ai/app": "workspace:*",
+        "@opencode-ai/core": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@sentry/solid": "catalog:",
         "@sentry/vite-plugin": "catalog:",
