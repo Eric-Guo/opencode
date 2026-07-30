@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Config } from "@opencode-ai/schema/config"
+import { Lsp } from "@opencode-ai/schema/lsp"
 import { Model } from "@opencode-ai/schema/model"
 import { Prompt } from "@opencode-ai/schema/prompt"
 import { Session } from "@opencode-ai/schema/session"
@@ -12,6 +13,7 @@ const Client = await import("../src/effect")
 test("effect entrypoint exposes canonical Schema contracts", () => {
   expect(Client.Agent).toBe(Agent)
   expect(Client.Config).toBe(Config)
+  expect(Client.Lsp).toBe(Lsp)
   expect(Client.Model).toBe(Model)
   expect(Client.Session).toBe(Session)
 })
@@ -19,7 +21,7 @@ test("effect entrypoint exposes canonical Schema contracts", () => {
 test("generated Effect API names canonical and composed outputs", async () => {
   const source = await Bun.file(new URL("../src/effect/api/api.ts", import.meta.url)).text()
 
-  expect(source).toContain("export type Endpoint5_3Output = Session.Info")
+  expect(source).toContain("export type Endpoint5_5Output = Session.Info")
   expect(source).toContain("export type Endpoint19_0Output = OpenCodeEvent")
   expect(source).not.toContain("HttpApiClient.ForApi")
 })

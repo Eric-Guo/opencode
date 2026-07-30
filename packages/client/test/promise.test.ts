@@ -31,7 +31,9 @@ test("exposes every standard HTTP API group", () => {
     "reference",
     "projectCopy",
     "vcs",
+    "lsp",
     "debug",
+    "migration",
     "websearch",
     "config",
   ])
@@ -46,6 +48,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find", "listLegacy", "readLegacy"])
   expect(Object.keys(client.vcs)).toEqual(["get", "status", "diff"])
+  expect(Object.keys(client.lsp)).toEqual(["status"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
@@ -77,6 +80,21 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(await client.config.get({ location: { directory: "/tmp/project" } })).toEqual(entries)
   expect(request?.method).toBe("GET")
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
+test("lsp.status uses the legacy desktop HTTP contract", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json([])
+    },
+  })
+
+  expect(await client.lsp.status({ directory: "/tmp/project" })).toEqual([])
+  expect(request?.method).toBe("GET")
+  expect(request?.url).toBe("http://localhost:3000/lsp?directory=%2Ftmp%2Fproject")
 })
 
 test("websearch.query uses the public HTTP contract", async () => {
