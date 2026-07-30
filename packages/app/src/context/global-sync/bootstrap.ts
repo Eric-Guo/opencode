@@ -231,10 +231,10 @@ export const loadProvidersQuery = (
           return normalizeProviderList(result.data!)
         }
         const location = directory ? { location: { directory } } : undefined
-        const [providers, models, defaultModel] = await Promise.all([
+        const defaultModel = await sdk.model.default(location)
+        const [providers, models] = await Promise.all([
           sdk.provider.list(location),
           sdk.model.list(location),
-          sdk.model.default(location),
         ])
         return normalizeProviderList(providers.data, models.data, defaultModel.data)
       }),
