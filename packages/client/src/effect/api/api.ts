@@ -37,6 +37,7 @@ import type { Reference } from "@opencode-ai/schema/reference"
 import type { ProjectCopy } from "@opencode-ai/schema/project-copy"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
+import type { Lsp } from "@opencode-ai/schema/lsp"
 import type { WebSearch } from "@opencode-ai/schema/websearch"
 import type { Config } from "@opencode-ai/schema/config"
 
@@ -1677,20 +1678,28 @@ export interface VcsApi<E = never> {
   readonly diff: VcsDiffOperation<E>
 }
 
-export type Endpoint26_0Output = ReadonlyArray<Location.Ref>
-export type DebugLocationListOperation<E = never> = () => Effect.Effect<Endpoint26_0Output, E>
+export type Endpoint26_0Input = { readonly directory?: string | undefined; readonly workspace?: string | undefined }
+export type Endpoint26_0Output = ReadonlyArray<Lsp.Status>
+export type LspStatusOperation<E = never> = (input?: Endpoint26_0Input) => Effect.Effect<Endpoint26_0Output, E>
 
-export type Endpoint26_1Input = {
+export interface LspApi<E = never> {
+  readonly status: LspStatusOperation<E>
+}
+
+export type Endpoint27_0Output = ReadonlyArray<Location.Ref>
+export type DebugLocationListOperation<E = never> = () => Effect.Effect<Endpoint27_0Output, E>
+
+export type Endpoint27_1Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint26_1Output = void
-export type DebugLocationEvictOperation<E = never> = (input?: Endpoint26_1Input) => Effect.Effect<Endpoint26_1Output, E>
+export type Endpoint27_1Output = void
+export type DebugLocationEvictOperation<E = never> = (input?: Endpoint27_1Input) => Effect.Effect<Endpoint27_1Output, E>
 
 export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 
-export type Endpoint27_0Output =
+export type Endpoint28_0Output =
   | { readonly status: "required" | "completed" }
   | {
       readonly status: "running"
@@ -1701,39 +1710,39 @@ export type Endpoint27_0Output =
       }
     }
   | { readonly status: "error"; readonly error: string }
-export type MigrationV1StatusOperation<E = never> = () => Effect.Effect<Endpoint27_0Output, E>
+export type MigrationV1StatusOperation<E = never> = () => Effect.Effect<Endpoint28_0Output, E>
 
 export interface MigrationApi<E = never> {
   readonly v1: { readonly status: MigrationV1StatusOperation<E> }
 }
 
-export type Endpoint28_0Input = {
+export type Endpoint29_0Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint28_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
-export type WebsearchProvidersOperation<E = never> = (input?: Endpoint28_0Input) => Effect.Effect<Endpoint28_0Output, E>
+export type Endpoint29_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
+export type WebsearchProvidersOperation<E = never> = (input?: Endpoint29_0Input) => Effect.Effect<Endpoint29_0Output, E>
 
-export type Endpoint28_1Input = {
+export type Endpoint29_1Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly query: string
   readonly providerID?: WebSearch.ID | undefined
 }
-export type Endpoint28_1Output = { readonly location: Location.Info; readonly data: WebSearch.Response }
-export type WebsearchQueryOperation<E = never> = (input: Endpoint28_1Input) => Effect.Effect<Endpoint28_1Output, E>
+export type Endpoint29_1Output = { readonly location: Location.Info; readonly data: WebSearch.Response }
+export type WebsearchQueryOperation<E = never> = (input: Endpoint29_1Input) => Effect.Effect<Endpoint29_1Output, E>
 
 export interface WebsearchApi<E = never> {
   readonly providers: WebsearchProvidersOperation<E>
   readonly query: WebsearchQueryOperation<E>
 }
 
-export type Endpoint29_0Input = {
+export type Endpoint30_0Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint29_0Output = ReadonlyArray<Config.Entry>
-export type ConfigGetOperation<E = never> = (input?: Endpoint29_0Input) => Effect.Effect<Endpoint29_0Output, E>
+export type Endpoint30_0Output = ReadonlyArray<Config.Entry>
+export type ConfigGetOperation<E = never> = (input?: Endpoint30_0Input) => Effect.Effect<Endpoint30_0Output, E>
 
-export type Endpoint29_1Output = { readonly [x: string]: Schema.Json }
-export type ConfigGlobalOperation<E = never> = () => Effect.Effect<Endpoint29_1Output, E>
+export type Endpoint30_1Output = { readonly [x: string]: Schema.Json }
+export type ConfigGlobalOperation<E = never> = () => Effect.Effect<Endpoint30_1Output, E>
 
 export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
@@ -1767,6 +1776,7 @@ export interface AppApi<E = never> {
   readonly reference: ReferenceApi<E>
   readonly projectCopy: ProjectCopyApi<E>
   readonly vcs: VcsApi<E>
+  readonly lsp: LspApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
