@@ -47,7 +47,11 @@ function PromptInputExample() {
   const inputControls = {
     agents: {
       available: [{ name: "review", hidden: false, mode: "subagent" }],
-      options: ["build", "review", "plan"],
+      options: [
+        { id: "build", label: "Build" },
+        { id: "review", label: "Review" },
+        { id: "plan", label: "Plan" },
+      ],
       get current() {
         return controls.agent
       },
