@@ -137,15 +137,6 @@ const getBase = (appId: string): Configuration => ({
     "!**/node_modules/js-yaml/bin{,/**/*}",
   ],
   extraResources: [
-    ...(channel !== "prod"
-      ? [
-          {
-            from: "resources/",
-            to: "",
-            filter: ["opencode-cli*"],
-          },
-        ]
-      : []),
     {
       from: iconDir,
       to: "icons",
