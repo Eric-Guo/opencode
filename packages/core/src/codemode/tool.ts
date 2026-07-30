@@ -167,7 +167,7 @@ export const createSearch = (inventory: Inventory) => {
   return {
     name: SEARCH_TOOL,
     description:
-      "Find Code Mode tool signatures. Call `tool_search` standalone, then use the returned `tools...` expression inside `execute` code, never as a standalone tool name. Inside code use `search(...)`, not `tools.search(...)`.",
+      'Find Code Mode tool signatures. Use query "" or "all" to list every available tool. Call `tool_search` standalone, then use the returned `tools...` expression inside `execute` code, never as a standalone tool name. Inside code use `search(...)`, not `tools.search(...)`.',
     input: CodeMode.SearchInput,
     output: CodeMode.SearchOutput,
     execute: (input) => {
