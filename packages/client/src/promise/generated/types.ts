@@ -2304,6 +2304,7 @@ export type ConfigEntry =
         }>
         agents?: {
           [x: string]: {
+            name?: string
             model?: string | { providerID: string; model: string; variant?: string }
             request?: { headers?: { [x: string]: string }; body?: { [x: string]: JsonValue } }
             system?: string
