@@ -2,6 +2,7 @@ import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@open
 import type { Agent, Project, Provider, ProviderListResponse } from "@/runtime/server/types"
 import type { Project as CurrentProject } from "@opencode/client/promise"
 import { unwrap } from "solid-js/store"
+import type { AppAgent } from "./types"
 
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/workspaces/path-key"
 
@@ -14,11 +15,12 @@ function isLegacyAgentList(input: AgentListOutput["data"] | Agent[]): input is A
   return input.every((agent) => !("request" in agent))
 }
 
-export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Agent[] {
+export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): AppAgent[] {
   if (isLegacyAgentList(input)) return input
 
   return input.map((agent) => ({
     name: agent.id,
+    displayName: agent.name,
     // The current API omits the legacy flag used to decide whether the agent selector is visible.
     native: ["build", "plan", "general", "explore", "compaction", "title", "summary"].includes(agent.id),
     description: agent.description,
