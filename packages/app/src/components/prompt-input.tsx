@@ -1660,9 +1660,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Select
                         size="normal"
                         options={props.controls.agents.options}
-                        current={props.controls.agents.current}
+                        current={props.controls.agents.options.find(
+                          (option) => option.id === props.controls.agents.current,
+                        )}
+                        value={(option) => option.id}
+                        label={(option) => option.label}
                         onSelect={(value) => {
-                          props.controls.agents.select(value)
+                          props.controls.agents.select(value?.id)
                           restoreFocus()
                         }}
                         class="capitalize max-w-[160px] text-text-base"
