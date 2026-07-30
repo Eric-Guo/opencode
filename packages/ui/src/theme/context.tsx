@@ -196,7 +196,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     // An id no theme has yet stays selected until `settle`: a registered theme can arrive after startup.
     const initial = createThemeState({
       themeId: read(STORAGE_KEYS.THEME_ID) || props.defaultTheme || DEFAULT_THEME_ID,
-      scheme: parseColorScheme(read(STORAGE_KEYS.COLOR_SCHEME)),
+      scheme: parseColorScheme(read(STORAGE_KEYS.COLOR_SCHEME) ?? "dark"),
       systemMode: getSystemMode(),
       defaultTheme: oc2Theme,
       bundled: knownThemes(),
