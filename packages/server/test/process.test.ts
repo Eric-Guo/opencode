@@ -126,5 +126,15 @@ it.live("serves browser and desktop compatibility endpoints", () =>
       type: "text",
       content: expect.stringContaining('"name": "@opencode-ai/server"'),
     })
+
+    const lspUrl = new URL("/lsp", HttpServer.formatAddress(server.address))
+    lspUrl.searchParams.set("directory", directory)
+    const lsp = yield* Effect.promise(() =>
+      fetch(lspUrl, {
+        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+      }),
+    )
+    expect(lsp.status).toBe(200)
+    expect(yield* Effect.promise(() => lsp.json())).toEqual([])
   }),
 )
