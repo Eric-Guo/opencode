@@ -35,7 +35,7 @@ function controls(): ComposerControls {
   return {
     agents: {
       available: [{ name: "build", mode: "primary" }],
-      options: ["build"],
+      options: [{ id: "build", label: "Build" }],
       current: "build",
       visible: true,
       select() {},
