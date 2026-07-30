@@ -35,7 +35,7 @@ export function createPromptInputController(input: {
     return {
       agents: {
         available: sync().data.agent,
-        options: local.agent.list().map((agent) => agent.name),
+        options: local.agent.list().map((agent) => ({ id: agent.name, label: agent.displayName ?? agent.name })),
         current: local.agent.current()?.name ?? "",
         loading: agentsQuery.isLoading,
         visible: local.agent.visible(),
