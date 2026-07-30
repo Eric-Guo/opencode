@@ -31,6 +31,7 @@ import { EventFeed } from "./event-feed"
 import { MigrationHandler } from "./handlers/migration"
 import { ConfigHandler } from "./handlers/config"
 import { WorkspaceHandler } from "./handlers/workspace"
+import { LspHandler } from "./handlers/lsp"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
@@ -64,4 +65,5 @@ export const handlers = Layer.mergeAll(
   WorktreeHandler,
   WorkspaceHandler,
   VcsHandler,
+  LspHandler,
 )
