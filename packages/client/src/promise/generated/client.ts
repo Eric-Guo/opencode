@@ -214,6 +214,8 @@ import type {
   VcsStatusOutput,
   VcsDiffInput,
   VcsDiffOutput,
+  LspStatusInput,
+  LspStatusOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -1779,6 +1781,20 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/vcs/diff`,
             query: { location: input["location"], mode: input["mode"], context: input["context"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    lsp: {
+      status: (input?: LspStatusInput, requestOptions?: RequestOptions) =>
+        request<LspStatusOutput>(
+          {
+            method: "GET",
+            path: `/lsp`,
+            query: { directory: input?.["directory"], workspace: input?.["workspace"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
