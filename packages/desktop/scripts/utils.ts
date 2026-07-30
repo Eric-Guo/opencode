@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import { chmod, copyFile } from "node:fs/promises"
+import { chmod, copyFile, rm } from "node:fs/promises"
 import { join } from "node:path"
 
 export type Channel = "dev" | "beta" | "prod"
@@ -60,9 +60,14 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
+export function getCliResourcePath(cli = getCurrentCli()) {
+  return cli.os === "win32" ? "resources/opencode-cli.exe" : "resources/opencode-cli"
+}
+
 export async function buildCliToResources() {
   const cli = getCurrentCli()
-  const dest = windowsify("resources/opencode-cli")
+  const dest = getCliResourcePath(cli)
+  await rm(cli.os === "win32" ? "resources/opencode-cli" : "resources/opencode-cli.exe", { force: true })
   await $`bun ../cli/script/build.ts --skip-install ${`--target=${cli.target}`}`
   await copyFile(
     join("../cli/dist", `cli-${cli.target}`, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
@@ -75,9 +80,4 @@ export async function buildCliToResources() {
   if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
 
   console.log(`Built ${cli.target} CLI at ${dest}`)
-}
-
-export function windowsify(path: string) {
-  if (path.endsWith(".exe")) return path
-  return `${path}${process.platform === "win32" ? ".exe" : ""}`
 }
