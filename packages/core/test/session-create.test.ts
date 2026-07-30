@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { DateTime, Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { Agent } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
@@ -22,7 +22,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
@@ -214,6 +214,160 @@ describe("Session.create", () => {
 
       expect((yield* session.list()).data.map((item) => item.id)).toEqual([active.id, newer.id])
     }),
+  )
+
+  it.effect("loads legacy messages through the current Session projection", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const { db } = yield* Database.Service
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+        })
+        const userID = SessionV1.MessageID.ascending("msg_legacy_user")
+        const assistantID = SessionV1.MessageID.ascending("msg_legacy_assistant")
+        const modelID = Model.ID.make("legacy-model")
+        const providerID = Provider.ID.make("legacy-provider")
+        yield* db
+          .insert(MessageTable)
+          .values([
+            {
+              id: userID,
+              session_id: created.id,
+              time_created: 1,
+              data: {
+                role: "user",
+                time: { created: 1 },
+                agent: "build",
+                model: { modelID, providerID },
+              },
+            },
+            {
+              id: assistantID,
+              session_id: created.id,
+              time_created: 2,
+              data: {
+                role: "assistant",
+                time: { created: 2, completed: 5 },
+                parentID: userID,
+                modelID,
+                providerID,
+                mode: "build",
+                agent: "build",
+                path: { cwd: "/project", root: "/project" },
+                cost: 0.25,
+                tokens: { input: 10, output: 20, reasoning: 3, cache: { read: 4, write: 5 } },
+                finish: "stop",
+              },
+            },
+          ])
+          .run()
+        yield* db
+          .insert(PartTable)
+          .values([
+            {
+              id: SessionV1.PartID.ascending("prt_legacy_user_text"),
+              message_id: userID,
+              session_id: created.id,
+              time_created: 1,
+              data: { type: "text", text: "Explain the loop" },
+            },
+            {
+              id: SessionV1.PartID.ascending("prt_legacy_user_file"),
+              message_id: userID,
+              session_id: created.id,
+              time_created: 1,
+              data: {
+                type: "file",
+                mime: "text/plain",
+                filename: "loop.ts",
+                url: "file:///project/loop.ts",
+                source: {
+                  type: "file",
+                  path: "loop.ts",
+                  text: { value: "@loop.ts", start: 0, end: 8 },
+                },
+              },
+            },
+            {
+              id: SessionV1.PartID.ascending("prt_legacy_assistant_text"),
+              message_id: assistantID,
+              session_id: created.id,
+              time_created: 2,
+              data: { type: "text", text: "The loop coordinates work." },
+            },
+            {
+              id: SessionV1.PartID.ascending("prt_legacy_assistant_reasoning"),
+              message_id: assistantID,
+              session_id: created.id,
+              time_created: 3,
+              data: { type: "reasoning", text: "Inspect the implementation", time: { start: 3, end: 4 } },
+            },
+            {
+              id: SessionV1.PartID.ascending("prt_legacy_assistant_tool"),
+              message_id: assistantID,
+              session_id: created.id,
+              time_created: 4,
+              data: {
+                type: "tool",
+                callID: "call_legacy",
+                tool: "read",
+                state: {
+                  status: "completed",
+                  input: { filePath: "/project/loop.ts" },
+                  output: "source",
+                  title: "loop.ts",
+                  metadata: { preview: "source" },
+                  time: { start: 3, end: 4 },
+                },
+              },
+            },
+          ])
+          .run()
+
+        const latest = yield* session.messages({ sessionID: created.id, limit: 1, order: "desc" })
+        const earlier = yield* session.messages({
+          sessionID: created.id,
+          limit: 1,
+          order: "desc",
+          cursor: { id: latest[0].id, direction: "next" },
+        })
+        const encode = Schema.encodeSync(SessionMessage.Info)
+
+        expect(latest).toMatchObject([
+          {
+            id: assistantID,
+            type: "assistant",
+            agent: "build",
+            model: { id: modelID, providerID },
+            content: [
+              { type: "reasoning", text: "Inspect the implementation" },
+              { type: "text", text: "The loop coordinates work." },
+              { type: "tool", id: "call_legacy", name: "read", state: { status: "completed" } },
+            ],
+            finish: "stop",
+            cost: 0.25,
+            tokens: { input: 10, output: 20, reasoning: 3, cache: { read: 4, write: 5 } },
+          },
+        ])
+        expect(earlier).toMatchObject([
+          {
+            id: userID,
+            type: "user",
+            text: "Explain the loop",
+            files: [
+              {
+                mime: "text/plain",
+                name: "loop.ts",
+                source: { type: "uri", uri: "file:///project/loop.ts" },
+                mention: { text: "@loop.ts", start: 0, end: 8 },
+              },
+            ],
+          },
+        ])
+        expect([...latest, ...earlier].map((message) => encode(message))).toHaveLength(2)
+      }),
+    ),
   )
 
   it.effect("filters direct child sessions by parent ID", () =>
