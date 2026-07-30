@@ -19,6 +19,8 @@ import type { CommandInfo, McpResource, McpServer, SessionMessageInfo } from "@o
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
+export type AppAgent = Agent & { displayName?: string }
+
 export type ProjectMeta = {
   name?: string
   icon?: {
@@ -32,7 +34,7 @@ export type ProjectMeta = {
 
 export type State = {
   status: "loading" | "partial" | "complete"
-  agent: Agent[]
+  agent: AppAgent[]
   command: CommandInfo[]
   reference: ReferenceInfo[]
   project: string
