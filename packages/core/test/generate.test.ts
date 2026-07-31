@@ -7,7 +7,7 @@ import { AISDK } from "@opencode/core/aisdk"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { ModelResolver } from "@opencode/core/model-resolver"
-import { ID, Info, Model, Ref } from "@opencode/core/model"
+import { ID, Info, Model, Ref, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Layer } from "effect"
@@ -18,6 +18,11 @@ const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
   package: Provider.aisdk("@ai-sdk/cohere"),
 })
+const fallback = Info.make({
+  ...Info.default(Provider.ID.make("kimi-for-coding"), ID.make("k3")),
+  package: Provider.aisdk("@ai-sdk/mistral"),
+  variants: [{ id: VariantID.make("high") }],
+})
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
 const providers = Layer.mock(Provider.Service, {
@@ -25,6 +30,7 @@ const providers = Layer.mock(Provider.Service, {
 })
 const models = Layer.mock(Model.Service, {
   get: () => Effect.succeed(selected),
+  default: () => Effect.succeed(fallback),
 })
 const integrations = Layer.mock(Integration.Service, {
   revision: () => 0,
@@ -143,5 +149,16 @@ testEffect(Layer.empty).effect("attributes each stateless completion without cre
     expect(sessions).toHaveLength(2)
     expect(sessions[0]).toStartWith("ses_")
     expect(sessions[1]).not.toBe(sessions[0])
+  }),
+)
+
+resolverIt.effect("uses the high variant for the fallback default model", () =>
+  Effect.gen(function* () {
+    const resolver = yield* ModelResolver.Service
+    const result = yield* resolver.resolve()
+
+    expect(result?.ref).toEqual(
+      Ref.make({ providerID: fallback.providerID, id: fallback.id, variant: VariantID.make("high") }),
+    )
   }),
 )
