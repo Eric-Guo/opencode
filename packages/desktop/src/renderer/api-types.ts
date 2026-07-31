@@ -10,6 +10,7 @@ import type {
   PickedFiles,
   SaveFilePickerOptions,
   ServerReadyData,
+  SsoSignInCredentials,
   TitlebarTheme,
 } from "../shared/ipc-contract"
 
@@ -23,6 +24,7 @@ export type UpdaterAPI = {
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(): Promise<ServerReadyData>
+  signInToThapeSso(credentials: SsoSignInCredentials): Promise<void>
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks(): Promise<string[]>
@@ -65,6 +67,7 @@ export type ElectronAPI = {
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
   relaunch(): void
+  quit(): void
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>
   getPinchZoomEnabled(): Promise<boolean>
