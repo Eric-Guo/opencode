@@ -12,9 +12,11 @@ const updaterHandler = (_: unknown, state: UpdaterState) => {
 
 const api: ElectronAPI = {
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
+  quit: () => ipcRenderer.send("quit"),
   installCli: () => ipcRenderer.invoke("install-cli"),
   awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
   getCybrosCurrentUser: () => ipcRenderer.invoke("get-cybros-current-user"),
+  signInToThapeSso: (credentials) => ipcRenderer.invoke("thape-sso-sign-in", credentials),
   wslServers: {
     getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
     subscribe: (cb) => {

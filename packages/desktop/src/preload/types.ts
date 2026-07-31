@@ -30,6 +30,11 @@ export type CybrosCurrentUser = {
   clerk_code: string
 }
 
+export type SsoSignInCredentials = {
+  username: string
+  password: string
+}
+
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {
   subscribe: (cb: (state: UpdaterState) => void) => Promise<() => void>
@@ -52,9 +57,11 @@ export type FatalRendererError = {
 
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
+  quit: () => void
   installCli: () => Promise<string>
   awaitInitialization: () => Promise<ServerReadyData>
   getCybrosCurrentUser: () => Promise<CybrosCurrentUser>
+  signInToThapeSso: (credentials: SsoSignInCredentials) => Promise<void>
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks: () => Promise<string[]>

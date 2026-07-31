@@ -332,6 +332,17 @@ export const dict = {
   "dialog.directory.parent": "โฟลเดอร์หลัก",
   "dialog.directory.readError": "ไม่สามารถอ่านโฟลเดอร์นี้ได้",
 
+  "dialog.userLogin.title": "THAPE sign in",
+  "dialog.userLogin.description": "Enter your THAPE username and password.",
+  "dialog.userLogin.success": "Login successful. Please relaunch SigmaAgents.",
+  "dialog.userLogin.username": "Username",
+  "dialog.userLogin.usernamePlaceholder": "Enter username",
+  "dialog.userLogin.password": "Password",
+  "dialog.userLogin.passwordPlaceholder": "Enter password",
+  "dialog.userLogin.exit": "Exit SigmaAgents",
+  "dialog.userLogin.submit": "Log in",
+  "dialog.userLogin.submitting": "Logging in…",
+
   "dialog.server.title": "เซิร์ฟเวอร์",
   "dialog.server.description": "สลับเซิร์ฟเวอร์ OpenCode ที่แอปนี้เชื่อมต่อด้วย",
   "dialog.server.search.placeholder": "ค้นหาเซิร์ฟเวอร์",
