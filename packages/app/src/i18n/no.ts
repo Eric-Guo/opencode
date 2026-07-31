@@ -323,6 +323,17 @@ export const dict = {
   "dialog.directory.parent": "Overordnet",
   "dialog.directory.readError": "Kan ikke lese denne mappen",
 
+  "dialog.userLogin.title": "THAPE sign in",
+  "dialog.userLogin.description": "Enter your THAPE username and password.",
+  "dialog.userLogin.success": "Login successful. Please relaunch SigmaAgents.",
+  "dialog.userLogin.username": "Username",
+  "dialog.userLogin.usernamePlaceholder": "Enter username",
+  "dialog.userLogin.password": "Password",
+  "dialog.userLogin.passwordPlaceholder": "Enter password",
+  "dialog.userLogin.exit": "Exit SigmaAgents",
+  "dialog.userLogin.submit": "Log in",
+  "dialog.userLogin.submitting": "Logging in…",
+
   "dialog.server.title": "Servere",
   "dialog.server.description": "Bytt hvilken OpenCode-server denne appen kobler til.",
   "dialog.server.search.placeholder": "Søk etter servere",
