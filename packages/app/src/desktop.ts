@@ -1,4 +1,5 @@
 export { AppBaseProviders, AppInterface, preloadRoute } from "./app"
+export { DialogUserLogin, type UserLoginCredentials } from "./shell/user-login"
 export { ACCEPTED_FILE_EXTENSIONS } from "./runtime/platform/file-picker"
 export { useCommand } from "./shell/commands/command"
 export { currentRoute, type LayoutRoute, useCurrentRoute } from "./shell/state/layout"

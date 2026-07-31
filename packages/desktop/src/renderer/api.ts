@@ -49,6 +49,7 @@ export const api: ElectronAPI = {
     send: (request) => send("BrowserPane", { request }),
     onEvent: (callback) => listen("BrowserPaneEvent", (value) => callback(value)),
   },
+  signInToThapeSso: (credentials) => invoke("AppSignInToThapeSso", { credentials }),
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
     subscribe: (cb) => {
@@ -140,6 +141,7 @@ export const api: ElectronAPI = {
   setWindowFocus: () => invoke("WindowSetFocus"),
   showWindow: () => invoke("WindowShow"),
   relaunch: () => send("AppRelaunch"),
+  quit: () => send("AppQuit"),
   getZoomFactor: () => invoke("WindowGetZoomFactor"),
   setZoomFactor: (factor) => invoke("WindowSetZoomFactor", { factor }),
   getPinchZoomEnabled: () => invoke("WindowGetPinchZoomEnabled"),
