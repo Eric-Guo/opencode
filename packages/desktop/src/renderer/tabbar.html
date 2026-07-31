@@ -125,6 +125,10 @@
         color: var(--text);
       }
 
+      .tab-button[hidden] {
+        display: none;
+      }
+
       .tab-button[data-active="true"] {
         background: rgb(56 189 248 / 12%);
         color: var(--accent);
@@ -245,6 +249,15 @@
       </nav>
       <nav id="tabs" aria-label="Tabs"></nav>
       <nav id="tools" aria-label="Navigation">
+        <button class="tab-button" id="login" title="THAPE sign in" aria-label="THAPE sign in" hidden>
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="3.25" />
+              <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+            </svg>
+          </span>
+          <span class="tab-label">Login</span>
+        </button>
         <button class="tab-button" id="help" title="Help" aria-label="Help">
           <span class="tab-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -272,6 +285,7 @@
       const reload = document.getElementById("reload")
       const forward = document.getElementById("forward")
       const settings = document.getElementById("settings")
+      const login = document.getElementById("login")
       const help = document.getElementById("help")
       const icons = {
         archx:
@@ -284,6 +298,7 @@
       }
       let state = {
         active: "opencode",
+        ssoConfigured: true,
         tabs: [
           { id: "opencode", title: "OpenCode", label: "Sigema", skipDisplay: false },
           { id: "worktime", title: "工时填报", label: "工时填报", skipDisplay: false },
@@ -321,12 +336,14 @@
 
         back.disabled = !state.navigation.canGoBack
         forward.disabled = !state.navigation.canGoForward
+        login.hidden = state.ssoConfigured
       }
 
       back.addEventListener("click", () => api.back())
       reload.addEventListener("click", () => api.reload())
       forward.addEventListener("click", () => api.forward())
       settings.addEventListener("click", () => api.action("settings"))
+      login.addEventListener("click", () => api.action("login"))
       help.addEventListener("click", () => api.action("help"))
       api.subscribe((next) => {
         state = next
