@@ -1,6 +1,6 @@
 export * as Ipc from "./ipc"
 
-import { ipcMain, MessageChannelMain, net } from "electron"
+import { app, ipcMain, MessageChannelMain, net } from "electron"
 import type { WebContents } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
@@ -20,18 +20,19 @@ import { ApplicationLifecycle } from "./lifecycle"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { BackgroundService } from "./service/background-service"
 import { DesktopStorage } from "./storage"
+import { getCybrosCurrentUser } from "./thape-sso"
 import { Updater } from "./updater"
 import {
   getDesktopTabHistory,
   getDesktopTabInitializationFromWebContents,
   getLastFocusedWindow,
   goToDesktopTabHistory,
+  notifyDesktopTabState,
   subscribeDesktopTabHistory,
   subscribeWebContents,
 } from "./windows"
 import { Wsl } from "./wsl/start"
 
-const cybrosCurrentUserURL = "https://cybros.thape.com.cn/api/sigma_agents/me.json"
 const services = Layer.mergeAll(DesktopFiles.layer, DesktopStorage.layer, Wsl.layer)
 const handlers = Layer.mergeAll(
   appHandlers,
@@ -84,22 +85,19 @@ export const registerIpcHandlers = Effect.gen(function* () {
       ...data,
       ...getDesktopTabInitializationFromWebContents(event.sender),
     }))
-  const getCybrosCurrentUser = async () => {
-    const key = process.env.THAPE_SSO_BEARER_API_KEY
-    if (!key) throw new Error("Cybros SSO bearer key is not configured")
-    const response = await net.fetch(cybrosCurrentUserURL, {
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
+  const handleCybrosCurrentUser = () =>
+    getCybrosCurrentUser(
+      app.getPath("userData"),
+      process.env.THAPE_SSO_BEARER_API_KEY,
+      () => {
+        delete process.env.THAPE_SSO_BEARER_API_KEY
+        notifyDesktopTabState()
       },
-    })
-    if (!response.ok) throw new Error(`Failed to load Cybros user: ${response.status}`)
-    return response.json()
-  }
+      (input, init) => net.fetch(input, init),
+    )
   yield* Effect.sync(() => {
     ipcMain.handle("await-initialization", awaitInitialization)
-    ipcMain.handle("get-cybros-current-user", getCybrosCurrentUser)
+    ipcMain.handle("get-cybros-current-user", handleCybrosCurrentUser)
   })
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {

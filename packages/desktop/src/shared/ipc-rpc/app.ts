@@ -12,6 +12,14 @@ const ServerReadyData = Schema.Struct({
 })
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
+export const AppSignInToThapeSso = Rpc.make("AppSignInToThapeSso", {
+  payload: {
+    credentials: Schema.Struct({
+      username: Schema.String,
+      password: Schema.String,
+    }),
+  },
+})
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
   success: Schema.Array(Schema.String),
 })
@@ -58,8 +66,10 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
 export const AppRelaunch = Rpc.make("AppRelaunch")
+export const AppQuit = Rpc.make("AppQuit")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
+  AppSignInToThapeSso,
   AppConsumeInitialDeepLinks,
   AppGetDefaultServerUrl,
   AppSetDefaultServerUrl,
@@ -73,4 +83,5 @@ export const AppRpcs = RpcGroup.make(
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,
+  AppQuit,
 )
