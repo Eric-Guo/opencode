@@ -4,6 +4,7 @@ import {
   ACCEPTED_FILE_EXTENSIONS,
   AppBaseProviders,
   AppInterface,
+  DialogUserLogin,
   loadLocaleDict,
   normalizeLocale,
   type Locale,
@@ -31,6 +32,7 @@ import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 const root = document.getElementById("root")
 const version = import.meta.env.OPENCODE_VERSION ?? pkg.version
@@ -111,7 +113,7 @@ function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string }) {
   return <MemoryRouter {...props} history={history} />
 }
 
-const createPlatform = (windowState: DesktopWindowState): Platform => {
+const createPlatform = (windowState: DesktopWindowState, thapeSsoConfigured: () => boolean): Platform => {
   const attachmentPaths = new WeakMap<File, string>()
   const os = (() => {
     const ua = navigator.userAgent
@@ -283,6 +285,12 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       await window.api.setDefaultServerUrl(url)
     },
 
+    signInToThapeSso: (credentials) => window.api.signInToThapeSso(credentials),
+
+    thapeSsoConfigured,
+
+    quit: () => window.api.quit(),
+
     wslServers: wslServersApi,
 
     getDisplayBackend: async () => {
@@ -337,7 +345,9 @@ function LoadingSplash() {
 }
 
 function DesktopRoot(props: { windowState: DesktopWindowState }) {
-  const platform = createPlatform(props.windowState)
+  // Fetch sidecar credentials (available immediately, before health check)
+  const [sidecar] = createResource(() => window.api.awaitInitialization())
+  const platform = createPlatform(props.windowState, () => Boolean(sidecar.latest?.ssoJwtSecretKey))
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -350,9 +360,6 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
     return next satisfies Locale
   }
 
-  // Fetch sidecar credentials (available immediately, before health check)
-  const [sidecar] = createResource(() => window.api.awaitInitialization())
-
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
   const router = (props: BaseRouterProps) => (
@@ -362,7 +369,16 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   function Inner() {
     const cmd = useCommand()
-    menuTrigger = (id) => cmd.trigger(id)
+    const dialog = useDialog()
+    menuTrigger = (id) => {
+      if (id !== "sso.login") return cmd.trigger(id)
+      void dialog.show(() => (
+        <DialogUserLogin
+          onLogin={(credentials) => platform.signInToThapeSso?.(credentials)}
+          onExit={() => platform.quit?.()}
+        />
+      ))
+    }
 
     const theme = useTheme()
 
