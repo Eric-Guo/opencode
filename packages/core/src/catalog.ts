@@ -14,7 +14,18 @@ export type ProviderRecord = {
   models: Map<Model.ID, Model.MutableInfo>
 }
 
-export type DefaultModel = { providerID: Provider.ID; modelID: Model.ID }
+export type DefaultModel = { providerID: Provider.ID; modelID: Model.ID; variant?: Model.VariantID }
+
+const fallbackDefaultModel: DefaultModel = {
+  providerID: Provider.ID.make("kimi-for-coding"),
+  modelID: Model.ID.make("k3"),
+  variant: Model.VariantID.make("high"),
+}
+
+export function fallbackDefaultVariant(model: Pick<Model.Info, "providerID" | "id">) {
+  if (model.providerID !== fallbackDefaultModel.providerID || model.id !== fallbackDefaultModel.modelID) return
+  return fallbackDefaultModel.variant
+}
 
 export { Event } from "@opencode-ai/schema/catalog"
 
@@ -194,16 +205,21 @@ const layer = Layer.effect(
         }),
 
         default: Effect.fn("Catalog.model.default")(function* () {
+          const available = yield* result.model.available()
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
-            const provider = yield* result.provider.get(defaultModel.providerID)
-            if (provider && (yield* result.provider.available()).some((item) => item.id === provider.id)) {
-              const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID)
-              if (model?.enabled) return model
-            }
+            const model = available.find(
+              (item) => item.providerID === defaultModel.providerID && item.id === defaultModel.modelID,
+            )
+            if (model) return model
           }
 
-          return (yield* result.model.available())[0]
+          return (
+            available.find(
+              (item) =>
+                item.providerID === fallbackDefaultModel.providerID && item.id === fallbackDefaultModel.modelID,
+            ) ?? available[0]
+          )
         }),
 
         small: Effect.fn("Catalog.model.small")(function* (providerID) {
