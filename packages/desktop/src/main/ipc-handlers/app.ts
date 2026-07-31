@@ -1,4 +1,5 @@
 import { parseDesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
+import { app, net } from "electron"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
 import { openExternalURL } from "../files"
@@ -14,6 +15,7 @@ import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../
 import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
+import { signInToThapeSso } from "../thape-sso"
 import { Updater } from "../updater"
 import {
   getDesktopTabHistory,
@@ -22,6 +24,7 @@ import {
   getPrimaryWebContents,
   getWindowFromWebContents,
   goToDesktopTabHistory,
+  notifyDesktopTabState,
   setBackgroundColor,
   subscribeDesktopTabHistory,
 } from "../windows"
@@ -43,6 +46,15 @@ export const appHandlers = AppRpcs.toLayer(
           return { ...data, ...getDesktopTabInitializationFromWebContents(sender(handoff, context)) }
         }),
       AppReconnectService: () => background.reconnect,
+      AppSignInToThapeSso: ({ credentials }) =>
+        promise(async () => {
+          process.env.THAPE_SSO_BEARER_API_KEY = await signInToThapeSso(
+            app.getPath("userData"),
+            credentials,
+            (input, init) => net.fetch(input, init),
+          )
+          notifyDesktopTabState()
+        }),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
       AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),
@@ -82,6 +94,7 @@ export const appHandlers = AppRpcs.toLayer(
           })
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
+      AppQuit: () => Effect.sync(lifecycle.quit),
     })
   }),
 )
