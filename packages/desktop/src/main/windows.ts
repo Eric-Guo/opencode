@@ -104,7 +104,7 @@ const desktopTabHistoryListeners = new Set<() => void>()
 const externalTabSessionRestores = new Map<string, Promise<void>>()
 
 type DesktopTabID = string
-type DesktopTabAction = "settings" | "help"
+type DesktopTabAction = "settings" | "login" | "help"
 type DesktopTabManager = ReturnType<typeof createDesktopTabManager>
 type DesktopTabsState = {
   active: DesktopTabID
@@ -646,6 +646,11 @@ function createDesktopTabManager(
       openCodeView.webContents.send("menu-command", "settings.open")
       return
     }
+    if (action === "login") {
+      activate("opencode")
+      openCodeView.webContents.send("menu-command", "sso.login")
+      return
+    }
     if (action === "help") {
       void shell.openExternal(helpURL)
       return
@@ -914,7 +919,7 @@ function registerDesktopTabsIpc() {
     desktopTabManagers.get(event.sender.id)?.reload()
   })
   ipcMain.on("desktop-tabs-action", (event, action: DesktopTabAction) => {
-    if (action !== "settings" && action !== "help") return
+    if (action !== "settings" && action !== "login" && action !== "help") return
     desktopTabManagers.get(event.sender.id)?.action(action)
   })
 }
