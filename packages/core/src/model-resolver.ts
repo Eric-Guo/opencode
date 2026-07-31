@@ -529,7 +529,7 @@ export const layer = Layer.effect(
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
         const selected = requested ? yield* models.get(requested.providerID, requested.id) : yield* fallback()
         if (!selected) return undefined
-        return yield* load(selected, requested?.variant)
+        return yield* load(selected, requested ? requested.variant : Model.fallbackDefaultVariant(selected))
       }),
       fallback,
       resolveModel: load,
