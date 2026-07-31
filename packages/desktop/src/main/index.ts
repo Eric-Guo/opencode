@@ -20,6 +20,7 @@ import { createMenu, sendMenuCommand } from "./native/menu"
 import { setNativeTranslations } from "./native/translations"
 import { configureProxyCommandLine, configureSessionProxy } from "./proxy"
 import { startBackgroundCli } from "./service/background-service"
+import { loadSsoBearerApiKey } from "./thape-sso"
 import { forwardInitializationFailure } from "./service/initialization"
 import { getDefaultServerUrl, setDefaultServerUrl } from "./service/server-settings"
 import { createUpdaterIpc, setupAutoUpdater, showUpdaterDialog, startAutoUpdater } from "./updater"
@@ -45,6 +46,10 @@ const main = Effect.gen(function* () {
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
 
   yield* Effect.promise(() => app.whenReady())
+  const ssoBearerApiKey = yield* Effect.promise(() =>
+    loadSsoBearerApiKey(app.getPath("userData"), process.env.THAPE_SSO_BEARER_API_KEY),
+  )
+  if (ssoBearerApiKey) process.env.THAPE_SSO_BEARER_API_KEY = ssoBearerApiKey
   void ensureKimiWebBridgeDaemon({
     logger: {
       log: (message, meta) => logger.log(message, meta),
@@ -66,6 +71,7 @@ const main = Effect.gen(function* () {
     onHistoryChange: subscribeDesktopTabHistory,
   }
   registerIpcHandlers({
+    quit: lifecycle.quit,
     relaunch: lifecycle.relaunch,
     awaitInitialization: Effect.fnUntraced(
       function* () {

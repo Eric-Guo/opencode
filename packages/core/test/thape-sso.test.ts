@@ -77,3 +77,22 @@ test("ensureSsoUsername populates the runtime environment", async () => {
   expect(process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()
   expect(Bun.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()
 })
+
+test("ensureSsoUsername clears an unauthorized bearer key", async () => {
+  for (const key of keys) {
+    delete process.env[key]
+    delete Bun.env[key]
+  }
+  process.env.THAPE_SSO_BEARER_API_KEY = "expired-token"
+  Bun.env.THAPE_SSO_BEARER_API_KEY = "expired-token"
+
+  globalThis.fetch = Object.assign(async () => new Response(undefined, { status: 401 }), {
+    preconnect: originalFetch.preconnect,
+  }) as typeof fetch
+
+  await ensureSsoUsername()
+
+  expect(process.env.THAPE_SSO_BEARER_API_KEY).toBeUndefined()
+  expect(Bun.env.THAPE_SSO_BEARER_API_KEY).toBeUndefined()
+  expect(ssoHideAgents()).toEqual([])
+})

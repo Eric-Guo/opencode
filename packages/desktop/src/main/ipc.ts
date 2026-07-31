@@ -1,4 +1,4 @@
-import { ipcMain, net } from "electron"
+import { app, ipcMain, net } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 
@@ -10,6 +10,7 @@ import {
   type IpcInvokeResult,
   type IpcSend,
   type ServerReadyData,
+  type SsoSignInCredentials,
 } from "../shared/ipc-contract"
 import { createFileCapabilities, openExternalURL, openLocalFileURL } from "./files"
 import { setForceFocus } from "./native/debug"
@@ -23,15 +24,16 @@ import {
   getWindowFromWebContents,
   getWindowID,
   goToDesktopTabHistory,
+  notifyDesktopTabState,
   setPinchZoomEnabled,
   setTitlebar,
   updateTitlebar,
 } from "./windows"
 import type { UpdaterIpc } from "./updater"
 import type { WslIpc } from "./wsl/ipc"
+import { getCybrosCurrentUser, signInToThapeSso } from "./thape-sso"
 
 type MaybePromise<Value> = Value | Promise<Value>
-const cybrosCurrentUserURL = "https://cybros.thape.com.cn/api/sigma_agents/me.json"
 
 function handle<Channel extends keyof IpcInvoke>(
   channel: Channel,
@@ -48,6 +50,7 @@ function on<Channel extends keyof IpcSend>(
 }
 
 type Deps = {
+  quit: () => void
   relaunch: () => void
   awaitInitialization: () => Promise<ServerReadyData>
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
@@ -68,22 +71,29 @@ export function registerIpcHandlers(deps: Deps) {
   const files = createFileCapabilities()
   const storage = createDesktopStorage()
 
+  on(Ipc.app.quit, () => deps.quit())
   handle(Ipc.app.awaitInitialization, async (event) => {
     const data = await deps.awaitInitialization()
     return { ...data, ...getDesktopTabInitializationFromWebContents(event.sender) }
   })
-  handle(Ipc.app.getCybrosCurrentUser, async () => {
-    const key = process.env.THAPE_SSO_BEARER_API_KEY
-    if (!key) throw new Error("Cybros SSO bearer key is not configured")
-    const response = await net.fetch(cybrosCurrentUserURL, {
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
+  handle(Ipc.app.getCybrosCurrentUser, () =>
+    getCybrosCurrentUser(
+      app.getPath("userData"),
+      process.env.THAPE_SSO_BEARER_API_KEY,
+      () => {
+        delete process.env.THAPE_SSO_BEARER_API_KEY
+        notifyDesktopTabState()
       },
-    })
-    if (!response.ok) throw new Error(`Failed to load Cybros user: ${response.status}`)
-    return response.json()
+      (input, init) => net.fetch(input, init),
+    ),
+  )
+  handle(Ipc.app.signInToThapeSso, async (_event, credentials: SsoSignInCredentials) => {
+    process.env.THAPE_SSO_BEARER_API_KEY = await signInToThapeSso(
+      app.getPath("userData"),
+      credentials,
+      (input, init) => net.fetch(input, init),
+    )
+    notifyDesktopTabState()
   })
   handle(Ipc.app.consumeInitialDeepLinks, () => deps.consumeInitialDeepLinks())
   handle(Ipc.app.getDefaultServerUrl, () => deps.getDefaultServerUrl())

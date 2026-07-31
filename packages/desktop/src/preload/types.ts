@@ -17,6 +17,7 @@ export type UpdaterAPI = {
 export type ElectronAPI = {
   awaitInitialization: IpcInvokeMethod<typeof Ipc.app.awaitInitialization>
   getCybrosCurrentUser: IpcInvokeMethod<typeof Ipc.app.getCybrosCurrentUser>
+  signInToThapeSso: IpcInvokeMethod<typeof Ipc.app.signInToThapeSso>
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks: IpcInvokeMethod<typeof Ipc.app.consumeInitialDeepLinks>
@@ -59,6 +60,7 @@ export type ElectronAPI = {
   setWindowFocus: IpcInvokeMethod<typeof Ipc.window.setFocus>
   showWindow: IpcInvokeMethod<typeof Ipc.window.show>
   relaunch: IpcSendMethod<typeof Ipc.app.relaunch>
+  quit: IpcSendMethod<typeof Ipc.app.quit>
   getZoomFactor: IpcInvokeMethod<typeof Ipc.window.getZoomFactor>
   setZoomFactor: IpcInvokeMethod<typeof Ipc.window.setZoomFactor>
   getPinchZoomEnabled: IpcInvokeMethod<typeof Ipc.window.getPinchZoomEnabled>
