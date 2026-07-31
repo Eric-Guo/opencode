@@ -308,7 +308,7 @@ export const layer = Layer.effect(
                 ),
               )
         if (!selected) return undefined
-        return yield* load(selected, requested?.variant)
+        return yield* load(selected, requested ? requested.variant : Catalog.fallbackDefaultVariant(selected))
       }),
       resolveModel: load,
     })
