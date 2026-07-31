@@ -439,6 +439,17 @@ export const dict = {
   "dialog.directory.parent": "Родительская папка",
   "dialog.directory.readError": "Не удалось прочитать эту папку",
 
+  "dialog.userLogin.title": "THAPE sign in",
+  "dialog.userLogin.description": "Enter your THAPE username and password.",
+  "dialog.userLogin.success": "Login successful. Please relaunch SigmaAgents.",
+  "dialog.userLogin.username": "Username",
+  "dialog.userLogin.usernamePlaceholder": "Enter username",
+  "dialog.userLogin.password": "Password",
+  "dialog.userLogin.passwordPlaceholder": "Enter password",
+  "dialog.userLogin.exit": "Exit SigmaAgents",
+  "dialog.userLogin.submit": "Log in",
+  "dialog.userLogin.submitting": "Logging in…",
+
   "dialog.server.title": "Серверы",
   "dialog.server.description": "Выберите сервер OpenCode, к которому подключается приложение.",
   "dialog.server.search.placeholder": "Поиск серверов",

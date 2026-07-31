@@ -7,6 +7,7 @@ export const Ipc = {
   app: {
     awaitInitialization: "await-initialization",
     getCybrosCurrentUser: "get-cybros-current-user",
+    signInToThapeSso: "thape-sso-sign-in",
     consumeInitialDeepLinks: "consume-initial-deep-links",
     deepLink: "deep-link",
     getDefaultServerUrl: "get-default-server-url",
@@ -16,6 +17,7 @@ export const Ipc = {
     checkAppExists: "check-app-exists",
     resolveAppPath: "resolve-app-path",
     relaunch: "relaunch",
+    quit: "quit",
     setBackgroundColor: "set-background-color",
     exportDebugLogs: "export-debug-logs",
     setForceFocus: "set-force-focus",
@@ -112,6 +114,11 @@ export type CybrosCurrentUser = {
   clerk_code: string
 }
 
+export type SsoSignInCredentials = {
+  username: string
+  password: string
+}
+
 export type TitlebarTheme = {
   mode: "light" | "dark"
   scheme?: "system" | "light" | "dark"
@@ -154,6 +161,7 @@ export type ClipboardImage = {
 export type IpcInvoke = {
   [Ipc.app.awaitInitialization]: { args: []; result: ServerReadyData }
   [Ipc.app.getCybrosCurrentUser]: { args: []; result: CybrosCurrentUser }
+  [Ipc.app.signInToThapeSso]: { args: [credentials: SsoSignInCredentials]; result: void }
   [Ipc.app.consumeInitialDeepLinks]: { args: []; result: string[] }
   [Ipc.app.getDefaultServerUrl]: { args: []; result: string | null }
   [Ipc.app.setDefaultServerUrl]: { args: [url: string | null]; result: void }
@@ -230,6 +238,7 @@ export type IpcInvoke = {
 
 export type IpcSend = {
   [Ipc.app.relaunch]: []
+  [Ipc.app.quit]: []
   [Ipc.files.openExternal]: [url: string]
   [Ipc.files.openLocalFile]: [url: string]
 }

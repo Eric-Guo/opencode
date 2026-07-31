@@ -1,4 +1,5 @@
 export { AppBaseProviders, AppInterface, preloadRoute } from "./app"
+export { DialogUserLogin, type UserLoginCredentials } from "./components/dialog-user-login"
 export { useLayout } from "./context/layout"
 export { useServerSDK } from "./context/server-sdk"
 export { useServers as useServers } from "./context/servers"

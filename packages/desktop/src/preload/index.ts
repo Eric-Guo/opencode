@@ -45,6 +45,7 @@ function invokeWsl<Channel extends WslInvoke>(channel: Channel, ...args: IpcInvo
 const api: ElectronAPI = {
   awaitInitialization: () => invoke(Ipc.app.awaitInitialization),
   getCybrosCurrentUser: () => invoke(Ipc.app.getCybrosCurrentUser),
+  signInToThapeSso: (credentials) => invoke(Ipc.app.signInToThapeSso, credentials),
   wslServers: {
     getState: () => invokeWsl(Ipc.wsl.getState),
     subscribe: (cb) => {
@@ -129,6 +130,7 @@ const api: ElectronAPI = {
   setWindowFocus: () => invoke(Ipc.window.setFocus),
   showWindow: () => invoke(Ipc.window.show),
   relaunch: () => send(Ipc.app.relaunch),
+  quit: () => send(Ipc.app.quit),
   getZoomFactor: () => invoke(Ipc.window.getZoomFactor),
   setZoomFactor: (factor) => invoke(Ipc.window.setZoomFactor, factor),
   getPinchZoomEnabled: () => invoke(Ipc.window.getPinchZoomEnabled),

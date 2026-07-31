@@ -4,14 +4,17 @@
 import {
   AppBaseProviders,
   AppInterface,
+  DialogUserLogin,
   PlatformProvider,
   preloadRoute,
   ServerConnection,
   useCommand,
   useLanguage,
   useWslServers,
+  type Platform,
   type UpdaterPlatform,
 } from "@opencode-ai/app"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
@@ -38,9 +41,14 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
 }
 
 function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; windowState: DesktopWindowState }) {
-  const platform = createDesktopPlatform(props.api, props.windowState, props.updater)
   const initialUrl = getLastActiveUrl(props.windowState.id)
   const [sidecar] = createResource(() => props.api.awaitInitialization())
+  const platform = createDesktopPlatform(
+    props.api,
+    props.windowState,
+    props.updater,
+    () => Boolean(sidecar.latest?.ssoJwtSecretKey),
+  )
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(() => preloadStoredLocale(platform))
   const [route] = createResource(() => preloadRoute(initialUrl))
@@ -84,7 +92,7 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
                 initialUrl={initialUrl}
                 serverKey={key}
               />
-              <DesktopEffects api={props.api} />
+              <DesktopEffects api={props.api} platform={platform} />
               <Suspense fallback={null}>
                 <Show when={initializationData(sidecar)} keyed>
                   {(server) => <MigrationStatus server={server} />}
@@ -110,9 +118,18 @@ function DesktopWindow(props: { api: ElectronAPI; updater: UpdaterPlatform; wind
   )
 }
 
-function DesktopEffects(props: { api: ElectronAPI }) {
+function DesktopEffects(props: { api: ElectronAPI; platform: Platform }) {
   const command = useCommand()
-  bindDesktopMenu((id) => command.trigger(id))
+  const dialog = useDialog()
+  bindDesktopMenu((id) => {
+    if (id !== "sso.login") return command.trigger(id)
+    void dialog.show(() => (
+      <DialogUserLogin
+        onLogin={(credentials) => props.platform.signInToThapeSso?.(credentials)}
+        onExit={() => props.platform.quit?.()}
+      />
+    ))
+  })
   const theme = useTheme()
 
   createEffect(() => {

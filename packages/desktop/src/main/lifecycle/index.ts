@@ -21,6 +21,10 @@ export function createApplicationLifecycle(logger: DesktopLogger) {
       app.quit()
     })
   }
+  const quit = () => {
+    setAppQuitting()
+    void wsl.stop().finally(() => app.exit(0))
+  }
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg) => arg.startsWith("opencode://"))
@@ -61,6 +65,7 @@ export function createApplicationLifecycle(logger: DesktopLogger) {
   })
 
   return {
+    quit,
     relaunch,
     prepareToRestart: () => wsl.stop(),
     setWslShutdown(stop: () => Promise<void>) {
