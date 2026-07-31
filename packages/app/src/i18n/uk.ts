@@ -442,6 +442,17 @@ export const dict = {
   "app.server.retrying": "Автоматична повторна спроба...",
   "app.server.otherServers": "Інші сервери",
 
+  "dialog.userLogin.title": "THAPE sign in",
+  "dialog.userLogin.description": "Enter your THAPE username and password.",
+  "dialog.userLogin.success": "Login successful. Please relaunch SigmaAgents.",
+  "dialog.userLogin.username": "Username",
+  "dialog.userLogin.usernamePlaceholder": "Enter username",
+  "dialog.userLogin.password": "Password",
+  "dialog.userLogin.passwordPlaceholder": "Enter password",
+  "dialog.userLogin.exit": "Exit SigmaAgents",
+  "dialog.userLogin.submit": "Log in",
+  "dialog.userLogin.submitting": "Logging in…",
+
   "dialog.server.title": "Сервери",
   "dialog.server.description": "Перемкніть сервер OpenCode, до якого підключається ця програма.",
   "dialog.server.search.placeholder": "Пошук серверів",

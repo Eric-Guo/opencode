@@ -7,6 +7,7 @@ import { ensureKimiWebBridgeDaemon } from "../kimi-webbridge"
 import { DesktopLogging } from "../native/logging"
 import { configureProxyCommandLine, configureSessionProxy } from "../proxy"
 import { getStore } from "../storage/store"
+import { loadSsoBearerApiKey } from "../thape-sso"
 import {
   loadProxyEnvironment,
   preferApplicationEnvironment,
@@ -50,6 +51,10 @@ export const layer = Layer.effect(
       yield* Effect.logInfo("electron session proxy applied", {
         hasBypassRules: Boolean(sessionProxy.proxyBypassRules),
       })
+    const ssoBearerApiKey = yield* Effect.promise(() =>
+      loadSsoBearerApiKey(app.getPath("userData"), process.env.THAPE_SSO_BEARER_API_KEY),
+    )
+    if (ssoBearerApiKey) process.env.THAPE_SSO_BEARER_API_KEY = ssoBearerApiKey
     yield* Effect.promise(() => ensureSsoUsername())
     yield* logging.startNetwork
     yield* prepareDesktop
