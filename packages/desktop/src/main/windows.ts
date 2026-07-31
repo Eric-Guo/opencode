@@ -108,6 +108,7 @@ type DesktopTabAction = "settings" | "login" | "help"
 type DesktopTabManager = ReturnType<typeof createDesktopTabManager>
 type DesktopTabsState = {
   active: DesktopTabID
+  ssoConfigured: boolean
   tabs: {
     id: DesktopTabID
     title: string
@@ -162,6 +163,10 @@ export function subscribeDesktopTabHistory(listener: () => void) {
 
 function notifyDesktopTabHistory() {
   desktopTabHistoryListeners.forEach((listener) => listener())
+  notifyDesktopTabState()
+}
+
+export function notifyDesktopTabState() {
   desktopTabManagers.forEach((manager) => manager.sendState())
 }
 
@@ -573,6 +578,7 @@ function createDesktopTabManager(
     const history = getActiveView().webContents.navigationHistory
     return {
       active,
+      ssoConfigured: Boolean(process.env.THAPE_SSO_BEARER_API_KEY?.trim()),
       tabs: desktopTabs.map((tab) => ({
         id: tab.id,
         title: tab.title,
