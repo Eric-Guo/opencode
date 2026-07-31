@@ -33,6 +33,11 @@ const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
   package: Provider.aisdk("@ai-sdk/perplexity"),
 })
+const fallback = Info.make({
+  ...Info.default(Provider.ID.make("kimi-for-coding"), ID.make("k3")),
+  package: Provider.aisdk("@ai-sdk/mistral"),
+  variants: [{ id: VariantID.make("high") }],
+})
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 const reference = Ref.make({ providerID: selected.providerID, id: selected.id })
 
@@ -41,6 +46,7 @@ const providers = Layer.mock(Provider.Service, {
 })
 const models = Layer.mock(Model.Service, {
   get: () => Effect.succeed(selected),
+  default: () => Effect.succeed(fallback),
 })
 const integrations = Layer.mock(Integration.Service, {
   revision: () => 0,
@@ -588,3 +594,13 @@ const DECISION_RESPONSE =
   '{"model":"typesafe/jev-1.13-20260917","answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"sales":0,"technical":0},"confidence":1},"urgency":{"type":"score","score":1.02,"legend":{"0":"Can wait for normal support","1":"Needs prompt attention","2":"Actively blocking revenue"},"probabilities":{"0":0.01,"1":0.96,"2":0.03},"confidence":0.95},"refund":{"type":"noul","noul":0.99}},"usage":{"input_tokens":422,"output_tokens":69,"cost":0.000017724},"id":"gen-dec-1790088886-JRlffOLUwQdx4Lltu2se","provider":"TypeSafe"}'
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52])
+resolverIt.effect("uses the high variant for the fallback default model", () =>
+  Effect.gen(function* () {
+    const resolver = yield* ModelResolver.Service
+    const result = yield* resolver.resolve()
+
+    expect(result?.ref).toEqual(
+      Ref.make({ providerID: fallback.providerID, id: fallback.id, variant: VariantID.make("high") }),
+    )
+  }),
+)
