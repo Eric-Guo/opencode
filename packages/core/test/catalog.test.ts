@@ -559,6 +559,31 @@ describe("Provider and Model", () => {
     }),
   )
 
+  it.effect("prefers Kimi for Coding K3 when no default is configured", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const kimiProvider = Provider.ID.make("kimi-for-coding")
+      const kimiModel = Model.ID.make("k3")
+      const newerProvider = Provider.ID.make("newer")
+      yield* providers.transform((editor) => {
+        editor.update(kimiProvider, () => {})
+        editor.models.update(kimiProvider, kimiModel, (model) => {
+          model.time.released = 1000
+        })
+        editor.update(newerProvider, () => {})
+        editor.models.update(newerProvider, Model.ID.make("newest"), (model) => {
+          model.time.released = 2000
+        })
+      })
+
+      expect(yield* models.default()).toMatchObject({
+        providerID: kimiProvider,
+        id: kimiModel,
+      })
+    }),
+  )
+
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
