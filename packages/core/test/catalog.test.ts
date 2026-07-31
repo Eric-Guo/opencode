@@ -238,6 +238,30 @@ describe("Catalog", () => {
     }),
   )
 
+  it.effect("prefers Kimi for Coding K3 when no default is configured", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const kimiProvider = Provider.ID.make("kimi-for-coding")
+      const kimiModel = Model.ID.make("k3")
+      const newerProvider = Provider.ID.make("newer")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(kimiProvider, () => {})
+        catalog.model.update(kimiProvider, kimiModel, (model) => {
+          model.time.released = 1000
+        })
+        catalog.provider.update(newerProvider, () => {})
+        catalog.model.update(newerProvider, Model.ID.make("newest"), (model) => {
+          model.time.released = 2000
+        })
+      })
+
+      expect(yield* catalog.model.default()).toMatchObject({
+        providerID: kimiProvider,
+        id: kimiModel,
+      })
+    }),
+  )
+
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
