@@ -21,6 +21,7 @@ import {
   goToDesktopTabHistory,
   openExternalURL,
   openLocalFileURL,
+  notifyDesktopTabState,
   setPinchZoomEnabled,
   setTitlebar,
   updateTitlebar,
@@ -29,6 +30,7 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import { getCybrosCurrentUser, signInToThapeSso, type SsoSignInCredentials } from "./thape-sso"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -36,10 +38,9 @@ const pickerFilters = (ext?: string[]) => {
 }
 
 const pickedFiles = createPickedFileAuthorizations()
-const CYBROS_CURRENT_USER_URL = "https://cybros.thape.com.cn/api/sigma_agents/me.json"
-
 type Deps = {
   killSidecar: () => Promise<void> | void
+  quit: () => void
   relaunch: () => void
   awaitInitialization: () => Promise<ServerReadyData>
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
@@ -69,6 +70,7 @@ export function registerIpcHandlers(deps: Deps) {
   app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
+  ipcMain.on("quit", () => deps.quit())
   ipcMain.handle("await-initialization", async (event) => {
     const data = await deps.awaitInitialization()
     return {
@@ -76,19 +78,21 @@ export function registerIpcHandlers(deps: Deps) {
       ...getDesktopTabInitializationFromWebContents(event.sender),
     }
   })
-  ipcMain.handle("get-cybros-current-user", async () => {
-    const ssoJwtSecretKey = process.env.THAPE_SSO_BEARER_API_KEY
-    if (!ssoJwtSecretKey) throw new Error("Cybros SSO bearer key is not configured")
-
-    const response = await net.fetch(CYBROS_CURRENT_USER_URL, {
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${ssoJwtSecretKey}`,
+  ipcMain.handle("get-cybros-current-user", () =>
+    getCybrosCurrentUser(
+      app.getPath("userData"),
+      process.env.THAPE_SSO_BEARER_API_KEY,
+      () => {
+        delete process.env.THAPE_SSO_BEARER_API_KEY
+        notifyDesktopTabState()
       },
-    })
-    if (!response.ok) throw new Error(`Failed to load Cybros user: ${response.status}`)
-    return response.json()
+      (input, init) => net.fetch(input, init),
+    ),
+  )
+  ipcMain.handle("thape-sso-sign-in", async (_event: IpcMainInvokeEvent, credentials: SsoSignInCredentials) => {
+    const token = await signInToThapeSso(app.getPath("userData"), credentials, (input, init) => net.fetch(input, init))
+    process.env.THAPE_SSO_BEARER_API_KEY = token
+    notifyDesktopTabState()
   })
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
