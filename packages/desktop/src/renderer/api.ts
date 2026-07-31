@@ -24,6 +24,7 @@ const updaterHandler = (state: UpdaterState) => {
 
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization").then(mutable),
+  signInToThapeSso: (credentials) => invoke("AppSignInToThapeSso", { credentials }),
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
     subscribe: (cb) => {
@@ -115,6 +116,7 @@ export const api: ElectronAPI = {
   setWindowFocus: () => invoke("WindowSetFocus"),
   showWindow: () => invoke("WindowShow"),
   relaunch: () => send("AppRelaunch"),
+  quit: () => send("AppQuit"),
   getZoomFactor: () => invoke("WindowGetZoomFactor"),
   setZoomFactor: (factor) => invoke("WindowSetZoomFactor", { factor }),
   getPinchZoomEnabled: () => invoke("WindowGetPinchZoomEnabled"),
