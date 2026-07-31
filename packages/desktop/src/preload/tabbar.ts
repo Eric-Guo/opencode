@@ -4,6 +4,7 @@ type DesktopTabID = string
 type DesktopTabAction = "settings" | "login" | "help"
 type DesktopTabsState = {
   active: DesktopTabID
+  ssoConfigured: boolean
   tabs: {
     id: DesktopTabID
     title: string
