@@ -105,10 +105,11 @@ const desktopTabHistoryListeners = new Set<() => void>()
 const externalTabSessionRestores = new Map<string, Promise<void>>()
 
 type DesktopTabID = string
-type DesktopTabAction = "settings" | "help"
+type DesktopTabAction = "settings" | "login" | "help"
 type DesktopTabManager = ReturnType<typeof createDesktopTabManager>
 type DesktopTabsState = {
   active: DesktopTabID
+  ssoConfigured: boolean
   tabs: {
     id: DesktopTabID
     title: string
@@ -163,6 +164,10 @@ export function subscribeDesktopTabHistory(listener: () => void) {
 
 function notifyDesktopTabHistory() {
   desktopTabHistoryListeners.forEach((listener) => listener())
+  notifyDesktopTabState()
+}
+
+export function notifyDesktopTabState() {
   desktopTabManagers.forEach((manager) => manager.sendState())
 }
 
@@ -609,6 +614,7 @@ function createDesktopTabManager(
     const history = getActiveView().webContents.navigationHistory
     return {
       active,
+      ssoConfigured: Boolean(process.env.THAPE_SSO_BEARER_API_KEY?.trim()),
       tabs: desktopTabs.map((tab) => ({
         id: tab.id,
         title: tab.title,
@@ -680,6 +686,11 @@ function createDesktopTabManager(
     if (action === "settings") {
       activate("opencode")
       openCodeView.webContents.send("menu-command", "settings.open")
+      return
+    }
+    if (action === "login") {
+      activate("opencode")
+      openCodeView.webContents.send("menu-command", "sso.login")
       return
     }
     if (action === "help") {
@@ -950,7 +961,7 @@ function registerDesktopTabsIpc() {
     desktopTabManagers.get(event.sender.id)?.reload()
   })
   ipcMain.on("desktop-tabs-action", (event, action: DesktopTabAction) => {
-    if (action !== "settings" && action !== "help") return
+    if (action !== "settings" && action !== "login" && action !== "help") return
     desktopTabManagers.get(event.sender.id)?.action(action)
   })
 }
