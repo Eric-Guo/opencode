@@ -347,6 +347,17 @@ export const dict = {
   "app.server.retrying": "Retrying automatically...",
   "app.server.otherServers": "Other servers",
 
+  "dialog.userLogin.title": "THAPE sign in",
+  "dialog.userLogin.description": "Enter your THAPE username and password.",
+  "dialog.userLogin.success": "Login successful. Please relaunch SigmaAgents.",
+  "dialog.userLogin.username": "Username",
+  "dialog.userLogin.usernamePlaceholder": "Enter username",
+  "dialog.userLogin.password": "Password",
+  "dialog.userLogin.passwordPlaceholder": "Enter password",
+  "dialog.userLogin.exit": "Exit SigmaAgents",
+  "dialog.userLogin.submit": "Log in",
+  "dialog.userLogin.submitting": "Logging in…",
+
   "dialog.server.title": "Servers",
   "dialog.server.description": "Switch which OpenCode server this app connects to.",
   "dialog.server.search.placeholder": "Search servers",
@@ -847,8 +858,7 @@ export const dict = {
   "sidebar.workspaces.enable": "Enable workspaces",
   "sidebar.workspaces.disable": "Disable workspaces",
   "sidebar.gettingStarted.title": "Tianhua SSO required",
-  "sidebar.gettingStarted.line1":
-    "Create a global environment variable THAPE_SSO_BEARER_API_KEY on your Windows system.",
+  "sidebar.gettingStarted.line1": "Sign in with your THAPE username and password.",
   "sidebar.gettingStarted.line2":
     "This authorizes the XiaoTian agent to access tools on the Tianhua intranet on your behalf.",
   "sidebar.project.recentSessions": "Recent sessions",
