@@ -12,6 +12,11 @@ export type CybrosCurrentUser = {
   clerk_code: string
 }
 
+export type SsoSignInCredentials = {
+  username: string
+  password: string
+}
+
 export type TitlebarTheme = {
   mode: "light" | "dark"
   scheme?: "system" | "light" | "dark"
