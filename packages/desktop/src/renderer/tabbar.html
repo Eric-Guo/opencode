@@ -125,6 +125,10 @@
         color: var(--text);
       }
 
+      .tab-button[hidden] {
+        display: none;
+      }
+
       .tab-button[data-active="true"] {
         background: rgb(56 189 248 / 12%);
         color: var(--accent);
@@ -245,7 +249,7 @@
       </nav>
       <nav id="tabs" aria-label="Tabs"></nav>
       <nav id="tools" aria-label="Navigation">
-        <button class="tab-button" id="login" title="THAPE sign in" aria-label="THAPE sign in">
+        <button class="tab-button" id="login" title="THAPE sign in" aria-label="THAPE sign in" hidden>
           <span class="tab-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="8" r="3.25" />
@@ -295,6 +299,7 @@
       }
       let state = {
         active: "opencode",
+        ssoConfigured: true,
         tabs: [
           { id: "opencode", title: "OpenCode", label: "Sigema", skipDisplay: false },
           { id: "worktime", title: "工时填报", label: "工时填报", skipDisplay: false },
@@ -332,6 +337,7 @@
 
         back.disabled = !state.navigation.canGoBack
         forward.disabled = !state.navigation.canGoForward
+        login.hidden = state.ssoConfigured
       }
 
       back.addEventListener("click", () => api.back())
