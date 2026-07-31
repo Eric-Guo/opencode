@@ -49,6 +49,7 @@ import { cleanupStoreFiles } from "./store-cleanup"
 import { setNativeTranslations } from "./native-translations"
 import { configureNodeProxyFromEnv, configureProxyCommandLine, configureSessionProxy } from "./proxy"
 import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
+import { loadSsoBearerApiKey } from "./thape-sso"
 
 const APP_NAMES: Record<string, string> = {
   dev: "SigmaAgents",
@@ -161,6 +162,10 @@ const main = Effect.gen(function* () {
       app.quit()
     })
   }
+  const quit = () => {
+    setAppQuitting()
+    void stopSidecars().finally(() => app.exit(0))
+  }
 
   try {
     setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
@@ -247,6 +252,11 @@ const main = Effect.gen(function* () {
 
   yield* Effect.promise(() => app.whenReady())
 
+  const ssoBearerApiKey = yield* Effect.promise(() =>
+    loadSsoBearerApiKey(app.getPath("userData"), process.env.THAPE_SSO_BEARER_API_KEY),
+  )
+  if (ssoBearerApiKey) process.env.THAPE_SSO_BEARER_API_KEY = ssoBearerApiKey
+
   void ensureKimiWebBridgeDaemon({
     logger: {
       log: (message, meta) => logger.log(message, meta),
@@ -285,6 +295,7 @@ const main = Effect.gen(function* () {
   }
   registerIpcHandlers({
     killSidecar: () => undefined,
+    quit,
     relaunch,
     awaitInitialization: Effect.fnUntraced(
       function* () {
