@@ -1,4 +1,5 @@
 export { AppBaseProviders, AppInterface, preloadRoute } from "./app"
+export { DialogUserLogin, type UserLoginCredentials } from "./shell/user-login"
 export { ACCEPTED_FILE_EXTENSIONS } from "./runtime/platform/file-picker"
 export { useCommand } from "./shell/commands/command"
 export { loadLocaleDict, normalizeLocale, type Locale, useLanguage } from "./runtime/i18n/language"
