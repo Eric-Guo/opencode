@@ -22,6 +22,7 @@ export function createDesktopPlatform(
   api: ElectronAPI,
   windowState: DesktopWindowState,
   updater: UpdaterPlatform,
+  thapeSsoConfigured: () => boolean,
 ): Platform {
   const os = desktopOS()
   return {
@@ -49,6 +50,9 @@ export function createDesktopPlatform(
     setDefaultServer: async (url) => {
       await api.setDefaultServerUrl(url)
     },
+    signInToThapeSso: (credentials) => api.signInToThapeSso(credentials),
+    thapeSsoConfigured,
+    quit: () => api.quit(),
     wslServers: os === "windows" ? api.wslServers : undefined,
     webviewZoom,
     windowFullscreen,

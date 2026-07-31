@@ -5,6 +5,7 @@ import {
   AppBaseProviders,
   AppInterface,
   currentRoute,
+  DialogUserLogin,
   PlatformProvider,
   preloadRoute,
   ServerConnection,
@@ -14,8 +15,10 @@ import {
   useTabs,
   useWslServers,
   type LayoutRoute,
+  type Platform,
   type UpdaterPlatform,
 } from "@opencode-ai/app/desktop"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
@@ -74,8 +77,13 @@ function DesktopWindow(props: {
   onReady: () => void
   onRoute: (route: LayoutRoute) => void
 }) {
-  const platform = createDesktopPlatform(props.api, props.windowState, props.updater)
   const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
+  const platform = createDesktopPlatform(
+    props.api,
+    props.windowState,
+    props.updater,
+    () => Boolean(sidecar.latest?.ssoJwtSecretKey),
+  )
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(() => preloadStoredLocale(platform))
   const [initialRoute] = createResource(() => preloadRoute(getLastActiveUrl(props.windowState.id)))
@@ -123,7 +131,7 @@ function DesktopWindow(props: {
                 initialUrl={getLastActiveUrl(props.windowState.id)}
                 serverKey={key}
               />
-              <DesktopEffects api={props.api} />
+              <DesktopEffects api={props.api} platform={platform} />
               <Suspense fallback={null}>
                 <Show when={initializationData(sidecar)} keyed>
                   {(server) => <MigrationStatus server={server} />}
@@ -142,8 +150,7 @@ function DesktopWindow(props: {
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
         onThemeApplied={(mode, scheme) => {
-          void props.api.setTitlebar({ mode, scheme })
-          void props.api.themeReady()
+          void props.api.setTitlebar({ mode, scheme }).finally(() => props.api.themeReady())
         }}
       >
         <Show when={true}>{(_) => <ReadyApp />}</Show>
@@ -167,9 +174,18 @@ function DesktopStartupReady(props: {
   return null
 }
 
-function DesktopEffects(props: { api: ElectronAPI }) {
+function DesktopEffects(props: { api: ElectronAPI; platform: Platform }) {
   const command = useCommand()
-  bindDesktopMenu((id) => command.trigger(id))
+  const dialog = useDialog()
+  bindDesktopMenu((id) => {
+    if (id !== "sso.login") return command.trigger(id)
+    void dialog.show(() => (
+      <DialogUserLogin
+        onLogin={(credentials) => props.platform.signInToThapeSso?.(credentials)}
+        onExit={() => props.platform.quit?.()}
+      />
+    ))
+  })
   const theme = useTheme()
 
   createEffect(() => {
