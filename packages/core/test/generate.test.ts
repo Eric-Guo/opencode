@@ -7,7 +7,7 @@ import { Catalog } from "@opencode/core/catalog"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { ModelResolver } from "@opencode/core/model-resolver"
-import { ID, Info, Ref } from "@opencode/core/model"
+import { ID, Info, Ref, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Layer } from "effect"
@@ -16,6 +16,11 @@ import { testEffect } from "./lib/effect"
 const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
   package: Provider.aisdk("@ai-sdk/cohere"),
+})
+const fallback = Info.make({
+  ...Info.default(Provider.ID.make("kimi-for-coding"), ID.make("k3")),
+  package: Provider.aisdk("@ai-sdk/mistral"),
+  variants: [{ id: VariantID.make("high") }],
 })
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
@@ -29,7 +34,7 @@ const catalog = Layer.mock(Catalog.Service, {
     get: () => Effect.succeed(selected),
     all: () => Effect.die("unused"),
     available: () => Effect.die("unused"),
-    default: () => Effect.die("unused"),
+    default: () => Effect.succeed(fallback),
     small: () => Effect.die("unused"),
   },
 })
@@ -96,5 +101,16 @@ resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
       limit: selected.limit,
       websocket: false,
     })
+  }),
+)
+
+resolverIt.effect("uses the high variant for the fallback default model", () =>
+  Effect.gen(function* () {
+    const resolver = yield* ModelResolver.Service
+    const result = yield* resolver.resolve()
+
+    expect(result?.ref).toEqual(
+      Ref.make({ providerID: fallback.providerID, id: fallback.id, variant: VariantID.make("high") }),
+    )
   }),
 )
