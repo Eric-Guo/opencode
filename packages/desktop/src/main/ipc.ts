@@ -18,6 +18,7 @@ import {
   getWindowID,
   getWindowFromWebContents,
   goToDesktopTabHistory,
+  notifyDesktopTabState,
   setPinchZoomEnabled,
   setTitlebar,
   updateTitlebar,
@@ -87,6 +88,7 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("thape-sso-sign-in", async (_event: IpcMainInvokeEvent, credentials: SsoSignInCredentials) => {
     const token = await signInToThapeSso(app.getPath("userData"), credentials, (input, init) => net.fetch(input, init))
     process.env.THAPE_SSO_BEARER_API_KEY = token
+    notifyDesktopTabState()
   })
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
