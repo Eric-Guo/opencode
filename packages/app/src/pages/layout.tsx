@@ -57,6 +57,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
+import { DialogUserLogin } from "@/components/dialog-user-login"
 import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { useDirectoryPicker } from "@/components/directory-picker"
@@ -125,6 +126,22 @@ export default function LegacyLayout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  const authorizeSso = () => {
+    if (!platform.signInToThapeSso) {
+      platform.openLink("https://sso.thape.com.cn/jwts?audience=opencode&exp_hours=36000")
+      return
+    }
+    void dialog.show(() => (
+      <DialogUserLogin
+        onLogin={(credentials) => platform.signInToThapeSso?.(credentials)}
+        onExit={() => platform.quit?.()}
+      />
+    ))
+  }
+  const needsSso = () => {
+    if (platform.thapeSsoConfigured) return !platform.thapeSsoConfigured()
+    return providers.all().size > 0 && providers.paid().length === 0
+  }
   createEffect(() => setV2Toast(false))
   const initialDirectory = decode64(params.dir)
   const route = createMemo(() => {
@@ -2165,7 +2182,7 @@ export default function LegacyLayout(props: ParentProps) {
         <div
           class="shrink-0 px-3 py-3"
           classList={{
-            hidden: store.gettingStartedDismissed || !(providers.all().size > 0 && providers.paid().length === 0),
+            hidden: store.gettingStartedDismissed || !needsSso(),
           }}
         >
           <div class="rounded-xl bg-background-base shadow-xs-border-base" data-component="getting-started">
@@ -2180,12 +2197,8 @@ export default function LegacyLayout(props: ParentProps) {
                 </div>
               </div>
               <div data-component="getting-started-actions">
-                <Button
-                  size="large"
-                  icon="plus-small"
-                  onClick={() => platform.openLink("https://sso.thape.com.cn/jwts?audience=opencode&exp_hours=36000")}
-                >
-                  {language.t("notification.permission.title")}
+                <Button size="large" icon="plus-small" onClick={authorizeSso}>
+                  Sign in
                 </Button>
                 <Button size="large" variant="ghost" onClick={() => setStore("gettingStartedDismissed", true)}>
                   {language.t("toast.update.action.notYet")}
