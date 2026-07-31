@@ -47,6 +47,9 @@ type PlatformBase = {
   /** Restart the app  */
   restart(): Promise<void>
 
+  /** Exit the app (desktop only). */
+  quit?(): void
+
   /** Send a system notification */
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
 
@@ -79,6 +82,12 @@ type PlatformBase = {
 
   /** Get the configured default server URL (platform-specific) */
   getDefaultServer?(): Promise<ServerConnection.Key | null>
+
+  /** Sign in through THAPE SSO and persist the desktop bearer credential. */
+  signInToThapeSso?(credentials: { username: string; password: string }): Promise<void>
+
+  /** Whether a THAPE SSO bearer credential was available at desktop startup. */
+  thapeSsoConfigured?: Accessor<boolean>
 
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServer?(url: ServerConnection.Key | null): Promise<void> | void
