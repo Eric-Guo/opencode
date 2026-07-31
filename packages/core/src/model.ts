@@ -51,6 +51,17 @@ export type RuntimeInfo = Omit<Info, "settings"> & { readonly settings?: Provide
 
 export type MutableInfo = DeepMutable<Info>
 
+const fallbackDefaultModel = {
+  providerID: Provider.ID.make("kimi-for-coding"),
+  modelID: ID.make("k3"),
+  variant: VariantID.make("high"),
+}
+
+export function fallbackDefaultVariant(model: Pick<Info, "providerID" | "id">) {
+  if (model.providerID !== fallbackDefaultModel.providerID || model.id !== fallbackDefaultModel.modelID) return
+  return fallbackDefaultModel.variant
+}
+
 export { Event } from "@opencode/schema/model"
 
 export interface Editor {
@@ -261,7 +272,17 @@ const layer = Layer.effect(
         const value = yield* read()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
-        return model?.enabled ? model : value.available.find(supportsText)
+
+        if (model?.enabled) return model
+
+        return (
+          value.available.find(
+            (item) =>
+              item.providerID === fallbackDefaultModel.providerID &&
+              item.id === fallbackDefaultModel.modelID &&
+              supportsText(item),
+          ) ?? value.available.find(supportsText)
+        )
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* read()
