@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { invalidateFromWatcher } from "./watcher"
 
 describe("file watcher invalidation", () => {
-  test("reloads open files and refreshes loaded parent on add", () => {
+  test.each([
+    { name: "legacy watcher events", type: "file.watcher.updated" },
+    { name: "current filesystem events", type: "filesystem.changed" },
+  ])("reloads open files and refreshes loaded parent for $name", ({ type }) => {
     const loads: string[] = []
     const refresh: string[] = []
     invalidateFromWatcher(
       {
-        type: "file.watcher.updated",
+        type,
         properties: {
           file: "src/new.ts",
           event: "add",
