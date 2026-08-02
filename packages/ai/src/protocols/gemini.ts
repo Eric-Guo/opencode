@@ -381,7 +381,12 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         // Generated images replay as model-role inline data so multi-turn image editing keeps the prior output.
         if (part.type === "media") {
           const lowered = yield* lowerContentPart(part)
-          parts.push({ ...lowered, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
+          parts.push({
+            ...lowered,
+            thoughtSignature:
+              thoughtSignature(part.providerMetadata, metadataKey) ??
+              (part.media.kind === "image" ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
+          })
           continue
         }
         if (part.type === "reasoning") {
