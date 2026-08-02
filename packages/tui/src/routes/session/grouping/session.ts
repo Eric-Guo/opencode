@@ -36,6 +36,7 @@ export type SessionRow = SessionEntry | SessionGroup
 export type AppendPart =
   | { type: "text" }
   | { type: "reasoning"; time?: { completed?: number } }
+  | { type: "file" }
   | { type: "tool"; name: string }
 
 export type ProjectionEntry = {
