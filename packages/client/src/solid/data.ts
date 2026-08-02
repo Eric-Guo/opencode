@@ -808,6 +808,14 @@ export function createData(config: CreateDataInput) {
           }
         })
         return
+      case "session.file.generated":
+        message.update(event.data.sessionID, (draft, index) => {
+          const assistant = message.assistant(draft, index, event.data.assistantMessageID)
+          if (!assistant || assistant.content.some((content) => content.type === "file" && content.id === event.data.file.id))
+            return
+          assistant.content.push(event.data.file)
+        })
+        return
       case "session.retry.scheduled":
         message.update(event.data.sessionID, (draft, index) => {
           const currentAssistant = message.assistant(draft, index, event.data.assistantMessageID)
