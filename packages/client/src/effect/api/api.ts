@@ -1118,6 +1118,21 @@ export type ExperimentalSessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.file.generated"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly assistantMessageID: SessionMessage.ID
+            readonly file: SessionMessage.AssistantFile
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.input.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?:
@@ -2091,6 +2106,7 @@ export type EventSubscribeInput = {
         | "session.reasoning.started"
         | "session.reasoning.delta"
         | "session.reasoning.ended"
+        | "session.file.generated"
         | "session.tool.input.started"
         | "session.tool.input.delta"
         | "session.tool.input.ended"
