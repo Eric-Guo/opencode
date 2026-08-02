@@ -892,6 +892,46 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("emits generated inline images as file events", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                { text: "[IMAGE]" },
+                {
+                  inlineData: { mimeType: "image/png", data: "ignored" },
+                  thought: true,
+                  thoughtSignature: "thought_image",
+                },
+                {
+                  inlineData: { mimeType: "image/png", data: "AAECAw==" },
+                  thoughtSignature: "final_image",
+                },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+      })
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find((event) => event.type === "file")).toEqual({
+        type: "file",
+        mediaType: "image/png",
+        data: "AAECAw==",
+        providerMetadata: { google: { thoughtSignature: "final_image" } },
+      })
+      expect(response.events.filter((event) => event.type === "file")).toHaveLength(1)
+      expect(response.message.content).toEqual([
+        { type: "text", text: "[IMAGE]" },
+        { type: "media", mediaType: "image/png", data: "AAECAw==" },
+      ])
+    }),
+  )
+
   it.effect("assigns unique ids to multiple streamed tool calls", () =>
     Effect.gen(function* () {
       const body = sseEvents({
