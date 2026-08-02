@@ -8,6 +8,7 @@ const ref = { sessionID: "ses_legacy", assistantMessageID: "msg_legacy" }
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 const native = { signature: "kept" }
 const textPart = { type: "text", text: "hi", state: native }
+const filePart = { type: "file", id: "image", mime: "image/png", url: "data:image/png;base64,aGk=", state: native }
 const result = { result: "kept" }
 const toolPart = {
   type: "tool",
@@ -54,17 +55,25 @@ describe("SessionLegacy", () => {
     expect(decode(type, { ...data, resultState: native })).toMatchObject({ native })
   })
 
+  test("upgrades generated file native data", () => {
+    expect(decode("session.file.generated.1", { ...ref, file: filePart })).toEqual({
+      ...ref,
+      file: { type: "file", id: filePart.id, mime: filePart.mime, url: filePart.url, native },
+    })
+  })
+
   test("upgrades replaced assistant content without touching tool status", () => {
     expect(
       decode("session.message.content.updated.1", {
         sessionID: ref.sessionID,
         messageID: ref.assistantMessageID,
-        content: [textPart, toolPart],
+        content: [textPart, toolPart, filePart],
       }),
     ).toMatchObject({
       content: [
         { type: "text", native },
         { type: "tool", native: { ...native, ...result }, state: { status: "streaming", input: "" } },
+        { type: "file", native },
       ],
     })
   })
@@ -160,7 +169,7 @@ describe("SessionLegacy", () => {
       agent: "build",
       model: { providerID: "anthropic", id: "claude" },
       providerState: native,
-      content: [textPart, { type: "reasoning", text: "thought", state: native }],
+      content: [textPart, { type: "reasoning", text: "thought", state: native }, filePart],
       time: { created: 0 },
     }
     expect(
@@ -171,6 +180,7 @@ describe("SessionLegacy", () => {
         content: [
           { type: "text", native },
           { type: "reasoning", native },
+          { type: "file", native },
         ],
       },
     ])
