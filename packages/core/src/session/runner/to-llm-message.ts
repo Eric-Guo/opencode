@@ -170,6 +170,16 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
         : item.text.length > 0
           ? [{ type: message.error === undefined ? "reasoning" : "text", text: item.text }]
           : []
+    if (item.type === "file")
+      return [
+        {
+          type: "media",
+          mediaType: item.mime,
+          data: item.url,
+          filename: item.filename,
+          providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.state) : undefined,
+        },
+      ]
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
@@ -198,8 +208,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
-    if (part.type === "text") return part.text !== ""
-    if (part.type !== "reasoning") return true
+    if (part.type !== "text" && part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
   const results = message.content
