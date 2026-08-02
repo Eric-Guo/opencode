@@ -1322,6 +1322,36 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("preserves thoughtSignature from a final empty text chunk", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { candidates: [{ content: { role: "model", parts: [{ text: "hello" }] } }] },
+              {
+                candidates: [
+                  {
+                    content: { role: "model", parts: [{ text: "", thoughtSignature: "text_sig" }] },
+                    finishReason: "STOP",
+                  },
+                ],
+              },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.message.content).toEqual([
+        {
+          type: "text",
+          text: "hello",
+          providerMetadata: { google: { thoughtSignature: "text_sig" } },
+        },
+      ])
+    }),
+  )
+
   it.effect("emits streamed tool calls and maps finish reason", () =>
     Effect.gen(function* () {
       const body = sseEvents({
@@ -1495,7 +1525,7 @@ describe("Gemini route", () => {
             content: {
               role: "model",
               parts: [
-                { text: "[IMAGE]" },
+                { text: "[IMAGE]", thoughtSignature: "final_text" },
                 {
                   inlineData: { mimeType: "image/png", data: "ignored" },
                   thought: true,
@@ -1521,8 +1551,17 @@ describe("Gemini route", () => {
       })
       expect(response.events.filter((event) => event.type === "file")).toHaveLength(1)
       expect(response.message.content).toEqual([
-        { type: "text", text: "[IMAGE]" },
-        { type: "media", mediaType: "image/png", data: "AAECAw==" },
+        {
+          type: "text",
+          text: "[IMAGE]",
+          providerMetadata: { google: { thoughtSignature: "final_text" } },
+        },
+        {
+          type: "media",
+          mediaType: "image/png",
+          data: "AAECAw==",
+          providerMetadata: { google: { thoughtSignature: "final_image" } },
+        },
       ])
     }),
   )
@@ -1828,6 +1867,69 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("replays generated assistant images for conversational editing", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          id: "req_media",
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "text",
+                text: "Here is the dinosaur.",
+                providerMetadata: { google: { thoughtSignature: "text-signature" } },
+              },
+              {
+                type: "media",
+                media: Media.fromDataUrl("data:image/png;base64,AAECAw=="),
+                providerMetadata: { google: { thoughtSignature: "image-signature" } },
+              },
+            ]),
+            Message.user("Make it a T-Rex."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            { text: "Here is the dinosaur.", thoughtSignature: "text-signature" },
+            {
+              inlineData: { mimeType: "image/png", data: "AAECAw==" },
+              thoughtSignature: "image-signature",
+            },
+          ],
+        },
+        { role: "user", parts: [{ text: "Make it a T-Rex." }] },
+      ])
+    }),
+  )
+
+  it.effect("replays legacy generated images with Gemini's signature validator bypass", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          id: "req_legacy_media",
+          model,
+          messages: [Message.assistant({ type: "media", media: Media.base64("AAECAw==", "image/png") })],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            {
+              inlineData: { mimeType: "image/png", data: "AAECAw==" },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
+        },
+      ])
+    }),
+  )
   it.effect("replays generated assistant media as model inline data", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
