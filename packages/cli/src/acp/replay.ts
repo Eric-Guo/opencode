@@ -73,6 +73,13 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
           content: { type: "text", text: part.text },
         },
       ]
+    if (part.type === "file")
+      return partsToContentChunks([part]).map((chunk) => ({
+        sessionUpdate: "agent_message_chunk",
+        messageId: message.id,
+        ...chunk,
+      }))
+
     const call: SessionUpdate = {
       sessionUpdate: "tool_call",
       ...pendingToolCall({
