@@ -137,7 +137,9 @@ export function presentAssistantParts(sessionID: string, message: SessionMessage
   const ordinals = { text: 0, reasoning: 0 }
   return message.content.flatMap((content): Part[] => {
     const id =
-      content.type === "tool" ? content.id : sessionMessagePartID(message.id, content.type, ordinals[content.type]++)
+      content.type === "tool" || content.type === "file"
+        ? content.id
+        : sessionMessagePartID(message.id, content.type, ordinals[content.type]++)
     const part = presentAssistantContent(sessionID, message, id, content)
     if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return []
     return [part]
@@ -163,6 +165,16 @@ export function presentAssistantContent(
         start: content.time?.created ?? message.time.created,
         end: content.time?.completed,
       },
+    }
+  if (content.type === "file")
+    return {
+      id,
+      sessionID,
+      messageID: message.id,
+      type: "file",
+      mime: content.mime,
+      filename: content.filename,
+      url: content.url,
     }
   return toolPart(sessionID, message.id, content)
 }
