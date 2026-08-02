@@ -588,6 +588,13 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
   switch (event.type) {
     case "compaction":
       return appendContent(next, event)
+    case "file":
+      return appendContent(next, {
+        type: "media",
+        mediaType: event.mediaType,
+        data: event.data,
+        providerMetadata: event.providerMetadata,
+      })
     case "text-start":
       return ensureText(next, event.id, event.providerMetadata)
     case "text-delta":
