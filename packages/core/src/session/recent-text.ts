@@ -42,6 +42,7 @@ export const messageToText = (message: SessionMessage.Info): string => {
           // Providers return summaries of the real reasoning, and written out as text it can read like an attempt to
           // extract the model's thinking.
           if (part.type === "reasoning") return []
+          if (part.type === "file") return [`[Assistant file]: ${part.filename ?? part.mime}`]
 
           const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
           const call = `[Assistant tool call]: ${part.name}(${input})`
