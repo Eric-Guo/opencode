@@ -85,6 +85,29 @@ test("derives a baseline from the latest completed projected request", () => {
     assistant,
     { ...assistant, id: "msg_running", tokens: undefined, time: { created: 5_000 } },
   ]
+
   // Reasoning ended at 1_700, so TPS spans 1_700 → 3_800 = 100 / 2.1s.
   expect(projectedProviderMetrics(messages)).toEqual({ tps: 100 / 2.1, ttft: 300, ttfa: 700, e2e: 2_800 })
+})
+
+const tool = (created: number): SessionMessageAssistant["content"][number] => ({
+  type: "tool",
+  id: "call_1",
+  name: "read",
+  state: { status: "running", input: {}, metadata: {} },
+  time: { created, ran: created + 100 },
+})
+
+test("leaves file-first history unavailable even when a later part has timing", () => {
+  expect(
+    projectedProviderMetrics([
+      {
+        ...assistant,
+        content: [
+          { type: "file", id: "file_1", mime: "image/png", url: "data:image/png;base64,aGVsbG8=" },
+          tool(2_500),
+        ],
+      },
+    ]),
+  ).toEqual({ tps: undefined, ttft: undefined, ttfa: undefined, e2e: 2_800 })
 })
