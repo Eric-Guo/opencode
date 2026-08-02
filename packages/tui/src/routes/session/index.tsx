@@ -1582,6 +1582,7 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
 }
 
 function SessionPartView(props: { partRef: PartRef; message: (messageID: string) => SessionMessageInfo | undefined }) {
+  const ctx = use()
   const message = createMemo(() => props.message(props.partRef.messageID))
   const part = createMemo(() => {
     const item = message()
@@ -1603,7 +1604,7 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
             />
           </Match>
           <Match when={item().type === "file"}>
-            <GeneratedFile part={item() as SessionMessageAssistantFile} />
+            <GeneratedFile part={item() as SessionMessageAssistantFile} width={ctx.width} />
           </Match>
           <Match when={item().type === "tool"}>
             <ToolPart part={item() as SessionMessageAssistantTool} />
@@ -2435,14 +2436,13 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
   )
 }
 
-export function GeneratedFile(props: { part: SessionMessageAssistantFile }) {
+export function GeneratedFile(props: { part: SessionMessageAssistantFile; width: number }) {
   const theme = useTheme()
-  const dimensions = useTerminalDimensions()
   const [failed, setFailed] = createSignal(false)
   const image = createMemo(
     () => props.part.mime.startsWith("image/") && props.part.url.startsWith("data:image/") && !failed(),
   )
-  const height = createMemo(() => Math.max(6, Math.min(18, Math.floor((dimensions().width - 6) / 4))))
+  const height = createMemo(() => Math.max(6, Math.min(18, Math.floor((props.width - 6) / 4))))
   return (
     <box paddingLeft={3} paddingRight={2} flexShrink={0} gap={1}>
       <Show when={image()}>
