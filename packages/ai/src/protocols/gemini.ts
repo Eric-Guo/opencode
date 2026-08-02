@@ -358,7 +358,12 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
         // Generated images replay as model-role inline data so multi-turn image editing keeps the prior output.
         if (part.type === "media") {
           const lowered = yield* lowerContentPart(part)
-          parts.push({ ...lowered, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
+          parts.push({
+            ...lowered,
+            thoughtSignature:
+              thoughtSignature(part.providerMetadata, metadataKey) ??
+              (part.media.kind === "image" ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
+          })
           continue
         }
         if (part.type === "reasoning") {
@@ -661,6 +666,19 @@ const step = (state: ParserState, event: GeminiEvent) => {
     else if (signature !== undefined && "text" in part) textSignature = signature
     // Image-capable Gemini models return generated images as inline data parts; surface them as first-class output.
     if ("inlineData" in part) {
+      if (part.thought) continue
+      if (reasoningId !== undefined) {
+        lifecycle = Lifecycle.reasoningEnd(
+          lifecycle,
+          events,
+          reasoningId,
+          reasoningSignature
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+            : undefined,
+        )
+        reasoningId = undefined
+        reasoningSignature = undefined
+      }
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.media({
@@ -723,27 +741,6 @@ const step = (state: ParserState, event: GeminiEvent) => {
         textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
       )
       textSignature = undefined
-      continue
-    }
-
-    if ("inlineData" in part) {
-      if (part.thought) continue
-      lifecycle = Lifecycle.reasoningEnd(
-        lifecycle,
-        events,
-        "reasoning-0",
-        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
-      )
-      lifecycle = Lifecycle.stepStart(lifecycle, events)
-      events.push(
-        LLMEvent.file({
-          mediaType: part.inlineData.mimeType,
-          data: part.inlineData.data,
-          providerMetadata: part.thoughtSignature
-            ? googleMetadata({ thoughtSignature: part.thoughtSignature })
-            : undefined,
-        }),
-      )
       continue
     }
 
