@@ -25,6 +25,7 @@ import { ToolSchemaProjection } from "./utils/tool-schema"
 
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
+const MISSING_IMAGE_SIGNATURE = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 export interface OptionsInput {
@@ -285,10 +286,25 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     if (message.role === "assistant") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
-          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
+        if (!ProviderShared.supportsContent(part, ["text", "media", "reasoning", "tool-call"]))
+          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", [
+            "text",
+            "media",
+            "reasoning",
+            "tool-call",
+          ])
         if (part.type === "text") {
-          parts.push({ text: part.text })
+          parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata) })
+          continue
+        }
+        if (part.type === "media") {
+          const media = yield* ProviderShared.validateMedia("Gemini", part, MEDIA_MIMES)
+          parts.push({
+            inlineData: { mimeType: media.mime, data: media.base64 },
+            thoughtSignature:
+              thoughtSignature(part.providerMetadata) ??
+              (media.mime.startsWith("image/") ? MISSING_IMAGE_SIGNATURE : undefined),
+          })
           continue
         }
         if (part.type === "reasoning") {
@@ -518,8 +534,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
   for (const part of candidate.content.parts) {
     if ("thoughtSignature" in part && part.thoughtSignature && "thought" in part && part.thought)
       reasoningSignature = part.thoughtSignature
-    if ("text" in part && part.text.length > 0) {
+    if ("text" in part) {
       if (part.thought) {
+        if (part.text.length === 0) continue
         lifecycle = Lifecycle.reasoningDelta(
           lifecycle,
           events,
@@ -535,6 +552,15 @@ const step = (state: ParserState, event: GeminiEvent) => {
         "reasoning-0",
         reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
       )
+      const metadata = part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined
+      if (part.text.length === 0) {
+        if (metadata) {
+          lifecycle = Lifecycle.textStart(lifecycle, events, "text-0", metadata)
+          lifecycle = Lifecycle.textEnd(lifecycle, events, "text-0", metadata)
+        }
+        continue
+      }
+      lifecycle = Lifecycle.textStart(lifecycle, events, "text-0", metadata)
       lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
       continue
     }
