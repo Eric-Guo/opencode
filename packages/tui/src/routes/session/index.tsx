@@ -3154,7 +3154,12 @@ function formatSessionTranscript(session: SessionInfo, messages: SessionMessageI
     const content = message.content.flatMap((item) => {
       if (item.type === "text") return [item.text]
       if (item.type === "reasoning") return thinking ? [`_Thinking:_\n\n${item.text}`] : []
-      if (item.type === "file") return [`[${item.filename ?? item.mime}](${item.url})`]
+      if (item.type === "file") {
+        const name = item.filename ?? item.mime
+        if (!item.url.startsWith("http://") && !item.url.startsWith("https://") && !item.url.startsWith("file://"))
+          return [`Generated file: ${name}`]
+        return [`[${name}](${item.url})`]
+      }
       const input = typeof item.state.input === "string" ? item.state.input : JSON.stringify(item.state.input, null, 2)
       const output =
         item.state.status === "error"
