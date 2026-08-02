@@ -38,13 +38,25 @@ test("keeps non-image generated files as text", async () => {
   expect(setup.captureCharFrame()).toContain("Generated file: generated-message-0.png")
 })
 
-async function render(part: SessionMessageAssistantFile) {
+test("does not add one resize listener per generated file", async () => {
+  setup = await render(
+    ...Array.from({ length: 12 }, () =>
+      generated({ mime: "text/plain", url: "data:text/plain;base64,SGVsbG8=" }),
+    ),
+  )
+
+  expect(setup.renderer.listenerCount("resize")).toBe(0)
+})
+
+async function render(...parts: SessionMessageAssistantFile[]) {
   const value = await testRender(
     () => (
       <TestTuiContexts>
         <ConfigProvider config={createTuiResolvedConfig()}>
           <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
-            <GeneratedFile part={part} />
+            {parts.map((part) => (
+              <GeneratedFile part={part} width={80} />
+            ))}
           </ThemeProvider>
         </ConfigProvider>
       </TestTuiContexts>
