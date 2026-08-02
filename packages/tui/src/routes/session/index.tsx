@@ -2430,10 +2430,29 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
   )
 }
 
-function GeneratedFile(props: { part: SessionMessageAssistantFile }) {
+export function GeneratedFile(props: { part: SessionMessageAssistantFile }) {
   const theme = useTheme()
+  const dimensions = useTerminalDimensions()
+  const [failed, setFailed] = createSignal(false)
+  const image = createMemo(
+    () => props.part.mime.startsWith("image/") && props.part.url.startsWith("data:image/") && !failed(),
+  )
+  const height = createMemo(() => Math.max(6, Math.min(18, Math.floor((dimensions().width - 6) / 4))))
   return (
-    <box paddingLeft={3} flexShrink={0}>
+    <box paddingLeft={3} paddingRight={2} flexShrink={0} gap={1}>
+      <Show when={image()}>
+        <box width="100%" maxWidth={70} height={height()} flexShrink={0} alignItems="center" justifyContent="center">
+          <image
+            id={`session-generated-image-${props.part.id}`}
+            source={props.part.url}
+            fit="fit"
+            protocol="auto"
+            width="100%"
+            height="100%"
+            onError={() => setFailed(true)}
+          />
+        </box>
+      </Show>
       <text fg={theme.text.subdued}>Generated file: {props.part.filename ?? props.part.mime}</text>
     </box>
   )
