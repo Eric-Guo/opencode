@@ -184,7 +184,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
         cut &&
         !items
           .slice(index + 1)
-          .some((after) => after.type === "tool" || (after.type === "text" && after.text.trim() !== ""))
+          .some(
+            (after) => after.type === "tool" || after.type === "file" || (after.type === "text" && after.text.trim() !== ""),
+          )
       )
         return []
       return sameModel
@@ -199,6 +201,15 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
           ? [{ type: "reasoning", text: item.text }]
           : []
     }
+    if (item.type === "file")
+      return [
+        {
+          type: "media",
+          media: Media.parseDataUrl(item.url) ?? Media.url(item.url, { mediaType: item.mime }),
+          filename: item.filename,
+          providerMetadata: sameModel && item !== tail ? providerMetadata(providerMetadataKey, item.native) : undefined,
+        },
+      ]
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
