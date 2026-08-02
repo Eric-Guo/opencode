@@ -980,6 +980,14 @@ export function createData(config: CreateDataInput) {
           if (event.data.state !== undefined) reasoning.state = event.data.state
         })
         return
+      case "session.file.generated":
+        message.update(event.data.sessionID, (draft, index) => {
+          const assistant = message.assistant(draft, index, event.data.assistantMessageID)
+          if (!assistant || assistant.content.some((content) => content.type === "file" && content.id === event.data.file.id))
+            return
+          assistant.content.push(event.data.file)
+        })
+        return
       case "session.retry.scheduled":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.retry = { attempt: event.data.attempt, at: event.data.at, error: event.data.error }
