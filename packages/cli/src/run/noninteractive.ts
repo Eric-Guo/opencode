@@ -603,6 +603,8 @@ function renderer(input: Input) {
           step("step-start", message.time.created, id("step-start"), message.id, { snapshot: message.snapshot?.start })
         const ordinals = { text: 0, reasoning: 0 }
         for (const item of message.content) {
+          if (item.type === "file") continue
+
           if (item.type === "tool") {
             if (item.state.status === "streaming" || item.state.status === "running") continue
             const metadata = { metadata: item.state.metadata, content: item.state.content }
