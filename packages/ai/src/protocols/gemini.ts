@@ -100,6 +100,8 @@ const GeminiInlineDataPart = Schema.Struct({
     mimeType: Schema.String,
     data: Schema.String,
   }),
+  thought: Schema.optional(Schema.Boolean),
+  thoughtSignature: Schema.optional(Schema.String),
 })
 type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
 
@@ -728,6 +730,27 @@ const step = (state: ParserState, event: GeminiEvent) => {
         textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
       )
       textSignature = undefined
+      continue
+    }
+
+    if ("inlineData" in part) {
+      if (part.thought) continue
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+      )
+      lifecycle = Lifecycle.stepStart(lifecycle, events)
+      events.push(
+        LLMEvent.file({
+          mediaType: part.inlineData.mimeType,
+          data: part.inlineData.data,
+          providerMetadata: part.thoughtSignature
+            ? googleMetadata({ thoughtSignature: part.thoughtSignature })
+            : undefined,
+        }),
+      )
       continue
     }
 
