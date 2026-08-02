@@ -29,6 +29,7 @@ import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   SessionMessageInfo,
   SessionMessageAssistant,
+  SessionMessageAssistantFile,
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
@@ -1723,6 +1724,9 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
               last={false}
             />
           </Match>
+          <Match when={item().type === "file"}>
+            <GeneratedFile part={item() as SessionMessageAssistantFile} />
+          </Match>
           <Match when={item().type === "tool"}>
             <ToolPart part={item() as SessionMessageAssistantTool} />
           </Match>
@@ -2430,6 +2434,15 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
         </box>
       )}
     </Show>
+  )
+}
+
+function GeneratedFile(props: { part: SessionMessageAssistantFile }) {
+  const theme = useTheme()
+  return (
+    <box paddingLeft={3} flexShrink={0}>
+      <text fg={theme.text.subdued}>Generated file: {props.part.filename ?? props.part.mime}</text>
+    </box>
   )
 }
 
@@ -3582,6 +3595,7 @@ function formatSessionTranscript(session: SessionInfo, messages: SessionMessageI
     const content = message.content.flatMap((item) => {
       if (item.type === "text") return [item.text]
       if (item.type === "reasoning") return thinking ? [`_Thinking:_\n\n${item.text}`] : []
+      if (item.type === "file") return [`[${item.filename ?? item.mime}](${item.url})`]
       if (!tools) return []
       const input = typeof item.state.input === "string" ? item.state.input : JSON.stringify(item.state.input, null, 2)
       const output =

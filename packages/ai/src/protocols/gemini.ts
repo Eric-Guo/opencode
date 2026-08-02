@@ -350,10 +350,25 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       // Parallel Gemini 3 calls may carry one signature on the first call; unsigned sibling calls are valid.
       let hasSignedToolCall = false
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
-          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
+        if (!ProviderShared.supportsContent(part, ["text", "media", "reasoning", "tool-call"]))
+          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", [
+            "text",
+            "media",
+            "reasoning",
+            "tool-call",
+          ])
         if (part.type === "text") {
           parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
+          continue
+        }
+        if (part.type === "media") {
+          const media = ProviderShared.normalizeMedia(part)
+          parts.push({
+            inlineData: { mimeType: media.mime, data: media.base64 },
+            thoughtSignature:
+              thoughtSignature(part.providerMetadata) ??
+              (media.mime.startsWith("image/") ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
+          })
           continue
         }
         if (part.type === "reasoning") {
