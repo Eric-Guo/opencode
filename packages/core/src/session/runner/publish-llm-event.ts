@@ -94,6 +94,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   let stepStarted = false
   let providerFailed = false
   let outputStarted = false
+  let retryEvidence = false
+  let nextFile = 0
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
 
@@ -436,6 +438,27 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       case "reasoning-end":
         yield* reasoning.end(event.id, providerState(event.providerMetadata), event.text)
         return
+      case "file":
+      case "media": {
+        retryEvidence = true
+        const mime = event.type === "media" ? event.media.mediaType : event.mediaType
+        const messageID = yield* startAssistant()
+        const index = nextFile++
+        const id = `generated-${messageID}-${index}`
+        yield* bus.publish(SessionEvent.File.Generated, {
+          sessionID: input.sessionID,
+          assistantMessageID: messageID,
+          file: {
+            type: "file",
+            id,
+            mime,
+            filename: `${id}.${fileExtension(mime)}`,
+            url: fileDataUrl(event),
+            state: providerState(event.providerMetadata),
+          },
+        })
+        return
+      }
       case "tool-input-start":
         outputStarted = true
         yield* startToolInput(event)
@@ -620,4 +643,25 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     startAssistant,
     streamed,
   }
+}
+
+function fileDataUrl(event: Extract<LLMEvent, { type: "file" | "media" }>) {
+  if (event.type === "media") {
+    const inline = event.media.inline()
+    if (inline) return inline.dataUrl
+    if (event.media.source.type === "url") return event.media.source.url
+    throw new Error("Cannot persist a provider media reference without file content")
+  }
+  if (typeof event.data === "string") {
+    if (event.data.startsWith("data:")) return event.data
+    return `data:${event.mediaType};base64,${event.data}`
+  }
+  return `data:${event.mediaType};base64,${Buffer.from(event.data).toString("base64")}`
+}
+
+function fileExtension(mediaType: string) {
+  const subtype = mediaType.split(";")[0]?.split("/")[1]?.toLowerCase()
+  if (subtype === "jpeg") return "jpg"
+  if (subtype === "svg+xml") return "svg"
+  return subtype?.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "bin"
 }

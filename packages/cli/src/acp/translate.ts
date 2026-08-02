@@ -442,6 +442,11 @@ export function* replayMessage(
       }
       continue
     }
+    if (part.type === "file") {
+      for (const chunk of partsToContentChunks([part]))
+        yield { sessionUpdate: "agent_message_chunk", messageId: message.id, ...chunk }
+      continue
+    }
     yield {
       sessionUpdate: "tool_call",
       ...pendingToolCall({
