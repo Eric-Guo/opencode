@@ -153,19 +153,21 @@ export type ShellInfo = {
   time: { started: number; completed?: number }
 }
 
-export type SessionMessageProviderState4 = { [x: string]: any }
-
 export type SessionMessageProviderState5 = { [x: string]: any }
 
 export type SessionMessageProviderState6 = { [x: string]: any }
 
 export type SessionMessageProviderState7 = { [x: string]: any }
 
-export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
-
 export type SessionMessageProviderState8 = { [x: string]: any }
 
 export type SessionMessageProviderState9 = { [x: string]: any }
+
+export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
+
+export type SessionMessageProviderState10 = { [x: string]: any }
+
+export type SessionMessageProviderState11 = { [x: string]: any }
 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: number }
 
@@ -1100,6 +1102,15 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionMessageAssistantFile = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
+  state?: SessionMessageProviderState
+}
+
 export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
@@ -1224,7 +1235,7 @@ export type SessionTextEnded = {
     assistantMessageID: string
     ordinal: number
     text: string
-    state?: SessionMessageProviderState4
+    state?: SessionMessageProviderState5
   }
 }
 
@@ -1235,7 +1246,7 @@ export type SessionReasoningStarted = {
   type: "session.reasoning.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderState5 }
+  data: { sessionID: string; assistantMessageID: string; ordinal: number; state?: SessionMessageProviderState6 }
 }
 
 export type SessionReasoningEnded = {
@@ -1250,8 +1261,17 @@ export type SessionReasoningEnded = {
     assistantMessageID: string
     ordinal: number
     text: string
-    state?: SessionMessageProviderState6
+    state?: SessionMessageProviderState7
   }
+}
+
+export type SessionMessageAssistantFile1 = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
+  state?: SessionMessageProviderState8
 }
 
 export type SessionToolCalled = {
@@ -1267,7 +1287,7 @@ export type SessionToolCalled = {
     id: string
     input: { [x: string]: any }
     executed: boolean
-    state?: SessionMessageProviderState7
+    state?: SessionMessageProviderState9
   }
 }
 
@@ -1600,6 +1620,16 @@ export type SessionMessageCompaction =
   | SessionMessageCompactionCompleted
   | SessionMessageCompactionFailed
 
+export type SessionFileGenerated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.file.generated"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; file: SessionMessageAssistantFile1 }
+}
+
 export type SessionToolSuccess = {
   id: string
   created: number
@@ -1614,7 +1644,7 @@ export type SessionToolSuccess = {
     content: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean
-    resultState?: SessionMessageProviderState8
+    resultState?: SessionMessageProviderState10
   }
 }
 
@@ -1633,7 +1663,7 @@ export type SessionToolFailed = {
     content?: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean
-    resultState?: SessionMessageProviderState9
+    resultState?: SessionMessageProviderState11
   }
 }
 
@@ -1925,7 +1955,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: string
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantFile
+    | SessionMessageAssistantTool
+  >
   snapshot?: { start?: string; end?: string; files?: Array<string> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   cost?: MoneyUSD
@@ -2008,6 +2043,7 @@ export type SessionEventDurable =
   | SessionTextEnded
   | SessionReasoningStarted
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputEnded
   | SessionToolCalled
@@ -2074,6 +2110,7 @@ export type V2Event =
   | SessionReasoningStarted
   | SessionReasoningDelta
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputDelta
   | SessionToolInputEnded
