@@ -23,6 +23,7 @@ const renames: Record<string, readonly [string, string]> = {
 export function event(type: string, data: unknown) {
   if (!isRecord(data)) return data
   if (type === "session.message.content.updated") return content(data)
+  if (type === "session.file.generated") return { ...data, file: part(data.file) }
   // Messages carry a legacy compaction's kept text; its events have no reader for it.
   if (type === "session.compaction.started") return omit(data, "recent")
   if (type === "session.compaction.ended")
@@ -50,7 +51,7 @@ function content(data: Record<string, unknown>) {
 
 function part(value: unknown) {
   if (!isRecord(value)) return value
-  if (value.type === "text" || value.type === "reasoning") return rename(value, "state", "native")
+  if (value.type === "text" || value.type === "reasoning" || value.type === "file") return rename(value, "state", "native")
   // A tool part's own `state` is its lifecycle status, not native data.
   if (value.type === "tool") return toolResult(rename(value, "providerState", "native"))
   return value
