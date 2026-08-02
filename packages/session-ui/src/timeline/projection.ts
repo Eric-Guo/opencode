@@ -173,7 +173,9 @@ export function createReactiveTimelineProjection(input: {
       input
         .sessionMessages()
         .flatMap((message) =>
-          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+          message.type === "assistant"
+            ? message.content.filter((content) => content.type === "text" || content.type === "reasoning")
+            : [],
         ),
     (content) => {
       // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
@@ -198,7 +200,7 @@ export function createReactiveTimelineProjection(input: {
       input.shellToolDefaultOpen?.() ?? false,
       input.editToolDefaultOpen?.() ?? false,
       (content, showReasoning, detail, placeOf) =>
-        content.type === "tool"
+        content.type === "tool" || content.type === "file"
           ? renderable(content, showReasoning, detail, placeOf)
           : (content.type === "text" || (detail ? detail.thinking.placement !== "hidden" : showReasoning)) &&
             textVisible().get(content)!(),
@@ -672,7 +674,10 @@ export namespace Timeline {
     const ordinals = { text: 0, reasoning: 0 }
 
     for (const content of message.content) {
-      const id = content.type === "tool" ? content.id : `${message.id}:${content.type}:${ordinals[content.type]++}`
+      const id =
+        content.type === "tool" || content.type === "file"
+          ? content.id
+          : `${message.id}:${content.type}:${ordinals[content.type]++}`
 
       if (id === partID) return content
     }
@@ -682,7 +687,10 @@ export namespace Timeline {
     const ordinals = { text: 0, reasoning: 0 }
 
     return message.content.map((content) => ({
-      id: content.type === "tool" ? content.id : `${message.id}:${content.type}:${ordinals[content.type]++}`,
+      id:
+        content.type === "tool" || content.type === "file"
+          ? content.id
+          : `${message.id}:${content.type}:${ordinals[content.type]++}`,
       content,
     }))
   }
@@ -988,6 +996,8 @@ function renderable(
 
   if (content.type === "reasoning")
     return (detail ? detail.thinking.placement !== "hidden" : showReasoning) && !!content.text.trim()
+
+  if (content.type === "file") return true
 
   if (detail) return (placeOf?.(content) ?? placeContent(content, detail, "current")).placement !== "hidden"
 
