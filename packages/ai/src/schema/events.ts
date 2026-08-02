@@ -538,6 +538,13 @@ const reduceToolCall = (state: ResponseState, event: ToolCall): ResponseState =>
 const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseState => {
   const next = appendEvent(state, event)
   switch (event.type) {
+    case "file":
+      return appendContent(next, {
+        type: "media",
+        mediaType: event.mediaType,
+        data: event.data,
+        providerMetadata: event.providerMetadata,
+      })
     case "text-start":
       return ensureText(next, event.id, event.providerMetadata)
     case "text-delta":
