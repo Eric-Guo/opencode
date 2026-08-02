@@ -574,6 +574,15 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionMessageAssistantFile = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
+  native?: SessionMessageNative
+}
+
 export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
@@ -683,6 +692,15 @@ export type InstructionEntrySnapshot = Array<{ key: InstructionEntryKey; value: 
 export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: EventSeq }
 
 export type LocationRef = { directory: AbsolutePath; workspaceID?: WorkspaceID }
+
+export type SessionMessageAssistantFile1 = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
+  native?: SessionMessageNative1
+}
 
 export type SessionMessageAssistantText1 = { type: "text"; text: string; native?: SessionMessageNative1 }
 
@@ -2175,6 +2193,16 @@ export type ExperimentalMcpEvent = {
   }
 }
 
+export type SessionFileGenerated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.file.generated"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; assistantMessageID: SessionMessageID; file: SessionMessageAssistantFile1 }
+}
+
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2786,7 +2814,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: AgentID
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantFile
+    | SessionMessageAssistantTool
+  >
   snapshot?: { start?: SnapshotID; end?: SnapshotID; files?: Array<RelativePath> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   rawFinish?: string
@@ -2827,6 +2860,7 @@ export type SessionInboxEnqueued = {
 export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
+  | SessionMessageAssistantFile1
   | SessionMessageAssistantTool1
 
 export type GenerateVideoGetResponse = { data: GenerateVideoJob }
@@ -2924,6 +2958,7 @@ export type SessionEventDurable =
   | SessionTextEnded
   | SessionReasoningStarted
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputEnded
   | SessionToolCalled
@@ -2985,6 +3020,7 @@ export type V2Event =
   | SessionReasoningStarted
   | SessionReasoningDelta
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputDelta
   | SessionToolInputEnded
@@ -4520,6 +4556,7 @@ export type EventSubscribeInput = {
         | "session.reasoning.started"
         | "session.reasoning.delta"
         | "session.reasoning.ended"
+        | "session.file.generated"
         | "session.tool.input.started"
         | "session.tool.input.delta"
         | "session.tool.input.ended"
