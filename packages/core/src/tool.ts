@@ -38,6 +38,8 @@ export interface Snapshot {
     readonly messageID: SessionMessage.ID
     readonly call: ToolCall
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
+    /** Execute a registered Code Mode tool by its effective name for trusted debug callers. */
+    readonly allowUnadvertised?: boolean
   }) => Effect.Effect<Tool.Result & { readonly content: ReadonlyArray<Tool.Content> }, Tool.Error>
 }
 
@@ -227,6 +229,7 @@ const layer = Layer.effect(
                 readonly messageID: SessionMessage.ID
                 readonly call: ToolCall
                 readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
+                readonly allowUnadvertised?: boolean
               }) => {
                 const context: Tool.Context = {
                   sessionID: input.sessionID,
@@ -241,6 +244,8 @@ const layer = Layer.effect(
                   return executeTool(toolSearch, input.call.name, input.call.input, context)
                 const tool = direct.get(input.call.name)
                 if (tool) return executeTool(tool, input.call.name, input.call.input, context)
+                const unadvertised = input.allowUnadvertised ? codemode.get(input.call.name) : undefined
+                if (unadvertised) return executeTool(unadvertised, input.call.name, input.call.input, context)
                 if (codemodeTool && (input.call.name.startsWith("tools.") || input.call.name.startsWith("tools[")))
                   return new Tool.Error({
                     message: `Unknown tool: ${input.call.name}. Code Mode catalog expressions are JavaScript-only, not standalone tool names. Call execute with the expression inside its code input.`,
