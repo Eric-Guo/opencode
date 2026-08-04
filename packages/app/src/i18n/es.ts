@@ -102,6 +102,7 @@ export const dict = {
   "dialog.provider.empty": "No se encontraron proveedores",
   "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Otro",
+  "dialog.provider.custom.label": "Proveedor personalizado compatible con OpenAI",
   "dialog.provider.tag.recommended": "Recomendado",
   "dialog.provider.opencode.note": "Modelos seleccionados incluyendo Claude, GPT, Gemini y más",
   "dialog.provider.opencode.tagline": "Modelos optimizados y fiables",
@@ -122,6 +123,7 @@ export const dict = {
 
   "dialog.model.unpaid.freeModels.title": "Modelos gratuitos proporcionados por OpenCode",
   "dialog.model.unpaid.addMore.title": "Añadir más modelos de proveedores populares",
+  "dialog.model.unpaid.viewMoreProviders": "Ver más de 70 proveedores adicionales",
 
   "dialog.provider.viewAll": "Ver más proveedores",
 
@@ -686,6 +688,9 @@ export const dict = {
   "session.header.open.ariaLabel": "Abrir en {{app}}",
   "session.header.open.menu": "Opciones de apertura",
   "session.header.open.copyPath": "Copiar ruta",
+  "session.header.reveal.finder": "Mostrar en Finder",
+  "session.header.reveal.fileExplorer": "Mostrar en el Explorador de archivos",
+  "session.header.reveal.containingFolder": "Abrir la carpeta contenedora",
 
   "status.popover.trigger": "Estado",
   "status.popover.ariaLabel": "Configuraciones del servidor",
