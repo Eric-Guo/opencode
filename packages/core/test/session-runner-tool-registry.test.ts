@@ -575,6 +575,20 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("executes an unadvertised Code Mode tool only for an explicit debug call", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() })
+      const request = yield* service.snapshot()
+
+      expect(yield* request.execute(call("echo")).pipe(Effect.flip)).toMatchObject({ message: "Unknown tool: echo" })
+      expect(yield* request.execute({ ...call("echo"), allowUnadvertised: true })).toMatchObject({
+        output: { text: "echo" },
+        content: [{ type: "text", text: "echo" }],
+      })
+    }),
+  )
+
   it.effect("reveals the previous registration after an overlay closes", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
