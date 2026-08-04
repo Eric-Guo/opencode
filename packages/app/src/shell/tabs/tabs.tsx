@@ -551,7 +551,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           current.prompted === next.prompted
         )
           return
-        console.debug("[tabs] update persisted session info", { key, sessionID: session.id, current, next })
+        console.debug("[tabs] update persisted session info", { key, sessionID: session.id, current, next, tab })
         setInfo(key, next)
       },
       select: navigateTab,
