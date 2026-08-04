@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
-import { QueryClient } from "@tanstack/solid-query"
+import { CancelledError, QueryClient } from "@tanstack/solid-query"
 import type { Config, Project, Session } from "@/types"
 import type { LegacyCapabilities } from "@/utils/server-compat"
 import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
@@ -123,10 +123,6 @@ describe("bootstrapDirectory", () => {
       protocol: Promise.resolve("v1"),
     })
 
-    expect(store.status).toBe("partial")
-
-    await new Promise((resolve) => setTimeout(resolve, 80))
-
     expect(store.status).toBe("complete")
     expect(mcpReads.sort()).toEqual(["command", "resource", "status"])
   })
@@ -204,12 +200,85 @@ describe("bootstrapDirectory", () => {
       protocol: Promise.resolve("v2"),
     })
 
-    await new Promise((resolve) => setTimeout(resolve, 80))
-
     expect(configReads).toEqual([])
     expect(agentReads).toEqual(["agent"])
     expect(store.agent[0]).toMatchObject({ name: "xiaotian", displayName: "小天", native: false })
     expect(store.form.ses_form?.[0]?.id).toBe("frm_question")
+    expect(store.status).toBe("complete")
+  })
+
+  test("waits for all directory reads before resolving", async () => {
+    const refresh = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    const [store, setStore] = directoryState()
+    let sessionReads = 0
+
+    const pending = bootstrapDirectory({
+      directory: "/project",
+      scope: ServerScope.local,
+      mcp: false,
+      global: {
+        config: {} satisfies Config,
+        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+        project: [{ id: "project", worktree: "/project" } as Project],
+        provider,
+      },
+      legacy: {} as LegacyCapabilities,
+      api,
+      store,
+      setStore,
+      vcsCache: { setStore() {} } as unknown as VcsCache,
+      loadSessions() {
+        sessionReads++
+        started.resolve()
+        return refresh.promise
+      },
+      translate: (key) => key,
+      queryClient: new QueryClient(),
+      protocol: Promise.resolve("v2"),
+    })
+    let resolved = false
+    void pending.then(() => {
+      resolved = true
+    })
+
+    await started.promise
+
+    expect(resolved).toBe(false)
+    expect(store.status).toBe("partial")
+
+    refresh.resolve()
+    await pending
+
+    expect(resolved).toBe(true)
+    expect(sessionReads).toBe(2)
+    expect(store.status).toBe("complete")
+  })
+
+  test("treats superseded query reads as successful refreshes", async () => {
+    const [store, setStore] = directoryState()
+
+    await bootstrapDirectory({
+      directory: "/project",
+      scope: ServerScope.local,
+      mcp: false,
+      global: {
+        config: {} satisfies Config,
+        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+        project: [{ id: "project", worktree: "/project" } as Project],
+        provider,
+      },
+      legacy: {} as LegacyCapabilities,
+      api,
+      store,
+      setStore,
+      vcsCache: { setStore() {} } as unknown as VcsCache,
+      loadSessions: () => Promise.reject(new CancelledError()),
+      translate: (key) => key,
+      queryClient: new QueryClient(),
+      protocol: Promise.resolve("v2"),
+    })
+
     expect(store.status).toBe("complete")
   })
 })
