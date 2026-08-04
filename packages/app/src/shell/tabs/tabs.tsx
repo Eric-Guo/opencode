@@ -538,7 +538,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const current = info[key]
 
         if (current && current.title === next.title && current.directory === next.directory) return
-        console.debug("[tabs] update persisted session info", { key, sessionID: session.id, current, next })
+        console.debug("[tabs] update persisted session info", { key, sessionID: session.id, current, next, tab })
         setInfo(key, next)
       },
       select: navigateTab,
