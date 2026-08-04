@@ -1687,8 +1687,40 @@ export type Endpoint27_1Input = {
 export type Endpoint27_1Output = void
 export type DebugLocationEvictOperation<E = never> = (input?: Endpoint27_1Input) => Effect.Effect<Endpoint27_1Output, E>
 
+export type Endpoint27_2Input = {
+  readonly agentID: Agent.ID
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type Endpoint27_2Output = { readonly location: Location.Info; readonly data: { readonly [x: string]: boolean } }
+export type DebugAgentToolsOperation<E = never> = (input: Endpoint27_2Input) => Effect.Effect<Endpoint27_2Output, E>
+
+export type Endpoint27_3Input = {
+  readonly agentID: Agent.ID
+  readonly toolID: string
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly payload: { readonly [x: string]: Schema.Json }
+}
+export type Endpoint27_3Output = {
+  readonly location: Location.Info
+  readonly data: {
+    readonly output?: Schema.Json | undefined
+    readonly content: ReadonlyArray<
+      | { readonly type: "text"; readonly text: string }
+      | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string | undefined }
+    >
+    readonly metadata?: { readonly [x: string]: unknown } | undefined
+  }
+}
+export type DebugAgentExecuteToolOperation<E = never> = (
+  input: Endpoint27_3Input,
+) => Effect.Effect<Endpoint27_3Output, E>
+
 export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
+  readonly agent: {
+    readonly tools: DebugAgentToolsOperation<E>
+    readonly executeTool: DebugAgentExecuteToolOperation<E>
+  }
 }
 
 export type Endpoint28_0Output =
