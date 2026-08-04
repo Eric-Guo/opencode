@@ -31,7 +31,7 @@ import type { State } from "./types"
 import type { ServerSession } from "../server-session"
 import { cmp, directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
-import { QueryClient, queryOptions, type SolidQueryOptions } from "@tanstack/solid-query"
+import { CancelledError, QueryClient, queryOptions, type SolidQueryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
@@ -435,7 +435,7 @@ export async function bootstrapDirectory(input: {
   ].filter(Boolean) as (() => Promise<any>)[]
 
   await waitForPaint()
-  const slowErrs = errors(await runAll(slow))
+  const slowErrs = errors(await runAll(slow)).filter((error) => !(error instanceof CancelledError))
   if (slowErrs.length > 0) {
     console.error("Failed to finish bootstrap instance", slowErrs[0])
     const project = getFilename(input.directory)
