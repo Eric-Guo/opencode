@@ -219,6 +219,10 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  DebugAgentToolsInput,
+  DebugAgentToolsOutput,
+  DebugAgentExecuteToolInput,
+  DebugAgentExecuteToolOutput,
   MigrationV1StatusOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
@@ -1824,6 +1828,33 @@ export function make(options: ClientOptions) {
               successStatus: 204,
               declaredStatuses: [401, 400],
               empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      agent: {
+        tools: (input: DebugAgentToolsInput, requestOptions?: RequestOptions) =>
+          request<DebugAgentToolsOutput>(
+            {
+              method: "GET",
+              path: `/api/debug/agent/${encodeURIComponent(input.agentID)}/tool`,
+              query: { location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [404, 503, 401, 400],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        executeTool: (input: DebugAgentExecuteToolInput, requestOptions?: RequestOptions) =>
+          request<DebugAgentExecuteToolOutput>(
+            {
+              method: "POST",
+              path: `/api/debug/agent/${encodeURIComponent(input.agentID)}/tool/${encodeURIComponent(input.toolID)}`,
+              query: { location: input["location"] },
+              body: input["payload"],
+              successStatus: 200,
+              declaredStatuses: [404, 403, 400, 503, 401],
+              empty: false,
             },
             requestOptions,
           ),
