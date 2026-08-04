@@ -38,7 +38,7 @@ import {
   normalizeProviderList,
 } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
-import { QueryClient, queryOptions, type SolidQueryOptions } from "@tanstack/solid-query"
+import { CancelledError, QueryClient, queryOptions, type SolidQueryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
@@ -340,7 +340,8 @@ export async function bootstrapDirectory(input: {
   const revKey = ScopedKey.from(input.scope, input.directory)
   const rev = (providerRev.get(revKey) ?? 0) + 1
   providerRev.set(revKey, rev)
-  ;(async () => {
+  // Keep bootstrapInstance's in-flight guard until every directory read has settled.
+  return (async () => {
     const slow = [
       () => Promise.resolve(input.loadSessions(input.directory)),
       () =>
@@ -405,12 +406,8 @@ export async function bootstrapDirectory(input: {
         ),
       () =>
         retry(() =>
-          (async () => {
-            if ((await input.protocol) === "v1") return []
-            return input.api.form.request
-              .list({ location: { directory: input.directory } })
-              .then((result) => result.data)
-          })().then((forms) => {
+          input.api.form.request.list({ location: { directory: input.directory } }).then((result) => {
+            const forms = result.data
             const ids = forms.map((form) => form.sessionID).filter((sessionID) => sessionID !== "global")
             const grouped = groupBySession(forms.filter((form) => !!form.id && !!form.sessionID))
             const warm = input.session
@@ -462,7 +459,7 @@ export async function bootstrapDirectory(input: {
     ].filter(Boolean) as (() => Promise<any>)[]
 
     await waitForPaint()
-    const slowErrs = errors(await runAll(slow))
+    const slowErrs = errors(await runAll(slow)).filter((error) => !(error instanceof CancelledError))
     if (slowErrs.length > 0) {
       console.error("Failed to finish bootstrap instance", slowErrs[0])
       const project = getFilename(input.directory)
