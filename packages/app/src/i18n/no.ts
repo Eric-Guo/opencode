@@ -101,6 +101,7 @@ export const dict = {
   "dialog.provider.empty": "Ingen leverandører funnet",
   "dialog.provider.group.popular": "Populære",
   "dialog.provider.group.other": "Andre",
+  "dialog.provider.custom.label": "Tilpasset OpenAI-kompatibel leverandør",
   "dialog.provider.tag.recommended": "Anbefalt",
   "dialog.provider.opencode.note": "Utvalgte modeller inkludert Claude, GPT, Gemini og mer",
   "dialog.provider.opencode.tagline": "Pålitelige, optimaliserte modeller",
@@ -121,6 +122,7 @@ export const dict = {
 
   "dialog.model.unpaid.freeModels.title": "Gratis modeller levert av OpenCode",
   "dialog.model.unpaid.addMore.title": "Legg til flere modeller fra populære leverandører",
+  "dialog.model.unpaid.viewMoreProviders": "Se over 70 flere leverandører",
 
   "dialog.provider.viewAll": "Vis flere leverandører",
 
@@ -566,6 +568,9 @@ export const dict = {
   "session.header.open.ariaLabel": "Åpne i {{app}}",
   "session.header.open.menu": "Åpne alternativer",
   "session.header.open.copyPath": "Kopier bane",
+  "session.header.reveal.finder": "Vis i Finder",
+  "session.header.reveal.fileExplorer": "Vis i Filutforsker",
+  "session.header.reveal.containingFolder": "Åpne mappen som inneholder filen",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Serverkonfigurasjoner",
