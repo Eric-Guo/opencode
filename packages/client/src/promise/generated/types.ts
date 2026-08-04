@@ -28,8 +28,6 @@ export type FileDiffInfo = {
   status: "added" | "deleted" | "modified"
 }
 
-export type PromptBase64 = string
-
 export type PromptFileSource = { type: "inline" } | { type: "uri"; uri: string }
 
 export type PromptMention = { start: number; end: number; text: string }
@@ -122,24 +120,6 @@ export type LegacyFileNode = {
   absolute: string
   type: "file" | "directory"
   ignored: boolean
-}
-
-export type LegacyFileContent = {
-  type: "text" | "binary"
-  content: string
-  diff?: string | undefined
-  patch?:
-    | {
-        oldFileName: string
-        newFileName: string
-        oldHeader?: string | undefined
-        newHeader?: string | undefined
-        hunks: Array<{ oldStart: number; oldLines: number; newStart: number; newLines: number; lines: Array<string> }>
-        index?: string | undefined
-      }
-    | undefined
-  encoding?: "base64" | undefined
-  mimeType?: string | undefined
 }
 
 export type SkillInfo = {
@@ -255,8 +235,10 @@ export type SessionInboxSyntheticPayload = { text: string; description?: string;
 
 export type FormMetadata = { [x: string]: JsonValue }
 
+export type GlobalConfig = { [x: string]: JsonValue }
+
 export type PromptFileAttachment = {
-  data: PromptBase64
+  data: string
   mime: string
   source: PromptFileSource
   name?: string
@@ -943,6 +925,15 @@ export type SessionReasoningEnded = {
   }
 }
 
+export type SessionMessageAssistantFile1 = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
+  state?: SessionMessageProviderState1
+}
+
 export type SessionToolCalled = {
   id: string
   created: number
@@ -1073,6 +1064,24 @@ export type PermissionAsked = {
     metadata?: { [x: string]: any }
     source?: PermissionSource
   }
+}
+
+export type LegacyFileContent = {
+  type: "text" | "binary"
+  content: string
+  diff?: string | undefined
+  patch?:
+    | {
+        oldFileName: string
+        newFileName: string
+        oldHeader?: string | undefined
+        newHeader?: string | undefined
+        hunks: Array<{ oldStart: number; oldLines: number; newStart: number; newLines: number; lines: Array<string> }>
+        index?: string | undefined
+      }
+    | undefined
+  encoding?: "base64" | undefined
+  mimeType?: string | undefined
 }
 
 export type PermissionReplied = {
@@ -1295,6 +1304,15 @@ export type SessionMessageAssistantReasoning = {
   time?: { created: number; completed?: number }
 }
 
+export type SessionMessageAssistantFile = {
+  type: "file"
+  id: string
+  mime: string
+  filename?: string
+  url: string
+  state?: SessionMessageProviderState
+}
+
 export type SessionInboxSynthetic = {
   id: string
   sessionID: string
@@ -1343,6 +1361,16 @@ export type ShellCreated = {
   type: "shell.created"
   location?: LocationRef
   data: { info: ShellInfo }
+}
+
+export type SessionFileGenerated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.file.generated"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; file: SessionMessageAssistantFile1 }
 }
 
 export type SessionToolSuccess = {
@@ -1808,6 +1836,12 @@ export type SessionMessageToolStateError = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type AgentToolResult = {
+  output?: JsonValue | null
+  content: Array<ToolContent>
+  metadata?: { [x: string]: JsonValue } | null
+}
+
 export type FormField1 =
   | FormStringField1
   | FormNumberField1
@@ -1942,7 +1976,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: string
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantFile
+    | SessionMessageAssistantTool
+  >
   snapshot?: { start?: string; end?: string; files?: Array<string> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   cost?: MoneyUSD
@@ -1981,6 +2020,7 @@ export type SessionEventDurable =
   | SessionTextEnded
   | SessionReasoningStarted
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputEnded
   | SessionToolCalled
@@ -2069,6 +2109,7 @@ export type V2Event =
   | SessionReasoningStarted
   | SessionReasoningDelta
   | SessionReasoningEnded
+  | SessionFileGenerated
   | SessionToolInputStarted
   | SessionToolInputDelta
   | SessionToolInputEnded
@@ -2300,6 +2341,10 @@ export type WorktreeError = {
 }
 export const isWorktreeError = (value: unknown): value is WorktreeError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "WorktreeError"
+
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type HealthGetOutput = ServiceHealth
 
@@ -2650,6 +2695,14 @@ export type SessionImportInput = {
                 readonly time?: { readonly created: number; readonly completed?: number }
               }
             | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
+              }
+            | {
                 readonly type: "tool"
                 readonly id: string
                 readonly name: string
@@ -2917,6 +2970,14 @@ export type SessionImportInput = {
                 readonly time?: { readonly created: number; readonly completed?: number }
               }
             | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
+              }
+            | {
                 readonly type: "tool"
                 readonly id: string
                 readonly name: string
@@ -3182,6 +3243,14 @@ export type SessionImportInput = {
                 readonly text: string
                 readonly state?: { readonly [x: string]: JsonValue }
                 readonly time?: { readonly created: number; readonly completed?: number }
+              }
+            | {
+                readonly type: "file"
+                readonly id: string
+                readonly mime: string
+                readonly filename?: string
+                readonly url: string
+                readonly state?: { readonly [x: string]: JsonValue }
               }
             | {
                 readonly type: "tool"
@@ -5748,6 +5817,32 @@ export type DebugLocationEvictInput = {
 
 export type DebugLocationEvictOutput = void
 
+export type DebugAgentToolsInput = {
+  readonly agentID: { readonly agentID: string }["agentID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type DebugAgentToolsOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: { [x: string]: boolean }
+}
+
+export type DebugAgentExecuteToolInput = {
+  readonly agentID: { readonly agentID: string; readonly toolID: string }["agentID"]
+  readonly toolID: { readonly agentID: string; readonly toolID: string }["toolID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly payload: { readonly [x: string]: JsonValue }
+}
+
+export type DebugAgentExecuteToolOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: AgentToolResult
+}
+
 export type MigrationV1StatusOutput =
   | { status: "required" | "completed" }
   | { status: "running"; progress: { label: string; numerator?: number | undefined; denominator?: number | undefined } }
@@ -5785,4 +5880,4 @@ export type ConfigGetInput = {
 
 export type ConfigGetOutput = Array<ConfigEntry>
 
-export type ConfigGlobalOutput = { [x: string]: any }
+export type ConfigGlobalOutput = GlobalConfig
