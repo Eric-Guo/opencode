@@ -823,6 +823,9 @@ export const dict = {
   "session.header.open.ariaLabel": "Открыть в {{app}}",
   "session.header.open.menu": "Варианты открытия",
   "session.header.open.copyPath": "Копировать путь",
+  "session.header.reveal.finder": "Показать в Finder",
+  "session.header.reveal.fileExplorer": "Показать в Проводнике",
+  "session.header.reveal.containingFolder": "Открыть папку, содержащую файл",
 
   "status.popover.trigger": "Статус",
   "status.popover.ariaLabel": "Настройки серверов",
