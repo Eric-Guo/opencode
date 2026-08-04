@@ -319,6 +319,24 @@ export type LegacyFileNode = {
   ignored: boolean
 }
 
+export type LegacyFileContent = {
+  type: "text" | "binary"
+  content: string
+  diff?: string | undefined
+  patch?:
+    | {
+        oldFileName: string
+        newFileName: string
+        oldHeader?: string | undefined
+        newHeader?: string | undefined
+        hunks: Array<{ oldStart: number; oldLines: number; newStart: number; newLines: number; lines: Array<string> }>
+        index?: string | undefined
+      }
+    | undefined
+  encoding?: "base64" | undefined
+  mimeType?: string | undefined
+}
+
 export type SkillInfo = {
   id: string
   name: string
@@ -1443,24 +1461,6 @@ export type PermissionAsked = {
   }
 }
 
-export type LegacyFileContent = {
-  type: "text" | "binary"
-  content: string
-  diff?: string | undefined
-  patch?:
-    | {
-        oldFileName: string
-        newFileName: string
-        oldHeader?: string | undefined
-        newHeader?: string | undefined
-        hunks: Array<{ oldStart: number; oldLines: number; newStart: number; newLines: number; lines: Array<string> }>
-        index?: string | undefined
-      }
-    | undefined
-  encoding?: "base64" | undefined
-  mimeType?: string | undefined
-}
-
 export type PermissionReplied = {
   id: string
   created: number
@@ -1661,6 +1661,12 @@ export type SessionMessageToolStateError = {
   error: SessionStructuredError
   content?: [ToolContent, ...Array<ToolContent>]
   metadata?: { [x: string]: JsonValue }
+}
+
+export type AgentToolResult = {
+  output?: JsonValue | null
+  content: Array<ToolContent>
+  metadata?: { [x: string]: JsonValue } | null
 }
 
 export type SessionMessageCompaction =
@@ -5944,6 +5950,32 @@ export type DebugLocationEvictInput = {
 }
 
 export type DebugLocationEvictOutput = void
+
+export type DebugAgentToolsInput = {
+  readonly agentID: { readonly agentID: string }["agentID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type DebugAgentToolsOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: { [x: string]: boolean }
+}
+
+export type DebugAgentExecuteToolInput = {
+  readonly agentID: { readonly agentID: string; readonly toolID: string }["agentID"]
+  readonly toolID: { readonly agentID: string; readonly toolID: string }["toolID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly payload: { readonly [x: string]: JsonValue }
+}
+
+export type DebugAgentExecuteToolOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: AgentToolResult
+}
 
 export type MigrationV1StatusOutput =
   | { status: "required" | "completed" }

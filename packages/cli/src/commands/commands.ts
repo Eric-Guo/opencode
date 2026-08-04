@@ -73,9 +73,14 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("agents", { description: "List all agents" }),
         Spec.make("config", { description: "List configuration sources" }),
         Spec.make("agent", {
-          description: "Show an agent's tool permissions and MCP status",
+          description: "Show agent configuration details or execute one of its tools",
           params: {
             name: Argument.string("name").pipe(Argument.withDescription("Agent ID")),
+            tool: Flag.string("tool").pipe(Flag.withDescription("Tool ID to execute"), Flag.optional),
+            params: Flag.string("params").pipe(
+              Flag.withDescription("Tool params as JSON or a JavaScript object literal"),
+              Flag.optional,
+            ),
           },
         }),
       ],
