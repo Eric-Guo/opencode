@@ -28,6 +28,11 @@ function setRuntimeEnv(key: string, value: string) {
   process.env[key] = value
 }
 
+function deleteRuntimeEnv(key: string) {
+  if (bun.Bun) delete bun.Bun.env[key]
+  delete process.env[key]
+}
+
 function hasValue(value: string | undefined) {
   return typeof value === "string" && value.trim().length > 0
 }
@@ -61,6 +66,7 @@ export async function ensureSsoUsername() {
   if (!response) return
 
   if (!response.ok) {
+    if (response.status === 401) deleteRuntimeEnv("THAPE_SSO_BEARER_API_KEY")
     await log(
       Effect.logWarning("SSO username request returned non-OK status", {
         status: response.status,
