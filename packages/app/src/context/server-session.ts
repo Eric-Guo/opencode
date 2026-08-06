@@ -958,7 +958,8 @@ export function createServerSession(
         message: event.data.error.message,
         next: event.data.at,
       })
-    if (event.type === "session.forked") void resolve(sessionID, { force: true }).catch(() => {})
+    if (event.type === "session.created" || event.type === "session.forked")
+      void resolve(sessionID, { force: true }).catch(() => {})
     if (
       event.type === "session.revert.staged" ||
       event.type === "session.revert.cleared" ||
@@ -980,11 +981,14 @@ export function createServerSession(
         void resolve(eventID).catch(() => {})
     }
     switch (event.type) {
-      case "session.created":
-        remember((event.properties as { info: Session }).info)
+      case "session.created": {
+        const info = (event.properties as { info?: Session }).info
+        if (info) remember(info)
         return
+      }
       case "session.updated": {
-        const info = (event.properties as { info: Session }).info
+        const info = (event.properties as { info?: Session }).info
+        if (!info) return
         remember(info)
         if (info.time.archived) evict([info.id])
         return

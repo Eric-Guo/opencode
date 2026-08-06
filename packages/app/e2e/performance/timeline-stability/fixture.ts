@@ -2,7 +2,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionStatusEvent } from "@opencode-ai/schema/session-status-event"
 import { SessionV1 } from "@opencode-ai/schema/session-v1"
-import type { SessionV1Info, SessionStatus } from "@opencode-ai/client/promise"
+import type { SessionStatus } from "@opencode-ai/client/promise"
 import type { AssistantMessage, Message, Part, ToolPart, ToolState, UserMessage } from "../../../src/types"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
@@ -18,7 +18,7 @@ export const assistantID = "msg_1001_timeline_assistant"
 export const title = "Timeline visual stability"
 export const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
-type Session = SessionV1Info
+type Session = (typeof SessionV1.SessionInfo)["Encoded"]
 type GlobalEvent = {
   directory: string
   project?: string
