@@ -31,7 +31,7 @@ export function runtimeRequirePlugin(): Plugin {
   }
 }
 
-function fffNodePlugin(): Plugin {
+export function fffNodePlugin(): Plugin {
   return {
     name: "opencode:fff-node",
     enforce: "pre",
