@@ -702,6 +702,7 @@ export function createServerSession(
 
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
     if (meta.loading[sessionID]) return
+    const pageSize = limit > 0 ? limit : initialMessagePageSize
     const active = generation(sessionID)
     const load: MessageLoadState = {
       touchedMessages: new Set(),
@@ -720,7 +721,7 @@ export function createServerSession(
     setMeta("loading", sessionID, true)
     let applied = false
     try {
-      const page = await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load))
+      const page = await fetchMessages(sessionID, pageSize, before, () => resetMessageLoad(sessionID, load))
       const first = page.session.reduce<Message | undefined>(
         (oldest, message) => (!oldest || cmpMessage(message, oldest) < 0 ? message : oldest),
         undefined,
