@@ -169,15 +169,16 @@ let runtimeState: RuntimeState = { status: "idle" }
 
 export function transformSession(input: TransformInput): TransformResult {
   const warnings: Warning[] = []
-  const messages = input.messages
-    .map((row) => {
-      const value = Option.getOrUndefined(decodeJson(row.data))
+  const source = input.messages.map((row) => ({ row, value: Option.getOrUndefined(decodeJson(row.data)) }))
+  const messages = source
+    .map((item) => {
+      const value = normalizeLegacyMessage(item, source, input.session)
       const decoded =
         value && typeof value === "object"
-          ? Option.getOrUndefined(decodeMessage({ ...value, id: row.id, sessionID: row.session_id }))
+          ? Option.getOrUndefined(decodeMessage({ ...value, id: item.row.id, sessionID: item.row.session_id }))
           : undefined
-      if (decoded) return { row, value: decoded }
-      warnings.push({ reason: "invalid-message", sessionID: input.session.id, messageID: row.id })
+      if (decoded) return { row: item.row, value: decoded }
+      warnings.push({ reason: "invalid-message", sessionID: input.session.id, messageID: item.row.id })
       return undefined
     })
     .filter((item): item is NonNullable<typeof item> => item !== undefined)
@@ -425,6 +426,78 @@ export function transformSession(input: TransformInput): TransformResult {
     watermark: projected.length - 1,
     warnings,
   }
+}
+
+function normalizeLegacyMessage(
+  item: { row: SourceMessage; value: unknown },
+  messages: ReadonlyArray<{ row: SourceMessage; value: unknown }>,
+  session: TransformInput["session"],
+) {
+  if (!record(item.value)) return item.value
+  if (item.value.role === "assistant") {
+    if (typeof item.value.agent === "string") return item.value
+    return { ...item.value, agent: typeof item.value.mode === "string" ? item.value.mode : "build" }
+  }
+  if (item.value.role !== "user") return item.value
+  if (typeof item.value.agent === "string" && record(item.value.model)) return item.value
+
+  const child = messages
+    .map((message) => message.value)
+    .find(
+      (message): message is Record<string, unknown> =>
+        record(message) && message.role === "assistant" && message.parentID === item.row.id,
+    )
+  const agent =
+    typeof item.value.agent === "string"
+      ? item.value.agent
+      : child && typeof child.agent === "string"
+        ? child.agent
+        : child && typeof child.mode === "string"
+          ? child.mode
+          : (session.agent ?? "build")
+  const model =
+    record(item.value.model)
+      ? item.value.model
+      : child && typeof child.providerID === "string" && typeof child.modelID === "string"
+        ? {
+            providerID: child.providerID,
+            modelID: child.modelID,
+            ...(typeof child.variant === "string" ? { variant: child.variant } : {}),
+          }
+        : {
+            providerID: session.model?.providerID ?? "",
+            modelID: session.model?.id ?? "",
+            ...(session.model?.variant ? { variant: session.model.variant } : {}),
+          }
+  return { ...item.value, agent, model }
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+export function retainedMessages(db: Database.Interface["db"], sessionID: SessionSchema.ID) {
+  return Effect.gen(function* () {
+    const tables = new Set(
+      (yield* db.all<{ name: string }>(
+        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('message', 'part')`,
+      )).map((table) => table.name),
+    )
+    if (!tables.has("message") || !tables.has("part")) return []
+    const session = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()
+    if (!session) return []
+    const messages = yield* db.all<SourceMessage>(
+      sql`SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ${sessionID}`,
+    )
+    if (messages.length === 0) return []
+    return transformSession({
+      session,
+      messages,
+      parts: yield* db.all<SourcePart>(
+        sql`SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ${sessionID}`,
+      ),
+    }).messages
+  }).pipe(Effect.orDie)
 }
 
 export function status(): Effect.Effect<Status, never, Database.Service> {
