@@ -15,7 +15,7 @@ export function useNewSessionCommands(input: {
   const language = useLanguage()
 
   useSettingsCommand()
-  command.register("new-session", () => [
+  command.register("session", () => [
     {
       id: "command.palette",
       title: language.t("command.palette"),
