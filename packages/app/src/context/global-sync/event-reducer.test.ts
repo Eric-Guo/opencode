@@ -181,6 +181,22 @@ describe("applyDirectoryEvent", () => {
     expect(store.session).toHaveLength(3)
   })
 
+  test("waits for projected session info before applying a durable session.created event", () => {
+    const [store, setStore] = createStore(baseState({ session: [], sessionTotal: 0 }))
+
+    applyDirectoryEvent({
+      event: { type: "session.created", properties: { sessionID: "ses_new" } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session).toEqual([])
+    expect(store.sessionTotal).toBe(0)
+  })
+
   test("inserts root sessions in sorted order and updates sessionTotal", () => {
     const [store, setStore] = createStore(
       baseState({
