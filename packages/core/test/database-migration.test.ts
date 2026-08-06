@@ -13,6 +13,7 @@ import { tmpdir } from "./fixture/tmpdir"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import legacyCredentialsMigration from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
 import { Global } from "@opencode-ai/util/global"
+import loosePsylocke from "@opencode-ai/core/database/migration/20260804233008_loose_psylocke"
 
 const run = <A, E>(
   effect: Effect.Effect<A, E, SqlClient | Global.Service>,
@@ -132,6 +133,59 @@ describe("DatabaseMigration", () => {
           { id: "first" },
           { id: "second" },
         ])
+      }),
+    )
+  })
+
+  test("consolidates a prelaunch database that already added event timestamps", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY, created integer DEFAULT 0 NOT NULL)`)
+        yield* db.run(sql`
+          CREATE TABLE session_message (
+            id text PRIMARY KEY,
+            session_id text NOT NULL,
+            type text NOT NULL,
+            time_created integer NOT NULL,
+            time_updated integer NOT NULL,
+            data text NOT NULL,
+            seq integer NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          CREATE TABLE session_pending (
+            id text PRIMARY KEY,
+            session_id text NOT NULL,
+            type text NOT NULL,
+            data text NOT NULL,
+            delivery text,
+            admitted_seq integer NOT NULL,
+            time_created integer NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          CREATE INDEX session_pending_session_delivery_seq_idx
+          ON session_pending (session_id, delivery, admitted_seq)
+        `)
+        yield* db.run(sql`CREATE TABLE data_migration (id text PRIMARY KEY)`)
+
+        yield* DatabaseMigration.applyOnly(db, [loosePsylocke])
+
+        expect(
+          (yield* db.all<{ name: string }>(sql`PRAGMA table_info(event)`)).filter(
+            (column) => column.name === "created",
+          ),
+        ).toHaveLength(1)
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'`)).toEqual(
+          { name: "session_v2" },
+        )
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'data_migration'`),
+        ).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${loosePsylocke.id}`)).toEqual({
+          id: loosePsylocke.id,
+        })
       }),
     )
   })
