@@ -124,6 +124,27 @@ const transform = (messages: V1Migration.SourceMessage[], parts: V1Migration.Sou
 }
 
 describe("V1Migration.transformSession", () => {
+  test("normalizes retained pre-agent messages for display", () => {
+    const parent = user("msg_000000000000aaaaaaaaaaaaaa", { agent: undefined, model: undefined })
+    const message = assistant("msg_000000000000bbbbbbbbbbbbbb", parent.id, { agent: undefined })
+    const result = transform(
+      [parent, message],
+      [
+        part("prt_1", parent.id, { type: "text", text: "old prompt" }),
+        part("prt_2", message.id, { type: "text", text: "old response" }),
+      ],
+    )
+
+    expect(result.messages).toMatchObject([
+      { type: "user", data: { text: "old prompt" } },
+      {
+        type: "assistant",
+        data: { agent: "build", model: { id: "model", providerID: "provider" }, content: [{ text: "old response" }] },
+      },
+    ])
+    expect(result.warnings).toEqual([])
+  })
+
   test("maps ordinary user text, agents, ignored fields, order, and timestamps", () => {
     const message = user("msg_000000000001aaaaaaaaaaaaaa", {
       system: "discard",
