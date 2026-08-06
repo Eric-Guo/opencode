@@ -90,7 +90,10 @@ const migration: DatabaseMigration.Migration = {
           CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      yield* tx.run(`ALTER TABLE \`event\` ADD \`created\` integer DEFAULT 0 NOT NULL;`)
+      if (
+        !(yield* tx.all<{ name: string }>(`PRAGMA table_info(\`event\`)`)).some((column) => column.name === "created")
+      )
+        yield* tx.run(`ALTER TABLE \`event\` ADD \`created\` integer DEFAULT 0 NOT NULL;`)
       yield* tx.run(`
         CREATE TABLE IF NOT EXISTS \`__new_session_message\` (
           \`id\` text PRIMARY KEY,
@@ -106,33 +109,35 @@ const migration: DatabaseMigration.Migration = {
       yield* tx.run(`DROP TABLE \`session_message\`;`)
       yield* tx.run(`ALTER TABLE \`__new_session_message\` RENAME TO \`session_message\`;`)
       yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
       )
       yield* tx.run(
-        `CREATE INDEX \`session_message_session_type_seq_idx\` ON \`session_message\` (\`session_id\`,\`type\`,\`seq\`);`,
+        `CREATE INDEX IF NOT EXISTS \`session_message_session_type_seq_idx\` ON \`session_message\` (\`session_id\`,\`type\`,\`seq\`);`,
       )
       yield* tx.run(
-        `CREATE INDEX \`session_message_session_time_created_id_idx\` ON \`session_message\` (\`session_id\`,\`time_created\`,\`id\`);`,
-      )
-      yield* tx.run(`CREATE INDEX \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
-      yield* tx.run(
-        `CREATE INDEX \`session_pending_session_delivery_seq_idx\` ON \`session_pending\` (\`session_id\`,\`delivery\`,\`admitted_seq\`);`,
+        `CREATE INDEX IF NOT EXISTS \`session_message_session_time_created_id_idx\` ON \`session_message\` (\`session_id\`,\`time_created\`,\`id\`);`,
       )
       yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_pending_session_compaction_idx\` ON \`session_pending\` (\`session_id\`) WHERE "session_pending"."type" = 'compaction';`,
+        `CREATE INDEX IF NOT EXISTS \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`,
       )
       yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_pending_session_admitted_seq_idx\` ON \`session_pending\` (\`session_id\`,\`admitted_seq\`);`,
+        `CREATE INDEX IF NOT EXISTS \`session_pending_session_delivery_seq_idx\` ON \`session_pending\` (\`session_id\`,\`delivery\`,\`admitted_seq\`);`,
       )
-      yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
-      yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
-      yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
       yield* tx.run(
-        `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS \`session_pending_session_compaction_idx\` ON \`session_pending\` (\`session_id\`) WHERE "session_pending"."type" = 'compaction';`,
       )
-      yield* tx.run(`DROP TABLE \`data_migration\`;`)
-      yield* tx.run(`DROP TABLE \`session_context_epoch\`;`)
-      yield* tx.run(`DROP TABLE \`session_input\`;`)
+      yield* tx.run(
+        `CREATE UNIQUE INDEX IF NOT EXISTS \`session_pending_session_admitted_seq_idx\` ON \`session_pending\` (\`session_id\`,\`admitted_seq\`);`,
+      )
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX IF NOT EXISTS \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
+      )
+      yield* tx.run(`DROP TABLE IF EXISTS \`data_migration\`;`)
+      yield* tx.run(`DROP TABLE IF EXISTS \`session_context_epoch\`;`)
+      yield* tx.run(`DROP TABLE IF EXISTS \`session_input\`;`)
     })
   },
 }
