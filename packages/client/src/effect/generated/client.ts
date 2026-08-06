@@ -231,6 +231,10 @@ import type {
   Endpoint27_0Output,
   Endpoint27_1Input,
   Endpoint27_1Output,
+  Endpoint27_2Input,
+  Endpoint27_2Output,
+  Endpoint27_3Input,
+  Endpoint27_3Output,
   Endpoint28_0Output,
   Endpoint29_0Input,
   Endpoint29_0Output,
@@ -1310,8 +1314,26 @@ const Endpoint27_1 = (raw: RawClient["server.debug"]) => (input?: Endpoint27_1In
     raw["debug.location.evict"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const Endpoint27_2 = (raw: RawClient["server.debug"]) => (input: Endpoint27_2Input) =>
+  preserveEffect<Endpoint27_2Output>()(
+    raw["debug.agent.tools"]({ params: { agentID: input["agentID"] }, query: { location: input["location"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+type Endpoint27_3Request = Parameters<RawClient["server.debug"]["debug.agent.executeTool"]>[0]
+const Endpoint27_3 = (raw: RawClient["server.debug"]) => (input: Endpoint27_3Input) =>
+  preserveEffect<Endpoint27_3Output>()(
+    raw["debug.agent.executeTool"]({
+      params: { agentID: input["agentID"], toolID: input["toolID"] },
+      query: { location: input["location"] },
+      payload: input["payload"],
+    } as Endpoint27_3Request).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroup27 = (raw: RawClient["server.debug"]) => ({
   location: { list: Endpoint27_0(raw), evict: Endpoint27_1(raw) },
+  agent: { tools: Endpoint27_2(raw), executeTool: Endpoint27_3(raw) },
 })
 
 const Endpoint28_0 = (raw: RawClient["server.migration"]) => () =>
