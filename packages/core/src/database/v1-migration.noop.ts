@@ -9,3 +9,6 @@ export function status() {
 export function run() {
   return Effect.succeed({ status: "completed" } as const)
 }
+export function retainedMessages() {
+  return Effect.succeed([])
+}
