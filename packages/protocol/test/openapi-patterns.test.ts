@@ -22,7 +22,7 @@ test("the OpenAPI document keeps string pattern constraints from protocol schema
       "^#[0-9a-fA-F]{6}$",
       "^[a-z0-9][a-z0-9._-]*$",
       "^[a-z][a-z0-9._-]*$",
-      "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+      "^[A-Za-z0-9+/]*={0,2}$",
     ]),
   )
 })
