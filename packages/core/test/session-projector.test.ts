@@ -298,6 +298,79 @@ describe("SessionProjector", () => {
     }).pipe(Effect.provide(sessionsLayer)),
   )
 
+  it.effect("reads retained V1 history when the V2 projection is empty", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const legacySessionID = Session.ID.make("ses_retained_history")
+      const parentID = SessionMessage.ID.make("msg_retained_user")
+      const assistantID = SessionMessage.ID.make("msg_retained_assistant")
+      const directory = process.cwd()
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make(directory), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+      yield* db.run(`
+        CREATE TABLE IF NOT EXISTS message (
+          id text PRIMARY KEY, session_id text NOT NULL, time_created integer NOT NULL,
+          time_updated integer NOT NULL, data text NOT NULL
+        )
+      `)
+      yield* db.run(`
+        CREATE TABLE IF NOT EXISTS part (
+          id text PRIMARY KEY, message_id text NOT NULL, session_id text NOT NULL,
+          time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
+        )
+      `)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: legacySessionID,
+          project_id: Project.ID.global,
+          slug: "retained",
+          directory,
+          title: "Retained",
+          version: "1",
+          time_created: 1,
+          time_updated: 2,
+        })
+        .run()
+      yield* db.run(sql`
+        INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES
+          (${parentID}, ${legacySessionID}, 10, 11, ${JSON.stringify({ role: "user", time: { created: 10 } })}),
+          (${assistantID}, ${legacySessionID}, 20, 21, ${JSON.stringify({
+            role: "assistant",
+            time: { created: 20, completed: 21 },
+            parentID,
+            modelID: "model",
+            providerID: "provider",
+            mode: "build",
+            path: { cwd: directory, root: directory },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          })})
+      `)
+      yield* db.run(sql`
+        INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES
+          ('prt_retained_user', ${parentID}, ${legacySessionID}, 10, 11, '{"type":"text","text":"old prompt"}'),
+          ('prt_retained_assistant', ${assistantID}, ${legacySessionID}, 20, 21, '{"type":"text","text":"old response"}')
+      `)
+
+      const session = yield* Session.Service
+      expect(yield* session.messages({ sessionID: legacySessionID, order: "asc" })).toMatchObject([
+        { id: parentID, type: "user", text: "old prompt" },
+        { id: assistantID, type: "assistant", content: [{ type: "text", text: "old response" }] },
+      ])
+      yield* db.run(sql`
+        INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+        VALUES ('msg_current_user', ${legacySessionID}, 'user', 0, 30, 30, '{"text":"current prompt","time":{"created":30}}')
+      `)
+      expect(yield* session.messages({ sessionID: legacySessionID, order: "asc" })).toMatchObject([
+        { id: "msg_current_user", type: "user", text: "current prompt" },
+      ])
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
   it.effect("consumes the pending row and projects the message at promotion", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
