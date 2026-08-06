@@ -2,6 +2,7 @@ import { defineConfig, type UserConfig } from "vite"
 import { Installation } from "@opencode-ai/core/installation"
 import { nodeTarget } from "./src/node/target"
 import {
+  fffNodePlugin,
   nodePrelude,
   output,
   rawTextPlugin,
@@ -13,7 +14,7 @@ import {
 export function sidecarConfig(input: NodeBuildInput): UserConfig {
   return defineConfig({
     root: import.meta.dirname,
-    plugins: [rawTextPlugin(), runtimeRequirePlugin()],
+    plugins: [rawTextPlugin(), runtimeRequirePlugin(), fffNodePlugin()],
     resolve,
     define: {
       OPENCODE_VERSION: JSON.stringify(input.version),
