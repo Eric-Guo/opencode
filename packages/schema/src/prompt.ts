@@ -18,7 +18,9 @@ export const FileSource = Schema.Union([
 export type FileSource = typeof FileSource.Type
 
 export const Base64 = Schema.String.check(
-  Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+  // Repeating four-character groups makes V8 reject valid multi-megabyte attachments.
+  Schema.isPattern(/^[A-Za-z0-9+/]*={0,2}$/),
+  Schema.makeFilter((value) => (value.length % 4 === 0 ? undefined : "a valid base64 string")),
 ).annotate({ identifier: "Prompt.Base64" })
 export type Base64 = typeof Base64.Type
 
