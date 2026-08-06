@@ -1619,6 +1619,12 @@ export type SessionMessageToolStateError = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type AgentToolResult = {
+  output?: JsonValue | null
+  content: Array<ToolContent>
+  metadata?: { [x: string]: JsonValue } | null
+}
+
 export type SessionMessageCompaction =
   | SessionMessageCompactionRunning
   | SessionMessageCompactionCompleted
@@ -2175,6 +2181,10 @@ export type ProjectCopyError = {
 }
 export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
+
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type HealthGetOutput = ServiceHealth
 
@@ -4678,6 +4688,32 @@ export type DebugLocationEvictInput = {
 }
 
 export type DebugLocationEvictOutput = void
+
+export type DebugAgentToolsInput = {
+  readonly agentID: { readonly agentID: string }["agentID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type DebugAgentToolsOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: { [x: string]: boolean }
+}
+
+export type DebugAgentExecuteToolInput = {
+  readonly agentID: { readonly agentID: string; readonly toolID: string }["agentID"]
+  readonly toolID: { readonly agentID: string; readonly toolID: string }["toolID"]
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+  readonly payload: { readonly [x: string]: JsonValue }
+}
+
+export type DebugAgentExecuteToolOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: AgentToolResult
+}
 
 export type MigrationV1StatusOutput =
   | { status: "required" | "completed" }
