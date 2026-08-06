@@ -116,7 +116,8 @@ export function applyDirectoryEvent(input: {
       return
     }
     case "session.created": {
-      const info = (event.properties as { info: SessionInfo }).info
+      const info = (event.properties as { info?: SessionInfo } | undefined)?.info
+      if (!info) break
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore("session", result.index, reconcile(info))
