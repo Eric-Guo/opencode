@@ -692,7 +692,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.input.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -1644,20 +1644,20 @@ export type Endpoint26_1Input = {
 export type Endpoint26_1Output = void
 export type DebugLocationEvictOperation<E = never> = (input?: Endpoint26_1Input) => Effect.Effect<Endpoint26_1Output, E>
 
-export type Endpoint27_2Input = {
+export type Endpoint26_2Input = {
   readonly agentID: Agent.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint27_2Output = { readonly location: Location.Info; readonly data: { readonly [x: string]: boolean } }
-export type DebugAgentToolsOperation<E = never> = (input: Endpoint27_2Input) => Effect.Effect<Endpoint27_2Output, E>
+export type Endpoint26_2Output = { readonly location: Location.Info; readonly data: { readonly [x: string]: boolean } }
+export type DebugAgentToolsOperation<E = never> = (input: Endpoint26_2Input) => Effect.Effect<Endpoint26_2Output, E>
 
-export type Endpoint27_3Input = {
+export type Endpoint26_3Input = {
   readonly agentID: Agent.ID
   readonly toolID: string
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly payload: { readonly [x: string]: Schema.Json }
 }
-export type Endpoint27_3Output = {
+export type Endpoint26_3Output = {
   readonly location: Location.Info
   readonly data: {
     readonly output?: Schema.Json | undefined
@@ -1669,8 +1669,8 @@ export type Endpoint27_3Output = {
   }
 }
 export type DebugAgentExecuteToolOperation<E = never> = (
-  input: Endpoint27_3Input,
-) => Effect.Effect<Endpoint27_3Output, E>
+  input: Endpoint26_3Input,
+) => Effect.Effect<Endpoint26_3Output, E>
 
 export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
