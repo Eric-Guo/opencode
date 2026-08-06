@@ -1,10 +1,30 @@
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { app } from "electron"
+import { app, utilityProcess } from "electron"
+import type { Details } from "electron"
 import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
+
+type SidecarMessage =
+  | { type: "starting"; stage: string }
+  | { type: "diagnostic"; message: string }
+  | { type: "ready" }
+  | { type: "error"; error: { message: string; stack?: string } }
+
+export type SidecarListener = { stop: () => Promise<void> }
+
+const SIDECAR_SERVICE_NAME = "opencode server"
+const SIDECAR_START_STALL_TIMEOUT = 60_000
+const SIDECAR_STOP_TIMEOUT = 6_000
+
+type SpawnLocalServerOptions = {
+  userDataPath: string
+  onStdout?: (message: string) => void
+  onStderr?: (message: string) => void
+  onExit?: (code: number) => void
+}
 
 export function getDefaultServerUrl(): string | null {
   const value = getStore().get(DEFAULT_SERVER_URL_KEY)
@@ -41,6 +61,143 @@ function packagedConfigDir() {
   return join(dirname(fileURLToPath(import.meta.url)), "../../resources/thape-config")
 }
 
+export async function spawnLocalServer(
+  hostname: string,
+  port: number,
+  password: string,
+  options: SpawnLocalServerOptions,
+) {
+  const sidecar = join(dirname(fileURLToPath(import.meta.url)), "sidecar.js")
+  const child = utilityProcess.fork(sidecar, [], {
+    cwd: process.cwd(),
+    env: createSidecarEnv(),
+    serviceName: SIDECAR_SERVICE_NAME,
+    stdio: "pipe",
+  })
+  const exit = defer<number>()
+  const state = { exited: false, processGone: undefined as Details | undefined }
+  let failProcessGone: ((details: Details) => void) | undefined
+
+  const onProcessGone = (_event: unknown, details: Details) => {
+    if (details.type !== "Utility" || details.name !== SIDECAR_SERVICE_NAME) return
+    state.processGone = details
+    options.onStderr?.(`utility process gone reason=${details.reason} exitCode=${details.exitCode}`)
+    failProcessGone?.(details)
+  }
+
+  app.on("child-process-gone", onProcessGone)
+  child.once("exit", (code) => {
+    state.exited = true
+    app.off("child-process-gone", onProcessGone)
+    options.onExit?.(code)
+    exit.resolve(code)
+  })
+  child.on("error", (error) => options.onStderr?.(`utility process error: ${serializeError(error).message}`))
+  child.stdout?.on("data", (chunk: Buffer) => options.onStdout?.(chunk.toString("utf8").trimEnd()))
+  child.stderr?.on("data", (chunk: Buffer) => options.onStderr?.(chunk.toString("utf8").trimEnd()))
+
+  await new Promise<void>((resolve, reject) => {
+    let done = false
+    let timeout: NodeJS.Timeout
+    let stage = "launching utility process"
+
+    const cleanup = () => {
+      clearTimeout(timeout)
+      failProcessGone = undefined
+      child.off("message", onMessage)
+      child.off("exit", onExit)
+    }
+    const fail = (error: Error) => {
+      if (done) return
+      done = true
+      cleanup()
+      reject(error)
+    }
+    const refreshTimeout = () => {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => {
+        fail(new Error(`Sidecar stalled for ${SIDECAR_START_STALL_TIMEOUT}ms while ${stage}: ${sidecar}`))
+      }, SIDECAR_START_STALL_TIMEOUT)
+    }
+    const onMessage = (message: SidecarMessage) => {
+      if (message.type === "starting") {
+        stage = message.stage
+        options.onStdout?.(`sidecar startup: ${stage}`)
+        refreshTimeout()
+        return
+      }
+      if (message.type === "diagnostic") {
+        options.onStdout?.(message.message)
+        return
+      }
+      if (message.type === "ready") {
+        if (done) return
+        done = true
+        cleanup()
+        resolve()
+        return
+      }
+      if (message.type === "error") {
+        fail(Object.assign(new Error(message.error.message), { stack: message.error.stack }))
+      }
+    }
+    const onExit = (code: number) => fail(new Error(`Sidecar exited before ready with code ${code}`))
+
+    failProcessGone = (details) => {
+      fail(
+        new Error(
+          `Sidecar utility process terminated before ready reason=${details.reason} exitCode=${details.exitCode}: ${sidecar}`,
+        ),
+      )
+    }
+    child.on("message", onMessage)
+    child.on("exit", onExit)
+    refreshTimeout()
+    if (state.processGone) return failProcessGone(state.processGone)
+    child.postMessage({ type: "start", hostname, port, password, userDataPath: options.userDataPath })
+  }).catch((error) => {
+    if (!state.exited) child.kill()
+    throw error
+  })
+
+  const wait = (async () => {
+    const url = `http://${hostname}:${port}`
+    const state = { healthy: false }
+    const gone = exit.promise.then((code) => {
+      if (state.healthy) return
+      throw new Error(`Sidecar exited before health check passed with code ${code}`)
+    })
+    const ready = async () => {
+      while (true) {
+        await delay(100)
+        if (!(await checkHealth(url, password))) continue
+        state.healthy = true
+        return
+      }
+    }
+    await Promise.race([ready(), gone])
+  })()
+  const stopping = { promise: undefined as Promise<void> | undefined }
+
+  return {
+    listener: {
+      stop: () => {
+        if (stopping.promise) return stopping.promise
+        if (state.exited) return Promise.resolve()
+        child.postMessage({ type: "stop" })
+        stopping.promise = Promise.race([
+          exit.promise.then(() => undefined),
+          delay(SIDECAR_STOP_TIMEOUT).then(() => {
+            if (!state.exited) child.kill()
+          }),
+        ])
+        return stopping.promise
+      },
+    },
+    health: { wait },
+  }
+}
+
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
   let healthUrls: URL[]
   try {
@@ -66,4 +223,32 @@ export async function checkHealth(url: string, password?: string | null): Promis
     } catch {}
   }
   return false
+}
+
+function createSidecarEnv(): Record<string, string> {
+  const env = Object.fromEntries(
+    Object.entries(process.env).flatMap(([key, value]) => (value === undefined ? [] : [[key, String(value)]])),
+  )
+  delete env.DEBUG
+  if (process.platform === "linux") delete env.LD_PRELOAD
+  return env
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+function serializeError(error: unknown) {
+  if (error instanceof Error) return { message: error.message, stack: error.stack }
+  return { message: String(error) }
+}
+
+function defer<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
 }
