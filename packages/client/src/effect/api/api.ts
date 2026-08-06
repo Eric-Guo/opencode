@@ -1659,7 +1659,7 @@ export interface DebugApi<E = never> {
   }
 }
 
-export type Endpoint27_0Output =
+export type Endpoint28_0Output =
   | { readonly status: "required" | "completed" }
   | {
       readonly status: "running"
@@ -1670,33 +1670,33 @@ export type Endpoint27_0Output =
       }
     }
   | { readonly status: "error"; readonly error: string }
-export type MigrationV1StatusOperation<E = never> = () => Effect.Effect<Endpoint27_0Output, E>
+export type MigrationV1StatusOperation<E = never> = () => Effect.Effect<Endpoint28_0Output, E>
 
 export interface MigrationApi<E = never> {
   readonly v1: { readonly status: MigrationV1StatusOperation<E> }
 }
 
-export type Endpoint28_0Input = {
+export type Endpoint29_0Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint28_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
-export type WebsearchProvidersOperation<E = never> = (input?: Endpoint28_0Input) => Effect.Effect<Endpoint28_0Output, E>
+export type Endpoint29_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
+export type WebsearchProvidersOperation<E = never> = (input?: Endpoint29_0Input) => Effect.Effect<Endpoint29_0Output, E>
 
-export type Endpoint28_1Input = {
+export type Endpoint29_1Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly query: string
   readonly providerID?: WebSearch.ID | undefined
 }
-export type Endpoint28_1Output = { readonly location: Location.Info; readonly data: WebSearch.Response }
-export type WebsearchQueryOperation<E = never> = (input: Endpoint28_1Input) => Effect.Effect<Endpoint28_1Output, E>
+export type Endpoint29_1Output = { readonly location: Location.Info; readonly data: WebSearch.Response }
+export type WebsearchQueryOperation<E = never> = (input: Endpoint29_1Input) => Effect.Effect<Endpoint29_1Output, E>
 
 export interface WebsearchApi<E = never> {
   readonly providers: WebsearchProvidersOperation<E>
   readonly query: WebsearchQueryOperation<E>
 }
 
-export type Endpoint29_0Output = { readonly [x: string]: Schema.Json }
-export type ServerConfigGetOperation<E = never> = () => Effect.Effect<Endpoint29_0Output, E>
+export type Endpoint30_0Output = { readonly [x: string]: Schema.Json }
+export type ServerConfigGetOperation<E = never> = () => Effect.Effect<Endpoint30_0Output, E>
 
 export interface ServerConfigApi<E = never> {
   readonly get: ServerConfigGetOperation<E>
