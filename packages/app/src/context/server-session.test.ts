@@ -358,6 +358,18 @@ describe("server session", () => {
     expect(ctx.store.data.message.root).toEqual([])
   })
 
+  test("uses the initial page size when refreshing an empty cached history", async () => {
+    const ctx = setup({ root: session("root") })
+
+    await ctx.store.sync("root")
+    await ctx.store.sync("root", { force: true })
+
+    expect(ctx.messages).toEqual([
+      { sessionID: "root", limit: 20, order: "desc" },
+      { sessionID: "root", limit: 20, order: "desc" },
+    ])
+  })
+
   test("loads current session content through the current message API", async () => {
     const requests: unknown[] = []
     const user = { id: "msg_z_user", type: "user", text: "hello", time: { created: 1 } }
