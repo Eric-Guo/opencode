@@ -25,7 +25,8 @@ if (outdir === dir) throw new Error("--outdir must not be the package directory"
 if (outdir === path.join(dir, "dist-node")) {
   throw new Error("--outdir must not be dist-node because it contains temporary files")
 }
-const bundleOnly = process.argv.includes("--bundle-only")
+const sidecarOnly = process.argv.includes("--sidecar-only")
+const bundleOnly = process.argv.includes("--bundle-only") || sidecarOnly
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
 const appArchiveOnly = process.argv.includes("--app-archive-only")
@@ -64,7 +65,8 @@ if (!bundleOnly && !sidecarOnly && targets.some((target) => target.platform === 
 const appArchive = archivePath ? (await Bun.file(archivePath).text()).trim() : await buildAppArchive(Script.channel)
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
-  !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)
+  !sidecarOnly &&
+  (!bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch))
     ? await resolveHostNode()
     : undefined
 
@@ -100,9 +102,12 @@ for (const target of targets) {
     appArchive,
   }
   await copyNodeAssets(assets)
-  await build(mainConfig(input))
-  await assertTextImportsInlined("dist-node/opencode.mjs")
+  if (!sidecarOnly) {
+    await build(mainConfig(input))
+    await assertTextImportsInlined("dist-node/opencode.mjs")
+  }
   await build(sidecarConfig(input))
+  if (sidecarOnly) continue
   if (bundleOnly) await verifyArtifact("dist-node/opencode.mjs")
 
   const host = target.platform === process.platform && target.arch === process.arch
