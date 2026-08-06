@@ -383,7 +383,8 @@ function createServerNotificationState(input: {
       })
       const description =
         session?.title ??
-        (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
+        error?.message ??
+        language.t("notification.session.error.fallbackDescription")
       const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
       if (settings.notifications.errors()) {
         void platform.notify(language.t("notification.session.error.title"), description, href)
