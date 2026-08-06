@@ -204,7 +204,7 @@ const NEXT_SESSION_COLUMNS = {
 type NextMessage = {
   readonly id: string
   readonly session_id: string
-  readonly type: string
+  readonly type: SessionMessage.Type
   readonly seq: number
   readonly time_created: number
   readonly time_updated: number
@@ -532,9 +532,22 @@ export function retainedMessages(db: Database.Interface["db"], sessionID: Sessio
   return Effect.gen(function* () {
     const tables = new Set(
       (yield* db.all<{ name: string }>(
-        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('message', 'part')`,
+        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('message', 'part', 'session_message_retained')`,
       )).map((table) => table.name),
     )
+    if (tables.has("session_message_retained")) {
+      const retained = yield* db.all<NextMessage>(sql`
+        SELECT id, session_id, type, seq, time_created, time_updated, data
+        FROM session_message_retained
+        WHERE session_id = ${sessionID}
+        ORDER BY seq
+      `)
+      if (retained.length > 0)
+        return retained.flatMap((message) => {
+          const data = Option.getOrUndefined(decodeJson(message.data))
+          return record(data) ? [{ ...message, data }] : []
+        })
+    }
     if (!tables.has("message") || !tables.has("part")) return []
     const session = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()
     if (!session) return []
@@ -598,9 +611,19 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       const global = yield* Global.Service
+      yield* recoverRetainedMessages(db)
       const state = yield* readState(db)
       if (state?.phase === "completed") return { status: "completed" as const }
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
+      const retainedTable = yield* db.get(
+        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_message_retained'`,
+      )
+      const retainedSessions = new Set(
+        (retainedTable
+          ? yield* db.all<{ session_id: string }>(sql`SELECT DISTINCT session_id FROM session_message_retained`)
+          : []
+        ).map((session) => session.session_id),
+      )
       const migrate = Effect.gen(function* () {
         const now = Date.now()
         yield* db.run(sql`
@@ -694,6 +717,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                 const sourceMessages = yield* tx.all<SourceMessage>(
                   sql`SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ${next.id}`,
                 )
+                if (sourceMessages.length === 0 && retainedSessions.has(next.id)) return
                 const sourceParts = yield* tx.all<SourcePart>(
                   sql`SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ${next.id}`,
                 )
@@ -757,11 +781,69 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
             }),
           )
           .pipe(Effect.orDie)
+        yield* recoverRetainedMessages(db)
         return { status: "completed" as const }
       })
       return yield* migrate
     }).pipe(Effect.orDie),
   )
+}
+
+function recoverRetainedMessages(db: Database.Interface["db"]) {
+  return Effect.gen(function* () {
+    const tables = new Set(
+      (yield* db.all<{ name: string }>(
+        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('message', 'session_message_retained')`,
+      )).map((table) => table.name),
+    )
+    if (!tables.has("session_message_retained")) return
+    const sessions = yield* db.all<{ session_id: string }>(
+      tables.has("message")
+        ? sql`
+            SELECT retained.session_id
+            FROM session_message_retained retained
+            INNER JOIN session_v2 ON session_v2.id = retained.session_id
+            WHERE NOT EXISTS (
+              SELECT 1 FROM session_message current WHERE current.session_id = retained.session_id
+            ) AND NOT EXISTS (
+              SELECT 1 FROM message legacy WHERE legacy.session_id = retained.session_id
+            )
+            GROUP BY retained.session_id
+          `
+        : sql`
+            SELECT retained.session_id
+            FROM session_message_retained retained
+            INNER JOIN session_v2 ON session_v2.id = retained.session_id
+            WHERE NOT EXISTS (
+              SELECT 1 FROM session_message current WHERE current.session_id = retained.session_id
+            )
+            GROUP BY retained.session_id
+          `,
+    )
+    yield* Effect.forEach(sessions, (session) =>
+      db
+        .transaction((tx) =>
+          Effect.gen(function* () {
+            yield* tx.run(sql`
+              INSERT OR IGNORE INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+              SELECT id, session_id, type, seq, time_created, time_updated, data
+              FROM session_message_retained
+              WHERE session_id = ${session.session_id}
+            `)
+            const watermark = yield* tx.get<{ value: number }>(sql`
+              SELECT MAX(seq) AS value FROM session_message WHERE session_id = ${session.session_id}
+            `)
+            if (watermark?.value === undefined) return
+            yield* tx.run(sql`
+              INSERT INTO event_sequence (aggregate_id, seq, owner_id)
+              VALUES (${session.session_id}, ${watermark.value}, NULL)
+              ON CONFLICT (aggregate_id) DO UPDATE SET seq = excluded.seq, owner_id = NULL
+            `)
+          }),
+        )
+        .pipe(Effect.orDie, Effect.tap(() => Effect.logInfo("Recovered retained V2 session history", session))),
+    )
+  }).pipe(Effect.orDie)
 }
 
 function nextPath(options: Options, data: string) {
