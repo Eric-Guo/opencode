@@ -937,6 +937,62 @@ describe("V1Migration database workflow", () => {
     )
   })
 
+  test("recovers retained V2 messages when no canonical V1 messages exist", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/tmp/test', 1, 2, '[]')`,
+        )
+        yield* db.run(sql`
+          INSERT INTO session (
+            id, project_id, slug, directory, title, version, cost, tokens_output, time_created, time_updated
+          ) VALUES ('ses_retained', 'global', 'retained', '/tmp/test', 'Retained', '2', 3, 5, 1, 2)
+        `)
+        yield* db.run(sql`
+          CREATE TABLE session_message_retained (
+            id text PRIMARY KEY,
+            session_id text NOT NULL,
+            type text NOT NULL,
+            seq integer NOT NULL,
+            time_created integer NOT NULL,
+            time_updated integer NOT NULL,
+            data text NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO session_message_retained (id, session_id, type, seq, time_created, time_updated, data)
+          VALUES ('msg_retained', 'ses_retained', 'user', 4, 10, 11, '{"text":"picture","time":{"created":10}}')
+        `)
+
+        expect(yield* V1Migration.retainedMessages(db, SessionSchema.ID.make("ses_retained"))).toEqual([
+          {
+            id: "msg_retained",
+            session_id: "ses_retained",
+            type: "user",
+            seq: 4,
+            time_created: 10,
+            time_updated: 11,
+            data: { text: "picture", time: { created: 10 } },
+          },
+        ])
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT id, seq, data FROM session_message WHERE session_id = 'ses_retained'`)).toEqual({
+          id: "msg_retained",
+          seq: 4,
+          data: '{"text":"picture","time":{"created":10}}',
+        })
+        expect(yield* db.get(sql`SELECT seq FROM event_sequence WHERE aggregate_id = 'ses_retained'`)).toEqual({
+          seq: 4,
+        })
+        expect(yield* db.get(sql`SELECT cost, tokens_output FROM session_v2 WHERE id = 'ses_retained'`)).toEqual({
+          cost: 3,
+          tokens_output: 5,
+        })
+      }),
+    )
+  })
+
   test("derives required status from the durable cursor", async () => {
     await database(
       Effect.gen(function* () {
