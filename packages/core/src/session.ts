@@ -51,6 +51,7 @@ import { Global } from "@opencode-ai/util/global"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
+import { V1Migration } from "./database/v1-migration"
 
 // get project -> project.locations
 //
@@ -320,7 +321,7 @@ const layer = Layer.effect(
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
-    const decode = (row: typeof SessionMessageTable.$inferSelect) =>
+    const decode = (row: { id: string; session_id: string; type: SessionMessage.Type; data: object }) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
         Effect.mapError(
           () =>
@@ -508,6 +509,27 @@ const layer = Layer.effect(
         const direction = input.cursor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
+        const projected = yield* db
+          .select({ id: SessionMessageTable.id })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, input.sessionID))
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie)
+        if (!projected) {
+          // V1 rows are retained after migration. Older message shapes can fail the durable
+          // projection, so keep those sessions readable without admitting them to V2 context.
+          const messages = yield* V1Migration.retainedMessages(db, input.sessionID)
+          const anchor = input.cursor ? messages.find((message) => message.id === input.cursor?.id) : undefined
+          if (input.cursor && !anchor) return []
+          const rows = (order === "asc" ? messages : messages.toReversed())
+            .filter((message) => {
+              if (!anchor) return true
+              return order === "asc" ? message.seq > anchor.seq : message.seq < anchor.seq
+            })
+            .slice(0, input.limit)
+          return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
+        }
         const anchor = input.cursor
           ? yield* db
               .select({ seq: SessionMessageTable.seq })
