@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Config } from "@opencode-ai/core/config"
+import { Config } from "@opencode-ai/schema/config"
 import { Config as TuiConfig } from "@opencode-ai/tui/config"
 import { Schema } from "effect"
 
