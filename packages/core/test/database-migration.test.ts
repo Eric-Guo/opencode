@@ -128,6 +128,8 @@ describe("DatabaseMigration", () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO session (id) VALUES ('ses_retained')`)
         yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY, created integer DEFAULT 0 NOT NULL)`)
         yield* db.run(sql`
           CREATE TABLE session_message (
@@ -141,6 +143,10 @@ describe("DatabaseMigration", () => {
           )
         `)
         yield* db.run(sql`
+          INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+          VALUES ('msg_retained', 'ses_retained', 'user', 4, 1, 2, '{"text":"retained","time":{"created":1}}')
+        `)
+        yield* db.run(sql`
           CREATE TABLE session_pending (
             id text PRIMARY KEY,
             session_id text NOT NULL,
@@ -148,12 +154,47 @@ describe("DatabaseMigration", () => {
             data text NOT NULL,
             delivery text,
             admitted_seq integer NOT NULL,
-            time_created integer NOT NULL
+            time_created integer NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
           )
+        `)
+        yield* db.run(sql`
+          INSERT INTO session_pending (id, session_id, type, data, delivery, admitted_seq, time_created)
+          VALUES ('msg_pending', 'ses_retained', 'user', '{}', 'steer', 5, 3)
         `)
         yield* db.run(sql`
           CREATE INDEX session_pending_session_delivery_seq_idx
           ON session_pending (session_id, delivery, admitted_seq)
+        `)
+        yield* db.run(sql`
+          CREATE TABLE instruction_entry (
+            session_id text NOT NULL,
+            key text NOT NULL,
+            value text,
+            removed integer DEFAULT false NOT NULL,
+            time_created integer NOT NULL,
+            time_updated integer NOT NULL,
+            PRIMARY KEY (session_id, key),
+            FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO instruction_entry (session_id, key, value, removed, time_created, time_updated)
+          VALUES ('ses_retained', 'AGENTS.md', '{}', false, 1, 2)
+        `)
+        yield* db.run(sql`
+          CREATE TABLE instruction_state (
+            session_id text PRIMARY KEY,
+            epoch_start integer NOT NULL,
+            through_seq integer NOT NULL,
+            initial_values text NOT NULL,
+            current_values text NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO instruction_state (session_id, epoch_start, through_seq, initial_values, current_values)
+          VALUES ('ses_retained', 0, 4, '{}', '{}')
         `)
         yield* db.run(sql`CREATE TABLE data_migration (id text PRIMARY KEY)`)
 
@@ -170,6 +211,24 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'data_migration'`),
         ).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id, seq, data FROM session_message_retained`)).toEqual({
+          id: "msg_retained",
+          seq: 4,
+          data: '{"text":"retained","time":{"created":1}}',
+        })
+        expect(yield* db.get(sql`SELECT id FROM session_message`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id FROM session_pending`)).toEqual({ id: "msg_pending" })
+        expect(yield* db.get(sql`SELECT key FROM instruction_entry`)).toEqual({ key: "AGENTS.md" })
+        expect(yield* db.get(sql`SELECT session_id FROM instruction_state`)).toEqual({
+          session_id: "ses_retained",
+        })
+        expect(
+          yield* Effect.forEach(["session_pending", "instruction_entry", "instruction_state"], (table) =>
+            db
+              .get<{ table: string }>(sql`PRAGMA foreign_key_list(${sql.identifier(table)})`)
+              .pipe(Effect.map((row) => row?.table)),
+          ),
+        ).toEqual(["session_v2", "session_v2", "session_v2"])
         expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${loosePsylocke.id}`)).toEqual({
           id: loosePsylocke.id,
         })
