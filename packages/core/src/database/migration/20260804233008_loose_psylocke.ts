@@ -94,6 +94,29 @@ export default {
         !(yield* tx.all<{ name: string }>(`PRAGMA table_info(\`event\`)`)).some((column) => column.name === "created")
       )
         yield* tx.run(`ALTER TABLE \`event\` ADD \`created\` integer DEFAULT 0 NOT NULL;`)
+      // Some pre-launch V2 builds stored image-only history here while sharing the V1 database path.
+      yield* tx.run(`
+        CREATE TABLE IF NOT EXISTS \`session_message_retained\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`type\` text NOT NULL,
+          \`seq\` integer NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          \`data\` text NOT NULL
+        );
+      `)
+      yield* tx.run(`
+        INSERT OR IGNORE INTO \`session_message_retained\` (
+          \`id\`, \`session_id\`, \`type\`, \`seq\`, \`time_created\`, \`time_updated\`, \`data\`
+        )
+        SELECT \`id\`, \`session_id\`, \`type\`, \`seq\`, \`time_created\`, \`time_updated\`, \`data\`
+        FROM \`session_message\`;
+      `)
+      yield* tx.run(`
+        CREATE INDEX IF NOT EXISTS \`session_message_retained_session_seq_idx\`
+        ON \`session_message_retained\` (\`session_id\`, \`seq\`);
+      `)
       yield* tx.run(`
         CREATE TABLE IF NOT EXISTS \`__new_session_message\` (
           \`id\` text PRIMARY KEY,

@@ -132,6 +132,10 @@ describe("DatabaseMigration", () => {
           )
         `)
         yield* db.run(sql`
+          INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+          VALUES ('msg_retained', 'ses_retained', 'user', 4, 1, 2, '{"text":"retained","time":{"created":1}}')
+        `)
+        yield* db.run(sql`
           CREATE TABLE session_pending (
             id text PRIMARY KEY,
             session_id text NOT NULL,
@@ -161,6 +165,12 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'data_migration'`),
         ).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id, seq, data FROM session_message_retained`)).toEqual({
+          id: "msg_retained",
+          seq: 4,
+          data: '{"text":"retained","time":{"created":1}}',
+        })
+        expect(yield* db.get(sql`SELECT id FROM session_message`)).toBeUndefined()
         expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${loosePsylocke.id}`)).toEqual({
           id: loosePsylocke.id,
         })
