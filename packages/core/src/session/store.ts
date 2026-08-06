@@ -6,6 +6,7 @@ import { Project } from "@opencode-ai/schema/project"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
 import { Database } from "../database/database.js"
+import { V1Migration } from "../database/v1-migration.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
@@ -140,6 +141,30 @@ const layer = Layer.effect(
         const direction = input.cursor?.direction ?? "next"
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
+        const projected = yield* db
+          .select({ id: SessionMessageTable.id })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, input.sessionID))
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie)
+        if (!projected) {
+          // V1 rows are retained after migration. Older message shapes can fail the durable
+          // projection, so keep those sessions readable without admitting them to V2 context.
+          const messages = yield* V1Migration.retainedMessages(db, input.sessionID)
+          const anchor = input.cursor ? messages.find((message) => message.id === input.cursor?.id) : undefined
+          if (input.cursor && !anchor) return []
+          const rows = (order === "asc" ? messages : messages.toReversed())
+            .filter((message) => {
+              if (!anchor) return true
+              return order === "asc" ? message.seq > anchor.seq : message.seq < anchor.seq
+            })
+            .slice(0, input.limit)
+          return yield* Effect.forEach(
+            direction === "previous" ? rows.toReversed() : rows,
+            SessionHistory.decodeMessageRow,
+          )
+        }
         const anchor = input.cursor
           ? yield* db
               .select({ seq: SessionMessageTable.seq })
