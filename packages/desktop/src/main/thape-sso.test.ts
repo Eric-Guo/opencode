@@ -2,7 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { loadSsoBearerApiKey, signInToThapeSso, SSO_BEARER_KEY_FILE } from "./thape-sso"
+import {
+  getCybrosCurrentUser,
+  loadSsoBearerApiKey,
+  signInToThapeSso,
+  SSO_BEARER_KEY_FILE,
+} from "./thape-sso"
 
 const roots: string[] = []
 
@@ -26,6 +31,30 @@ describe("THAPE SSO", () => {
 
   test("falls back to the environment when the bearer key file is absent", async () => {
     expect(await loadSsoBearerApiKey(await tempRoot(), " environment-token ")).toBe("environment-token")
+  })
+
+  test("clears rejected bearer state so sign-in is available again", async () => {
+    const root = await tempRoot()
+    await writeFile(join(root, SSO_BEARER_KEY_FILE), "expired-token\n")
+    const state: { bearerApiKey?: string; tabStateRefreshes: number } = {
+      bearerApiKey: "expired-token",
+      tabStateRefreshes: 0,
+    }
+
+    const result = getCybrosCurrentUser(
+      root,
+      state.bearerApiKey,
+      () => {
+        state.bearerApiKey = undefined
+        state.tabStateRefreshes += 1
+      },
+      async () => new Response(undefined, { status: 401 }),
+    )
+
+    await expect(result).rejects.toThrow("Failed to load Cybros user: 401")
+    expect(await loadSsoBearerApiKey(root)).toBeUndefined()
+    expect(state.bearerApiKey).toBeUndefined()
+    expect(state.tabStateRefreshes).toBe(1)
   })
 
   test("signs in and saves the returned JWT token", async () => {

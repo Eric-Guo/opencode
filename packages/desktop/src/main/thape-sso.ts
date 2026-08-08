@@ -1,7 +1,8 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises"
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
 const SSO_SIGN_IN_URL = "https://sso.thape.com.cn/users/sign_in"
+const CYBROS_CURRENT_USER_URL = "https://cybros.thape.com.cn/api/sigma_agents/me.json"
 export const SSO_BEARER_KEY_FILE = ".thape-sso-bearer-api-key"
 
 export type SsoSignInCredentials = {
@@ -14,6 +15,29 @@ type SsoRequest = (input: string, init?: RequestInit) => Promise<Response>
 export async function loadSsoBearerApiKey(userDataPath: string, environmentValue?: string) {
   const saved = await readFile(join(userDataPath, SSO_BEARER_KEY_FILE), "utf8").catch(() => undefined)
   return saved?.trim() || environmentValue?.trim() || undefined
+}
+
+export async function getCybrosCurrentUser(
+  userDataPath: string,
+  bearerApiKey: string | undefined,
+  onBearerRejected: () => void,
+  request: SsoRequest = fetch,
+) {
+  if (!bearerApiKey) throw new Error("Cybros SSO bearer key is not configured")
+
+  const response = await request(CYBROS_CURRENT_USER_URL, {
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${bearerApiKey}`,
+    },
+  })
+  if (response.status === 401) {
+    await rm(join(userDataPath, SSO_BEARER_KEY_FILE), { force: true })
+    onBearerRejected()
+  }
+  if (!response.ok) throw new Error(`Failed to load Cybros user: ${response.status}`)
+  return response.json()
 }
 
 export async function signInToThapeSso(
