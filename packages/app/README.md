@@ -21,6 +21,30 @@ Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
 
 The page will reload if you make edits.<br>
 
+### Connecting to a password-protected local server
+
+The app connects to the opencode server at `http://localhost:4096` by default. Keep the Vite dev server running while using the app:
+
+```bash
+bun run dev
+```
+
+`OPENCODE_SERVER_PASSWORD` protects the backend, but Vite does not automatically forward it to browser requests. If the backend was started with a password, export the same password in the shell that opens the app and pass it as an encoded startup token:
+
+```bash
+export PLAYWRIGHT_SERVER_HOST=4096
+export OPENCODE_SERVER_PASSWORD="..."
+AUTH_TOKEN="$(bun -e 'process.stdout.write(encodeURIComponent(btoa(`opencode:${process.env.OPENCODE_SERVER_PASSWORD}`)))')" open "http://localhost:3000/?auth_token=$AUTH_TOKEN"
+```
+
+For a persistent connection, open **Settings → Servers**, edit `http://localhost:4096`, and set the username to `opencode` and the password to the value of `OPENCODE_SERVER_PASSWORD`.
+
+To distinguish an authentication problem from a server startup problem, check the authenticated health endpoint. A successful response returns HTTP `200`; the same request without credentials returns HTTP `401` when password protection is enabled.
+
+```bash
+curl --user "opencode:$OPENCODE_SERVER_PASSWORD" http://127.0.0.1:4096/api/health
+```
+
 ### `npm run build`
 
 Builds the app for production to the `dist` folder.<br>
