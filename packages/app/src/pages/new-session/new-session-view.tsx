@@ -2,7 +2,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { Show, createMemo, createSignal, type Accessor } from "solid-js"
+import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
@@ -30,12 +30,36 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
 }) {
+  const sdk = useSDK()
+  const [background] = createResource(sdk, (current) =>
+    current.api.config
+      .get({ location: { directory: current.directory } })
+      .then((entries) => {
+        const root = entries.find((entry) => entry.type === "directory")?.path
+        if (!root) return
+        return current.api.file
+          .read({ location: { directory: root }, path: "artifacts/Xintiandi_1920x968.jpg" })
+          .then((content) => URL.createObjectURL(new Blob([new Uint8Array(content)], { type: "image/jpeg" })))
+      })
+      .catch(() => undefined),
+  )
+  createEffect(() => {
+    const url = background()
+    if (!url) return
+    const image = `url("${url}")`
+    document.body.toggleAttribute("data-new-session-background", true)
+    document.body.style.setProperty("--new-session-background", image)
+    onCleanup(() => {
+      URL.revokeObjectURL(url)
+      if (document.body.style.getPropertyValue("--new-session-background") !== image) return
+      document.body.removeAttribute("data-new-session-background")
+      document.body.style.removeProperty("--new-session-background")
+    })
+  })
+
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
-      <div
-        data-component="session-new-design"
-        class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-deep"
-      >
+      <div data-component="session-new-design" class="relative flex-1 min-h-0 overflow-hidden">
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <div class="mt-8 flex flex-col gap-8">
