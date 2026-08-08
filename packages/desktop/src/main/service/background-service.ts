@@ -5,6 +5,7 @@ import { chmod, copyFile, mkdir, readdir, rename, rm } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { promisify } from "node:util"
 import { app } from "electron"
+import { cliInstallPath } from "../cli-install"
 import { parseCliVersion } from "./cli-version"
 import { developmentResourcesRoot } from "../paths"
 
@@ -70,7 +71,12 @@ async function resolveBundledCli(isolated: boolean, logger: Logger) {
     : join(developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
   logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = parseCliVersion(await run(bundled, ["--version"], logger))
-  const binary = app.isPackaged || isolated ? await installCli(bundled, version, logger) : bundled
+  logger.log("v2 CLI executable verified", { version })
+  const binary = app.isPackaged
+    ? await installCli(bundled, app.getVersion(), logger)
+    : isolated
+      ? await installCli(bundled, version, logger)
+      : bundled
   return { version, binary, command: [binary] }
 }
 
@@ -89,15 +95,16 @@ async function cleanCliStages(binary: string, logger: Logger) {
 }
 
 async function installCli(source: string, version: string, logger: Logger) {
-  const directory = join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"))
-  const destination = join(directory, executableName())
+  const destination = app.isPackaged
+    ? cliInstallPath(app.getPath("userData"), version)
+    : join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"), executableName())
   if (existsSync(destination)) {
     logger.log("v2 CLI staged executable reused", { path: destination, version })
     return destination
   }
 
   const temp = destination + `.${process.pid}.tmp`
-  await mkdir(directory, { recursive: true })
+  await mkdir(dirname(destination), { recursive: true })
   await copyFile(source, temp)
   if (process.platform !== "win32") await chmod(temp, 0o755)
   await rename(temp, destination).catch(async (error) => {
