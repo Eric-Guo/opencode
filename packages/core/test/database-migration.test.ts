@@ -14,6 +14,7 @@ import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import legacyCredentialsMigration from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
 import { Global } from "@opencode-ai/util/global"
 import loosePsylocke from "@opencode-ai/core/database/migration/20260804233008_loose_psylocke"
+import repairV2ForeignKeys from "@opencode-ai/core/database/migration/20260808090000_repair_v2_foreign_keys"
 
 const run = <A, E>(
   effect: Effect.Effect<A, E, SqlClient | Global.Service>,
@@ -245,6 +246,81 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${loosePsylocke.id}`)).toEqual({
           id: loosePsylocke.id,
         })
+      }),
+    )
+  })
+
+  test("repairs V2 tables that retained legacy session foreign keys", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE session_v2 (id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO session (id) VALUES ('ses_legacy')`)
+        yield* db.run(sql`INSERT INTO session_v2 (id) VALUES ('ses_v2')`)
+        yield* db.run(sql`
+          CREATE TABLE session_pending (
+            id text PRIMARY KEY,
+            session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+            type text NOT NULL,
+            data text NOT NULL,
+            delivery text,
+            admitted_seq integer NOT NULL,
+            time_created integer NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO session_pending (id, session_id, type, data, delivery, admitted_seq, time_created)
+          VALUES ('msg_pending', 'ses_v2', 'user', '{}', 'steer', 1, 1)
+        `)
+        yield* db.run(sql`
+          CREATE TABLE instruction_entry (
+            session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+            key text NOT NULL,
+            value text,
+            removed integer DEFAULT false NOT NULL,
+            time_created integer NOT NULL,
+            time_updated integer NOT NULL,
+            PRIMARY KEY (session_id, key)
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO instruction_entry (session_id, key, value, removed, time_created, time_updated)
+          VALUES ('ses_v2', 'AGENTS.md', '{}', false, 1, 2)
+        `)
+        yield* db.run(sql`
+          CREATE TABLE instruction_state (
+            session_id text PRIMARY KEY REFERENCES session(id) ON DELETE CASCADE,
+            epoch_start integer NOT NULL,
+            through_seq integer NOT NULL,
+            initial_values text NOT NULL,
+            current_values text NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO instruction_state (session_id, epoch_start, through_seq, initial_values, current_values)
+          VALUES ('ses_v2', 0, 1, '{}', '{}')
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [repairV2ForeignKeys])
+
+        expect(
+          yield* Effect.forEach(["session_pending", "instruction_entry", "instruction_state"], (table) =>
+            db
+              .get<{ table: string }>(sql`PRAGMA foreign_key_list(${sql.identifier(table)})`)
+              .pipe(Effect.map((row) => row?.table)),
+          ),
+        ).toEqual(["session_v2", "session_v2", "session_v2"])
+        yield* db.run(sql`
+          INSERT INTO session_pending (id, session_id, type, data, delivery, admitted_seq, time_created)
+          VALUES ('msg_new', 'ses_v2', 'user', '{}', 'steer', 2, 2)
+        `)
+        expect(yield* db.all(sql`SELECT id FROM session_pending ORDER BY admitted_seq`)).toEqual([
+          { id: "msg_pending" },
+          { id: "msg_new" },
+        ])
+        expect(yield* db.get(sql`SELECT key FROM instruction_entry`)).toEqual({ key: "AGENTS.md" })
+        expect(yield* db.get(sql`SELECT session_id FROM instruction_state`)).toEqual({ session_id: "ses_v2" })
       }),
     )
   })
