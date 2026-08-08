@@ -40,16 +40,17 @@ import m37 from "./migration/20260622202450_simplify_session_input.js"
 import m38 from "./migration/20260804233008_loose_psylocke.js"
 import m39 from "./migration/20260805200742_import_legacy_credentials.js"
 import m40 from "./migration/20260808023530_workspace_domain.js"
-import m41 from "./migration/20260811161259_execution_claim_attempts.js"
-import m42 from "./migration/20260812181746_session_inbox.js"
-import m43 from "./migration/20260812213948_worktree.js"
-import m44 from "./migration/20260819222447_session_viewed_state.js"
-import m45 from "./migration/20260823191254_nullable_workspace_binding.js"
-import m46 from "./migration/20260910120000_clear_v1_session_permission.js"
-import m47 from "./migration/20260923013825_project_time_active.js"
-import m48 from "./migration/20261007190000_azure_cli_external_credential.js"
-import m49 from "./migration/20261010180456_project_time_archived.js"
-import m50 from "./migration/20261024002554_session_allowance.js"
+import m41 from "./migration/20260808090000_repair_v2_foreign_keys.js"
+import m42 from "./migration/20260811161259_execution_claim_attempts.js"
+import m43 from "./migration/20260812181746_session_inbox.js"
+import m44 from "./migration/20260812213948_worktree.js"
+import m45 from "./migration/20260819222447_session_viewed_state.js"
+import m46 from "./migration/20260823191254_nullable_workspace_binding.js"
+import m47 from "./migration/20260910120000_clear_v1_session_permission.js"
+import m48 from "./migration/20260923013825_project_time_active.js"
+import m49 from "./migration/20261007190000_azure_cli_external_credential.js"
+import m50 from "./migration/20261010180456_project_time_archived.js"
+import m51 from "./migration/20261024002554_session_allowance.js"
 
 export const migrations = [
   m00,
@@ -103,4 +104,5 @@ export const migrations = [
   m48,
   m49,
   m50,
+  m51,
 ] satisfies DatabaseMigration.Migration[]
