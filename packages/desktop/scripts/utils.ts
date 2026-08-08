@@ -18,7 +18,7 @@ const CLI_BINARIES = [
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    target: "darwin-x64-baseline",
+    target: "darwin-x64",
     os: "darwin",
   },
   {
@@ -28,12 +28,12 @@ const CLI_BINARIES = [
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    target: "windows-x64-baseline",
+    target: "windows-x64",
     os: "win32",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    target: "linux-x64-baseline",
+    target: "linux-x64",
     os: "linux",
   },
   {
@@ -68,9 +68,14 @@ export async function buildCliToResources() {
   const cli = getCurrentCli()
   const dest = getCliResourcePath(cli)
   await rm(cli.os === "win32" ? "resources/opencode-cli" : "resources/opencode-cli.exe", { force: true })
-  await $`bun ../cli/script/build.ts --skip-install ${`--target=${cli.target}`}`
+  await $`bun ../cli/script/build-node.ts --skip-install ${`--target=${cli.target}`}`
   await copyFile(
-    join("../cli/dist", `cli-${cli.target}`, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
+    join(
+      "../cli/dist",
+      `cli-node-${cli.target}`,
+      "bin",
+      cli.os === "win32" ? "opencode2-node.exe" : "opencode2-node",
+    ),
     dest,
   )
   if (process.platform !== "win32") await chmod(dest, 0o755)
@@ -79,5 +84,5 @@ export async function buildCliToResources() {
   }
   if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
 
-  console.log(`Built ${cli.target} CLI at ${dest}`)
+  console.log(`Built Node ${cli.target} CLI at ${dest}`)
 }
