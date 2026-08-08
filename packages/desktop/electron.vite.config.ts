@@ -5,7 +5,6 @@ import { pickerPlugin } from "./script/picker"
 import { nodePtyPackage } from "./script/utils"
 import { cp, rm } from "node:fs/promises"
 
-const OPENCODE_SERVER_DIST = "../cli/dist-node"
 const SEVEN_SEVEN_DIST = "../7777/dist"
 const SEVEN_SEVEN_RENDERER_OUT = "./out/renderer/7777"
 
@@ -64,7 +63,7 @@ export default defineConfig(async ({ command }) => {
       build: {
         minify: command === "build",
         rolldownOptions: {
-          input: { index: "src/main/index.ts", sidecar: "src/main/sidecar.ts" },
+          input: { index: "src/main/index.ts" },
           output: {
             format: "es",
             // DesktopPaths resolves resources from the main output directory,
@@ -97,13 +96,6 @@ export default defineConfig(async ({ command }) => {
             const shim = config.plugins.find((plugin) => plugin.name === "vite:esm-shim")
 
             if (shim) delete shim.renderChunk
-          },
-        },
-        {
-          name: "opencode:copy-server-dist",
-          async writeBundle() {
-            await cp(`${OPENCODE_SERVER_DIST}/sidecar.mjs`, "./out/main/chunks/sidecar.mjs", { force: true })
-            await cp(`${OPENCODE_SERVER_DIST}/assets`, "./out/main/chunks/assets", { recursive: true, force: true })
           },
         },
       ],
