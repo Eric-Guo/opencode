@@ -140,6 +140,15 @@ const getBase = (appId: string): Configuration => ({
   },
   files: appFiles,
   extraResources: [
+    ...(channel === "dev"
+      ? [
+          {
+            from: "resources/",
+            to: "",
+            filter: ["opencode-cli*"],
+          },
+        ]
+      : []),
     {
       from: iconDir,
       to: "icons",
