@@ -74,7 +74,7 @@ function useEnvProxy() {
 
 function getStartupEnv() {
   if (process.platform === "win32") return process.env
-  return mergeShellEnv(loadShellEnv(getUserShell()), process.env)
+  return mergeShellEnv(loadShellEnv(getUserShell(), logger), process.env)
 }
 
 function emitDeepLinks(urls: string[]) {
