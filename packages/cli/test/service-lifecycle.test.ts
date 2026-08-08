@@ -66,7 +66,7 @@ serviceTest(
     )
     const before = await settled(home, "2.0.0-old")
 
-    await Promise.all([ensure(home), cli(home, "service", "start")])
+    await Promise.all([ensure(home), ensure(home)])
     expect((await settled(home, "2.0.0-old")).pid).toBe(before.pid)
 
     await Promise.all([ensure(home, OPENCODE_VERSION), ensure(home), cli(home, "service", "start")])
@@ -80,7 +80,7 @@ serviceTest(
 )
 
 serviceTest(
-  "an old-protocol server survives version-agnostic clients and yields to a required version",
+  "an old-protocol server survives version-agnostic clients and yields to CLI service start",
   async () => {
     await using home = await serviceHome()
     await using old = Bun.spawn(
@@ -94,11 +94,10 @@ serviceTest(
     )
     await until(() => snapshot(home).then((state) => state.info))
 
-    await expect(cli(home, "service", "start")).rejects.toThrow("incompatible health protocol")
     await expect(ensure(home)).rejects.toThrow("incompatible health protocol")
     expect(old.exitCode).toBe(null)
 
-    await ensure(home, OPENCODE_VERSION)
+    await cli(home, "service", "start")
     await old.exited
     await settled(home)
     await stopped(home)
