@@ -5,6 +5,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { app } from "electron"
+import { cliInstallPath } from "./cli-install"
 
 const execFileAsync = promisify(execFile)
 const root = dirname(fileURLToPath(import.meta.url))
@@ -25,8 +26,9 @@ export async function startBackgroundCli(logger: Logger, options: StartBackgroun
     ? join(process.resourcesPath, executableName())
     : join(root, "../../resources", executableName())
   logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const version = await run(bundled, ["--version"], logger)
-  const binary = app.isPackaged ? await installCli(bundled, version, logger) : bundled
+  const cliVersion = await run(bundled, ["--version"], logger)
+  logger.log("v2 CLI executable verified", { version: cliVersion })
+  const binary = app.isPackaged ? await installCli(bundled, app.getVersion(), logger) : bundled
   const stateHome = process.env.XDG_STATE_HOME
 
   const candidates = [
@@ -66,15 +68,14 @@ export async function startBackgroundCli(logger: Logger, options: StartBackgroun
 }
 
 async function installCli(source: string, version: string, logger: Logger) {
-  const directory = join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"))
-  const destination = join(directory, executableName())
+  const destination = cliInstallPath(app.getPath("userData"), version)
   if (existsSync(destination)) {
     logger.log("v2 CLI staged executable reused", { path: destination, version })
     return destination
   }
 
   const temp = destination + `.${process.pid}.tmp`
-  await mkdir(directory, { recursive: true })
+  await mkdir(dirname(destination), { recursive: true })
   await copyFile(source, temp)
   if (process.platform !== "win32") await chmod(temp, 0o755)
   await rename(temp, destination).catch(async (error) => {
