@@ -87,6 +87,7 @@ export function preferApplicationEnvironment(logger: DesktopLogger) {
     ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    OPENCODE_DISABLE_CHANNEL_DB: "1",
     OPENCODE_CLIENT: "desktop",
     OPENCODE_CONFIG_DIR:
       app.isPackaged || !configDir
