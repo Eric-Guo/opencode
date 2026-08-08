@@ -2,8 +2,6 @@ import { spawnSync } from "node:child_process"
 import { userInfo } from "node:os"
 import { basename } from "node:path"
 
-import { getLogger } from "../native/logging"
-
 const TIMEOUT = 5_000
 const cache = new Map<string, Record<string, string> | null>()
 
@@ -71,7 +69,7 @@ export function isNushell(shell: string) {
   return name === "nu" || name === "nu.exe" || raw.endsWith("\\nu.exe")
 }
 
-export function loadShellEnv(shell: string, logger: ShellEnvLogger = getLogger()) {
+export function loadShellEnv(shell: string, logger: ShellEnvLogger) {
   if (cache.has(shell)) {
     return cache.get(shell) ?? null
   }
