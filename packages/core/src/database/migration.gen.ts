@@ -43,5 +43,6 @@ export const migrations: DatabaseMigration.Migration[] = (
     import("./migration/20260804233008_loose_psylocke"),
     import("./migration/20260805200742_import_legacy_credentials"),
     import("./migration/20260808023530_workspace_domain"),
+    import("./migration/20260808090000_repair_v2_foreign_keys"),
   ])
 ).map((module) => module.default)
