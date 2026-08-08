@@ -23,7 +23,7 @@ export const CLI_BINARIES: Array<{ rustTarget: string; target: string; package: 
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    target: "darwin-x64-baseline",
+    target: "darwin-x64",
     package: "@opencode-ai/cli-darwin-x64-baseline",
     os: "darwin",
     cpu: "x64",
@@ -37,14 +37,14 @@ export const CLI_BINARIES: Array<{ rustTarget: string; target: string; package: 
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    target: "windows-x64-baseline",
+    target: "windows-x64",
     package: "@opencode-ai/cli-windows-x64-baseline",
     os: "win32",
     cpu: "x64",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    target: "linux-x64-baseline",
+    target: "linux-x64",
     package: "@opencode-ai/cli-linux-x64-baseline",
     os: "linux",
     cpu: "x64",
@@ -102,7 +102,7 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
   const resource = dest ?? getCliResourcePath(cli)
   if (!dest) await rm(cli.os === "win32" ? "resources/opencode-cli" : "resources/opencode-cli.exe", { force: true })
   try {
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} ${`--target=${cli.target}`} --skip-install --skip-web-ui --outdir=${directory}`.env(
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} ${`--target=${cli.target}`} --skip-install --outdir=${directory}`.env(
       {
         ...process.env,
         OPENCODE_VERSION: process.env.OPENCODE_VERSION,
@@ -118,7 +118,12 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
       if (exitCode !== 0) throw new Error(`Failed to stop development service: ${exitCode}`)
     }
     await copyFile(
-      join(directory, `cli-${cli.target}`, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
+      join(
+        directory,
+        `cli-node-${cli.target}`,
+        "bin",
+        cli.os === "win32" ? "opencode2-node.exe" : "opencode2-node",
+      ),
       resource,
     )
   } finally {
@@ -126,7 +131,7 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
   }
   await prepareCli(resource)
 
-  console.log(`Built ${cli.target} CLI at ${resource}`)
+  console.log(`Built Node ${cli.target} CLI at ${resource}`)
 }
 
 async function prepareCli(dest: string) {
