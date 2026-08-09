@@ -38,6 +38,7 @@
         "@opencode-ai/session-ui": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "dompurify": "catalog:",
+        "effect": "catalog:",
         "marked": "catalog:",
         "solid-js": "catalog:",
       },
