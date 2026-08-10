@@ -4,13 +4,7 @@ import "./startup-splash.css"
 export function StartupSplash() {
   return (
     <div data-component="startup-splash" role="status" aria-label="天华 AI 协作平台正在启动">
-      <div data-slot="background" aria-hidden="true">
-        <span data-slot="aurora" data-variant="cyan" />
-        <span data-slot="aurora" data-variant="violet" />
-        <span data-slot="grid" />
-        <span data-slot="particles" />
-        <span data-slot="scanline" />
-      </div>
+      <Background />
 
       <div data-slot="content">
         <div data-slot="mark">
@@ -28,6 +22,26 @@ export function StartupSplash() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+export function StartupSplashBackground() {
+  return (
+    <div data-component="startup-splash" data-variant="background" aria-hidden="true">
+      <Background />
+    </div>
+  )
+}
+
+function Background() {
+  return (
+    <div data-slot="background" aria-hidden="true">
+      <span data-slot="aurora" data-variant="cyan" />
+      <span data-slot="aurora" data-variant="violet" />
+      <span data-slot="grid" />
+      <span data-slot="particles" />
+      <span data-slot="scanline" />
     </div>
   )
 }

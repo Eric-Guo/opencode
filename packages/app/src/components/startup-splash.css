@@ -11,6 +11,12 @@
   background: var(--background-base);
 }
 
+[data-component="startup-splash"][data-variant="background"] {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
 [data-component="startup-splash"]::before {
   position: absolute;
   inset: 0;

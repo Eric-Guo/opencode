@@ -25,13 +25,6 @@
 }
 
 @layer components {
-  body[data-new-session-background] [data-slot="app-layout"] {
-    background-image: linear-gradient(rgb(0 0 0 / 30%), rgb(0 0 0 / 30%)), var(--new-session-background);
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
-  }
-
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;
