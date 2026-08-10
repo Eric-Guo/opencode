@@ -7,10 +7,7 @@ export function StartupSplash() {
       <Background />
 
       <div data-slot="content">
-        <div data-slot="mark">
-          <span data-slot="orbit" aria-hidden="true" />
-          <Splash class="w-80 h-80 opacity-50 animate-pulse" />
-        </div>
+        <Mark />
 
         <div data-slot="brand">
           <h1>天华 AI 协作平台</h1>
@@ -30,6 +27,18 @@ export function StartupSplashBackground() {
   return (
     <div data-component="startup-splash" data-variant="background" aria-hidden="true">
       <Background />
+      <div data-slot="content">
+        <Mark />
+      </div>
+    </div>
+  )
+}
+
+function Mark() {
+  return (
+    <div data-slot="mark">
+      <span data-slot="orbit" aria-hidden="true" />
+      <Splash class="w-80 h-80 opacity-50 animate-pulse" />
     </div>
   )
 }

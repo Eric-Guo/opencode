@@ -17,6 +17,18 @@
   pointer-events: none;
 }
 
+[data-component="startup-splash"][data-variant="background"] [data-slot="content"] {
+  position: absolute;
+  top: 14%;
+  right: 0;
+  left: 0;
+  transform: none;
+}
+
+[data-component="startup-splash"][data-variant="background"] [data-slot="mark"] > svg {
+  width: min(12rem, 32vw, 26vh);
+}
+
 [data-component="startup-splash"]::before {
   position: absolute;
   inset: 0;
