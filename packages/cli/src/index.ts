@@ -121,6 +121,5 @@ Effect.gen(function* () {
   ),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
-  Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),
   NodeRuntime.runMain,
 )
