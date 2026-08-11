@@ -7,6 +7,7 @@ import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
 import { PromptInputV2Composer } from "@/components/prompt-input-v2"
+import { StartupSplashBackground } from "@/components/startup-splash"
 import { PromptGitStatus, PromptWorkspaceSelector } from "@/components/prompt-workspace-selector"
 import {
   PromptProjectAddButton,
@@ -41,11 +42,9 @@ export function NewSessionView(props: {
 
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
-      <div
-        data-component="session-new-design"
-        class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-deep"
-      >
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+      <div data-component="session-new-design" class="relative isolate flex-1 min-h-0 overflow-hidden">
+        <StartupSplashBackground />
+        <div class="absolute inset-x-0 top-[40%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} accentSubmit={props.workspace.selection.workspace()} />
