@@ -15,7 +15,7 @@ import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact } from "./verify-artifact"
 
-const NODE_VERSION = "26.4.0"
+const NODE_VERSION = "26.7.0"
 const dir = path.resolve(import.meta.dirname, "..")
 const outdir = path.resolve(
   dir,
@@ -158,14 +158,17 @@ async function resolveHostNode() {
   for (const candidate of candidates) {
     const result = spawnSync(
       candidate,
-      ["-p", "JSON.stringify({version:process.versions.node,path:process.execPath})"],
+      [
+        "-p",
+        "JSON.stringify({version:process.versions.node,path:process.execPath,sea:process.config.variables.single_executable_application})",
+      ],
       {
         encoding: "utf8",
       },
     )
     if (result.status !== 0) continue
-    const info = JSON.parse(result.stdout) as { version: string; path: string }
-    if (info.version === NODE_VERSION) return realpath(info.path)
+    const info = JSON.parse(result.stdout) as { version: string; path: string; sea: boolean }
+    if (info.version === NODE_VERSION && info.sea) return realpath(info.path)
   }
   return resolveTargetNode(nodeTarget(process.platform, process.arch))
 }
