@@ -19,10 +19,15 @@ export const FileSource = Schema.Union([
 export type FileSource = typeof FileSource.Type
 
 export const Base64 = Schema.String.check(
-  // Repeating four-character groups makes V8 reject valid multi-megabyte attachments.
   Schema.isPattern(/^[A-Za-z0-9+/]*={0,2}$/),
-  Schema.makeFilter((value) => (value.length % 4 === 0 ? undefined : "a valid base64 string")),
-).annotate({ identifier: "Prompt.Base64" })
+)
+  .pipe(
+    // Validate the length without the repeating regex that rejects multi-megabyte attachments.
+    Schema.decodeTo(
+      Schema.Uint8ArrayFromBase64.pipe(Schema.decodeTo(Schema.flip(Schema.Uint8ArrayFromBase64))),
+    ),
+  )
+  .annotate({ identifier: "Prompt.Base64" })
 export type Base64 = typeof Base64.Type
 
 export interface FileAttachment extends Schema.Schema.Type<typeof FileAttachment> {}
