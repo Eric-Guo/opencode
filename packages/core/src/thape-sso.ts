@@ -1,8 +1,7 @@
-import { Effect, ManagedRuntime } from "effect"
+import { Effect } from "effect"
 import { Observability } from "@opencode-ai/util/observability"
 
 const SSO_ME_URL = "https://sso.thape.com.cn/api/me.json"
-const runtime = ManagedRuntime.make(Observability.layer())
 const bun = globalThis as typeof globalThis & { Bun?: { env: Record<string, string | undefined> } }
 
 export const API_KEY_ENV_NAMES = [
@@ -20,7 +19,12 @@ function runtimeEnv(key: string) {
 }
 
 function log(effect: Effect.Effect<void>) {
-  return runtime.runPromise(effect.pipe(Effect.annotateLogs({ service: "thape-sso" })))
+  return effect.pipe(
+    Effect.annotateLogs({ service: "thape-sso" }),
+    Effect.provide(Observability.layer()),
+    Effect.scoped,
+    Effect.runPromise,
+  )
 }
 
 function setRuntimeEnv(key: string, value: string) {
