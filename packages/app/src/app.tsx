@@ -56,6 +56,7 @@ import { decode64 } from "@/utils/base64"
 
 import { TargetSessionRouteContent } from "@/pages/session"
 import { Home } from "@/pages/home"
+import { StartupSplash } from "@/components/startup-splash"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
 
@@ -372,9 +373,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; start
         </Show>
       </Show>
       <Show when={loading()}>
-        <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-80 h-80 opacity-50 animate-pulse" />
-        </div>
+        <StartupSplash />
       </Show>
     </>
   )
