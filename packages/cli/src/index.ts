@@ -131,7 +131,6 @@ Effect.gen(function* () {
   ),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
-  Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),
   // runMain's default reporter logs the fatal cause to stdout. Write it to stderr instead: the
   // desktop and `Service.ensure` only capture stderr from `serve --service`, so this is the only
   // channel through which a startup failure's reason reaches the user.
