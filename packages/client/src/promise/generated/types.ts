@@ -80,8 +80,6 @@ export type SessionStatsToolUsage = {
 
 export type SessionStatsActivity = { date: string; steps: number }
 
-export type PromptBase64 = string
-
 export type PromptFileSource = { type: "inline" } | { type: "uri"; uri: string }
 
 export type PromptMention = { start: number; end: number; text: string }
@@ -407,7 +405,7 @@ export type SessionStatsTools =
   | { mode: "detail"; totals: SessionStatsToolTotals; usage: Array<SessionStatsToolUsage> }
 
 export type PromptFileAttachment = {
-  data: PromptBase64
+  data: string
   mime: string
   source: PromptFileSource
   name?: string
