@@ -44,8 +44,6 @@ export type SessionMessageAgentSelected = {
   previous?: string
 }
 
-export type PromptBase64 = string
-
 export type PromptFileSource = { type: "inline" } | { type: "uri"; uri: string }
 
 export type PromptMention = { start: number; end: number; text: string }
@@ -1111,7 +1109,7 @@ export type V2EventServerConnected = {
 export type SessionRevert = { messageID: string; partID?: string; snapshot?: string; files?: Array<FileDiffInfo> }
 
 export type PromptFileAttachment = {
-  data: PromptBase64
+  data: string
   mime: string
   source: PromptFileSource
   name?: string
