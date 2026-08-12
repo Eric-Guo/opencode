@@ -57,6 +57,7 @@ import { SessionEnvironment } from "./session/environment.js"
 import { SessionHistory } from "./session/history.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 import { V1Migration } from "./database/v1-migration.js"
+import { Mcp } from "./mcp/index.js"
 
 // get project -> project.locations
 //
@@ -1115,7 +1116,7 @@ const materializeAttachment = Effect.fn("Session.materializeAttachment")(functio
         name: undefined,
         mime: undefined,
       }
-    : yield* readFileAttachment(fs, input.uri)
+    : yield* readAttachment(fs, input)
   if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
     return yield* new AttachmentError({
       uri: input.uri,
@@ -1143,6 +1144,58 @@ const materializeAttachment = Effect.fn("Session.materializeAttachment")(functio
     mention: input.mention,
   })
 })
+
+const readAttachment = Effect.fn("Session.readAttachment")(function* (
+  fs: FSUtil.Interface,
+  input: PromptInput.FileAttachment,
+) {
+  const resourceURI = embeddedResourceURI(input.uri)
+  if (resourceURI) {
+    const service = yield* Mcp.Service
+    const resource = (yield* service.resourceCatalog()).resources.find((item) => item.uri === resourceURI)
+    if (resource) {
+      const content = yield* service.readResource({ server: resource.server, uri: resource.uri }).pipe(
+        Effect.mapError(
+          () =>
+            new AttachmentError({
+              uri: input.uri,
+              message: `Unable to read MCP resource: ${resource.server}/${resource.name}`,
+            }),
+        ),
+      )
+      if (!content?.contents.length)
+        return yield* new AttachmentError({
+          uri: input.uri,
+          message: `Unable to read MCP resource: ${resource.server}/${resource.name}`,
+        })
+      if (content.contents.some((item) => item.type === "blob"))
+        return yield* new AttachmentError({
+          uri: input.uri,
+          message: `MCP resource returned unsupported mixed or binary content: ${resource.server}/${resource.name}`,
+        })
+      return {
+        bytes: Buffer.from(content.contents.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")),
+        source: { type: "uri" as const, uri: resource.uri },
+        start: undefined,
+        end: undefined,
+        name: resource.name,
+        // The runner renders text/plain attachments into model-visible text.
+        mime: "text/plain",
+      }
+    }
+  }
+  return yield* readFileAttachment(fs, input.uri)
+})
+
+function embeddedResourceURI(uri: string): string | undefined {
+  const url = URL.parse(uri)
+  if (!url || url.protocol === "data:") return undefined
+  if (url.protocol !== "file:") return uri
+  if (/%(?![A-Fa-f0-9]{2})/.test(url.pathname)) return undefined
+  const target = decodeURIComponent(url.pathname)
+  const start = target.search(/[A-Za-z][A-Za-z0-9+.-]*:\/\//)
+  return start === -1 ? undefined : target.slice(start)
+}
 
 const normalizeImageAttachment = Effect.fn("Session.normalizeImageAttachment")(function* (
   input: PromptInput.FileAttachment,
