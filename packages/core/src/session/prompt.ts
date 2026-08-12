@@ -11,6 +11,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { Image } from "../image.js"
 import { Instance } from "../instance/service.js"
+import { Mcp } from "../mcp/index.js"
 import { Mime } from "../mime.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Skill } from "../skill.js"
@@ -100,7 +101,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
         name: undefined,
         mime: undefined,
       }
-    : yield* readFileAttachment(input.uri)
+    : yield* readAttachment(input)
   if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
     return yield* new AttachmentError({
       uri: input.uri,
@@ -143,6 +144,45 @@ const normalizeImageAttachment = Effect.fn("SessionPrompt.normalizeImageAttachme
     Effect.mapError((error) => new AttachmentError({ uri: label, message: error.message })),
   )
   return { data: Base64.make(normalized.content), mime: normalized.mime }
+})
+
+const readAttachment = Effect.fn("SessionPrompt.readAttachment")(function* (input: PromptInput.FileAttachment) {
+  const resourceURI = embeddedResourceURI(input.uri)
+  if (resourceURI) {
+    const mcp = yield* Mcp.Service
+    const resource = (yield* mcp.resourceCatalog()).resources.find((item) => item.uri === resourceURI)
+    if (resource) {
+      const content = yield* mcp.readResource({ server: resource.server, uri: resource.uri }).pipe(
+        Effect.mapError(
+          () =>
+            new AttachmentError({
+              uri: input.uri,
+              message: `Unable to read MCP resource: ${resource.server}/${resource.name}`,
+            }),
+        ),
+      )
+      if (!content?.contents.length)
+        return yield* new AttachmentError({
+          uri: input.uri,
+          message: `Unable to read MCP resource: ${resource.server}/${resource.name}`,
+        })
+      if (content.contents.some((item) => item.type === "blob"))
+        return yield* new AttachmentError({
+          uri: input.uri,
+          message: `MCP resource returned unsupported mixed or binary content: ${resource.server}/${resource.name}`,
+        })
+      return {
+        bytes: Buffer.from(content.contents.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")),
+        source: { type: "uri" as const, uri: resource.uri },
+        start: undefined,
+        end: undefined,
+        name: resource.name,
+        // The runner renders text/plain attachments into model-visible text.
+        mime: "text/plain",
+      }
+    }
+  }
+  return yield* readFileAttachment(input.uri)
 })
 
 const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(function* (uri: string) {
@@ -198,6 +238,16 @@ const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(functio
 })
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+
+function embeddedResourceURI(uri: string): string | undefined {
+  const url = URL.parse(uri)
+  if (!url || url.protocol === "data:") return undefined
+  if (url.protocol !== "file:") return uri
+  if (/%(?![A-Fa-f0-9]{2})/.test(url.pathname)) return undefined
+  const target = decodeURIComponent(url.pathname)
+  const start = target.search(/[A-Za-z][A-Za-z0-9+.-]*:\/\//)
+  return start === -1 ? undefined : target.slice(start)
+}
 
 function decodeDataURL(uri: string) {
   return Effect.try({
