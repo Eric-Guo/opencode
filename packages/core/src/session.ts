@@ -53,6 +53,7 @@ import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
 import { SessionEnvironment } from "./session/environment.js"
 import { V1Migration } from "./database/v1-migration"
+import { MCP } from "./mcp/index.js"
 
 // get project -> project.locations
 //
@@ -604,13 +605,14 @@ const layer = Layer.effect(
             // A staged revert must be committed before admitting new input so the prompt
             // continues from the reverted boundary rather than stale post-boundary history.
             if (session.revert) yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
-            // Resolved lazily so prompt admission only boots location services when an
-            // image attachment actually needs the resizer.
+            // These effects boot location services only if an attachment or skill needs them.
             const image = Image.Service.pipe(Effect.provide(locations.get(session.location)))
+            const mcp = MCP.Service.pipe(Effect.provide(locations.get(session.location)))
             const skills = Skill.Service.pipe(Effect.provide(locations.get(session.location)))
             const prompt = yield* resolvePrompt(
               { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
               image,
+              mcp,
               skills,
             ).pipe(Effect.provideService(FSUtil.Service, fs))
             const messageID = input.id ?? SessionMessage.ID.create()
@@ -978,11 +980,12 @@ function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Inf
 const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   input: PromptInput.Prompt,
   image: Effect.Effect<Image.Interface>,
+  mcp: Effect.Effect<MCP.Interface>,
   skills: Effect.Effect<Skill.Interface>,
 ) {
   const fs = yield* FSUtil.Service
   const files = input.files
-    ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file, image), { concurrency: 8 })
+    ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file, image, mcp), { concurrency: 8 })
     : undefined
   const requested = input.skills
   const selected = yield* Effect.gen(function* () {
@@ -1008,6 +1011,7 @@ const materializeAttachment = Effect.fn("Session.materializeAttachment")(functio
   fs: FSUtil.Interface,
   input: PromptInput.FileAttachment,
   image: Effect.Effect<Image.Interface>,
+  mcp: Effect.Effect<MCP.Interface>,
 ) {
   const resolved = input.uri.startsWith("data:")
     ? {
@@ -1018,7 +1022,7 @@ const materializeAttachment = Effect.fn("Session.materializeAttachment")(functio
         name: undefined,
         mime: undefined,
       }
-    : yield* readFileAttachment(fs, input.uri)
+    : yield* readAttachment(fs, input, mcp)
   if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
     return yield* new AttachmentError({
       uri: input.uri,
@@ -1046,6 +1050,59 @@ const materializeAttachment = Effect.fn("Session.materializeAttachment")(functio
     mention: input.mention,
   })
 })
+
+const readAttachment = Effect.fn("Session.readAttachment")(function* (
+  fs: FSUtil.Interface,
+  input: PromptInput.FileAttachment,
+  mcp: Effect.Effect<MCP.Interface>,
+) {
+  const resourceURI = embeddedResourceURI(input.uri)
+  if (resourceURI) {
+    const service = yield* mcp
+    const resource = (yield* service.resourceCatalog()).resources.find((item) => item.uri === resourceURI)
+    if (resource) {
+      const content = yield* service.readResource({ server: resource.server, uri: resource.uri }).pipe(
+        Effect.mapError(
+          () =>
+            new AttachmentError({
+              uri: input.uri,
+              message: `Unable to read MCP resource: ${resource.server}/${resource.name}`,
+            }),
+        ),
+      )
+      if (!content?.contents.length)
+        return yield* new AttachmentError({
+          uri: input.uri,
+          message: `Unable to read MCP resource: ${resource.server}/${resource.name}`,
+        })
+      if (content.contents.some((item) => item.type === "blob"))
+        return yield* new AttachmentError({
+          uri: input.uri,
+          message: `MCP resource returned unsupported mixed or binary content: ${resource.server}/${resource.name}`,
+        })
+      return {
+        bytes: Buffer.from(content.contents.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")),
+        source: { type: "uri" as const, uri: resource.uri },
+        start: undefined,
+        end: undefined,
+        name: resource.name,
+        // The runner renders text/plain attachments into model-visible text.
+        mime: "text/plain",
+      }
+    }
+  }
+  return yield* readFileAttachment(fs, input.uri)
+})
+
+function embeddedResourceURI(uri: string): string | undefined {
+  const url = URL.parse(uri)
+  if (!url || url.protocol === "data:") return undefined
+  if (url.protocol !== "file:") return uri
+  if (/%(?![A-Fa-f0-9]{2})/.test(url.pathname)) return undefined
+  const target = decodeURIComponent(url.pathname)
+  const start = target.search(/[A-Za-z][A-Za-z0-9+.-]*:\/\//)
+  return start === -1 ? undefined : target.slice(start)
+}
 
 const normalizeImageAttachment = Effect.fn("Session.normalizeImageAttachment")(function* (
   input: PromptInput.FileAttachment,
