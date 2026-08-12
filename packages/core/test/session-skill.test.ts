@@ -28,6 +28,7 @@ import { Event } from "@opencode/schema/event"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 import { organizationPolicy, registerIntegrationPolicy } from "./fixture/policy"
+import { emptyMcpLayer } from "./fixture/mcp"
 import { tmpdir } from "./fixture/tmpdir"
 
 const directory = await tmpdir("opencode-session-skill-")
@@ -79,6 +80,7 @@ const locations = makeGlobalNode({
               ),
             ),
           ),
+          emptyMcpLayer,
           Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
         ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
       { idleTimeToLive: Duration.infinity },
