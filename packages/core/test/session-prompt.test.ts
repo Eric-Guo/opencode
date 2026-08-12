@@ -27,6 +27,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
 import { Image } from "@opencode-ai/core/image"
+import { MCP } from "@opencode-ai/core/mcp/index"
 import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
@@ -56,12 +57,40 @@ const locations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
     () =>
-      // Attachment admission only needs the location-scoped Image service.
+      // Attachment admission only needs the location-scoped Image and MCP services.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      Layer.mock(Image.Service, {
-        normalize: (_resource, content) =>
-          Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
-      }) as unknown as Layer.Layer<LocationServices>,
+      Layer.mergeAll(
+        Layer.mock(Image.Service, {
+          normalize: (_resource, content) =>
+            Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+        }),
+        Layer.mock(MCP.Service, {
+          resourceCatalog: () =>
+            Effect.succeed({
+              resources: [
+                {
+                  server: "cybros",
+                  name: "year_report_history",
+                  uri: "http://localhost:3000/report/year_report_history?view_orgcode_sum=true",
+                  description: "Aggregated group operating history",
+                  mimeType: "application/json",
+                },
+              ],
+              templates: [],
+            }),
+          readResource: (input) =>
+            Effect.succeed(
+              input.server === "cybros" &&
+                input.uri === "http://localhost:3000/report/year_report_history?view_orgcode_sum=true"
+                ? {
+                    server: "cybros",
+                    uri: input.uri,
+                    contents: [{ type: "text", uri: input.uri, text: '{"year":2025}', mimeType: "application/json" }],
+                  }
+                : undefined,
+            ),
+        }),
+      ) as unknown as Layer.Layer<LocationServices>,
   ),
 )
 const it = testEffect(
@@ -383,6 +412,37 @@ describe("Session.prompt", () => {
       expect(Buffer.from(message.payload.files?.[0]?.data ?? "", "base64").toString("utf8")).toContain(
         "session-prompt.test.ts",
       )
+    }),
+  )
+
+  it.effect("materializes an MCP resource URI embedded in a file attachment", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ directory: import.meta.dir })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* Session.Service
+      const uri = `${pathToFileURL(import.meta.dir).href}/http%3A//localhost%3A3000/report/year_report_history%3Fview_orgcode_sum%3Dtrue`
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "Inspect this report",
+        files: [{ uri, name: "year_report_history" }],
+        resume: false,
+      })
+
+      expect(message.payload.files).toEqual([
+        {
+          data: Buffer.from('{"year":2025}').toString("base64"),
+          mime: "text/plain",
+          source: { type: "uri", uri: "http://localhost:3000/report/year_report_history?view_orgcode_sum=true" },
+          name: "year_report_history",
+        },
+      ])
     }),
   )
 
