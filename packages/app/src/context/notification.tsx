@@ -314,18 +314,16 @@ function createServerNotificationState(input: {
     })
   }
 
-  const lookup = async (directory: string, sessionID?: string) => {
+  const lookup = async (sessionID?: string) => {
     if (!sessionID) return undefined
-    const sync = serverSync().ensureDirSyncContext(directory)
-    const session = sync.session.get(sessionID)
+    const session = serverSync().session.get(sessionID)
     if (session) return session
-    return sync.session
-      .sync(sessionID)
-      .then(() => sync.session.get(sessionID))
+    return serverSync()
+      .session.resolve(sessionID)
       .catch(() => undefined)
   }
 
-  const viewedInCurrentSession = (directory: string, sessionID?: string) => {
+  const viewedInCurrentSession = (directory: string | undefined, sessionID?: string) => {
     if (!input.active()) return false
     const activeDirectory = currentDirectory()
     const activeSession = currentSession()
@@ -335,26 +333,27 @@ function createServerNotificationState(input: {
     return sessionID === activeSession
   }
 
-  const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
+  const handleSessionIdle = (event: { properties: { sessionID?: string } }, time: number) => {
     const sessionID = event.properties.sessionID
-    void lookup(directory, sessionID).then((session) => {
+    void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
       if (session.parentID) return
+      const location = session.location.directory
 
       if (settings.sounds.agentEnabled()) {
         void playSoundById(settings.sounds.agent())
       }
 
       append({
-        directory,
+        directory: location,
         time,
-        viewed: viewedInCurrentSession(directory, sessionID),
+        viewed: viewedInCurrentSession(location, sessionID),
         type: "turn-complete",
         session: sessionID,
       })
 
-      const href = `/${base64Encode(directory)}/session/${sessionID}`
+      const href = `/${base64Encode(location)}/session/${sessionID}`
       if (settings.notifications.agent()) {
         void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
           input.navigate(href),
@@ -369,9 +368,10 @@ function createServerNotificationState(input: {
     time: number,
   ) => {
     const sessionID = event.properties.sessionID
-    void lookup(directory, sessionID).then((session) => {
+    void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
+      const location = session?.location.directory ?? (directory === "global" ? undefined : directory)
 
       if (settings.sounds.errorsEnabled()) {
         void playSoundById(settings.sounds.errors())
@@ -379,18 +379,16 @@ function createServerNotificationState(input: {
 
       const error = event.properties.error
       append({
-        directory,
+        directory: location,
         time,
-        viewed: viewedInCurrentSession(directory, sessionID),
+        viewed: viewedInCurrentSession(location, sessionID),
         type: "error",
         session: sessionID ?? "global",
         error,
       })
       const description =
-        session?.title ??
-        error?.message ??
-        language.t("notification.session.error.fallbackDescription")
-      const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
+        session?.title ?? error?.message ?? language.t("notification.session.error.fallbackDescription")
+      const href = location ? `/${base64Encode(location)}${sessionID ? `/session/${sessionID}` : ""}` : "/"
       if (settings.notifications.errors()) {
         void platform.notify(language.t("notification.session.error.title"), description, () => input.navigate(href))
       }
@@ -412,7 +410,7 @@ function createServerNotificationState(input: {
       handleSessionError(directory, event, time)
       return
     }
-    handleSessionIdle(directory, event, time)
+    handleSessionIdle(event, time)
   })
   onCleanup(() => {
     meta.disposed = true
