@@ -215,18 +215,19 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
     dispatchEvent(new PopStateEvent("popstate"))
   }
 
-  const handleSessionIdle = (directory: string, sessionID: string, time: number) => {
+  const handleSessionIdle = (sessionID: string, time: number) => {
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
       if (session.parentID) return
+      const location = session.location.directory
 
       if (settings.sounds.agentEnabled()) {
         void playSoundById(settings.sounds.agent())
       }
 
       append({
-        directory,
+        directory: location,
         time,
         viewed: viewedInCurrentSession(sessionID),
         type: "turn-complete",
@@ -251,13 +252,14 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
     void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
+      const location = session?.location.directory ?? (directory === "global" ? undefined : directory)
 
       if (settings.sounds.errorsEnabled()) {
         void playSoundById(settings.sounds.errors())
       }
 
       append({
-        directory,
+        directory: location,
         time,
         viewed: viewedInCurrentSession(sessionID),
         type: "error",
@@ -289,7 +291,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
       handleSessionError(directory, event.data.sessionID, event.data.error, time)
       return
     }
-    handleSessionIdle(directory, event.data.sessionID, time)
+    handleSessionIdle(event.data.sessionID, time)
   })
   onCleanup(() => {
     meta.disposed = true
