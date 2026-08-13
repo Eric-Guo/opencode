@@ -78,7 +78,7 @@
     },
     "packages/app": {
       "name": "@opencode-ai/app",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@corvu/drawer": "catalog:",
         "@dnd-kit/abstract": "0.5.0",
@@ -140,7 +140,7 @@
     },
     "packages/cli": {
       "name": "@opencode-ai/cli",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "bin": {
         "opencode2": "./bin/opencode2.cjs",
       },
@@ -227,7 +227,7 @@
     },
     "packages/codemode": {
       "name": "@opencode-ai/codemode",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "acorn": "8.15.0",
         "effect": "catalog:",
@@ -241,7 +241,7 @@
     },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -277,7 +277,7 @@
     },
     "packages/console/core": {
       "name": "@opencode-ai/console-core",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -304,7 +304,7 @@
     },
     "packages/console/function": {
       "name": "@opencode-ai/console-function",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@openauthjs/openauth": "0.0.0-20250322224806",
         "@opencode-ai/console-core": "workspace:*",
@@ -321,7 +321,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode-ai/console-mail",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -345,7 +345,7 @@
     },
     "packages/console/support": {
       "name": "@opencode-ai/console-support",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@opencode-ai/console-core": "workspace:*",
@@ -365,7 +365,7 @@
     },
     "packages/core": {
       "name": "@opencode-ai/core",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@ai-sdk/alibaba": "1.0.17",
         "@ai-sdk/amazon-bedrock": "4.0.112",
@@ -441,7 +441,7 @@
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@zip.js/zip.js": "2.7.62",
@@ -498,7 +498,7 @@
     },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@hono/standard-validator": "catalog:",
         "@opencode-ai/client": "workspace:*",
@@ -535,7 +535,7 @@
     },
     "packages/function": {
       "name": "@opencode-ai/function",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -551,7 +551,7 @@
     },
     "packages/http-recorder": {
       "name": "@opencode-ai/http-recorder",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@effect/platform-node-shared": "4.0.0-rc.111",
       },
@@ -598,7 +598,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@ai-sdk/provider": "3.0.8",
         "@opencode-ai/ai": "workspace:*",
@@ -709,7 +709,7 @@
     },
     "packages/server": {
       "name": "@opencode-ai/server",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@opencode-ai/core": "workspace:*",
@@ -728,7 +728,7 @@
     },
     "packages/session-ui": {
       "name": "@opencode-ai/session-ui",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/client": "workspace:*",
@@ -787,7 +787,7 @@
     },
     "packages/stats/app": {
       "name": "@opencode-ai/stats-app",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@ibm/plex": "6.4.1",
         "@kobalte/core": "catalog:",
@@ -821,7 +821,7 @@
     },
     "packages/stats/core": {
       "name": "@opencode-ai/stats-core",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@aws-sdk/client-athena": "3.933.0",
         "@planetscale/database": "1.19.0",
@@ -840,7 +840,7 @@
     },
     "packages/stats/server": {
       "name": "@opencode-ai/stats-server",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@aws-sdk/client-firehose": "3.933.0",
         "@effect/platform-node": "catalog:",
@@ -899,7 +899,7 @@
     },
     "packages/tui": {
       "name": "@opencode-ai/tui",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/core": "workspace:*",
@@ -933,7 +933,7 @@
     },
     "packages/ui": {
       "name": "@opencode-ai/ui",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@pierre/diffs": "catalog:",
@@ -1025,7 +1025,7 @@
     },
     "packages/web": {
       "name": "@opencode-ai/web",
-      "version": "1.18.17",
+      "version": "1.18.18",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
