@@ -6,7 +6,6 @@ import type { ServerSync } from "./server-sync"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import type { EventSessionError } from "@/types"
 import { Persist, persisted } from "@/utils/persist"
@@ -197,15 +196,11 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
     })
   }
 
-  const lookup = async (directory: string, sessionID?: string) => {
+  const lookup = async (sessionID?: string) => {
     if (!sessionID) return undefined
-    const sync = input.sync.ensureDirSyncContext(directory)
-    const session = sync.session.get(sessionID)
+    const session = input.sync.session.get(sessionID)
     if (session) return session
-    return sync.session
-      .sync(sessionID)
-      .then(() => sync.session.get(sessionID))
-      .catch(() => undefined)
+    return input.sync.session.resolve(sessionID).catch(() => undefined)
   }
 
   const viewedInCurrentSession = (sessionID: string) => {
@@ -217,19 +212,21 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
     dispatchEvent(new PopStateEvent("popstate"))
   }
 
-  const handleSessionIdle = (directory: string, event: { properties: { sessionID: string } }, time: number) => {
+  const handleSessionIdle = (event: { properties: { sessionID?: string } }, time: number) => {
     const sessionID = event.properties.sessionID
-    void lookup(directory, sessionID).then((session) => {
+    if (!sessionID) return
+    void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
       if (session.parentID) return
+      const location = session.location.directory
 
       if (settings.sounds.agentEnabled()) {
         void playSoundById(settings.sounds.agent())
       }
 
       append({
-        directory,
+        directory: location,
         time,
         viewed: viewedInCurrentSession(sessionID),
         type: "turn-complete",
@@ -251,9 +248,10 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
     time: number,
   ) => {
     const sessionID = event.properties.sessionID
-    void lookup(directory, sessionID).then((session) => {
+    void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
+      const location = session?.location.directory ?? (directory === "global" ? undefined : directory)
 
       if (settings.sounds.errorsEnabled()) {
         void playSoundById(settings.sounds.errors())
@@ -261,7 +259,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
 
       const error = event.properties.error
       append({
-        directory,
+        directory: location,
         time,
         viewed: viewedInCurrentSession(sessionID),
         type: "error",
@@ -295,7 +293,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
       handleSessionError(directory, event, time)
       return
     }
-    handleSessionIdle(directory, event, time)
+    handleSessionIdle(event, time)
   })
   onCleanup(() => {
     meta.disposed = true
