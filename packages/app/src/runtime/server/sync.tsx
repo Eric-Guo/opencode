@@ -55,23 +55,25 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, serverSDK.api)
   const connected = () => serverSDK.connection.status() === "connected"
 
-  const [configQuery, pathQuery] = useQueries(() => ({
+  const globalQueries = useQueries(() => ({
     queries: [
       { ...queryOptionsApi.globalConfig(), enabled: connected() },
       { ...queryOptionsApi.path(), enabled: connected() },
     ],
   }))
+  const configQuery = () => globalQueries[0]
+  const pathQuery = () => globalQueries[1]
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     project: [],
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-      if (pathQuery.isLoading) return EMPTY
-      return pathQuery.data ?? EMPTY
+      if (pathQuery().isLoading) return EMPTY
+      return pathQuery().data ?? EMPTY
     },
     get config() {
-      if (configQuery.isLoading) return {}
-      return configQuery.data ?? {}
+      if (configQuery().isLoading) return {}
+      return configQuery().data ?? {}
     },
     get reload() {
       return updateConfigMutation.isPending ? "pending" : undefined
