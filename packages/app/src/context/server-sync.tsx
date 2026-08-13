@@ -233,13 +233,16 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
   const hydrateSession = (sessionID: string) => Promise.all([session.sync(sessionID), hydrateSessionState(sessionID)])
 
-  const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
+  const globalQueries = useQueries(() => ({
     queries: [
       { ...queryOptionsApi.globalConfig(), enabled: connected() },
       { ...queryOptionsApi.providers(null), enabled: connected() },
       { ...queryOptionsApi.path(null), enabled: connected() },
     ],
   }))
+  const configQuery = () => globalQueries[0]
+  const providerQuery = () => globalQueries[1]
+  const pathQuery = () => globalQueries[2]
   const activeSessionsQuery = useQuery(() => ({
     ...loadActiveSessionsQuery(serverSDK.scope, {
       active: async () => {
@@ -262,17 +265,17 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-      if (pathQuery.isLoading) return EMPTY
-      return pathQuery.data ?? EMPTY
+      if (pathQuery().isLoading) return EMPTY
+      return pathQuery().data ?? EMPTY
     },
     get provider() {
       const EMPTY = { all: new Map(), connected: [], default: {} }
-      if (providerQuery.isLoading) return EMPTY
-      return providerQuery.data ?? EMPTY
+      if (providerQuery().isLoading) return EMPTY
+      return providerQuery().data ?? EMPTY
     },
     get config() {
-      if (configQuery.isLoading) return {}
-      return configQuery.data ?? {}
+      if (configQuery().isLoading) return {}
+      return configQuery().data ?? {}
     },
     get reload() {
       return updateConfigMutation.isPending ? "pending" : undefined
