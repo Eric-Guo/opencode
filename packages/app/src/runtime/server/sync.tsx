@@ -27,27 +27,29 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   const connected = () => serverSDK.connection.status() === "connected"
 
-  const [configQuery, pathQuery] = useQueries(() => ({
+  const globalQueries = useQueries(() => ({
     queries: [
       { ...loadGlobalConfigQuery(serverSDK.scope, serverSDK.api.config), enabled: connected() },
       { ...loadPathQuery(serverSDK.scope, null, serverSDK.api.location), enabled: connected() },
     ],
   }))
 
+  const configQuery = () => globalQueries[0]
+  const pathQuery = () => globalQueries[1]
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     project: [],
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
 
-      if (pathQuery.isPending) return EMPTY
+      if (pathQuery().isPending) return EMPTY
 
-      return pathQuery.data ?? EMPTY
+      return pathQuery().data ?? EMPTY
     },
     get config() {
-      if (configQuery.isPending) return {}
+      if (configQuery().isPending) return {}
 
-      return configQuery.data ?? {}
+      return configQuery().data ?? {}
     },
   })
 
