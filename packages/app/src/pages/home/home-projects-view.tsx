@@ -362,6 +362,12 @@ function HomeProjectSlot(
     (previous) => props.items.find((item) => item.worktree === props.worktree) ?? previous,
     initial,
   )
+  const serverSelected = () => props.selection.server === ServerConnection.key(props.server)
+  // Hoisted into a memo: HomeProjectRow reads this prop from pointer/click
+  // handlers, which run without a reactive owner. A logical-expression JSX prop
+  // compiles to a getter that creates a fresh memo per read, so reads from those
+  // handlers would warn about computations that can never be disposed.
+  const selected = createMemo(() => serverSelected() && props.selection.directory === props.worktree)
 
   return (
     <HomeProjectRow
@@ -369,10 +375,8 @@ function HomeProjectSlot(
       project={project()}
       server={props.server}
       index={props.index}
-      serverSelected={props.selection.server === ServerConnection.key(props.server)}
-      selected={
-        props.selection.server === ServerConnection.key(props.server) && props.selection.directory === props.worktree
-      }
+      serverSelected={serverSelected()}
+      selected={selected()}
       unseen={props.unseenCount(props.server, project())}
     />
   )
