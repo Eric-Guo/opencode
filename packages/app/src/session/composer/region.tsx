@@ -157,7 +157,7 @@ export function createActiveSessionRegion(input: {
     revert,
     focusInput: focus,
   })
-  command.register("session-palette", () => [
+  command.register("command.palette", () => [
     {
       id: "command.palette",
       title: language.t("command.palette"),
