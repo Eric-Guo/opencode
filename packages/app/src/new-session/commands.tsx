@@ -15,7 +15,10 @@ export function useNewSessionCommands(input: {
   const language = useLanguage()
 
   useSettingsCommand()
-  command.register("session", () => [
+  // The palette handler is page-specific, so all pages register it under one
+  // shared key: during route transitions two pages stay mounted at once and the
+  // newest registration shadows the previous one instead of duplicating the id.
+  command.register("command.palette", () => [
     {
       id: "command.palette",
       title: language.t("command.palette"),
@@ -25,6 +28,8 @@ export function useNewSessionCommands(input: {
         void dialog.show(() => <DialogCommandPalette />)
       },
     },
+  ])
+  command.register("session", () => [
     {
       id: "input.focus",
       title: language.t("command.input.focus"),
