@@ -282,7 +282,7 @@ export function createActiveSessionComposer(input: {
     setActiveMessage: input.timeline.actions.setActiveMessage,
     focusInput: focus,
   })
-  command.register("session-palette", () => [
+  command.register("command.palette", () => [
     {
       id: "command.palette",
       title: language.t("command.palette"),
