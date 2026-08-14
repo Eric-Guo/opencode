@@ -278,6 +278,14 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
             text: redact("reasoning", message.id, content.text),
             native: content.native ? { redacted: `reasoning-native:${message.id}` } : undefined,
           }
+        if (content.type === "file")
+          return {
+            ...content,
+            filename:
+              content.filename === undefined ? undefined : redact("assistant-file-name", content.id, content.filename),
+            url: redact("assistant-file-url", content.id, content.url),
+            native: content.native ? { redacted: `file-native:${message.id}` } : undefined,
+          }
         return {
           ...content,
           native: content.native ? { redacted: `tool-native:${message.id}` } : undefined,
