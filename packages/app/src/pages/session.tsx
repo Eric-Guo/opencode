@@ -1009,7 +1009,7 @@ export default function Page() {
     setActiveMessage,
     focusInput,
   })
-  command.register("session-palette", () => [
+  command.register("command.palette", () => [
     {
       id: "command.palette",
       title: language.t("command.palette"),
