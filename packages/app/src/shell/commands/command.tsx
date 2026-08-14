@@ -110,6 +110,9 @@ export type CommandCatalogItem = {
 }
 
 export type CommandRegistration = {
+  // Registrations sharing a key shadow earlier ones (newest wins). Pages register
+  // page-specific handlers like "command.palette" under one shared key so only the
+  // newest mounted page is active while route transitions keep two pages mounted.
   key?: string
   options: Accessor<CommandOption[]>
 }
