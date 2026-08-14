@@ -116,7 +116,7 @@ export function createHomeSessionsController(home: HomeController) {
       })
   })
 
-  command.register("home.palette", () => [
+  command.register("command.palette", () => [
     {
       id: "command.palette",
       title: language.t("command.palette"),
