@@ -431,7 +431,7 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
       }
     }
     missing = defaultModel ? "No primary agents are available" : "No models are available"
-    await Bun.sleep(25)
+    await new Promise((resolve) => setTimeout(resolve, 25))
   }
   throw new Error(missing)
 }
