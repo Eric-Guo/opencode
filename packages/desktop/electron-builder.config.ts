@@ -151,6 +151,15 @@ const getBase = (appId: string): Configuration => ({
   },
   files: appFiles,
   extraResources: [
+    ...(channel === "dev"
+      ? [
+          {
+            from: "resources/",
+            to: "",
+            filter: ["opencode-cli", "opencode-cli.exe"],
+          },
+        ]
+      : []),
     {
       from: iconDir,
       to: "icons",
@@ -162,6 +171,8 @@ const getBase = (appId: string): Configuration => ({
       filter: [
         "**/*",
         "!**/.git/**",
+        "!tmp/**",
+        "!opencode-thape.sublime-workspace",
         "!node_modules/**/*.d.ts",
         "!node_modules/effect/src/**",
         "!node_modules/zod/src/**",
