@@ -3,6 +3,7 @@ import { Service } from "@opencode-ai/client/effect/service"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { Effect, Option, Schema } from "effect"
+import { readFile } from "node:fs/promises"
 import { EOL } from "node:os"
 import path from "node:path"
 import { Commands } from "../commands"
@@ -19,7 +20,7 @@ export default Runtime.handler(
               if (!response.ok) throw new Error(`Failed to fetch session data: ${response.statusText}`)
               return response.text()
             })
-          : Bun.file(input.file).text(),
+          : readFile(input.file, "utf8"),
       catch: (cause) =>
         new Error(`Failed to read session data: ${cause instanceof Error ? cause.message : String(cause)}`),
     })
