@@ -1,6 +1,7 @@
 import { OpenCode, type SessionInfo } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/effect/service"
 import { Effect, Option } from "effect"
+import { writeFile } from "node:fs/promises"
 import { EOL, tmpdir } from "node:os"
 import path from "node:path"
 import { emitKeypressEvents, type Key } from "node:readline"
@@ -135,6 +136,6 @@ export async function writeExport(data: unknown, sessionID: string, stdout: bool
   const json = JSON.stringify(data, null, 2) + EOL
   if (stdout) return json
   const file = path.join(tmpdir(), `opencode-session-${sessionID}-${crypto.randomUUID().slice(0, 8)}.json`)
-  await Bun.write(file, json)
+  await writeFile(file, json)
   return file + EOL
 }
