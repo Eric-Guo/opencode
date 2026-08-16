@@ -198,11 +198,15 @@ const getBase = (appId: string): Configuration => {
     },
     files: platformFiles,
     extraResources: [
-      {
-        from: "resources/",
-        to: "",
-        filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
-      },
+      ...(channel === "dev"
+        ? [
+            {
+              from: "resources/",
+              to: "",
+              filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
+            },
+          ]
+        : []),
       {
         from: iconDir,
         to: "icons",
@@ -214,6 +218,8 @@ const getBase = (appId: string): Configuration => {
         filter: [
           "**/*",
           "!**/.git/**",
+          "!tmp/**",
+          "!opencode-thape.sublime-workspace",
           "!node_modules/**/*.d.ts",
           "!node_modules/effect/src/**",
           "!node_modules/zod/src/**",
@@ -238,15 +244,18 @@ const getBase = (appId: string): Configuration => {
 
       if (arch !== target.cpu) throw new Error(`Packaging ${arch} Electron with the ${target.target} CLI`)
       const resources = context.packager.getResourcesDir(context.appOutDir)
-      const cli = path.join(resources, context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli")
+      if (channel === "dev") {
+        const cli = path.join(resources, context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli")
 
-      const file = await stat(cli)
+        const file = await stat(cli)
 
-      if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
-      await NativeArch.verify(cli, arch)
-      const version = path.join(path.dirname(cli), "opencode-cli.version")
+        if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
+        await NativeArch.verify(cli, arch)
+        const version = path.join(path.dirname(cli), "opencode-cli.version")
 
-      if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
+        if ((await stat(version)).size === 0)
+          throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
+      }
 
       if (context.electronPlatformName !== "win32") return
 
