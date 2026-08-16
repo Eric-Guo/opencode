@@ -2,6 +2,7 @@ import type { AgentSideConnection, PermissionOption, ToolCallContent, ToolCallLo
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
 import { Patch } from "@opencode-ai/util/patch"
 import { Result } from "effect"
+import { readFile } from "node:fs/promises"
 import { isAbsolute, resolve } from "node:path"
 import { pendingToolCall, stringValue, toLocations, toToolKind, type ToolInput } from "./tool"
 
@@ -87,9 +88,9 @@ export async function syncEditedFiles(input: {
   await Promise.all(
     paths.map(async (path) => {
       const target = resolvePath(path, input.cwd)
-      const file = Bun.file(target)
-      if (!(await file.exists())) return
-      await input.connection.writeTextFile?.({ sessionId: input.sessionID, path: target, content: await file.text() })
+      const content = await readFile(target, "utf8").catch(() => undefined)
+      if (content === undefined) return
+      await input.connection.writeTextFile?.({ sessionId: input.sessionID, path: target, content })
     }),
   )
 }
@@ -178,9 +179,7 @@ function permissionLocations(
 }
 
 function readText(path: string, cwd: string) {
-  return Bun.file(resolvePath(path, cwd))
-    .text()
-    .catch(() => "")
+  return readFile(resolvePath(path, cwd), "utf8").catch(() => "")
 }
 
 function filePath(input: ToolInput) {
