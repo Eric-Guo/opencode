@@ -6,6 +6,7 @@ import type { Session } from "@opencode/schema/session"
 import { Patch } from "@opencode/util/patch"
 import { applyPatch } from "diff"
 import { Cause, Effect, Option, Schema } from "effect"
+import { readFile } from "node:fs/promises"
 import { ACPClient } from "./client"
 import type { ACPConnection } from "./connection"
 import { ACPTranslate } from "./translate"
@@ -109,7 +110,7 @@ const permissionPreviews = Effect.fnUntraced(function* (
     (file) =>
       Effect.gen(function* () {
         const path = absolutePath(file.file, cwd)
-        const oldText = file.status === "added" ? null : yield* Effect.tryPromise(() => Bun.file(path).text())
+        const oldText = file.status === "added" ? null : yield* Effect.tryPromise(() => readFile(path, "utf8"))
         const newText = applyPatch(oldText ?? "", file.patch)
         return newText === false ? [] : [diff(path, oldText, newText)]
       }),
@@ -130,7 +131,7 @@ function patchPreviews(input: ToolInput, cwd: string) {
           const newText = hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
           return diff(path, null, newText)
         }
-        const oldText = yield* Effect.tryPromise(() => Bun.file(path).text())
+        const oldText = yield* Effect.tryPromise(() => readFile(path, "utf8"))
         if (hunk.type === "delete") return diff(path, oldText, "")
         const derived = yield* Effect.try(() => Patch.derive(hunk.path, hunk.chunks, oldText))
         return diff(hunk.movePath ? absolutePath(hunk.movePath, cwd) : path, oldText, derived.content)
