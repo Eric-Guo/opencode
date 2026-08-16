@@ -168,11 +168,15 @@ const getBase = (appId: string): Configuration => ({
   },
   files: appFiles,
   extraResources: [
-    {
-      from: "resources/",
-      to: "",
-      filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
-    },
+    ...(channel === "dev"
+      ? [
+          {
+            from: "resources/",
+            to: "",
+            filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
+          },
+        ]
+      : []),
     {
       from: iconDir,
       to: "icons",
@@ -184,6 +188,8 @@ const getBase = (appId: string): Configuration => ({
       filter: [
         "**/*",
         "!**/.git/**",
+        "!tmp/**",
+        "!opencode-thape.sublime-workspace",
         "!node_modules/**/*.d.ts",
         "!node_modules/effect/src/**",
         "!node_modules/zod/src/**",
@@ -207,6 +213,7 @@ const getBase = (appId: string): Configuration => ({
     },
   ],
   afterPack: async (context) => {
+    if (channel !== "dev") return
     const cli = path.join(
       context.packager.getResourcesDir(context.appOutDir),
       context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli",
