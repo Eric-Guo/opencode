@@ -145,7 +145,7 @@ const getBase = (appId: string): Configuration => ({
           {
             from: "resources/",
             to: "",
-            filter: ["opencode-cli*"],
+            filter: ["opencode-cli", "opencode-cli.exe"],
           },
         ]
       : []),
@@ -160,6 +160,8 @@ const getBase = (appId: string): Configuration => ({
       filter: [
         "**/*",
         "!**/.git/**",
+        "!tmp/**",
+        "!opencode-thape.sublime-workspace",
         "!node_modules/**/*.d.ts",
         "!node_modules/effect/src/**",
         "!node_modules/zod/src/**",
