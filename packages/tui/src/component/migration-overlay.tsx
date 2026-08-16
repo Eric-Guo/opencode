@@ -14,15 +14,17 @@ export function MigrationOverlay() {
   const [progress, setProgress] = createSignal<Progress>()
   const abort = new AbortController()
 
+  const sleep = () => new Promise((resolve) => setTimeout(resolve, 1_000))
+
   onMount(async () => {
-    await Bun.sleep(1_000)
+    await sleep()
     void (async () => {
       while (true) {
         const status = await client.api.migration.v1.status({ signal: abort.signal })
         setProgress(status.status === "running" ? status.progress : undefined)
         if (status.status === "completed") return
         if (status.status === "error") throw new Error(status.error)
-        await Bun.sleep(1_000)
+        await sleep()
       }
     })().catch((error) => {
       if (abort.signal.aborted) return
