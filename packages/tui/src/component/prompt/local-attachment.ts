@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs"
+import { readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 
@@ -84,10 +85,10 @@ const mimeTypes: Record<string, string> = {
 }
 
 async function readFileBounded(file: string, maxBytes: number) {
-  const source = Bun.file(file)
-  if (!(await source.exists())) throw new Error("Attachment does not exist")
-  if (source.size > maxBytes) throw new Error("Attachment exceeds the local file limit")
-  const content = Buffer.from(await source.slice(0, maxBytes + 1).arrayBuffer())
+  const info = await stat(file).catch(() => undefined)
+  if (!info) throw new Error("Attachment does not exist")
+  if (info.size > maxBytes) throw new Error("Attachment exceeds the local file limit")
+  const content = await readFile(file)
   if (content.byteLength > maxBytes) throw new Error("Attachment exceeds the local file limit")
   return content
 }
