@@ -178,6 +178,23 @@ test("the trimmed Zip.js package can still export compressed logs", async () => 
   }
 })
 
+for (const channel of ["beta", "prod"] as const) {
+  test(`does not bundle the CLI in ${channel} builds`, async () => {
+    const previous = process.env.OPENCODE_CHANNEL
+    process.env.OPENCODE_CHANNEL = channel
+    const module = await import(`./electron-builder.config.ts?no-cli-resource=${channel}`)
+    const config = module.default as Configuration
+    if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+    else process.env.OPENCODE_CHANNEL = previous
+
+    expect(config.extraResources).not.toContainEqual({
+      from: "resources/",
+      to: "",
+      filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
+    })
+  })
+}
+
 test("excludes native dependencies for other platforms and Windows architectures", () => {
   for (const target of CLI_BINARIES.filter((item) => item.os === "win32")) {
     const config = load("prod", target.rustTarget)
