@@ -69,7 +69,7 @@ test("bundles the CLI outside the dev app archive", async () => {
   expect(config.extraResources).toContainEqual({
     from: "resources/",
     to: "",
-    filter: ["opencode-cli*"],
+    filter: ["opencode-cli", "opencode-cli.exe"],
   })
 })
 
@@ -85,7 +85,7 @@ for (const channel of ["beta", "prod"] as const) {
     expect(config.extraResources).not.toContainEqual({
       from: "resources/",
       to: "",
-      filter: ["opencode-cli*"],
+      filter: ["opencode-cli", "opencode-cli.exe"],
     })
   })
 }
