@@ -94,7 +94,7 @@ export const appHandlers = AppRpcs.toLayer(
           })
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
-      AppQuit: () => Effect.sync(lifecycle.quit),
+      AppQuit: () => background.stop.pipe(Effect.ensuring(Effect.sync(lifecycle.quit))),
     })
   }),
 )
