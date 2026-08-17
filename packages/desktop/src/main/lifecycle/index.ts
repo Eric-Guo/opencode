@@ -8,6 +8,7 @@ import { getLastFocusedWindow, restoreMainWindows, setAppQuitting, setRelaunchHa
 export function createApplicationLifecycle(logger: DesktopLogger) {
   const pendingDeepLinks: string[] = []
   const wsl = { stop: async () => {} }
+  const background = { stop: async () => {} }
   const emitDeepLinks = (urls: string[]) => {
     if (!urls.length) return
     pendingDeepLinks.push(...urls)
@@ -23,7 +24,11 @@ export function createApplicationLifecycle(logger: DesktopLogger) {
   }
   const quit = () => {
     setAppQuitting()
-    void wsl.stop().finally(() => app.exit(0))
+    // SSO sign-in persists a credential after the service has already captured
+    // its environment, so quit must force a fresh service on the next launch.
+    void Promise.all([wsl.stop(), background.stop()])
+      .catch((error) => logger.warn("failed to stop background service", error))
+      .finally(() => app.exit(0))
   }
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
@@ -70,6 +75,9 @@ export function createApplicationLifecycle(logger: DesktopLogger) {
     prepareToRestart: () => wsl.stop(),
     setWslShutdown(stop: () => Promise<void>) {
       wsl.stop = stop
+    },
+    setBackgroundShutdown(stop: () => Promise<void>) {
+      background.stop = stop
     },
     consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
     restoreWindows() {
