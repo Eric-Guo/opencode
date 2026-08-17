@@ -22,31 +22,10 @@ type StartBackgroundCliOptions = {
 }
 
 export async function startBackgroundCli(logger: Logger, options: StartBackgroundCliOptions) {
-  const bundled = app.isPackaged
-    ? join(process.resourcesPath, executableName())
-    : join(root, "../../resources", executableName())
-  logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const cliVersion = await run(bundled, ["--version"], logger)
-  logger.log("v2 CLI executable verified", { version: cliVersion })
-  const binary = app.isPackaged ? await installCli(bundled, app.getVersion(), logger) : bundled
-  const stateHome = process.env.XDG_STATE_HOME
+  const binary = await resolveCliBinary(logger)
+  const found = await discoverBackgroundService(binary, logger, options.shellStateHome)
 
-  const candidates = [
-    ...new Set([stateHome, options.shellStateHome, ...desktopStateNames.map((name) => join(app.getPath("appData"), name))]),
-  ].filter((candidate) => candidate === undefined || existsSync(candidate))
-  const discovered = await Promise.all(
-    candidates.map(async (candidate) => ({
-      stateHome: candidate,
-      url: serviceUrl(await run(binary, ["service", "status"], logger, { stateHome: candidate })),
-    })),
-  )
-  const found = discovered.find((candidate) => candidate.url !== undefined)
-  logger.log("v2 CLI background instance checked", {
-    detected: Boolean(found),
-    ...endpoint(found?.url),
-  })
-
-  const daemonStateHome = found?.stateHome ?? stateHome
+  const daemonStateHome = found?.stateHome ?? process.env.XDG_STATE_HOME
   await run(binary, ["service", "set", "cors", JSON.stringify(options.cors)], logger, {
     stateHome: daemonStateHome,
   })
@@ -65,6 +44,46 @@ export async function startBackgroundCli(logger: Logger, options: StartBackgroun
     username: "opencode",
     password,
   }
+}
+
+export async function stopBackgroundCli(logger: Logger, options: { shellStateHome?: string } = {}) {
+  const binary = await resolveCliBinary(logger)
+  const found = await discoverBackgroundService(binary, logger, options.shellStateHome)
+  if (!found) {
+    logger.log("v2 CLI background service not running; skipping stop")
+    return
+  }
+  await run(binary, ["service", "stop"], logger, { stateHome: found.stateHome })
+  logger.log("v2 CLI background service stopped", endpoint(found.url))
+}
+
+async function resolveCliBinary(logger: Logger) {
+  const bundled = app.isPackaged
+    ? join(process.resourcesPath, executableName())
+    : join(root, "../../resources", executableName())
+  logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
+  const cliVersion = await run(bundled, ["--version"], logger)
+  logger.log("v2 CLI executable verified", { version: cliVersion })
+  return app.isPackaged ? installCli(bundled, app.getVersion(), logger) : bundled
+}
+
+async function discoverBackgroundService(binary: string, logger: Logger, shellStateHome?: string) {
+  const stateHome = process.env.XDG_STATE_HOME
+  const candidates = [
+    ...new Set([stateHome, shellStateHome, ...desktopStateNames.map((name) => join(app.getPath("appData"), name))]),
+  ].filter((candidate) => candidate === undefined || existsSync(candidate))
+  const discovered = await Promise.all(
+    candidates.map(async (candidate) => ({
+      stateHome: candidate,
+      url: serviceUrl(await run(binary, ["service", "status"], logger, { stateHome: candidate })),
+    })),
+  )
+  const found = discovered.find((candidate) => candidate.url !== undefined)
+  logger.log("v2 CLI background instance checked", {
+    detected: Boolean(found),
+    ...endpoint(found?.url),
+  })
+  return found
 }
 
 async function installCli(source: string, version: string, logger: Logger) {

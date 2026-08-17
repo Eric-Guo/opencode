@@ -11,7 +11,7 @@ import { Deferred, Effect, Fiber } from "effect"
 
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
-import { startBackgroundCli } from "./background-cli"
+import { startBackgroundCli, stopBackgroundCli } from "./background-cli"
 import { CHANNEL, VERSION } from "./constants"
 import { loadDesktopTabs } from "./desktop-tabs"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
@@ -147,7 +147,11 @@ const main = Effect.gen(function* () {
   }
   const quit = () => {
     setAppQuitting()
-    void stopSidecars().finally(() => app.exit(0))
+    // Quit after SSO sign-in must stop the v2 background service so the next
+    // launch starts it fresh with the newly provisioned credentials.
+    void Promise.all([stopSidecars(), stopBackgroundCli(logger, { shellStateHome: startupEnv.XDG_STATE_HOME })])
+      .catch((error) => logger.warn("failed to stop background service", error))
+      .finally(() => app.exit(0))
   }
 
   try {
