@@ -19,7 +19,7 @@ import { exportDebugLogs, startNetworkLogging, writeLog } from "./native/logging
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { setNativeTranslations } from "./native/translations"
 import { configureProxyCommandLine, configureSessionProxy } from "./proxy"
-import { startBackgroundCli } from "./service/background-service"
+import { startBackgroundCli, stopBackgroundCli } from "./service/background-service"
 import { loadSsoBearerApiKey } from "./thape-sso"
 import { forwardInitializationFailure } from "./service/initialization"
 import { getDefaultServerUrl, setDefaultServerUrl } from "./service/server-settings"
@@ -117,6 +117,7 @@ const main = Effect.gen(function* () {
         ),
       }),
     )
+    lifecycle.setBackgroundShutdown(() => stopBackgroundCli(logger))
     const wsl = yield* Effect.promise(() => startWsl(background, logger))
     registerWslIpcHandlers(wsl.ipc)
     wsl.start()

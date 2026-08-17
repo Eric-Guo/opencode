@@ -37,10 +37,7 @@ export async function startBackgroundCli(logger: Logger, options: { cors?: strin
   if (options.cors)
     await run(cli.command[0], [...cli.command.slice(1), "service", "set", "cors", JSON.stringify(options.cors)], logger)
   const service = await Service.ensure({
-    file:
-      isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-        ? join(app.getPath("userData"), "opencode", "service-local.json")
-        : undefined,
+    file: registrationFile(isolated),
     version: cli.version,
     command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
     onStart: (reason, previousVersion) => logger.log("v2 CLI background service starting", { reason, previousVersion }),
@@ -67,6 +64,16 @@ export async function startBackgroundCli(logger: Logger, options: { cors?: strin
             output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT,
           },
   }
+}
+
+export async function stopBackgroundCli(logger: Logger) {
+  await Service.stop({ file: registrationFile(!app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1") })
+  logger.log("v2 CLI background service stopped")
+}
+
+function registrationFile(isolated: boolean) {
+  if (!isolated || process.env.OPENCODE_DESKTOP_SERVER_CHANNEL !== "local") return undefined
+  return join(app.getPath("userData"), "opencode", "service-local.json")
 }
 
 async function resolveBundledCli(isolated: boolean, logger: Logger) {
