@@ -72,9 +72,9 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
   const version = parseCliVersion(yield* run(bundled, ["--version"]))
   yield* Effect.logInfo("v2 CLI executable verified", { version })
   const binary = app.isPackaged
-    ? yield* installCli(bundled, app.getVersion())
+    ? yield* installCli(bundled, app.getVersion(), version)
     : isolated
-      ? yield* installCli(bundled, version)
+      ? yield* installCli(bundled, version, version)
       : bundled
   return { version, binary, command: [binary] }
 })
@@ -100,12 +100,30 @@ export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (binary
   )
 })
 
-const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string) {
+const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string, cliVersion: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const destination = app.isPackaged
+  const preferred = app.isPackaged
     ? cliInstallPath(app.getPath("userData"), version)
     : path.join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"), executableName())
+  const installed = yield* fs.exists(preferred)
+  const installedVersion = installed
+    ? yield* Effect.tryPromise(() => execFileAsync(preferred, ["--version"], { windowsHide: true })).pipe(
+        Effect.map((result) => parseCliVersion(result.stdout.trim())),
+        Effect.catch(() => Effect.succeed(undefined)),
+      )
+    : undefined
+  const destination =
+    app.isPackaged && installed && installedVersion !== cliVersion
+      ? cliInstallPath(app.getPath("userData"), `${version}-${cliVersion}`)
+      : preferred
+  if (destination !== preferred)
+    yield* Effect.logInfo("v2 CLI staged executable version differs", {
+      path: preferred,
+      installedVersion,
+      bundledVersion: cliVersion,
+      replacement: destination,
+    })
   if (yield* fs.exists(destination)) {
     yield* Effect.logInfo("v2 CLI staged executable reused", { path: destination, version })
     return destination
