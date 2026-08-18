@@ -78,7 +78,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         serverSDK.api.file.list({ path: dir, location: { directory: scope() } }).then((x) =>
           x.data.map((entry) => ({
             ...entry,
-            name: getFilename(entry.path),
+            name: getFilename(entry.path.replace(/[\\/]+$/, "")),
             absolute: `${scope()}/${entry.path}`,
             ignored: false,
           })),
