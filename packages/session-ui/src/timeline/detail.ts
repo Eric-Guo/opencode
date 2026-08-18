@@ -90,7 +90,7 @@ export function timelinePreset(value: TimelineDetail) {
 export function timelineCategory(
   content: SessionMessageAssistant["content"][number],
 ): keyof TimelineDetail | undefined {
-  if (content.type === "text") return
+  if (content.type === "text" || content.type === "file") return
   if (content.type === "reasoning") return "thinking"
   if (["shell", "execute", "bash"].includes(content.name)) return "shell"
   if (["edit", "write", "patch", "apply_patch"].includes(content.name)) return "edit"
