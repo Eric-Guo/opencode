@@ -7,8 +7,7 @@ const CLI_VERSION = "dev"
 
 export type Channel = "dev" | "beta" | "prod"
 
-export function resolveChannel(): Channel {
-  const raw = Bun.env.OPENCODE_CHANNEL
+export function resolveChannel(raw = Bun.env.OPENCODE_CHANNEL): Channel {
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 }
@@ -115,6 +114,7 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
     await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} ${`--target=${cli.target}`} --skip-install --outdir=${directory}`.env(
       {
         ...process.env,
+        OPENCODE_CHANNEL: resolveChannel(),
         OPENCODE_VERSION: process.env.OPENCODE_VERSION,
       },
     )

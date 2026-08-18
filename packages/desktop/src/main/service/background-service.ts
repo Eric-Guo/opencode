@@ -73,9 +73,9 @@ async function resolveBundledCli(isolated: boolean, logger: Logger) {
   const version = parseCliVersion(await run(bundled, ["--version"], logger))
   logger.log("v2 CLI executable verified", { version })
   const binary = app.isPackaged
-    ? await installCli(bundled, app.getVersion(), logger)
+    ? await installCli(bundled, app.getVersion(), version, logger)
     : isolated
-      ? await installCli(bundled, version, logger)
+      ? await installCli(bundled, version, version, logger)
       : bundled
   return { version, binary, command: [binary] }
 }
@@ -94,10 +94,28 @@ async function cleanCliStages(binary: string, logger: Logger) {
   )
 }
 
-async function installCli(source: string, version: string, logger: Logger) {
-  const destination = app.isPackaged
+async function installCli(source: string, version: string, cliVersion: string, logger: Logger) {
+  const preferred = app.isPackaged
     ? cliInstallPath(app.getPath("userData"), version)
     : join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"), executableName())
+  const installed = existsSync(preferred)
+  const installedVersion = installed
+    ? await execFileAsync(preferred, ["--version"], { windowsHide: true }).then(
+        (result) => parseCliVersion(result.stdout.trim()),
+        () => undefined,
+      )
+    : undefined
+  const destination =
+    app.isPackaged && installed && installedVersion !== cliVersion
+      ? cliInstallPath(app.getPath("userData"), `${version}-${cliVersion}`)
+      : preferred
+  if (destination !== preferred)
+    logger.log("v2 CLI staged executable version differs", {
+      path: preferred,
+      installedVersion,
+      bundledVersion: cliVersion,
+      replacement: destination,
+    })
   if (existsSync(destination)) {
     logger.log("v2 CLI staged executable reused", { path: destination, version })
     return destination
