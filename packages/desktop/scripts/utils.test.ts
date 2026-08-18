@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test"
 
-import { getCliResourcePath, getCurrentCli } from "./utils"
+import { getCliResourcePath, getCurrentCli, resolveChannel } from "./utils"
+
+test("normalizes unsupported desktop channels to dev", () => {
+  expect(resolveChannel("eric_dev")).toBe("dev")
+  expect(resolveChannel("dev")).toBe("dev")
+  expect(resolveChannel("beta")).toBe("beta")
+  expect(resolveChannel("prod")).toBe("prod")
+})
 
 test("uses the target platform for the CLI resource extension", () => {
   expect(getCliResourcePath(getCurrentCli("x86_64-pc-windows-msvc"))).toBe("resources/opencode-cli.exe")
