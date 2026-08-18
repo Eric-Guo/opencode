@@ -7,8 +7,7 @@ const CLI_VERSION = "dev"
 
 export type Channel = "dev" | "beta" | "prod"
 
-export function resolveChannel(): Channel {
-  const raw = Bun.env.OPENCODE_CHANNEL
+export function resolveChannel(raw = Bun.env.OPENCODE_CHANNEL): Channel {
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 }
@@ -23,7 +22,7 @@ export const CLI_BINARIES: Array<{ rustTarget: string; target: string; package: 
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    target: "darwin-x64-baseline",
+    target: "darwin-x64",
     package: "@opencode-ai/cli-darwin-x64-baseline",
     os: "darwin",
     cpu: "x64",
@@ -37,14 +36,14 @@ export const CLI_BINARIES: Array<{ rustTarget: string; target: string; package: 
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    target: "windows-x64-baseline",
+    target: "windows-x64",
     package: "@opencode-ai/cli-windows-x64-baseline",
     os: "win32",
     cpu: "x64",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    target: "linux-x64-baseline",
+    target: "linux-x64",
     package: "@opencode-ai/cli-linux-x64-baseline",
     os: "linux",
     cpu: "x64",
@@ -57,15 +56,6 @@ export const CLI_BINARIES: Array<{ rustTarget: string; target: string; package: 
     cpu: "arm64",
   },
 ]
-
-const SIDECAR_TARGETS = [
-  { rustTarget: "aarch64-apple-darwin", target: "darwin-arm64" },
-  { rustTarget: "x86_64-apple-darwin", target: "darwin-x64" },
-  { rustTarget: "aarch64-pc-windows-msvc", target: "windows-arm64" },
-  { rustTarget: "x86_64-pc-windows-msvc", target: "windows-x64" },
-  { rustTarget: "x86_64-unknown-linux-gnu", target: "linux-x64" },
-  { rustTarget: "aarch64-unknown-linux-gnu", target: "linux-arm64" },
-] as const
 
 export const RUST_TARGET = Bun.env.RUST_TARGET
 
@@ -82,12 +72,6 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   if (!binaryConfig) throw new Error(`CLI configuration not available for target '${target}'`)
 
   return binaryConfig
-}
-
-export function getCurrentSidecarTarget(target = RUST_TARGET ?? nativeTarget()) {
-  const sidecar = SIDECAR_TARGETS.find((item) => item.rustTarget === target)
-  if (!sidecar) throw new Error(`Sidecar configuration not available for target '${target}'`)
-  return sidecar.target
 }
 
 export function getCliResourcePath(cli = getCurrentCli()) {
@@ -127,9 +111,10 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
   const resource = dest ?? getCliResourcePath(cli)
   if (!dest) await rm(cli.os === "win32" ? "resources/opencode-cli" : "resources/opencode-cli.exe", { force: true })
   try {
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} ${`--target=opencode2-${cli.target}`} --skip-install --skip-web-ui --outdir=${directory}`.env(
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} ${`--target=${cli.target}`} --skip-install --outdir=${directory}`.env(
       {
         ...process.env,
+        OPENCODE_CHANNEL: resolveChannel(),
         OPENCODE_VERSION: process.env.OPENCODE_VERSION,
       },
     )
@@ -143,7 +128,12 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
       if (exitCode !== 0) throw new Error(`Failed to stop development service: ${exitCode}`)
     }
     await copyFile(
-      join(directory, `cli-${cli.target}`, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
+      join(
+        directory,
+        `cli-node-${cli.target}`,
+        "bin",
+        cli.os === "win32" ? "opencode2-node.exe" : "opencode2-node",
+      ),
       resource,
     )
   } finally {
@@ -151,11 +141,7 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
   }
   await prepareCli(resource)
 
-  console.log(`Built ${cli.target} CLI at ${resource}`)
-}
-
-export async function buildEmbeddedSidecar() {
-  await $`bun ../cli/script/build-node.ts --sidecar-only --skip-install ${`--target=${getCurrentSidecarTarget()}`}`
+  console.log(`Built Node ${cli.target} CLI at ${resource}`)
 }
 
 async function prepareCli(dest: string) {
