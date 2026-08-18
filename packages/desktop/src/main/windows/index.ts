@@ -21,8 +21,8 @@ import {
   shell,
 } from "electron"
 import type { Cookie, WebContents } from "electron"
-import { dirname, isAbsolute, join, relative, resolve } from "node:path"
-import { fileURLToPath, pathToFileURL } from "node:url"
+import { isAbsolute, join, relative, resolve } from "node:path"
+import { pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../../shared/ipc-contract"
 import {
   loadDesktopTabs,
@@ -38,6 +38,7 @@ import {
   isExternalTabURL,
 } from "../external-tab-policy"
 import { exportDebugLogs, writeLog } from "../native/logging"
+import { developmentResourcesRoot, preloadPath, preloadRoot, rendererRoot } from "../paths"
 import { getStore, removeStoreFile } from "../storage/store"
 import { DESKTOP_TAB_COOKIES_STORE, PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "../storage/keys"
 import { createUnresponsiveSampler } from "./unresponsive"
@@ -46,8 +47,6 @@ import { createWindowRegistry } from "./registry"
 import { resolveExternalURL, resolveLocalFilePath } from "../files/external-url"
 import { safeWebContentsURL } from "./state"
 
-const root = dirname(fileURLToPath(import.meta.url))
-const rendererRoot = join(root, "../../renderer")
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
 const notificationPermission = "notifications"
@@ -218,7 +217,7 @@ export function getBackgroundColor(): string | undefined {
 }
 
 function iconsDir() {
-  return app.isPackaged ? join(process.resourcesPath, "icons") : join(root, "../../../resources/icons")
+  return app.isPackaged ? join(process.resourcesPath, "icons") : join(developmentResourcesRoot, "icons")
 }
 
 function iconPath() {
@@ -333,7 +332,7 @@ export function createMainWindow(id: string = randomUUID()) {
         }
       : {}),
     webPreferences: {
-      preload: join(root, "../../preload/index.js"),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -492,7 +491,7 @@ function loadWebContents(
 function createOpenCodeView(win: BrowserWindow) {
   const view = new WebContentsView({
     webPreferences: {
-      preload: join(root, "../../preload/index.js"),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -511,7 +510,7 @@ function createOpenCodeView(win: BrowserWindow) {
 function createTabbarView(win: BrowserWindow) {
   const view = new WebContentsView({
     webPreferences: {
-      preload: join(root, "../../preload/tabbar.js"),
+      preload: join(preloadRoot, "tabbar.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -734,7 +733,7 @@ function createDesktopTabManager(
 function createRendererTabView(win: BrowserWindow, tab: RendererDesktopTab) {
   const view = new WebContentsView({
     webPreferences: {
-      preload: join(root, "../../preload/index.js"),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -770,7 +769,7 @@ function createExternalView(
         tab.welcomeText ||
         tab.suggestedQuestions ||
         process.env.THAPE_SSO_BEARER_API_KEY
-        ? { preload: join(root, "../../preload/external-tab.js") }
+        ? { preload: join(preloadRoot, "external-tab.js") }
         : {}),
       contextIsolation: true,
       nodeIntegration: false,
