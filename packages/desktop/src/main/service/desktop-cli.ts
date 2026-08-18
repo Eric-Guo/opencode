@@ -5,6 +5,7 @@ import { promisify } from "node:util"
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import installer from "../../../../../install?raw"
+import { cliInstallPath } from "../cli-install"
 import { DesktopPaths } from "../paths"
 import { parseCliVersion } from "./cli-version"
 
@@ -80,7 +81,12 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
     : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
   yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = parseCliVersion(yield* run(bundled, ["--version"]))
-  const binary = app.isPackaged || isolated ? yield* installCli(bundled, version) : bundled
+  yield* Effect.logInfo("v2 CLI executable verified", { version })
+  const binary = app.isPackaged
+    ? yield* installCli(bundled, app.getVersion(), version)
+    : isolated
+      ? yield* installCli(bundled, version, version)
+      : bundled
   return { version, binary, command: [binary] }
 })
 
@@ -105,18 +111,37 @@ export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (binary
   )
 })
 
-const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string) {
+const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string, cliVersion: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const directory = path.join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"))
-  const destination = path.join(directory, executableName())
+  const preferred = app.isPackaged
+    ? cliInstallPath(app.getPath("userData"), version)
+    : path.join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"), executableName())
+  const installed = yield* fs.exists(preferred)
+  const installedVersion = installed
+    ? yield* Effect.tryPromise(() => execFileAsync(preferred, ["--version"], { windowsHide: true })).pipe(
+        Effect.map((result) => parseCliVersion(result.stdout.trim())),
+        Effect.catch(() => Effect.succeed(undefined)),
+      )
+    : undefined
+  const destination =
+    app.isPackaged && installed && installedVersion !== cliVersion
+      ? cliInstallPath(app.getPath("userData"), `${version}-${cliVersion}`)
+      : preferred
+  if (destination !== preferred)
+    yield* Effect.logInfo("v2 CLI staged executable version differs", {
+      path: preferred,
+      installedVersion,
+      bundledVersion: cliVersion,
+      replacement: destination,
+    })
   if (yield* fs.exists(destination)) {
     yield* Effect.logInfo("v2 CLI staged executable reused", { path: destination, version })
     return destination
   }
 
   const temp = destination + `.${process.pid}.tmp`
-  yield* fs.makeDirectory(directory, { recursive: true })
+  yield* fs.makeDirectory(path.dirname(destination), { recursive: true })
   yield* fs.copyFile(source, temp)
   if (process.platform !== "win32") yield* fs.chmod(temp, 0o755)
   yield* fs
