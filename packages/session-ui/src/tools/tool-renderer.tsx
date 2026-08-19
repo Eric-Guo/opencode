@@ -266,7 +266,9 @@ function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI1
         ? "TinyFish"
         : provider === "opencode"
           ? "OpenCode"
-          : `${provider[0].toUpperCase()}${provider.slice(1)}`
+          : provider === "searchkimi"
+            ? "SearchKimi"
+            : `${provider[0].toUpperCase()}${provider.slice(1)}`
   if (name) return i18n.t("ui.tool.websearch.provider", { provider: name })
   return i18n.t("ui.tool.websearch")
 }
