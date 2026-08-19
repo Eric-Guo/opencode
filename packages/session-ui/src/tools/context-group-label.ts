@@ -5,6 +5,7 @@ import type { ContextGroupPart } from "./tool-renderer"
 const webSearchProviderNames = new Map([
   ["tinyfish", "TinyFish"],
   ["opencode", "OpenCode"],
+  ["searchkimi", "SearchKimi"],
 ])
 
 export function webSearchProviderLabel(provider: string | undefined, i18n: UiI18n) {
