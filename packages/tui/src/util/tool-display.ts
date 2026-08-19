@@ -21,6 +21,7 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
 
 export function webSearchProviderName(provider: unknown) {
   if (typeof provider !== "string" || !provider) return ""
+  if (provider === "searchkimi") return "SearchKimi"
   return `${provider[0].toUpperCase()}${provider.slice(1)}`
 }
 
