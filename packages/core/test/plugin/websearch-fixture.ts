@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -17,11 +17,11 @@ interface WebSearchRequest {
 }
 
 export const requests: WebSearchRequest[] = []
-let responseBody = ""
+let responseBodies: readonly string[] = []
 
-export function resetWebSearchFixture(body: string) {
+export function resetWebSearchFixture(body: string | readonly string[]) {
   requests.length = 0
-  responseBody = body
+  responseBodies = typeof body === "string" ? [body] : body
 }
 
 const http = Layer.succeed(
@@ -34,6 +34,7 @@ const http = Layer.succeed(
         headers: request.headers,
         body: JSON.parse(new TextDecoder().decode(request.body.body)),
       })
+      const responseBody = responseBodies[Math.min(requests.length - 1, responseBodies.length - 1)] ?? ""
       return HttpClientResponse.fromWeb(request, new Response(responseBody, { status: 200 }))
     }),
   ),
