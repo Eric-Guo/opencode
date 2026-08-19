@@ -5,6 +5,7 @@ import { WebSearch } from "@opencode-ai/core/websearch"
 import { WebSearchExa } from "@opencode-ai/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode-ai/core/plugin/websearch/firecrawl"
 import { WebSearchParallel } from "@opencode-ai/core/plugin/websearch/parallel"
+import { SearchKimi } from "@opencode-ai/core/plugin/websearch/searchkimi"
 import { WebSearchTavily } from "@opencode-ai/core/plugin/websearch/tavily"
 import { host, integrationHost, webSearchHost } from "./host"
 import { requests, resetWebSearchFixture, webSearchIntegrationTest } from "./websearch-fixture"
@@ -256,6 +257,97 @@ describe("built-in web search providers", () => {
         headers: { authorization: "Bearer tavily-secret", "x-client-name": "opencode2" },
       })
       expect(requests[1]?.headers["x-tavily-access-mode"]).toBeUndefined()
+    }),
+  )
+
+  it.effect("registers SearchKimi and uses its tool call id for search", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture([
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                tool_calls: [{ id: "call_searchkimi" }],
+              },
+            },
+          ],
+        }),
+        JSON.stringify({
+          search_results: [
+            {
+              title: "Effect",
+              url: "https://effect.website",
+              snippet: "Effect documentation",
+              content: "Typed functional programming in TypeScript",
+              date: "2026-07-25T00:00:00.000Z",
+            },
+          ],
+        }),
+      ])
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* SearchKimi.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("searchkimi"))).toMatchObject({
+        id: "searchkimi",
+        name: "SearchKimi",
+        methods: [{ type: "key" }, { type: "env", names: ["KIMI_API_KEY"] }],
+      })
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("searchkimi"),
+        key: "kimi-secret",
+      })
+      expect(
+        yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("searchkimi") }),
+      ).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("searchkimi"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation\n\nTyped functional programming in TypeScript",
+              time: { published: Date.parse("2026-07-25T00:00:00.000Z") },
+            },
+          ],
+        }),
+      )
+      expect(requests).toEqual([
+        {
+          url: SearchKimi.chatEndpoint,
+          headers: expect.objectContaining({ authorization: "Bearer kimi-secret", "user-agent": "KimiCLI/1.48.0" }),
+          body: {
+            model: "kimi-for-coding",
+            stream: false,
+            parallel_tool_calls: false,
+            tool_choice: { type: "builtin_function", function: { name: "$web_search" } },
+            thinking: { type: "disabled" },
+            tools: [{ type: "builtin_function", function: { name: "$web_search" } }],
+            messages: [
+              {
+                role: "user",
+                content:
+                  "Use the $web_search tool to search the web for the following query. Do not add commentary. Query:\neffect typescript",
+              },
+            ],
+          },
+        },
+        {
+          url: SearchKimi.endpoint,
+          headers: expect.objectContaining({
+            authorization: "Bearer kimi-secret",
+            "x-msh-tool-call-id": "call_searchkimi",
+          }),
+          body: {
+            text_query: "effect typescript",
+            enable_page_crawling: false,
+            timeout_seconds: 120,
+            limit: 20,
+          },
+        },
+      ])
     }),
   )
 })
