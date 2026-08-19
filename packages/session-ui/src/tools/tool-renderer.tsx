@@ -305,6 +305,7 @@ function agentColor(value: string | undefined, themeColors: ReadonlyMap<string, 
 const webSearchProviderNames = new Map([
   ["tinyfish", "TinyFish"],
   ["opencode", "OpenCode"],
+  ["searchkimi", "SearchKimi"],
 ])
 
 function webSearchProviderLabel(provider: string | undefined, i18n: ReturnType<typeof useI18n>) {
