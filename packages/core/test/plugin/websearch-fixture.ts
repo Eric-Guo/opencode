@@ -18,14 +18,14 @@ interface WebSearchRequest {
 
 export const requests: WebSearchRequest[] = []
 export const signals: AbortSignal[] = []
-let responseBody = ""
+let responseBodies: readonly string[] = []
 let responseStatus = 200
 let responseHeaders: Record<string, string> = {}
 
-export function resetWebSearchFixture(body: string, status = 200) {
+export function resetWebSearchFixture(body: string | readonly string[], status = 200) {
   requests.length = 0
   signals.length = 0
-  responseBody = body
+  responseBodies = typeof body === "string" ? [body] : body
   responseStatus = status
   responseHeaders = {}
 }
@@ -45,6 +45,7 @@ const http = Layer.succeed(
         headers: request.headers,
         body: JSON.parse(new TextDecoder().decode(request.body.body)),
       })
+      const responseBody = responseBodies[Math.min(requests.length - 1, responseBodies.length - 1)] ?? ""
       return HttpClientResponse.fromWeb(
         request,
         new Response(responseBody, { status: responseStatus, headers: responseHeaders }),
