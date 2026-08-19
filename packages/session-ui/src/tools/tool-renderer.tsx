@@ -252,9 +252,11 @@ function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI1
         ? "Exa"
         : provider === "firecrawl"
           ? "Firecrawl"
-          : provider === "tavily"
-            ? "Tavily"
-            : undefined
+          : provider === "searchkimi"
+            ? "SearchKimi"
+            : provider === "tavily"
+              ? "Tavily"
+              : undefined
   if (name) return i18n.t("ui.tool.websearch.provider", { provider: name })
   return i18n.t("ui.tool.websearch")
 }
