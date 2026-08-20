@@ -11,11 +11,13 @@ import { CommentCard } from "./comment-card"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import type {
   PromptAgentAttachment,
   PromptFileAttachment,
   SessionMessageAssistant,
+  SessionMessageAssistantFile,
   SessionMessageUser,
 } from "@opencode-ai/client/promise"
 import type { SessionUserActions, SessionUserComment } from "../actions"
@@ -334,6 +336,37 @@ export function CurrentUserMessageDisplay(props: {
             />
           </Show>
         </div>
+      </Show>
+    </div>
+  )
+}
+
+export function AssistantFileContent(props: { file: SessionMessageAssistantFile }) {
+  const dialog = useDialog()
+  const i18n = useI18n()
+  const image = createMemo(() => props.file.mime.startsWith("image/"))
+  const name = createMemo(() => props.file.filename ?? i18n.t("ui.message.attachment.alt"))
+
+  return (
+    <div data-component="file-part" data-kind={image() ? "image" : "file"} data-timeline-part-id={props.file.id}>
+      <Show
+        when={image()}
+        fallback={
+          <div data-slot="file-part-attachment" data-type="file" title={name()}>
+            <FileIcon node={{ path: name(), type: "file" }} />
+            <span data-slot="file-part-name">{name()}</span>
+          </div>
+        }
+      >
+        <button
+          type="button"
+          data-slot="file-part-attachment"
+          data-type="image"
+          data-clickable="true"
+          onClick={() => dialog.show(() => <ImagePreview src={props.file.url} alt={name()} />)}
+        >
+          <img data-slot="file-part-image" src={props.file.url} alt={name()} />
+        </button>
       </Show>
     </div>
   )
