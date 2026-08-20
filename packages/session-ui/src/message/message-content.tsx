@@ -24,6 +24,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
+import { FileIcon } from "@opencode/ui/file-icon"
 import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
@@ -36,6 +37,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
   SessionMessageCompaction,
+  SessionMessageAssistantFile,
   SessionMessageUser,
 } from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
@@ -513,6 +515,37 @@ export function CurrentUserMessageDisplay(props: {
             </Menu.Context>
           </Show>
         </div>
+      </Show>
+    </div>
+  )
+}
+
+export function AssistantFileContent(props: { file: SessionMessageAssistantFile }) {
+  const dialog = useDialog()
+  const i18n = useI18n()
+  const image = createMemo(() => props.file.mime.startsWith("image/"))
+  const name = createMemo(() => props.file.filename ?? i18n.t("ui.message.attachment.alt"))
+
+  return (
+    <div data-component="file-part" data-kind={image() ? "image" : "file"} data-timeline-part-id={props.file.id}>
+      <Show
+        when={image()}
+        fallback={
+          <div data-slot="file-part-attachment" data-type="file" title={name()}>
+            <FileIcon node={{ path: name(), type: "file" }} />
+            <span data-slot="file-part-name">{name()}</span>
+          </div>
+        }
+      >
+        <button
+          type="button"
+          data-slot="file-part-attachment"
+          data-type="image"
+          data-clickable="true"
+          onClick={() => dialog.show(() => <ImagePreview src={props.file.url} alt={name()} />)}
+        >
+          <img data-slot="file-part-image" src={props.file.url} alt={name()} />
+        </button>
       </Show>
     </div>
   )
