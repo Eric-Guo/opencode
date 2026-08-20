@@ -83,6 +83,35 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test("keeps generated assistant files as timeline parts", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "draw", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "file",
+            id: "file_1",
+            mime: "image/png",
+            filename: "chart.png",
+            url: "data:image/png;base64,AAAA",
+          },
+        ],
+        time: { created: 2, completed: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
+
+    expect(result.rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_user",
+      "assistant-part:msg_user:part:msg_assistant:file_1",
+    ])
+  })
+
   test("keeps CLI notice messages between the assistant steps they surround", () => {
     const source = [
       { id: "msg_user", type: "user", text: "run", time: { created: 1 } },
