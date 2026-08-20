@@ -15,6 +15,7 @@ export const API_KEY_ENV_NAMES = [
   "SILICONFLOW_CN_API_KEY",
   "EXA_API_KEY",
   "CEREBRAS_API_KEY",
+  "VIPAI_API_KEY",
 ] as const
 
 function runtimeEnv(key: string) {
@@ -91,6 +92,7 @@ export async function ensureSsoUsername() {
           exa_api_key: string
           deepseek_api_key: string
           cerebras_api_key: string
+          vipai_api_key: string
           hide_agents: string[]
         },
     )
@@ -121,4 +123,5 @@ export async function ensureSsoUsername() {
   setRuntimeEnv("SILICONFLOW_CN_API_KEY", payload.siliconflow_cn_api_key)
   setRuntimeEnv("EXA_API_KEY", payload.exa_api_key)
   setRuntimeEnv("CEREBRAS_API_KEY", payload.cerebras_api_key)
+  setRuntimeEnv("VIPAI_API_KEY", payload.vipai_api_key)
 }
