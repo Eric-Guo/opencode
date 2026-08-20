@@ -5,8 +5,17 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
-import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
-import { CurrentContextToolGroup, CurrentFileToolGroup, ToolDisplay } from "../tools/tool-renderer"
+import {
+  AssistantFileContent,
+  AssistantReasoningContent,
+  AssistantTextContent,
+  CurrentUserMessageDisplay,
+} from "./message-content"
+import {
+  CurrentContextToolGroup,
+  CurrentFileToolGroup,
+  ToolDisplay,
+} from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
 export type { SessionUserActions, SessionUserComment } from "../actions"
@@ -72,6 +81,9 @@ export function SessionAssistantContent(props: {
             onContentRendered={props.onContentRendered}
           />
         )}
+      </Match>
+      <Match when={props.content.type === "file" ? props.content : undefined}>
+        {(file) => <AssistantFileContent file={file()} />}
       </Match>
       <Match when={props.content.type === "tool" ? props.content : undefined}>
         {(tool) => (
