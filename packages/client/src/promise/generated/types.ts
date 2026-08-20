@@ -2165,6 +2165,7 @@ export type SessionMessageAssistant = {
 export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
+  | SessionMessageAssistantFile1
   | SessionMessageAssistantTool1
 
 export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
@@ -2382,14 +2383,6 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
-export type AgentNotFoundError = {
-  readonly _tag: "AgentNotFoundError"
-  readonly agentID: string
-  readonly message: string
-}
-export const isAgentNotFoundError = (value: unknown): value is AgentNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AgentNotFoundError"
-
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
   readonly message: string
@@ -2397,6 +2390,14 @@ export type ServiceUnavailableError = {
 }
 export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
+
+export type AgentNotFoundError = {
+  readonly _tag: "AgentNotFoundError"
+  readonly agentID: string
+  readonly message: string
+}
+export const isAgentNotFoundError = (value: unknown): value is AgentNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AgentNotFoundError"
 
 export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
@@ -4274,6 +4275,14 @@ export type SessionMessageUpdateInput = {
           readonly text: string
           readonly state?: { readonly [x: string]: JsonValue }
           readonly time?: { readonly created: number; readonly completed?: number }
+        }
+      | {
+          readonly type: "file"
+          readonly id: string
+          readonly mime: string
+          readonly filename?: string
+          readonly url: string
+          readonly state?: { readonly [x: string]: JsonValue }
         }
       | {
           readonly type: "tool"

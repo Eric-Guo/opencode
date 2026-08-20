@@ -1079,7 +1079,10 @@ export type SessionMessageUpdateInput = {
   readonly sessionID: Session.ID
   readonly messageID: SessionMessage.ID
   readonly content: ReadonlyArray<
-    SessionMessage.AssistantText | SessionMessage.AssistantReasoning | SessionMessage.AssistantTool
+    | SessionMessage.AssistantText
+    | SessionMessage.AssistantReasoning
+    | SessionMessage.AssistantFile
+    | SessionMessage.AssistantTool
   >
 }
 export type SessionMessageUpdateOutput = SessionMessage.Assistant
