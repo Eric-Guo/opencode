@@ -481,7 +481,7 @@ export function make(options: ClientOptions) {
             path: `/api/agent`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -493,7 +493,7 @@ export function make(options: ClientOptions) {
             path: `/api/agent/${encodeURIComponent(input.agentID)}`,
             query: { location: input["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -2271,7 +2271,13 @@ export function make(options: ClientOptions) {
         ),
       global: (requestOptions?: RequestOptions) =>
         request<ConfigGlobalOutput>(
-          { method: "GET", path: `/global/config`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          {
+            method: "GET",
+            path: `/global/config`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
           requestOptions,
         ),
     },
