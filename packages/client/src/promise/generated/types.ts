@@ -2587,14 +2587,6 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
-export type LocationNotFoundError = {
-  readonly _tag: "LocationNotFoundError"
-  readonly location: { readonly directory: string }
-  readonly message: string
-}
-export const isLocationNotFoundError = (value: unknown): value is LocationNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationNotFoundError"
-
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
   readonly message: string
@@ -2602,6 +2594,14 @@ export type ServiceUnavailableError = {
 }
 export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
+
+export type LocationNotFoundError = {
+  readonly _tag: "LocationNotFoundError"
+  readonly location: { readonly directory: string }
+  readonly message: string
+}
+export const isLocationNotFoundError = (value: unknown): value is LocationNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationNotFoundError"
 
 export type AgentNotFoundError = {
   readonly _tag: "AgentNotFoundError"
