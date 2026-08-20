@@ -148,6 +148,7 @@ export type Config = {
   small_model?: string
   default_agent?: string
   username?: string
+  hide_agents?: string[]
   share?: "manual" | "auto" | "disabled"
   autoshare?: boolean
   shell?: string
