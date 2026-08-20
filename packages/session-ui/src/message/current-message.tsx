@@ -5,7 +5,12 @@ import type {
 } from "@opencode-ai/client/promise"
 import { Match, Switch } from "solid-js"
 import type { SessionUserActions, SessionUserComment } from "../actions"
-import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
+import {
+  AssistantFileContent,
+  AssistantReasoningContent,
+  AssistantTextContent,
+  CurrentUserMessageDisplay,
+} from "./message-content"
 import { CurrentContextToolGroup, ToolDisplay } from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
@@ -68,6 +73,9 @@ export function SessionAssistantContent(props: {
             streaming={typeof props.message.time.completed !== "number"}
           />
         )}
+      </Match>
+      <Match when={props.content.type === "file" ? props.content : undefined}>
+        {(file) => <AssistantFileContent file={file()} />}
       </Match>
       <Match when={props.content.type === "tool" ? props.content : undefined}>
         {(tool) => (
