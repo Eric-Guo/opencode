@@ -187,6 +187,7 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
     expect(configBody).toMatchObject({
       username: "Test User",
       clerk_code: "123456",
+      hide_agents: [],
       agents: {
         build: {
           permissions: [{ action: "websearch", resource: "*", effect: "allow" }],

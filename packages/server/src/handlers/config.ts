@@ -1,5 +1,6 @@
 import { Config } from "@opencode/core/config"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { ssoHideAgents } from "@opencode/core/thape-sso"
 import { GlobalConfig } from "@opencode/protocol/groups/config"
 import { Info } from "@opencode/schema/config"
 import { Effect, Schema } from "effect"
@@ -57,6 +58,7 @@ export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handler
             ),
             username,
             clerk_code: clerkCode,
+            hide_agents: ssoHideAgents(),
           }).filter((entry) => entry[1] !== undefined),
         )
         return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(GlobalConfig))(JSON.stringify(response)).pipe(
