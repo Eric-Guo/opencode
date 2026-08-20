@@ -15,6 +15,7 @@ const keys = [
   "SILICONFLOW_CN_API_KEY",
   "EXA_API_KEY",
   "CEREBRAS_API_KEY",
+  "VIPAI_API_KEY",
 ]
 
 const originalEnv = new Map(keys.map((key) => [key, process.env[key]]))
@@ -24,6 +25,7 @@ const originalFetch = globalThis.fetch
 test("keeps the bearer key available to tools", () => {
   expect(API_KEY_ENV_NAMES).not.toContain("THAPE_SSO_BEARER_API_KEY")
   expect(API_KEY_ENV_NAMES).toContain("OPENCODE_API_KEY")
+  expect(API_KEY_ENV_NAMES).toContain("VIPAI_API_KEY")
 })
 
 afterEach(() => {
@@ -59,6 +61,7 @@ test("ensureSsoUsername populates the runtime environment", async () => {
         exa_api_key: "exa-key",
         deepseek_api_key: "deepseek-key",
         cerebras_api_key: "cerebras-key",
+        vipai_api_key: "vipai-key",
         hide_agents: ["bid-assistant", "7777"],
       }),
     { preconnect: originalFetch.preconnect },
@@ -68,6 +71,8 @@ test("ensureSsoUsername populates the runtime environment", async () => {
 
   expect(process.env.THAPE_SSO_USER_NAME).toBe("Test User")
   expect(process.env.OPENCODE_API_KEY).toBe("opencode-key")
+  expect(process.env.VIPAI_API_KEY).toBe("vipai-key")
+  expect(Bun.env.VIPAI_API_KEY).toBe("vipai-key")
   expect(ssoHideAgents()).toEqual(["bid-assistant", "7777"])
   expect(process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()
   expect(Bun.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()
