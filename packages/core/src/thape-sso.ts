@@ -3,6 +3,8 @@ import { Observability } from "@opencode-ai/util/observability"
 
 const SSO_ME_URL = "https://sso.thape.com.cn/api/me.json"
 const bun = globalThis as typeof globalThis & { Bun?: { env: Record<string, string | undefined> } }
+let hideAgents: string[] = []
+let loaded = false
 
 export const API_KEY_ENV_NAMES = [
   "OPENCODE_API_KEY",
@@ -36,8 +38,12 @@ function hasValue(value: string | undefined) {
   return typeof value === "string" && value.trim().length > 0
 }
 
+export function ssoHideAgents() {
+  return hideAgents.slice()
+}
+
 export async function ensureSsoUsername() {
-  if (hasValue(runtimeEnv("THAPE_SSO_USER_NAME")) && hasValue(runtimeEnv("OPENCODE_API_KEY"))) return
+  if (loaded && hasValue(runtimeEnv("THAPE_SSO_USER_NAME")) && hasValue(runtimeEnv("OPENCODE_API_KEY"))) return
 
   const token = runtimeEnv("THAPE_SSO_BEARER_API_KEY")
   if (!token) {
@@ -89,6 +95,7 @@ export async function ensureSsoUsername() {
           exa_api_key: string
           deepseek_api_key: string
           cerebras_api_key: string
+          hide_agents: string[]
         },
     )
     .catch(async (error) => {
@@ -97,6 +104,10 @@ export async function ensureSsoUsername() {
     })
   if (!payload) return
 
+  hideAgents = Array.isArray(payload.hide_agents)
+    ? payload.hide_agents.filter((agent): agent is string => typeof agent === "string")
+    : []
+  loaded = true
   if (payload.kimi_api_key) setRuntimeEnv("KIMI_API_KEY", payload.kimi_api_key)
   if (payload.moonshot_api_key) setRuntimeEnv("DOC_MOONSHOT_API_KEY", payload.moonshot_api_key)
   if (payload.deepseek_api_key) setRuntimeEnv("DEEPSEEK_API_KEY", payload.deepseek_api_key)
