@@ -9,7 +9,7 @@ import { useProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { usePlatform, type Platform } from "@/runtime/platform/platform"
-import { hasCustomAgent, resolveAgent } from "./agent"
+import { hasCustomAgent, resolveAgent, selectableAgents } from "./agent"
 import {
   createModelSelectionState,
   editSelection,
@@ -37,7 +37,7 @@ import {
 } from "./variant"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { pathKey } from "@/workspaces/path-key"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { normalizeAgentList } from "@/runtime/server/global-sync/utils"
 import { useServerSDK } from "@/runtime/server/client"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
@@ -311,6 +311,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const params = useParams()
     const sdk = useWorkspaceLocation()
     const data = useData()
+    const server = useServer()
     const serverSDK = useServerSDK()
     const platform = usePlatform()
     const providers = useProviders(() => sdk().directory)
@@ -321,8 +322,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const id = createMemo(() => params.id || undefined)
 
     const list = createMemo(() =>
-      normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []).filter(
-        (item) => item.mode !== "subagent" && !item.hidden,
+      selectableAgents(
+        normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []),
+        server.ctx.sync.data.config.hide_agents ?? [],
       ),
     )
 
