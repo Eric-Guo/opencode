@@ -7,10 +7,10 @@ import { useModels } from "@/context/models"
 import { useSettings } from "@/context/settings"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
-import { hasCustomAgent, resolveAgent } from "./local-agent"
+import { hasCustomAgent, resolveAgent, selectableAgents } from "./local-agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useWorkspaceLocation } from "./location"
-import { useData } from "./server"
+import { useData, useServer } from "./server"
 import { normalizeAgentList } from "./global-sync/utils"
 import { useServerSDK } from "./server-sdk"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
@@ -62,6 +62,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const params = useParams()
     const sdk = useWorkspaceLocation()
     const data = useData()
+    const server = useServer()
     const serverSDK = useServerSDK()
     const providers = useProviders(() => sdk().directory)
     const models = useModels()
@@ -69,8 +70,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const id = createMemo(() => params.id || undefined)
     const list = createMemo(() =>
-      normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []).filter(
-        (item) => item.mode !== "subagent" && !item.hidden,
+      selectableAgents(
+        normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []),
+        server.ctx.sync.data.config.hide_agents ?? [],
       ),
     )
     const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))
