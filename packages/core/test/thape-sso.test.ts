@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { API_KEY_ENV_NAMES, ensureSsoUsername } from "../src/thape-sso"
+import { API_KEY_ENV_NAMES, ensureSsoUsername, ssoHideAgents } from "../src/thape-sso"
 
 const keys = [
   "THAPE_SSO_BEARER_API_KEY",
@@ -59,6 +59,7 @@ test("ensureSsoUsername populates the runtime environment", async () => {
         exa_api_key: "exa-key",
         deepseek_api_key: "deepseek-key",
         cerebras_api_key: "cerebras-key",
+        hide_agents: ["bid-assistant", "7777"],
       }),
     { preconnect: originalFetch.preconnect },
   ) as typeof fetch
@@ -67,6 +68,7 @@ test("ensureSsoUsername populates the runtime environment", async () => {
 
   expect(process.env.THAPE_SSO_USER_NAME).toBe("Test User")
   expect(process.env.OPENCODE_API_KEY).toBe("opencode-key")
+  expect(ssoHideAgents()).toEqual(["bid-assistant", "7777"])
   expect(process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()
   expect(Bun.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()
 })
