@@ -1,7 +1,12 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
-import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
+import {
+  AssistantFileContent,
+  AssistantReasoningContent,
+  AssistantTextContent,
+  CurrentUserMessageDisplay,
+} from "./message-content"
 import {
   CurrentContextToolGroup,
   CurrentFileToolGroup,
@@ -75,6 +80,9 @@ export function SessionAssistantContent(props: {
             onContentRendered={props.onContentRendered}
           />
         )}
+      </Match>
+      <Match when={props.content.type === "file" ? props.content : undefined}>
+        {(file) => <AssistantFileContent file={file()} />}
       </Match>
       <Match when={props.content.type === "tool" ? props.content : undefined}>
         {(tool) => (
