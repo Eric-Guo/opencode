@@ -10,8 +10,15 @@ const ServerReadyData = Schema.Struct({
   welcomeText: Schema.optionalKey(Schema.String),
   suggestedQuestions: Schema.optionalKey(Schema.Array(Schema.String)),
 })
+const CybrosCurrentUser = Schema.Struct({
+  chinese_name: Schema.String,
+  clerk_code: Schema.String,
+})
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
+export const AppGetCybrosCurrentUser = Rpc.make("AppGetCybrosCurrentUser", {
+  success: Schema.NullOr(CybrosCurrentUser),
+})
 export const AppSignInToThapeSso = Rpc.make("AppSignInToThapeSso", {
   payload: {
     credentials: Schema.Struct({
@@ -69,6 +76,7 @@ export const AppRelaunch = Rpc.make("AppRelaunch")
 export const AppQuit = Rpc.make("AppQuit")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
+  AppGetCybrosCurrentUser,
   AppSignInToThapeSso,
   AppConsumeInitialDeepLinks,
   AppGetDefaultServerUrl,
