@@ -7,7 +7,31 @@ import type {
   Prompt,
   SkillPart,
   SessionPart,
-} from "./state"
+} from "./schema"
+
+export type {
+  AgentPart,
+  ComposerStore,
+  ContentPart,
+  ContextItem,
+  FileAttachmentPart,
+  FileContextItem,
+  ImageAttachmentPart,
+  NoteComment,
+  NoteContextItem,
+  PathAttachmentPart,
+  Prompt,
+  PromptModel,
+  QuoteComment,
+  QuoteContextItem,
+  SessionPart,
+  SkillPart,
+  TextPart,
+} from "./schema"
+export type { FileSelection } from "../workspaces/files/types"
+export type { PromptScope } from "./state"
+
+export type FilePartSource = NonNullable<FileAttachmentPart["source"]>
 
 export type ComposerFilePart = FileAttachmentPart
 
