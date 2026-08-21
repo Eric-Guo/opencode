@@ -1,5 +1,5 @@
 import { Predicate } from "effect"
-import { createEffect, type Accessor } from "solid-js"
+import { createEffect, on, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
@@ -73,6 +73,7 @@ export function createComposerEditor(input: {
   attachments?: ComposerAttachmentConfig
   capabilities?: ComposerCapabilities
   onChange?: () => void
+  identity?: Accessor<unknown>
 }) {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
@@ -85,6 +86,16 @@ export function createComposerEditor(input: {
   }
 
   const [state, setState] = input.state ?? createComposerEditorState(draft.state.mode)
+
+  if (input.identity) {
+    createEffect(
+      on(
+        input.identity,
+        () => setState(reconcile({ ...createComposerInteractionState(), mode: draft.state.mode ?? "normal" })),
+        { defer: true },
+      ),
+    )
+  }
 
   function addPart(part: ComposerPersistedState["prompt"][number]) {
     if (isAttachment(part)) return false
