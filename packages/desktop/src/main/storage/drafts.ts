@@ -36,9 +36,11 @@ export function createDesktopDraftStore(filename: string) {
     .forEach(({ id }) => db.delete(blobs).where(eq(blobs.id, id)).run())
   const pending = new Map<string, string | null>()
   let timer: ReturnType<typeof setTimeout> | undefined
+  let closed = false
   const flush = () => {
     if (timer) clearTimeout(timer)
     timer = undefined
+    if (closed || !pending.size) return
     const writes = [...pending]
     pending.clear()
     db.transaction((tx) => {
@@ -75,7 +77,9 @@ export function createDesktopDraftStore(filename: string) {
     getBlob: (id: string) => db.select({ data: blobs.data }).from(blobs).where(eq(blobs.id, id)).get()?.data ?? null,
     flush,
     close() {
+      if (closed) return
       flush()
+      closed = true
       native.close()
     },
   }
