@@ -1,107 +1,43 @@
 import { checksum } from "@opencode-ai/util/encode"
 import { batch, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
-import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
 import { ServerScope } from "@/utils/server-scope"
-import type { BlobReference } from "@/utils/draft-store"
 import type { Platform } from "@/context/platform"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Skill } from "@opencode-ai/schema/skill"
+import type {
+  AgentPart,
+  ComposerStore,
+  ContentPart,
+  ContextItem,
+  FileAttachmentPart,
+  FileContextItem,
+  FilePartSource,
+  FileSelection,
+  ImageAttachmentPart,
+  Prompt,
+  PromptModel,
+  PromptScope,
+  SkillPart,
+} from "./types"
 
-interface PartBase {
-  content: string
-  start: number
-  end: number
-}
-
-type FilePartSourceText = { value: string; start: number; end: number }
-type FilePartSource =
-  | { text: FilePartSourceText; type: "file"; path: string }
-  | {
-      text: FilePartSourceText
-      type: "symbol"
-      path: string
-      range: { start: { line: number; character: number }; end: { line: number; character: number } }
-      name: string
-      kind: number
-    }
-  | { text: FilePartSourceText; type: "resource"; clientName: string; uri: string }
-
-export interface TextPart extends PartBase {
-  type: "text"
-}
-
-export interface FileAttachmentPart extends PartBase {
-  type: "file"
-  path: string
-  selection?: FileSelection
-  mime?: string
-  filename?: string
-  url?: string
-  source?: FilePartSource
-}
-
-export interface AgentPart extends PartBase {
-  type: "agent"
-  name: string
-}
-
-export interface SkillPart extends PartBase {
-  type: "skill"
-  id: Skill.ID
-  name: Skill.Name
-}
-
-export interface ImageAttachmentPart {
-  type: "image"
-  id: string
-  filename: string
-  sourcePath?: string
-  mime: string
-  blob: BlobReference
-}
-
-export type ContentPart = TextPart | FileAttachmentPart | AgentPart | SkillPart | ImageAttachmentPart
-export type Prompt = ContentPart[]
-
-export type PromptModel = {
-  providerID: string
-  modelID: string
-  variant?: string | null
-}
-
-export type FileContextItem = {
-  type: "file"
-  path: string
-  selection?: FileSelection
-  comment?: string
-  commentID?: string
-  commentOrigin?: "review" | "file"
-  preview?: string
-}
-
-export type ContextItem = FileContextItem
-export type PromptScope = { draftID: string } | { dir: string; id?: string }
+export type {
+  AgentPart,
+  ComposerStore,
+  ContentPart,
+  ContextItem,
+  FileAttachmentPart,
+  FileContextItem,
+  ImageAttachmentPart,
+  Prompt,
+  PromptModel,
+  PromptScope,
+  SkillPart,
+  TextPart,
+} from "./types"
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
-
-export type ComposerStore = {
-  prompt: Prompt
-  cursor?: number
-  model?: PromptModel
-  mode?: "normal" | "shell"
-  retry?: {
-    id: SessionMessage.ID
-    agent: string
-    providerID: string
-    modelID: string
-    variant?: string
-  }
-  context: {
-    items: (ContextItem & { key: string })[]
-  }
-}
 
 type InitialPrompt = {
   prompt?: string
