@@ -136,6 +136,31 @@ test("re-resolves when navigating to an uncached session without a remount", asy
   })
 })
 
+// Solid Router can temporarily clear params while committing the transition
+// from a draft route to its newly created Session. The shared route instance
+// must stay inert until the target ID is available again.
+test("ignores a transient missing session ID during navigation", async () => {
+  await createRoot(async (dispose) => {
+    const fixture = createFixture()
+    const [id, setId] = createSignal<string | undefined>()
+    const current = createSessionResolution(id, () => fixture.sessions)
+
+    expect(current()).toBeUndefined()
+    await flush()
+    expect(fixture.resolves).toEqual([])
+
+    setId("ses_a")
+    await flush()
+    expect(fixture.resolves).toEqual(["ses_a"])
+
+    fixture.settle("ses_a")
+    await flush()
+    expect(current()?.id).toBe("ses_a")
+
+    dispose()
+  })
+})
+
 // A late failure from a session the user already navigated away from must not
 // poison the currently viewed session.
 test("ignores a stale resolution failure after the target changes", async () => {
