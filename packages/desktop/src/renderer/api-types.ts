@@ -4,6 +4,7 @@ import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type {
   ClipboardImage,
+  CybrosCurrentUser,
   DirectoryPickerOptions,
   FatalRendererError,
   FilePickerOptions,
@@ -23,6 +24,7 @@ export type UpdaterAPI = {
 
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
+  getCybrosCurrentUser(): Promise<CybrosCurrentUser | null>
   signInToThapeSso(credentials: SsoSignInCredentials): Promise<void>
   wslServers: WslServersAPI
   updater: UpdaterAPI
