@@ -29,11 +29,15 @@ type Resolution<T> = { id: string; store: SessionStore<T> } & (
 // session that simply has not resolved yet. Resolve failures rethrow on read so
 // the enclosing SessionRouteErrorBoundary renders the scoped session error.
 export function createSessionResolution<T>(
-  sessionID: () => string,
+  sessionID: () => string | undefined,
   sessions: () => SessionStore<T>,
   options?: { children?: boolean },
 ) {
-  const cached = createMemo(() => sessions().get(sessionID()))
+  const cached = createMemo(() => {
+    const id = sessionID()
+    if (!id) return
+    return sessions().get(id)
+  })
   const [status, setStatus] = createSignal<Resolution<T>>()
 
   createEffect(
@@ -42,6 +46,10 @@ export function createSessionResolution<T>(
       onCleanup(() => {
         stale = true
       })
+      if (!id) {
+        setStatus(undefined)
+        return
+      }
       if (cached() && !options?.children) {
         setStatus({ id, store, state: "settled" })
         return
@@ -60,10 +68,11 @@ export function createSessionResolution<T>(
 
   return createMemo(() => {
     const id = sessionID()
+    if (!id) return
     const value = cached()
     if (value) return value
     const state = status()
-    if (state?.id !== id || state.store !== sessions()) return undefined
+    if (!state || state.id !== id || state.store !== sessions()) return undefined
     if (state.state === "failed") throw state.failure
     // A session missing after settlement was deleted, possibly by another client.
     // Match the resolve error so the boundary shows the

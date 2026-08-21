@@ -8,12 +8,10 @@ import { useNotification } from "@/shell/notifications/notification"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
-import { ServerConnection } from "@/runtime/server/registry"
 import { TerminalProvider } from "@/session/terminal/context"
 import { useSettingsCommand } from "@/settings/command"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { useTabs } from "@/shell/tabs/tabs"
-import { requireServerKey } from "@/shell/routes/session"
 import { useSessionModel } from "./model"
 import { SessionPanelFrame, SessionRouteFrame } from "./session-frame"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
@@ -22,7 +20,7 @@ import { createSessionResolution } from "./session-resolution"
 import { SessionScreen } from "./screen"
 
 export function TargetSessionRouteContent() {
-  const params = useParams<{ serverKey: string; id: string }>()
+  const params = useParams<{ id: string }>()
   const data = useData()
   const directory = createMemo(() => data.session.get(params.id)?.location.directory)
 
@@ -31,7 +29,7 @@ export function TargetSessionRouteContent() {
       <MarkSessionNotificationsViewed sessionID={() => params.id} />
       <ModelsProvider directory={directory}>
         <TargetSessionSettingsCommand />
-        <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+        <SessionRouteErrorBoundary sessionID={params.id} padded>
           <ResolvedTargetSessionRoute />
         </SessionRouteErrorBoundary>
       </ModelsProvider>
@@ -44,15 +42,13 @@ function TargetSessionSettingsCommand() {
   return null
 }
 
-function SessionRouteErrorBoundary(
-  props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
-) {
+function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; padded?: boolean }>) {
   return (
     <ErrorBoundary
       fallback={(error) => (
         <SessionRouteFrame padded={props.padded}>
           <SessionPanelFrame raised={!!props.sessionID}>
-            <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+            <SessionErrorFallback error={error} sessionID={props.sessionID} />
           </SessionPanelFrame>
         </SessionRouteFrame>
       )}
