@@ -7,6 +7,7 @@ import type { SshPlatform } from "@opencode/app/ssh"
 import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type {
   ClipboardImage,
+  CybrosCurrentUser,
   DirectoryPickerOptions,
   FatalRendererError,
   FilePickerOptions,
@@ -32,6 +33,7 @@ export type ElectronAPI = {
     send(request: BrowserPaneRequest): void
     onEvent(callback: (value: { readonly bindingID: string; readonly event: BrowserPaneEvent }) => void): () => void
   }
+  getCybrosCurrentUser(): Promise<CybrosCurrentUser | null>
   signInToThapeSso(credentials: SsoSignInCredentials): Promise<void>
   wslServers: WslServersAPI
   sshServers: SshPlatform
