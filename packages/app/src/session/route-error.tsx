@@ -8,16 +8,16 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { isLocalSessionNotFoundError, isSessionNotFoundError } from "@/runtime/server/errors"
 import { ServerUnavailablePanel } from "./server-unavailable-panel"
 
-export function SessionErrorFallback(props: { error: unknown; sessionID?: string; serverKey?: ServerConnection.Key }) {
+export function SessionErrorFallback(props: { error: unknown; sessionID?: string }) {
   const language = useLanguage()
   const activeServer = useServer()
   const server = useServers()
   const tabs = useTabs()
 
   const displayServer = createMemo(() => {
-    const conn = server.list.find((item) => ServerConnection.key(item) === props.serverKey)
+    const conn = server.list.find((item) => ServerConnection.key(item) === activeServer.key)
 
-    return conn ? server.label(conn) : props.serverKey
+    return conn ? server.label(conn) : activeServer.key
   })
 
   const closeSession = () => {
@@ -60,10 +60,7 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
               variant="neutral"
               size="normal"
               icon="xmark-small"
-              onClick={() => {
-                if (!props.sessionID || !props.serverKey) return
-                tabs.removeSessionTab({ server: props.serverKey, sessionId: props.sessionID })
-              }}
+              onClick={closeSession}
             >
               {language.t("session.error.notFound.closeTab")}
             </Button>
