@@ -25,6 +25,7 @@ const updaterHandler = (state: UpdaterState) => {
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization").then(mutable),
   reconnectService: () => invoke("AppReconnectService").then(mutable),
+  getCybrosCurrentUser: () => invoke("AppGetCybrosCurrentUser").then(mutable),
   signInToThapeSso: (credentials) => invoke("AppSignInToThapeSso", { credentials }),
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
