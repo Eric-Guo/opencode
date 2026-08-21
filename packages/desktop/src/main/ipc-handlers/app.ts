@@ -16,7 +16,7 @@ import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
-import { signInToThapeSso } from "../thape-sso"
+import { getCybrosCurrentUser, signInToThapeSso } from "../thape-sso"
 import { Updater } from "../updater"
 import {
   getDesktopTabHistory,
@@ -47,6 +47,20 @@ export const appHandlers = AppRpcs.toLayer(
           return { ...data, ...getDesktopTabInitializationFromWebContents(sender(handoff, context)) }
         }),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
+      AppGetCybrosCurrentUser: () => {
+        if (!process.env.THAPE_SSO_BEARER_API_KEY?.trim()) return Effect.succeed(null)
+        return promise(() =>
+          getCybrosCurrentUser(
+            app.getPath("userData"),
+            process.env.THAPE_SSO_BEARER_API_KEY,
+            () => {
+              delete process.env.THAPE_SSO_BEARER_API_KEY
+              notifyDesktopTabState()
+            },
+            (input, init) => net.fetch(input, init),
+          ),
+        )
+      },
       AppSignInToThapeSso: ({ credentials }) =>
         promise(async () => {
           process.env.THAPE_SSO_BEARER_API_KEY = await signInToThapeSso(
