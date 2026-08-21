@@ -79,16 +79,23 @@ export const latestCompaction = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
 })
 
+type MessageRow = {
+  readonly id: string
+  readonly session_id: string
+  readonly type: SessionMessage.Type
+  readonly data: object
+}
+
 // Every stored message row decodes through here, so rows written in older shapes are upgraded in one place.
-const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
-  ...SessionLegacy.message(row.type, row.data),
+const rowInput = (row: MessageRow) => ({
+  ...SessionLegacy.message(row.type, { ...row.data }),
   id: row.id,
   type: row.type,
 })
 
-export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelect) => decodeSync(rowInput(row))
+export const decodeMessageRowSync = (row: MessageRow) => decodeSync(rowInput(row))
 
-export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
+export const decodeMessageRow = (row: MessageRow) =>
   decode(rowInput(row)).pipe(
     Effect.mapError(
       () =>
