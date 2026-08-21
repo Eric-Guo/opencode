@@ -17,12 +17,10 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useNotification } from "@/shell/notifications/notification"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
-import { ServerConnection } from "@/runtime/server/registry"
 import { useSettingsCommand } from "@/settings/command"
 import { useSettings } from "@/settings/model"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { useTabs, type PendingSession } from "@/shell/tabs/tabs"
-import { requireServerKey } from "@/shell/routes/session"
 import { useSessionModel } from "./model"
 import { SessionPanelFrame } from "./session-frame"
 import { SessionIdentityHeader } from "./session-identity-header"
@@ -33,7 +31,7 @@ import { SessionScreenView } from "./screen"
 import { PreparingComposer } from "./preparing-composer"
 
 export function TargetSessionRouteContent() {
-  const params = useParams<{ serverKey: string; id: string }>()
+  const params = useParams<{ id: string }>()
   const data = useData()
   const server = useServer()
   const tabs = useTabs()
@@ -45,7 +43,7 @@ export function TargetSessionRouteContent() {
       <SessionDocumentTitle sessionID={() => params.id} />
       <ModelsProvider directory={directory()}>
         <TargetSessionSettingsCommand />
-        <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
+        <SessionRouteErrorBoundary sessionID={params.id}>
           <Show when={tabs.pendingSession(server.key, params.id)} fallback={<ResolvedTargetSessionRoute />}>
             {(pending) => <PreparingSession sessionID={params.id} pending={pending()} />}
           </Show>
@@ -106,12 +104,12 @@ function TargetSessionSettingsCommand() {
   return null
 }
 
-function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key }>) {
+function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string }>) {
   return (
     <ErrorBoundary
       fallback={(error) => (
         <SessionStatePanel>
-          <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+          <SessionErrorFallback error={error} sessionID={props.sessionID} />
         </SessionStatePanel>
       )}
     >
