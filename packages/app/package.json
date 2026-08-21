@@ -8,6 +8,8 @@
     "./desktop": "./src/desktop.ts",
     "./desktop-menu": "./src/shell/commands/desktop-menu.ts",
     "./loopback": "./src/runtime/server/loopback.ts",
+    "./composer/editor": "./src/composer/editor/editor.tsx",
+    "./composer/editor/interaction": "./src/composer/editor/interaction.ts",
     "./i18n/desktop-native": "./src/runtime/i18n/desktop-native.ts",
     "./vite": "./vite.js",
     "./index.css": "./src/index.css"
