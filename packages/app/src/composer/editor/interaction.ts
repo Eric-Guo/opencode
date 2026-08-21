@@ -114,6 +114,7 @@ export function createComposerEditor(input: {
   attachments?: ComposerAttachmentConfig
   capabilities?: ComposerCapabilities
   onChange?: () => void
+  identity?: Accessor<unknown>
 }) {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
@@ -182,6 +183,16 @@ export function createComposerEditor(input: {
       { defer: true },
     ),
   )
+
+  if (input.identity) {
+    createEffect(
+      on(
+        input.identity,
+        () => setState(reconcile({ ...createComposerInteractionState(), mode: draft.state.mode ?? "normal" })),
+        { defer: true },
+      ),
+    )
+  }
 
   function addPart(part: ComposerPersistedState["prompt"][number]) {
     if (isAttachment(part)) return false
