@@ -30,6 +30,7 @@ export const api: ElectronAPI = {
     send: (request) => send("BrowserPane", { request }),
     onEvent: (callback) => listen("BrowserPaneEvent", (value) => callback(value)),
   },
+  getCybrosCurrentUser: () => invoke("AppGetCybrosCurrentUser").then(mutable),
   signInToThapeSso: (credentials) => invoke("AppSignInToThapeSso", { credentials }),
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
