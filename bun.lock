@@ -34,6 +34,7 @@
       "name": "@opencode-ai/7777",
       "version": "1.18.9",
       "dependencies": {
+        "@opencode-ai/app": "workspace:*",
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/session-ui": "workspace:*",
