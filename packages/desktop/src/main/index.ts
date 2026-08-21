@@ -1,6 +1,7 @@
-import { NodeFileSystem, NodePath, NodeRuntime } from "@effect/platform-node"
+import { layer } from "@effect/platform-node/NodeServices"
+import { runMain } from "@effect/platform-node/NodeRuntime"
 import { app } from "electron"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { Ipc } from "./ipc"
 import { DesktopInitialization } from "./lifecycle/desktop-initialization"
 import { ApplicationLifecycle } from "./lifecycle"
@@ -26,7 +27,7 @@ runIpc().pipe(
   Effect.provide(UpdaterLive.layer),
   Effect.provide(DesktopInitialization.layer),
   Effect.provide(ApplicationLifecycle.layer),
-  Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
+  Effect.provide(layer),
   Effect.scoped,
-  NodeRuntime.runMain,
+  runMain,
 )
