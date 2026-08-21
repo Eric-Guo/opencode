@@ -47,6 +47,10 @@ export function createSessionResolution<T>(
       onCleanup(() => {
         stale = true
       })
+      if (!id) {
+        setStatus(undefined)
+        return
+      }
       if (cached() && !options?.children) {
         setStatus({ id, store, state: "settled" })
         return
