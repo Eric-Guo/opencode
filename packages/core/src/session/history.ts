@@ -6,7 +6,7 @@ import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Database } from "../database/database.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
-import type { SessionSchema } from "./schema.js"
+import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionBlob } from "./blob.js"
@@ -122,9 +122,16 @@ export const withParts = Effect.fnUntraced(function* (
   })
 })
 
+type MessageRow = {
+  readonly id: string
+  readonly session_id: string
+  readonly type: SessionMessage.Type
+  readonly data: object
+}
+
 // Every stored message row decodes through here, so rows written in older shapes are upgraded in one place.
-const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
-  ...SessionLegacy.message(row.type, row.data),
+const rowInput = (row: MessageRow) => ({
+  ...SessionLegacy.message(row.type, { ...row.data }),
   id: row.id,
   type: row.type,
 })
@@ -132,15 +139,15 @@ const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
 export const decodePartRowSync = (row: typeof SessionPartTable.$inferSelect) =>
   decodePartSync(SessionLegacy.part({ ...row.data, type: row.type }))
 
-export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelect) => decodeSync(rowInput(row))
+export const decodeMessageRowSync = (row: MessageRow) => decodeSync(rowInput(row))
 
-const decodeError = (row: typeof SessionMessageTable.$inferSelect) => () =>
+const decodeError = (row: MessageRow) => () =>
   new MessageDecodeError({
-    sessionID: row.session_id,
-    messageID: row.id,
+    sessionID: SessionSchema.ID.make(row.session_id),
+    messageID: SessionMessage.ID.make(row.id),
   })
 
-export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
+export const decodeMessageRow = (row: MessageRow) =>
   decode(rowInput(row)).pipe(Effect.mapError(decodeError(row)))
 
 /** Decodes a row without its blobs, so user files may stay refs. Only for readers that never use file bytes. */
