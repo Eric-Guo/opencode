@@ -92,8 +92,9 @@ export const api: ElectronAPI = {
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
   onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
 
-  openDirectoryPicker: (opts) => invoke("FilesOpenDirectoryPicker", { options: opts }).then(mutable),
-  openFilePicker: (opts) => invoke("FilesOpenFilePicker", { options: opts }).then(mutable),
+  openDirectoryPicker: (opts) =>
+    invoke("FilesOpenDirectoryPicker", opts === undefined ? {} : { options: opts }).then(mutable),
+  openFilePicker: (opts) => invoke("FilesOpenFilePicker", opts === undefined ? {} : { options: opts }).then(mutable),
   readPickedFile: (token, path) => invoke("FilesReadPickedFile", { token, path }).then(toArrayBuffer),
   releasePickedFiles: (token) => invoke("FilesReleasePickedFiles", { token }),
   getPathForFile: (file) => window.electron.getPathForFile(file),
