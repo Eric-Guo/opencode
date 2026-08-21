@@ -14,3 +14,12 @@ test("flushes the latest buffered draft and stores blobs", () => {
   expect(store.getBlob(id)).toEqual(bytes)
   store.close()
 })
+
+test("allows repeated shutdown flushes", () => {
+  const store = createDesktopDraftStore(":memory:")
+  store.set("prompt", "latest")
+  store.close()
+
+  expect(() => store.flush()).not.toThrow()
+  expect(() => store.close()).not.toThrow()
+})
