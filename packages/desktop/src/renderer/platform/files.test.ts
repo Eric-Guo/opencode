@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { FilePickerOptions } from "../../shared/ipc-contract"
 import { createDesktopFiles } from "./files"
 
 function fileApi(events: string[]) {
@@ -33,6 +34,21 @@ function fileApi(events: string[]) {
 }
 
 describe("desktop attachment files", () => {
+  test("omits undefined attachment picker options", async () => {
+    const api = fileApi([])
+    let received: FilePickerOptions | undefined
+    api.openFilePicker = async (options?: FilePickerOptions) => {
+      received = options
+      return null
+    }
+    const files = createDesktopFiles(api, "macos", ["png"])
+
+    await files.openAttachmentPickerDialog({ defaultPath: "/workspace", multiple: true }, async () => {})
+
+    expect(received).toEqual({ defaultPath: "/workspace", multiple: true, extensions: ["png"] })
+    expect(Object.hasOwn(received ?? {}, "title")).toBe(false)
+  })
+
   test("reads selected files sequentially and releases the token", async () => {
     const events: string[] = []
     const files = createDesktopFiles(fileApi(events), "windows", ["txt"])
