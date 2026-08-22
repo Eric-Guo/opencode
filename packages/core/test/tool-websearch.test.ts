@@ -37,16 +37,18 @@ const assertions: Permission.AssertInput[] = []
 const queries: WebSearch.Input[] = []
 const formRequests: Form.CreateInput[] = []
 let selection: WebSearch.ID | "random" | false | undefined
-const providers = [
+const defaultProviders = [
   { id: WebSearch.ID.make("exa"), name: "Exa" },
   { id: WebSearch.ID.make("parallel"), name: "Parallel" },
 ]
+let providers = defaultProviders
 let providerRequired = false
 let formResponse: Form.TerminalState = { status: "cancelled" }
 const formResponses: Form.TerminalState[] = []
 let queryBarrier: Deferred.Deferred<void> | undefined
 let synchronizedQueries = 0
 let queryError: WebSearch.Error | undefined
+const queryErrors: WebSearch.Error[] = []
 let result = new WebSearch.Response({
   providerID: WebSearch.ID.make("exa"),
   results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
@@ -63,6 +65,8 @@ beforeEach(() => {
   queryBarrier = undefined
   synchronizedQueries = 0
   queryError = undefined
+  queryErrors.length = 0
+  providers = defaultProviders
   result = new WebSearch.Response({
     providerID: WebSearch.ID.make("exa"),
     results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
@@ -102,11 +106,13 @@ const websearch = Layer.succeed(
           if (synchronizedQueries === 5) yield* Deferred.succeed(queryBarrier, undefined)
           yield* Deferred.await(queryBarrier)
         }
+        const queryFailure = queryErrors.shift()
+        if (queryFailure) return yield* queryFailure
         if (queryError) return yield* queryError
         if (providerRequired && !selection) return yield* new WebSearch.ProviderRequiredError()
         if (selection)
           return new WebSearch.Response({
-            providerID: selection === "random" ? result.providerID : WebSearch.ID.make(selection),
+            providerID: input.providerID ?? (selection === "random" ? result.providerID : WebSearch.ID.make(selection)),
             results: result.results,
           })
         return result
@@ -268,6 +274,7 @@ describe("WebSearchTool registration", () => {
 
   it.effect("asks once and uses the default provider when web search is first enabled", () =>
     Effect.gen(function* () {
+      providers = [...defaultProviders, { id: WebSearch.ID.make("searchkimi"), name: "SearchKimi" }]
       providerRequired = true
       formResponse = { status: "answered", answer: { choice: "allow" } }
       const registry = yield* Tool.Service
@@ -278,8 +285,8 @@ describe("WebSearchTool registration", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-enable", name: "websearch", input: { query: "effect" } },
         }),
-      ).toMatchObject({ status: "completed", metadata: { provider: "exa" } })
-      expect(selection).toBe("random")
+      ).toMatchObject({ status: "completed", metadata: { provider: "searchkimi" } })
+      expect(selection).toBe(WebSearch.ID.make("searchkimi"))
       expect(queries).toHaveLength(2)
       expect(formRequests).toEqual([
         {
@@ -296,7 +303,7 @@ describe("WebSearchTool registration", () => {
               options: [
                 {
                   value: "allow",
-                  label: "Allow search via Exa, Parallel",
+                  label: "Allow search via SearchKimi",
                 },
                 {
                   value: "choose",
@@ -315,7 +322,7 @@ describe("WebSearchTool registration", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-enabled", name: "websearch", input: { query: "effect schema" } },
         }),
-      ).toMatchObject({ status: "completed", metadata: { provider: "exa" } })
+      ).toMatchObject({ status: "completed", metadata: { provider: "searchkimi" } })
       expect(formRequests).toHaveLength(1)
       expect(queries).toHaveLength(3)
     }),
@@ -362,6 +369,7 @@ describe("WebSearchTool registration", () => {
 
   it.effect("shares provider consent across concurrent searches", () =>
     Effect.gen(function* () {
+      providers = [...defaultProviders, { id: WebSearch.ID.make("searchkimi"), name: "SearchKimi" }]
       providerRequired = true
       formResponse = { status: "answered", answer: { choice: "allow" } }
       queryBarrier = yield* Deferred.make<void>()
@@ -385,7 +393,7 @@ describe("WebSearchTool registration", () => {
 
       expect(results.every((item) => item.status === "completed")).toBe(true)
       expect(formRequests).toHaveLength(1)
-      expect(selection).toBe("random")
+      expect(selection).toBe(WebSearch.ID.make("searchkimi"))
     }),
   )
 
@@ -477,6 +485,48 @@ describe("WebSearchTool registration", () => {
         status: "error",
         error: { type: "tool.execution", message: "SearchKimi API key is not configured" },
       })
+    }),
+  )
+
+  it.effect("falls back from SearchKimi to Exa", () =>
+    Effect.gen(function* () {
+      providers = [...defaultProviders, { id: WebSearch.ID.make("searchkimi"), name: "SearchKimi" }]
+      selection = WebSearch.ID.make("searchkimi")
+      queryErrors.push(
+        new WebSearch.RequestError({
+          providerID: WebSearch.ID.make("searchkimi"),
+          cause: new Error("SearchKimi API key is not configured"),
+        }),
+      )
+      result = new WebSearch.Response({
+        providerID: WebSearch.ID.make("exa"),
+        results: [{ url: "https://example.com/exa", title: "Exa result", content: "fallback", time: {} }],
+      })
+      const progress: Tool.Metadata[] = []
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-fallback", name: "websearch", input: { query: "effect" } },
+          progress: (metadata) => Effect.sync(() => progress.push(metadata)),
+        }),
+      ).toEqual({
+        status: "completed",
+        output: {
+          provider: "exa",
+          results: [{ url: "https://example.com/exa", title: "Exa result", content: "fallback", time: {} }],
+        },
+        content: [{ type: "text", text: "## [Exa result](https://example.com/exa)\n\nfallback" }],
+        metadata: { provider: "exa" },
+      })
+      expect(queries).toEqual([
+        { query: "effect", providerID: WebSearch.ID.make("searchkimi") },
+        { query: "effect", providerID: WebSearch.ID.make("exa") },
+      ])
+      expect(progress).toEqual([{ provider: "searchkimi" }, { provider: "exa" }])
+      expect(selection).toBe(WebSearch.ID.make("searchkimi"))
     }),
   )
 })
