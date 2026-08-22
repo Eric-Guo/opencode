@@ -1,4 +1,4 @@
-import type { Prompt } from "./state"
+import type { Prompt } from "./types"
 
 export function clonePrompt(prompt: Prompt): Prompt {
   return prompt.map((part) =>
