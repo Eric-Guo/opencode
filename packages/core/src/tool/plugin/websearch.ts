@@ -166,11 +166,17 @@ export const Plugin = {
                 const fallback = `Unable to search the web for ${input.query}`
                 if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
                 const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
+                if (status === undefined) {
+                  const message =
+                    error.cause instanceof Error &&
+                    (error.cause.message.endsWith("API key is not configured") ||
+                      error.cause.message.endsWith("request timed out"))
+                      ? error.cause.message
+                      : fallback
+                  return new ToolFailure({ message, metadata: { provider: error.providerID } })
+                }
                 return new ToolFailure({
-                  message:
-                    status === undefined
-                      ? fallback
-                      : (httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`),
+                  message: httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`,
                   error,
                   metadata: { provider: error.providerID },
                 })
