@@ -10,6 +10,8 @@ import { WebSearch } from "../../websearch.js"
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
+const DEFAULT_PROVIDER = WebSearch.ID.make("searchkimi")
+const FALLBACK_PROVIDER = WebSearch.ID.make("exa")
 const providerSelectionLock = Semaphore.makeUnsafe(1)
 
 export const description = `Search the web using the user's selected search integration. Use this for current information beyond knowledge cutoff.
@@ -65,7 +67,8 @@ export const Plugin = {
                         Effect.gen(function* () {
                           if (yield* websearch.default()) return
                           const providers = (yield* ctx.websearch.providers()).data
-                          const defaultProvider = providers[0]
+                          const defaultProvider =
+                            providers.find((provider) => provider.id === DEFAULT_PROVIDER) ?? providers[0]
                           if (!defaultProvider) return yield* new WebSearch.ProviderRequiredError()
                           const response = yield* forms.ask({
                             sessionID: context.sessionID,
@@ -81,7 +84,7 @@ export const Plugin = {
                                 options: [
                                   {
                                     value: "allow",
-                                    label: `Allow search via ${providers.map((provider) => provider.name).join(", ")}`,
+                                    label: `Allow search via ${defaultProvider.name}`,
                                   },
                                   {
                                     value: "choose",
@@ -121,15 +124,14 @@ export const Plugin = {
                               : undefined
                           if (selection?.status === "cancelled")
                             return yield* Effect.fail(new Error("Web search cancelled"))
-                          const providerID = selection?.answer.provider ?? "random"
+                          const providerID = selection?.answer.provider ?? defaultProvider.id
                           if (
                             typeof providerID !== "string" ||
-                            (providerID !== "random" && !providers.some((provider) => provider.id === providerID))
+                            !providers.some((provider) => provider.id === providerID)
                           )
                             return yield* new WebSearch.ProviderRequiredError()
-                          yield* websearch.select(providerID === "random" ? "random" : WebSearch.ID.make(providerID))
-                          if (providerID !== "random") return WebSearch.ID.make(providerID)
-                          return providers[Math.floor(Math.random() * providers.length)]?.id
+                          yield* websearch.select(WebSearch.ID.make(providerID))
+                          return WebSearch.ID.make(providerID)
                         }),
                       )
                       .pipe(
@@ -146,7 +148,21 @@ export const Plugin = {
                       )
                   }),
                 )
-              const result = yield* search()
+              const result = yield* search().pipe(
+                Effect.catch((error) => {
+                  if (!Schema.is(WebSearch.RequestError)(error) || error.providerID !== DEFAULT_PROVIDER)
+                    return Effect.fail(error)
+                  return ctx.websearch.providers().pipe(
+                    Effect.flatMap((providers) => {
+                      if (!providers.data.some((provider) => provider.id === FALLBACK_PROVIDER))
+                        return Effect.fail(error)
+                      return context
+                        .progress({ provider: FALLBACK_PROVIDER })
+                        .pipe(Effect.andThen(ctx.websearch.query({ ...input, providerID: FALLBACK_PROVIDER })))
+                    }),
+                  )
+                }),
+              )
               const output = {
                 provider: result.data.providerID,
                 results: result.data.results,
