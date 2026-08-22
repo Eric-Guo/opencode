@@ -181,8 +181,15 @@ export const Plugin = {
                       error,
                       metadata: { provider: error.providerID },
                     })
-                  case undefined:
-                    return new ToolFailure({ message: fallback, error, metadata: { provider: error.providerID } })
+                  case undefined: {
+                    const message =
+                      error.cause instanceof Error &&
+                      (error.cause.message.endsWith("API key is not configured") ||
+                        error.cause.message.endsWith("request timed out"))
+                        ? error.cause.message
+                        : fallback
+                    return new ToolFailure({ message, metadata: { provider: error.providerID } })
+                  }
                   default:
                     return new ToolFailure({
                       message: `Web search request failed (HTTP ${status})`,
