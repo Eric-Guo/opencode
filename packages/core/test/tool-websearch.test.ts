@@ -395,4 +395,26 @@ describe("WebSearchTool registration", () => {
       )
     }),
   )
+
+  it.effect("preserves safe provider configuration failures", () =>
+    Effect.gen(function* () {
+      selection = WebSearch.ID.make("exa")
+      queryError = new WebSearch.RequestError({
+        providerID: WebSearch.ID.make("searchkimi"),
+        cause: new Error("SearchKimi API key is not configured"),
+      })
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-config", name: "websearch", input: { query: "effect" } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: { type: "tool.execution", message: "SearchKimi API key is not configured" },
+      })
+    }),
+  )
 })
