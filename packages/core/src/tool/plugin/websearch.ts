@@ -14,6 +14,8 @@ import { WebSearchMcp } from "../../plugin/websearch/mcp.js"
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
+const DEFAULT_PROVIDER = WebSearch.ID.make("searchkimi")
+const FALLBACK_PROVIDER = WebSearch.ID.make("exa")
 const providerSelectionLock = Semaphore.makeUnsafe(1)
 const httpErrors = new Map([
   [429, "Web search rate limited (HTTP 429)"],
@@ -81,7 +83,8 @@ export const Plugin = {
                       Effect.gen(function* () {
                         if (yield* websearch.default()) return
                         const providers = (yield* ctx.websearch.providers()).data
-                        const defaultProvider = providers[0]
+                        const defaultProvider =
+                          providers.find((provider) => provider.id === DEFAULT_PROVIDER) ?? providers[0]
                         if (!defaultProvider) return yield* new WebSearch.ProviderRequiredError()
                         const response = yield* forms.ask({
                           sessionID: context.sessionID,
@@ -97,7 +100,7 @@ export const Plugin = {
                               options: [
                                 {
                                   value: "allow",
-                                  label: `Allow search via ${providers.map((provider) => provider.name).join(", ")}`,
+                                  label: `Allow search via ${defaultProvider.name}`,
                                 },
                                 {
                                   value: "choose",
@@ -137,11 +140,7 @@ export const Plugin = {
                             : undefined
                         if (selection?.status === "cancelled")
                           return yield* Effect.fail(new Error("Web search cancelled"))
-                        const providerID = selection?.answer.provider ?? "random"
-                        if (providerID === "random") {
-                          yield* websearch.select("random")
-                          return
-                        }
+                        const providerID = selection?.answer.provider ?? defaultProvider.id
                         const provider = providers.find((provider) => provider.id === providerID)
                         if (!provider) return yield* new WebSearch.ProviderRequiredError()
                         yield* websearch.select(provider.id)
@@ -155,6 +154,17 @@ export const Plugin = {
                       }),
                       Effect.flatMap(search),
                     )
+                }),
+                Effect.catch((error) => {
+                  if (!Schema.is(WebSearch.RequestError)(error) || error.providerID !== DEFAULT_PROVIDER)
+                    return Effect.fail(error)
+                  return ctx.websearch.providers().pipe(
+                    Effect.flatMap((providers) => {
+                      if (!providers.data.some((provider) => provider.id === FALLBACK_PROVIDER))
+                        return Effect.fail(error)
+                      return search(FALLBACK_PROVIDER)
+                    }),
+                  )
                 }),
               )
               const output = result.results.map((hit) => ({
