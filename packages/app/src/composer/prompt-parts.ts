@@ -1,7 +1,7 @@
-import type { ContentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "./state"
+import type { ContentPart, Prompt } from "./types"
 
 /** Parts that sit beside the text rather than inside it. */
-export function isAttachment(part: ContentPart): part is ImageAttachmentPart | PathAttachmentPart {
+export function isAttachment<T extends ContentPart>(part: T): part is Extract<T, { type: "image" | "path" }> {
   return part.type === "image" || part.type === "path"
 }
 
