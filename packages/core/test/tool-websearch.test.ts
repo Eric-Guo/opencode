@@ -44,7 +44,8 @@ class Fixture {
   formResponse: Form.TerminalState = { status: "cancelled" }
   formResponses: Form.TerminalState[] = []
   formWait = Effect.void
-  error: HttpClientError.HttpClientError | undefined
+  error: HttpClientError.HttpClientError | Error | undefined
+  searchKimiError: Error | undefined
   results: readonly WebSearch.Result[] = [
     { url: "https://example.com", title: "Search results", content: "search results", time: {} },
   ]
@@ -62,7 +63,7 @@ const setup = Effect.gen(function* () {
         execute: () =>
           Effect.gen(function* () {
             fixture.events.push("query")
-            if (fixture.error) return yield* fixture.error
+            if (fixture.error) return yield* Effect.fail(fixture.error)
             return fixture.results
           }),
       }),
@@ -94,6 +95,18 @@ const setup = Effect.gen(function* () {
     ]),
   )
   return Object.assign(fixture, { websearch, kv, registry: Context.get(context, Tool.Service) })
+})
+
+const setupSearchKimi = Effect.gen(function* () {
+  const fixture = yield* setup
+  yield* fixture.websearch.transform((draft) =>
+    draft.add({
+      id: WebSearch.ID.make("searchkimi"),
+      name: "SearchKimi",
+      execute: () => (fixture.searchKimiError ? Effect.fail(fixture.searchKimiError) : Effect.succeed(fixture.results)),
+    }),
+  )
+  return fixture
 })
 
 describe("WebSearchTool registration", () => {
@@ -204,7 +217,7 @@ describe("WebSearchTool registration", () => {
 
   it.effect("asks once and uses the default provider when web search is first enabled", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setupSearchKimi
       fixture.formResponse = { status: "answered", answer: { choice: "allow" } }
       const registry = fixture.registry
 
@@ -214,9 +227,9 @@ describe("WebSearchTool registration", () => {
         call: { type: "tool-call", id: "call-enable", name: "websearch", input: { query: "effect" } },
       })
       expect(first.status).toBe("completed")
-      expect(["exa", "parallel"]).toContain(first.metadata?.provider)
+      expect(first.metadata?.provider).toBe("searchkimi")
       expect(first.metadata?.provider).toBe(fixture.websearch.queries[1]?.providerID)
-      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
+      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe(WebSearch.ID.make("searchkimi"))
       expect(fixture.websearch.queries).toHaveLength(2)
       expect(fixture.formRequests).toEqual([
         {
@@ -233,7 +246,7 @@ describe("WebSearchTool registration", () => {
               options: [
                 {
                   value: "allow",
-                  label: "Allow search via Exa, Parallel",
+                  label: "Allow search via SearchKimi",
                 },
                 {
                   value: "choose",
@@ -252,7 +265,7 @@ describe("WebSearchTool registration", () => {
         call: { type: "tool-call", id: "call-enabled", name: "websearch", input: { query: "effect schema" } },
       })
       expect(second.status).toBe("completed")
-      expect(["exa", "parallel"]).toContain(second.metadata?.provider)
+      expect(second.metadata?.provider).toBe("searchkimi")
       expect(second.metadata?.provider).toBe(fixture.websearch.queries[2]?.providerID)
       expect(fixture.formRequests).toHaveLength(1)
       expect(fixture.websearch.queries).toHaveLength(3)
@@ -301,7 +314,7 @@ describe("WebSearchTool registration", () => {
 
   it.effect("shares provider consent across concurrent searches", () =>
     Effect.gen(function* () {
-      const fixture = yield* setup
+      const fixture = yield* setupSearchKimi
       fixture.formResponse = { status: "answered", answer: { choice: "allow" } }
       fixture.formWait = fixture.websearch.wait(5)
       const registry = fixture.registry
@@ -324,7 +337,7 @@ describe("WebSearchTool registration", () => {
 
       expect(results.every((item) => item.status === "completed")).toBe(true)
       expect(fixture.formRequests).toHaveLength(1)
-      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
+      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe(WebSearch.ID.make("searchkimi"))
     }),
   )
 
@@ -398,12 +411,10 @@ describe("WebSearchTool registration", () => {
 
   it.effect("preserves safe provider configuration failures", () =>
     Effect.gen(function* () {
-      selection = WebSearch.ID.make("exa")
-      queryError = new WebSearch.RequestError({
-        providerID: WebSearch.ID.make("searchkimi"),
-        cause: new Error("SearchKimi API key is not configured"),
-      })
-      const registry = yield* Tool.Service
+      const fixture = yield* setup
+      yield* fixture.websearch.select(WebSearch.ID.make("exa"))
+      fixture.error = new Error("Exa API key is not configured")
+      const registry = fixture.registry
 
       expect(
         yield* executeTool(registry, {
@@ -413,8 +424,42 @@ describe("WebSearchTool registration", () => {
         }),
       ).toEqual({
         status: "error",
-        error: { type: "tool.execution", message: "SearchKimi API key is not configured" },
+        error: { type: "tool.execution", message: "Exa API key is not configured" },
       })
+    }),
+  )
+
+  it.effect("falls back from SearchKimi to Exa", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setupSearchKimi
+      yield* fixture.websearch.select(WebSearch.ID.make("searchkimi"))
+      fixture.searchKimiError = new Error("SearchKimi API key is not configured")
+      fixture.results = [{ url: "https://example.com/exa", title: "Exa result", content: "fallback", time: {} }]
+      const progress: Tool.Metadata[] = []
+      const registry = fixture.registry
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-fallback", name: "websearch", input: { query: "effect" } },
+          progress: (metadata) => Effect.sync(() => progress.push(metadata)),
+        }),
+      ).toEqual({
+        status: "completed",
+        output: {
+          provider: "exa",
+          results: [{ url: "https://example.com/exa", title: "Exa result", content: "fallback", time: {} }],
+        },
+        content: [{ type: "text", text: "## [Exa result](https://example.com/exa)\n\nfallback" }],
+        metadata: { provider: "exa" },
+      })
+      expect(fixture.websearch.queries).toEqual([
+        { query: "effect", providerID: WebSearch.ID.make("searchkimi") },
+        { query: "effect", providerID: WebSearch.ID.make("exa") },
+      ])
+      expect(progress).toEqual([{ provider: "searchkimi" }, { provider: "exa" }])
+      expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe(WebSearch.ID.make("searchkimi"))
     }),
   )
 })
