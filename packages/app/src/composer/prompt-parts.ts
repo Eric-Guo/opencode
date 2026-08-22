@@ -1,4 +1,4 @@
-import type { ContentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "./state"
+import type { ContentPart, Prompt } from "./types"
 import { parseSessionMention, serializeSessionMention } from "@opencode/util/session-mention"
 
 export function serializePrompt(prompt: Prompt): Prompt {
@@ -24,7 +24,7 @@ export function serializePrompt(prompt: Prompt): Prompt {
 }
 
 /** Parts that sit beside the text rather than inside it. */
-export function isAttachment(part: ContentPart): part is ImageAttachmentPart | PathAttachmentPart {
+export function isAttachment<T extends ContentPart>(part: T): part is Extract<T, { type: "image" | "path" }> {
   return part.type === "image" || part.type === "path"
 }
 
