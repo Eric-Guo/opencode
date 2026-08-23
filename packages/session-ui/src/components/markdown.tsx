@@ -58,6 +58,7 @@ const renderedMarkdown = new WeakMap<
   HTMLDivElement,
   { renderer: ReturnType<typeof createMarkdownRenderer>; raw: string }
 >()
+const mermaidRequests = new WeakMap<HTMLElement, object>()
 
 function escape(text: string) {
   return text
@@ -187,6 +188,7 @@ function disposeRenderedMarkdown(root: Element) {
     ...Array.from(root.querySelectorAll<HTMLDivElement>("[data-markdown-block]")),
   ]
   blocks.forEach((block) => {
+    resetMarkdownDecorations(block)
     renderedMarkdown.get(block)?.renderer.dispose()
     renderedMarkdown.delete(block)
   })
@@ -200,6 +202,12 @@ function codeKind(language: string | undefined) {
   if (shellLanguages.has(value)) return "shell"
 }
 
+function codeLanguage(block: HTMLPreElement) {
+  const code = block.querySelector("code")
+  if (!(code instanceof HTMLElement)) return
+  return code.className.match(/(?:^|\s)language-([^\s]+)/)?.[1]
+}
+
 function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
   if (language) wrapper.dataset.language = language
   else delete wrapper.dataset.language
@@ -207,6 +215,32 @@ function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
   const kind = codeKind(language)
   if (kind) wrapper.dataset.codeKind = kind
   else delete wrapper.dataset.codeKind
+}
+
+function ensureCodeWrapper(block: HTMLPreElement, labels?: CopyLabels) {
+  const parent = block.parentElement
+  if (!parent) return
+  const wrapped = parent.getAttribute("data-component") === "markdown-code"
+  const wrapper = wrapped ? parent : document.createElement("div")
+  if (!wrapped) {
+    wrapper.setAttribute("data-component", "markdown-code")
+    parent.replaceChild(wrapper, block)
+    wrapper.appendChild(block)
+  }
+  applyCodeMetadata(wrapper, codeLanguage(block))
+  if (!labels) return
+
+  const buttons = Array.from(wrapper.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
+    (el): el is HTMLElement => el instanceof HTMLElement,
+  )
+  if (buttons.length === 0) {
+    wrapper.appendChild(createCopyButton(labels))
+    return
+  }
+  buttons.slice(1).forEach((button) => {
+    disposeCopyButton(button)
+    button.remove()
+  })
 }
 
 function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: boolean) {
@@ -226,8 +260,11 @@ function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: bool
   const attempt = `${complete ? "complete" : "streaming"}:${input.length}`
   if (wrapper.dataset.mermaidAttempt === attempt) return
   wrapper.dataset.mermaidAttempt = attempt
+  const request = {}
+  mermaidRequests.set(wrapper, request)
   void renderMermaidSvg(input)
     .then((svg) => {
+      if (mermaidRequests.get(wrapper) !== request) return
       if (!svg) {
         if (complete && code.textContent === source) clearMermaid(wrapper)
         return
@@ -238,12 +275,14 @@ function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: bool
       wrapper.dataset.mermaidReady = "true"
     })
     .catch(() => {
+      if (mermaidRequests.get(wrapper) !== request) return
       if (!complete || code.textContent !== source) return
       clearMermaid(wrapper)
     })
 }
 
 function clearMermaid(wrapper: HTMLElement) {
+  mermaidRequests.delete(wrapper)
   delete wrapper.dataset.mermaidAttempt
   delete wrapper.dataset.mermaidPending
   delete wrapper.dataset.mermaidReady
@@ -287,6 +326,29 @@ function markInlineCode(root: HTMLDivElement) {
     const kind = inlineCodeKind(code.textContent ?? "")
     if (kind) code.dataset.inlineCodeKind = kind
   }
+}
+
+function prepareMarkdown(root: HTMLDivElement) {
+  Array.from(root.querySelectorAll("pre")).forEach((block) => ensureCodeWrapper(block))
+  markInlineCode(root)
+  markCodeLinks(root)
+}
+
+function decorateMarkdown(root: HTMLDivElement, labels: CopyLabels, complete: boolean) {
+  Array.from(root.querySelectorAll("pre")).forEach((block) => {
+    ensureCodeWrapper(block, labels)
+    const wrapper = block.parentElement
+    const code = block.querySelector("code")
+    if (wrapper instanceof HTMLElement && code instanceof HTMLElement) decorateMermaid(wrapper, code, complete)
+  })
+}
+
+function resetMarkdownDecorations(root: HTMLDivElement) {
+  Array.from(root.querySelectorAll<HTMLElement>('[data-component="markdown-code"]')).forEach(clearMermaid)
+  Array.from(root.querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')).forEach((button) => {
+    disposeCopyButton(button)
+    button.remove()
+  })
 }
 
 function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
@@ -631,13 +693,14 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   const rendered = renderedMarkdown.get(next)
   // Keep live renderers in control of their DOM, including after completion.
   const source = rendered || block.mode === "live" ? document.createElement("div") : next
+  if (existing) resetMarkdownDecorations(existing)
   source.innerHTML = block.html
-  markInlineCode(source)
-  markCodeLinks(source)
+  prepareMarkdown(source)
 
   if (rendered) {
     rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)
     rendered.raw = block.raw
+    decorateMarkdown(next, labels, block.mode === "full")
     return
   }
   if (block.mode === "live") {
@@ -648,6 +711,7 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
     })
   }
 
+  decorateMarkdown(next, labels, block.mode === "full")
   if (existing) return
   if (!current) {
     container.appendChild(next)
