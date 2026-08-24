@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { Arch, type Configuration } from "electron-builder"
 import { getConfig } from "./electron-builder.config"
-import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
+import { SIDECAR_TARGETS, nodePtyPackage } from "./script/utils"
 import { verifyPreviewBinding } from "./script/preview-binding"
 
 // Use electron-builder's matcher so the tests also cover its glob and directory traversal semantics.
@@ -173,9 +173,11 @@ test("shared packaging defaults", async () => {
   expect(config.nsis?.include).toBe(include)
   expect(await Bun.file(include).exists()).toBe(true)
   expect(config.files).toContain("!resources/opencode-cli*")
-  expect(config.extraResources).toContainEqual(
-    { from: "resources/", to: "", filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"] },
-  )
+  expect(config.extraResources).toContainEqual({
+    from: "resources/",
+    to: "",
+    filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
+  })
 })
 
 test("trims external dependencies without excluding runtime files", () => {
@@ -233,11 +235,11 @@ test("trims external dependencies without excluding runtime files", () => {
     expect(included("@zip.js/zip.js/lib", dirStats)).toBe(true)
   }
 
-  for (const item of CLI_BINARIES) {
+  for (const item of SIDECAR_TARGETS) {
     const targetFilter = trimFilter(import.meta.dirname, load("prod", item.target))
     const active = nodePtyPackage(item.target)
 
-    for (const candidate of CLI_BINARIES) {
+    for (const candidate of SIDECAR_TARGETS) {
       const pkg = nodePtyPackage(candidate.target)
       const included = targetFilter(path.join(import.meta.dirname, "node_modules", pkg, "lib/index.js"), fileStats)
       expect(included).toBe(pkg === active)
@@ -337,7 +339,7 @@ for (const channel of ["beta", "prod"] as const) {
 }
 
 test("excludes native dependencies for other platforms and Windows architectures", () => {
-  for (const target of CLI_BINARIES.filter((item) => item.os === "win32")) {
+  for (const target of SIDECAR_TARGETS.filter((item) => item.os === "win32")) {
     const config = load("prod", target.rustTarget)
 
     expect(config.win?.files).toEqual(
