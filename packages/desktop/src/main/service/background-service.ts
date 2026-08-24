@@ -1,10 +1,21 @@
-import { app } from "electron"
-import { Context, Effect, FileSystem, Layer, Path } from "effect"
-import type { ServerReadyData } from "../../shared/ipc-contract"
-import { BackgroundServiceState } from "./background-service-state"
-import { cleanStages, DesktopCli } from "./desktop-cli"
-
 export * as BackgroundService from "./background-service"
+
+import { randomUUID } from "node:crypto"
+import { createServer } from "node:net"
+import { fileURLToPath } from "node:url"
+import { app, utilityProcess } from "electron"
+import type { UtilityProcess } from "electron"
+import { Context, Effect, Layer } from "effect"
+import type { ServerReadyData } from "../../shared/ipc-contract"
+import { Shutdown } from "../lifecycle/shutdown"
+import { BackgroundServiceState } from "./background-service-state"
+
+type SidecarMessage =
+  | { type: "starting"; stage: string }
+  | { type: "diagnostic"; message: string }
+  | { type: "ready" }
+  | { type: "stopped" }
+  | { type: "error"; error: { message: string; stack?: string } }
 
 export interface Interface {
   readonly connection: Effect.Effect<ServerReadyData>
@@ -16,55 +27,95 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
-    return Service.of(
-      yield* BackgroundServiceState.make({
-        initial: connect("initial").pipe(Effect.provide(context)),
-        reconnect: connect("reconnect").pipe(Effect.provide(context), Effect.orDie),
-      }),
-    )
+    const child = { current: undefined as UtilityProcess | undefined }
+    const runFork = Effect.runForkWith(yield* Effect.context())
+    const connect = Effect.tryPromise(async () => {
+      await app.whenReady()
+      if (child.current) await stop(child.current)
+      const port = await allocatePort()
+      const password = randomUUID()
+      child.current = await start(port, password, (message) =>
+        runFork(Effect.logInfo("embedded server sidecar", { message })),
+      )
+      return {
+        url: `http://127.0.0.1:${port}`,
+        password,
+      } satisfies ServerReadyData
+    })
+    const state = yield* BackgroundServiceState.make({ initial: connect, reconnect: connect.pipe(Effect.orDie) })
+    const shutdown = yield* Shutdown.Service
+    const stopCurrent = Effect.promise(async () => {
+      if (!child.current) return
+      await stop(child.current)
+      child.current = undefined
+    })
+    const removeShutdown = yield* shutdown.add(stopCurrent)
+    yield* Effect.addFinalizer(() => Effect.sync(removeShutdown).pipe(Effect.andThen(stopCurrent)))
+    return Service.of(state)
   }),
 )
 
-const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial" | "reconnect") {
-  yield* Effect.logInfo("starting v2 background service")
-  const path = yield* Path.Path
-  const desktopCli = yield* DesktopCli.Service
-  const runFork = Effect.runForkWith(yield* Effect.context())
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
-  const cli = yield* desktopCli.resolve
-  const version = mode === "initial" ? cli.version : undefined
-  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
-  const client = yield* Effect.promise(() => import("@opencode-ai/client/service"))
-  const service = yield* Effect.tryPromise(() =>
-    client.Service.ensure({
-      file:
-        isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-          ? path.join(app.getPath("userData"), "opencode", "service-local.json")
-          : undefined,
-      version,
-      command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
-      onStart: (reason, previousVersion) =>
-        runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
-    }),
-  )
-  if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
-  const url = new URL(service.url)
-  if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
-  yield* Effect.logInfo("v2 CLI background service ready", {
-    OPENCODE_SERVER_PASSWORD: service.auth.password,
-    version,
-    ...endpoint(url.origin),
+function start(port: number, password: string, diagnostic: (message: string) => void) {
+  return new Promise<UtilityProcess>((resolve, reject) => {
+    const child = utilityProcess.fork(fileURLToPath(new URL("./sidecar.js", import.meta.url)), [], {
+      serviceName: "OpenCode Server",
+      stdio: "inherit",
+    })
+    const finish = (error?: Error) => {
+      clearTimeout(timeout)
+      child.off("message", onMessage)
+      child.off("exit", onExit)
+      if (!error) return resolve(child)
+      child.kill()
+      reject(error)
+    }
+    const onMessage = (value: unknown) => {
+      const message = value as SidecarMessage
+      if (message.type === "diagnostic") diagnostic(message.message)
+      if (message.type === "starting") diagnostic(message.stage)
+      if (message.type === "ready") finish()
+      if (message.type === "error")
+        finish(Object.assign(new Error(message.error.message), { stack: message.error.stack }))
+    }
+    const onExit = (code: number) => finish(new Error(`Embedded server exited during startup with code ${code}`))
+    const timeout = setTimeout(() => finish(new Error("Embedded server startup timed out")), 30_000)
+    child.on("message", onMessage)
+    child.once("exit", onExit)
+    child.once("spawn", () =>
+      child.postMessage({
+        type: "start",
+        hostname: "127.0.0.1",
+        port,
+        password,
+        userDataPath: app.getPath("userData"),
+      }),
+    )
   })
-  if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
-  return {
-    url: url.origin,
-    password: service.auth.password,
-  } satisfies ServerReadyData
-})
+}
 
-function endpoint(url: string | undefined) {
-  if (!url || !URL.canParse(url)) return {}
-  const parsed = new URL(url)
-  return { url, hostname: parsed.hostname, port: parsed.port }
+function stop(child: UtilityProcess) {
+  if (!child.pid) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      child.kill()
+      resolve()
+    }, 5_000)
+    child.once("exit", () => {
+      clearTimeout(timeout)
+      resolve()
+    })
+    child.postMessage({ type: "stop" })
+  })
+}
+
+function allocatePort() {
+  return new Promise<number>((resolve, reject) => {
+    const server = createServer()
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address()
+      if (typeof address === "object" && address) return server.close(() => resolve(address.port))
+      server.close(() => reject(new Error("Failed to allocate an embedded server port")))
+    })
+  })
 }
