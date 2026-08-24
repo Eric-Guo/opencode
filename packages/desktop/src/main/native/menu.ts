@@ -16,7 +16,6 @@ import { nativeT } from "./translations"
 type Deps = {
   trigger: (id: string) => void
   checkForUpdates: () => void
-  installCli: () => void
   createWindow: () => void
   openExternal: (url: string) => void
   relaunch: () => void
@@ -30,7 +29,9 @@ export function createMenu(deps: Deps) {
     return {
       label: nativeT(menu.labelKey),
       submenu: menu.items
-        ?.filter((entry) => desktopMenuVisible(entry, "macos"))
+        ?.filter(
+          (entry) => desktopMenuVisible(entry, "macos") && (entry.type !== "item" || entry.action !== "app.installCli"),
+        )
         .map((entry) => nativeItem(entry, deps)),
     }
   })
@@ -61,7 +62,6 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
     item.click = () =>
       runDesktopMenuAction(BrowserWindow.getFocusedWindow(), action, {
         checkForUpdates: deps.checkForUpdates,
-        installCli: deps.installCli,
         createWindow: deps.createWindow,
         relaunch: deps.relaunch,
       })
