@@ -1,15 +1,10 @@
 export * as Wsl from "./start"
 
-import { app } from "electron"
-import { Context, Effect, FileSystem, Layer, Path } from "effect"
+import { Context, Effect, Exit, FileSystem, Layer, Path } from "effect"
 import { Shutdown } from "../lifecycle/shutdown"
+import { DesktopCli } from "../service/desktop-cli"
 import { WSL_SERVERS_KEY } from "../storage/keys"
 import { WslIpc } from "./ipc"
-
-type WslCli = {
-  readonly version: string
-  readonly wslBuild?: { readonly script: string; readonly output: string }
-}
 
 export interface Interface extends WslIpc.Interface {
   readonly stop: Effect.Effect<void>
@@ -20,17 +15,9 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const cli = {
-      version: process.env.OPENCODE_VERSION ?? app.getVersion(),
-      wslBuild:
-        app.isPackaged || !process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD || !process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT
-          ? undefined
-          : {
-              script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD,
-              output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT,
-            },
-    } satisfies WslCli
-    const wsl = yield* makeWsl(cli)
+    const desktopCli = yield* DesktopCli.Service
+    const cli = yield* desktopCli.resolve.pipe(Effect.exit)
+    const wsl = Exit.isSuccess(cli) ? yield* makeWsl(cli.value) : { ...WslIpc.create(), stop: Effect.void }
     const shutdown = yield* Shutdown.Service
     const removeShutdown = yield* shutdown.add(wsl.stop)
     yield* Effect.addFinalizer(() => Effect.sync(removeShutdown).pipe(Effect.andThen(wsl.stop)))
@@ -38,7 +25,7 @@ export const layer = Layer.effect(
   }),
 )
 
-const makeWsl = Effect.fn("Wsl.make")(function* (cli: WslCli) {
+const makeWsl = Effect.fn("Wsl.make")(function* (cli: DesktopCli.Resolved) {
   if (process.platform !== "win32") return { ...WslIpc.create(), stop: Effect.void }
 
   const { createWslServersController, wslServerIdForDistro } = yield* Effect.promise(() => import("./servers"))
