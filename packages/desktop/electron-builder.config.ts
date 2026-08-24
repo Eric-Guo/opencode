@@ -7,7 +7,7 @@ import { promisify } from "node:util"
 import { Arch, type Configuration } from "electron-builder"
 import { NativeArch } from "../../script/native-arch"
 import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
-import { SIDECAR_TARGETS, getCurrentSidecar, nodePtyPackage } from "./script/utils"
+import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
 
 const execFileAsync = promisify(execFile)
 
@@ -130,7 +130,7 @@ function linuxExecutableName(appId: string): string {
 }
 
 const getBase = (appId: string): Configuration => {
-  const target = getCurrentSidecar()
+  const target = getCurrentCli()
   const desktopName = `${appId}.desktop`
 
   const windowsArchitectureExclusions = (
@@ -160,7 +160,7 @@ const getBase = (appId: string): Configuration => {
   // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
   const platformFiles = [
     ...appFiles,
-    ...SIDECAR_TARGETS.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
+    ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
       (item) => `!**/node_modules/@lydell/node-pty-${item.os}-${item.cpu}{,/**/*}`,
     ),
   ]
@@ -194,6 +194,15 @@ const getBase = (appId: string): Configuration => {
       : { desktopName },
     files: platformFiles,
     extraResources: [
+      ...(channel === "dev"
+        ? [
+            {
+              from: "resources/",
+              to: "",
+              filter: ["opencode-cli", "opencode-cli.exe"],
+            },
+          ]
+        : []),
       {
         from: iconDir,
         to: "icons",
@@ -231,9 +240,17 @@ const getBase = (appId: string): Configuration => {
 
       if (arch !== target.cpu) throw new Error(`Packaging ${arch} Electron with the ${target.target} CLI`)
 
-      if (context.electronPlatformName !== "win32") return
-
       const resources = context.packager.getResourcesDir(context.appOutDir)
+
+      if (channel === "dev") {
+        const cli = path.join(resources, context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli")
+        const file = await stat(cli)
+
+        if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
+        await NativeArch.verify(cli, arch)
+      }
+
+      if (context.electronPlatformName !== "win32") return
 
       const prebuilds = path.join(
         resources,
@@ -246,6 +263,7 @@ const getBase = (appId: string): Configuration => {
       const addon = path.join(prebuilds, "conpty.node")
 
       if ((await stat(addon)).size === 0) throw new Error(`Bundled node-pty must be a non-empty file: ${addon}`)
+
       const entries = await readdir(prebuilds, { recursive: true, withFileTypes: true })
 
       await Promise.all(
