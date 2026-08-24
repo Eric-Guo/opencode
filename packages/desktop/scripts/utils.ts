@@ -1,12 +1,3 @@
-import { chmod, copyFile, mkdtemp, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
-import { Option, Schema } from "effect"
-
-const CLI_VERSION = "dev"
-
-const Manifest = Schema.fromJsonString(Schema.Struct({ version: Schema.NonEmptyString }))
-
 export type Channel = "dev" | "beta" | "prod"
 
 export function resolveChannel(raw = process.env.OPENCODE_CHANNEL): Channel {
@@ -17,173 +8,44 @@ export function resolveChannel(raw = process.env.OPENCODE_CHANNEL): Channel {
   return "dev"
 }
 
-export const CLI_BINARIES: Array<{ rustTarget: string; target: string; package: string; os: string; cpu: string }> = [
-  {
-    rustTarget: "aarch64-apple-darwin",
-    target: "darwin-arm64",
-    package: "@opencode/cli-darwin-arm64",
-    os: "darwin",
-    cpu: "arm64",
-  },
-  {
-    rustTarget: "x86_64-apple-darwin",
-    target: "darwin-x64",
-    package: "@opencode/cli-darwin-x64-baseline",
-    os: "darwin",
-    cpu: "x64",
-  },
-  {
-    rustTarget: "aarch64-pc-windows-msvc",
-    target: "windows-arm64",
-    package: "@opencode/cli-windows-arm64",
-    os: "win32",
-    cpu: "arm64",
-  },
-  {
-    rustTarget: "x86_64-pc-windows-msvc",
-    target: "windows-x64",
-    package: "@opencode/cli-windows-x64-baseline",
-    os: "win32",
-    cpu: "x64",
-  },
-  {
-    rustTarget: "x86_64-unknown-linux-gnu",
-    target: "linux-x64",
-    package: "@opencode/cli-linux-x64-baseline",
-    os: "linux",
-    cpu: "x64",
-  },
-  {
-    rustTarget: "aarch64-unknown-linux-gnu",
-    target: "linux-arm64",
-    package: "@opencode/cli-linux-arm64",
-    os: "linux",
-    cpu: "arm64",
-  },
-]
-
-export const RUST_TARGET = Bun.env.RUST_TARGET
+export const SIDECAR_TARGETS = [
+  { rustTarget: "aarch64-apple-darwin", target: "darwin-arm64", os: "darwin", cpu: "arm64" },
+  { rustTarget: "x86_64-apple-darwin", target: "darwin-x64", os: "darwin", cpu: "x64" },
+  { rustTarget: "aarch64-pc-windows-msvc", target: "windows-arm64", os: "win32", cpu: "arm64" },
+  { rustTarget: "x86_64-pc-windows-msvc", target: "windows-x64", os: "win32", cpu: "x64" },
+  { rustTarget: "x86_64-unknown-linux-gnu", target: "linux-x64", os: "linux", cpu: "x64" },
+  { rustTarget: "aarch64-unknown-linux-gnu", target: "linux-arm64", os: "linux", cpu: "arm64" },
+] as const
 
 function nativeTarget() {
-  const { platform, arch } = process
-
-  if (platform === "darwin") return arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin"
-
-  if (platform === "win32") return arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc"
-
-  if (platform === "linux") return arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu"
-  throw new Error(`Unsupported platform: ${platform}/${arch}`)
+  if (process.platform === "darwin") return process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin"
+  if (process.platform === "win32")
+    return process.arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc"
+  if (process.platform === "linux")
+    return process.arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu"
+  throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`)
 }
 
-export function getCurrentCli(target = process.env.OPENCODE_CLI_TARGET ?? process.env.RUST_TARGET ?? nativeTarget()) {
-  const binaryConfig = CLI_BINARIES.find((item) => item.rustTarget === target || item.target === target)
+export function getCurrentSidecar(
+  target = process.env.OPENCODE_CLI_TARGET ?? process.env.RUST_TARGET ?? nativeTarget(),
+) {
+  const sidecar = SIDECAR_TARGETS.find((item) => item.rustTarget === target || item.target === target)
+  if (!sidecar) throw new Error(`Sidecar configuration not available for target '${target}'`)
+  return sidecar
+}
 
-  if (!binaryConfig) throw new Error(`CLI configuration not available for target '${target}'`)
-
-  return binaryConfig
+export function getCurrentSidecarTarget(target?: string) {
+  return getCurrentSidecar(target).target
 }
 
 export function nodePtyPackage(target?: string) {
-  const cli = getCurrentCli(target)
+  const sidecar = getCurrentSidecar(target)
 
-  return `@lydell/node-pty-${cli.os}-${cli.cpu}`
+  return `@lydell/node-pty-${sidecar.os}-${sidecar.cpu}`
 }
 
-export function getCliResourcePath(cli = getCurrentCli()) {
-  return cli.os === "win32" ? "resources/opencode-cli.exe" : "resources/opencode-cli"
-}
-
-export async function downloadCliToResources(version = CLI_VERSION, dest = getCliResourcePath()) {
-  const { $ } = await import("bun")
-  const cli = getCurrentCli()
-  const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
-
-  try {
-    await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
-    await copyCliToResources(join(directory, "node_modules", cli.package), dest)
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
-
-  console.log(`Copied ${cli.package}@${version} to ${dest}`)
-}
-
-export async function copyBuiltCliToResources(root: string, dest = windowsify("resources/opencode-cli")) {
-  const cli = getCurrentCli()
-  const directory = cli.package.replace("@opencode/", "")
-  await copyCliToResources(join(root, directory), dest)
-}
-
-// The package directory is an npm package: its package.json version is the string the executable
-// prints for --version. Writing it next to the executable spares the desktop a ~400 ms spawn of the
-// 200 MB binary on first launch.
-async function copyCliToResources(pkg: string, dest: string) {
-  const cli = getCurrentCli()
-  await copyFile(join(pkg, "bin", cli.os === "win32" ? "opencode.exe" : "opencode"), dest)
-  await prepareCli(dest)
-
-  const manifest = Option.getOrUndefined(
-    Schema.decodeUnknownOption(Manifest)(await Bun.file(join(pkg, "package.json")).text()),
-  )
-
-  if (!manifest) throw new Error(`Bundled CLI package has no version: ${pkg}`)
-  await Bun.write(versionFile(dest), manifest.version)
-}
-
-export function versionFile(cli: string) {
-  return join(dirname(cli), "opencode-cli.version")
-}
-
-export async function buildCliToResources(dest?: string, stateHome?: string) {
+export async function buildEmbeddedSidecar() {
   const { $ } = await import("bun")
 
-  const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
-  const cli = getCurrentCli()
-  const resource = dest ?? getCliResourcePath(cli)
-  if (!dest) await rm(cli.os === "win32" ? "resources/opencode-cli" : "resources/opencode-cli.exe", { force: true })
-  try {
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} ${`--target=${cli.target}`} --skip-install --outdir=${directory}`.env(
-      {
-        ...process.env,
-        OPENCODE_CHANNEL: resolveChannel(),
-        OPENCODE_VERSION: process.env.OPENCODE_VERSION,
-      },
-    )
-    if (stateHome && (await Bun.file(resource).exists())) {
-      const child = Bun.spawn([resource, "service", "stop"], {
-        env: { ...process.env, XDG_STATE_HOME: stateHome },
-        stdout: "inherit",
-        stderr: "inherit",
-      })
-      const exitCode = await child.exited
-      if (exitCode !== 0) throw new Error(`Failed to stop development service: ${exitCode}`)
-    }
-    await copyFile(
-      join(directory, `cli-node-${cli.target}`, "bin", cli.os === "win32" ? "opencode2-node.exe" : "opencode2-node"),
-      resource,
-    )
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
-  await prepareCli(resource)
-
-  console.log(`Built Node ${cli.target} CLI at ${resource}`)
-}
-
-async function prepareCli(dest: string) {
-  const { $ } = await import("bun")
-
-  if (process.platform !== "win32") await chmod(dest, 0o755)
-
-  if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
-    await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
-  }
-
-  if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
-}
-
-export function windowsify(path: string) {
-  if (path.endsWith(".exe")) return path
-
-  return `${path}${process.platform === "win32" ? ".exe" : ""}`
+  await $`bun ../cli/script/build-node.ts --sidecar-only --skip-install ${`--target=${getCurrentSidecarTarget()}`}`
 }
