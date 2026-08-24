@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { Configuration } from "electron-builder"
 import { getConfig } from "./electron-builder.config"
-import { SIDECAR_TARGETS, nodePtyPackage } from "./scripts/utils"
+import { CLI_BINARIES, nodePtyPackage } from "./scripts/utils"
 
 // Use electron-builder's matcher so the tests also cover its glob and directory traversal semantics.
 const { FileMatcher } = createRequire(import.meta.resolve("electron-builder"))("app-builder-lib/out/fileMatcher")
@@ -148,11 +148,11 @@ test("trims external dependencies without excluding runtime files", () => {
     expect(included("@zip.js/zip.js/lib", dirStats)).toBe(true)
   }
 
-  for (const item of SIDECAR_TARGETS) {
+  for (const item of CLI_BINARIES) {
     const targetFilter = trimFilter(import.meta.dirname, load("prod", item.target))
     const active = nodePtyPackage(item.target)
 
-    for (const candidate of SIDECAR_TARGETS) {
+    for (const candidate of CLI_BINARIES) {
       const pkg = nodePtyPackage(candidate.target)
       const included = targetFilter(path.join(import.meta.dirname, "node_modules", pkg, "lib/index.js"), fileStats)
       expect(included).toBe(pkg === active)
