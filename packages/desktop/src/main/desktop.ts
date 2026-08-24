@@ -7,6 +7,7 @@ import { installContextMenu } from "./lifecycle/environment"
 import { ApplicationLifecycle } from "./lifecycle"
 import { DesktopLogging } from "./native/logging"
 import { BackgroundService } from "./service/background-service"
+import { DesktopCli } from "./service/desktop-cli"
 import { UpdaterLive } from "./updater/live"
 import { marks } from "./lifecycle/marks"
 
@@ -35,6 +36,7 @@ const runIpc = Effect.fn("Desktop.runIpc")(function* () {
 runIpc().pipe(
   Effect.provide(Ipc.layer),
   Effect.provide(BackgroundService.layer),
+  Effect.provide(DesktopCli.layer),
   Effect.provide(UpdaterLive.layer),
   Effect.provide(DesktopInitialization.layer),
   Effect.provide(ApplicationLifecycle.layer),
