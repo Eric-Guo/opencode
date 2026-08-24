@@ -1,15 +1,12 @@
 export * as DesktopCli from "./desktop-cli"
 
 import { execFile, spawn } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
 import { promisify } from "node:util"
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import installer from "../../../../../install?raw"
 import { cliInstallPath } from "../cli-install"
 import { DesktopPaths } from "../paths"
-import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
-import { getStore } from "../storage/store"
 import { parseCliVersion } from "./cli-version"
 
 const execFileAsync = promisify(execFile)
@@ -18,6 +15,7 @@ export interface Resolved {
   readonly version: string
   readonly command: readonly string[]
   readonly binary?: string
+  readonly wslBuild?: { readonly script: string; readonly output: string }
 }
 
 export interface Interface {
@@ -61,7 +59,7 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
         // Bun's transpiler cache key includes the define table, and the dev version changes on every
         // run. Reading it from the inherited environment keeps the define fixed and the cache warm.
         command: [
-          "bun",
+          process.env.OPENCODE_DESKTOP_BUN ?? "bun",
           "run",
           "--cwd",
           development,
@@ -72,7 +70,16 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
       }
     : yield* resolveBundledCli(!app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1")
 
-  return cli satisfies Resolved
+  return {
+    ...cli,
+    wslBuild:
+      app.isPackaged || !process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD || !process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT
+        ? undefined
+        : {
+            script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD,
+            output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT,
+          },
+  } satisfies Resolved
 })
 
 const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isolated: boolean) {
@@ -84,7 +91,7 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
     : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
 
   yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const version = yield* bundledVersion(bundled)
+  const version = parseCliVersion(yield* run(bundled, ["--version"]))
   yield* Effect.logInfo("v2 CLI executable verified", { version })
 
   const binary = app.isPackaged
@@ -96,51 +103,6 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
   return { version, binary, command: [binary] }
 })
 
-// Spawning the bundled executable for `--version` costs ~400 ms of startup on a 200 MB binary (and
-// several seconds on the first launch after an update, while the antivirus scans it). The build
-// writes the version next to the executable, so a packaged app never spawns; the per-identity cache
-// covers executables that arrived without that file.
-const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled: string) {
-  const fs = yield* FileSystem.FileSystem
-  const path = yield* Path.Path
-
-  // Synchronous on purpose: this sits on the path to the first window's IPC port, and a queued
-  // async read waits behind everything else the main thread is doing at that moment.
-  const shipped = yield* Effect.sync(() => {
-    try {
-      return readFileSync(path.join(path.dirname(bundled), "opencode-cli.version"), "utf8").trim()
-    } catch {
-      return ""
-    }
-  })
-
-  if (shipped) {
-    yield* Effect.logInfo("v2 CLI version bundled", { version: shipped })
-
-    return shipped
-  }
-
-  const stat = yield* fs.stat(bundled).pipe(Effect.orElseSucceed(() => undefined))
-  const identity = stat ? `${stat.size}:${Option.getOrUndefined(stat.mtime)?.getTime() ?? ""}` : undefined
-  const store = getStore()
-  const cached = Option.getOrUndefined(Schema.decodeUnknownOption(VersionCache)(store.get(BUNDLED_CLI_VERSION_KEY)))
-
-  if (identity && cached?.path === bundled && cached.identity === identity) {
-    yield* Effect.logInfo("v2 CLI version reused", { version: cached.version })
-
-    return cached.version
-  }
-
-  const version = parseCliVersion(yield* run(bundled, ["--version"]))
-
-  if (identity)
-    store.set(BUNDLED_CLI_VERSION_KEY, { path: bundled, identity, version } satisfies typeof VersionCache.Type)
-
-  return version
-})
-
-const VersionCache = Schema.Struct({ path: Schema.String, identity: Schema.String, version: Schema.String })
-
 const ExecFailure = Schema.Struct({ stdout: Schema.optional(Schema.String), stderr: Schema.optional(Schema.String) })
 
 const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string, cliVersion: string) {
@@ -150,7 +112,9 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
   const preferred = app.isPackaged
     ? cliInstallPath(app.getPath("userData"), version)
     : path.join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"), executableName())
-  const installed = existsSync(preferred)
+
+  const installed = yield* fs.exists(preferred)
+
   const installedVersion = installed
     ? yield* Effect.tryPromise(() => execFileAsync(preferred, ["--version"], { windowsHide: true })).pipe(
         Effect.map((result) => parseCliVersion(result.stdout.trim())),
@@ -171,7 +135,7 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
       replacement: destination,
     })
 
-  if (existsSync(destination)) {
+  if (yield* fs.exists(destination)) {
     yield* Effect.logInfo("v2 CLI staged executable reused", { path: destination, version })
 
     return destination
