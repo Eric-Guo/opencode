@@ -123,7 +123,9 @@ export type ToolTextContent = { type: "text"; text: string }
 
 export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string | null }
 
-export type SessionStructuredError = { type: string; message: string; status?: number }
+export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string }
+
+export type ConnectionEnvInfo = { type: "env"; name: string }
 
 export type SessionMessageCompactionRunning = {
   type: "compaction"
@@ -223,10 +225,6 @@ export type FormExternalField = { key: string; type: "external"; url: string; ti
 export type IntegrationCommandMethod = { id: string; type: "command"; label: string; command: Array<string> }
 
 export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
-
-export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string }
-
-export type ConnectionEnvInfo = { type: "env"; name: string }
 
 export type IntegrationAttemptStatus =
   | {
@@ -522,17 +520,7 @@ export type SessionMessageAssistantFile = {
 
 export type ToolContent = ToolTextContent | ToolFileContent
 
-export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
-
-export type SessionMessageCompactionFailed = {
-  type: "compaction"
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  status: "failed"
-  reason: "auto" | "manual"
-  error: SessionStructuredError
-}
+export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
 export type SessionProviderContext = { version: 1; provenance: SessionProviderContextProvenance; messages: JsonValue }
 
@@ -690,16 +678,6 @@ export type SessionExecutionSucceeded = {
   data: { sessionID: string }
 }
 
-export type SessionExecutionFailed = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.execution.failed"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; error: SessionStructuredError }
-}
-
 export type SessionExecutionInterrupted = {
   id: string
   created: number
@@ -790,16 +768,6 @@ export type SessionToolInputEnded = {
   data: { sessionID: string; assistantMessageID: string; id: string; text: string }
 }
 
-export type SessionRetryScheduled = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.retry.scheduled"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; assistantMessageID: string; attempt: number; at: number; error: SessionStructuredError }
-}
-
 export type SessionCompactionStarted = {
   id: string
   created: number
@@ -808,16 +776,6 @@ export type SessionCompactionStarted = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; reason: "auto" | "manual"; recent: string; inputID?: string }
-}
-
-export type SessionCompactionFailed = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.compaction.failed"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; reason: "auto" | "manual"; error: SessionStructuredError; inputID?: string }
 }
 
 export type SessionRevertCleared = {
@@ -1262,27 +1220,6 @@ export type SessionStepEnded = {
   }
 }
 
-export type SessionStepFailed = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.step.failed"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: {
-    sessionID: string
-    assistantMessageID: string
-    error: SessionStructuredError
-    finish?: "content-filter"
-    rawFinish?: string
-    providerState?: SessionMessageProviderState1
-    cost?: MoneyUSD
-    tokens?: TokenUsageInfo
-    snapshot?: string
-    files?: Array<string>
-  }
-}
-
 export type SessionTextEnded = {
   id: string
   created: number
@@ -1454,8 +1391,6 @@ export type FormMultiselectField = {
   custom?: boolean
   default?: Array<string>
 }
-
-export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
 export type McpServer = {
   name: string
@@ -1736,18 +1671,27 @@ export type SessionMessageToolStateCompleted = {
   metadata?: { [x: string]: JsonValue }
 }
 
-export type SessionMessageToolStateError = {
-  status: "error"
-  input: { [x: string]: JsonValue }
-  error: SessionStructuredError
-  content?: [ToolContent, ...Array<ToolContent>]
-  metadata?: { [x: string]: JsonValue }
-}
-
 export type AgentToolResult = {
   output?: JsonValue | null
   content: Array<ToolContent>
   metadata?: { [x: string]: JsonValue } | null
+}
+
+export type SessionErrorConnectionFallbackRecovery = {
+  type: "connection-fallback"
+  integrationID: string
+  previous: ConnectionInfo
+  promoted: ConnectionInfo
+  unavailableUntil: number
+}
+
+export type IntegrationConnectionSwitched = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "integration.connection.switched"
+  location?: LocationRef
+  data: { integrationID: string; previous: ConnectionInfo; promoted: ConnectionInfo }
 }
 
 export type SessionMessageCompactionCompleted = {
@@ -1826,37 +1770,10 @@ export type SessionToolSuccess = {
   }
 }
 
-export type SessionToolFailed = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.tool.failed"
-  durable: { aggregateID: string; seq: number; version: 2 }
-  location?: LocationRef
-  data: {
-    sessionID: string
-    assistantMessageID: string
-    id: string
-    error: SessionStructuredError
-    content?: [ToolContent1, ...Array<ToolContent1>]
-    metadata?: { [x: string]: JsonValue }
-    executed: boolean
-    resultState?: SessionMessageProviderState1
-  }
-}
-
 export type SessionMessageToolStateCompleted1 = {
   status: "completed"
   input: { [x: string]: any }
   content: [ToolContent1, ...Array<ToolContent1>]
-  metadata?: { [x: string]: JsonValue }
-}
-
-export type SessionMessageToolStateError1 = {
-  status: "error"
-  input: { [x: string]: any }
-  error: SessionStructuredError
-  content?: [ToolContent1, ...Array<ToolContent1>]
   metadata?: { [x: string]: JsonValue }
 }
 
@@ -2120,6 +2037,147 @@ export type SessionInboxItem =
   | { type: "compaction"; payload: SessionInboxCompactionPayload; delivery: SessionInboxDelivery }
   | { type: "move"; payload: SessionInboxMovePayload; delivery: SessionInboxDelivery }
 
+export type SessionErrorRecovery = SessionErrorConnectionFallbackRecovery
+
+export type FormFields = [FormField, ...Array<FormField>]
+
+export type FormFields2 = [FormField1, ...Array<FormField1>]
+
+export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
+
+export type SessionInboxEnqueued = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.inbox.enqueued"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; inboxID: string; item: SessionInboxItem }
+}
+
+export type SessionStructuredError = { type: string; message: string; status?: number; recovery?: SessionErrorRecovery }
+
+export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
+
+export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
+
+export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
+
+export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
+
+export type SessionMessageToolStateError = {
+  status: "error"
+  input: { [x: string]: JsonValue }
+  error: SessionStructuredError
+  content?: [ToolContent, ...Array<ToolContent>]
+  metadata?: { [x: string]: JsonValue }
+}
+
+export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
+
+export type SessionMessageCompactionFailed = {
+  type: "compaction"
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  status: "failed"
+  reason: "auto" | "manual"
+  error: SessionStructuredError
+}
+
+export type SessionExecutionFailed = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.execution.failed"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; error: SessionStructuredError }
+}
+
+export type SessionStepFailed = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.step.failed"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    assistantMessageID: string
+    error: SessionStructuredError
+    finish?: "content-filter"
+    rawFinish?: string
+    providerState?: SessionMessageProviderState1
+    cost?: MoneyUSD
+    tokens?: TokenUsageInfo
+    snapshot?: string
+    files?: Array<string>
+  }
+}
+
+export type SessionToolFailed = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.tool.failed"
+  durable: { aggregateID: string; seq: number; version: 2 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    assistantMessageID: string
+    id: string
+    error: SessionStructuredError
+    content?: [ToolContent1, ...Array<ToolContent1>]
+    metadata?: { [x: string]: JsonValue }
+    executed: boolean
+    resultState?: SessionMessageProviderState1
+  }
+}
+
+export type SessionRetryScheduled = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.retry.scheduled"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; assistantMessageID: string; attempt: number; at: number; error: SessionStructuredError }
+}
+
+export type SessionCompactionFailed = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.compaction.failed"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; reason: "auto" | "manual"; error: SessionStructuredError; inputID?: string }
+}
+
+export type SessionMessageToolStateError1 = {
+  status: "error"
+  input: { [x: string]: any }
+  error: SessionStructuredError
+  content?: [ToolContent1, ...Array<ToolContent1>]
+  metadata?: { [x: string]: JsonValue }
+}
+
+export type IntegrationMethod =
+  | IntegrationOAuthMethod
+  | IntegrationCommandMethod
+  | IntegrationKeyMethod
+  | IntegrationEnvMethod
+
+export type FormCreated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "form.created"
+  location?: LocationRef
+  data: { form: FormInfo1 }
+}
+
 export type SessionMessageAssistantTool = {
   type: "tool"
   id: string
@@ -2155,20 +2213,12 @@ export type SessionMessageAssistantTool1 = {
   time: { created: number; ran?: number; completed?: number }
 }
 
-export type FormFields = [FormField, ...Array<FormField>]
-
-export type FormFields2 = [FormField1, ...Array<FormField1>]
-
-export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
-
-export type SessionInboxEnqueued = {
+export type IntegrationInfo = {
   id: string
-  created: number
+  name: string
   metadata?: { [x: string]: any }
-  type: "session.inbox.enqueued"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; inboxID: string; item: SessionInboxItem }
+  methods: Array<IntegrationMethod>
+  connections: Array<ConnectionInfo>
 }
 
 export type SessionMessageAssistant = {
@@ -2200,14 +2250,6 @@ export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantFile1
   | SessionMessageAssistantTool1
 
-export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
-
-export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
-
-export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
-
-export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
-
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
   | SessionMessageModelSelected
@@ -2228,21 +2270,6 @@ export type SessionMessageContentUpdated = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; messageID: string; content: Array<SessionMessageAssistantContentEncoded> }
-}
-
-export type IntegrationMethod =
-  | IntegrationOAuthMethod
-  | IntegrationCommandMethod
-  | IntegrationKeyMethod
-  | IntegrationEnvMethod
-
-export type FormCreated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "form.created"
-  location?: LocationRef
-  data: { form: FormInfo1 }
 }
 
 export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
@@ -2298,19 +2325,12 @@ export type SessionEventDurable =
   | SessionMessageContentUpdated
   | SessionUsageRecorded
 
-export type IntegrationInfo = {
-  id: string
-  name: string
-  metadata?: { [x: string]: any }
-  methods: Array<IntegrationMethod>
-  connections: Array<ConnectionInfo>
-}
-
 export type V2Event =
   | ModelsDevRefreshed
   | CredentialUpdated
   | CredentialSwitched
   | IntegrationUpdated
+  | IntegrationConnectionSwitched
   | CatalogUpdated
   | AgentUpdated
   | SessionCreated
@@ -3085,7 +3105,22 @@ export type SessionImportInput = {
                   | {
                       readonly status: "error"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+                      readonly error: {
+                        readonly type: string
+                        readonly message: string
+                        readonly status?: number
+                        readonly recovery?: {
+                          readonly type: "connection-fallback"
+                          readonly integrationID: string
+                          readonly previous:
+                            | { readonly type: "credential"; readonly id: string; readonly label: string }
+                            | { readonly type: "env"; readonly name: string }
+                          readonly promoted:
+                            | { readonly type: "credential"; readonly id: string; readonly label: string }
+                            | { readonly type: "env"; readonly name: string }
+                          readonly unavailableUntil: number
+                        }
+                      }
                       readonly content?: readonly [
                         (
                           | { readonly type: "text"; readonly text: string }
@@ -3122,11 +3157,41 @@ export type SessionImportInput = {
             readonly reasoning: number
             readonly cache: { readonly read: number; readonly write: number }
           }
-          readonly error?: { readonly type: string; readonly message: string; readonly status?: number }
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly recovery?: {
+              readonly type: "connection-fallback"
+              readonly integrationID: string
+              readonly previous:
+                | { readonly type: "credential"; readonly id: string; readonly label: string }
+                | { readonly type: "env"; readonly name: string }
+              readonly promoted:
+                | { readonly type: "credential"; readonly id: string; readonly label: string }
+                | { readonly type: "env"; readonly name: string }
+              readonly unavailableUntil: number
+            }
+          }
           readonly retry?: {
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number
+              readonly recovery?: {
+                readonly type: "connection-fallback"
+                readonly integrationID: string
+                readonly previous:
+                  | { readonly type: "credential"; readonly id: string; readonly label: string }
+                  | { readonly type: "env"; readonly name: string }
+                readonly promoted:
+                  | { readonly type: "credential"; readonly id: string; readonly label: string }
+                  | { readonly type: "env"; readonly name: string }
+                readonly unavailableUntil: number
+              }
+            }
           }
         }
       | (
@@ -3171,7 +3236,22 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
-              readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly error: {
+                readonly type: string
+                readonly message: string
+                readonly status?: number
+                readonly recovery?: {
+                  readonly type: "connection-fallback"
+                  readonly integrationID: string
+                  readonly previous:
+                    | { readonly type: "credential"; readonly id: string; readonly label: string }
+                    | { readonly type: "env"; readonly name: string }
+                  readonly promoted:
+                    | { readonly type: "credential"; readonly id: string; readonly label: string }
+                    | { readonly type: "env"; readonly name: string }
+                  readonly unavailableUntil: number
+                }
+              }
             }
         )
     >
@@ -3384,7 +3464,22 @@ export type SessionImportInput = {
                   | {
                       readonly status: "error"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+                      readonly error: {
+                        readonly type: string
+                        readonly message: string
+                        readonly status?: number
+                        readonly recovery?: {
+                          readonly type: "connection-fallback"
+                          readonly integrationID: string
+                          readonly previous:
+                            | { readonly type: "credential"; readonly id: string; readonly label: string }
+                            | { readonly type: "env"; readonly name: string }
+                          readonly promoted:
+                            | { readonly type: "credential"; readonly id: string; readonly label: string }
+                            | { readonly type: "env"; readonly name: string }
+                          readonly unavailableUntil: number
+                        }
+                      }
                       readonly content?: readonly [
                         (
                           | { readonly type: "text"; readonly text: string }
@@ -3421,11 +3516,41 @@ export type SessionImportInput = {
             readonly reasoning: number
             readonly cache: { readonly read: number; readonly write: number }
           }
-          readonly error?: { readonly type: string; readonly message: string; readonly status?: number }
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly recovery?: {
+              readonly type: "connection-fallback"
+              readonly integrationID: string
+              readonly previous:
+                | { readonly type: "credential"; readonly id: string; readonly label: string }
+                | { readonly type: "env"; readonly name: string }
+              readonly promoted:
+                | { readonly type: "credential"; readonly id: string; readonly label: string }
+                | { readonly type: "env"; readonly name: string }
+              readonly unavailableUntil: number
+            }
+          }
           readonly retry?: {
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number
+              readonly recovery?: {
+                readonly type: "connection-fallback"
+                readonly integrationID: string
+                readonly previous:
+                  | { readonly type: "credential"; readonly id: string; readonly label: string }
+                  | { readonly type: "env"; readonly name: string }
+                readonly promoted:
+                  | { readonly type: "credential"; readonly id: string; readonly label: string }
+                  | { readonly type: "env"; readonly name: string }
+                readonly unavailableUntil: number
+              }
+            }
           }
         }
       | (
@@ -3470,7 +3595,22 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
-              readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly error: {
+                readonly type: string
+                readonly message: string
+                readonly status?: number
+                readonly recovery?: {
+                  readonly type: "connection-fallback"
+                  readonly integrationID: string
+                  readonly previous:
+                    | { readonly type: "credential"; readonly id: string; readonly label: string }
+                    | { readonly type: "env"; readonly name: string }
+                  readonly promoted:
+                    | { readonly type: "credential"; readonly id: string; readonly label: string }
+                    | { readonly type: "env"; readonly name: string }
+                  readonly unavailableUntil: number
+                }
+              }
             }
         )
     >
@@ -3683,7 +3823,22 @@ export type SessionImportInput = {
                   | {
                       readonly status: "error"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+                      readonly error: {
+                        readonly type: string
+                        readonly message: string
+                        readonly status?: number
+                        readonly recovery?: {
+                          readonly type: "connection-fallback"
+                          readonly integrationID: string
+                          readonly previous:
+                            | { readonly type: "credential"; readonly id: string; readonly label: string }
+                            | { readonly type: "env"; readonly name: string }
+                          readonly promoted:
+                            | { readonly type: "credential"; readonly id: string; readonly label: string }
+                            | { readonly type: "env"; readonly name: string }
+                          readonly unavailableUntil: number
+                        }
+                      }
                       readonly content?: readonly [
                         (
                           | { readonly type: "text"; readonly text: string }
@@ -3720,11 +3875,41 @@ export type SessionImportInput = {
             readonly reasoning: number
             readonly cache: { readonly read: number; readonly write: number }
           }
-          readonly error?: { readonly type: string; readonly message: string; readonly status?: number }
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly recovery?: {
+              readonly type: "connection-fallback"
+              readonly integrationID: string
+              readonly previous:
+                | { readonly type: "credential"; readonly id: string; readonly label: string }
+                | { readonly type: "env"; readonly name: string }
+              readonly promoted:
+                | { readonly type: "credential"; readonly id: string; readonly label: string }
+                | { readonly type: "env"; readonly name: string }
+              readonly unavailableUntil: number
+            }
+          }
           readonly retry?: {
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number
+              readonly recovery?: {
+                readonly type: "connection-fallback"
+                readonly integrationID: string
+                readonly previous:
+                  | { readonly type: "credential"; readonly id: string; readonly label: string }
+                  | { readonly type: "env"; readonly name: string }
+                readonly promoted:
+                  | { readonly type: "credential"; readonly id: string; readonly label: string }
+                  | { readonly type: "env"; readonly name: string }
+                readonly unavailableUntil: number
+              }
+            }
           }
         }
       | (
@@ -3769,7 +3954,22 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
-              readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly error: {
+                readonly type: string
+                readonly message: string
+                readonly status?: number
+                readonly recovery?: {
+                  readonly type: "connection-fallback"
+                  readonly integrationID: string
+                  readonly previous:
+                    | { readonly type: "credential"; readonly id: string; readonly label: string }
+                    | { readonly type: "env"; readonly name: string }
+                  readonly promoted:
+                    | { readonly type: "credential"; readonly id: string; readonly label: string }
+                    | { readonly type: "env"; readonly name: string }
+                  readonly unavailableUntil: number
+                }
+              }
             }
         )
     >
@@ -4400,7 +4600,22 @@ export type SessionMessageUpdateInput = {
             | {
                 readonly status: "error"
                 readonly input: { readonly [x: string]: JsonValue }
-                readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+                readonly error: {
+                  readonly type: string
+                  readonly message: string
+                  readonly status?: number
+                  readonly recovery?: {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: string
+                    readonly previous:
+                      | { readonly type: "credential"; readonly id: string; readonly label: string }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly promoted:
+                      | { readonly type: "credential"; readonly id: string; readonly label: string }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly unavailableUntil: number
+                  }
+                }
                 readonly content?: readonly [
                   (
                     | { readonly type: "text"; readonly text: string }
