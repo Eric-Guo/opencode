@@ -92,6 +92,8 @@ const KIMI_ROLLING_QUOTA_TEXT =
   "you've reached your usage limit for this period. your quota will be refreshed in the next period."
 const KIMI_ORDINARY_QUOTA_TEXT =
   /you(?:'|’)ve reached (?:your usage limit for this billing cycle|kimi monthly usage limit)\b/i
+const KIMI_CONCURRENT_RATE_LIMIT_TEXT =
+  "you've reached your concurrent request limit. please wait for your ongoing requests to finish and try again."
 // Policy rejections without a dedicated code, matched against the provider's own
 // explanation only. OpenAI reuses `invalid_prompt` for usage-policy rejections while
 // Bedrock Mantle reuses it for schema validation; Anthropic reports blocked output
@@ -150,6 +152,8 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if ([input.message, body].some(isKimiRollingQuota))
     return new QuotaExceededError({ ...details, classification: "rolling-window" })
   if (KIMI_ORDINARY_QUOTA_TEXT.test(text)) return new QuotaExceededError(details)
+  if ([input.message, body].some(isKimiConcurrentRateLimit))
+    return new QuotaExceededError({ ...details, classification: "rolling-window" })
   if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
     return new QuotaExceededError(details)
   if (input.status === 401 || input.status === 403 || codes.some((code) => AUTH_CODES.has(code)))
@@ -187,6 +191,10 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
 
 function isKimiRollingQuota(value: string) {
   return value.trim().replaceAll("’", "'").toLowerCase() === KIMI_ROLLING_QUOTA_TEXT
+}
+
+function isKimiConcurrentRateLimit(value: string) {
+  return value.trim().replaceAll("’", "'").toLowerCase() === KIMI_CONCURRENT_RATE_LIMIT_TEXT
 }
 
 function providerCodes(value: unknown) {
