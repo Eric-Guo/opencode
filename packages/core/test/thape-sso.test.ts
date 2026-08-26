@@ -7,6 +7,7 @@ const keys = [
   "THAPE_SSO_CLERK_CODE",
   "OPENCODE_API_KEY",
   "KIMI_API_KEY",
+  "KIMI_API_KEY_2",
   "DOC_MOONSHOT_API_KEY",
   "DEEPSEEK_API_KEY",
   "OPENCODE_ENABLE_EXA",
@@ -25,6 +26,7 @@ const originalFetch = globalThis.fetch
 test("keeps the bearer key available to tools", () => {
   expect(API_KEY_ENV_NAMES).not.toContain("THAPE_SSO_BEARER_API_KEY")
   expect(API_KEY_ENV_NAMES).toContain("OPENCODE_API_KEY")
+  expect(API_KEY_ENV_NAMES).toContain("KIMI_API_KEY_2")
   expect(API_KEY_ENV_NAMES).toContain("VIPAI_API_KEY")
 })
 
@@ -56,6 +58,7 @@ test("ensureSsoUsername populates the runtime environment", async () => {
         clerk_code: "123456",
         opencode_api_key: "opencode-key",
         kimi_api_key: "kimi-key",
+        kimi_api_key_2: "kimi-key-2",
         siliconflow_cn_api_key: "siliconflow-key",
         moonshot_api_key: "moonshot-key",
         exa_api_key: "exa-key",
@@ -71,7 +74,9 @@ test("ensureSsoUsername populates the runtime environment", async () => {
 
   expect(process.env.THAPE_SSO_USER_NAME).toBe("Test User")
   expect(process.env.OPENCODE_API_KEY).toBe("opencode-key")
+  expect(process.env.KIMI_API_KEY_2).toBe("kimi-key-2")
   expect(process.env.VIPAI_API_KEY).toBe("vipai-key")
+  expect(Bun.env.KIMI_API_KEY_2).toBe("kimi-key-2")
   expect(Bun.env.VIPAI_API_KEY).toBe("vipai-key")
   expect(ssoHideAgents()).toEqual(["bid-assistant", "7777"])
   expect(process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import {
   AIError,
   LLMEvent,
@@ -10,6 +11,7 @@ import {
   TransportError,
   InvalidProviderOutputError,
   InvalidRequestError,
+  QuotaExceededError,
   RateLimitError,
   UnknownProviderError,
 } from "@opencode-ai/ai"
@@ -86,7 +88,11 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
+import { KimiKeyRotation } from "@opencode-ai/core/integration/kimi-key-rotation"
+import { Hash } from "@opencode-ai/util/hash"
 
+const projectDirectory = AbsolutePath.make(import.meta.dir)
+const movedDirectory = AbsolutePath.make(path.dirname(import.meta.dir))
 const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
 type ToolBarrier = {
   readonly count: number
@@ -199,6 +205,7 @@ const makeRunnerState = () => {
     }).pipe(Effect.andThen(Deferred.succeed(barrier.release, undefined)), Effect.asVoid)
   return {
     currentModel: model,
+    currentConnection: undefined as SessionRunnerModel.Resolved["connection"],
     modelResolveHook: Effect.void,
     systemBaseline: "Initial context",
     systemRemoved: false,
@@ -313,12 +320,13 @@ const layer = Layer.unwrap(
         state.modelResolveHook.pipe(
           Effect.map(() => {
             const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
-            return SessionRunnerModel.resolved(selected, {
+            const resolved = SessionRunnerModel.resolved(selected, {
               capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
               cost: [],
               limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
               variant: session.model?.variant,
             })
+            return state.currentConnection ? { ...resolved, connection: state.currentConnection } : resolved
           }),
         ),
     })
@@ -405,7 +413,7 @@ const layer = Layer.unwrap(
       SessionRunnerModel.node.replace(models),
       InstructionBuiltIns.node.replace(systemContext),
       InstructionDiscovery.node.replace(instructionContext),
-      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      Location.node.replace(Location.boundNode({ directory: projectDirectory })),
       SkillInstructions.node.replace(skillInstructions),
       ReferenceInstructions.node.replace(referenceInstructions),
       Permission.node.replace(permission),
@@ -497,7 +505,7 @@ const insertSession = (id: Session.ID) =>
         id,
         project_id: Project.ID.global,
         slug: id,
-        directory: "/project",
+        directory: projectDirectory,
         title: "test",
         version: "test",
       })
@@ -528,7 +536,7 @@ const setup = Effect.gen(function* () {
   )
   yield* db
     .insert(ProjectTable)
-    .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+    .values({ id: Project.ID.global, worktree: projectDirectory, sandboxes: [] })
     .onConflictDoNothing()
     .run()
     .pipe(Effect.orDie)
@@ -639,6 +647,14 @@ const invalidRequest = () =>
 const rateLimited = (retryAfterMs?: number) =>
   new AIError({
     reason: new RateLimitError({ message: "Rate limited", retryAfterMs }),
+  })
+
+const kimiRollingQuota = () =>
+  new AIError({
+    reason: new QuotaExceededError({
+      message: "You've reached your usage limit for this period. Your quota will be refreshed in the next period.",
+      classification: "rolling-window",
+    }),
   })
 
 const setupOverflowRecovery = Effect.fnUntraced(function* (s: Scenario) {
@@ -1227,7 +1243,7 @@ describe("SessionRunnerLLM", () => {
 
       yield* s.bus.publish(SessionEvent.Moved, {
         sessionID,
-        location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
+        location: Location.Ref.make({ directory: movedDirectory }),
         projectID: Project.ID.global,
       })
       expect(
@@ -1261,7 +1277,7 @@ describe("SessionRunnerLLM", () => {
       item: {
         type: "move",
         payload: {
-          location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
+          location: Location.Ref.make({ directory: movedDirectory }),
           projectID: Project.ID.global,
         },
         delivery: "queue",
@@ -1273,7 +1289,7 @@ describe("SessionRunnerLLM", () => {
     expect(reads).toBe(0)
     expect(s.requests).toHaveLength(0)
     expect(yield* s.inbox).toEqual([])
-    expect((yield* s.session.get(sessionID)).location.directory).toBe(AbsolutePath.make("/moved"))
+    expect((yield* s.session.get(sessionID)).location.directory).toBe(movedDirectory)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
       status: "failed",
@@ -1289,7 +1305,7 @@ describe("SessionRunnerLLM", () => {
       item: {
         type: "move",
         payload: {
-          location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
+          location: Location.Ref.make({ directory: movedDirectory }),
           projectID: Project.ID.global,
         },
         delivery: "queue",
@@ -1298,7 +1314,7 @@ describe("SessionRunnerLLM", () => {
 
     yield* s.resume
 
-    expect((yield* s.session.get(sessionID)).location.directory).toBe(AbsolutePath.make("/moved"))
+    expect((yield* s.session.get(sessionID)).location.directory).toBe(movedDirectory)
     expect(yield* s.inbox).toEqual([])
     expect(s.requests).toEqual([])
     expect(s.closedTransports).toEqual([sessionID])
@@ -1333,7 +1349,7 @@ describe("SessionRunnerLLM", () => {
           item: {
             type: "move",
             payload: {
-              location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+              location: Location.Ref.make({ directory: projectDirectory }),
               projectID: Project.ID.global,
             },
             delivery,
@@ -1374,7 +1390,7 @@ describe("SessionRunnerLLM", () => {
       item: {
         type: "move",
         payload: {
-          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          location: Location.Ref.make({ directory: projectDirectory }),
           projectID: Project.ID.global,
         },
         delivery: "steer",
@@ -1412,7 +1428,7 @@ describe("SessionRunnerLLM", () => {
       item: {
         type: "move",
         payload: {
-          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          location: Location.Ref.make({ directory: projectDirectory }),
           projectID: Project.ID.global,
         },
         delivery: "steer",
@@ -3204,7 +3220,7 @@ describe("SessionRunnerLLM", () => {
   scenario("dispatches a queued move when a steer is cancelled during preparation", function* (s) {
     const runner = yield* SessionRunner.Service
 
-    const location = Location.Ref.make({ directory: AbsolutePath.make("/moved") })
+    const location = Location.Ref.make({ directory: movedDirectory })
     yield* s.admit("A")
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
     const stream = yield* s.llm.gate
@@ -4940,6 +4956,65 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
   })
+
+  it.effect("rotates a Kimi rolling quota once without replaying the failed step", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = { primary: process.env.KIMI_API_KEY, secondary: process.env.KIMI_API_KEY_2 }
+        process.env.KIMI_API_KEY = "runner-account-a"
+        process.env.KIMI_API_KEY_2 = "runner-account-b"
+        return previous
+      }),
+      () =>
+        Effect.gen(function* () {
+          const s = yield* setup
+          const failure = kimiRollingQuota()
+          s.currentConnection = {
+            integrationID: KimiKeyRotation.integrationID,
+            ref: { type: "env", name: "KIMI_API_KEY" },
+            fingerprint: Hash.sha256("runner-account-a"),
+          }
+          yield* s.llm.push(Stream.fail(failure))
+
+          expect(yield* s.runPrompt("Rotate Kimi account").pipe(Effect.flip)).toBe(failure)
+          expect(s.requests).toHaveLength(1)
+          expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+          expect(requireAssistant(yield* s.context).error).toMatchObject({
+            type: "provider.quota",
+            message: expect.stringContaining("KIMI_API_KEY_2 is now selected"),
+            recovery: {
+              type: "connection-fallback",
+              integrationID: "kimi-for-coding",
+              previous: { type: "env", name: "KIMI_API_KEY" },
+              promoted: { type: "env", name: "KIMI_API_KEY_2" },
+              unavailableUntil: KimiKeyRotation.cooldown,
+            },
+          })
+          s.currentConnection = {
+            integrationID: KimiKeyRotation.integrationID,
+            ref: { type: "env", name: "KIMI_API_KEY_2" },
+            fingerprint: Hash.sha256("runner-account-b"),
+          }
+          const secondFailure = kimiRollingQuota()
+          yield* s.llm.push(Stream.fail(secondFailure))
+          expect(yield* s.runPrompt("Both accounts cooling").pipe(Effect.flip)).toBe(secondFailure)
+          expect(s.requests).toHaveLength(2)
+          const assistants = (yield* s.context).filter((message) => message.type === "assistant")
+          expect(assistants.at(-1)?.error).toMatchObject({
+            type: "provider.quota",
+            message: expect.stringContaining("Both Kimi accounts are cooling down"),
+          })
+          expect(assistants.at(-1)?.error?.recovery).toBeUndefined()
+        }),
+      (previous) =>
+        Effect.sync(() => {
+          if (previous.primary === undefined) delete process.env.KIMI_API_KEY
+          else process.env.KIMI_API_KEY = previous.primary
+          if (previous.secondary === undefined) delete process.env.KIMI_API_KEY_2
+          else process.env.KIMI_API_KEY_2 = previous.secondary
+        }),
+    ),
+  )
 
   scenario("settles malformed streamed tool input before the provider failure", function* (s) {
     const failure = new AIError({
