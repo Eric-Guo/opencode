@@ -2191,6 +2191,48 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("renders connection fallback guidance as a normal noninteractive error", async () => {
+    const events = feed()
+    events.push(connected())
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({ streams: [events] }),
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      footer: ui.api,
+    })
+    const guidance =
+      "KIMI_API_KEY is cooling down. KIMI_API_KEY_2 is now selected. Start a blank session; this step was not replayed."
+    events.push({
+      id: "evt_kimi_fallback",
+      created: 2,
+      type: "session.step.failed",
+      durable: durable("ses_1", 1),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_kimi_fallback",
+        error: {
+          type: "provider.quota",
+          message: guidance,
+          recovery: {
+            type: "connection-fallback",
+            integrationID: "kimi-for-coding",
+            previous: { type: "env", name: "KIMI_API_KEY" },
+            promoted: { type: "env", name: "KIMI_API_KEY_2" },
+            unavailableUntil: 18_000_000,
+          },
+        },
+      },
+    })
+    await Bun.sleep(0)
+
+    expect(ui.commits).toContainEqual(
+      expect.objectContaining({ kind: "error", messageID: "msg_kimi_fallback", text: guidance }),
+    )
+    await transport.close()
+  })
+
   test("dedupes a retained live step failure from resize projection", async () => {
     const events = feed()
     events.push(connected())

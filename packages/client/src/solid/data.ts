@@ -125,6 +125,13 @@ export function locationKey(location: LocationRef) {
   return JSON.stringify([location.directory, location.workspaceID])
 }
 
+function locationFromKey(key: string): LocationRef | undefined {
+  const ref: unknown = JSON.parse(key)
+  if (!Array.isArray(ref) || typeof ref[0] !== "string") return
+  if (ref[1] !== undefined && ref[1] !== null && typeof ref[1] !== "string") return
+  return { directory: ref[0], ...(ref[1] ? { workspaceID: ref[1] } : {}) }
+}
+
 function locationQuery(ref?: LocationRef) {
   return ref ? { directory: ref.directory, workspace: ref.workspaceID } : undefined
 }
@@ -1018,7 +1025,10 @@ export function createData(config: CreateDataInput) {
       case "session.file.generated":
         message.update(event.data.sessionID, (draft, index) => {
           const assistant = message.assistant(draft, index, event.data.assistantMessageID)
-          if (!assistant || assistant.content.some((content) => content.type === "file" && content.id === event.data.file.id))
+          if (
+            !assistant ||
+            assistant.content.some((content) => content.type === "file" && content.id === event.data.file.id)
+          )
             return
           assistant.content.push(event.data.file)
         })
@@ -1166,10 +1176,26 @@ export function createData(config: CreateDataInput) {
         return
     }
 
+    if (event.type === "integration.connection.switched") {
+      Object.keys(store.location).forEach((key) => {
+        const location = locationFromKey(key)
+        if (!location) return
+        result.location.integration.invalidate(location)
+        result.location.model.invalidate(location)
+        result.location.provider.invalidate(location)
+        void Promise.all([
+          result.location.integration.sync(location),
+          result.location.model.sync(location),
+          result.location.provider.sync(location),
+        ])
+      })
+      return
+    }
+
     if (event.type === "credential.updated" || event.type === "credential.switched") {
       Object.keys(store.location).forEach((key) => {
-        const ref = JSON.parse(key) as [string, string | null]
-        const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+        const location = locationFromKey(key)
+        if (!location) return
         if (event.type === "credential.updated") {
           result.location.integration.invalidate(location)
           void result.location.integration.sync(location)
