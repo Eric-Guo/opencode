@@ -42,7 +42,6 @@ export default sidecarConfig({
   version: process.env.OPENCODE_VERSION ?? Installation.version,
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   assetHash: "local",
-  appArchive: "{}",
   target: nodeTarget(process.platform, process.arch),
   appArchive: "",
 })
