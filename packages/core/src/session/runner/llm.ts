@@ -24,6 +24,7 @@ import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { PluginSupervisor } from "../../plugin/supervisor.js"
+import { KimiKeyRotation } from "../../integration/kimi-key-rotation.js"
 import { PromptCacheDiagnostics } from "../prompt-cache-diagnostics.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
@@ -333,5 +334,6 @@ export const node = makeLocationNode({
     Snapshot.node,
     ToolOutput.node,
     Database.node,
+    KimiKeyRotation.node,
   ],
 })
