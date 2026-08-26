@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import {
   AIError,
   LLMEvent,
@@ -10,6 +11,7 @@ import {
   TransportError,
   InvalidProviderOutputError,
   InvalidRequestError,
+  QuotaExceededError,
   RateLimitError,
 } from "@opencode-ai/ai"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
@@ -87,7 +89,11 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
+import { KimiKeyRotation } from "@opencode-ai/core/integration/kimi-key-rotation"
+import { Hash } from "@opencode-ai/util/hash"
 
+const projectDirectory = AbsolutePath.make(import.meta.dir)
+const movedDirectory = AbsolutePath.make(path.dirname(import.meta.dir))
 let requests: LLMRequest[] = []
 const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
 type ToolBarrier = {
@@ -296,17 +302,19 @@ const echo = Layer.effectDiscard(
 const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [Tool.node] })
 let modelResolveHook = Effect.void
 let currentModel = model
+let currentConnection: SessionRunnerModel.Resolved["connection"]
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: (session) =>
     modelResolveHook.pipe(
       Effect.map(() => {
         const selected = session.model?.id === "replacement" ? replacementModel : currentModel
-        return SessionRunnerModel.resolved(selected, {
+        const resolved = SessionRunnerModel.resolved(selected, {
           capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           cost: [],
           limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
           variant: session.model?.variant,
         })
+        return currentConnection ? { ...resolved, connection: currentConnection } : resolved
       }),
     ),
 })
@@ -400,7 +408,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [SessionRunnerModel.node, models],
   [InstructionBuiltIns.node, systemContext],
   [InstructionDiscovery.node, instructionContext],
-  [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+  [Location.node, Location.boundNode({ directory: projectDirectory })],
   [SkillInstructions.node, skillInstructions],
   [ReferenceInstructions.node, referenceInstructions],
   [Permission.node, permission],
@@ -475,7 +483,7 @@ const it = testEffect(
       [SessionRunnerModel.node, models],
       [InstructionBuiltIns.node, systemContext],
       [InstructionDiscovery.node, instructionContext],
-      [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+      [Location.node, Location.boundNode({ directory: projectDirectory })],
       [SkillInstructions.node, skillInstructions],
       [ReferenceInstructions.node, referenceInstructions],
       [Snapshot.node, Snapshot.noopLayer],
@@ -504,7 +512,7 @@ const insertSession = (id: Session.ID) =>
         id,
         project_id: Project.ID.global,
         slug: id,
-        directory: "/project",
+        directory: projectDirectory,
         title: "test",
         version: "test",
       })
@@ -537,6 +545,7 @@ const setup = Effect.gen(function* () {
   modelResolveHook = Effect.void
   pluginFlushHook = Effect.void
   currentModel = model
+  currentConnection = undefined
   skillBaselines.clear()
   toolBarrier = undefined
   yield* agents.transform((draft) =>
@@ -546,7 +555,7 @@ const setup = Effect.gen(function* () {
   )
   yield* db
     .insert(ProjectTable)
-    .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+    .values({ id: Project.ID.global, worktree: projectDirectory, sandboxes: [] })
     .onConflictDoNothing()
     .run()
     .pipe(Effect.orDie)
@@ -603,6 +612,14 @@ const invalidRequest = () =>
 const rateLimited = (retryAfterMs?: number) =>
   new AIError({
     reason: new RateLimitError({ message: "Rate limited", retryAfterMs }),
+  })
+
+const kimiRollingQuota = () =>
+  new AIError({
+    reason: new QuotaExceededError({
+      message: "You've reached your usage limit for this period. Your quota will be refreshed in the next period.",
+      classification: "rolling-window",
+    }),
   })
 
 const setupOverflowRecovery = Effect.gen(function* () {
@@ -1388,7 +1405,7 @@ describe("SessionRunnerLLM", () => {
 
       yield* bus.publish(SessionEvent.Moved, {
         sessionID,
-        location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
+        location: Location.Ref.make({ directory: movedDirectory }),
         projectID: Project.ID.global,
       })
       expect(
@@ -1459,7 +1476,7 @@ describe("SessionRunnerLLM", () => {
         item: {
           type: "move",
           payload: {
-            location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
+            location: Location.Ref.make({ directory: movedDirectory }),
             projectID: Project.ID.global,
           },
           delivery: "queue",
@@ -1468,7 +1485,7 @@ describe("SessionRunnerLLM", () => {
 
       yield* session.resume(sessionID)
 
-      expect((yield* session.get(sessionID)).location.directory).toBe(AbsolutePath.make("/moved"))
+      expect((yield* session.get(sessionID)).location.directory).toBe(movedDirectory)
       expect(yield* session.inbox(sessionID)).toEqual([])
       expect(requests).toEqual([])
       expect(closedTransports).toEqual([sessionID])
@@ -1503,7 +1520,7 @@ describe("SessionRunnerLLM", () => {
         item: {
           type: "move",
           payload: {
-            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+            location: Location.Ref.make({ directory: projectDirectory }),
             projectID: Project.ID.global,
           },
           delivery: "steer",
@@ -1540,7 +1557,7 @@ describe("SessionRunnerLLM", () => {
         item: {
           type: "move",
           payload: {
-            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+            location: Location.Ref.make({ directory: projectDirectory }),
             projectID: Project.ID.global,
           },
           delivery: "steer",
@@ -5301,6 +5318,65 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
     }),
+  )
+
+  it.effect("rotates a Kimi rolling quota once without replaying the failed step", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = { primary: process.env.KIMI_API_KEY, secondary: process.env.KIMI_API_KEY_2 }
+        process.env.KIMI_API_KEY = "runner-account-a"
+        process.env.KIMI_API_KEY_2 = "runner-account-b"
+        return previous
+      }),
+      () =>
+        Effect.gen(function* () {
+          const session = yield* setup
+          const failure = kimiRollingQuota()
+          currentConnection = {
+            integrationID: KimiKeyRotation.integrationID,
+            ref: { type: "env", name: "KIMI_API_KEY" },
+            fingerprint: Hash.sha256("runner-account-a"),
+          }
+          yield* TestLLM.push(Stream.fail(failure))
+
+          expect(yield* runPrompt(session, "Rotate Kimi account").pipe(Effect.flip)).toBe(failure)
+          expect(requests).toHaveLength(1)
+          expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+          expect(requireAssistant(yield* session.context(sessionID)).error).toMatchObject({
+            type: "provider.quota",
+            message: expect.stringContaining("KIMI_API_KEY_2 is now selected"),
+            recovery: {
+              type: "connection-fallback",
+              integrationID: "kimi-for-coding",
+              previous: { type: "env", name: "KIMI_API_KEY" },
+              promoted: { type: "env", name: "KIMI_API_KEY_2" },
+              unavailableUntil: KimiKeyRotation.cooldown,
+            },
+          })
+          currentConnection = {
+            integrationID: KimiKeyRotation.integrationID,
+            ref: { type: "env", name: "KIMI_API_KEY_2" },
+            fingerprint: Hash.sha256("runner-account-b"),
+          }
+          const secondFailure = kimiRollingQuota()
+          yield* TestLLM.push(Stream.fail(secondFailure))
+          expect(yield* runPrompt(session, "Both accounts cooling").pipe(Effect.flip)).toBe(secondFailure)
+          expect(requests).toHaveLength(2)
+          const assistants = (yield* session.context(sessionID)).filter((message) => message.type === "assistant")
+          expect(assistants.at(-1)?.error).toMatchObject({
+            type: "provider.quota",
+            message: expect.stringContaining("Both Kimi accounts are cooling down"),
+          })
+          expect(assistants.at(-1)?.error?.recovery).toBeUndefined()
+        }),
+      (previous) =>
+        Effect.sync(() => {
+          if (previous.primary === undefined) delete process.env.KIMI_API_KEY
+          else process.env.KIMI_API_KEY = previous.primary
+          if (previous.secondary === undefined) delete process.env.KIMI_API_KEY_2
+          else process.env.KIMI_API_KEY_2 = previous.secondary
+        }),
+    ),
   )
 
   it.effect("settles malformed streamed tool input before the provider failure", () =>
