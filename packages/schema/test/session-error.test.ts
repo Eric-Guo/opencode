@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { LLM, SessionError } from "../src/index.js"
+import { Integration, LLM, SessionError } from "../src/index.js"
 
 describe("SessionError", () => {
   test("exports one identified open envelope", () => {
     expect(SessionError.Error.ast.annotations?.identifier).toBe("Session.StructuredError")
-    expect(Object.keys(SessionError).filter((key) => key !== "SessionError")).toEqual(["Error"])
+    expect(Object.keys(SessionError).filter((key) => key !== "SessionError")).toEqual([
+      "ConnectionFallbackRecovery",
+      "Error",
+      "Recovery",
+    ])
   })
 
   test("round trips current and future error types through JSON", () => {
@@ -21,6 +25,23 @@ describe("SessionError", () => {
       const encoded = Schema.encodeSync(codec)(value)
       expect(Schema.decodeUnknownSync(codec)(encoded)).toEqual(value)
     }
+  })
+
+  test("round trips connection fallback recovery metadata", () => {
+    const value: SessionError.Error = {
+      type: "provider.quota",
+      message: "KIMI_API_KEY reached its rolling limit",
+      recovery: {
+        type: "connection-fallback",
+        integrationID: Integration.ID.make("kimi-for-coding"),
+        previous: { type: "env", name: "KIMI_API_KEY" },
+        promoted: { type: "env", name: "KIMI_API_KEY_2" },
+        unavailableUntil: 18_000_000,
+      },
+    }
+    const codec = Schema.fromJsonString(SessionError.Error)
+
+    expect(Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(value))).toEqual(value)
   })
 
   test("accepts future fields while exposing only the stable envelope", () => {

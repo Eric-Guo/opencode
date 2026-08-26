@@ -64,7 +64,7 @@ describe("public event manifest", () => {
     expect(Config.Event.Definitions).toEqual([Config.Event.Updated])
     expect(FileSystem.Event.Definitions).toEqual([FileSystem.Event.Changed])
     expect(FileSystemV1.Event.Definitions).toEqual([FileSystemV1.Event.Edited])
-    expect(Integration.Event.Definitions).toEqual([Integration.Event.Updated])
+    expect(Integration.Event.Definitions).toEqual([Integration.Event.Updated, Integration.Event.ConnectionSwitched])
     expect(Permission.Event.Definitions).toEqual([Permission.Event.Asked, Permission.Event.Replied])
     expect(PersistentPty.Event.Definitions).toEqual([PersistentPty.Event.Added, PersistentPty.Event.Removed])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
@@ -102,8 +102,8 @@ describe("public event manifest", () => {
     expect(EventManifest.Server.has("credential.created")).toBe(false)
     expect(EventManifest.Server.has("credential.activated")).toBe(false)
     expect(EventManifest.Server.has("credential.deleted")).toBe(false)
-    expect(EventManifest.Server.has("integration.connection.updated")).toBe(false)
-    expect(EventManifest.Latest.has("integration.connection.updated")).toBe(false)
+    expect(EventManifest.Server.has("integration.connection.switched")).toBe(true)
+    expect(EventManifest.Latest.has("integration.connection.switched")).toBe(true)
   })
 
   test("derives durable definitions from explicit definition durability", () => {
