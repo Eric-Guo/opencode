@@ -88,6 +88,10 @@ const CONTENT_POLICY_CODES = new Set([
 const GATEWAY_CODE_LABEL = /^[^:\n]+: \[([A-Za-z0-9_.-]+)\]/
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
+const KIMI_ROLLING_QUOTA_TEXT =
+  "you've reached your usage limit for this period. your quota will be refreshed in the next period."
+const KIMI_ORDINARY_QUOTA_TEXT =
+  /you(?:'|’)ve reached (?:your usage limit for this billing cycle|kimi monthly usage limit)\b/i
 // Policy rejections without a dedicated code, matched against the provider's own
 // explanation only. OpenAI reuses `invalid_prompt` for usage-policy rejections while
 // Bedrock Mantle reuses it for schema validation; Anthropic reports blocked output
@@ -143,6 +147,9 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (codes.some((code) => CONTENT_POLICY_CODES.has(code)) || (clientScoped && CONTENT_POLICY_TEXT.test(input.message)))
     return new ContentPolicyError(details)
+  if ([input.message, body].some(isKimiRollingQuota))
+    return new QuotaExceededError({ ...details, classification: "rolling-window" })
+  if (KIMI_ORDINARY_QUOTA_TEXT.test(text)) return new QuotaExceededError(details)
   if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
     return new QuotaExceededError(details)
   if (input.status === 401 || input.status === 403 || codes.some((code) => AUTH_CODES.has(code)))
@@ -176,6 +183,10 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   // Any remaining 4xx is a deterministic rejection of this request.
   if (input.status !== undefined && input.status >= 400 && input.status < 500) return new InvalidRequestError(details)
   return new UnknownProviderError(details)
+}
+
+function isKimiRollingQuota(value: string) {
+  return value.trim().replaceAll("’", "'").toLowerCase() === KIMI_ROLLING_QUOTA_TEXT
 }
 
 function providerCodes(value: unknown) {

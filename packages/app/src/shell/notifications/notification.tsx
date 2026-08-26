@@ -285,7 +285,7 @@ export function createServerNotificationState(input: {
 
     const time = Date.now()
     if (event.type === "session.execution.failed") {
-      handleSessionError(event.data.sessionID, event.data.error, event.id, time)
+      handleSessionError(event.data.sessionID, Schema.decodeUnknownSync(SessionError.Error)(event.data.error), event.id, time)
       return
     }
     handleSessionIdle(event.data.sessionID, event.id, time)
