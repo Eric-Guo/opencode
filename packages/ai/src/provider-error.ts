@@ -74,6 +74,10 @@ const SERVER_CODES = new Set([
 const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
+const KIMI_ROLLING_QUOTA_TEXT =
+  "you've reached your usage limit for this period. your quota will be refreshed in the next period."
+const KIMI_ORDINARY_QUOTA_TEXT =
+  /you(?:'|’)ve reached (?:your usage limit for this billing cycle|kimi monthly usage limit)\b/i
 const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
 const NETWORK_ERROR_TEXT = /network[-_\s]error/i
 
@@ -114,6 +118,9 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if (input.status === 413 || isPayloadTooLarge(text))
     return new InvalidRequestReason({ ...common, classification: "payload-too-large" })
   if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyReason(common)
+  if ([input.message, body].some(isKimiRollingQuota))
+    return new QuotaExceededReason({ ...common, classification: "rolling-window" })
+  if (KIMI_ORDINARY_QUOTA_TEXT.test(text)) return new QuotaExceededReason(common)
   if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
     return new QuotaExceededReason(common)
   if (input.status === 401) return new AuthenticationReason({ ...common, kind: "invalid" })
@@ -159,6 +166,10 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if (input.status === 400 || input.status === 404 || input.status === 413 || input.status === 422)
     return new InvalidRequestReason(common)
   return new UnknownProviderReason({ ...common, status: input.status })
+}
+
+function isKimiRollingQuota(value: string) {
+  return value.trim().replaceAll("’", "'").toLowerCase() === KIMI_ROLLING_QUOTA_TEXT
 }
 
 function providerCodes(value: string) {
