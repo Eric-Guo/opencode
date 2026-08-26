@@ -763,7 +763,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
         lifecycle,
         events,
         "reasoning-0",
-        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+        reasoningSignature
+          ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+          : undefined,
       )
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
@@ -771,7 +773,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           mediaType: part.inlineData.mimeType,
           data: part.inlineData.data,
           providerMetadata: part.thoughtSignature
-            ? googleMetadata({ thoughtSignature: part.thoughtSignature })
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
             : undefined,
         }),
       )
