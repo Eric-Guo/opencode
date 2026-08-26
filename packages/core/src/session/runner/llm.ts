@@ -40,6 +40,8 @@ import { PluginSupervisor } from "../../plugin/supervisor.js"
 import { Tool } from "../../tool.js"
 import { PromptCacheDiagnostics } from "../prompt-cache-diagnostics.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
+import { KimiKeyRotation } from "../../integration/kimi-key-rotation.js"
+import { SessionError } from "@opencode-ai/schema/session-error"
 
 /** How one model call ended: settled, awaiting retry/recovery, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
@@ -62,8 +64,7 @@ const isDecline = (
   error._tag === "Permission.DeclinedError" || error._tag === "QuestionTool.CancelledError"
 
 const isInterruptedStream = (failure: AIError) => {
-  if (failure.reason._tag === "InvalidProviderOutput")
-    return failure.reason.classification === "incomplete-stream"
+  if (failure.reason._tag === "InvalidProviderOutput") return failure.reason.classification === "incomplete-stream"
   if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
   return false
 }
@@ -138,6 +139,7 @@ const layer = Layer.effect(
     const plugins = yield* PluginSupervisor.Service
     const title = yield* SessionTitle.Service
     const toolOutput = yield* ToolOutput.Service
+    const kimi = yield* KimiKeyRotation.Service
     const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
       Config.withDefault(false),
       Effect.orDie,
@@ -233,8 +235,7 @@ const layer = Layer.effect(
       while (true) {
         if (yield* runPendingCompaction(sessionID, "steer")) continue
         if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
-        if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer")))
-          return { type: "complete" as const }
+        if (!first && !next && !(yield* SessionInbox.has(db, sessionID, "steer"))) return { type: "complete" as const }
         const result = yield* runStep(sessionID, promotable, step)
         first = false
         promotable = "steer"
@@ -531,7 +532,20 @@ const layer = Layer.effect(
                 })
               : undefined
           const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
-          const llmError = llmFailure && !publisher.record().providerFailed ? toSessionError(llmFailure) : undefined
+          const baseLLMError = llmFailure && !publisher.record().providerFailed ? toSessionError(llmFailure) : undefined
+          const fallback =
+            baseLLMError &&
+            llmFailure?.reason._tag === "QuotaExceeded" &&
+            llmFailure.reason.classification === "rolling-window" &&
+            resolved.connection?.integrationID === KimiKeyRotation.integrationID &&
+            resolved.connection.ref.type === "env" &&
+            resolved.connection.fingerprint
+              ? yield* kimi.fail({
+                  connection: resolved.connection.ref,
+                  fingerprint: resolved.connection.fingerprint,
+                })
+              : undefined
+          const llmError = baseLLMError && fallback ? kimiFallbackError(baseLLMError, fallback) : baseLLMError
           if (
             recoverContinuation &&
             llmFailure?.reason._tag === "Transport" &&
@@ -743,5 +757,28 @@ export const node = makeLocationNode({
     Snapshot.node,
     ToolOutput.node,
     Database.node,
+    KimiKeyRotation.node,
   ],
 })
+
+function kimiFallbackError(error: SessionError.Error, fallback: KimiKeyRotation.Failure): SessionError.Error {
+  const unavailableUntil = new Date(fallback.unavailableUntil).toISOString()
+  if (fallback.promoted)
+    return {
+      type: error.type,
+      message: `${fallback.previous.name} reached Kimi's five-hour rolling usage limit and is unavailable until ${unavailableUntil}. ${fallback.promoted.name} is now selected. Start a blank session to use the promoted account; this failed step was not replayed.`,
+      ...(error.status === undefined ? {} : { status: error.status }),
+      recovery: {
+        type: "connection-fallback",
+        integrationID: KimiKeyRotation.integrationID,
+        previous: fallback.previous,
+        promoted: fallback.promoted,
+        unavailableUntil: fallback.unavailableUntil,
+      },
+    }
+  return {
+    type: error.type,
+    message: `${fallback.previous.name} reached Kimi's five-hour rolling usage limit and is unavailable until ${unavailableUntil}. Both Kimi accounts are cooling down, so no account was switched. The earliest account becomes available at ${new Date(fallback.earliestAvailableAt).toISOString()}. Start a blank session after that time.`,
+    ...(error.status === undefined ? {} : { status: error.status }),
+  }
+}

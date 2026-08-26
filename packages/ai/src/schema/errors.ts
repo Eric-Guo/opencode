@@ -73,6 +73,7 @@ export class RateLimitReason extends Schema.Class<RateLimitReason>("AI.Error.Rat
 export class QuotaExceededReason extends Schema.Class<QuotaExceededReason>("AI.Error.QuotaExceeded")({
   _tag: Schema.tag("QuotaExceeded"),
   message: Schema.String,
+  classification: Schema.optional(Schema.Literals(["rolling-window"])),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
 }) {}
