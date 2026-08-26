@@ -10,6 +10,9 @@ import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
+import { IntegrationConnection } from "./integration/connection.js"
+import { KimiKeyRotation } from "./integration/kimi-key-rotation.js"
+import { Hash } from "@opencode/util/hash"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -121,6 +124,13 @@ export interface Resolved {
   readonly compaction?: Info["compaction"]
   /** Model transport overrides the provider transport; omitted means HTTP. */
   readonly transport?: Info["transport"]
+  /** Non-secret identity of the integration connection used to build this runtime model. */
+  readonly connection?: {
+    readonly integrationID: Integration.ID
+    readonly ref: IntegrationConnection.Info
+    /** Captures which environment value backed a request without retaining that value. */
+    readonly fingerprint?: string
+  }
 }
 
 export interface Interface {
@@ -351,9 +361,8 @@ export const layer = Layer.effect(
     const aisdk = yield* AISDK.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* providers.get(selected.providerID)
-      const connection = yield* integrations.connection.active(
-        provider?.integrationID ?? Integration.ID.make(selected.providerID),
-      )
+      const integrationID = provider?.integrationID ?? Integration.ID.make(selected.providerID)
+      const connection = yield* integrations.connection.active(integrationID)
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const runtimeInfo = yield* withVariant(selected, variant)
       const model = yield* fromCatalogModel(runtimeInfo, credential, {
@@ -379,6 +388,19 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: selected.compaction,
         transport: selected.transport,
+        ...(connection
+          ? {
+              connection: {
+                integrationID,
+                ref: connection,
+                ...(integrationID === KimiKeyRotation.integrationID &&
+                connection.type === "env" &&
+                credential?.type === "key"
+                  ? { fingerprint: Hash.sha256(credential.key) }
+                  : {}),
+              },
+            }
+          : {}),
       }
     })
     return Service.of({

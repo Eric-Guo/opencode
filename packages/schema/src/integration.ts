@@ -53,7 +53,15 @@ const Updated = ephemeral({
   type: "integration.updated",
   schema: {},
 })
-export const Event = { Updated, Definitions: inventory(Updated) }
+const ConnectionSwitched = ephemeral({
+  type: "integration.connection.switched",
+  schema: {
+    integrationID: IntegrationID,
+    previous: Connection.Info,
+    promoted: Connection.Info,
+  },
+})
+export const Event = { Updated, ConnectionSwitched, Definitions: inventory(Updated, ConnectionSwitched) }
 
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Ref = Schema.Struct({
