@@ -362,7 +362,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           parts.push({
             inlineData: { mimeType: media.mime, data: media.base64 },
             thoughtSignature:
-              thoughtSignature(part.providerMetadata) ??
+              thoughtSignature(part.providerMetadata, metadataKey) ??
               (media.mime.startsWith("image/") ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
           })
           continue
@@ -708,7 +708,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
         lifecycle,
         events,
         "reasoning-0",
-        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+        reasoningSignature
+          ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+          : undefined,
       )
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
@@ -716,7 +718,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           mediaType: part.inlineData.mimeType,
           data: part.inlineData.data,
           providerMetadata: part.thoughtSignature
-            ? googleMetadata({ thoughtSignature: part.thoughtSignature })
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
             : undefined,
         }),
       )
