@@ -4,6 +4,7 @@ import { Provider } from "@opencode/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { ModelsDev } from "../models-dev.js"
+import { KimiKeyRotation } from "../integration/kimi-key-rotation.js"
 
 // These catalog entries require inference profiles on Bedrock Runtime.
 // Opus/Sonnet 4.6 support in-region calls in eu-west-2 and must remain available.
@@ -80,6 +81,7 @@ export const ModelsDevPlugin = define({
 })
 
 function environmentNames(provider: ModelsDev.Snapshot) {
+  if (provider.info.id === "kimi-for-coding") return [...KimiKeyRotation.environmentNames]
   if (provider.info.id === Provider.ID.azure)
     return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
   // models.dev advertises project, location, and the ADC credentials file path for
