@@ -25,6 +25,7 @@ import { IntegrationConnection } from "./integration/connection.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
 import { Form } from "./form.js"
+import { KimiKeyRotation } from "./integration/kimi-key-rotation.js"
 
 export const ID = Integration.ID
 export type ID = Integration.ID
@@ -262,6 +263,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const credentials = yield* Credential.Service
     const bus = yield* Bus.Service
+    const kimi = yield* KimiKeyRotation.Service
     const processes = yield* AppProcess.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
@@ -342,7 +344,10 @@ const layer = Layer.effect(
       return yield* credentials.create({ ...input, label })
     })
 
-    const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
+    const resolveConnections = Effect.fnUntraced(function* (
+      entry: Entry | undefined,
+      saved: readonly Credential.Info[],
+    ) {
       const credentials = saved
         .map((credential) => ({
           type: "credential" as const,
@@ -350,12 +355,13 @@ const layer = Layer.effect(
           label: credential.label,
         }))
         .toReversed()
-      const env = (entry?.methods ?? [])
-        .filter((method) => method.type === "env")
-        .flatMap((method) => method.names.filter((name) => process.env[name]))
-        .map((name) => ({ type: "env" as const, name }))
+      const names = (entry?.methods ?? []).filter((method) => method.type === "env").flatMap((method) => method.names)
+      const env =
+        entry?.ref.id === KimiKeyRotation.integrationID
+          ? yield* kimi.connections(names)
+          : names.filter((name) => process.env[name]).map((name) => ({ type: "env" as const, name }))
       return [...credentials, ...env]
-    }
+    })
 
     const project = (entry: Entry, connections: IntegrationConnection.Info[]): Info =>
       Info.make({
@@ -651,18 +657,20 @@ const layer = Layer.effect(
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined
-        return project(entry, resolveConnections(entry, yield* credentials.list(id)))
+        return project(entry, yield* resolveConnections(entry, yield* credentials.list(id)))
       }),
       list: Effect.fn("Integration.list")(function* () {
         const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
-        return Array.from(state.get().integrations.values(), (entry) =>
-          project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [])),
-        ).toSorted((a, b) => a.name.localeCompare(b.name))
+        return (yield* Effect.forEach(state.get().integrations.values(), (entry) =>
+          resolveConnections(entry, saved.get(entry.ref.id) ?? []).pipe(
+            Effect.map((connections) => project(entry, connections)),
+          ),
+        )).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
       connection: {
         active: Effect.fn("Integration.connection.active")(function* (id) {
           const entry = state.get().integrations.get(id)
-          return resolveConnections(entry, yield* credentials.list(id))[0]
+          return (yield* resolveConnections(entry, yield* credentials.list(id)))[0]
         }),
         resolve: Effect.fn("Integration.connection.resolve")(function* (connection) {
           if (connection.type === "env") {
@@ -796,5 +804,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Credential.node, Bus.node, AppProcess.node],
+  deps: [Credential.node, Bus.node, AppProcess.node, KimiKeyRotation.node],
 })
