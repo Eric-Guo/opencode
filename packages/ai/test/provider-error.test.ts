@@ -146,7 +146,7 @@ describe("provider error classification", () => {
     ).toEqual(["QuotaExceeded", "ProviderInternal", "InvalidRequest"])
   })
 
-  test("classifies only Kimi's five-hour response as a rolling-window quota", () => {
+  test("classifies Kimi's exact five-hour response as a rolling-window quota", () => {
     expect(
       classifyProviderFailure({
         message: "You've reached your usage limit for this period. Your quota will be refreshed in the next period.",
@@ -178,6 +178,20 @@ describe("provider error classification", () => {
         return "classification" in reason ? reason.classification : undefined
       }),
     ).toEqual(ordinary.map(() => undefined))
+  })
+
+  test("classifies Kimi's HTTP 403 concurrent-request response as rotation-triggering", () => {
+    expect(
+      classifyProviderFailure({
+        message:
+          "You've reached your concurrent request limit. Please wait for your ongoing requests to finish and try again.",
+        status: 403,
+      }),
+    ).toMatchObject({
+      _tag: "QuotaExceeded",
+      classification: "rolling-window",
+      message: expect.stringContaining("concurrent request limit"),
+    })
   })
 
   test("leaves unrecognized failures unclassified for the retry default", () => {
