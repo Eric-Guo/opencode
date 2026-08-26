@@ -13,6 +13,7 @@ import { Cause, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Agent } from "../../agent.js"
 import { Bus } from "../../bus.js"
+import { KimiKeyRotation } from "../../integration/kimi-key-rotation.js"
 import { Permission } from "../../permission.js"
 import { Snapshot } from "../../snapshot.js"
 import { Tool } from "../../tool.js"
@@ -60,6 +61,7 @@ export const make = Effect.gen(function* () {
   const llm = yield* LLMClient.Service
   const snapshots = yield* Snapshot.Service
   const toolOutput = yield* ToolOutput.Service
+  const kimi = Option.getOrUndefined(yield* Effect.serviceOption(KimiKeyRotation.Service))
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
     const startSnapshot = yield* snapshots.capture()
@@ -158,7 +160,21 @@ export const make = Effect.gen(function* () {
               })
             : undefined
         const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
-        const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
+        const baseLLMError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
+        const fallback =
+          kimi &&
+          baseLLMError &&
+          llmFailure?.reason._tag === "QuotaExceeded" &&
+          llmFailure.reason.classification === "rolling-window" &&
+          input.model.connection?.integrationID === KimiKeyRotation.integrationID &&
+          input.model.connection.ref.type === "env" &&
+          input.model.connection.fingerprint
+            ? yield* kimi.fail({
+                connection: input.model.connection.ref,
+                fingerprint: input.model.connection.fingerprint,
+              })
+            : undefined
+        const llmError = baseLLMError && fallback ? kimiFallbackError(baseLLMError, fallback) : baseLLMError
         if (
           input.recoverContinuation &&
           llmFailure?.reason._tag === "Transport" &&
@@ -260,6 +276,28 @@ const isInterruptedStream = (failure: AIError) => {
   if (failure.reason._tag === "InvalidProviderOutput") return failure.reason.classification === "incomplete-stream"
   if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
   return false
+}
+
+function kimiFallbackError(error: SessionError.Error, fallback: KimiKeyRotation.Failure): SessionError.Error {
+  const unavailableUntil = new Date(fallback.unavailableUntil).toISOString()
+  if (fallback.promoted)
+    return {
+      type: error.type,
+      message: `${fallback.previous.name} reached Kimi's five-hour rolling usage limit and is unavailable until ${unavailableUntil}. ${fallback.promoted.name} is now selected. Start a blank session to use the promoted account; this failed step was not replayed.`,
+      ...(error.status === undefined ? {} : { status: error.status }),
+      recovery: {
+        type: "connection-fallback",
+        integrationID: KimiKeyRotation.integrationID,
+        previous: fallback.previous,
+        promoted: fallback.promoted,
+        unavailableUntil: fallback.unavailableUntil,
+      },
+    }
+  return {
+    type: error.type,
+    message: `${fallback.previous.name} reached Kimi's five-hour rolling usage limit and is unavailable until ${unavailableUntil}. Both Kimi accounts are cooling down, so no account was switched. The earliest account becomes available at ${new Date(fallback.earliestAvailableAt).toISOString()}. Start a blank session after that time.`,
+    ...(error.status === undefined ? {} : { status: error.status }),
+  }
 }
 
 /** Keep every joined exit associated with its call; a decline is not an infrastructure failure. */
