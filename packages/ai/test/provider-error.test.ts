@@ -84,9 +84,7 @@ describe("provider error classification", () => {
 
   test("classifies network error text as provider internal", () => {
     expect(
-      ["network error", "network-error", "network_error"].map(
-        (message) => classifyProviderFailure({ message })._tag,
-      ),
+      ["network error", "network-error", "network_error"].map((message) => classifyProviderFailure({ message })._tag),
     ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
   })
 
@@ -98,6 +96,40 @@ describe("provider error classification", () => {
         '{"code":"bad_request","error":{"type":"invalid_request_error"}}',
       ].map((message) => classifyProviderFailure({ message })._tag),
     ).toEqual(["QuotaExceeded", "ProviderInternal", "InvalidRequest"])
+  })
+
+  test("classifies only Kimi's five-hour response as a rolling-window quota", () => {
+    expect(
+      classifyProviderFailure({
+        message: "You've reached your usage limit for this period. Your quota will be refreshed in the next period.",
+        status: 429,
+      }),
+    ).toMatchObject({ _tag: "QuotaExceeded", classification: "rolling-window" })
+
+    expect(
+      classifyProviderFailure({
+        message:
+          "You've reached your usage limit for this period. Your quota will be refreshed in the next period. Contact support.",
+        status: 429,
+      }),
+    ).not.toHaveProperty("classification", "rolling-window")
+
+    const ordinary = [
+      ["You've reached your usage limit for this billing cycle. Your quota will be refreshed in the next cycle.", 403],
+      ["You've reached kimi monthly usage limit for this billing cycle.", 429],
+      ["The engine is currently overloaded, please try again later", 429],
+      ["We're receiving too many requests at the moment. Please wait a moment and try again.", 429],
+      ["The API Key appears to be invalid or may have expired.", 401],
+      ["Your current subscription does not have access to kimi-for-coding-highspeed.", 401],
+      ["Access terminated.", 403],
+    ] as const
+
+    expect(
+      ordinary.map(([message, status]) => {
+        const reason = classifyProviderFailure({ message, status })
+        return "classification" in reason ? reason.classification : undefined
+      }),
+    ).toEqual(ordinary.map(() => undefined))
   })
 
   test("keeps unknown and malformed provider payloads non-retryable", () => {
