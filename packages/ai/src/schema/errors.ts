@@ -87,6 +87,7 @@ export class QuotaExceededError extends Schema.TaggedError<QuotaExceededError>("
   {
     ...ReasonFields,
     retryAfterMs: Schema.optional(NonNegativeInt),
+    classification: Schema.optional(Schema.Literals(["rolling-window"])),
   },
 ) {}
 

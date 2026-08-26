@@ -25,11 +25,11 @@ import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
+import type { Integration } from "@opencode/schema/integration"
+import type { Credential } from "@opencode/schema/credential"
 import type { Form } from "@opencode/schema/form"
 import type { Provider } from "@opencode/schema/provider"
-import type { Integration } from "@opencode/schema/integration"
 import type { Mcp } from "@opencode/schema/mcp"
-import type { Credential } from "@opencode/schema/credential"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
 import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
@@ -686,6 +686,63 @@ export type SessionLogOutput =
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
               readonly retryAfterMs?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
             }
           }
         }
@@ -854,6 +911,63 @@ export type SessionLogOutput =
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
               readonly retryAfterMs?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
             }
             readonly finish?: "content-filter" | undefined
             readonly rawFinish?: string | undefined
@@ -1058,6 +1172,63 @@ export type SessionLogOutput =
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
               readonly retryAfterMs?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
             }
             readonly content?:
               | readonly [
@@ -1106,6 +1277,63 @@ export type SessionLogOutput =
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
               readonly retryAfterMs?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
             }
           }
         }
@@ -1168,6 +1396,63 @@ export type SessionLogOutput =
               readonly status?: number | undefined
               readonly response?: { readonly body: string } | undefined
               readonly retryAfterMs?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth" | "external"
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                      | {
+                          readonly type: "env"
+                          readonly name: string
+                          readonly status?:
+                            | {
+                                readonly status: "needs_auth"
+                                readonly message: string
+                                readonly url?: string | undefined
+                              }
+                            | undefined
+                        }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
             }
             readonly inputID?: SessionMessage.ID | undefined
             readonly cost?: Money.USD | undefined

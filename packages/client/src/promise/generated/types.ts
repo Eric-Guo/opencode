@@ -106,13 +106,11 @@ export type ToolTextContent = { type: "text"; text: string }
 
 export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string | null }
 
-export type SessionStructuredError = {
-  type: string
-  message: string
-  status?: number
-  response?: { body: string }
-  retryAfterMs?: number
-}
+export type IntegrationID = string
+
+export type CredentialID = string
+
+export type ConnectionStatus = { status: "needs_auth"; message: string; url?: string }
 
 export type SessionActive = { type: "running" }
 
@@ -182,15 +180,9 @@ export type VoiceWebRTCTransport = { type: "webrtc"; sdp: string }
 
 export type VoiceWebSocketTransport = { type: "websocket"; url: string; token: string; expiresAt: number }
 
-export type IntegrationID = string
-
 export type IntegrationMethodID = string
 
 export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
-
-export type CredentialID = string
-
-export type ConnectionStatus = { status: "needs_auth"; message: string; url?: string }
 
 export type IntegrationAttemptID = string
 
@@ -508,28 +500,15 @@ export type SessionMessageAssistantFile = {
 
 export type ToolContent = ToolTextContent | ToolFileContent
 
-export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
-
-export type SessionMessageCompactionFailed = {
-  type: "compaction"
-  id: SessionMessageID
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  status: "failed"
-  reason: "auto" | "manual"
-  error: SessionStructuredError
-  cost?: MoneyUSD
-  tokens?: TokenUsageInfo
+export type ConnectionCredentialInfo = {
+  type: "credential"
+  id: CredentialID
+  label: string
+  method: "key" | "oauth" | "external"
+  status?: ConnectionStatus
 }
 
-export type SessionMessageIdle = {
-  id: SessionMessageID
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  type: "idle"
-  outcome: "succeeded" | "failed" | "interrupted"
-  error?: SessionStructuredError
-}
+export type ConnectionEnvInfo = { type: "env"; name: string; status?: ConnectionStatus }
 
 export type SessionInboxSynthetic = {
   id: SessionMessageID
@@ -703,16 +682,6 @@ export type CredentialExternal = {
   methodID: IntegrationMethodID
   metadata?: { [x: string]: JsonValue }
 }
-
-export type ConnectionCredentialInfo = {
-  type: "credential"
-  id: CredentialID
-  label: string
-  method: "key" | "oauth" | "external"
-  status?: ConnectionStatus
-}
-
-export type ConnectionEnvInfo = { type: "env"; name: string; status?: ConnectionStatus }
 
 export type IntegrationAttempt = {
   attemptID: IntegrationAttemptID
@@ -988,13 +957,7 @@ export type SessionMessageToolStateCompleted = {
   metadata?: { [x: string]: JsonValue }
 }
 
-export type SessionMessageToolStateError = {
-  status: "error"
-  input: { [x: string]: JsonValue }
-  error: SessionStructuredError
-  content?: [ToolContent, ...Array<ToolContent>]
-  metadata?: { [x: string]: JsonValue }
-}
+export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
 export type SessionAgentSelected = {
   id: EventID
@@ -1154,16 +1117,6 @@ export type SessionExecutionSucceeded = {
   data: { sessionID: SessionID }
 }
 
-export type SessionExecutionFailed = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.execution.failed"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: { sessionID: SessionID; error: SessionStructuredError }
-}
-
 export type SessionExecutionInterrupted = {
   id: EventID
   created: number
@@ -1275,27 +1228,6 @@ export type SessionStepEnded = {
   }
 }
 
-export type SessionStepFailed = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.step.failed"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: {
-    sessionID: SessionID
-    assistantMessageID: SessionMessageID
-    error: SessionStructuredError
-    finish?: "content-filter"
-    rawFinish?: string
-    native?: SessionMessageNative1
-    cost?: MoneyUSD
-    tokens?: TokenUsageInfo
-    snapshot?: SnapshotID
-    files?: Array<RelativePath>
-  }
-}
-
 export type SessionTextStarted = {
   id: EventID
   created: number
@@ -1385,22 +1317,6 @@ export type SessionToolCalled = {
   }
 }
 
-export type SessionRetryScheduled = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.retry.scheduled"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: {
-    sessionID: SessionID
-    assistantMessageID: SessionMessageID
-    attempt: number
-    at: number
-    error: SessionStructuredError
-  }
-}
-
 export type SessionCompactionStarted = {
   id: EventID
   created: number
@@ -1424,23 +1340,6 @@ export type SessionCompactionEnded = {
     model?: ModelRef
     native?: SessionMessageNative1
     text: string
-    cost?: MoneyUSD
-    tokens?: TokenUsageInfo
-  }
-}
-
-export type SessionCompactionFailed = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.compaction.failed"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: {
-    sessionID: SessionID
-    reason: "auto" | "manual"
-    error: SessionStructuredError
-    inputID?: SessionMessageID
     cost?: MoneyUSD
     tokens?: TokenUsageInfo
   }
@@ -1953,37 +1852,10 @@ export type SessionToolSuccess = {
   }
 }
 
-export type SessionToolFailed = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.tool.failed"
-  durable: { aggregateID: string; seq: EventSeq; version: 2 }
-  location?: LocationRef
-  data: {
-    sessionID: SessionID
-    assistantMessageID: SessionMessageID
-    id: string
-    error: SessionStructuredError
-    content?: [ToolContent1, ...Array<ToolContent1>]
-    metadata?: { [x: string]: JsonValue }
-    executed: boolean
-    native?: SessionMessageNative1
-  }
-}
-
 export type SessionMessageToolStateCompleted1 = {
   status: "completed"
   input: { [x: string]: any }
   content: [ToolContent1, ...Array<ToolContent1>]
-  metadata?: { [x: string]: JsonValue }
-}
-
-export type SessionMessageToolStateError1 = {
-  status: "error"
-  input: { [x: string]: any }
-  error: SessionStructuredError
-  content?: [ToolContent1, ...Array<ToolContent1>]
   metadata?: { [x: string]: JsonValue }
 }
 
@@ -2022,8 +1894,6 @@ export type ProviderInfo = {
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
 
 export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
-
-export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
 export type PtyCreated = {
   id: EventID
@@ -2107,11 +1977,6 @@ export type SessionStatsInfo = {
   activity: Array<SessionStatsActivity>
   models: Array<SessionStatsModelUsage>
 }
-
-export type SessionMessageCompaction =
-  | SessionMessageCompactionRunning
-  | SessionMessageCompactionCompleted
-  | SessionMessageCompactionFailed
 
 export type ModelInfo = {
   id: string
@@ -2393,18 +2258,21 @@ export type SessionInboxUser = {
   delivery: SessionInboxDelivery
 }
 
-export type SessionMessageAssistantTool = {
-  type: "tool"
-  id: string
-  name: string
-  executed?: boolean
-  native?: SessionMessageNative
-  state:
-    | SessionMessageToolStateStreaming
-    | SessionMessageToolStateRunning
-    | SessionMessageToolStateCompleted
-    | SessionMessageToolStateError
-  time: { created: number; ran?: number; completed?: number }
+export type SessionErrorConnectionFallbackRecovery = {
+  type: "connection-fallback"
+  integrationID: IntegrationID
+  previous: ConnectionInfo
+  promoted: ConnectionInfo
+  unavailableUntil: number
+}
+
+export type IntegrationConnectionSwitched = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "integration.connection.switched"
+  location?: LocationRef
+  data: { integrationID: IntegrationID; previous: ConnectionInfo; promoted: ConnectionInfo }
 }
 
 export type SessionInboxItem =
@@ -2412,20 +2280,6 @@ export type SessionInboxItem =
   | { type: "synthetic"; payload: SessionInboxSyntheticPayload1; delivery: SessionInboxDelivery }
   | { type: "compaction"; payload: SessionInboxCompactionPayload; delivery: SessionInboxDelivery }
   | { type: "move"; payload: SessionInboxMovePayload1; delivery: SessionInboxDelivery }
-
-export type SessionMessageAssistantTool1 = {
-  type: "tool"
-  id: string
-  name: string
-  executed?: boolean
-  native?: SessionMessageNative1
-  state:
-    | SessionMessageToolStateStreaming
-    | SessionMessageToolStateRunning1
-    | SessionMessageToolStateCompleted1
-    | SessionMessageToolStateError1
-  time: { created: number; ran?: number; completed?: number }
-}
 
 export type FormFields = [FormField, ...Array<FormField>]
 
@@ -2446,28 +2300,7 @@ export type SessionsResponse = {
 
 export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
 
-export type SessionMessageAssistant = {
-  id: SessionMessageID
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number; streamed?: number; completed?: number }
-  type: "assistant"
-  agent: AgentID
-  model: ModelRef
-  content: Array<
-    | SessionMessageAssistantText
-    | SessionMessageAssistantReasoning
-    | SessionMessageAssistantFile
-    | SessionMessageAssistantTool
-  >
-  snapshot?: { start?: SnapshotID; end?: SnapshotID; files?: Array<RelativePath> }
-  finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
-  rawFinish?: string
-  native?: SessionMessageNative
-  cost?: MoneyUSD
-  tokens?: TokenUsageInfo
-  error?: SessionStructuredError
-  retry?: SessionMessageAssistantRetry
-}
+export type SessionErrorRecovery = SessionErrorConnectionFallbackRecovery
 
 export type SessionInboxEnqueued = {
   id: EventID
@@ -2478,12 +2311,6 @@ export type SessionInboxEnqueued = {
   location?: LocationRef
   data: { sessionID: SessionID; inboxID: SessionMessageID; item: SessionInboxItem }
 }
-
-export type SessionMessageAssistantContentEncoded =
-  | SessionMessageAssistantText1
-  | SessionMessageAssistantReasoning1
-  | SessionMessageAssistantFile1
-  | SessionMessageAssistantTool1
 
 export type FormInfo = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
 
@@ -2504,27 +2331,13 @@ export type IntegrationExternalMethod = { id: IntegrationMethodID; type: "extern
 
 export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
 
-export type SessionMessageInfo =
-  | SessionMessageAgentSelected
-  | SessionMessageModelSelected
-  | SessionMessageLocationSwitched
-  | SessionMessageUser
-  | SessionMessageSynthetic
-  | SessionMessageSystem
-  | SessionMessageSkill
-  | SessionMessageShell
-  | SessionMessageAssistant
-  | SessionMessageCompaction
-  | SessionMessageIdle
-
-export type SessionMessageContentUpdated = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.message.content.updated"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: { sessionID: SessionID; messageID: SessionMessageID; content: Array<SessionMessageAssistantContentEncoded> }
+export type SessionStructuredError = {
+  type: string
+  message: string
+  status?: number
+  response?: { body: string }
+  retryAfterMs?: number
+  recovery?: SessionErrorRecovery
 }
 
 export type IntegrationMethod =
@@ -2543,62 +2356,127 @@ export type FormCreated = {
   data: { form: FormInfo1 }
 }
 
-export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
-
-export type SessionMessagesResponse = {
-  data: Array<SessionMessageInfo>
-  cursor: { previous?: string | null; next?: string | null }
+export type SessionMessageToolStateError = {
+  status: "error"
+  input: { [x: string]: JsonValue }
+  error: SessionStructuredError
+  content?: [ToolContent, ...Array<ToolContent>]
+  metadata?: { [x: string]: JsonValue }
 }
 
-export type SessionEventDurable =
-  | SessionCreated
-  | SessionAgentSelected
-  | SessionModelSelected
-  | SessionMoved
-  | SessionRenamed
-  | SessionMetadataUpdated
-  | SessionPermissions
-  | SessionViewed
-  | SessionArchived
-  | SessionUnarchived
-  | SessionDeleted
-  | SessionForked
-  | SessionInboxDelivered
-  | SessionInboxEnqueued
-  | SessionInboxCancelled
-  | SessionInboxDeliveryChanged
-  | SessionExecutionStarted
-  | SessionExecutionSucceeded
-  | SessionExecutionFailed
-  | SessionExecutionInterrupted
-  | SessionInstructionsUpdated
-  | SessionSynthetic
-  | SessionSkillActivated
-  | SessionShellStarted
-  | SessionShellEnded
-  | SessionStepStarted
-  | SessionStepStreamed
-  | SessionStepEnded
-  | SessionStepFailed
-  | SessionTextStarted
-  | SessionTextEnded
-  | SessionReasoningStarted
-  | SessionReasoningEnded
-  | SessionFileGenerated
-  | SessionToolInputStarted
-  | SessionToolInputEnded
-  | SessionToolCalled
-  | SessionToolSuccess
-  | SessionToolFailed
-  | SessionRetryScheduled
-  | SessionCompactionStarted
-  | SessionCompactionEnded
-  | SessionCompactionFailed
-  | SessionRevertStaged
-  | SessionRevertCleared
-  | SessionRevertCommitted
-  | SessionUsageRecorded
-  | SessionMessageContentUpdated
+export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
+
+export type SessionMessageCompactionFailed = {
+  type: "compaction"
+  id: SessionMessageID
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  status: "failed"
+  reason: "auto" | "manual"
+  error: SessionStructuredError
+  cost?: MoneyUSD
+  tokens?: TokenUsageInfo
+}
+
+export type SessionExecutionFailed = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.execution.failed"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; error: SessionStructuredError }
+}
+
+export type SessionStepFailed = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.step.failed"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    assistantMessageID: SessionMessageID
+    error: SessionStructuredError
+    finish?: "content-filter"
+    rawFinish?: string
+    native?: SessionMessageNative1
+    cost?: MoneyUSD
+    tokens?: TokenUsageInfo
+    snapshot?: SnapshotID
+    files?: Array<RelativePath>
+  }
+}
+
+export type SessionToolFailed = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.tool.failed"
+  durable: { aggregateID: string; seq: EventSeq; version: 2 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    assistantMessageID: SessionMessageID
+    id: string
+    error: SessionStructuredError
+    content?: [ToolContent1, ...Array<ToolContent1>]
+    metadata?: { [x: string]: JsonValue }
+    executed: boolean
+    native?: SessionMessageNative1
+  }
+}
+
+export type SessionRetryScheduled = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.retry.scheduled"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    assistantMessageID: SessionMessageID
+    attempt: number
+    at: number
+    error: SessionStructuredError
+  }
+}
+
+export type SessionCompactionFailed = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.compaction.failed"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    reason: "auto" | "manual"
+    error: SessionStructuredError
+    inputID?: SessionMessageID
+    cost?: MoneyUSD
+    tokens?: TokenUsageInfo
+  }
+}
+
+export type SessionMessageToolStateError1 = {
+  status: "error"
+  input: { [x: string]: any }
+  error: SessionStructuredError
+  content?: [ToolContent1, ...Array<ToolContent1>]
+  metadata?: { [x: string]: JsonValue }
+}
+
+export type SessionMessageIdle = {
+  id: SessionMessageID
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  type: "idle"
+  outcome: "succeeded" | "failed" | "interrupted"
+  error?: SessionStructuredError
+}
 
 export type IntegrationInfo = {
   id: IntegrationID
@@ -2608,12 +2486,32 @@ export type IntegrationInfo = {
   connections: Array<ConnectionInfo>
 }
 
+export type SessionMessageAssistantTool = {
+  type: "tool"
+  id: string
+  name: string
+  executed?: boolean
+  native?: SessionMessageNative
+  state:
+    | SessionMessageToolStateStreaming
+    | SessionMessageToolStateRunning
+    | SessionMessageToolStateCompleted
+    | SessionMessageToolStateError
+  time: { created: number; ran?: number; completed?: number }
+}
+
+export type SessionMessageCompaction =
+  | SessionMessageCompactionRunning
+  | SessionMessageCompactionCompleted
+  | SessionMessageCompactionFailed
+
 export type V2Event =
   | LocationShutdown
   | ModelsDevRefreshed
   | CredentialUpdated
   | CredentialSwitched
   | IntegrationUpdated
+  | IntegrationConnectionSwitched
   | ProviderUpdated
   | ModelUpdated
   | AgentUpdated
@@ -2707,6 +2605,129 @@ export type V2Event =
   | V2EventRpc
   | V2EventServerConnected
 
+export type SessionMessageAssistantTool1 = {
+  type: "tool"
+  id: string
+  name: string
+  executed?: boolean
+  native?: SessionMessageNative1
+  state:
+    | SessionMessageToolStateStreaming
+    | SessionMessageToolStateRunning1
+    | SessionMessageToolStateCompleted1
+    | SessionMessageToolStateError1
+  time: { created: number; ran?: number; completed?: number }
+}
+
+export type SessionMessageAssistant = {
+  id: SessionMessageID
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number; streamed?: number; completed?: number }
+  type: "assistant"
+  agent: AgentID
+  model: ModelRef
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantFile
+    | SessionMessageAssistantTool
+  >
+  snapshot?: { start?: SnapshotID; end?: SnapshotID; files?: Array<RelativePath> }
+  finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
+  rawFinish?: string
+  native?: SessionMessageNative
+  cost?: MoneyUSD
+  tokens?: TokenUsageInfo
+  error?: SessionStructuredError
+  retry?: SessionMessageAssistantRetry
+}
+
+export type SessionMessageAssistantContentEncoded =
+  | SessionMessageAssistantText1
+  | SessionMessageAssistantReasoning1
+  | SessionMessageAssistantFile1
+  | SessionMessageAssistantTool1
+
+export type SessionMessageInfo =
+  | SessionMessageAgentSelected
+  | SessionMessageModelSelected
+  | SessionMessageLocationSwitched
+  | SessionMessageUser
+  | SessionMessageSynthetic
+  | SessionMessageSystem
+  | SessionMessageSkill
+  | SessionMessageShell
+  | SessionMessageAssistant
+  | SessionMessageCompaction
+  | SessionMessageIdle
+
+export type SessionMessageContentUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.message.content.updated"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; messageID: SessionMessageID; content: Array<SessionMessageAssistantContentEncoded> }
+}
+
+export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
+
+export type SessionMessagesResponse = {
+  data: Array<SessionMessageInfo>
+  cursor: { previous?: string | null; next?: string | null }
+}
+
+export type SessionEventDurable =
+  | SessionCreated
+  | SessionAgentSelected
+  | SessionModelSelected
+  | SessionMoved
+  | SessionRenamed
+  | SessionMetadataUpdated
+  | SessionPermissions
+  | SessionViewed
+  | SessionArchived
+  | SessionUnarchived
+  | SessionDeleted
+  | SessionForked
+  | SessionInboxDelivered
+  | SessionInboxEnqueued
+  | SessionInboxCancelled
+  | SessionInboxDeliveryChanged
+  | SessionExecutionStarted
+  | SessionExecutionSucceeded
+  | SessionExecutionFailed
+  | SessionExecutionInterrupted
+  | SessionInstructionsUpdated
+  | SessionSynthetic
+  | SessionSkillActivated
+  | SessionShellStarted
+  | SessionShellEnded
+  | SessionStepStarted
+  | SessionStepStreamed
+  | SessionStepEnded
+  | SessionStepFailed
+  | SessionTextStarted
+  | SessionTextEnded
+  | SessionReasoningStarted
+  | SessionReasoningEnded
+  | SessionFileGenerated
+  | SessionToolInputStarted
+  | SessionToolInputEnded
+  | SessionToolCalled
+  | SessionToolSuccess
+  | SessionToolFailed
+  | SessionRetryScheduled
+  | SessionCompactionStarted
+  | SessionCompactionEnded
+  | SessionCompactionFailed
+  | SessionRevertStaged
+  | SessionRevertCleared
+  | SessionRevertCommitted
+  | SessionUsageRecorded
+  | SessionMessageContentUpdated
+
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
 export type InvalidRequestError = {
@@ -2722,14 +2743,6 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
-export type ServiceUnavailableError = {
-  readonly _tag: "ServiceUnavailableError"
-  readonly message: string
-  readonly service?: string | undefined
-}
-export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
-
 export type LocationNotFoundError = {
   readonly _tag: "LocationNotFoundError"
   readonly location: { readonly directory: string }
@@ -2737,6 +2750,14 @@ export type LocationNotFoundError = {
 }
 export const isLocationNotFoundError = (value: unknown): value is LocationNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationNotFoundError"
+
+export type ServiceUnavailableError = {
+  readonly _tag: "ServiceUnavailableError"
+  readonly message: string
+  readonly service?: string | undefined
+}
+export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
 
 export type AgentNotFoundError = {
   readonly _tag: "AgentNotFoundError"
