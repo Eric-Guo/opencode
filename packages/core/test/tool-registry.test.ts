@@ -378,7 +378,7 @@ describe("Tool", () => {
       yield* transform(service, { "2d_get_scene": make() }, { namespace: "123._private.-tools", codemode: true })
 
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute", "tool_search"])
       expect(codeModeListings(snapshot.codeModeCatalog!).map((tool) => tool.path)).toEqual([
         "-lookup",
         "123",
@@ -418,7 +418,7 @@ describe("Tool", () => {
       })
 
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["first", "execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["first", "execute", "tool_search"])
       expect(codeModeListings(snapshot.codeModeCatalog!).map((tool) => tool.path)).toEqual([
         "invalid__namespace.second",
       ])
@@ -438,7 +438,7 @@ describe("Tool", () => {
       })
 
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["registry_direct", "execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["registry_direct", "execute", "tool_search"])
       expect(codeModeListings(snapshot.codeModeCatalog!).map((tool) => tool.path)).toEqual([
         "legacy.plain",
         "registry.search",
@@ -592,7 +592,7 @@ describe("Tool", () => {
         ],
       ])
       const snapshot = yield* service.snapshot()
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["healthy", "execute"])
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["healthy", "execute", "tool_search"])
       expect(codeModeListings(snapshot.codeModeCatalog!).map((tool) => tool.path)).toEqual(["codemode"])
       expect((yield* snapshot.execute(call("phone_type")).pipe(Effect.flip)).message).toBe("Unknown tool: phone_type")
     }).pipe(Effect.provide(Logger.layer([logger])))
@@ -617,14 +617,17 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("reserves execute and tool_search for Code Mode", () =>
+  it.effect("skips registrations for execute and tool_search reserved by Code Mode", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      const execute = yield* transform(service, { execute: make() }, { codemode: false }).pipe(Effect.flip)
-      const toolSearch = yield* transform(service, { tool_search: make() }, { codemode: false }).pipe(Effect.flip)
+      yield* transform(service, { execute: make() }, { codemode: false })
+      yield* transform(service, { tool_search: make() }, { codemode: false })
 
-      expect(execute.message).toBe('Tool name "execute" is reserved for CodeMode')
-      expect(toolSearch.message).toBe('Tool name "tool_search" is reserved for CodeMode')
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect((yield* snapshot.execute(call("tool_search")).pipe(Effect.flip)).message).toBe(
+        "Unknown tool: tool_search",
+      )
     }),
   )
 
