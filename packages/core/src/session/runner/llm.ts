@@ -32,6 +32,7 @@ import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
+import { KimiKeyRotation } from "../../integration/kimi-key-rotation.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -453,5 +454,6 @@ export const node = makeLocationNode({
     Snapshot.node,
     ToolOutput.node,
     Database.node,
+    KimiKeyRotation.node,
   ],
 })
