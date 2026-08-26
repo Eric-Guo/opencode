@@ -409,6 +409,35 @@ test("refreshes global credential events across every loaded location and worksp
       )
       requests.length = 0
     }
+
+    const connectionSwitched: OpenCodeEvent = {
+      id: "evt_integration.connection.switched",
+      created: 3,
+      type: "integration.connection.switched",
+      data: {
+        integrationID: "kimi-for-coding",
+        previous: { type: "env", name: "KIMI_API_KEY" },
+        promoted: { type: "env", name: "KIMI_API_KEY_2" },
+      },
+    }
+    listeners.forEach((listener) => listener({ name: connectionSwitched.type, details: connectionSwitched }))
+    await wait(() => requests.length === 6)
+    expect(
+      requests.map((url) => [
+        url.pathname,
+        url.searchParams.get("location[directory]"),
+        url.searchParams.get("location[workspace]"),
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        ["/api/integration", "/project", null],
+        ["/api/model", "/project", null],
+        ["/api/provider", "/project", null],
+        ["/api/integration", "/other", "workspace-other"],
+        ["/api/model", "/other", "workspace-other"],
+        ["/api/provider", "/other", "workspace-other"],
+      ]),
+    )
   } finally {
     setup.dispose()
   }

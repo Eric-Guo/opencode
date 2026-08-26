@@ -75,6 +75,10 @@ const SERVER_CODES = new Set([
 const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
+const KIMI_ROLLING_QUOTA_TEXT =
+  "you've reached your usage limit for this period. your quota will be refreshed in the next period."
+const KIMI_ORDINARY_QUOTA_TEXT =
+  /you(?:'|’)ve reached (?:your usage limit for this billing cycle|kimi monthly usage limit)\b/i
 const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
 const SERVER_ERROR_TEXT =
   /\b(?:try again|(?:please |you can )?retry (?:the |this |your )?request|try (?:the |this |your )?request again|(?:currently |temporarily )?at capacity|overloaded|temporarily unavailable|service[-_\s]?unavailable|(?:server|internal)[-_\s]?error|server (?:is )?busy|provider returned (?:an )?error|resource[-_\s]?exhausted|upstream (?:connect|connection|request)|request buffer limit while retrying upstream)\b/i
@@ -121,6 +125,9 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if (input.status === 413 || isPayloadTooLarge(text))
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyError(details)
+  if ([input.message, body].some(isKimiRollingQuota))
+    return new QuotaExceededError({ ...details, classification: "rolling-window" })
+  if (KIMI_ORDINARY_QUOTA_TEXT.test(text)) return new QuotaExceededError(details)
   if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
     return new QuotaExceededError(details)
   if (input.status === 401 || input.status === 403 || codes.some((code) => AUTH_CODES.has(code)))
@@ -154,6 +161,10 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   // Any remaining 4xx is a deterministic rejection of this request.
   if (input.status !== undefined && input.status >= 400 && input.status < 500) return new InvalidRequestError(details)
   return new UnknownProviderError(details)
+}
+
+function isKimiRollingQuota(value: string) {
+  return value.trim().replaceAll("’", "'").toLowerCase() === KIMI_ROLLING_QUOTA_TEXT
 }
 
 function providerCodes(value: unknown) {
