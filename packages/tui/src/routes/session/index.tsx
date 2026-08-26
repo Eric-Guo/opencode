@@ -115,6 +115,8 @@ import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { useSessionTerminals } from "../../context/session-terminals"
+import { useEvent } from "../../context/event"
+import { DialogConnectionFallback } from "../../component/dialog-connection-fallback"
 
 addDefaultParsers(parsers.parsers)
 
@@ -566,6 +568,31 @@ export function Session(props: {
     current.submit()
   })
   const dialog = useDialog()
+  const event = useEvent()
+  const keymap = Keymap.use()
+  const shownFallbacks = new Set<string>()
+  onCleanup(
+    event.on("session.step.failed", (failure) => {
+      if (failure.data.sessionID !== route.sessionID) return
+      const recovery = failure.data.error.recovery
+      if (!recovery || recovery.type !== "connection-fallback") return
+      const id = `${failure.data.sessionID}:${failure.data.assistantMessageID}`
+      if (shownFallbacks.has(id)) return
+      shownFallbacks.add(id)
+      dialog.replace(
+        () => (
+          <DialogConnectionFallback
+            previous={recovery.previous.type === "env" ? recovery.previous.name : recovery.previous.label}
+            promoted={recovery.promoted.type === "env" ? recovery.promoted.name : recovery.promoted.label}
+            unavailableUntil={recovery.unavailableUntil}
+            onConfirm={() => keymap.dispatch("session.new")}
+          />
+        ),
+        undefined,
+        { key: id },
+      )
+    }),
+  )
   const renderer = useRenderer()
   const runPendingAction = createSingleFlight<string>()
   const mutatePending = async (action: PendingAction, inboxID: string) => {
