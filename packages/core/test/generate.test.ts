@@ -4,11 +4,13 @@ import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { AISDK } from "@opencode/core/aisdk"
 import { Catalog } from "@opencode/core/catalog"
+import { Credential } from "@opencode/core/credential"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { ID, Info, Ref, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+import { Hash } from "@opencode/util/hash"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
@@ -76,6 +78,31 @@ const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, 
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))
 const resolverIt = testEffect(resolver)
 
+const kimiIntegrations = Layer.mock(Integration.Service, {
+  connection: {
+    active: () => Effect.succeed({ type: "env", name: "KIMI_API_KEY" }),
+    resolve: () => Effect.succeed(Credential.Key.make({ type: "key", key: "account-a" })),
+    key: () => Effect.die("unused"),
+    activate: () => Effect.die("unused"),
+    update: () => Effect.die("unused"),
+    remove: () => Effect.die("unused"),
+  },
+  oauth: {
+    connect: () => Effect.die("unused"),
+    status: () => Effect.die("unused"),
+    complete: () => Effect.die("unused"),
+    cancel: () => Effect.die("unused"),
+  },
+  command: {
+    connect: () => Effect.die("unused"),
+    status: () => Effect.die("unused"),
+    cancel: () => Effect.die("unused"),
+  },
+})
+const kimiResolverIt = testEffect(
+  ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, kimiIntegrations, npm, aisdk))),
+)
+
 it.effect("loads dynamic AI SDK models", () =>
   Effect.gen(function* () {
     const generate = yield* Generate.Service
@@ -111,5 +138,19 @@ resolverIt.effect("uses the high variant for the fallback default model", () =>
     expect(result?.ref).toEqual(
       Ref.make({ providerID: fallback.providerID, id: fallback.id, variant: VariantID.make("high") }),
     )
+  }),
+)
+
+kimiResolverIt.effect("carries the selected Kimi environment slot without exposing its key", () =>
+  Effect.gen(function* () {
+    const resolver = yield* ModelResolver.Service
+    const result = yield* resolver.resolveModel(fallback)
+
+    expect(result.connection).toEqual({
+      integrationID: Integration.ID.make("kimi-for-coding"),
+      ref: { type: "env", name: "KIMI_API_KEY" },
+      fingerprint: Hash.sha256("account-a"),
+    })
+    expect(JSON.stringify(result.connection)).not.toContain("account-a")
   }),
 )

@@ -146,6 +146,40 @@ describe("provider error classification", () => {
     ).toEqual(["QuotaExceeded", "ProviderInternal", "InvalidRequest"])
   })
 
+  test("classifies only Kimi's five-hour response as a rolling-window quota", () => {
+    expect(
+      classifyProviderFailure({
+        message: "You've reached your usage limit for this period. Your quota will be refreshed in the next period.",
+        status: 429,
+      }),
+    ).toMatchObject({ _tag: "QuotaExceeded", classification: "rolling-window" })
+
+    expect(
+      classifyProviderFailure({
+        message:
+          "You've reached your usage limit for this period. Your quota will be refreshed in the next period. Contact support.",
+        status: 429,
+      }),
+    ).not.toHaveProperty("classification", "rolling-window")
+
+    const ordinary = [
+      ["You've reached your usage limit for this billing cycle. Your quota will be refreshed in the next cycle.", 403],
+      ["You've reached kimi monthly usage limit for this billing cycle.", 429],
+      ["The engine is currently overloaded, please try again later", 429],
+      ["We're receiving too many requests at the moment. Please wait a moment and try again.", 429],
+      ["The API Key appears to be invalid or may have expired.", 401],
+      ["Your current subscription does not have access to kimi-for-coding-highspeed.", 401],
+      ["Access terminated.", 403],
+    ] as const
+
+    expect(
+      ordinary.map(([message, status]) => {
+        const reason = classifyProviderFailure({ message, status })
+        return "classification" in reason ? reason.classification : undefined
+      }),
+    ).toEqual(ordinary.map(() => undefined))
+  })
+
   test("leaves unrecognized failures unclassified for the retry default", () => {
     expect(classifyProviderFailure({ message: '{"error":{"message":"no_kv_space"}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
