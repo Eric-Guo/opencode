@@ -10,6 +10,7 @@ let loaded = false
 export const API_KEY_ENV_NAMES = [
   "OPENCODE_API_KEY",
   "KIMI_API_KEY",
+  "KIMI_API_KEY_2",
   "DOC_MOONSHOT_API_KEY",
   "DEEPSEEK_API_KEY",
   "SILICONFLOW_CN_API_KEY",
@@ -87,6 +88,7 @@ export async function ensureSsoUsername() {
           clerk_code: string
           opencode_api_key: string
           kimi_api_key: string
+          kimi_api_key_2?: string
           siliconflow_cn_api_key: string
           moonshot_api_key: string
           exa_api_key: string
@@ -107,6 +109,7 @@ export async function ensureSsoUsername() {
     : []
   loaded = true
   if (payload.kimi_api_key) setRuntimeEnv("KIMI_API_KEY", payload.kimi_api_key)
+  if (payload.kimi_api_key_2) setRuntimeEnv("KIMI_API_KEY_2", payload.kimi_api_key_2)
   if (payload.moonshot_api_key) setRuntimeEnv("DOC_MOONSHOT_API_KEY", payload.moonshot_api_key)
   if (payload.deepseek_api_key) setRuntimeEnv("DEEPSEEK_API_KEY", payload.deepseek_api_key)
   setRuntimeEnv("THAPE_SSO_USER_NAME", payload.chinese_name || payload.email)
