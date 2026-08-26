@@ -20,6 +20,9 @@ import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
 import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
+import { IntegrationConnection } from "./integration/connection.js"
+import { KimiKeyRotation } from "./integration/kimi-key-rotation.js"
+import { Hash } from "@opencode/util/hash"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -135,6 +138,13 @@ export interface Resolved {
   readonly transport?: Provider.Transport
   /** Milliseconds without streamed data before a WebSocket exchange fails; `false` disables the limit. */
   readonly chunkTimeout?: number | false
+  /** Non-secret identity of the integration connection used to build this runtime model. */
+  readonly connection?: {
+    readonly integrationID: Integration.ID
+    readonly ref: IntegrationConnection.Info
+    /** Captures which environment value backed a request without retaining that value. */
+    readonly fingerprint?: string
+  }
 }
 
 export type MediaError =
@@ -448,9 +458,8 @@ export const layer = Layer.effect(
     }
     const prepare = Effect.fn("ModelResolver.prepare")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* providers.get(selected.providerID)
-      const connection = yield* integrations.connection.active(
-        provider?.integrationID ?? Integration.ID.make(selected.providerID),
-      )
+      const integrationID = provider?.integrationID ?? Integration.ID.make(selected.providerID)
+      const connection = yield* integrations.connection.active(integrationID)
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const selectedVariant = yield* withVariant(selected, variant)
       const runtimeInfo: RuntimeInfo = {
@@ -483,6 +492,19 @@ export const layer = Layer.effect(
         cache: runtimeInfo.settings?.cache,
         transport: provider?.settings?.transport,
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
+        ...(connection
+          ? {
+              connection: {
+                integrationID,
+                ref: connection,
+                ...(integrationID === KimiKeyRotation.integrationID &&
+                connection.type === "env" &&
+                credential?.type === "key"
+                  ? { fingerprint: Hash.sha256(credential.key) }
+                  : {}),
+              },
+            }
+          : {}),
       }
     })
     const loadMedia = Effect.fnUntraced(function* <Runtime>(
