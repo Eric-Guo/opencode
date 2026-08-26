@@ -33,6 +33,7 @@ import { PersistentPty } from "../../persistent-pty/index.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
+import { KimiKeyRotation } from "../../integration/kimi-key-rotation.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_OUTPUT_LIMIT =
@@ -466,5 +467,6 @@ export const node = makeLocationNode({
     PersistentPty.node,
     ToolOutput.node,
     Database.node,
+    KimiKeyRotation.node,
   ],
 })
