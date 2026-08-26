@@ -5,6 +5,7 @@ import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
+import { KimiKeyRotation } from "../integration/kimi-key-rotation.js"
 
 // These catalog entries require inference profiles on Bedrock Runtime.
 // Opus/Sonnet 4.6 support in-region calls in eu-west-2 and must remain available.
@@ -45,8 +46,8 @@ export const ModelsDevPlugin = define({
           integrationID,
           method: {
             type: "env",
-            // Every listed variable is treated as a key; plugins override providers that also list setup values.
-            names: [...provider.environment],
+            // Provider plugins narrow setup variables; Kimi also supports a pool of API keys.
+            names: environmentNames(provider),
           },
         })
       }
@@ -74,6 +75,11 @@ export const ModelsDevPlugin = define({
     if (snapshots(latest) !== loaded.data) yield* apply(latest)
   }),
 })
+
+function environmentNames(provider: ModelsDev.Snapshot) {
+  if (provider.info.id === "kimi-for-coding") return [...KimiKeyRotation.environmentNames]
+  return [...provider.environment]
+}
 
 const prepared = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()
 
