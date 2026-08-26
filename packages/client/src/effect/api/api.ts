@@ -22,11 +22,11 @@ import type { Schema } from "effect"
 import type { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import type { Shell } from "@opencode/schema/shell"
+import type { Credential } from "@opencode/schema/credential"
+import type { Integration } from "@opencode/schema/integration"
 import type { Provider } from "@opencode/schema/provider"
 import type { Form } from "@opencode/schema/form"
-import type { Integration } from "@opencode/schema/integration"
 import type { Mcp } from "@opencode/schema/mcp"
-import type { Credential } from "@opencode/schema/credential"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
 import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
@@ -701,7 +701,34 @@ export type SessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
+            }
           }
         }
       | {
@@ -893,7 +920,34 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
+            }
             readonly finish?: "content-filter" | undefined
             readonly rawFinish?: string | undefined
             readonly providerState?: SessionMessage.ProviderState | undefined
@@ -1121,7 +1175,34 @@ export type SessionLogOutput =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly id: string
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
+            }
             readonly content?:
               | readonly [
                   (
@@ -1166,7 +1247,34 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
+            }
           }
         }
       | {
@@ -1247,7 +1355,34 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly recovery?:
+                | {
+                    readonly type: "connection-fallback"
+                    readonly integrationID: Integration.ID
+                    readonly previous:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly promoted:
+                      | {
+                          readonly type: "credential"
+                          readonly id: Credential.ID
+                          readonly label: string
+                          readonly method: "key" | "oauth"
+                        }
+                      | { readonly type: "env"; readonly name: string }
+                    readonly unavailableUntil: number
+                  }
+                | undefined
+            }
             readonly inputID?: SessionMessage.ID | undefined
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined
             readonly tokens?:
