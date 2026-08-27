@@ -32,7 +32,6 @@ import { SessionShell } from "./shell.js"
 import { SessionSkill } from "./skill.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 
 type PromptRequest = SessionPrompt.Input & {
   id?: SessionMessage.ID
@@ -43,7 +42,9 @@ type PromptRequest = SessionPrompt.Input & {
  * Build once in the host Scope: `const sessions = yield* Session.make()`.
  * Use `sessions.forSession(id)` for handles that share host services and reload current state.
  */
-export const make = Effect.fn("Session.make")(function* () {
+export const make = Effect.fn("Session.make")(function* (
+  ensureDirectory: (session: SessionSchema.Info) => Effect.Effect<SessionSchema.Info> = Effect.succeed,
+) {
   const bus = yield* Bus.Service
   const database = yield* Database.Service
   const store = yield* SessionStore.Service
@@ -52,13 +53,11 @@ export const make = Effect.fn("Session.make")(function* () {
   const admission = yield* SessionInbox.Service
   const fs = yield* FSUtil.Service
   const scope = yield* Scope.Scope
-  const fs = yield* FSUtil.Service
 
   const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
     const session = yield* store.get(sessionID)
     if (!session) return yield* new NotFoundError({ sessionID })
-    yield* fs.ensureDir(session.location.directory).pipe(Effect.orDie)
-    return session
+    return yield* ensureDirectory(session)
   })
   const message = Effect.fn("Session.message")(function* (sessionID: SessionSchema.ID, messageID: SessionMessage.ID) {
     const stored = yield* store.message(messageID)
@@ -279,6 +278,8 @@ export const make = Effect.fn("Session.make")(function* () {
     yield* execution.awaitIdle(sessionID)
   })
   const resume = Effect.fn("Session.resume")(function* (sessionID: SessionSchema.ID) {
+    // Join before filesystem work can let the active execution settle and lose its exit.
+    if ((yield* execution.active).has(sessionID)) return yield* execution.resume(sessionID)
     yield* get(sessionID)
     yield* execution.resume(sessionID)
   })
