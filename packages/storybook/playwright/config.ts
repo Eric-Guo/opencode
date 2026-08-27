@@ -22,6 +22,7 @@ export function componentConfig(directory: string) {
     },
     use: {
       baseURL,
+      channel: process.platform === "darwin" && !process.env.CI ? "chrome" : undefined,
       trace: "on-first-retry",
       screenshot: "only-on-failure",
       video: "retain-on-failure",
