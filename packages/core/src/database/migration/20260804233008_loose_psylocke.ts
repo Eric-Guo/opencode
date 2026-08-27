@@ -1,6 +1,7 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { sql } from "drizzle-orm"
 import type { DatabaseMigration } from "../migration.js"
+import type { SourceMessage, SourcePart, TransformInput } from "../v1-transform.js"
 
 const previousV2Marker = "20260730195856_optional_session_title"
 
@@ -19,13 +20,23 @@ const migration: DatabaseMigration.Migration = {
           )
           LIMIT 1
         `)
-        if (v1Only) return yield* Effect.die(new Error("Previous V2 database contains V1-only session history"))
-
         yield* tx.run(`DROP INDEX IF EXISTS \`session_project_idx\`;`)
         yield* tx.run(`DROP INDEX IF EXISTS \`session_workspace_idx\`;`)
         yield* tx.run(`DROP INDEX IF EXISTS \`session_parent_idx\`;`)
         yield* tx.run(`DROP INDEX IF EXISTS \`session_time_suspended_idx\`;`)
-        yield* tx.run(`ALTER TABLE \`session\` RENAME TO \`session_v2\`;`)
+        // Bun defaults to legacy ALTER behavior. Startup disables foreign keys,
+        // so explicitly retarget references to the renamed canonical table.
+        const legacy = yield* tx.get<{ legacy_alter_table: number }>(sql`PRAGMA legacy_alter_table`)
+        yield* tx.run(sql`PRAGMA legacy_alter_table = OFF`)
+        yield* tx
+          .run(`ALTER TABLE \`session\` RENAME TO \`session_v2\`;`)
+          .pipe(
+            Effect.ensuring(
+              tx
+                .run(`PRAGMA legacy_alter_table = ${legacy?.legacy_alter_table === 1 ? "ON" : "OFF"}`)
+                .pipe(Effect.orDie),
+            ),
+          )
         yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
         yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
         yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
@@ -35,6 +46,7 @@ const migration: DatabaseMigration.Migration = {
         yield* tx.run(`DROP TABLE IF EXISTS \`data_migration\`;`)
         yield* tx.run(`DROP TABLE IF EXISTS \`session_context_epoch\`;`)
         yield* tx.run(`DROP TABLE IF EXISTS \`session_input\`;`)
+        if (v1Only) yield* migrateLegacyHistory(tx)
         return
       }
 
@@ -260,3 +272,63 @@ const migration: DatabaseMigration.Migration = {
 }
 
 export default migration
+
+function migrateLegacyHistory(tx: Parameters<DatabaseMigration.Migration["up"]>[0]) {
+  return Effect.gen(function* () {
+    const { transformSession } = yield* Effect.promise(() => import("../v1-transform.js"))
+    const decodeModel = Schema.decodeUnknownEffect(
+      Schema.fromJsonString(
+        Schema.Struct({ id: Schema.String, providerID: Schema.String, variant: Schema.optional(Schema.String) }),
+      ),
+    )
+    // The pre-split database shared session metadata between V1 and V2. Only
+    // convert V1-only histories; existing V2 messages and events are canonical.
+    const sessions = yield* tx.all<Omit<TransformInput["session"], "model"> & { model: string | null }>(sql`
+      SELECT id, agent, model FROM session_v2
+      WHERE EXISTS (SELECT 1 FROM message WHERE message.session_id = session_v2.id)
+        AND NOT EXISTS (SELECT 1 FROM session_message WHERE session_message.session_id = session_v2.id)
+    `)
+    yield* Effect.forEach(sessions, (session) =>
+      Effect.gen(function* () {
+        const transformed = transformSession({
+          session: { ...session, model: session.model === null ? null : yield* decodeModel(session.model) },
+          messages: yield* tx.all<SourceMessage>(sql`
+            SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ${session.id}
+          `),
+          parts: yield* tx.all<SourcePart>(sql`
+            SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ${session.id}
+          `),
+        })
+        if (transformed.warnings.length)
+          return yield* Effect.fail(
+            new Error(`Cannot migrate V1 history for ${session.id}: ${transformed.warnings[0]?.reason}`),
+          )
+        yield* Effect.forEach(transformed.messages, (message) =>
+          tx.run(sql`
+            INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+            VALUES (${message.id}, ${session.id}, ${message.type}, ${message.seq},
+                    ${message.time_created}, ${message.time_updated}, ${JSON.stringify(message.data)})
+          `),
+        )
+        yield* tx.run(sql`
+          UPDATE session_v2 SET
+            agent = ${transformed.session.agent},
+            model = ${transformed.session.model === null ? null : JSON.stringify(transformed.session.model)},
+            cost = ${transformed.session.cost},
+            tokens_input = ${transformed.session.tokens_input},
+            tokens_output = ${transformed.session.tokens_output},
+            tokens_reasoning = ${transformed.session.tokens_reasoning},
+            tokens_cache_read = ${transformed.session.tokens_cache_read},
+            tokens_cache_write = ${transformed.session.tokens_cache_write},
+            revert = NULL, time_compacting = NULL
+          WHERE id = ${session.id}
+        `)
+        yield* tx.run(sql`
+          INSERT INTO event_sequence (aggregate_id, seq)
+          VALUES (${session.id}, ${transformed.watermark})
+          ON CONFLICT (aggregate_id) DO UPDATE SET seq = MAX(event_sequence.seq, excluded.seq)
+        `)
+      }),
+    )
+  })
+}
