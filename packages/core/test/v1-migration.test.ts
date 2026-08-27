@@ -28,9 +28,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClient | Scope.Scope | Global.
     ),
   )
 
-const session = (
-  overrides: Partial<V1Migration.TransformInput["session"]> = {},
-): V1Migration.TransformInput["session"] => ({
+const session = (overrides: Partial<typeof SessionTable.$inferSelect> = {}): typeof SessionTable.$inferSelect => ({
   id: SessionSchema.ID.make("ses_test"),
   project_id: Project.ID.global,
   workspace_id: null,
