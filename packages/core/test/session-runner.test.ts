@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import {
   AIError,
@@ -91,9 +92,13 @@ import { agentHost, catalogHost, host } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 import { KimiKeyRotation } from "@opencode-ai/core/integration/kimi-key-rotation"
 import { Hash } from "@opencode-ai/util/hash"
+import { tmpdir } from "./fixture/tmpdir"
 
-const projectDirectory = AbsolutePath.make(import.meta.dir)
-const movedDirectory = AbsolutePath.make(path.dirname(import.meta.dir))
+const directory = await tmpdir("opencode-session-runner-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const projectDirectory = AbsolutePath.make(path.join(directory.path, "project"))
+const movedDirectory = AbsolutePath.make(path.join(directory.path, "moved"))
+await Promise.all([projectDirectory, movedDirectory].map((directory) => fs.mkdir(directory)))
 let requests: LLMRequest[] = []
 const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
 type ToolBarrier = {
@@ -1443,7 +1448,7 @@ describe("SessionRunnerLLM", () => {
         item: {
           type: "move",
           payload: {
-            location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
+            location: Location.Ref.make({ directory: movedDirectory }),
             projectID: Project.ID.global,
           },
           delivery: "queue",
@@ -1455,7 +1460,7 @@ describe("SessionRunnerLLM", () => {
       expect(reads).toBe(0)
       expect(requests).toHaveLength(0)
       expect(yield* session.inbox(sessionID)).toEqual([])
-      expect((yield* session.get(sessionID)).location.directory).toBe(AbsolutePath.make("/moved"))
+      expect((yield* session.get(sessionID)).location.directory).toBe(movedDirectory)
       expect((yield* session.messages({ sessionID })).find((message) => message.id === compaction.id)).toMatchObject({
         type: "compaction",
         status: "failed",
@@ -1600,7 +1605,7 @@ describe("SessionRunnerLLM", () => {
         item: {
           type: "move",
           payload: {
-            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+            location: Location.Ref.make({ directory: projectDirectory }),
             projectID: Project.ID.global,
           },
           delivery: "steer",
@@ -3450,7 +3455,7 @@ describe("SessionRunnerLLM", () => {
       const runner = yield* SessionRunner.Service
       const database = yield* Database.Service
       const bus = yield* Bus.Service
-      const location = Location.Ref.make({ directory: AbsolutePath.make("/moved") })
+      const location = Location.Ref.make({ directory: movedDirectory })
       yield* admit(session, "A")
       yield* TestLLM.push(TestLLM.stop(), TestLLM.stop())
       const stream = yield* TestLLM.gate
