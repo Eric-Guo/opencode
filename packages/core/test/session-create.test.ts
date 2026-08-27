@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
@@ -67,7 +67,9 @@ const liveIt = testEffect(
     ],
   ),
 )
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+const directory = await tmpdir("opencode-session-create-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const location = Location.Ref.make({ directory: AbsolutePath.make(path.join(directory.path, "project")) })
 const id = Session.ID.create()
 
 /** Public session events from a `log` read, without synced markers. */
