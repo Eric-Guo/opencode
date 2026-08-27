@@ -943,6 +943,8 @@ const layer = Layer.effect(
           .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
       }),
       resume: Effect.fn("Session.resume")(function* (sessionID) {
+        // Join before filesystem work can let the active execution settle and lose its exit.
+        if ((yield* execution.active).has(sessionID)) return yield* execution.resume(sessionID)
         yield* result.get(sessionID)
         yield* execution.resume(sessionID)
       }),

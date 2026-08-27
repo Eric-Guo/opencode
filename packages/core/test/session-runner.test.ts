@@ -2346,6 +2346,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("delivers steered manual compaction when the model has no context limit", () =>
     Effect.gen(function* () {
       const session = yield* setup
+      currentModel = testModel("manual-unknown-context", { context: 0, output: 32_000 })
       yield* TestLLM.push(TestLLM.text("Earlier answer", "text-manual-unknown-history"))
       yield* runPrompt(session, "Earlier question")
 
