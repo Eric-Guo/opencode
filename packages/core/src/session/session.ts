@@ -264,6 +264,8 @@ export const make = Effect.fn("Session.make")(function* (servicesFor: (ref: Loca
     yield* execution.awaitIdle(sessionID)
   })
   const resume = Effect.fn("Session.resume")(function* (sessionID: SessionSchema.ID) {
+    // Join before filesystem work can let the active execution settle and lose its exit.
+    if ((yield* execution.active).has(sessionID)) return yield* execution.resume(sessionID)
     yield* get(sessionID)
     yield* execution.resume(sessionID)
   })
