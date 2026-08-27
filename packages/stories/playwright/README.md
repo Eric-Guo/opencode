@@ -32,6 +32,8 @@ bun turbo test:components --filter=@opencode/app
 
 Component browser coverage deliberately remains separate from each package's default `test` script and from `packages/app`'s `test:e2e`, so expensive browser checks can be scheduled independently from required unit and full-app journey CI. CI runs each suite in its own leg of the `e2e` job in `.github/workflows/check-test.yml` (`session-ui-components` and `app-components`). Set `PLAYWRIGHT_STORIES_URL` to reuse a running story server (`bun --cwd packages/stories dev`) or `PLAYWRIGHT_STORIES_PORT` to choose its port.
 
+Local macOS runs use installed Google Chrome, so no Playwright Chromium download is needed. CI and other operating systems continue to use Playwright's Chromium.
+
 ## Adding a test
 
 Keep inspectable scenarios next to the production component in a `*.stories.tsx` file. A story owns its fixtures, providers, state, and callbacks; its package-local spec owns user-visible interactions and assertions.
