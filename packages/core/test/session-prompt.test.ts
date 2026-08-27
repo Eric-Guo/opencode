@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import { Clock, DateTime, Duration, Effect, Fiber, Layer, LayerMap, Queue, Schema, Stream } from "effect"
 import { mkdir, symlink } from "fs/promises"
 import path from "path"
@@ -36,7 +36,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Skill } from "@opencode-ai/core/skill"
 import { Mcp } from "@opencode-ai/core/mcp/index"
-import { tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { Reference } from "@opencode-ai/core/reference"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
@@ -44,6 +44,10 @@ import { Global } from "@opencode-ai/util/global"
 import { EffectFlock } from "@opencode-ai/util/effect-flock"
 import { KV } from "@opencode-ai/core/kv"
 import { gitRemote, git, commit, read } from "./fixture/git"
+
+const directory = await tmpdir("opencode-session-prompt-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const projectDirectory = AbsolutePath.make(path.join(directory.path, "project"))
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -175,7 +179,7 @@ const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
   yield* db
     .insert(ProjectTable)
-    .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+    .values({ id: Project.ID.global, worktree: projectDirectory, sandboxes: [] })
     .onConflictDoNothing()
     .run()
     .pipe(Effect.orDie)
@@ -185,7 +189,7 @@ const setup = Effect.gen(function* () {
       id: sessionID,
       project_id: Project.ID.global,
       slug: "test",
-      directory: "/project",
+      directory: projectDirectory,
       title: "test",
       version: "test",
     })
@@ -552,7 +556,7 @@ describe("Session.prompt", () => {
         Buffer.from(message.payload.files?.[0]?.data ?? "", "base64")
           .toString("utf8")
           .replace(/\r$/, ""),
-      ).toBe('import { describe, expect } from "bun:test"')
+      ).toBe('import { afterAll, describe, expect } from "bun:test"')
     }),
   )
 
@@ -1029,7 +1033,7 @@ describe("Session.prompt", () => {
           id: other,
           project_id: Project.ID.global,
           slug: "other",
-          directory: "/project",
+          directory: projectDirectory,
           title: "other",
           version: "test",
         })
