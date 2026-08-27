@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
@@ -38,7 +38,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
-import { tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -80,7 +80,9 @@ const projectIt = testEffect(
     ],
   ),
 )
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+const directory = await tmpdir("opencode-session-create-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const location = Location.Ref.make({ directory: AbsolutePath.make(path.join(directory.path, "project")) })
 const id = Session.ID.create()
 
 /** Public session events from a `log` read, without synced markers. */
