@@ -44,6 +44,7 @@ describe.skipIf(process.platform === "win32")("sqlite bundle conditions", () => 
   test("default conditions fall back to node:sqlite, not bun:sqlite", async () => {
     const output = await bundle([])
     expect(output).not.toContain("bun:sqlite")
+    expect(output).not.toContain("Bun.CryptoHasher")
     expect(output).toContain("SqliteNode")
   })
 })
