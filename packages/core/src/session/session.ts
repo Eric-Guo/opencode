@@ -39,7 +39,9 @@ type PromptRequest = SessionPrompt.Input & {
  * Build once in the host Scope: `const sessions = yield* Session.make()`.
  * Use `sessions.forSession(id)` for handles that share host services and reload current state.
  */
-export const make = Effect.fn("Session.make")(function* () {
+export const make = Effect.fn("Session.make")(function* (
+  ensureDirectory: (session: SessionSchema.Info) => Effect.Effect<SessionSchema.Info> = Effect.succeed,
+) {
   const bus = yield* Bus.Service
   const database = yield* Database.Service
   const store = yield* SessionStore.Service
@@ -52,8 +54,7 @@ export const make = Effect.fn("Session.make")(function* () {
   const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
     const session = yield* store.get(sessionID)
     if (!session) return yield* new NotFoundError({ sessionID })
-    yield* fs.ensureDir(session.location.directory).pipe(Effect.orDie)
-    return session
+    return yield* ensureDirectory(session)
   })
   const message = Effect.fn("Session.message")(function* (sessionID: SessionSchema.ID, messageID: SessionMessage.ID) {
     const stored = yield* store.message(messageID)
