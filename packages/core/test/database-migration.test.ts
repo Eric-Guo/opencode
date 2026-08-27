@@ -4,7 +4,7 @@ import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Layer, Schema } from "effect"
 import { sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
@@ -22,6 +22,7 @@ import sessionViewedStateMigration from "@opencode-ai/core/database/migration/20
 import { Global } from "@opencode-ai/util/global"
 import loosePsylocke from "@opencode-ai/core/database/migration/20260804233008_loose_psylocke"
 import repairV2ForeignKeys from "@opencode-ai/core/database/migration/20260808090000_repair_v2_foreign_keys"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 
 const run = <A, E>(
   effect: Effect.Effect<A, E, SqlClient | Global.Service>,
@@ -341,25 +342,90 @@ describe("DatabaseMigration", () => {
     )
   })
 
-  test("rejects previous V2 databases with V1-only session history", async () => {
+  test.each([false, true])("converts mixed previous V2 history with foreign keys %s", async (foreignKeys) => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
-        yield* db.run(sql`CREATE TABLE migration (id text PRIMARY KEY, time_completed integer NOT NULL)`)
-        yield* db.run(sql`
-          INSERT INTO migration (id, time_completed)
-          VALUES ('20260730195856_optional_session_title', 1)
-        `)
-        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
-        yield* db.run(sql`CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL)`)
-        yield* db.run(sql`CREATE TABLE message (id text PRIMARY KEY, session_id text NOT NULL)`)
-        yield* db.run(sql`INSERT INTO session VALUES ('session')`)
-        yield* db.run(sql`INSERT INTO message VALUES ('message', 'session')`)
+        yield* previousV2Database(db)
+        yield* db.run(`PRAGMA foreign_keys = ${foreignKeys ? "ON" : "OFF"}`)
+        const legacy = yield* db.get(sql`PRAGMA legacy_alter_table`)
+        const messages = yield* db.all(sql`SELECT * FROM message ORDER BY id`)
+        const parts = yield* db.all(sql`SELECT * FROM part ORDER BY id`)
+        const canonical = yield* db.all(sql`SELECT * FROM session_message`)
+        const events = yield* db.all(sql`SELECT * FROM event`)
+        const instructions = yield* db.all(sql`SELECT * FROM instruction_state`)
+        const pending = yield* db.all(sql`SELECT * FROM session_pending`)
 
-        expect((yield* Effect.exit(DatabaseMigration.applyOnly(db, [previousV2Migration])))._tag).toBe("Failure")
+        yield* DatabaseMigration.apply(db)
+        yield* DatabaseMigration.apply(db)
+
+        expect(yield* db.get(sql`PRAGMA legacy_alter_table`)).toEqual(legacy)
+        expect(yield* db.all(sql`PRAGMA foreign_key_check`)).toEqual([])
+        expect(yield* db.all(sql`SELECT * FROM message ORDER BY id`)).toEqual(messages)
+        expect(yield* db.all(sql`SELECT * FROM part ORDER BY id`)).toEqual(parts)
+        expect(yield* db.all(sql`SELECT * FROM session_message WHERE session_id = 'ses_v2'`)).toEqual(canonical)
+        expect(yield* db.all(sql`SELECT * FROM event`)).toEqual(events)
+        expect(yield* db.all(sql`SELECT * FROM instruction_state`)).toEqual(instructions)
+        expect(yield* db.all(sql`SELECT * FROM session_pending`)).toEqual(pending)
+        expect(yield* db.all(sql`SELECT aggregate_id, seq FROM event_sequence ORDER BY aggregate_id`)).toEqual([
+          { aggregate_id: "ses_legacy", seq: 20 },
+          { aggregate_id: "ses_v2", seq: 41 },
+        ])
+        expect(yield* db.all(sql`SELECT id, time_updated, resume_attempts FROM session_v2 ORDER BY id`)).toEqual([
+          { id: "ses_empty", time_updated: 2, resume_attempts: 0 },
+          { id: "ses_legacy", time_updated: 2, resume_attempts: 0 },
+          { id: "ses_v2", time_updated: 2, resume_attempts: 0 },
+        ])
+        const converted = yield* db.all<{ id: string; type: string; seq: number; data: string }>(sql`
+          SELECT id, type, seq, data FROM session_message WHERE session_id = 'ses_legacy' ORDER BY seq
+        `)
+        expect(converted.map((row) => ({ type: row.type, seq: row.seq }))).toEqual([
+          { type: "user", seq: 0 },
+          { type: "synthetic", seq: 1 },
+          { type: "assistant", seq: 2 },
+        ])
+        converted.forEach((row) =>
+          Schema.decodeUnknownSync(SessionMessage.Info)({ id: row.id, type: row.type, ...JSON.parse(row.data) }),
+        )
+        expect(JSON.parse(converted[0].data).text).toBe("User's retained text")
+        expect(JSON.parse(converted[1].data).text).toBe("Synthetic context")
+        expect(JSON.parse(converted[2].data).content[0].text).toBe("Retained answer")
+        expect(
+          yield* db.get(sql`SELECT cost, tokens_input, tokens_output, model FROM session_v2 WHERE id = 'ses_legacy'`),
+        ).toEqual({
+          cost: 0.5,
+          tokens_input: 3,
+          tokens_output: 4,
+          model: JSON.stringify({ id: "model", providerID: "provider", variant: "default" }),
+        })
+        expect(yield* db.get(sql`SELECT cost FROM session_v2 WHERE id = 'ses_v2'`)).toEqual({ cost: 99 })
+      }),
+    )
+  })
+
+  test("rolls back mixed history migration when legacy rows cannot be converted", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* previousV2Database(db)
+        yield* db.run(sql`PRAGMA foreign_keys = OFF`)
+        const legacy = yield* db.get(sql`PRAGMA legacy_alter_table`)
+        yield* db.run(sql`UPDATE message SET data = '{}' WHERE id = 'msg_legacy_assistant'`)
+        const messages = yield* db.all(sql`SELECT * FROM session_message`)
+        const result = yield* Effect.exit(DatabaseMigration.apply(db))
+        expect(result._tag).toBe("Failure")
+        if (result._tag === "Failure")
+          expect(Cause.pretty(result.cause)).toContain("Cannot migrate V1 history for ses_legacy: invalid-message")
+        expect(yield* db.get(sql`PRAGMA legacy_alter_table`)).toEqual(legacy)
         expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)).toEqual({
           name: "session",
         })
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'`),
+        ).toBeUndefined()
+        expect(yield* db.all(sql`SELECT * FROM session_message`)).toEqual(messages)
+        expect(yield* db.get(sql`SELECT count(*) AS count FROM message`)).toEqual({ count: 3 })
+        expect(yield* db.all(sql`PRAGMA foreign_key_check`)).toEqual([])
         expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${previousV2Migration.id}`)).toBeUndefined()
       }),
     )
@@ -756,3 +822,73 @@ describe("DatabaseMigration", () => {
     )
   })
 })
+
+function previousV2Database(db: EffectDrizzleSqlite.EffectSQLiteDatabase) {
+  return Effect.gen(function* () {
+    yield* DatabaseMigration.apply(db)
+    // Recreate the pre-split table layout without copying production migrations.
+    yield* db.run(sql`PRAGMA foreign_keys = ON`)
+    yield* Effect.forEach(["project", "workspace", "parent", "time_suspended"], (name) =>
+      db.run(sql`DROP INDEX ${sql.identifier("session_v2_" + name + "_idx")}`),
+    )
+    yield* db.run(sql`ALTER TABLE session_v2 RENAME TO session`)
+    yield* Effect.forEach(["resume_attempts", "time_idle", "time_viewed", "idle_outcome"], (column) =>
+      db.run(sql`ALTER TABLE session DROP COLUMN ${sql.identifier(column)}`),
+    )
+    yield* db.run(sql`DROP TABLE session_inbox`)
+    yield* db.run(sql`DROP TABLE worktree`)
+    yield* db.run(sql`DELETE FROM migration WHERE id >= ${previousV2Migration.id}`)
+    yield* db.run(sql`INSERT INTO migration VALUES ('20260730195856_optional_session_title', 1)`)
+    yield* db.run(sql`
+      CREATE TABLE message (
+        id text PRIMARY KEY, session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+        time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
+      )
+    `)
+    yield* db.run(sql`
+      CREATE TABLE part (
+        id text PRIMARY KEY, message_id text NOT NULL REFERENCES message(id) ON DELETE CASCADE,
+        session_id text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
+      )
+    `)
+    yield* db.run(
+      sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('project', '/repo', 1, 2, '[]')`,
+    )
+    yield* db.run(sql`
+      INSERT INTO session (id, project_id, slug, directory, version, cost, time_created, time_updated)
+      VALUES ('ses_legacy', 'project', 'legacy', '/repo', 'old', 99, 1, 2),
+             ('ses_v2', 'project', 'v2', '/repo', 'old', 99, 1, 2),
+             ('ses_empty', 'project', 'empty', '/repo', 'old', 99, 1, 2)
+    `)
+    yield* db.run(sql`
+      INSERT INTO message VALUES
+        ('msg_legacy_user', 'ses_legacy', 1, 1, ${JSON.stringify({ role: "user", time: { created: 1 } })}),
+        ('msg_legacy_assistant', 'ses_legacy', 2, 2, ${JSON.stringify({
+          role: "assistant",
+          parentID: "msg_legacy_user",
+          modelID: "model",
+          providerID: "provider",
+          mode: "build",
+          path: { cwd: "/repo", root: "/repo" },
+          cost: 0.5,
+          tokens: { input: 3, output: 4, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 2, completed: 2 },
+        })}),
+        ('msg_v2', 'ses_v2', 1, 2, '{}')
+    `)
+    yield* db.run(sql`
+      INSERT INTO part VALUES
+        ('prt_user', 'msg_legacy_user', 'ses_legacy', 1, 1, ${JSON.stringify({ type: "text", text: "User's retained text" })}),
+        ('prt_synthetic', 'msg_legacy_user', 'ses_legacy', 1, 1, ${JSON.stringify({ type: "text", text: "Synthetic context", synthetic: true })}),
+        ('prt_assistant', 'msg_legacy_assistant', 'ses_legacy', 2, 2, ${JSON.stringify({ type: "text", text: "Retained answer" })})
+    `)
+    yield* db.run(sql`
+      INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+      VALUES ('msg_v2', 'ses_v2', 'user', 41, 1, 2, '{"text":"canonical","time":{"created":1}}')
+    `)
+    yield* db.run(sql`INSERT INTO event_sequence VALUES ('ses_v2', 41, 'owner'), ('ses_legacy', 20, NULL)`)
+    yield* db.run(sql`INSERT INTO event VALUES ('evt_v2', 'ses_v2', 41, 1, 'session.text.ended.1', '{}')`)
+    yield* db.run(sql`INSERT INTO instruction_state VALUES ('ses_v2', 0, 41, '{}', '{}')`)
+    yield* db.run(sql`INSERT INTO session_pending VALUES ('pending', 'ses_v2', 'user', '{}', 'steer', 42, 2)`)
+  })
+}
