@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
+import path from "path"
 import { AIError, TransportError } from "@opencode-ai/ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -24,6 +25,11 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { tmpdir } from "./fixture/tmpdir"
+
+const directory = await tmpdir("opencode-session-execution-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const projectDirectory = AbsolutePath.make(path.join(directory.path, "project"))
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionStore.node, Job.node, KV.node, Session.node])),
@@ -1218,7 +1224,7 @@ function seedSessions(
   return Effect.gen(function* () {
     yield* database.db
       .insert(ProjectTable)
-      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .values({ id: Project.ID.global, worktree: projectDirectory, sandboxes: [] })
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
@@ -1229,7 +1235,7 @@ function seedSessions(
           id,
           project_id: Project.ID.global,
           slug: id,
-          directory: "/project",
+          directory: projectDirectory,
           title: id,
           version: "test",
           ...values,

@@ -2171,6 +2171,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("delivers steered manual compaction when the model has no context limit", function* (s) {
+    s.currentModel = testModel("manual-unknown-context", { context: 0, output: 32_000 })
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-unknown-history"))
     yield* s.runPrompt("Earlier question")
 
