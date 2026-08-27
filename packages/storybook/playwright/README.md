@@ -32,6 +32,8 @@ bun turbo test:components --filter=@opencode-ai/app
 
 Component browser coverage deliberately remains separate from each package's default `test` script and from `packages/app`'s `test:e2e`, so expensive Storybook checks can be scheduled independently from required unit and full-app journey CI. Set `PLAYWRIGHT_STORYBOOK_URL` to reuse an existing Storybook instance or `PLAYWRIGHT_STORYBOOK_PORT` to choose its port.
 
+Local macOS runs use installed Google Chrome, so no Playwright Chromium download is needed. CI and other operating systems continue to use Playwright's Chromium.
+
 ## Adding a test
 
 Keep inspectable scenarios next to the production component in a `*.stories.tsx` file. A story owns its fixtures, providers, state, and callbacks; its package-local spec owns user-visible interactions and assertions.
