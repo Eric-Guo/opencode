@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import {
   AIError,
@@ -90,9 +91,13 @@ import { agentHost, catalogHost, host } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 import { KimiKeyRotation } from "@opencode-ai/core/integration/kimi-key-rotation"
 import { Hash } from "@opencode-ai/util/hash"
+import { tmpdir } from "./fixture/tmpdir"
 
-const projectDirectory = AbsolutePath.make(import.meta.dir)
-const movedDirectory = AbsolutePath.make(path.dirname(import.meta.dir))
+const directory = await tmpdir("opencode-session-runner-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const projectDirectory = AbsolutePath.make(path.join(directory.path, "project"))
+const movedDirectory = AbsolutePath.make(path.join(directory.path, "moved"))
+await Promise.all([projectDirectory, movedDirectory].map((directory) => fs.mkdir(directory)))
 const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
 type ToolBarrier = {
   readonly count: number
