@@ -1362,7 +1362,7 @@ describe("SessionTransfer", () => {
                   state: { thoughtSignature: "secret" },
                 },
               ],
-              time: { created: DateTime.makeUnsafe(101) },
+              time: { created: DateTime.makeUnsafe(101), completed: DateTime.makeUnsafe(102) },
             },
             {
               id: errorMessageID,
