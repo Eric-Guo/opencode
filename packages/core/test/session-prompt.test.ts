@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import type { FileSystem } from "@opencode/core/filesystem"
 import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import path from "path"
@@ -39,7 +39,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Skill } from "@opencode/core/skill"
-import { tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
@@ -48,6 +48,10 @@ import { SessionStored } from "@opencode/core/session/stored"
 import { SessionBlob } from "@opencode/core/session/blob"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { PromptInput } from "@opencode/schema/prompt-input"
+
+const directory = await tmpdir("opencode-session-prompt-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const projectDirectory = AbsolutePath.make(path.join(directory.path, "project"))
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -171,7 +175,7 @@ const setup = Effect.gen(function* () {
   const { db } = yield* Database.Service
   yield* db
     .insert(ProjectTable)
-    .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+    .values({ id: Project.ID.global, worktree: projectDirectory, sandboxes: [] })
     .onConflictDoNothing()
     .run()
     .pipe(Effect.orDie)
@@ -181,7 +185,7 @@ const setup = Effect.gen(function* () {
       id: sessionID,
       project_id: Project.ID.global,
       slug: "test",
-      directory: "/project",
+      directory: projectDirectory,
       title: "test",
       version: "test",
     })
@@ -503,7 +507,7 @@ describe("Session.prompt", () => {
         Buffer.from(message.payload.files?.[0]?.data ?? "", "base64")
           .toString("utf8")
           .replace(/\r$/, ""),
-      ).toBe('import { describe, expect } from "bun:test"')
+      ).toBe('import { afterAll, describe, expect } from "bun:test"')
     }),
   )
 
@@ -1225,7 +1229,7 @@ describe("Session.prompt", () => {
           id: other,
           project_id: Project.ID.global,
           slug: "other",
-          directory: "/project",
+          directory: projectDirectory,
           title: "other",
           version: "test",
         })
