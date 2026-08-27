@@ -49,5 +49,6 @@ describe.skipIf(process.platform === "win32")("sqlite bundle conditions", () => 
     expect(output).not.toContain("bun:sqlite")
     expect(output).not.toContain("@effect/sql-sqlite-bun")
     expect(output).toContain("@effect/sql-sqlite-node")
+    expect(output).not.toContain("Bun.CryptoHasher")
   })
 })
