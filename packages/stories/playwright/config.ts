@@ -26,6 +26,7 @@ export function componentConfig(directory: string) {
     },
     use: {
       baseURL,
+      channel: process.platform === "darwin" && !process.env.CI ? "chrome" : undefined,
       trace: "on-first-retry",
       screenshot: "only-on-failure",
       // CI retries failures, so the retry records the video; local runs have no retries.
