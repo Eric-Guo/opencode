@@ -8,6 +8,7 @@ import type { Location } from "@opencode-ai/schema/location"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Effect, Layer, LayerMap } from "effect"
+import { emptyMcpLayer } from "./mcp"
 
 // Plain-prompt unit fixtures use virtual directories.
 export const promptLocationNode = makeGlobalNode({
@@ -18,9 +19,12 @@ export const promptLocationNode = makeGlobalNode({
       const bus = yield* Bus.Service
       return yield* LayerMap.make(
         (_ref: Location.Ref) =>
-          LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Skill.node]), {
-            replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
-          }) as Layer.Layer<LocationServices>,
+          Layer.mergeAll(
+            LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Skill.node]), {
+              replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
+            }),
+            emptyMcpLayer,
+          ) as Layer.Layer<LocationServices>,
       )
     }),
   ),
