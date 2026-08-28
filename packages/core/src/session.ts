@@ -280,7 +280,10 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
     const scope = yield* Scope.Scope
-    const sessions = yield* Session.make((ref) => locations.get(ref))
+    const sessions = yield* Session.make(
+      (ref) => locations.get(ref),
+      (session: SessionSchema.Info) => fs.ensureDir(session.location.directory).pipe(Effect.orDie, Effect.as(session)),
+    )
     const admission = yield* SessionInbox.Service
     const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
       const location = Location.Ref.make({
