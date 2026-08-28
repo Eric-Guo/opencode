@@ -114,7 +114,7 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
 }) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const storage = yield* DesktopStorage.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* windowRecovery
