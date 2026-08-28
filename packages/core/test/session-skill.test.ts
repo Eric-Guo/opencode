@@ -1,6 +1,6 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import path from "path"
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import { Duration, Effect, Layer, LayerMap } from "effect"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -28,10 +28,14 @@ import { Event } from "@opencode/schema/event"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 import { organizationPolicy, registerIntegrationPolicy } from "./fixture/policy"
+import { emptyMcpLayer } from "./fixture/mcp"
+import { tmpdir } from "./fixture/tmpdir"
 
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+const directory = await tmpdir("opencode-session-skill-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const location = Location.Ref.make({ directory: AbsolutePath.make(path.join(directory.path, "project")) })
 // The organization behind this location's Console connection denies the skill.
-const blocked = Location.Ref.make({ directory: AbsolutePath.make("/blocked") })
+const blocked = Location.Ref.make({ directory: AbsolutePath.make(path.join(directory.path, "blocked")) })
 const info = Skill.Info.make({
   id: Skill.ID.make("effect"),
   name: Skill.Name.make("Effect"),
@@ -76,6 +80,7 @@ const locations = makeGlobalNode({
               ),
             ),
           ),
+          emptyMcpLayer,
           Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
         ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
       { idleTimeToLive: Duration.infinity },
