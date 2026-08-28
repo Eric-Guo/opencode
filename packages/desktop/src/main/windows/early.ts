@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { app, BrowserWindow, screen, shell } from "electron"
 import { resolveExternalURL } from "../files/external-url"
 import { windowArguments } from "./bootstrap"
@@ -36,10 +35,10 @@ const displays = {
 export function createEarlyWindow() {
   const ids = getStore().get(WINDOW_IDS_KEY)
   const id = Array.isArray(ids) && typeof ids[0] === "string" ? ids[0] : randomUUID()
-  const root = path.dirname(fileURLToPath(import.meta.url))
+  const root = app.getAppPath()
   const file = path.join(app.getPath("userData"), windowStateFile(id))
   const state = resolveWindowState(readWindowState(file), { width: 1280, height: 800 }, displays)
-  const icons = app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(root, "../../resources/icons")
+  const icons = app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(root, "resources/icons")
   const win = new BrowserWindow({
     x: state.x,
     y: state.y,
@@ -53,7 +52,7 @@ export function createEarlyWindow() {
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 14, y: 14 } } : {}),
     ...(process.platform === "win32" ? { frame: false, titleBarStyle: "hidden" as const, titleBarOverlay: titlebarOverlay() } : {}),
     webPreferences: {
-      preload: path.join(root, "../preload/index.cjs"),
+      preload: path.join(root, "out/preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -80,7 +79,7 @@ export function createEarlyWindow() {
   pending = record
   // The renderer boots while the main bundle and layers load, instead of after them. Everything the
   // page needs before its first request is wired here; the IPC port arrives once the layers are up.
-  registerRendererProtocol(path.join(root, "../renderer"))
+  registerRendererProtocol(path.join(root, "out/renderer"))
   allowRendererPermissions(win)
   wireNavigationPolicy(win, (url) => record.openExternal(url))
   wireRendererHeaders(win)
