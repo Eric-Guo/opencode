@@ -71,7 +71,7 @@ export const prepareApplicationEnvironment = Effect.gen(function* () {
 
 export const preferApplicationEnvironment = Effect.gen(function* () {
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? yield* loadShellEnv(shell) : null
   yield* Effect.sync(() => {
@@ -92,7 +92,7 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
 
 export const prepareDesktop = Effect.gen(function* () {
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   yield* cleanupStoreFiles(app.getPath("userData")).pipe(
     Effect.tap((result) =>
       result.deleted.length === 0
