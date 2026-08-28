@@ -327,7 +327,7 @@ export function setWindowThemeReady(win: BrowserWindow) {
 export const makeMainWindows = Effect.fn("Window.make")(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* makeWindowRecovery
   const writeLog: WriteLog = (scope, message, annotations = {}, level = "info") => {
@@ -500,7 +500,7 @@ function desktopTabStateFile(id: string) {
 
 export const registerRendererProtocol = Effect.fn("Window.registerRendererProtocol")(function* () {
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const runFork = Effect.runForkWith(yield* Effect.context<never>())
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
