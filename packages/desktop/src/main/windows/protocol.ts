@@ -1,4 +1,4 @@
-import { net, protocol } from "electron"
+import { app, net, protocol } from "electron"
 import type { BrowserWindow } from "electron"
 import { pathToFileURL } from "node:url"
 import { Effect, Path } from "effect"
@@ -24,7 +24,7 @@ protocol.registerSchemesAsPrivileged([
 
 export const registerRendererProtocol = Effect.fn("Window.registerRendererProtocol")(function* () {
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const runFork = Effect.runForkWith(yield* Effect.context<never>())
   if (protocol.isProtocolHandled(rendererProtocol)) return
 

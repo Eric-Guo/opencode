@@ -74,7 +74,7 @@ export function setWindowThemeReady(win: BrowserWindow) {
 export const makeMainWindows = Effect.fn("Window.make")(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* makeWindowRecovery
 
