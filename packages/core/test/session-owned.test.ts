@@ -17,6 +17,7 @@ import { EventTable } from "../src/event/sql.js"
 import { Image } from "../src/image.js"
 import { Instance } from "../src/instance/service.js"
 import { Location } from "../src/location.js"
+import { Mcp } from "../src/mcp/index.js"
 import { Plugin } from "../src/plugin.js"
 import { PluginHooks } from "../src/plugin/hooks.js"
 import { ProjectTable } from "../src/project/sql.js"
@@ -125,6 +126,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   const services = Layer.mergeAll(
     Layer.succeed(PluginHooks.Service, hooks),
     Layer.mock(Image.Service, {}),
+    Layer.mock(Mcp.Service, {}),
     options?.shell ?? Layer.mock(Shell.Service, {}),
   )
   const servicesFor = (ref: Location.Ref) => {
