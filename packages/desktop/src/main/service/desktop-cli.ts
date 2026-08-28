@@ -75,7 +75,7 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
 
 const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isolated: boolean) {
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const bundled = app.isPackaged
     ? path.join(process.resourcesPath, executableName())
     : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
