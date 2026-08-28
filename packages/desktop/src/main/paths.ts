@@ -9,14 +9,14 @@ export interface Resolved {
   readonly rendererRoot: string
 }
 
-export const resolve = Effect.gen(function* () {
+// Resolve from app.getAppPath(); a bundled module can live under out/main/chunks.
+export const resolve = Effect.fn("DesktopPaths.resolve")(function* (root: string) {
   const path = yield* Path.Path
-  const root = path.dirname(yield* path.fromFileUrl(new URL(import.meta.url)))
-  const preloadRoot = path.join(root, "../preload")
+  const preloadRoot = path.join(root, "out/preload")
   return {
-    developmentResourcesRoot: path.join(root, "../../resources"),
+    developmentResourcesRoot: path.join(root, "resources"),
     preloadRoot,
     preloadPath: path.join(preloadRoot, "index.js"),
-    rendererRoot: path.join(root, "../renderer"),
+    rendererRoot: path.join(root, "out/renderer"),
   } satisfies Resolved
-}).pipe(Effect.orDie)
+})
