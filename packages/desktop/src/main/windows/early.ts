@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { app, BrowserWindow, screen, shell } from "electron"
 import { resolveExternalURL } from "../files/external-url"
 import { windowArguments } from "./bootstrap"
@@ -78,11 +77,11 @@ const displays = {
 // bundle, the layers and the renderer boot. restoreWindows() adopts it through restoreEarlyWindow().
 export function createEarlyWindow() {
   const id = persistedWindowIDs(getStore().get(WINDOW_IDS_KEY))[0] ?? randomUUID()
-  const root = path.dirname(fileURLToPath(import.meta.url))
+  const root = app.getAppPath()
   const file = path.join(app.getPath("userData"), windowStateFile(id))
   const state = resolveWindowState(readWindowState(file), { width: 1280, height: 800 }, displays)
   const zoom = storedZoomLevel()
-  const icons = app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(root, "../../resources/icons")
+  const icons = app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(root, "resources/icons")
 
   // On Windows, maximize() on a hidden window shows it with SW_SHOWMAXIMIZED, so it never paints at
   // its normal bounds first. macOS does not reliably enter fullscreen while hidden, so it shows first.
@@ -100,7 +99,7 @@ export function createEarlyWindow() {
     backgroundColor: storedBackgroundColor(),
     ...platformFrame(tone(), zoom),
     webPreferences: {
-      preload: path.join(root, "../preload/index.cjs"),
+      preload: path.join(root, "out/preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -120,7 +119,7 @@ export function createEarlyWindow() {
   win.once("closed", () => dispatch({ type: "early.closed", entry }))
   // The renderer boots while the main bundle and layers load, instead of after them. Everything the
   // page needs before its first request is wired here; the IPC port arrives once the layers are up.
-  registerRendererProtocol(path.join(root, "../renderer"))
+  registerRendererProtocol(path.join(root, "out/renderer"))
   allowRendererPermissions(win)
   wireNavigationPolicy(win, (url) => dispatch({ type: "external.opened", entry, url }))
   wireRendererHeaders(win)
