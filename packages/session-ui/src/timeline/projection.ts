@@ -329,7 +329,10 @@ export namespace Timeline {
     if (message?.type !== "assistant") return undefined
     const ordinals = { text: 0, reasoning: 0 }
     for (const content of message.content) {
-      const id = content.type === "tool" ? content.id : `${message.id}:${content.type}:${ordinals[content.type]++}`
+      const id =
+        content.type === "tool" || content.type === "file"
+          ? content.id
+          : `${message.id}:${content.type}:${ordinals[content.type]++}`
       if (id === partID) return content
     }
   }
