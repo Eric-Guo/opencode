@@ -70,7 +70,7 @@ export const prepareApplicationEnvironment = Effect.gen(function* () {
 
 export const preferApplicationEnvironment = Effect.gen(function* () {
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? yield* loadShellEnv(shell) : null
   yield* Effect.sync(() => {
@@ -91,7 +91,7 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
 
 export const prepareDesktop = Effect.gen(function* () {
   const path = yield* Path.Path
-  const paths = yield* DesktopPaths.resolve
+  const paths = yield* DesktopPaths.resolve(app.getAppPath())
   if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
     app.setAsDefaultProtocolClient("opencode")
   yield* registerRendererProtocol()
