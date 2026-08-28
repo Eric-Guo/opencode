@@ -16,6 +16,7 @@ import { Bus } from "../src/bus.js"
 import { Database } from "../src/database/database.js"
 import { EventTable } from "../src/event/sql.js"
 import { Image } from "../src/image.js"
+import { Mcp } from "../src/mcp/index.js"
 import { PluginHooks } from "../src/plugin/hooks.js"
 import { PluginSupervisor } from "../src/plugin/supervisor-service.js"
 import { ProjectTable } from "../src/project/sql.js"
@@ -113,6 +114,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   const services = Layer.mergeAll(
     Layer.succeed(PluginHooks.Service, hooks),
     Layer.mock(Image.Service, {}),
+    Layer.mock(Mcp.Service, {}),
     Layer.mock(Skill.Service, {}),
     options?.shell ?? Layer.mock(Shell.Service, {}),
   )
@@ -638,6 +640,7 @@ describe("SessionPrompt construction", () => {
                   }),
                 }),
                 Layer.mock(Image.Service, {}),
+                Layer.mock(Mcp.Service, {}),
                 Layer.mock(Skill.Service, {}),
               ),
             ),
