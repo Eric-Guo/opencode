@@ -1,6 +1,6 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import path from "path"
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import { Effect, Layer, LayerMap } from "effect"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -26,8 +26,12 @@ import { Skill } from "@opencode/core/skill"
 import { Event } from "@opencode/schema/event"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { emptyMcpLayer } from "./fixture/mcp"
+import { tmpdir } from "./fixture/tmpdir"
 
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+const directory = await tmpdir("opencode-session-skill-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const location = Location.Ref.make({ directory: AbsolutePath.make(path.join(directory.path, "project")) })
 const info = Skill.Info.make({
   id: Skill.ID.make("effect"),
   name: Skill.Name.make("Effect"),
@@ -45,6 +49,7 @@ const locations = makeGlobalNode({
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
         Layer.mergeAll(
           LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node])),
+          emptyMcpLayer,
           Layer.mock(Skill.Service, {
             get: (id) => Effect.succeed(id === info.id ? info : undefined),
             list: () => Effect.succeed([info]),
