@@ -11,6 +11,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Effect, Layer, LayerMap } from "effect"
+import { emptyMcpLayer } from "./mcp"
 
 // Plain-prompt unit fixtures use virtual directories and need only prompt preparation services.
 export const promptLocationNode = makeGlobalNode({
@@ -30,6 +31,7 @@ export const promptLocationNode = makeGlobalNode({
                 ]),
                 Layer.succeed(FSUtil.Service, fs),
                 Layer.succeed(PluginSupervisor.Service, { flush: Effect.void }),
+                emptyMcpLayer,
               ),
             ),
           ) as Layer.Layer<LocationServices>,
