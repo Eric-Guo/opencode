@@ -11,6 +11,8 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Effect, Schema } from "effect"
+import path from "path"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
@@ -24,13 +26,15 @@ const it = testEffect(
     ],
   ),
 )
-const project = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-const other = Location.Ref.make({ directory: AbsolutePath.make("/other") })
 
 describe("Session.list", () => {
-  it.effect("pages through the filtered store results in both directions", () =>
+  it.live("pages through the filtered store results in both directions", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const project = Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "project")) })
+      const other = Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "other")) })
       const session = yield* Session.Service
+
       yield* Effect.forEach(["match one", "match two", "match three"], (title) =>
         session.create({ location: project, title }),
       )
@@ -52,9 +56,12 @@ describe("Session.list", () => {
     }),
   )
 
-  it.effect("returns 50 sessions when no limit is given", () =>
+  it.live("returns 50 sessions when no limit is given", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const project = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const session = yield* Session.Service
+
       yield* Effect.forEach(Array.from({ length: 51 }), () => session.create({ location: project }), { discard: true })
 
       expect((yield* session.list()).data).toHaveLength(50)
