@@ -14,6 +14,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Effect } from "effect"
 import { eq } from "drizzle-orm"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
@@ -27,11 +28,11 @@ const it = testEffect(
     ],
   ),
 )
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
 describe("Session.archive", () => {
-  it.effect("archives and unarchives through one durable event each", () =>
+  it.live("archives and unarchives through one durable event each", () =>
     Effect.gen(function* () {
+      const location = Location.Ref.make({ directory: AbsolutePath.make((yield* tmpdirScoped()).path) })
       const session = yield* Session.Service
       const { db } = yield* Database.Service
       const created = yield* session.create({ location })
@@ -55,8 +56,9 @@ describe("Session.archive", () => {
     }),
   )
 
-  it.effect("filters listed sessions by archive state", () =>
+  it.live("filters listed sessions by archive state", () =>
     Effect.gen(function* () {
+      const location = Location.Ref.make({ directory: AbsolutePath.make((yield* tmpdirScoped()).path) })
       const session = yield* Session.Service
       const active = yield* session.create({ location })
       const archived = yield* session.create({ location })
