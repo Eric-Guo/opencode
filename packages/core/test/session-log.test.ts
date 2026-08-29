@@ -15,6 +15,7 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionStore } from "@opencode/core/session/store"
 import { SessionTable } from "@opencode/core/session/sql"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
@@ -28,11 +29,12 @@ const it = testEffect(
     ],
   ),
 )
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
 describe("Session.log", () => {
-  it.effect("replays public session events and marks synced at the aggregate watermark", () =>
+  it.live("replays public session events and marks synced at the aggregate watermark", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const session = yield* Session.Service
       const created = yield* session.create({ location })
       yield* session.rename({ sessionID: created.id, title: "session.renamed" })
@@ -44,8 +46,10 @@ describe("Session.log", () => {
     }),
   )
 
-  it.effect("continues with live public events when following", () =>
+  it.live("continues with live public events when following", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const session = yield* Session.Service
       const created = yield* session.create({ location })
       const fiber = yield* session
@@ -68,8 +72,10 @@ describe("Session.log", () => {
     }),
   )
 
-  it.effect("reads across undecodable gaps in aggregate order and marks the true log position", () =>
+  it.live("reads across undecodable gaps in aggregate order and marks the true log position", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const GapEvent = Bus.durable({
         type: "test.session.log.gap",
         durable: { aggregate: "sessionID", version: 1 },
