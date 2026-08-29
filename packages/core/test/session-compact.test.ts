@@ -21,10 +21,10 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStore } from "@opencode/core/session/store"
 import { Effect, Layer, LayerMap, Stream } from "effect"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
@@ -74,9 +74,12 @@ const it = testEffect(
 )
 
 describe("Session.compact", () => {
-  it.effect("durably coalesces manual compaction", () =>
+  it.live("durably coalesces manual compaction", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       requests = []
+
       const session = yield* Session.Service
       const bus = yield* Bus.Service
       const created = yield* session.create({ location })
@@ -116,8 +119,10 @@ describe("Session.compact", () => {
     }),
   )
 
-  it.effect("coalesces concurrent manual compaction", () =>
+  it.live("coalesces concurrent manual compaction", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const session = yield* Session.Service
       const created = yield* session.create({ location })
       const admitted = yield* Effect.all(
@@ -132,8 +137,10 @@ describe("Session.compact", () => {
     }),
   )
 
-  it.effect("commits a staged revert before admitting manual compaction", () =>
+  it.live("commits a staged revert before admitting manual compaction", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const session = yield* Session.Service
       const bus = yield* Bus.Service
       const created = yield* session.create({ location })
