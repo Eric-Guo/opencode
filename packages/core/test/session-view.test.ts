@@ -31,11 +31,12 @@ const it = testEffect(
     ],
   ),
 )
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
 describe("Session.view", () => {
-  it.effect("copies the latest idle time without changing session recency", () =>
+  it.live("copies the latest idle time without changing session recency", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const session = yield* Session.Service
       const bus = yield* Bus.Service
       const { db } = yield* Database.Service
@@ -115,8 +116,10 @@ describe("Session.view", () => {
     }),
   )
 
-  it.effect("keeps a newer completion unread when the viewed watermark is stale", () =>
+  it.live("keeps a newer completion unread when the viewed watermark is stale", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const session = yield* Session.Service
       const bus = yield* Bus.Service
       const created = yield* session.create({ location })
@@ -155,8 +158,10 @@ describe("Session.view", () => {
     }),
   )
 
-  it.effect("replays viewed state into a fresh database", () =>
+  it.live("replays viewed state into a fresh database", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       const session = yield* Session.Service
       const bus = yield* Bus.Service
       const sourceDb = (yield* Database.Service).db
@@ -187,7 +192,6 @@ describe("Session.view", () => {
         type: event.type,
         data: event.data,
       }))
-      const tmp = yield* tmpdirScoped()
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
         [
