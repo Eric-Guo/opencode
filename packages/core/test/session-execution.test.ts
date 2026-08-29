@@ -1,5 +1,6 @@
 import type { FileSystem } from "@opencode/core/filesystem"
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
+import path from "path"
 import { AIError, TransportError } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
 import { Database } from "@opencode/core/database/database"
@@ -33,6 +34,11 @@ import { SubagentCompletion } from "@opencode/core/session/subagent-completion"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Logger, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { tmpdir } from "./fixture/tmpdir"
+
+const directory = await tmpdir("opencode-session-execution-")
+afterAll(() => directory[Symbol.asyncDispose]())
+const projectDirectory = AbsolutePath.make(path.join(directory.path, "project"))
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -1979,7 +1985,7 @@ function seedSessions(
   return Effect.gen(function* () {
     yield* database.db
       .insert(ProjectTable)
-      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .values({ id: Project.ID.global, worktree: projectDirectory, sandboxes: [] })
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
@@ -1990,7 +1996,7 @@ function seedSessions(
           id,
           project_id: Project.ID.global,
           slug: id,
-          directory: "/project",
+          directory: projectDirectory,
           title: id,
           version: "test",
           ...values,
