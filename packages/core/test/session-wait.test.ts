@@ -11,10 +11,10 @@ import { Session } from "@opencode/core/session"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionStore } from "@opencode/core/session/store"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
-const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const awaited: Session.ID[] = []
 const execution = Layer.mock(SessionExecution.Service, {
   awaitIdle: (sessionID) => Effect.sync(() => awaited.push(sessionID)),
@@ -27,9 +27,12 @@ const it = testEffect(
 )
 
 describe("Session.wait", () => {
-  it.effect("delegates to SessionExecution.awaitIdle", () =>
+  it.live("delegates to SessionExecution.awaitIdle", () =>
     Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
       awaited.length = 0
+
       const sessions = yield* Session.Service
       const session = yield* sessions.create({ location })
 
