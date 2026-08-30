@@ -59,6 +59,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
   expect(Object.keys(client.audio.recording)).toEqual(["start", "stop", "status"])
+  expect(client.audio.transcriptions).toBeFunction()
 })
 
 test("audio recording accepts created starts and returns MP3 bytes", async () => {
@@ -79,6 +80,25 @@ test("audio recording accepts created starts and returns MP3 bytes", async () =>
     ["POST", "/api/audio/recording/start"],
     ["POST", "/api/audio/recording/recording-1/stop"],
   ])
+})
+
+test("audio transcriptions sends native bytes without JSON encoding", async () => {
+  let request: Request | undefined
+  const assistant = { id: "msg_audio", type: "assistant", content: [] }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = new Request(input, init)
+      return Response.json({ data: assistant })
+    },
+  })
+  const bytes = new Uint8Array([0x49, 0x44, 0x33])
+
+  expect(await client.audio.transcriptions({ sessionID: "ses_audio", payload: bytes })).toEqual(assistant)
+  expect(request?.headers.get("content-type")).toBe("audio/mpeg")
+  const body = await request?.arrayBuffer()
+  expect(body).toBeDefined()
+  expect(new Uint8Array(body ?? new ArrayBuffer(0))).toEqual(bytes)
 })
 
 test("config.get returns ordered config entries for a location", async () => {
