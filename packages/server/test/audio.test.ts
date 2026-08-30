@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test"
+import { Agent } from "@opencode-ai/core/agent"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
+import { Session } from "@opencode-ai/core/session"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Audio } from "@opencode-ai/schema/audio"
-import { Effect, Layer } from "effect"
+import { DateTime, Effect, Layer } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { AudioRecording } from "../src/audio"
 import { isLoopbackAddress } from "../src/handlers/audio"
@@ -157,6 +162,52 @@ it.live("returns valid partial MP3 results after an unexpected backend end", () 
   }),
 )
 
+it.live("passes MP3 bytes to the current Session as JSON-compatible tool input while recording only a placeholder", () =>
+  Effect.gen(function* () {
+    const calls: Parameters<Session.Interface["executeTool"]>[0][] = []
+    const assistant = SessionMessage.Assistant.make({
+      id: SessionMessage.ID.create(),
+      type: "assistant",
+      agent: Agent.defaultID,
+      model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+      content: [],
+      finish: "stop",
+      time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
+    })
+    const handler = yield* ServerFetch.make(options, {
+      overrides: [
+        Session.node.replace(
+          Layer.mock(Session.Service, {
+            executeTool: (input) => Effect.sync(() => calls.push(input)).pipe(Effect.as(assistant)),
+            revert: {
+              stage: () => Effect.die("unused"),
+              clear: () => Effect.die("unused"),
+              commit: () => Effect.die("unused"),
+            },
+          }),
+        ),
+      ],
+    })
+    const mp3 = new Uint8Array([0x49, 0x44, 0x33, 0x04])
+    const sessionID = Session.ID.make("ses_audio")
+    const response = yield* request(handler, `/api/audio/transcriptions/${sessionID}`, {
+      method: "POST",
+      headers: { ...auth, "content-type": "audio/mpeg" },
+      body: mp3,
+    })
+
+    expect(response.status).toBe(200)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({ data: { id: assistant.id } })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      sessionID,
+      name: "audio_transcriptions",
+      recordedInput: { file: "[audio bytes omitted]" },
+    })
+    expect(calls[0]?.input.file).toEqual(Array.from(mp3))
+  }),
+)
+
 it.live("maps recorder conflicts, unavailable backends, and encoder failures", () =>
   Effect.gen(function* () {
     const cases = [
@@ -224,7 +275,7 @@ function makeHandler(
 ) {
   return ServerFetch.make(
     { ...options, audio: config },
-    { overrides: [[AudioRecording.node, Layer.succeed(AudioRecording.Service, audio)]] },
+    { overrides: [AudioRecording.node.replace(Layer.succeed(AudioRecording.Service, audio))] },
   )
 }
 
