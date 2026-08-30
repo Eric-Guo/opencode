@@ -269,6 +269,10 @@ import type {
   ConfigGetInput,
   ConfigGetOutput,
   ConfigGlobalOutput,
+  AudioRecordingStartOutput,
+  AudioRecordingStopInput,
+  AudioRecordingStopOutput,
+  AudioRecordingStatusOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -283,17 +287,16 @@ export interface RequestOptions {
   readonly headers?: RequestInit["headers"]
 }
 
-interface RequestDescriptor {
+type RequestDescriptor = {
   readonly method: string
   readonly path: string
   readonly query?: Record<string, unknown>
   readonly headers?: Record<string, unknown>
   readonly body?: unknown
-  readonly successStatus: number
   readonly declaredStatuses: ReadonlyArray<number>
   readonly empty: boolean
   readonly binary?: true
-}
+} & ({ readonly successStatus: number } | { readonly successStatuses: ReadonlyArray<number> })
 
 const maxSseEventBytes = 16 * 1024 * 1024
 
@@ -337,9 +340,14 @@ export function make(options: ClientOptions) {
     throw new ClientError("UnexpectedStatus", { cause: { status: response.status } })
   }
 
+  const success = (response: Response, descriptor: RequestDescriptor) =>
+    "successStatus" in descriptor
+      ? response.status === descriptor.successStatus
+      : descriptor.successStatuses.includes(response.status)
+
   const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {
     const response = await execute(descriptor, requestOptions)
-    if (response.status !== descriptor.successStatus) return responseError(response, descriptor)
+    if (!success(response, descriptor)) return responseError(response, descriptor)
     if (descriptor.binary) return new Uint8Array(await response.arrayBuffer()) as A
     if (descriptor.empty) {
       try {
@@ -353,7 +361,7 @@ export function make(options: ClientOptions) {
   const sse = <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): AsyncIterable<A> => ({
     async *[Symbol.asyncIterator]() {
       const response = await execute(descriptor, requestOptions)
-      if (response.status !== descriptor.successStatus) await responseError(response, descriptor)
+      if (!success(response, descriptor)) await responseError(response, descriptor)
       if (!isContentType(response, "text/event-stream")) {
         try {
           await response.body?.cancel()
@@ -2213,6 +2221,44 @@ export function make(options: ClientOptions) {
           { method: "GET", path: `/global/config`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
           requestOptions,
         ),
+    },
+    audio: {
+      recording: {
+        start: (requestOptions?: RequestOptions) =>
+          request<AudioRecordingStartOutput>(
+            {
+              method: "POST",
+              path: `/api/audio/recording/start`,
+              successStatuses: [200, 201],
+              declaredStatuses: [409, 403, 503, 500, 401, 400],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        stop: (input: AudioRecordingStopInput, requestOptions?: RequestOptions) =>
+          request<AudioRecordingStopOutput>(
+            {
+              method: "POST",
+              path: `/api/audio/recording/${encodeURIComponent(input.recordingID)}/stop`,
+              successStatus: 200,
+              declaredStatuses: [409, 403, 503, 500, 401, 400],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+        status: (requestOptions?: RequestOptions) =>
+          request<AudioRecordingStatusOutput>(
+            {
+              method: "GET",
+              path: `/api/audio/recording/status`,
+              successStatus: 200,
+              declaredStatuses: [400],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
     },
   }
 }
