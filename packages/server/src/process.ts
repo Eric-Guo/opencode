@@ -25,6 +25,8 @@ import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
 import type { ServerOptions } from "./options"
+import { AudioRecording } from "./audio"
+import { AudioRecordingNode } from "./audio-node"
 
 export interface Lifecycle<E = never, R = never> {
   readonly onListen: (
@@ -102,6 +104,15 @@ export const start = Effect.fn("ServerProcess.start")(function* <E = never, R = 
           password,
         },
         urls,
+        [
+          AudioRecording.node.replace(
+            AudioRecordingNode.layer({
+              nativeAddonPath: process.env.OPENCODE_AUDIO_RECORDER_PATH,
+              maxDurationMs: options.audio?.maxDurationMs,
+              remoteEnvironmentHint: options.audio?.remoteEnvironmentHint,
+            }).pipe(Layer.orDie),
+          ),
+        ],
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )
@@ -189,6 +200,7 @@ function dispatch(
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
+    const publicAudioStatus = request.method === "GET" && url.pathname === "/api/audio/recording/status"
     const state = yield* status.current
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
@@ -197,6 +209,7 @@ function dispatch(
       return yield* infoResponse(status, version, urls, tmp)
     }
     if (
+      !publicAudioStatus &&
       (!ready || (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url))) &&
       !(yield* authorizedRequest(request, auth))
     )
