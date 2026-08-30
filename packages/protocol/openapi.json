@@ -141,6 +141,60 @@
         "summary": "Redeem pairing code"
       }
     },
+    "/api/server/my-todo/projects": {
+      "get": {
+        "tags": ["server"],
+        "operationId": "v2.server.myTodoProjects",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyTodo.Project"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Refresh PLM work projects"
+      }
+    },
     "/api/location": {
       "get": {
         "tags": ["location"],
@@ -474,6 +528,16 @@
                       "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
                 }
               }
             }
@@ -8768,6 +8832,9 @@
                   "name": {
                     "type": "string"
                   },
+                  "myTodo": {
+                    "$ref": "#/components/schemas/MyTodo.Project"
+                  },
                   "icon": {
                     "$ref": "#/components/schemas/Project.Icon"
                   },
@@ -10597,6 +10664,7 @@
                     "credential.updated",
                     "credential.switched",
                     "integration.updated",
+                    "integration.connection.switched",
                     "provider.updated",
                     "model.updated",
                     "agent.updated",
@@ -10705,6 +10773,7 @@
                           "credential.updated",
                           "credential.switched",
                           "integration.updated",
+                          "integration.connection.switched",
                           "provider.updated",
                           "model.updated",
                           "agent.updated",
@@ -15909,6 +15978,222 @@
         "description": "Retrieve global configuration required by desktop clients during migration to the current API.",
         "summary": "Get global configuration"
       }
+    },
+    "/api/audio/recording/start": {
+      "post": {
+        "tags": ["audio"],
+        "operationId": "v2.audio.recording.start",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Audio.Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audio.Status"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Audio.Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audio.Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Start recording the default microphone on the OpenCode server host.",
+        "summary": "Start audio recording"
+      }
+    },
+    "/api/audio/recording/{recordingID}/stop": {
+      "post": {
+        "tags": ["audio"],
+        "operationId": "v2.audio.recording.stop",
+        "parameters": [
+          {
+            "name": "recordingID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop one server-host recording and return its retained MP3 bytes.",
+        "summary": "Stop audio recording"
+      }
+    },
+    "/api/audio/recording/status": {
+      "get": {
+        "tags": ["audio"],
+        "operationId": "v2.audio.recording.status",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Audio.Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audio.Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Report process-wide server-host recording state and availability.",
+        "summary": "Get audio recording status"
+      }
     }
   },
   "components": {
@@ -16014,6 +16299,167 @@
           }
         },
         "required": ["content"],
+        "additionalProperties": false
+      },
+      "Audio.Status": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["idle", "starting", "recording", "stopping", "completed", "failed"]
+          },
+          "recordingID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["native", "arecord"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["manual", "unexpected-backend-end", "max-duration"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pcmBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "mp3Bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "progress": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "boolean"
+          },
+          "permission": {
+            "type": "string",
+            "enum": ["not-determined", "restricted", "denied", "authorized", "unknown"]
+          },
+          "environment": {
+            "type": "string",
+            "enum": ["local", "remote", "wsl", "headless"]
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "RECORDER_BUSY",
+                  "RECORDER_DISPOSED",
+                  "RECORDING_ID_MISMATCH",
+                  "RECORDING_NOT_ACTIVE",
+                  "REMOTE_ENVIRONMENT",
+                  "UNSUPPORTED_PLATFORM",
+                  "UNSUPPORTED_ARCHITECTURE",
+                  "NATIVE_ADDON_MISSING",
+                  "MICROPHONE_PERMISSION_RESTRICTED",
+                  "MICROPHONE_PERMISSION_DENIED",
+                  "AUDIO_BACKEND_UNAVAILABLE",
+                  "STALE_NATIVE_RECORDING",
+                  "CAPTURE_START_FAILED",
+                  "BACKEND_ENDED_UNEXPECTEDLY",
+                  "PCM_ENCODING_FAILED",
+                  "MP3_FINALIZATION_FAILED",
+                  "INVALID_MP3_ARTIFACT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorMessage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guidance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "recordingID",
+          "active",
+          "backend",
+          "startedAt",
+          "endedAt",
+          "endReason",
+          "pcmBytes",
+          "mp3Bytes",
+          "durationMs",
+          "progress",
+          "availability",
+          "permission",
+          "environment",
+          "errorCode",
+          "errorMessage",
+          "guidance"
+        ],
         "additionalProperties": false
       },
       "Command.Info": {
@@ -20169,6 +20615,26 @@
       "Money.USDPerMillionTokens": {
         "type": "number"
       },
+      "MyTodo.Project": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          },
+          "project_name": {
+            "type": "string"
+          },
+          "work_package_id": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": ["project_id", "project_name", "work_package_id"],
+        "additionalProperties": false
+      },
       "PairingCode": {
         "type": "object",
         "properties": {
@@ -20841,6 +21307,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "myTodo": {
+            "$ref": "#/components/schemas/MyTodo.Project"
           },
           "icon": {
             "$ref": "#/components/schemas/Project.Icon"
@@ -22080,6 +22549,38 @@
         },
         "required": ["_tag", "message"],
         "additionalProperties": false
+      },
+      "Session.Error.ConnectionFallbackRecovery": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["connection-fallback"]
+          },
+          "integrationID": {
+            "$ref": "#/components/schemas/Integration.ID"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/Connection.Info"
+          },
+          "promoted": {
+            "$ref": "#/components/schemas/Connection.Info"
+          },
+          "unavailableUntil": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["type", "integrationID", "previous", "promoted", "unavailableUntil"],
+        "additionalProperties": false
+      },
+      "Session.Error.Recovery": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Session.Error.ConnectionFallbackRecovery"
+          }
+        ]
       },
       "Session.ForkBoundary": {
         "anyOf": [
@@ -23386,6 +23887,9 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/Session.Error.Recovery"
           }
         },
         "required": ["type", "message"],
@@ -24773,6 +25277,10 @@
     {
       "name": "config",
       "description": "Configuration routes."
+    },
+    {
+      "name": "audio",
+      "description": "Process-wide audio recording on the OpenCode server host."
     }
   ]
 }
