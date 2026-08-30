@@ -40,3 +40,11 @@ test("accepts an embedder fetch and rejects other values", () => {
   expect(Option.getOrThrow(decode({ fetch })).fetch).toBe(fetch)
   expect(Option.isNone(decode({ fetch: "https://example.com" }))).toBe(true)
 })
+
+test("accepts audio remote access and positive duration options", () => {
+  expect(Option.getOrThrow(decode({ audio: { allowRemote: true, maxDurationMs: 60_000 } })).audio).toEqual({
+    allowRemote: true,
+    maxDurationMs: 60_000,
+  })
+  expect(Option.isNone(decode({ audio: { maxDurationMs: 0 } }))).toBe(true)
+})
