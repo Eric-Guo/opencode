@@ -26,6 +26,10 @@ export async function collectNodeAssets(target: NodeTarget) {
   })
   const ptyEntry = fileURLToPath(import.meta.resolve(target.nodePtyPackage))
   const ptyRoot = path.resolve(path.dirname(ptyEntry), "..")
+  const audioRecorderRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.resolve("@mixtint/audio-recorder-node"))),
+    "..",
+  )
   const assets: NodeAsset[] = [
     ...getNodeAssets({
       platform: target.platform,
@@ -48,6 +52,16 @@ export async function collectNodeAssets(target: NodeTarget) {
       source: path.resolve(dir, "../ui/src/assets/audio", path.basename(key)),
     })),
     ...(opencodePty && target.opencodePtyAsset ? [{ key: target.opencodePtyAsset, source: opencodePty.source }] : []),
+    {
+      key: target.audioRecorderAsset,
+      source: path.join(
+        audioRecorderRoot,
+        "vendor",
+        "audio-capture",
+        `${target.arch}-${target.platform}`,
+        "audio-capture.node",
+      ),
+    },
     ...(await collectFiles(ptyRoot))
       .filter((relative) => !relative.endsWith(".map") && !relative.endsWith(".pdb"))
       .map((relative) => ({
