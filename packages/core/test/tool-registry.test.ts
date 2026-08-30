@@ -607,9 +607,7 @@ describe("Tool", () => {
 
       const snapshot = yield* service.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-      expect((yield* snapshot.execute(call("tool_search")).pipe(Effect.flip)).message).toBe(
-        "Unknown tool: tool_search",
-      )
+      expect((yield* snapshot.execute(call("tool_search")).pipe(Effect.flip)).message).toBe("Unknown tool: tool_search")
     }),
   )
 
@@ -1087,6 +1085,44 @@ describe("Tool", () => {
           call: { type: "tool-call", id: "call-zod", name: "zod", input: { count: "41" } },
         }),
       ).toMatchObject({ output: { count: 42 } })
+    }),
+  )
+
+  it.effect("passes trusted host-native inputs directly to a tool adapter", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const received: unknown[] = []
+      yield* transform(
+        service,
+        {
+          binary: {
+            name: "binary",
+            description: "Accept binary input from a trusted host",
+            input: {
+              type: "object",
+              properties: { file: { type: "array", items: { type: "integer" } } },
+              required: ["file"],
+            },
+            output: Schema.String,
+            execute: (input) =>
+              Effect.sync(() => received.push(input)).pipe(Effect.as({ output: "ok", content: "ok" })),
+          },
+        },
+        { codemode: false },
+      )
+      const snapshot = yield* service.snapshot()
+      const bytes = new Uint8Array([1, 2, 3])
+      const toolCall = {
+        sessionID,
+        ...identity,
+        call: { type: "tool-call" as const, id: "binary", name: "binary", input: { file: bytes } },
+      }
+
+      expect(yield* snapshot.execute(toolCall).pipe(Effect.flip)).toMatchObject({
+        message: expect.stringContaining("Invalid arguments for tool"),
+      })
+      expect(yield* snapshot.execute({ ...toolCall, trustedInput: true })).toMatchObject({ output: "ok" })
+      expect(received).toEqual([{ file: bytes }])
     }),
   )
 

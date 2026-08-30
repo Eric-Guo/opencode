@@ -53,6 +53,8 @@ export interface Snapshot {
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
     /** Execute a registered Code Mode tool by its effective name for trusted debug callers. */
     readonly allowUnadvertised?: boolean
+    /** Pass a host-native value directly to a trusted tool adapter instead of enforcing its JSON-facing schema. */
+    readonly trustedInput?: boolean
   }) => Effect.Effect<Tool.Result & { readonly content: ReadonlyArray<Tool.Content> }, Tool.Error>
 }
 
@@ -109,8 +111,9 @@ const layer = Layer.effect(
       name: string,
       input: unknown,
       context: Tool.Context,
+      trustedInput?: boolean,
     ) {
-      const execution = yield* execute(tool, input, context).pipe(
+      const execution = yield* execute(tool, input, context, { trustedInput }).pipe(
         Effect.map((value) => ({ value })),
         Effect.catchTag("Tool.Error", (failure) => Effect.succeed({ failure })),
       )
@@ -251,13 +254,13 @@ const layer = Layer.effect(
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
               if (name === "execute" && codemodeTool)
-                return yield* executeTool(codemodeTool, name, event.input, context)
+                return yield* executeTool(codemodeTool, name, event.input, context, input.trustedInput)
               if (name === CodeModeTool.SEARCH_TOOL && toolSearch)
-                return yield* executeTool(toolSearch, name, event.input, context)
+                return yield* executeTool(toolSearch, name, event.input, context, input.trustedInput)
               const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
+              if (tool) return yield* executeTool(tool, name, event.input, context, input.trustedInput)
               const unadvertised = input.allowUnadvertised ? codemode.get(name) : undefined
-              if (unadvertised) return yield* executeTool(unadvertised, name, event.input, context)
+              if (unadvertised) return yield* executeTool(unadvertised, name, event.input, context, input.trustedInput)
               if (codemodeTool && (name.startsWith("tools.") || name.startsWith("tools[")))
                 return yield* new Tool.Error({
                   message: `Unknown tool: ${name}. Code Mode catalog expressions are JavaScript-only, not standalone tool names. Call execute with the expression inside its code input.`,

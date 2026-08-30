@@ -24,9 +24,14 @@ export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   ...(tool.output === undefined ? {} : { outputSchema: outputJsonSchema(tool.output) }),
 })
 
-export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool.Context) =>
+export const execute = (
+  tool: Tool.Info<any, any>,
+  input: unknown,
+  context: Tool.Context,
+  options?: { readonly trustedInput?: boolean },
+) =>
   Effect.gen(function* () {
-    const decoded = yield* decodeInput(tool, input)
+    const decoded = options?.trustedInput ? input : yield* decodeInput(tool, input)
     // Tool implementations declare `Tool.Error` but plugins can fail with anything at
     // runtime. A foreign typed failure would slip past every `catchTag("Tool.Error")`
     // downstream and leave its call permanently unsettled, so the declared contract is
