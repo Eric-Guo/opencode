@@ -94,19 +94,26 @@ it.live("service CORS config rejects empty lists, invalid origins, and extra arg
 )
 
 test.each([
-  { args: [], cors: [] },
-  { args: ["--cors", "https://app.example.com"], cors: ["https://app.example.com"] },
+  { args: [], cors: [], allowRemoteAudio: false },
+  {
+    args: ["--cors", "https://app.example.com", "--allow-remote-audio"],
+    cors: ["https://app.example.com"],
+    allowRemoteAudio: true,
+  },
   {
     args: ["--service", "--cors", "http://192.0.2.10:3001", "--cors", "https://app.example.com"],
     cors: ["http://192.0.2.10:3001", "https://app.example.com"],
+    allowRemoteAudio: false,
   },
-])("serve parses CORS flags: $args", async ({ args, cors }) => {
-  const received: (readonly string[])[] = []
+])("serve parses CORS and remote audio flags: $args", async ({ args, cors, allowRemoteAudio }) => {
+  const received: Array<{ readonly cors: readonly string[]; readonly allowRemoteAudio: boolean }> = []
   const command = Commands.commands.serve.spec.pipe(
-    Command.withHandler((input) => Effect.sync(() => void received.push(input.cors))),
+    Command.withHandler((input) =>
+      Effect.sync(() => void received.push({ cors: input.cors, allowRemoteAudio: input.allowRemoteAudio })),
+    ),
   )
   await Effect.runPromise(Command.runWith(command, { version: "test" })(args).pipe(Effect.provide(NodeServices.layer)))
-  expect(received).toEqual([cors])
+  expect(received).toEqual([{ cors, allowRemoteAudio }])
 })
 
 test.each([{ args: ["--cors"] }, { args: ["--cors", ""] }])(
