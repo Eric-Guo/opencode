@@ -292,6 +292,10 @@ import type {
   ConfigUpdateInput,
   ConfigUpdateOutput,
   ConfigGlobalOutput,
+  AudioRecordingStartOutput,
+  AudioRecordingStopInput,
+  AudioRecordingStopOutput,
+  AudioRecordingStatusOutput,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1754,6 +1758,27 @@ const adaptGroupConfig = (raw: RawClient["server.config"]) => ({
   global: EndpointConfigGlobal(raw),
 })
 
+const EndpointAudioRecordingStart = (raw: RawClient["server.audio"]) => () =>
+  preserveEffect<AudioRecordingStartOutput>()(raw["audio.recording.start"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointAudioRecordingStop = (raw: RawClient["server.audio"]) => (input: AudioRecordingStopInput) =>
+  preserveEffect<AudioRecordingStopOutput>()(
+    raw["audio.recording.stop"]({ params: { recordingID: input["recordingID"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointAudioRecordingStatus = (raw: RawClient["server.audio"]) => () =>
+  preserveEffect<AudioRecordingStatusOutput>()(raw["audio.recording.status"]({}).pipe(Effect.mapError(mapClientError)))
+
+const adaptGroupAudio = (raw: RawClient["server.audio"]) => ({
+  recording: {
+    start: EndpointAudioRecordingStart(raw),
+    stop: EndpointAudioRecordingStop(raw),
+    status: EndpointAudioRecordingStatus(raw),
+  },
+})
+
 const adaptClient = (raw: RawClient) => ({
   server: adaptGroupServer(raw["server.server"]),
   location: adaptGroupLocation(raw["server.location"]),
@@ -1787,6 +1812,7 @@ const adaptClient = (raw: RawClient) => ({
   websearch: adaptGroupWebsearch(raw["server.websearch"]),
   usage: adaptGroupUsage(raw["server.usage"]),
   config: adaptGroupConfig(raw["server.config"]),
+  audio: adaptGroupAudio(raw["server.audio"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>
