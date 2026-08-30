@@ -2292,12 +2292,19 @@ export type AudioRecordingStatusOutput = {
 }
 export type AudioRecordingStatusOperation<E = never> = () => Effect.Effect<AudioRecordingStatusOutput, E>
 
+export type AudioTranscriptionsInput = { readonly sessionID: Session.ID; readonly payload: globalThis.Uint8Array }
+export type AudioTranscriptionsOutput = SessionMessage.Assistant
+export type AudioTranscriptionsOperation<E = never> = (
+  input: AudioTranscriptionsInput,
+) => Effect.Effect<AudioTranscriptionsOutput, E>
+
 export interface AudioApi<E = never> {
   readonly recording: {
     readonly start: AudioRecordingStartOperation<E>
     readonly stop: AudioRecordingStopOperation<E>
     readonly status: AudioRecordingStatusOperation<E>
   }
+  readonly transcriptions: AudioTranscriptionsOperation<E>
 }
 
 export interface AppApi<E = never> {
