@@ -277,6 +277,8 @@ import type {
   AudioRecordingStopInput,
   AudioRecordingStopOutput,
   AudioRecordingStatusOutput,
+  AudioTranscriptionsInput,
+  AudioTranscriptionsOutput,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1625,12 +1627,25 @@ const EndpointAudioRecordingStop = (raw: RawClient["server.audio"]) => (input: A
 const EndpointAudioRecordingStatus = (raw: RawClient["server.audio"]) => () =>
   preserveEffect<AudioRecordingStatusOutput>()(raw["audio.recording.status"]({}).pipe(Effect.mapError(mapClientError)))
 
+type AudioTranscriptionsRequest = Parameters<RawClient["server.audio"]["audio.transcriptions"]>[0]
+const EndpointAudioTranscriptions = (raw: RawClient["server.audio"]) => (input: AudioTranscriptionsInput) =>
+  preserveEffect<AudioTranscriptionsOutput>()(
+    raw["audio.transcriptions"]({
+      params: { sessionID: input["sessionID"] },
+      payload: input["payload"],
+    } as AudioTranscriptionsRequest).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const adaptGroupAudio = (raw: RawClient["server.audio"]) => ({
   recording: {
     start: EndpointAudioRecordingStart(raw),
     stop: EndpointAudioRecordingStop(raw),
     status: EndpointAudioRecordingStatus(raw),
   },
+  transcriptions: EndpointAudioTranscriptions(raw),
 })
 
 const adaptClient = (raw: RawClient) => ({

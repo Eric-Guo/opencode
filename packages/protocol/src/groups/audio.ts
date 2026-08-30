@@ -1,7 +1,16 @@
 import { Audio } from "@opencode-ai/schema/audio"
+import { Session } from "@opencode-ai/schema/session"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { ConflictError, ForbiddenError, ServiceUnavailableError, UnknownError } from "../errors.js"
+import {
+  ConflictError,
+  ForbiddenError,
+  InvalidRequestError,
+  ServiceUnavailableError,
+  SessionNotFoundError,
+  UnknownError,
+} from "../errors.js"
 import { Authorization } from "../middleware/authorization.js"
 
 const errors = [ConflictError, ForbiddenError, ServiceUnavailableError, UnknownError] as const
@@ -46,6 +55,23 @@ export const AudioGroup = HttpApiGroup.make("server.audio")
         description: "Report process-wide server-host recording state and availability.",
       }),
     ),
+  )
+  .add(
+    HttpApiEndpoint.post("audio.transcriptions", "/api/audio/transcriptions/:sessionID", {
+      params: { sessionID: Session.ID },
+      payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array({ contentType: "audio/mpeg" })),
+      success: Schema.Struct({ data: SessionMessage.Assistant }),
+      error: [...errors, InvalidRequestError, SessionNotFoundError],
+    })
+      .middleware(Authorization)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.audio.transcriptions",
+          summary: "Transcribe session audio",
+          description:
+            "Execute the audio_transcriptions tool with MP3 bytes in a Session and append its redacted call and result to history.",
+        }),
+      ),
   )
   .annotateMerge(
     OpenApi.annotations({
