@@ -1,4 +1,5 @@
 export { Agent } from "./agent.js"
+export { Audio } from "./audio.js"
 export { Command } from "./command.js"
 export { Config } from "./config.js"
 export { Connection } from "./connection.js"
