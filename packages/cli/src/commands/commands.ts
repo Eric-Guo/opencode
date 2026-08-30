@@ -559,6 +559,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.withDescription("Additional allowed CORS origin (repeat for multiple origins)"),
           Flag.atLeast(0),
         ),
+        allowRemoteAudio: Flag.Boolean("allow-remote-audio").pipe(
+          Flag.withDescription("Allow authenticated non-loopback clients to control server-host audio recording"),
+          Flag.withDefault(false),
+        ),
         service: Flag.Boolean("service").pipe(Flag.withDefault(false)),
         stdio: Flag.Boolean("stdio").pipe(Flag.withDefault(false)),
       },
