@@ -13,6 +13,13 @@ export const AppOptions = Schema.Struct({
       channel: Schema.optional(Schema.String),
     }),
   ),
+  audio: Schema.optional(
+    Schema.Struct({
+      allowRemote: Schema.optional(Schema.Boolean),
+      maxDurationMs: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))),
+      remoteEnvironmentHint: Schema.optional(Schema.Boolean),
+    }),
+  ),
   database: Schema.optional(Database.Options),
   pty: Schema.optional(PersistentPty.Options),
   events: Schema.optional(

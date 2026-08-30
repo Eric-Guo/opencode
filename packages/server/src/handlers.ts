@@ -34,8 +34,10 @@ import { EventFeed } from "./event-feed"
 import { SpaceStore } from "./space-store"
 import { MigrationHandler } from "./handlers/migration"
 import { ConfigHandler } from "./handlers/config"
+import { AudioHandler } from "./handlers/audio"
 
 export const handlers = Layer.mergeAll(
+  AudioHandler,
   ServerHandler,
   ConfigHandler,
   DebugHandler,
