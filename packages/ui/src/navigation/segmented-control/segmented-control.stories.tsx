@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js"
+import { Icon } from "@opencode-ai/ui/icon"
 import { SegmentedControlItem, SegmentedControl } from "./segmented-control"
 
 const docs = `### Overview
@@ -58,6 +59,59 @@ export const Controlled = {
         </SegmentedControl>
         <div style={{ "font-family": "var(--v2-font-family-sans)", "font-size": "12px", color: "#808080" }}>
           Value: {value()}
+        </div>
+      </div>
+    )
+  },
+}
+
+export const Recorder = {
+  render: () => {
+    const [value, setValue] = createSignal("start")
+    // Mirrors Audio.Status fields (state/durationMs/progress) from packages/schema/src/audio.ts
+    const info = () =>
+      value() === "stop"
+        ? { state: "completed", durationMs: 8420, progress: "Recorded 8.4 seconds" }
+        : { state: "recording", durationMs: 8420, progress: "Recording" }
+    const recording = () => info().state === "recording"
+    const item = (name: "record-stop" | "record-status", label: string, key: string) => (
+      <SegmentedControlItem value={key}>
+        <span style={{ display: "inline-flex", gap: "6px", "align-items": "center" }}>
+          <Icon name={name} size="small" />
+          {label}
+        </span>
+      </SegmentedControlItem>
+    )
+    return (
+      <div style={{ display: "grid", gap: "12px", "justify-items": "start" }}>
+        <SegmentedControl
+          value={value()}
+          onChange={setValue}
+          class="segmented-control-v2--fit-content"
+          aria-label="Recorder"
+        >
+          <SegmentedControlItem value="start">
+            <span style={{ display: "inline-flex", gap: "6px", "align-items": "center" }}>
+              <Icon
+                name="record-start"
+                size="small"
+                style={recording() ? { color: "var(--v2-state-fg-danger)" } : undefined}
+              />
+              {recording() ? "Recording" : "Start"}
+            </span>
+          </SegmentedControlItem>
+          {item("record-stop", "Stop", "stop")}
+          {item("record-status", "Status", "status")}
+        </SegmentedControl>
+        <div
+          style={{
+            "font-family": "var(--v2-font-family-sans)",
+            "font-size": "12px",
+            color: "#808080",
+            "font-variant-numeric": "tabular-nums",
+          }}
+        >
+          State: {info().state} · Duration: {(info().durationMs / 1000).toFixed(1)}s · {info().progress}
         </div>
       </div>
     )
