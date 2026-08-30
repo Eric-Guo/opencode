@@ -47,7 +47,7 @@ export const AudioHandler = HttpApiBuilder.group(Api, "server.audio", (handlers)
               .executeTool({
                 sessionID: ctx.params.sessionID,
                 name: "audio_transcriptions",
-                input: { file: ctx.payload },
+                input: { file: Array.from(ctx.payload) },
                 recordedInput: { file: "[audio bytes omitted]" },
               })
               .pipe(

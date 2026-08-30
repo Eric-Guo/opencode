@@ -162,7 +162,7 @@ it.live("returns valid partial MP3 results after an unexpected backend end", () 
   }),
 )
 
-it.live("passes native MP3 bytes to the current Session while recording only a placeholder", () =>
+it.live("passes MP3 bytes to the current Session as JSON-compatible tool input while recording only a placeholder", () =>
   Effect.gen(function* () {
     const calls: Parameters<Session.Interface["executeTool"]>[0][] = []
     const assistant = SessionMessage.Assistant.make({
@@ -205,8 +205,7 @@ it.live("passes native MP3 bytes to the current Session while recording only a p
       name: "audio_transcriptions",
       recordedInput: { file: "[audio bytes omitted]" },
     })
-    expect(calls[0]?.input.file).toBeInstanceOf(Uint8Array)
-    expect(calls[0]?.input.file).toEqual(mp3)
+    expect(calls[0]?.input.file).toEqual(Array.from(mp3))
   }),
 )
 
