@@ -30,8 +30,10 @@ import { VcsHandler } from "./handlers/vcs"
 import { EventFeed } from "./event-feed"
 import { MigrationHandler } from "./handlers/migration"
 import { ConfigHandler } from "./handlers/config"
+import { AudioHandler } from "./handlers/audio"
 
 export const handlers = Layer.mergeAll(
+  AudioHandler,
   ServerHandler,
   ConfigHandler,
   DebugHandler,
