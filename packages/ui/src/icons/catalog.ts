@@ -270,6 +270,18 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 6.5H12.5C13.0523 6.5 13.5 6.94772 13.5 7.5V10.5C13.5 11.0523 13.0523 11.5 12.5 11.5H8.5M5.5 9.5L2.5 6.5L5.5 3.5" stroke="currentColor"/>`,
   },
+  "record-start": {
+    viewBox: "0 0 16 16",
+    body: `<circle cx="8" cy="8" r="6.444" stroke="currentColor"/><circle cx="8" cy="8" r="3" fill="currentColor"/>`,
+  },
+  "record-stop": {
+    viewBox: "0 0 16 16",
+    body: `<circle cx="8" cy="8" r="6.444" stroke="currentColor"/><rect x="5.5" y="5.5" width="5" height="5" fill="currentColor"/>`,
+  },
+  "record-status": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M2.5 6.5V9.5M5.75 4.5V11.5M8 3V13M10.25 4.5V11.5M13.5 6.5V9.5" stroke="currentColor" stroke-linecap="square"/>`,
+  },
   "fill-triangle-down": {
     viewBox: "0 0 16 16",
     body: `<path d="M5.37624 6.75194C5.18184 6.41861 5.42224 6 5.80814 6H10.1921C10.578 6 10.8184 6.41861 10.624 6.75194L8.43203 10.5096C8.23909 10.8404 7.76119 10.8404 7.56825 10.5096L5.37624 6.75194Z" fill="currentColor"/>`,
