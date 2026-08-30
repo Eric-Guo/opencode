@@ -869,6 +869,28 @@ describe("HttpApiCodegen.generate", () => {
     })
 
     expect(await client.session.interrupt({ sessionID: "session" })).toBeUndefined()
+    expect(output.files.find((file) => file.path === "client.ts")?.content).toContain("successStatus: 204")
+  })
+
+  test("accepts the same success body at multiple statuses", async () => {
+    const Status = Schema.Struct({ state: Schema.String })
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.post("start", "/recording/start", {
+            success: [Status, Status.pipe(HttpApiSchema.status(201))],
+          }),
+        ),
+      ),
+    )
+    await using emitted = await emittedModule(output)
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async () => Response.json({ state: "recording" }, { status: 201 }),
+    })
+
+    expect(await client.session.start()).toEqual({ state: "recording" })
+    expect(output.files.find((file) => file.path === "client.ts")?.content).toContain("successStatuses: [200, 201]")
   })
 
   test("executes an emitted binary wildcard GET through fetch", async () => {
