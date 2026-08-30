@@ -78,6 +78,36 @@ it.live("creates the first session directory and returns 404 for deleted session
       })
       await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
 
+      const transcribed = await handler(
+        new Request(`http://opencode.local/api/audio/transcriptions/${created.data.id}`, {
+          method: "POST",
+          headers: { "content-type": "audio/mpeg" },
+          body: new Uint8Array([1, 2, 3]),
+        }),
+      )
+      expect(transcribed.status).toBe(404)
+      expect(await transcribed.json()).toEqual({
+        _tag: "LocationNotFoundError",
+        location: { directory },
+        message: `Location not found: ${directory}`,
+      })
+      await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
+
+      const debug = await handler(
+        new Request("http://opencode.local/api/debug/agent/build/tool/read", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-opencode-directory": encodeURIComponent(directory) },
+          body: JSON.stringify({ filePath: path.join(directory, "README.md") }),
+        }),
+      )
+      expect(debug.status).toBe(404)
+      expect(await debug.json()).toEqual({
+        _tag: "LocationNotFoundError",
+        location: { directory },
+        message: `Location not found: ${directory}`,
+      })
+      await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
+
       const missing = Session.ID.create()
       const unknown = await handler(
         new Request(`http://opencode.local/api/session/${missing}/agent`, {
