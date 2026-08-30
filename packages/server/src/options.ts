@@ -15,6 +15,13 @@ export const ServerOptions = Schema.Struct({
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
   cors: Schema.optional(Schema.Array(Schema.String)),
+  audio: Schema.optional(
+    Schema.Struct({
+      allowRemote: Schema.optional(Schema.Boolean),
+      maxDurationMs: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))),
+      remoteEnvironmentHint: Schema.optional(Schema.Boolean),
+    }),
+  ),
   simulation: Schema.optional(Schema.Boolean),
   database: Schema.optional(Database.Options),
   pty: Schema.optional(PersistentPty.Options),
