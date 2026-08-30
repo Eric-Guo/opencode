@@ -1288,6 +1288,37 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
+  name: "audio_transcriptions",
+  render(props) {
+    const i18n = useI18n()
+    const file = createMemo(() => (typeof props.input.file === "string" ? `file=${props.input.file}` : undefined))
+    return (
+      <BasicTool
+        {...props}
+        defaultOpen
+        icon="mcp"
+        trigger={{
+          title: i18n.t("ui.basicTool.called", { tool: props.tool }),
+          args: file() ? [file()!] : [],
+        }}
+      >
+        <Show when={props.output}>
+          <div
+            data-component="tool-output"
+            data-scrollable
+            tabIndex={0}
+            role="region"
+            aria-label={i18n.t("ui.scrollView.ariaLabel")}
+          >
+            <Markdown text={props.output!} />
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
   name: "webfetch",
   render(props) {
     const i18n = useI18n()
