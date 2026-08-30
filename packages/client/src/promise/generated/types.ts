@@ -6740,3 +6740,10 @@ export type AudioRecordingStopInput = { readonly recordingID: { readonly recordi
 export type AudioRecordingStopOutput = globalThis.Uint8Array
 
 export type AudioRecordingStatusOutput = AudioStatus
+
+export type AudioTranscriptionsInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly payload: globalThis.Uint8Array
+}
+
+export type AudioTranscriptionsOutput = { data: SessionMessageAssistant }["data"]
