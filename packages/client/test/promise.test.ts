@@ -37,6 +37,7 @@ test("exposes every standard HTTP API group", () => {
     "migration",
     "websearch",
     "config",
+    "audio",
   ])
   expect(Object.keys(client.debug)).toEqual(["location", "agent"])
   expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
@@ -57,6 +58,27 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
+  expect(Object.keys(client.audio.recording)).toEqual(["start", "stop", "status"])
+})
+
+test("audio recording accepts created starts and returns MP3 bytes", async () => {
+  const requests: Request[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      if (request.url.endsWith("/start")) return Response.json({ state: "recording" }, { status: 201 })
+      return new Response(new Uint8Array([0x49, 0x44, 0x33]), { headers: { "content-type": "audio/mpeg" } })
+    },
+  })
+
+  expect(await client.audio.recording.start()).toEqual({ state: "recording" })
+  expect(Array.from(await client.audio.recording.stop({ recordingID: "recording-1" }))).toEqual([0x49, 0x44, 0x33])
+  expect(requests.map((request) => [request.method, new URL(request.url).pathname])).toEqual([
+    ["POST", "/api/audio/recording/start"],
+    ["POST", "/api/audio/recording/recording-1/stop"],
+  ])
 })
 
 test("config.get returns ordered config entries for a location", async () => {
