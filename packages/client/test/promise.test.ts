@@ -179,6 +179,7 @@ test("nests a method under client.experimental exactly when its route is experim
   expect(Object.keys(client.project)).toEqual(["list", "update"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
   expect(Object.keys(client.audio.recording)).toEqual(["start", "stop", "status"])
+  expect(client.audio.transcriptions).toBeFunction()
 })
 
 test("audio recording accepts created starts and returns MP3 bytes", async () => {
@@ -199,6 +200,25 @@ test("audio recording accepts created starts and returns MP3 bytes", async () =>
     ["POST", "/api/audio/recording/start"],
     ["POST", "/api/audio/recording/recording-1/stop"],
   ])
+})
+
+test("audio transcriptions sends native bytes without JSON encoding", async () => {
+  let request: Request | undefined
+  const assistant = { id: "msg_audio", type: "assistant", content: [] }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      request = new Request(input, init)
+      return Response.json({ data: assistant })
+    },
+  })
+  const bytes = new Uint8Array([0x49, 0x44, 0x33])
+
+  expect(await client.audio.transcriptions({ sessionID: "ses_audio", payload: bytes })).toEqual(assistant)
+  expect(request?.headers.get("content-type")).toBe("audio/mpeg")
+  const body = await request?.arrayBuffer()
+  expect(body).toBeDefined()
+  expect(new Uint8Array(body ?? new ArrayBuffer(0))).toEqual(bytes)
 })
 
 test("config.get returns ordered config entries for a location", async () => {
@@ -557,6 +577,21 @@ test("MCP resource catalog uses the public HTTP contract", async () => {
   expect(result.data.resources[0]?.uri).toBe("docs://readme")
   expect(request?.method).toBe("GET")
   expect(request?.url).toBe("http://localhost:3000/api/mcp/resource?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
+test("experimental.file.write passes the original File to the upload transport", async () => {
+  const file = new File(["upload"], "upload.txt")
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (_input, init) => {
+      expect(init?.body).toBe(file)
+      expect(new Headers(init?.headers).get("content-type")).toBe("application/octet-stream")
+      return Response.json({ data: { path: "/tmp/upload.txt" } })
+    },
+  })
+
+  const result = await client.experimental.file.write({ path: "/tmp/upload.txt", payload: file })
+  expect(result.data.path).toBe("/tmp/upload.txt")
 })
 
 test("file.read returns binary content from the public HTTP contract", async () => {
