@@ -15,7 +15,7 @@ import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact } from "./verify-artifact"
 
-const NODE_VERSION = "26.8.1"
+const NODE_VERSION = "26.8.2"
 const dir = path.resolve(import.meta.dirname, "..")
 const outdir = path.resolve(
   dir,
@@ -37,15 +37,14 @@ const allTargets = [
   nodeTarget("linux", "arm64"),
   nodeTarget("linux", "x64"),
   nodeTarget("darwin", "arm64"),
-  nodeTarget("darwin", "x64"),
   nodeTarget("win32", "arm64"),
   nodeTarget("win32", "x64"),
 ]
 const targets = requested
   ? allTargets.filter((target) => targetName(target) === requested)
   : single || bundleOnly
-    ? [nodeTarget(process.platform, process.arch)]
-    : allTargets.filter((target) => target.platform !== "darwin" || target.arch !== "x64")
+    ? allTargets.filter((target) => target.platform === process.platform && target.arch === process.arch)
+    : allTargets
 
 process.chdir(dir)
 if (!skipInstall) run(process.execPath, ["install", "--os=*", "--cpu=*"])
@@ -56,11 +55,7 @@ if (appArchiveOnly) {
   process.exit(0)
 }
 if (targets.length === 0) {
-  if (requested === "darwin-x64") throw new Error("Node 26.4 SEA does not support macOS x64")
-  throw new Error(`Unknown Node target: ${requested}`)
-}
-if (!bundleOnly && !sidecarOnly && targets.some((target) => target.platform === "darwin" && target.arch === "x64")) {
-  throw new Error("Node 26.4 SEA does not support macOS x64")
+  throw new Error(`Unknown Node target: ${requested ?? `${process.platform}-${process.arch}`}`)
 }
 const appArchive = archivePath ? (await Bun.file(archivePath).text()).trim() : await buildAppArchive(Script.channel)
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
@@ -148,6 +143,7 @@ for (const target of targets) {
       {
         name: `@opencode/${name}`,
         version: Script.version,
+        bin: { "opencode2-node": `./bin/${binary}` },
         license: pkg.license,
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
         os: [target.platform],
