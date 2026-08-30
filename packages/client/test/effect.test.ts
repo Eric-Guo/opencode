@@ -27,6 +27,48 @@ test("health.get decodes the readiness response", async () => {
   expect(result).toEqual({ healthy: true, version: "old", pid: 123 })
 })
 
+test("audio recording accepts created starts and decodes MP3 bytes", async () => {
+  const status = {
+    state: "recording",
+    recordingID: "recording-1",
+    active: true,
+    backend: "native",
+    startedAt: 1_000,
+    endedAt: null,
+    endReason: null,
+    pcmBytes: 0,
+    mp3Bytes: 0,
+    durationMs: 0,
+    progress: "Recording",
+    availability: true,
+    permission: "authorized",
+    environment: "local",
+    errorCode: null,
+    errorMessage: null,
+    guidance: null,
+  }
+  const httpClient = HttpClient.make((request) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        request.url.endsWith("/start")
+          ? Response.json(status, { status: 201 })
+          : new Response(new Uint8Array([0x49, 0x44, 0x33]), { headers: { "content-type": "audio/mpeg" } }),
+      ),
+    ),
+  )
+  const result = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    return {
+      status: yield* client.audio.recording.start(),
+      mp3: yield* client.audio.recording.stop({ recordingID: "recording-1" }),
+    }
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  expect(result.status).toEqual(status)
+  expect(Array.from(result.mp3)).toEqual([0x49, 0x44, 0x33])
+})
+
 test("vcs.base decodes nullable review-base metadata", async () => {
   const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
   const base = {
