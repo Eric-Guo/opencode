@@ -14,6 +14,7 @@ it.live("allows browser preflight requests without credentials", () =>
         password: "secret",
         cors: ["http://192.168.1.10:3001", "https://example.com"],
         app: { version: "test-version" },
+        audio: { remoteEnvironmentHint: true },
         database: { path: ":memory:" },
         config: {
           content: JSON.stringify({
@@ -63,6 +64,33 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(health.status).toBe(200)
     expect(health.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
     expect(yield* Effect.promise(() => health.json())).toMatchObject({ version: "test-version" })
+
+    const audioStatus = yield* Effect.promise(() =>
+      fetch(new URL("/api/audio/recording/status", HttpServer.formatAddress(server.address))),
+    )
+    expect(audioStatus.status).toBe(200)
+    expect(yield* Effect.promise(() => audioStatus.json())).toMatchObject({
+      state: "idle",
+      active: false,
+      recordingID: null,
+    })
+
+    const audioStart = yield* Effect.promise(() =>
+      fetch(new URL("/api/audio/recording/start", HttpServer.formatAddress(server.address)), { method: "POST" }),
+    )
+    expect(audioStart.status).toBe(401)
+
+    const loopbackAudioStart = yield* Effect.promise(() =>
+      fetch(new URL("/api/audio/recording/start", HttpServer.formatAddress(server.address)), {
+        method: "POST",
+        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+      }),
+    )
+    expect(loopbackAudioStart.status).toBe(403)
+    expect(yield* Effect.promise(() => loopbackAudioStart.json())).toMatchObject({
+      _tag: "ForbiddenError",
+      message: "Audio recording is disabled by the remote-environment hint.",
+    })
 
     yield* Effect.forEach(
       ["http://192.168.1.10:3001", "https://example.com", "https://untrusted.example.com"],

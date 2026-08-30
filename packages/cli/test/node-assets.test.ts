@@ -15,4 +15,7 @@ test("collects each SEA asset key once", async () => {
       source: fileURLToPath(import.meta.resolve(shellParserWasmAssets.runtime)),
     },
   ])
+  const audio = assets.find((asset) => asset.key === nodeTarget(process.platform, process.arch).audioRecorderAsset)
+  expect(audio).toBeDefined()
+  expect(await Bun.file(audio!.source).exists()).toBe(true)
 })
