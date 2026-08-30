@@ -164,6 +164,18 @@ const icons = {
     viewBox: "0 0 20 20",
     body: `<path d="M5.83333 4.16406L2.5 7.4974L5.83333 10.8307M3.33333 7.4974H17.9167V15.4141H10" stroke="currentColor" stroke-linecap="square"/>`,
   },
+  "record-start": {
+    viewBox: "0 0 16 16",
+    body: `<circle cx="8" cy="8" r="6.444" stroke="currentColor"/><circle cx="8" cy="8" r="3" fill="currentColor"/>`,
+  },
+  "record-stop": {
+    viewBox: "0 0 16 16",
+    body: `<circle cx="8" cy="8" r="6.444" stroke="currentColor"/><rect x="5.5" y="5.5" width="5" height="5" fill="currentColor"/>`,
+  },
+  "record-status": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M2.5 6.5V9.5M5.75 4.5V11.5M8 3V13M10.25 4.5V11.5M13.5 6.5V9.5" stroke="currentColor" stroke-linecap="square"/>`,
+  },
   "fill-triangle-down": {
     viewBox: "0 0 16 16",
     body: `<path d="M5.37624 6.75194C5.1818 6.41861 5.42223 6 5.80813 6H10.1921C10.578 6 10.8184 6.41861 10.624 6.75194L8.43199 10.5096C8.23905 10.8404 7.76115 10.8404 7.56821 10.5096L5.37624 6.75194Z" fill="currentColor"/>`,
