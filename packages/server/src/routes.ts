@@ -63,6 +63,7 @@ import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
+import { AudioRecording } from "./audio"
 import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
@@ -113,6 +114,7 @@ const applicationServiceNodes = [
   PushList.node,
   PushSender.node,
   PushWatcher.node,
+  AudioRecording.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -237,7 +239,13 @@ function makeRoutes(
         ServerInfo.layer(serviceURLs, Context.get(context, Global.Service).tmp, options.app),
       )
       const api = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
-        Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),
+        Layer.provide(
+          handlers.pipe(
+            Layer.provide(services),
+            Layer.provide(Layer.succeed(CorsConfig, options)),
+            Layer.provide(Layer.succeed(AudioRecording.Config, options.audio)),
+          ),
+        ),
         Layer.provide(formLocationLayer),
         Layer.provide(sessionLocationLayer),
         Layer.provide(layer),
