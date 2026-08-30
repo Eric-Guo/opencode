@@ -232,6 +232,9 @@ jobs:
             host: blacksmith-4vcpu-ubuntu-2404
           - target: darwin-arm64
             host: macos-26
+          - target: darwin-x64
+            host: macos-26
+            bun_install_flags: --cpu=*
           - target: windows-arm64
             host: blacksmith-4vcpu-windows-2025
             bun_install_flags: --cpu=*
@@ -264,7 +267,7 @@ jobs:
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
 
       - name: Verify service lifecycle
-        if: matrix.settings.target != 'windows-arm64'
+        if: matrix.settings.target != 'windows-arm64' && matrix.settings.target != 'darwin-x64'
         working-directory: packages/cli
         run: bun run script/service-smoke.ts --node
 
