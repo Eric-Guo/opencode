@@ -231,6 +231,7 @@ process.env.OPENCODE_TREE_SITTER_BASH_WASM_PATH = __ocPath.join(__ocAssetRoot, $
 process.env.OPENCODE_TREE_SITTER_POWERSHELL_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(shellParserWasmAssets.powershell)})
 process.env.FFF_BINARY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffAsset)})
 process.env.OPENCODE_FFF_FFI_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffFfiAsset)})
+process.env.OPENCODE_AUDIO_RECORDER_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.audioRecorderAsset)})
 if (__ocPersistentPty && !process.env.OPENCODE_PTY_BIN) process.env.OPENCODE_PTY_BIN = __ocPath.join(__ocAssetRoot, __ocPersistentPty)
 try {
   globalThis.__OPENCODE_FFF_FFI = require(process.env.OPENCODE_FFF_FFI_PATH)
