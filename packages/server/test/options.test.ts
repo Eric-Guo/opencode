@@ -45,3 +45,11 @@ test("accepts Console refresh options", () => {
   expect(Option.getOrThrow(decode({ console: { poll: false } })).console).toEqual({ poll: false })
   expect(Option.isNone(decode({ console: { poll: "no" } }))).toBe(true)
 })
+
+test("accepts audio remote access and positive duration options", () => {
+  expect(Option.getOrThrow(decode({ audio: { allowRemote: true, maxDurationMs: 60_000 } })).audio).toEqual({
+    allowRemote: true,
+    maxDurationMs: 60_000,
+  })
+  expect(Option.isNone(decode({ audio: { maxDurationMs: 0 } }))).toBe(true)
+})
