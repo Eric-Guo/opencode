@@ -13868,6 +13868,222 @@
         "description": "Retrieve global configuration required by desktop clients during migration to the current API.",
         "summary": "Get global configuration"
       }
+    },
+    "/api/audio/recording/start": {
+      "post": {
+        "tags": ["audio"],
+        "operationId": "v2.audio.recording.start",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Audio.Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audio.Status"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Audio.Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audio.Status_1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Start recording the default microphone on the OpenCode server host.",
+        "summary": "Start audio recording"
+      }
+    },
+    "/api/audio/recording/{recordingID}/stop": {
+      "post": {
+        "tags": ["audio"],
+        "operationId": "v2.audio.recording.stop",
+        "parameters": [
+          {
+            "name": "recordingID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop one server-host recording and return its retained MP3 bytes.",
+        "summary": "Stop audio recording"
+      }
+    },
+    "/api/audio/recording/status": {
+      "get": {
+        "tags": ["audio"],
+        "operationId": "v2.audio.recording.status",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Audio.Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audio.Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Report process-wide server-host recording state and availability.",
+        "summary": "Get audio recording status"
+      }
     }
   },
   "components": {
@@ -13966,6 +14182,324 @@
           }
         },
         "required": ["content"],
+        "additionalProperties": false
+      },
+      "Audio.Status": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["idle", "starting", "recording", "stopping", "completed", "failed"]
+          },
+          "recordingID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["native", "arecord"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["manual", "unexpected-backend-end", "max-duration"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pcmBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mp3Bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "progress": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "boolean"
+          },
+          "permission": {
+            "type": "string",
+            "enum": ["not-determined", "restricted", "denied", "authorized", "unknown"]
+          },
+          "environment": {
+            "type": "string",
+            "enum": ["local", "remote", "wsl", "headless"]
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "RECORDER_BUSY",
+                  "RECORDER_DISPOSED",
+                  "RECORDING_ID_MISMATCH",
+                  "RECORDING_NOT_ACTIVE",
+                  "REMOTE_ENVIRONMENT",
+                  "UNSUPPORTED_PLATFORM",
+                  "UNSUPPORTED_ARCHITECTURE",
+                  "NATIVE_ADDON_MISSING",
+                  "MICROPHONE_PERMISSION_RESTRICTED",
+                  "MICROPHONE_PERMISSION_DENIED",
+                  "AUDIO_BACKEND_UNAVAILABLE",
+                  "STALE_NATIVE_RECORDING",
+                  "CAPTURE_START_FAILED",
+                  "BACKEND_ENDED_UNEXPECTEDLY",
+                  "PCM_ENCODING_FAILED",
+                  "MP3_FINALIZATION_FAILED",
+                  "INVALID_MP3_ARTIFACT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorMessage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guidance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "recordingID",
+          "active",
+          "backend",
+          "startedAt",
+          "endedAt",
+          "endReason",
+          "pcmBytes",
+          "mp3Bytes",
+          "durationMs",
+          "progress",
+          "availability",
+          "permission",
+          "environment",
+          "errorCode",
+          "errorMessage",
+          "guidance"
+        ],
+        "additionalProperties": false
+      },
+      "Audio.Status_1": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["idle", "starting", "recording", "stopping", "completed", "failed"]
+          },
+          "recordingID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["native", "arecord"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["manual", "unexpected-backend-end", "max-duration"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pcmBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mp3Bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "progress": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "boolean"
+          },
+          "permission": {
+            "type": "string",
+            "enum": ["not-determined", "restricted", "denied", "authorized", "unknown"]
+          },
+          "environment": {
+            "type": "string",
+            "enum": ["local", "remote", "wsl", "headless"]
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "RECORDER_BUSY",
+                  "RECORDER_DISPOSED",
+                  "RECORDING_ID_MISMATCH",
+                  "RECORDING_NOT_ACTIVE",
+                  "REMOTE_ENVIRONMENT",
+                  "UNSUPPORTED_PLATFORM",
+                  "UNSUPPORTED_ARCHITECTURE",
+                  "NATIVE_ADDON_MISSING",
+                  "MICROPHONE_PERMISSION_RESTRICTED",
+                  "MICROPHONE_PERMISSION_DENIED",
+                  "AUDIO_BACKEND_UNAVAILABLE",
+                  "STALE_NATIVE_RECORDING",
+                  "CAPTURE_START_FAILED",
+                  "BACKEND_ENDED_UNEXPECTEDLY",
+                  "PCM_ENCODING_FAILED",
+                  "MP3_FINALIZATION_FAILED",
+                  "INVALID_MP3_ARTIFACT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorMessage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guidance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "recordingID",
+          "active",
+          "backend",
+          "startedAt",
+          "endedAt",
+          "endReason",
+          "pcmBytes",
+          "mp3Bytes",
+          "durationMs",
+          "progress",
+          "availability",
+          "permission",
+          "environment",
+          "errorCode",
+          "errorMessage",
+          "guidance"
+        ],
         "additionalProperties": false
       },
       "Command.Info": {
@@ -20206,6 +20740,10 @@
     {
       "name": "config",
       "description": "Configuration routes."
+    },
+    {
+      "name": "audio",
+      "description": "Process-wide audio recording on the OpenCode server host."
     }
   ]
 }

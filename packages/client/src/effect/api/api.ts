@@ -2235,6 +2235,98 @@ export interface ConfigApi<E = never> {
   readonly global: ConfigGlobalOperation<E>
 }
 
+export type AudioRecordingStartOutput = {
+  readonly state: "idle" | "starting" | "recording" | "stopping" | "completed" | "failed"
+  readonly recordingID: string | null
+  readonly active: boolean
+  readonly backend: "native" | "arecord" | null
+  readonly startedAt: number | null
+  readonly endedAt: number | null
+  readonly endReason: "manual" | "unexpected-backend-end" | "max-duration" | null
+  readonly pcmBytes: number
+  readonly mp3Bytes: number
+  readonly durationMs: number
+  readonly progress: string
+  readonly availability: boolean
+  readonly permission: "not-determined" | "restricted" | "denied" | "authorized" | "unknown"
+  readonly environment: "local" | "remote" | "wsl" | "headless"
+  readonly errorCode:
+    | "RECORDER_BUSY"
+    | "RECORDER_DISPOSED"
+    | "RECORDING_ID_MISMATCH"
+    | "RECORDING_NOT_ACTIVE"
+    | "REMOTE_ENVIRONMENT"
+    | "UNSUPPORTED_PLATFORM"
+    | "UNSUPPORTED_ARCHITECTURE"
+    | "NATIVE_ADDON_MISSING"
+    | "MICROPHONE_PERMISSION_RESTRICTED"
+    | "MICROPHONE_PERMISSION_DENIED"
+    | "AUDIO_BACKEND_UNAVAILABLE"
+    | "STALE_NATIVE_RECORDING"
+    | "CAPTURE_START_FAILED"
+    | "BACKEND_ENDED_UNEXPECTEDLY"
+    | "PCM_ENCODING_FAILED"
+    | "MP3_FINALIZATION_FAILED"
+    | "INVALID_MP3_ARTIFACT"
+    | null
+  readonly errorMessage: string | null
+  readonly guidance: string | null
+}
+export type AudioRecordingStartOperation<E = never> = () => Effect.Effect<AudioRecordingStartOutput, E>
+
+export type AudioRecordingStopInput = { readonly recordingID: string }
+export type AudioRecordingStopOutput = globalThis.Uint8Array
+export type AudioRecordingStopOperation<E = never> = (
+  input: AudioRecordingStopInput,
+) => Effect.Effect<AudioRecordingStopOutput, E>
+
+export type AudioRecordingStatusOutput = {
+  readonly state: "idle" | "starting" | "recording" | "stopping" | "completed" | "failed"
+  readonly recordingID: string | null
+  readonly active: boolean
+  readonly backend: "native" | "arecord" | null
+  readonly startedAt: number | null
+  readonly endedAt: number | null
+  readonly endReason: "manual" | "unexpected-backend-end" | "max-duration" | null
+  readonly pcmBytes: number
+  readonly mp3Bytes: number
+  readonly durationMs: number
+  readonly progress: string
+  readonly availability: boolean
+  readonly permission: "not-determined" | "restricted" | "denied" | "authorized" | "unknown"
+  readonly environment: "local" | "remote" | "wsl" | "headless"
+  readonly errorCode:
+    | "RECORDER_BUSY"
+    | "RECORDER_DISPOSED"
+    | "RECORDING_ID_MISMATCH"
+    | "RECORDING_NOT_ACTIVE"
+    | "REMOTE_ENVIRONMENT"
+    | "UNSUPPORTED_PLATFORM"
+    | "UNSUPPORTED_ARCHITECTURE"
+    | "NATIVE_ADDON_MISSING"
+    | "MICROPHONE_PERMISSION_RESTRICTED"
+    | "MICROPHONE_PERMISSION_DENIED"
+    | "AUDIO_BACKEND_UNAVAILABLE"
+    | "STALE_NATIVE_RECORDING"
+    | "CAPTURE_START_FAILED"
+    | "BACKEND_ENDED_UNEXPECTEDLY"
+    | "PCM_ENCODING_FAILED"
+    | "MP3_FINALIZATION_FAILED"
+    | "INVALID_MP3_ARTIFACT"
+    | null
+  readonly errorMessage: string | null
+  readonly guidance: string | null
+}
+export type AudioRecordingStatusOperation<E = never> = () => Effect.Effect<AudioRecordingStatusOutput, E>
+
+export interface AudioApi<E = never> {
+  readonly recording: {
+    readonly start: AudioRecordingStartOperation<E>
+    readonly stop: AudioRecordingStopOperation<E>
+    readonly status: AudioRecordingStatusOperation<E>
+  }
+}
+
 export interface AppApi<E = never> {
   readonly health: HealthApi<E>
   readonly server: ServerApi<E>
@@ -2268,4 +2360,5 @@ export interface AppApi<E = never> {
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
   readonly config: ConfigApi<E>
+  readonly audio: AudioApi<E>
 }
