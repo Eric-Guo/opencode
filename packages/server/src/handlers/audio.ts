@@ -1,14 +1,17 @@
+import { Session } from "@opencode-ai/core/session"
 import { ConflictError, ForbiddenError, ServiceUnavailableError, UnknownError } from "@opencode-ai/protocol/errors"
 import { Effect, Option } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { AudioRecording } from "../audio"
+import { missingSession } from "./session-error"
 
 export const AudioHandler = HttpApiBuilder.group(Api, "server.audio", (handlers) =>
   Effect.gen(function* () {
     const audio = yield* AudioRecording.Service
     const config = yield* AudioRecording.Config
+    const session = yield* Session.Service
     return handlers
       .handleRaw("audio.recording.start", (request) =>
         trusted(request.request, config).pipe(
@@ -36,6 +39,30 @@ export const AudioHandler = HttpApiBuilder.group(Api, "server.audio", (handlers)
         ),
       )
       .handle("audio.recording.status", () => audio.status)
+      .handle(
+        "audio.transcriptions",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session
+              .executeTool({
+                sessionID: ctx.params.sessionID,
+                name: "audio_transcriptions",
+                input: { file: Array.from(ctx.payload) },
+                recordedInput: { file: "[audio bytes omitted]" },
+              })
+              .pipe(
+                Effect.mapError((error) =>
+                  error._tag === "Session.NotFoundError"
+                    ? missingSession(error)
+                    : new ServiceUnavailableError({
+                        message: error.message,
+                        service: "audio_transcriptions",
+                      }),
+                ),
+              ),
+          }
+        }),
+      )
   }),
 )
 
