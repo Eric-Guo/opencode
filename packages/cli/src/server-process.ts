@@ -25,6 +25,7 @@ export type Options = {
   readonly hostname?: string
   readonly port?: number
   readonly cors?: readonly string[]
+  readonly allowRemoteAudio?: boolean
 }
 
 // The process effect lives until server shutdown; tracing it would parent every request to one process-lifetime trace.
@@ -91,6 +92,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           hostname,
           port,
           cors: options.cors ?? config.cors,
+          audio: { allowRemote: options.allowRemoteAudio },
           password,
           pty: { handoff },
           simulation: truthy(process.env.OPENCODE_SIMULATE),
@@ -104,6 +106,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           },
           config: {
             directory: configDirectory(),
+            user: Global.Path.config,
             project: !truthy(
               process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
             ),
