@@ -439,6 +439,44 @@ export type WebSearchResult = { url: string; title?: string; content?: string; t
 
 export type GlobalConfig = { [x: string]: JsonValue }
 
+export type AudioStatus = {
+  state: "idle" | "starting" | "recording" | "stopping" | "completed" | "failed"
+  recordingID: string | null
+  active: boolean
+  backend: "native" | "arecord" | null
+  startedAt: number | null
+  endedAt: number | null
+  endReason: "manual" | "unexpected-backend-end" | "max-duration" | null
+  pcmBytes: number
+  mp3Bytes: number
+  durationMs: number
+  progress: string
+  availability: boolean
+  permission: "not-determined" | "restricted" | "denied" | "authorized" | "unknown"
+  environment: "local" | "remote" | "wsl" | "headless"
+  errorCode:
+    | "RECORDER_BUSY"
+    | "RECORDER_DISPOSED"
+    | "RECORDING_ID_MISMATCH"
+    | "RECORDING_NOT_ACTIVE"
+    | "REMOTE_ENVIRONMENT"
+    | "UNSUPPORTED_PLATFORM"
+    | "UNSUPPORTED_ARCHITECTURE"
+    | "NATIVE_ADDON_MISSING"
+    | "MICROPHONE_PERMISSION_RESTRICTED"
+    | "MICROPHONE_PERMISSION_DENIED"
+    | "AUDIO_BACKEND_UNAVAILABLE"
+    | "STALE_NATIVE_RECORDING"
+    | "CAPTURE_START_FAILED"
+    | "BACKEND_ENDED_UNEXPECTEDLY"
+    | "PCM_ENCODING_FAILED"
+    | "MP3_FINALIZATION_FAILED"
+    | "INVALID_MP3_ARTIFACT"
+    | null
+  errorMessage: string | null
+  guidance: string | null
+}
+
 export type ProviderRequest = {
   settings: ProviderSettings
   headers: { [x: string]: string }
@@ -6582,3 +6620,11 @@ export type ConfigGetInput = {
 export type ConfigGetOutput = Array<ConfigEntry>
 
 export type ConfigGlobalOutput = GlobalConfig
+
+export type AudioRecordingStartOutput = AudioStatus
+
+export type AudioRecordingStopInput = { readonly recordingID: { readonly recordingID: string }["recordingID"] }
+
+export type AudioRecordingStopOutput = globalThis.Uint8Array
+
+export type AudioRecordingStatusOutput = AudioStatus
