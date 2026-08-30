@@ -5147,6 +5147,13 @@ export type AudioRecordingStopOutput = globalThis.Uint8Array
 
 export type AudioRecordingStatusOutput = AudioStatus
 
+export type AudioTranscriptionsInput = {
+  readonly sessionID: string
+  readonly payload: globalThis.Uint8Array | globalThis.Blob
+}
+
+export type AudioTranscriptionsOutput = { data: SessionMessageAssistant }["data"]
+
 /** @deprecated Use `ExperimentalSessionStatsInput`. Removed in the next minor. */
 export type SessionStatsInput = ExperimentalSessionStatsInput
 
