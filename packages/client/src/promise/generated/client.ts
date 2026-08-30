@@ -275,6 +275,8 @@ import type {
   AudioRecordingStopInput,
   AudioRecordingStopOutput,
   AudioRecordingStatusOutput,
+  AudioTranscriptionsInput,
+  AudioTranscriptionsOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -298,6 +300,8 @@ type RequestDescriptor = {
   readonly declaredStatuses: ReadonlyArray<number>
   readonly empty: boolean
   readonly binary?: true
+  readonly binaryBody?: true
+  readonly contentType?: string
 } & ({ readonly successStatus: number } | { readonly successStatuses: ReadonlyArray<number> })
 
 const maxSseEventBytes = 16 * 1024 * 1024
@@ -313,14 +317,23 @@ export function make(options: ClientOptions) {
       if (value !== undefined && value !== null) headers.set(key, String(value))
     }
     for (const [key, value] of new Headers(requestOptions?.headers)) headers.set(key, value)
-    if (descriptor.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
+    if (descriptor.body !== undefined && !headers.has("content-type"))
+      headers.set(
+        "content-type",
+        descriptor.binaryBody ? (descriptor.contentType ?? "application/octet-stream") : "application/json",
+      )
     return {
       url,
       init: {
         method: descriptor.method,
         signal: requestOptions?.signal,
         headers,
-        body: descriptor.body === undefined ? undefined : JSON.stringify(descriptor.body),
+        body:
+          descriptor.body === undefined
+            ? undefined
+            : descriptor.binaryBody
+              ? new Uint8Array(descriptor.body as Uint8Array)
+              : JSON.stringify(descriptor.body),
       } satisfies RequestInit,
     }
   }
@@ -2277,6 +2290,20 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      transcriptions: (input: AudioTranscriptionsInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: AudioTranscriptionsOutput }>(
+          {
+            method: "POST",
+            path: `/api/audio/transcriptions/${encodeURIComponent(input.sessionID)}`,
+            body: input["payload"],
+            successStatus: 200,
+            declaredStatuses: [400, 401, 403, 404, 409, 500, 503],
+            empty: false,
+            binaryBody: true,
+            contentType: "audio/mpeg",
+          },
+          requestOptions,
+        ).then((value) => value.data),
     },
   }
 }
