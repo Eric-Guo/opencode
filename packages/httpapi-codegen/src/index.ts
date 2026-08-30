@@ -584,7 +584,9 @@ function assertPromiseEndpoint(endpoint: Endpoint) {
   const payloadEncoding = payload === undefined ? undefined : resolveHttpApiEncoding(payload.ast)
   if (
     payload !== undefined &&
-    (payloadEncoding?._tag ?? (HttpMethod.hasBody(endpoint.endpoint.method) ? "Json" : "FormUrlEncoded")) !== "Json"
+    !["Json", "Uint8Array"].includes(
+      payloadEncoding?._tag ?? (HttpMethod.hasBody(endpoint.endpoint.method) ? "Json" : "FormUrlEncoded"),
+    )
   ) {
     throw new GenerationError({ reason: `Unsupported Promise payload encoding: ${name}` })
   }
@@ -946,7 +948,9 @@ function renderPromiseClient(groups: ReadonlyArray<Group>) {
         successStatuses.length === 1
           ? `successStatus: ${successStatuses[0]}`
           : `successStatuses: [${successStatuses.join(", ")}]`
-      const descriptor = `{ method: ${JSON.stringify(endpoint.endpoint.method)}, path: ${path}${parts.length === 0 ? "" : `, ${parts.join(", ")}`}, ${successStatus}, declaredStatuses: [${declaredStatuses.join(", ")}], empty: ${endpoint.operation.success === "void"}${isBinarySchema(endpoint.successes[0]) ? ", binary: true" : ""} }`
+      const payloadEncoding = endpoint.payloads[0] && resolveHttpApiEncoding(endpoint.payloads[0].ast)
+      const binaryBody = payloadEncoding?._tag === "Uint8Array"
+      const descriptor = `{ method: ${JSON.stringify(endpoint.endpoint.method)}, path: ${path}${parts.length === 0 ? "" : `, ${parts.join(", ")}`}, ${successStatus}, declaredStatuses: [${declaredStatuses.join(", ")}], empty: ${endpoint.operation.success === "void"}${isBinarySchema(endpoint.successes[0]) ? ", binary: true" : ""}${binaryBody ? `, binaryBody: true, contentType: ${JSON.stringify(payloadEncoding.contentType)}` : ""} }`
       if (endpoint.operation.success === "stream") {
         const success = endpoint.successes[0]
         if (!isStreamSchema(success) || success._tag !== "StreamSse" || success.sseMode !== "data") {
@@ -1232,16 +1236,36 @@ function preserveStringSuggestions(type: string) {
 function normalizePromiseClientContent(content: string, groups: ReadonlyArray<Group>) {
   const endpoints = groups.flatMap((group) => group.endpoints)
   const usesBinary = endpoints.some((endpoint) => isBinarySchema(endpoint.successes[0]))
+  const usesBinaryBody = endpoints.some((endpoint) => endpoint.payloads.some(isBinarySchema))
   const usesWildcard = endpoints.some((endpoint) => promiseWildcardInput(endpoint) !== undefined)
 
   const sseReady = replaceOne(content, "let next: ReadableStreamReadResult<Uint8Array>", "let next")
+  const descriptorFields = [
+    ...(usesBinary ? ["  readonly binary?: true"] : []),
+    ...(usesBinaryBody ? ["  readonly binaryBody?: true", "  readonly contentType?: string"] : []),
+  ]
+  const descriptorReady =
+    descriptorFields.length === 0
+      ? sseReady
+      : replaceOne(sseReady, "readonly empty: boolean\n}", `readonly empty: boolean\n${descriptorFields.join("\n")}\n}`)
+  const requestReady = usesBinaryBody
+    ? replaceOne(
+        replaceOne(
+          descriptorReady,
+          'headers.set("content-type", "application/json")',
+          'headers.set("content-type", descriptor.binaryBody ? descriptor.contentType ?? "application/octet-stream" : "application/json")',
+        ),
+        "body: descriptor.body === undefined ? undefined : JSON.stringify(descriptor.body)",
+        "body: descriptor.body === undefined ? undefined : descriptor.binaryBody ? new Uint8Array(descriptor.body as Uint8Array) : JSON.stringify(descriptor.body)",
+      )
+    : descriptorReady
   const binaryReady = usesBinary
     ? replaceOne(
-        replaceOne(sseReady, "readonly empty: boolean\n}", "readonly empty: boolean\n  readonly binary?: true\n}"),
+        requestReady,
         "if (descriptor.empty) {",
         "if (descriptor.binary) return new Uint8Array(await response.arrayBuffer()) as A\n    if (descriptor.empty) {",
       )
-    : sseReady
+    : requestReady
   return usesWildcard
     ? replaceOne(
         binaryReady,

@@ -921,6 +921,36 @@ describe("HttpApiCodegen.generate", () => {
     expect(request?.url).toBe("https://example.com/file/src/a%20b%23c.ts?token=x%2Fy")
   })
 
+  test("sends an emitted Uint8Array payload as a binary request body", async () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.post("upload", "/session/:sessionID/audio", {
+            params: { sessionID: Schema.String },
+            payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array({ contentType: "audio/mpeg" })),
+            success: Schema.Struct({ data: Schema.String }),
+          }),
+        ),
+      ),
+    )
+    await using emitted = await emittedModule(output)
+    let request: Request | undefined
+    const client = emitted.module.OpenCode.make({
+      baseUrl: "https://example.com",
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        request = new Request(input, init)
+        return Response.json({ data: "uploaded" })
+      },
+    })
+
+    const bytes = new Uint8Array([0x49, 0x44, 0x33])
+    expect(await client.session.upload({ sessionID: "session", payload: bytes })).toBe("uploaded")
+    expect(request?.headers.get("content-type")).toBe("audio/mpeg")
+    const body = await request?.arrayBuffer()
+    expect(body).toBeDefined()
+    expect(new Uint8Array(body ?? new ArrayBuffer(0))).toEqual(bytes)
+  })
+
   test("serializes flattened query, header, and JSON payload inputs", async () => {
     const output = emitPromise(
       compileContract(

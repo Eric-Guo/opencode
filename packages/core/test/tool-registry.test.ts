@@ -715,9 +715,7 @@ describe("Tool", () => {
 
       const snapshot = yield* service.snapshot()
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-      expect((yield* snapshot.execute(call("tool_search")).pipe(Effect.flip)).message).toBe(
-        "Unknown tool: tool_search",
-      )
+      expect((yield* snapshot.execute(call("tool_search")).pipe(Effect.flip)).message).toBe("Unknown tool: tool_search")
     }),
   )
 

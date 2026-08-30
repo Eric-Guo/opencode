@@ -16,16 +16,18 @@ import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
 import { AbsolutePath, RelativePath } from "./schema.js"
-import { Agent } from "@opencode-ai/schema/agent"
+import { Agent } from "./agent.js"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
 import path from "path"
 import { SessionRunner } from "./session/runner/index.js"
+import { SessionRunnerModel } from "./session/runner/model.js"
 import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionModelTransport } from "./session/model-transport.js"
 import {
   AttachmentError,
+  AgentNotFoundError,
   BusyError,
   CompactionConflictError,
   ForkEmptyError,
@@ -56,6 +58,11 @@ import { Command } from "./command.js"
 import { Global } from "@opencode-ai/util/global"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
+import { SessionUsage } from "./session/usage.js"
+import { toSessionError } from "./session/to-session-error.js"
+import { Tool } from "./tool.js"
+import { Money } from "@opencode-ai/schema/money"
+import { Catalog } from "./catalog.js"
 
 // get project -> project.locations
 //
@@ -189,6 +196,15 @@ export interface Interface {
     sessionID: SessionSchema.ID
     prompt: string
   }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
+  readonly executeTool: (input: {
+    sessionID: SessionSchema.ID
+    name: string
+    input: Readonly<Record<string, unknown>>
+    recordedInput: Readonly<Record<string, unknown>>
+  }) => Effect.Effect<
+    SessionMessage.Assistant,
+    NotFoundError | AgentNotFoundError | SessionRunnerModel.Error | Tool.Error
+  >
   readonly command: (input: {
     sessionID: SessionSchema.ID
     command: string
@@ -244,7 +260,9 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
-    const sessions = yield* Session.make()
+    const sessions = yield* Session.make((session) =>
+      fs.ensureDir(session.location.directory).pipe(Effect.orDie, Effect.as(session)),
+    )
     const admission = yield* SessionInbox.Service
     const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
       yield* SessionModelTransport.Service.use((transport) => transport.close(session.id)).pipe(
@@ -403,6 +421,116 @@ const layer = Layer.effect(
         const session = yield* result.get(input.sessionID)
         const generate = yield* SessionGenerate.Service.pipe(instances.provide(session))
         return yield* generate.generate(input)
+      }),
+      executeTool: Effect.fn("Session.executeTool")(function* (input) {
+        yield* result.get(input.sessionID)
+        yield* execution.awaitIdle(input.sessionID)
+        const session = yield* result.get(input.sessionID)
+        const selected = yield* Effect.gen(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          const agents = yield* Agent.Service
+          const models = yield* SessionRunnerModel.Service
+          const catalog = yield* Catalog.Service
+          const registry = yield* Tool.Service
+          yield* plugins.flush
+          const agent = yield* agents.select(session.agent)
+          if (!agent.info)
+            return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
+          return {
+            agent,
+            model: yield* models.resolve(session, catalog.model.available),
+            tools: yield* registry.snapshot(agent.info.permissions),
+          }
+        }).pipe(Effect.provide(locations.get(session.location)))
+        const assistantMessageID = SessionMessage.ID.create()
+        const callID = `call_${crypto.randomUUID()}`
+        const complete = () =>
+          bus.publish(SessionEvent.Step.Ended, {
+            sessionID: input.sessionID,
+            assistantMessageID,
+            finish: "stop",
+            cost: Money.USD.zero,
+            tokens: SessionUsage.tokens(undefined),
+          })
+
+        yield* bus.publish(SessionEvent.Step.Started, {
+          sessionID: input.sessionID,
+          assistantMessageID,
+          agent: selected.agent.id,
+          model: selected.model.ref,
+        })
+        yield* bus.publish(SessionEvent.Tool.Input.Started, {
+          sessionID: input.sessionID,
+          assistantMessageID,
+          id: callID,
+          name: input.name,
+        })
+        yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+          sessionID: input.sessionID,
+          assistantMessageID,
+          id: callID,
+          text: JSON.stringify(input.recordedInput),
+        })
+        yield* bus.publish(SessionEvent.Tool.Called, {
+          sessionID: input.sessionID,
+          assistantMessageID,
+          id: callID,
+          input: input.recordedInput,
+          executed: false,
+        })
+
+        yield* selected.tools
+          .execute({
+            sessionID: input.sessionID,
+            agent: selected.agent.id,
+            messageID: assistantMessageID,
+            call: { type: "tool-call", id: callID, name: input.name, input: input.input },
+            progress: (metadata) =>
+              bus.publish(SessionEvent.Tool.Progress, {
+                sessionID: input.sessionID,
+                assistantMessageID,
+                id: callID,
+                metadata,
+              }),
+            allowUnadvertised: true,
+          })
+          .pipe(
+            Effect.matchEffect({
+              onFailure: (error) =>
+                Effect.gen(function* () {
+                  yield* bus.publish(SessionEvent.Tool.Failed, {
+                    sessionID: input.sessionID,
+                    assistantMessageID,
+                    id: callID,
+                    error: toSessionError(error),
+                    executed: false,
+                  })
+                  yield* complete()
+                  return yield* error
+                }),
+              onSuccess: (toolResult) =>
+                Effect.gen(function* () {
+                  if (typeof toolResult.content === "string")
+                    return yield* Effect.die(new Error(`Tool execution returned unnormalized content: ${callID}`))
+                  const first = toolResult.content[0]
+                  if (!first) return yield* Effect.die(new Error(`Tool execution has no content: ${callID}`))
+                  yield* bus.publish(SessionEvent.Tool.Success, {
+                    sessionID: input.sessionID,
+                    assistantMessageID,
+                    id: callID,
+                    content: [first, ...toolResult.content.slice(1)],
+                    metadata: toolResult.metadata,
+                    executed: false,
+                  })
+                  yield* complete()
+                }),
+            }),
+          )
+
+        const message = yield* result.message({ sessionID: input.sessionID, messageID: assistantMessageID })
+        if (message?.type !== "assistant")
+          return yield* Effect.die(new Error(`Tool assistant message was not projected: ${assistantMessageID}`))
+        return message
       }),
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)
