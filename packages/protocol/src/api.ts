@@ -34,6 +34,7 @@ import { VcsGroup } from "./groups/vcs.js"
 import { MigrationGroup } from "./groups/migration.js"
 import { ConfigGroup } from "./groups/config.js"
 import { WorkspaceGroup } from "./groups/workspace.js"
+import { AudioGroup } from "./groups/audio.js"
 
 type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof LocationGroup, LocationId>
@@ -109,18 +110,19 @@ export type Api<
 > = HttpApi.HttpApi<
   "server",
   HttpApiGroup.AddMiddleware<
-    HttpApiGroup.AddMiddleware<
-      ApiGroups<
-        LocationId,
-        LocationService,
-        FormLocationId,
-        FormLocationService,
-        SessionLocationId,
-        SessionLocationService,
-        Event
-      >,
-      Authorization
-    >,
+    | HttpApiGroup.AddMiddleware<
+        ApiGroups<
+          LocationId,
+          LocationService,
+          FormLocationId,
+          FormLocationService,
+          SessionLocationId,
+          SessionLocationService,
+          Event
+        >,
+        Authorization
+      >
+    | typeof AudioGroup,
     SchemaErrorMiddleware
   >
 >
@@ -188,6 +190,7 @@ const makeApiFromGroup = <
       }),
     )
     .middleware(Authorization)
+    .add(AudioGroup)
     .middleware(SchemaErrorMiddleware)
 
 export const makeApi = <
