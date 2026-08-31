@@ -120,7 +120,7 @@ describe("current session timeline rows", () => {
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user",
-      "assistant-part:msg_user:part:msg_assistant:file_1",
+      "assistant-part:part:part:msg_assistant:file_1",
     ])
   })
 
