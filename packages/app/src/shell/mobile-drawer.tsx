@@ -26,7 +26,7 @@ export function MobileDrawer(
   )
 }
 
-export const MobileDrawerTrigger = Drawer.Trigger
+export const MobileDrawerTrigger: typeof Drawer.Trigger = Drawer.Trigger
 
 export function MobileDrawerContent(props: ParentProps) {
   const language = useLanguage()
@@ -43,5 +43,5 @@ export function MobileDrawerContent(props: ParentProps) {
   )
 }
 
-export const MobileDrawerLabel = Drawer.Label
-export const MobileDrawerClose = Drawer.Close
+export const MobileDrawerLabel: typeof Drawer.Label = Drawer.Label
+export const MobileDrawerClose: typeof Drawer.Close = Drawer.Close
