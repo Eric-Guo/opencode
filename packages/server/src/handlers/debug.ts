@@ -141,7 +141,7 @@ const requireAgent = Effect.fn("server.debug.agent.require")(function* (agentID:
 const toolIDs = (snapshot: Tool.Snapshot) =>
   [
     ...snapshot.definitions.map((tool) => tool.name),
-    ...(snapshot.codeModeCatalog ?? []).map((tool) => tool.path.replaceAll(".", "_")),
+    ...(snapshot.codeModeCatalog?.tools ?? []).map((tool) => tool.path.replaceAll(".", "_")),
   ]
     .filter((name) => !["execute", "tool_search"].includes(name))
     .toSorted()
