@@ -89,7 +89,9 @@ export function createReactiveTimelineProjection(input: {
       input
         .sessionMessages()
         .flatMap((message) =>
-          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+          message.type === "assistant"
+            ? message.content.filter((content) => content.type === "text" || content.type === "reasoning")
+            : [],
         ),
     (content) => [content, createMemo(() => !!content.text.trim())] as const,
   )
@@ -103,7 +105,7 @@ export function createReactiveTimelineProjection(input: {
       input.shellToolDefaultOpen?.() ?? false,
       input.editToolDefaultOpen?.() ?? false,
       (content, showReasoning) =>
-        content.type === "tool"
+        content.type === "tool" || content.type === "file"
           ? renderable(content, showReasoning)
           : (content.type === "text" || showReasoning) && textVisible().get(content)!(),
     ),
