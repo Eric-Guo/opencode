@@ -51,6 +51,10 @@ export default defineMain({
             replacement: path.resolve(mocks, "app/hooks/use-providers.ts"),
           },
           {
+            find: /^@\/providers\/catalog\/integrations$/,
+            replacement: path.resolve(mocks, "app/hooks/use-integrations.ts"),
+          },
+          {
             find: /^@\/providers\/models\/unpaid$/,
             replacement: path.resolve(mocks, "app/components/dialog-select-model-unpaid.tsx"),
           },
