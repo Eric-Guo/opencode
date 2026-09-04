@@ -23,6 +23,7 @@
   },
   "include": [
     "src",
+    "src/my-todo/select-project-dialog.mock.json",
     "component-tests",
     "playwright.components.config.ts",
     "../storybook/playwright/*.ts",
