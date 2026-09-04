@@ -60,6 +60,7 @@ export default defineConfig({
       { find: /^@\/runtime\/server\/client$/, replacement: path.resolve(mocks, "app/context/server-sdk.ts") },
       { find: /^@\/runtime\/server\/current$/, replacement: path.resolve(mocks, "app/context/server-current.ts") },
       { find: /^@\/providers\/catalog\/providers$/, replacement: path.resolve(mocks, "app/hooks/use-providers.ts") },
+      { find: /^@\/providers\/catalog\/integrations$/, replacement: path.resolve(mocks, "app/hooks/use-integrations.ts") },
       {
         find: /^@\/providers\/models\/unpaid$/,
         replacement: path.resolve(mocks, "app/components/dialog-select-model-unpaid.tsx"),
