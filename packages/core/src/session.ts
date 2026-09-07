@@ -230,6 +230,7 @@ const layer = Layer.effect(
     const moves = yield* SessionMove.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
+    const fs = yield* FSUtil.Service
     const sessions = yield* Session.make()
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
 
