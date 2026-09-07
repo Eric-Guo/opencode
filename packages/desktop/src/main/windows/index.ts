@@ -44,12 +44,14 @@ import { openExternalURL } from "../files"
 import { emitIpcEvent } from "../ipc-events"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
+import { SidecarCredentials } from "../service/sidecar-credentials"
 import { DesktopStorage } from "../storage"
 import { forgetStore, getStore } from "../storage/store"
 import { windowIDArgument } from "../../shared/window-bootstrap"
 import { DESKTOP_TAB_COOKIES_STORE, PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "../storage/keys"
 import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
+import { hasHeader, upsertHeader } from "./headers"
 
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
@@ -407,9 +409,14 @@ function createMainWindow(dependencies: WindowDependencies, id: string) {
   wireNavigationPolicy(openCodeView.webContents, dependencies)
 
   openCodeView.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-    const { requestHeaders } = details
-    upsertKeyValue(requestHeaders, "Access-Control-Allow-Origin", ["*"])
-    callback({ requestHeaders })
+    // Keep the sidecar password in the main process and only attach it for our top-level renderer.
+    const frame = details.frame
+    const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
+    const authorization = renderer && SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
+    if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
+      upsertHeader(details.requestHeaders, "Authorization", authorization)
+    }
+    callback({ requestHeaders: details.requestHeaders })
   })
 
   openCodeView.webContents.session.webRequest.onHeadersReceived((details, callback) => {
