@@ -2,7 +2,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { ImageRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import type { SessionMessageAssistantFile } from "@opencode-ai/client"
+import type { SessionMessageAssistantFile } from "@opencode/client"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeProvider } from "../../../src/context/theme"
 import { GeneratedFile } from "../../../src/routes/session"
