@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ConfigMarkdown } from "@opencode-ai/core/config/markdown"
+import { ConfigMarkdown } from "@opencode/core/config/markdown"
 
 describe("ConfigMarkdown", () => {
   test("substitutes environment variables before parsing frontmatter and content", () => {
