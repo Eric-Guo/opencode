@@ -50,8 +50,16 @@ export interface HealthApi<E = never> {
 export type ServerGetOutput = { readonly urls: ReadonlyArray<string> }
 export type ServerGetOperation<E = never> = () => Effect.Effect<ServerGetOutput, E>
 
+export type ServerMyTodoProjectsOutput = ReadonlyArray<{
+  readonly project_id: number
+  readonly project_name: string
+  readonly work_package_id: number
+}>
+export type ServerMyTodoProjectsOperation<E = never> = () => Effect.Effect<ServerMyTodoProjectsOutput, E>
+
 export interface ServerApi<E = never> {
   readonly get: ServerGetOperation<E>
+  readonly myTodoProjects: ServerMyTodoProjectsOperation<E>
 }
 
 export type LocationGetInput = {
@@ -1560,6 +1568,9 @@ export type ProjectUpdateInput = {
   readonly projectID: Project.ID
   readonly canonical?: AbsolutePath | undefined
   readonly name?: string | undefined
+  readonly myTodo?:
+    | { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
+    | undefined
   readonly icon?: Project.Icon | undefined
   readonly commands?: Project.Commands | undefined
 }
