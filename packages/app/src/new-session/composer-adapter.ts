@@ -110,6 +110,9 @@ export function createNewSessionComposerAdapter(props: {
     submitted: props.submitted,
     start(selection, submission, message) {
       const projectDirectory = props.root()
+      const projectID = data.location.info({ directory: projectDirectory })?.project.id
+      const refreshProject = !projectID || !data.project.get(projectID)
+
       const worktree = props.worktree()
       const directory = worktree === "main" ? projectDirectory : worktree
       const sessionID = Session.ID.create()
@@ -245,7 +248,13 @@ export function createNewSessionComposerAdapter(props: {
 
               settled.resolve({
                 cleanupReady,
-                complete: () => pending.complete(submission.target()),
+                complete: async () => {
+                  await pending.complete(submission.target())
+
+                  if (!refreshProject) return
+                  data.project.invalidate()
+                  await data.project.sync().catch(() => undefined)
+                },
                 session: createdSession(effect.sessionID, effect.directory),
               })
 
