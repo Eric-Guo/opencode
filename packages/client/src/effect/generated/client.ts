@@ -6,6 +6,7 @@ import { HttpApiClient } from "effect/unstable/httpapi"
 import { ClientApi } from "../../contract"
 import type {
   ServerInfoOutput,
+  ServerMyTodoProjectsOutput,
   LocationGetInput,
   LocationGetOutput,
   LocationReloadOutput,
@@ -286,7 +287,13 @@ const preserveStream =
 const EndpointServerInfo = (raw: RawClient["server.server"]) => () =>
   preserveEffect<ServerInfoOutput>()(raw["server.info"]({}).pipe(Effect.mapError(mapClientError)))
 
-const adaptGroupServer = (raw: RawClient["server.server"]) => ({ info: EndpointServerInfo(raw) })
+const EndpointServerMyTodoProjects = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerMyTodoProjectsOutput>()(raw["server.myTodoProjects"]({}).pipe(Effect.mapError(mapClientError)))
+
+const adaptGroupServer = (raw: RawClient["server.server"]) => ({
+  info: EndpointServerInfo(raw),
+  myTodoProjects: EndpointServerMyTodoProjects(raw),
+})
 
 const EndpointLocationGet = (raw: RawClient["server.location"]) => (input?: LocationGetInput) =>
   preserveEffect<LocationGetOutput>()(
@@ -1044,7 +1051,13 @@ const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: Proj
   preserveEffect<ProjectUpdateOutput>()(
     raw["project.update"]({
       params: { projectID: input["projectID"] },
-      payload: { canonical: input["canonical"], name: input["name"], icon: input["icon"], commands: input["commands"] },
+      payload: {
+        canonical: input["canonical"],
+        name: input["name"],
+        myTodo: input["myTodo"],
+        icon: input["icon"],
+        commands: input["commands"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
