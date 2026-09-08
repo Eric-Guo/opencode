@@ -26,6 +26,7 @@ import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
 import { useAttachmentDestination } from "./attachments/destination"
 import { parseClientSlashCommand } from "./client-slash-command"
+import { useMyTodoProject } from "@/my-todo/current-project"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
@@ -54,6 +55,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const language = useLanguage()
   const platform = usePlatform()
   const prompt = adapter.state
+  const project = useMyTodoProject(() => (adapter.kind === "active-session" ? adapter.session().id : undefined))
   let editor: HTMLDivElement | undefined
 
   const interaction = createComposerEditorState(prompt.mode.current())
@@ -96,9 +98,13 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const stopping = createMemo(() => adapter.working() && blank())
 
+  const notice = createMemo(() => {
+    if (!project() || project()?.myTodo?.work_package_id) return
+
+    return language.t("myTodo.promptProjectRequired")
+  })
+
   const placeholder = () => {
-    if (adapter.kind === "new-session" && adapter.canStart?.() === false)
-      return language.t("myTodo.workPackageRequired")
     if (mode() === "shell") return language.t("prompt.placeholder.shell", { example: "git status" })
 
     if (adapter.working() || (options?.queue?.count() ?? 0) > 0)
@@ -390,6 +396,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     view: {
       placeholder,
+      notice,
       get agent() {
         const agents = adapter.controls().agents
 
