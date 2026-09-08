@@ -1,6 +1,7 @@
+import { MyTodo } from "@opencode/schema/my-todo"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { UnauthorizedError } from "../errors.js"
+import { ServiceUnavailableError, UnauthorizedError } from "../errors.js"
 
 export const ServerInfo = Schema.Struct({
   version: Schema.String,
@@ -66,6 +67,14 @@ export const ServerGroup = HttpApiGroup.make("server.server")
         description:
           "Redeem a pairing code. Browsers receive a session cookie and a redirect to the web app; requests that accept JSON receive a session token to use as the password.",
       }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("server.myTodoProjects", "/api/server/my-todo/projects", {
+      success: Schema.Array(MyTodo.Project),
+      error: ServiceUnavailableError,
+    }).annotateMerge(
+      OpenApi.annotations({ identifier: "v2.server.myTodoProjects", summary: "Refresh PLM work projects" }),
     ),
   )
   .annotateMerge(OpenApi.annotations({ title: "server" }))
