@@ -258,6 +258,39 @@ describe("Composer submission", () => {
     expect(state.current()[0]).toMatchObject({ content: "/review changes" })
   })
 
+  test.each(["normal", "shell"] as const)(
+    "requires the current project's work package before starting in %s mode",
+    async (mode) => {
+      const state = createMemoryComposerState({ prompt: "hello" }).capture()
+      const calls: string[] = []
+      const projects = { first: 42, second: undefined as number | undefined }
+      const current = { project: "first" as keyof typeof projects }
+      const adapter: NewSessionComposerAdapter = {
+        kind: "new-session",
+        state,
+        ready: () => true,
+        controls,
+        working: () => false,
+        canStart: () => !!projects[current.project],
+        submitted() {},
+        async start() {
+          calls.push(current.project)
+          return undefined
+        },
+      }
+      const submit = submitInput(adapter, undefined, mode)
+      await submit.submit(new Event("submit"))
+      expect(calls).toEqual(["first"])
+      current.project = "second"
+      await submit.submit(new Event("submit"), { alternate: true })
+      expect(calls).toEqual(["first"])
+      expect(state.current()).toEqual([{ type: "text", content: "hello", start: 0, end: 5 }])
+      projects.second = 99
+      await submit.submit(new Event("submit"))
+      expect(calls).toEqual(["first", "second"])
+    },
+  )
+
   test("sends one captured value with explicit delivery after selection switches", async () => {
     const state = createMemoryComposerState({ prompt: "ship it" }).capture()
     const calls: string[] = []
