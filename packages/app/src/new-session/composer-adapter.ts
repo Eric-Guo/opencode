@@ -55,6 +55,8 @@ export function createNewSessionComposerAdapter(props: {
     async start(selection, submission, message) {
       const draftID = props.draftID
       const projectDirectory = location().directory
+      const projectID = data.location.info({ directory: projectDirectory })?.project.id
+      const refreshProject = !projectID || !data.project.get(projectID)
       const worktree = props.worktree()
       const branch = props.branch()
       const mcp = props.mcp.capture()
@@ -142,7 +144,12 @@ export function createNewSessionComposerAdapter(props: {
 
       return {
         cleanupReady,
-        complete: pending ? () => pending.complete(submission.target()) : undefined,
+        complete: async () => {
+          await pending?.complete(submission.target())
+          if (!refreshProject || !(await creation).ok) return
+          data.project.invalidate()
+          await data.project.sync().catch(() => undefined)
+        },
         session: {
           id: created.id,
           directory: sessionDirectory,
