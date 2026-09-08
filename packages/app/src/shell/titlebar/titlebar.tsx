@@ -1,3 +1,4 @@
+import { ProjectSelector } from "@/my-todo/project-selector"
 import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useLocation } from "@solidjs/router"
@@ -41,6 +42,7 @@ import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { ActivityRing } from "@opencode/ui/activity-ring"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsCommand, useSettingsDialog } from "@/settings/command"
+import { projectForSession } from "@/shell/layout/helpers"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import { createRouteTabSync } from "./route-sync"
 import { createAutoTabSections } from "./auto-tab-sections"
@@ -294,6 +296,36 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const session = routeSync.session
             const currentTab = routeSync.currentTab
             createNavigationSwitch(currentTab)
+
+            const workProjectServer = createMemo(() => {
+              const route = layout.route()
+
+              const key =
+                route.type === "session" ? route.server : (currentTab()?.server ?? layout.home.selection().server)
+
+              const conn =
+                global.servers.list().find((item) => ServerConnection.key(item) === key) ?? global.servers.list()[0]
+
+              return conn ? global.ensureServerCtx(conn) : undefined
+            })
+
+            const workProject = createMemo(() => {
+              const value = session()
+              const tab = currentTab()
+              const server = workProjectServer()
+
+              if (!server) return
+
+              if (tab?.type === "session" && value) return projectForSession(value, server.projects.list())
+              const directory = tab?.type === "draft" ? tab.directory : layout.home.selection().directory
+              return server.projects
+                .list()
+                .find(
+                  (project) =>
+                    project.worktree === directory ||
+                    project.worktrees?.some((worktree) => worktree.directory === directory),
+                )
+            })
 
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
               const detail = readSessionTabsRemovedDetail(event)
@@ -820,9 +852,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           // The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows.
                           "ps-[calc(var(--sidebar-inset-start)-2px)]": windows() && !!props.verticalTabs,
                           "ps-3.5": windows() && !props.verticalTabs,
-                        }}
-                      >
-                        <Show when={(windows() || linux()) && !hideVerticalTitlebar()}>
+                      }}
+                    >
+                      <Show when={!mobile() && (!props.verticalTabs || windows())}>
+                        <ProjectSelector server={workProjectServer()} project={workProject()} />
+                      </Show>
+                      <Show when={(windows() || linux()) && !hideVerticalTitlebar()}>
                           <WindowsAppMenu command={command} platform={platform} />
                         </Show>
                         <Show when={windows() && props.verticalTabs}>
@@ -1054,7 +1089,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                         <SidebarToggle handoff="out" />
                                       </div>
                                     </Show>
-                                    <div class="flex w-full shrink-0 flex-col gap-[3px]">
+                                  <Show when={!windows()}>
+                                    <ProjectSelector server={workProjectServer()} project={workProject()} sidebar />
+                                  </Show>
+                                  <div class="flex w-full shrink-0 flex-col gap-[3px]">
                                       <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
                                       <Show
                                         when={settings.appearance.navigationPrototype()}
