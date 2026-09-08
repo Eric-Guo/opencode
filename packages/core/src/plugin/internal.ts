@@ -100,6 +100,7 @@ import { ThapeSsoProtection } from "./thape-sso-protection.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
+import { Project } from "../project.js"
 import { CybrosTrace } from "./cybros.js"
 import { SessionStore } from "../session/store.js"
 
@@ -127,6 +128,7 @@ const services = [
   Job.Service,
   KV.Service,
   LLMClient.Service,
+  Project.Service,
   Location.Service,
   ModelsDev.Service,
   Mcp.Service,
@@ -180,6 +182,7 @@ export const requirements = LayerNode.group([
   Job.node,
   KV.node,
   llmClient,
+  Project.node,
   Location.node,
   ModelsDev.node,
   Mcp.node,
