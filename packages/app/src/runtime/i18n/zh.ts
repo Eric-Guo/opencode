@@ -3,6 +3,17 @@ import en from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "myTodo.workPackageRequired": "开始新会话前请先选择一个 PLM 项目。",
+  "myTodo.selectProject": "选择 PLM 项目",
+  "myTodo.loadFailed": "无法加载 PLM 项目，请重试。",
+  "myTodo.saveFailed": "无法保存选中的 PLM 项目，请重试。",
+  "myTodo.empty": "当前没有可用的 PLM 项目。",
+  "session.location.unavailable": "会话位置不可用",
+  "session.location.description": "请另外选择一个目录以继续此会话。",
+  "session.location.choose": "选择目录",
+  "session.location.worktree": "选择工作区",
+  "session.location.worktreesFailed": "加载工作区失败",
+  "session.location.moving": "正在移动会话…",
   "desktop.menu.app": "Sigma Agents",
   "desktop.menu.file": "文件",
   "desktop.menu.edit": "编辑",
