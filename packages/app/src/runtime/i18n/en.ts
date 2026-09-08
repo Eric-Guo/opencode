@@ -6,6 +6,7 @@ export const dict = {
   "server.status.connecting": "Connecting over SSH…",
   "server.status.authentication": "Authentication required",
   "myTodo.workPackageRequired": "Select a PLM project before starting a new session.",
+  "myTodo.promptProjectRequired": "Select a PLM project on titlebar to continue with your prompt.",
   "myTodo.selectProject": "Select PLM project",
   "myTodo.loadFailed": "Could not load PLM projects. Please try again.",
   "myTodo.saveFailed": "Could not save the selected PLM project. Please try again.",
