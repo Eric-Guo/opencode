@@ -53,6 +53,7 @@ type ComposerSubmitInput = {
 export function createComposerSubmit(input: ComposerSubmitInput) {
   const submit = async (event: globalThis.Event, options?: { alternate?: boolean }) => {
     event.preventDefault()
+    if (input.adapter.kind === "new-session" && input.adapter.canStart?.() === false) return
 
     const prompt = clonePrompt(input.adapter.state.current())
     const text = submissionText(prompt)
