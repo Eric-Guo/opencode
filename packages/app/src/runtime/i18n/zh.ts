@@ -4,6 +4,7 @@ type Keys = keyof typeof en
 
 export const dict = {
   "myTodo.workPackageRequired": "开始新会话前请先选择一个 PLM 项目。",
+  "myTodo.promptProjectRequired": "请先选择一个 PLM 项目，再继续发送提示词。",
   "myTodo.selectProject": "选择 PLM 项目",
   "myTodo.loadFailed": "无法加载 PLM 项目，请重试。",
   "myTodo.saveFailed": "无法保存选中的 PLM 项目，请重试。",
