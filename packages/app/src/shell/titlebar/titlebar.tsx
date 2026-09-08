@@ -41,6 +41,7 @@ import { ActivityRing } from "@opencode/ui/activity-ring"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsCommand, useSettingsDialog } from "@/settings/command"
 import { projectForSession } from "@/shell/layout/helpers"
+import { sameDirectory } from "@opencode/util/path"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import { createRouteTabSync } from "./route-sync"
 import {
@@ -292,12 +293,15 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
               if (tab?.type === "session" && value) return projectForSession(value, server.projects.list())
               const directory = tab?.type === "draft" ? tab.directory : layout.home.selection().directory
+
+              if (!directory) return
+
               return server.projects
                 .list()
                 .find(
                   (project) =>
-                    project.worktree === directory ||
-                    project.worktrees?.some((worktree) => worktree.directory === directory),
+                    sameDirectory(project.worktree, directory) ||
+                    project.worktrees?.some((worktree) => sameDirectory(worktree.directory, directory)),
                 )
             })
 
