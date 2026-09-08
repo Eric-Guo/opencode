@@ -128,6 +128,7 @@ export type ComposerSubmissionHandle = {
 
 export type NewSessionComposerAdapter = ComposerAdapterBase & {
   kind: "new-session"
+  canStart?: Accessor<boolean>
   start: (
     selection: ComposerSelection,
     submission: ComposerSubmissionHandle,
