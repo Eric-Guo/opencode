@@ -1,5 +1,6 @@
 export * as Project from "./project.js"
 
+import { MyTodo } from "./my-todo.js"
 import { Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
 import { AbsolutePath, NonNegativeInt, optional } from "./schema.js"
@@ -40,6 +41,7 @@ export const Info = Schema.Struct({
   canonical: AbsolutePath,
   vcs: optional(Vcs),
   name: optional(Schema.String),
+  myTodo: optional(MyTodo.Project),
   icon: optional(Icon),
   commands: optional(Commands),
   time: Time,
@@ -51,6 +53,7 @@ export const UpdateInput = Schema.Struct({
   projectID: ID,
   canonical: optional(AbsolutePath),
   name: optional(Schema.String),
+  myTodo: optional(MyTodo.Project),
   icon: optional(Icon),
   commands: optional(Commands),
 }).annotate({ identifier: "Project.UpdateInput" })
