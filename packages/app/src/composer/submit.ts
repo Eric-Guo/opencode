@@ -260,6 +260,8 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     submit(event: globalThis.Event, options?: { alternate?: boolean }) {
       event.preventDefault()
 
+      if (input.adapter.kind === "new-session" && input.adapter.canStart?.() === false) return Promise.resolve()
+
       return new Promise<void>((resolve) =>
         dispatch({ type: "submit", snapshot: snapshot(input, options?.alternate ?? false), done: () => resolve() }),
       )
