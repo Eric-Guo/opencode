@@ -828,6 +828,7 @@ export function project() {
     name: "timeline-stability",
     time: { created: 1700000000000, updated: 1700000000000 },
     sandboxes: [],
+    myTodo: { project_id: 1, project_name: "Test PLM project", work_package_id: 42 },
   }
 }
 
