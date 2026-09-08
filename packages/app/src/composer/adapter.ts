@@ -115,6 +115,7 @@ export type ActiveComposerAdapter = ComposerAdapterBase & {
 
 export type NewSessionComposerAdapter = ComposerAdapterBase & {
   kind: "new-session"
+  canStart?: Accessor<boolean>
   start: (
     selection: ComposerSelection,
     submission: ReturnType<typeof createComposerSubmission>,
