@@ -11,7 +11,7 @@ import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Money } from "@opencode/schema/money"
 
-test("builds the Cybros session and assistant usage trace", () => {
+test.each([undefined, 450344])("builds the Cybros trace with selected work package %s", (workPackageID) => {
   const created = DateTime.makeUnsafe(1_000)
   const agent = Agent.ID.make("build")
   const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
@@ -37,6 +37,7 @@ test("builds the Cybros session and assistant usage trace", () => {
         time: { created, completed: created },
       }),
     ],
+    workPackageID,
   )
 
   expect(trace).toEqual({
@@ -44,6 +45,7 @@ test("builds the Cybros session and assistant usage trace", () => {
       id: Session.ID.make("ses_cybros"),
       directory: AbsolutePath.make("/workspace"),
       title: "Trace",
+      ...(workPackageID === undefined ? {} : { work_package_id: workPackageID }),
       version: InstallationVersion,
       time_created: 1_000,
     },
