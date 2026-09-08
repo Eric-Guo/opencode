@@ -1,7 +1,8 @@
+import { MyTodo } from "@opencode/core/my-todo"
 import { Duration, Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { UnauthorizedError } from "@opencode/protocol/errors"
+import { ServiceUnavailableError, UnauthorizedError } from "@opencode/protocol/errors"
 import { Api } from "../api"
 import { ServerAuth } from "../auth"
 import { ServerInfo } from "../server-info"
@@ -49,6 +50,11 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
             }),
           )
         }),
+      )
+      .handle("server.myTodoProjects", () =>
+        MyTodo.list().pipe(
+          Effect.mapError(() => new ServiceUnavailableError({ message: "Unable to load PLM projects", service: "plm" })),
+        ),
       )
   }),
 )
