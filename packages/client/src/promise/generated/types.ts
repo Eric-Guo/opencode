@@ -2,6 +2,8 @@ export type JsonValue = null | boolean | number | string | Array<JsonValue> | { 
 
 export type ServiceHealth = { healthy: true; version: string; pid: number }
 
+export type MyTodoProject = { project_id: number; project_name: string; work_package_id: number }
+
 export type ModelRef = { id: string; providerID: string; variant?: string }
 
 export type ProviderSettings = { [x: string]: any }
@@ -1396,6 +1398,7 @@ export type Project = {
   canonical: string
   vcs?: ProjectVcs
   name?: string
+  myTodo?: MyTodoProject
   icon?: ProjectIcon
   commands?: ProjectCommands
   time: ProjectTime
@@ -1413,6 +1416,7 @@ export type ProjectUpdated = {
     canonical: string
     vcs?: ProjectVcs
     name?: string
+    myTodo?: MyTodoProject
     icon?: ProjectIcon
     commands?: ProjectCommands
     time: ProjectTime
@@ -2671,6 +2675,8 @@ export const isWorktreeError = (value: unknown): value is WorktreeError =>
 export type HealthGetOutput = ServiceHealth
 
 export type ServerGetOutput = { urls: Array<string> }
+
+export type ServerMyTodoProjectsOutput = Array<MyTodoProject>
 
 export type LocationGetInput = {
   readonly location?: {
@@ -5155,24 +5161,35 @@ export type ProjectUpdateInput = {
   readonly canonical?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["canonical"]
   readonly name?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["name"]
+  readonly myTodo?: {
+    readonly canonical?: string
+    readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["myTodo"]
   readonly icon?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["icon"]
   readonly commands?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["commands"]
