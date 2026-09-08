@@ -31,6 +31,7 @@ import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { projectForSession } from "@/shell/layout/helpers"
+import { sameDirectory } from "@/workspaces/paths"
 import { useSettingsDialog } from "@/settings/command"
 
 const titlebarHeight = 36
@@ -240,12 +241,13 @@ export function Titlebar(props: {
               if (!server) return
               if (tab?.type === "session" && value) return projectForSession(value, server.projects.list())
               const directory = tab?.type === "draft" ? tab.directory : layout.home.selection().directory
+              if (!directory) return
               return server.projects
                 .list()
                 .find(
                   (project) =>
-                    project.worktree === directory ||
-                    project.worktrees?.some((worktree) => worktree.directory === directory),
+                    sameDirectory(project.worktree, directory) ||
+                    project.worktrees?.some((worktree) => sameDirectory(worktree.directory, directory)),
                 )
             })
 
