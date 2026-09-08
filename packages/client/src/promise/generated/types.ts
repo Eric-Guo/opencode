@@ -6,6 +6,8 @@ export type PairingCode = { code: string; expires_in: number }
 
 export type PairingSession = { token: string }
 
+export type MyTodoProject = { project_id: number; project_name: string; work_package_id: number }
+
 export type LocationPublicInfo = { directory: string; project: { id: string; directory: string; canonical: string } }
 
 export type LocationPublicRef = { directory: string }
@@ -1426,6 +1428,7 @@ export type Project = {
   canonical: string
   vcs?: ProjectVcs
   name?: string
+  myTodo?: MyTodoProject
   icon?: ProjectIcon
   commands?: ProjectCommands
   time: ProjectTime
@@ -1443,6 +1446,7 @@ export type ProjectUpdated = {
     canonical: string
     vcs?: ProjectVcs
     name?: string
+    myTodo?: MyTodoProject
     icon?: ProjectIcon
     commands?: ProjectCommands
     time: ProjectTime
@@ -2769,6 +2773,8 @@ export type ServerPairOutput = PairingCode
 export type ServerConnectInput = { readonly code: { readonly code: string }["code"] }
 
 export type ServerConnectOutput = PairingSession
+
+export type ServerMyTodoProjectsOutput = Array<MyTodoProject>
 
 export type LocationGetInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
@@ -6090,24 +6096,35 @@ export type ProjectUpdateInput = {
   readonly canonical?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["canonical"]
   readonly name?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["name"]
+  readonly myTodo?: {
+    readonly canonical?: string
+    readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["myTodo"]
   readonly icon?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["icon"]
   readonly commands?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["commands"]
