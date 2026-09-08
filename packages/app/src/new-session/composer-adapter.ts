@@ -14,6 +14,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { createWorktree } from "@/workspaces/create"
 import { showToast } from "@/shell/notifications/toast"
 import type { DraftMcpControls } from "./mcp"
+import { useMyTodoProject } from "@/my-todo/current-project"
 import {
   createNewSessionStartState,
   transitionNewSessionStart,
@@ -87,14 +88,13 @@ export function createNewSessionComposerAdapter(props: {
   const language = useLanguage()
   const model = createComposerModelSelection({ agent: () => local.agent.current() })
   const controls = createComposerControls({ model })
+  const project = useMyTodoProject()
 
   const adapter: NewSessionComposerAdapter = {
     kind: "new-session",
     canStart: () => {
-      const id = data.location.info(location().ref)?.project.id
-      const project = id ? data.project.get(id) : undefined
       // A new folder may not have a saved project yet, so its PLM picker is unavailable.
-      return !project || !!project.myTodo?.work_package_id
+      return !project() || !!project()?.myTodo?.work_package_id
     },
     state,
     ready: prompt.ready,
