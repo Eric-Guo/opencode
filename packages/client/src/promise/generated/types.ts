@@ -12,6 +12,8 @@ export type PairingCode = { code: string; expires_in: number }
 
 export type PairingSession = { token: string }
 
+export type MyTodoProject = { project_id: number; project_name: string; work_package_id: number }
+
 export type AbsolutePath = string
 
 export type ProjectID = string
@@ -717,6 +719,7 @@ export type Project = {
   canonical: AbsolutePath
   vcs?: ProjectVcs
   name?: string
+  myTodo?: MyTodoProject
   icon?: ProjectIcon
   commands?: ProjectCommands
   time: ProjectTime
@@ -1587,6 +1590,7 @@ export type ProjectUpdated = {
     canonical: AbsolutePath
     vcs?: ProjectVcs
     name?: string
+    myTodo?: MyTodoProject
     icon?: ProjectIcon
     commands?: ProjectCommands
     time: ProjectTime
@@ -2756,14 +2760,6 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
-export type LocationNotFoundError = {
-  readonly _tag: "LocationNotFoundError"
-  readonly location: { readonly directory: string }
-  readonly message: string
-}
-export const isLocationNotFoundError = (value: unknown): value is LocationNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationNotFoundError"
-
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
   readonly message: string
@@ -2771,6 +2767,14 @@ export type ServiceUnavailableError = {
 }
 export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
+
+export type LocationNotFoundError = {
+  readonly _tag: "LocationNotFoundError"
+  readonly location: { readonly directory: string }
+  readonly message: string
+}
+export const isLocationNotFoundError = (value: unknown): value is LocationNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationNotFoundError"
 
 export type AgentNotFoundError = {
   readonly _tag: "AgentNotFoundError"
@@ -3004,6 +3008,8 @@ export type ServerPairOutput = PairingCode
 export type ServerConnectInput = { readonly code: { readonly code: string }["code"] }
 
 export type ServerConnectOutput = PairingSession
+
+export type ServerMyTodoProjectsOutput = Array<MyTodoProject>
 
 export type LocationGetInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
@@ -5436,24 +5442,35 @@ export type ProjectUpdateInput = {
   readonly canonical?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["canonical"]
   readonly name?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["name"]
+  readonly myTodo?: {
+    readonly canonical?: string
+    readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
+    readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
+    readonly commands?: { readonly start?: string }
+  }["myTodo"]
   readonly icon?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["icon"]
   readonly commands?: {
     readonly canonical?: string
     readonly name?: string
+    readonly myTodo?: { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
     readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string }
     readonly commands?: { readonly start?: string }
   }["commands"]
