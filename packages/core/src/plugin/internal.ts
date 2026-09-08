@@ -130,6 +130,7 @@ import { VcsGitPlugin } from "./vcs/git.js"
 import { VerbosityPlugin } from "./verbosity.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
+import { Project } from "../project.js"
 import { CybrosTrace } from "./cybros.js"
 import { SessionStore } from "../session/store.js"
 
@@ -165,6 +166,7 @@ const services = [
   Job.Service,
   KV.Service,
   LLMClient.Service,
+  Project.Service,
   Location.Service,
   Machines.Service,
   ModelsDev.Service,
@@ -232,6 +234,7 @@ export const requirements = LayerNode.group([
   Shell.daemonNode,
   KV.node,
   llmClient,
+  Project.node,
   Location.node,
   Machines.node,
   ModelsDev.node,
