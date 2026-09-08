@@ -3,6 +3,7 @@ import type {
   ServerPairOutput,
   ServerConnectInput,
   ServerConnectOutput,
+  ServerMyTodoProjectsOutput,
   LocationGetInput,
   LocationGetOutput,
   LocationReloadOutput,
@@ -528,6 +529,17 @@ export function make(options: ClientOptions) {
             path: `/auth/connect/${encodeURIComponent(input.code)}`,
             successStatus: 200,
             declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      myTodoProjects: (requestOptions?: RequestOptions) =>
+        request<ServerMyTodoProjectsOutput>(
+          {
+            method: "GET",
+            path: `/api/server/my-todo/projects`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 503],
             empty: false,
           },
           requestOptions,
@@ -2333,6 +2345,7 @@ export function make(options: ClientOptions) {
             body: {
               canonical: input["canonical"],
               name: input["name"],
+              myTodo: input["myTodo"],
               icon: input["icon"],
               commands: input["commands"],
             },
