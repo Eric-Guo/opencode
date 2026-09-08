@@ -33,6 +33,7 @@ import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
 import { useAttachmentDestination } from "./attachments/destination"
 import { parseClientSlashCommand } from "./client-slash-command"
+import { useMyTodoProject } from "@/my-todo/current-project"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
@@ -69,6 +70,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       (items) => prompt.quoteSource.retain(items.map((item) => item.key)),
     ),
   )
+
+  const project = useMyTodoProject(() => (adapter.kind === "active-session" ? adapter.session().id : undefined))
   let editor: HTMLDivElement | undefined
   // A path attachment's image is read through the server, which can see both local and uploaded paths.
   const pathImages = new Map<string, Promise<string | undefined>>()
@@ -118,9 +121,13 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const stopping = createMemo(() => adapter.working() && blank())
 
+  const notice = createMemo(() => {
+    if (!project() || project()?.myTodo?.work_package_id) return
+
+    return language.t("myTodo.promptProjectRequired")
+  })
+
   const placeholder = () => {
-    if (adapter.kind === "new-session" && adapter.canStart?.() === false)
-      return language.t("myTodo.workPackageRequired")
     if (mode() === "shell") return language.t("prompt.placeholder.shell", { example: "git status" })
 
     if (adapter.working() || (options?.queue?.count() ?? 0) > 0)
@@ -504,6 +511,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     view: {
       placeholder,
+      notice,
       get agent() {
         const agents = adapter.controls().agents
 
