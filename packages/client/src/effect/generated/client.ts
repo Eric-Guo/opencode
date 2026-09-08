@@ -7,6 +7,10 @@ import { ClientApi } from "../../contract"
 import type {
   HealthGetOutput,
   ServerGetOutput,
+  ServerMyTodoProjectsOutput,
+  ServerMyTodoSelectionOutput,
+  ServerSelectMyTodoInput,
+  ServerSelectMyTodoOutput,
   LocationGetInput,
   LocationGetOutput,
   AgentListInput,
@@ -308,7 +312,29 @@ const adaptGroupHealth = (raw: RawClient["server.health"]) => ({ get: EndpointHe
 const EndpointServerGet = (raw: RawClient["server.server"]) => () =>
   preserveEffect<ServerGetOutput>()(raw["server.get"]({}).pipe(Effect.mapError(mapClientError)))
 
-const adaptGroupServer = (raw: RawClient["server.server"]) => ({ get: EndpointServerGet(raw) })
+const EndpointServerMyTodoProjects = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerMyTodoProjectsOutput>()(raw["server.myTodoProjects"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointServerMyTodoSelection = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerMyTodoSelectionOutput>()(raw["server.myTodoSelection"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointServerSelectMyTodo = (raw: RawClient["server.server"]) => (input: ServerSelectMyTodoInput) =>
+  preserveEffect<ServerSelectMyTodoOutput>()(
+    raw["server.selectMyTodo"]({
+      payload: {
+        project_id: input["project_id"],
+        project_name: input["project_name"],
+        work_package_id: input["work_package_id"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupServer = (raw: RawClient["server.server"]) => ({
+  get: EndpointServerGet(raw),
+  myTodoProjects: EndpointServerMyTodoProjects(raw),
+  myTodoSelection: EndpointServerMyTodoSelection(raw),
+  selectMyTodo: EndpointServerSelectMyTodo(raw),
+})
 
 const EndpointLocationGet = (raw: RawClient["server.location"]) => (input?: LocationGetInput) =>
   preserveEffect<LocationGetOutput>()(

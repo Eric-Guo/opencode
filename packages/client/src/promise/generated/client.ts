@@ -1,6 +1,10 @@
 import type {
   HealthGetOutput,
   ServerGetOutput,
+  ServerMyTodoProjectsOutput,
+  ServerMyTodoSelectionOutput,
+  ServerSelectMyTodoInput,
+  ServerSelectMyTodoOutput,
   LocationGetInput,
   LocationGetOutput,
   AgentListInput,
@@ -445,6 +449,44 @@ export function make(options: ClientOptions) {
       get: (requestOptions?: RequestOptions) =>
         request<ServerGetOutput>(
           { method: "GET", path: `/api/server`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+      myTodoProjects: (requestOptions?: RequestOptions) =>
+        request<ServerMyTodoProjectsOutput>(
+          {
+            method: "GET",
+            path: `/api/server/my-todo/projects`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 503],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      myTodoSelection: (requestOptions?: RequestOptions) =>
+        request<ServerMyTodoSelectionOutput>(
+          {
+            method: "GET",
+            path: `/api/server/my-todo/selection`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      selectMyTodo: (input: ServerSelectMyTodoInput, requestOptions?: RequestOptions) =>
+        request<ServerSelectMyTodoOutput>(
+          {
+            method: "PUT",
+            path: `/api/server/my-todo/selection`,
+            body: {
+              project_id: input["project_id"],
+              project_name: input["project_name"],
+              work_package_id: input["work_package_id"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
           requestOptions,
         ),
     },

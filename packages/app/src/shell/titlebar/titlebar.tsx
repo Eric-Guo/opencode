@@ -1,3 +1,4 @@
+import { ProjectSelector } from "@/my-todo/project-selector"
 import { createEffect, createMemo, createResource, Match, Show, Switch, untrack } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -223,6 +224,14 @@ export function Titlebar(props: {
             }
 
             const currentTab = () => matchRoute(layout.route())
+            const workProjectServer = createMemo(() => {
+              const route = layout.route()
+              const key =
+                route.type === "session" ? route.server : (currentTab()?.server ?? layout.home.selection().server)
+              const conn =
+                global.servers.list().find((item) => ServerConnection.key(item) === key) ?? global.servers.list()[0]
+              return conn ? global.ensureServerCtx(conn) : undefined
+            })
 
             createEffect(() => {
               const route = layout.route()
@@ -440,6 +449,9 @@ export function Titlebar(props: {
                   "ps-3.5": windows(),
                 }}
               >
+                <Show when={!mobile() && (!props.verticalTabs || windows())}>
+                  <ProjectSelector server={workProjectServer()} />
+                </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
@@ -632,6 +644,9 @@ export function Titlebar(props: {
                                 style={{ height: `${macTrafficLightsTopClearance / zoom()}px` }}
                                 data-tauri-drag-region
                               />
+                            </Show>
+                            <Show when={!windows()}>
+                              <ProjectSelector server={workProjectServer()} sidebar />
                             </Show>
                             {homeButton(true)}
                             <button

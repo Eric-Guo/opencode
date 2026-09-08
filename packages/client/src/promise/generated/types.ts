@@ -2,6 +2,8 @@ export type JsonValue = null | boolean | number | string | Array<JsonValue> | { 
 
 export type ServiceHealth = { healthy: true; version: string; pid: number }
 
+export type MyTodoProject = { project_id: number; project_name: string; work_package_id: number }
+
 export type ModelRef = { id: string; providerID: string; variant?: string }
 
 export type ProviderSettings = { [x: string]: any }
@@ -2662,6 +2664,30 @@ export const isWorktreeError = (value: unknown): value is WorktreeError =>
 export type HealthGetOutput = ServiceHealth
 
 export type ServerGetOutput = { urls: Array<string> }
+
+export type ServerMyTodoProjectsOutput = Array<MyTodoProject>
+
+export type ServerMyTodoSelectionOutput = MyTodoProject | null
+
+export type ServerSelectMyTodoInput = {
+  readonly project_id: {
+    readonly project_id: number
+    readonly project_name: string
+    readonly work_package_id: number
+  }["project_id"]
+  readonly project_name: {
+    readonly project_id: number
+    readonly project_name: string
+    readonly work_package_id: number
+  }["project_name"]
+  readonly work_package_id: {
+    readonly project_id: number
+    readonly project_name: string
+    readonly work_package_id: number
+  }["work_package_id"]
+}
+
+export type ServerSelectMyTodoOutput = MyTodoProject
 
 export type LocationGetInput = {
   readonly location?: {

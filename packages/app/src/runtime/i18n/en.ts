@@ -2,6 +2,10 @@ import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
   ...DESKTOP_NATIVE_ENGLISH,
+  "myTodo.selectProject": "Select work project",
+  "myTodo.loadFailed": "Could not load work projects. Please try again.",
+  "myTodo.saveFailed": "Could not save the selected work project. Please try again.",
+  "myTodo.empty": "No work projects available.",
   "session.location.unavailable": "Session location unavailable",
   "session.location.description": "Choose another directory to continue this session.",
   "session.location.choose": "Choose directory",

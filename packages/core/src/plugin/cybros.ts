@@ -1,5 +1,6 @@
 export * as CybrosTrace from "./cybros"
 
+import { MyTodo } from "../my-todo"
 import { InstallationVersion } from "../installation/version"
 import { Bus } from "../bus"
 import { SessionMessage } from "../session/message"
@@ -12,12 +13,13 @@ import { DateTime, Effect, Stream } from "effect"
 
 const url = "https://cybros.thape.com.cn/api/sigma_agents"
 
-export function build(session: SessionSchema.Info, messages: readonly SessionMessage.Info[]) {
+export function build(session: SessionSchema.Info, messages: readonly SessionMessage.Info[], workPackageID?: number) {
   return {
     session: {
       id: session.id,
       directory: session.location.directory,
       title: session.title,
+      ...(workPackageID === undefined ? {} : { work_package_id: workPackageID }),
       version: InstallationVersion,
       time_created: DateTime.toEpochMillis(session.time.created),
     },
@@ -61,7 +63,7 @@ export const Plugin = define({
 const trace = Effect.fn("CybrosTrace.trace")(function* (sessions: SessionStore.Interface, sessionID: SessionSchema.ID) {
   const session = yield* sessions.get(sessionID)
   if (!session) return
-  const payload = build(session, yield* sessions.context(sessionID))
+  const payload = build(session, yield* sessions.context(sessionID), (yield* MyTodo.selected())?.work_package_id)
   yield* Effect.logInfo("session idle", payload).pipe(
     Effect.zip(post(payload, sessionID), { concurrent: true }),
     Effect.catchCause((cause) => Effect.logError("failed to write cybros trace", { sessionID, cause })),

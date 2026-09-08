@@ -50,8 +50,39 @@ export interface HealthApi<E = never> {
 export type ServerGetOutput = { readonly urls: ReadonlyArray<string> }
 export type ServerGetOperation<E = never> = () => Effect.Effect<ServerGetOutput, E>
 
+export type ServerMyTodoProjectsOutput = ReadonlyArray<{
+  readonly project_id: number
+  readonly project_name: string
+  readonly work_package_id: number
+}>
+export type ServerMyTodoProjectsOperation<E = never> = () => Effect.Effect<ServerMyTodoProjectsOutput, E>
+
+export type ServerMyTodoSelectionOutput = {
+  readonly project_id: number
+  readonly project_name: string
+  readonly work_package_id: number
+} | null
+export type ServerMyTodoSelectionOperation<E = never> = () => Effect.Effect<ServerMyTodoSelectionOutput, E>
+
+export type ServerSelectMyTodoInput = {
+  readonly project_id: number
+  readonly project_name: string
+  readonly work_package_id: number
+}
+export type ServerSelectMyTodoOutput = {
+  readonly project_id: number
+  readonly project_name: string
+  readonly work_package_id: number
+}
+export type ServerSelectMyTodoOperation<E = never> = (
+  input: ServerSelectMyTodoInput,
+) => Effect.Effect<ServerSelectMyTodoOutput, E>
+
 export interface ServerApi<E = never> {
   readonly get: ServerGetOperation<E>
+  readonly myTodoProjects: ServerMyTodoProjectsOperation<E>
+  readonly myTodoSelection: ServerMyTodoSelectionOperation<E>
+  readonly selectMyTodo: ServerSelectMyTodoOperation<E>
 }
 
 export type LocationGetInput = {

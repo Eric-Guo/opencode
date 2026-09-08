@@ -1,3 +1,4 @@
+import { KV } from "@opencode/core/kv"
 import { Database } from "@opencode/core/database/database"
 import { V1Migration } from "@opencode/core/database/v1-migration"
 import { App } from "@opencode/core/app"
@@ -51,6 +52,7 @@ import type { ServerOptions } from "./options"
 const applicationServiceNodes = [
   Global.node,
   Database.node,
+  KV.node,
   Bus.node,
   EventLogger.node,
   httpClient,
@@ -162,6 +164,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.succeedContext(
           Context.pick(
             Database.Service,
+            KV.Service,
             PermissionSaved.Service,
             PluginUpdate.Service,
             Project.Service,
