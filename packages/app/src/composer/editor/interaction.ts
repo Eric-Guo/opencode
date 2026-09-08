@@ -40,6 +40,7 @@ export type ComposerEditorView = {
   variant?: ComposerSelectControl
   submit: {
     available?: Accessor<boolean>
+    enabled?: Accessor<boolean>
     stopping: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
@@ -365,7 +366,7 @@ export function createComposerEditor(input: {
     },
     canSubmit() {
       if (input.view.submit.available?.() === false) return false
-      if (input.view.draftOnly) return false
+      if (input.view.draftOnly || input.view.submit.enabled?.() === false) return false
       if (attachments?.pending().length) return false
       const persisted = draft.state
       if (state.mode === "shell") {
@@ -399,6 +400,7 @@ export function createComposerEditor(input: {
     },
     submit(options?: { alternate?: boolean }) {
       if (input.view.submit.available?.() === false) return
+      if (input.view.submit.enabled?.() === false) return
       if (input.view.draftOnly) return
       if (attachments?.pending().length) return
       input.view.submit.onSubmit(options)
