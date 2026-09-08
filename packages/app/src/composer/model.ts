@@ -84,12 +84,15 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
   })
   const stopping = createMemo(() => adapter.working() && blank())
-  const placeholder = () =>
-    composerPlaceholder(
+  const placeholder = () => {
+    if (adapter.kind === "new-session" && adapter.canStart?.() === false)
+      return language.t("myTodo.workPackageRequired")
+    return composerPlaceholder(
       mode(),
       (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
       adapter.working() || (options?.queue?.count() ?? 0) > 0,
     )
+  }
 
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
@@ -394,6 +397,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         keybind: () => command.keybindParts("model.variant.cycle"),
       },
       submit: {
+        enabled: () => adapter.kind !== "new-session" || adapter.canStart?.() !== false,
         stopping,
         working: adapter.working,
         queue: options?.queue,

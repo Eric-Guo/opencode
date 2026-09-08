@@ -2,6 +2,11 @@ import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
   ...DESKTOP_NATIVE_ENGLISH,
+  "myTodo.workPackageRequired": "Select a PLM project before starting a new session.",
+  "myTodo.selectProject": "Select PLM project",
+  "myTodo.loadFailed": "Could not load PLM projects. Please try again.",
+  "myTodo.saveFailed": "Could not save the selected PLM project. Please try again.",
+  "myTodo.empty": "No PLM projects available.",
   "session.location.unavailable": "Session location unavailable",
   "session.location.description": "Choose another directory to continue this session.",
   "session.location.choose": "Choose directory",
