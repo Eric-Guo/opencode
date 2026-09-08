@@ -9,6 +9,7 @@ import type {
   ServerPairOutput,
   ServerConnectInput,
   ServerConnectOutput,
+  ServerMyTodoProjectsOutput,
   LocationGetInput,
   LocationGetOutput,
   LocationReloadOutput,
@@ -297,10 +298,14 @@ const EndpointServerConnect = (raw: RawClient["server.server"]) => (input: Serve
     raw["server.connect"]({ params: { code: input["code"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointServerMyTodoProjects = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerMyTodoProjectsOutput>()(raw["server.myTodoProjects"]({}).pipe(Effect.mapError(mapClientError)))
+
 const adaptGroupServer = (raw: RawClient["server.server"]) => ({
   info: EndpointServerInfo(raw),
   pair: EndpointServerPair(raw),
   connect: EndpointServerConnect(raw),
+  myTodoProjects: EndpointServerMyTodoProjects(raw),
 })
 
 const EndpointLocationGet = (raw: RawClient["server.location"]) => (input?: LocationGetInput) =>
@@ -1059,7 +1064,13 @@ const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: Proj
   preserveEffect<ProjectUpdateOutput>()(
     raw["project.update"]({
       params: { projectID: input["projectID"] },
-      payload: { canonical: input["canonical"], name: input["name"], icon: input["icon"], commands: input["commands"] },
+      payload: {
+        canonical: input["canonical"],
+        name: input["name"],
+        myTodo: input["myTodo"],
+        icon: input["icon"],
+        commands: input["commands"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
