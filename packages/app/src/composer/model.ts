@@ -97,6 +97,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const stopping = createMemo(() => adapter.working() && blank())
 
   const placeholder = () => {
+    if (adapter.kind === "new-session" && adapter.canStart?.() === false)
+      return language.t("myTodo.workPackageRequired")
     if (mode() === "shell") return language.t("prompt.placeholder.shell", { example: "git status" })
 
     if (adapter.working() || (options?.queue?.count() ?? 0) > 0)
@@ -407,6 +409,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       },
       submit: {
         available,
+        enabled: () => adapter.kind !== "new-session" || adapter.canStart?.() !== false,
         stopping,
         working: adapter.working,
         queue: options?.queue,
