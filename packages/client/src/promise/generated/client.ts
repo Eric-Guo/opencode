@@ -1,5 +1,6 @@
 import type {
   ServerStatusOutput,
+  ServerMyTodoProjectsOutput,
   LocationGetInput,
   LocationGetOutput,
   AgentListInput,
@@ -405,6 +406,17 @@ export function make(options: ClientOptions) {
       status: (requestOptions?: RequestOptions) =>
         request<ServerStatusOutput>(
           { method: "GET", path: `/api/status`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+      myTodoProjects: (requestOptions?: RequestOptions) =>
+        request<ServerMyTodoProjectsOutput>(
+          {
+            method: "GET",
+            path: `/api/server/my-todo/projects`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 503],
+            empty: false,
+          },
           requestOptions,
         ),
     },
@@ -1402,6 +1414,7 @@ export function make(options: ClientOptions) {
             body: {
               canonical: input["canonical"],
               name: input["name"],
+              myTodo: input["myTodo"],
               icon: input["icon"],
               commands: input["commands"],
             },

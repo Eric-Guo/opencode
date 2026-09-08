@@ -46,8 +46,16 @@ export type ServerStatusOutput = {
 }
 export type ServerStatusOperation<E = never> = () => Effect.Effect<ServerStatusOutput, E>
 
+export type ServerMyTodoProjectsOutput = ReadonlyArray<{
+  readonly project_id: number
+  readonly project_name: string
+  readonly work_package_id: number
+}>
+export type ServerMyTodoProjectsOperation<E = never> = () => Effect.Effect<ServerMyTodoProjectsOutput, E>
+
 export interface ServerApi<E = never> {
   readonly status: ServerStatusOperation<E>
+  readonly myTodoProjects: ServerMyTodoProjectsOperation<E>
 }
 
 export type LocationGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -1822,6 +1830,9 @@ export type ProjectUpdateInput = {
   readonly projectID: Project.ID
   readonly canonical?: AbsolutePath | undefined
   readonly name?: string | undefined
+  readonly myTodo?:
+    | { readonly project_id: number; readonly project_name: string; readonly work_package_id: number }
+    | undefined
   readonly icon?: Project.Icon | undefined
   readonly commands?: Project.Commands | undefined
 }
