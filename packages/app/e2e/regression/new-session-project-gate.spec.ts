@@ -43,7 +43,7 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
       onPrompt: (input) => prompts.push(input),
     })
     await page.route("**/api/project", (route) =>
-      route.fulfill({ json: selection === "missing" ? [] : [project], headers }),
+      route.fulfill({ json: selection === "missing" && sessions.length === 0 ? [] : [project], headers }),
     )
     await page.route("**/api/session", (route) => {
       if (route.request().method() !== "POST") return route.fallback()
@@ -92,5 +92,7 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
     expect(sessions).toHaveLength(1)
     expect(prompts[0]).toMatchObject({ sessionID: sessions[0].id, body: { text: "Start my first session" } })
     await expect(page).toHaveURL(`/server/${base64Encode(server)}/session/${sessions[0].id}`)
+    if (selection === "missing")
+      await expect(page.getByRole("button", { name: "Select PLM project", exact: true })).toBeVisible()
   })
 }
