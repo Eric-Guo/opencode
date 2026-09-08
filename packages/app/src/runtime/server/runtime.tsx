@@ -3,6 +3,7 @@ import { Accessor, createEffect, createMemo, createResource, createRoot, getOwne
 import { createStore } from "solid-js/store"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
 import { pathKey } from "@/workspaces/path-key"
+import { sameDirectory } from "@/workspaces/paths"
 import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
 import { createServerSyncContext } from "./sync"
@@ -16,6 +17,7 @@ import { ModelState } from "./persistence"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "./errors"
+import { normalizeProjectInfo } from "./global-sync/utils"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -160,9 +162,11 @@ function createServerController(
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
     const projectID = childStore.project
+    const catalog = data.project.list().map(normalizeProjectInfo)
     const metadata = projectID
-      ? sync.data.project.find((x) => x.id === projectID)
-      : sync.data.project.find((x) => x.worktree === project.worktree)
+      ? (sync.data.project.find((x) => x.id === projectID) ?? catalog.find((x) => x.id === projectID))
+      : (sync.data.project.find((x) => sameDirectory(x.worktree, project.worktree)) ??
+        catalog.find((x) => sameDirectory(x.worktree, project.worktree)))
 
     // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
     // Without this, different subdirectories of the same git repo would share the same
