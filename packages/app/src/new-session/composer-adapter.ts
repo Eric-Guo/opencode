@@ -39,6 +39,12 @@ export function createNewSessionComposerAdapter(props: {
 
   const adapter: NewSessionComposerAdapter = {
     kind: "new-session",
+    canStart: () => {
+      const id = data.location.info(location().ref)?.project.id
+      const project = id ? data.project.get(id) : undefined
+      // A new folder may not have a saved project yet, so its PLM picker is unavailable.
+      return !project || !!project.myTodo?.work_package_id
+    },
     state,
     ready: prompt.ready,
     controls,
