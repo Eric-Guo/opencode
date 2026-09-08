@@ -7,6 +7,7 @@ import { ClientApi } from "../../contract"
 import type {
   HealthGetOutput,
   ServerGetOutput,
+  ServerMyTodoProjectsOutput,
   LocationGetInput,
   LocationGetOutput,
   AgentListInput,
@@ -308,7 +309,13 @@ const adaptGroupHealth = (raw: RawClient["server.health"]) => ({ get: EndpointHe
 const EndpointServerGet = (raw: RawClient["server.server"]) => () =>
   preserveEffect<ServerGetOutput>()(raw["server.get"]({}).pipe(Effect.mapError(mapClientError)))
 
-const adaptGroupServer = (raw: RawClient["server.server"]) => ({ get: EndpointServerGet(raw) })
+const EndpointServerMyTodoProjects = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerMyTodoProjectsOutput>()(raw["server.myTodoProjects"]({}).pipe(Effect.mapError(mapClientError)))
+
+const adaptGroupServer = (raw: RawClient["server.server"]) => ({
+  get: EndpointServerGet(raw),
+  myTodoProjects: EndpointServerMyTodoProjects(raw),
+})
 
 const EndpointLocationGet = (raw: RawClient["server.location"]) => (input?: LocationGetInput) =>
   preserveEffect<LocationGetOutput>()(
@@ -1029,7 +1036,13 @@ const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: Proj
   preserveEffect<ProjectUpdateOutput>()(
     raw["project.update"]({
       params: { projectID: input["projectID"] },
-      payload: { canonical: input["canonical"], name: input["name"], icon: input["icon"], commands: input["commands"] },
+      payload: {
+        canonical: input["canonical"],
+        name: input["name"],
+        myTodo: input["myTodo"],
+        icon: input["icon"],
+        commands: input["commands"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
