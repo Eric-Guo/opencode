@@ -143,6 +143,7 @@ export function project(input: { id: string; directory: string; name?: string } 
     vcs: "git",
     time: { created: T0, updated: T0 },
     sandboxes: [] as string[],
+    myTodo: { project_id: 1, project_name: "Test PLM project", work_package_id: 42 },
     ...rest,
   }
 }
