@@ -31,7 +31,7 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
         : {}),
     }
 
-    await mockOpenCodeServer(page, {
+    const mock = await mockOpenCodeServer(page, {
       directory,
       project,
       provider: {
@@ -50,9 +50,9 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
       onPrompt: (input) => prompts.push(input),
     })
     await page.route("**/api/project", (route) =>
-      route.fulfill({ json: selection === "missing" ? [] : [project], headers }),
+      route.fulfill({ json: selection === "missing" && sessions.length === 0 ? [] : [project], headers }),
     )
-    await page.route("**/api/session", (route) => {
+    await page.route("**/api/session", async (route) => {
       if (route.request().method() !== "POST") return route.fallback()
       const body: Record<string, unknown> = route.request().postDataJSON()
       expect(body.location).toEqual({ directory })
@@ -60,6 +60,21 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
       if (typeof body.id !== "string") throw new Error("Expected a client-reserved session ID")
       const session = currentSession({ ...body, id: body.id, projectID, title: "First session" }, directory)
       sessions.push(session)
+
+      if (selection === "missing")
+        await mock.push([
+          {
+            id: "evt_project_created",
+            created: 1700000000000,
+            type: "project.updated",
+            data: {
+              ...project,
+              canonical: directory,
+              sandboxes: [],
+              time: { created: 1700000000000, updated: 1700000000000, active: 1700000000000 },
+            },
+          },
+        ])
 
       return route.fulfill({ json: { data: session }, headers })
     })
@@ -104,5 +119,8 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
     expect(sessions).toHaveLength(1)
     expect(prompts[0]).toMatchObject({ sessionID: sessions[0].id, body: { text: "Start my first session" } })
     await expect(page).toHaveURL(`/server/${base64Encode(server)}/session/${sessions[0].id}`)
+
+    if (selection === "missing")
+      await expect(page.getByRole("button", { name: "Select PLM project", exact: true })).toBeVisible()
   })
 }
