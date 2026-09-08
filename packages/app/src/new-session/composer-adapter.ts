@@ -18,6 +18,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { clearSessionMessageHandoff, setSessionMessageHandoff } from "@/session/handoff"
 import type { DraftMcpControls } from "./mcp"
+import { useMyTodoProject } from "@/my-todo/current-project"
 
 export function createNewSessionComposerAdapter(props: {
   draftID: string
@@ -38,14 +39,13 @@ export function createNewSessionComposerAdapter(props: {
   const language = useLanguage()
   const model = createComposerModelSelection({ agent: () => local.agent.current() })
   const controls = createComposerControls({ sessionKey: route.sessionKey, model })
+  const project = useMyTodoProject()
 
   const adapter: NewSessionComposerAdapter = {
     kind: "new-session",
     canStart: () => {
-      const id = data.location.info(location().ref)?.project.id
-      const project = id ? data.project.get(id) : undefined
       // A new folder may not have a saved project yet, so its PLM picker is unavailable.
-      return !project || !!project.myTodo?.work_package_id
+      return !project() || !!project()?.myTodo?.work_package_id
     },
     state,
     ready: prompt.ready,
