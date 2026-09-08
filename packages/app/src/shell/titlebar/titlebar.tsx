@@ -1,3 +1,4 @@
+import { ProjectSelector } from "@/my-todo/project-selector"
 import { createEffect, createMemo, Match, onCleanup, Show, Switch, untrack } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -250,6 +251,37 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const preparing = routeSync.preparing
             const session = routeSync.session
             const currentTab = routeSync.currentTab
+
+            const workProjectServer = createMemo(() => {
+              const route = layout.route()
+
+              const key =
+                route.type === "session" ? route.server : (currentTab()?.server ?? layout.home.selection().server)
+
+              const conn =
+                global.servers.list().find((item) => ServerConnection.key(item) === key) ?? global.servers.list()[0]
+
+              return conn ? global.ensureServerCtx(conn) : undefined
+            })
+
+            const workProject = createMemo(() => {
+              const value = session()
+              const tab = currentTab()
+              const server = workProjectServer()
+
+              if (!server) return
+
+              if (tab?.type === "session" && value) return projectForSession(value, server.projects.list())
+              const directory = tab?.type === "draft" ? tab.directory : layout.home.selection().directory
+              return server.projects
+                .list()
+                .find(
+                  (project) =>
+                    project.worktree === directory ||
+                    project.worktrees?.some((worktree) => worktree.directory === directory),
+                )
+            })
+
 
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
               const detail = readSessionTabsRemovedDetail(event)
@@ -572,6 +604,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   "ps-3.5": windows() && !props.verticalTabs,
                 }}
               >
+                <Show when={!mobile() && (!props.verticalTabs || windows())}>
+                  <ProjectSelector server={workProjectServer()} project={workProject()} />
+                </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
@@ -788,6 +823,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 </Show>
                                 <SidebarToggle handoff="out" />
                               </div>
+                            </Show>
+                            <Show when={!windows()}>
+                              <ProjectSelector server={workProjectServer()} project={workProject()} sidebar />
                             </Show>
                             <div class="flex w-full shrink-0 flex-col gap-[3px]">
                               <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
