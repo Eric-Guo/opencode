@@ -3,6 +3,7 @@ import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 export const dict = {
   ...DESKTOP_NATIVE_ENGLISH,
   "myTodo.workPackageRequired": "Select a PLM project before starting a new session.",
+  "myTodo.promptProjectRequired": "Select a PLM project to continue with your prompt.",
   "myTodo.selectProject": "Select PLM project",
   "myTodo.loadFailed": "Could not load PLM projects. Please try again.",
   "myTodo.saveFailed": "Could not save the selected PLM project. Please try again.",
