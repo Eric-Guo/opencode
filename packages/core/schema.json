@@ -641,6 +641,36 @@
       "table": "project"
     },
     {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_name",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "work_package_id",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
       "type": "text",
       "notNull": false,
       "autoincrement": false,
