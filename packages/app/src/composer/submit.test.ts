@@ -194,6 +194,39 @@ describe("Composer submission", () => {
     expect(request.skills?.map((skill) => skill.id)).toEqual([...expected])
   })
 
+  test.each(["normal", "shell"] as const)(
+    "requires the current project's work package before starting in %s mode",
+    async (mode) => {
+      const state = createMemoryComposerState({ prompt: "hello" }).capture()
+      const calls: string[] = []
+      const projects = { first: 42, second: undefined as number | undefined }
+      const current = { project: "first" as keyof typeof projects }
+      const adapter: NewSessionComposerAdapter = {
+        kind: "new-session",
+        state,
+        ready: () => true,
+        controls,
+        working: () => false,
+        canStart: () => !!projects[current.project],
+        submitted() {},
+        async start() {
+          calls.push(current.project)
+          return undefined
+        },
+      }
+      const submit = submitInput(adapter, undefined, mode)
+      await submit.submit(new Event("submit"))
+      expect(calls).toEqual(["first"])
+      current.project = "second"
+      await submit.submit(new Event("submit"), { alternate: true })
+      expect(calls).toEqual(["first"])
+      expect(state.current()).toEqual([{ type: "text", content: "hello", start: 0, end: 5 }])
+      projects.second = 99
+      await submit.submit(new Event("submit"))
+      expect(calls).toEqual(["first", "second"])
+    },
+  )
+
   test("captures slash skills before creating a session in a new worktree", async () => {
     const state = createMemoryComposerState({ prompt: "/show-me" }).capture()
     let skills: readonly Skill.Info[] | undefined = [slashSkill]

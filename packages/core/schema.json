@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "be60f352-8da1-40e1-8d70-dc41121cfbc5",
-  "prevIds": ["3fb67508-0196-4bae-b2bd-c08ece7583fd"],
+  "id": "8f4715db-c8d2-476c-aa48-ae6f5e05e660",
+  "prevIds": ["be60f352-8da1-40e1-8d70-dc41121cfbc5"],
   "ddl": [
     {
       "name": "account_state",
@@ -637,6 +637,36 @@
       "default": null,
       "generated": null,
       "name": "name",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_name",
+      "entityType": "columns",
+      "table": "project"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "work_package_id",
       "entityType": "columns",
       "table": "project"
     },
