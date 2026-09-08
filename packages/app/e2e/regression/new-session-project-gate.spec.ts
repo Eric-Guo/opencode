@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test"
 import { base64Encode } from "@opencode/util/encode"
 import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 
-const directory = "/tmp/opencode-new-project"
+const directory = "C:/Users/test/opencode-new-project"
+const selectedDirectory = "C:\\Users\\test\\opencode-new-project"
 const projectID = "proj_new_project"
 const draftID = "draft_new_project"
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
@@ -47,27 +48,27 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
     await page.route("**/api/session", (route) => {
       if (route.request().method() !== "POST") return route.fallback()
       const body: Record<string, unknown> = route.request().postDataJSON()
-      expect(body.location).toEqual({ directory })
+      expect(body.location).toEqual({ directory: selectedDirectory })
       if (typeof body.id !== "string") throw new Error("Expected a client-reserved session ID")
       const session = currentSession({ ...body, id: body.id, projectID, title: "First session" }, directory)
       sessions.push(session)
       return route.fulfill({ json: { data: session }, headers })
     })
     await page.addInitScript(
-      ({ directory, draftID, server }) => {
+      ({ selectedDirectory, draftID, server }) => {
         localStorage.setItem(
           "opencode.global.dat:server",
           JSON.stringify({
-            projects: { local: [{ worktree: directory, expanded: true }] },
-            lastProject: { local: directory },
+            projects: { local: [{ worktree: selectedDirectory, expanded: true }] },
+            lastProject: { local: selectedDirectory },
           }),
         )
         localStorage.setItem(
           "opencode.window.browser.dat:tabs",
-          JSON.stringify([{ type: "draft", draftID, server, directory }]),
+          JSON.stringify([{ type: "draft", draftID, server, directory: selectedDirectory }]),
         )
       },
-      { directory, draftID, server },
+      { selectedDirectory, draftID, server },
     )
     const location = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/location")
     await page.goto(`/new-session?draftId=${draftID}`)
