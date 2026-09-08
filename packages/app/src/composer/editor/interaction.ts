@@ -32,6 +32,7 @@ export type ComposerSelectControl = {
 export type ComposerEditorView = {
   draftOnly?: boolean
   placeholder?: Accessor<string>
+  notice?: Accessor<string | undefined>
   add?: {
     onAttach: () => void
   }
