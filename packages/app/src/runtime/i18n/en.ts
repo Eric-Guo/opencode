@@ -51,6 +51,7 @@ export const dict = {
     "The host’s identity could not be verified. Verify its fingerprint before updating your SSH known hosts.",
   "ssh.error.ssh-missing": "OpenSSH was not found. Install an OpenSSH client and ensure ssh is available on PATH.",
   "myTodo.workPackageRequired": "Select a PLM project before starting a new session.",
+  "myTodo.promptProjectRequired": "Select a PLM project on titlebar to continue with your prompt.",
   "myTodo.selectProject": "Select PLM project",
   "myTodo.loadFailed": "Could not load PLM projects. Please try again.",
   "myTodo.saveFailed": "Could not save the selected PLM project. Please try again.",
