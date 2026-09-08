@@ -95,6 +95,7 @@ import { VariantPlugin } from "./variant.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
+import { Project } from "../project.js"
 import { CybrosTrace } from "./cybros.js"
 import { SessionStore } from "../session/store.js"
 
@@ -120,6 +121,7 @@ const services = [
   Integration.Service,
   Job.Service,
   KV.Service,
+  Project.Service,
   Location.Service,
   ModelsDev.Service,
   Mcp.Service,
@@ -170,6 +172,7 @@ export const requirements = LayerNode.group([
   Integration.node,
   Job.node,
   KV.node,
+  Project.node,
   Location.node,
   ModelsDev.node,
   Mcp.node,
