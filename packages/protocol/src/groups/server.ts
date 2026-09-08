@@ -1,3 +1,5 @@
+import { MyTodo } from "@opencode/schema/my-todo"
+import { ServiceUnavailableError } from "../errors.js"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
@@ -11,6 +13,14 @@ export const ServerGroup = HttpApiGroup.make("server.server")
         summary: "Get server information",
         description: "Return the URLs that can be used to connect to this server.",
       }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("server.myTodoProjects", "/api/server/my-todo/projects", {
+      success: Schema.Array(MyTodo.Project),
+      error: ServiceUnavailableError,
+    }).annotateMerge(
+      OpenApi.annotations({ identifier: "v2.server.myTodoProjects", summary: "Refresh PLM work projects" }),
     ),
   )
   .annotateMerge(OpenApi.annotations({ title: "server" }))
