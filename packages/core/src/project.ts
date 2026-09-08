@@ -80,6 +80,10 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
     canonical: row.worktree,
     vcs: row.vcs ?? undefined,
     name: row.name ?? undefined,
+    myTodo:
+      row.project_id !== null && row.project_name !== null && row.work_package_id !== null
+        ? { project_id: row.project_id, project_name: row.project_name, work_package_id: row.work_package_id }
+        : undefined,
     icon,
     commands: row.commands ?? undefined,
     time: {
@@ -213,6 +217,9 @@ const layer = Layer.effect(
         .update(ProjectTable)
         .set({
           worktree: input.canonical,
+          project_id: input.myTodo?.project_id,
+          project_name: input.myTodo?.project_name,
+          work_package_id: input.myTodo?.work_package_id,
           name: input.name === undefined ? undefined : input.name || null,
           icon_url_override: input.icon?.override === undefined ? undefined : input.icon.override || null,
           icon_color: input.icon?.color === undefined ? undefined : input.icon.color || null,
