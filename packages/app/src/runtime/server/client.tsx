@@ -159,9 +159,9 @@ function sameEndpoint(a: ServerConnection.HttpBase, b: ServerConnection.HttpBase
   return a.url === b.url && a.password === b.password
 }
 
-/** A server's HTTP client, rebuilt when its endpoint changes. */
+/** A server's HTTP client, kept stable when its endpoint changes. */
 export interface ServerTransport {
-  /** Rebuilds the client for a new endpoint and returns it. */
+  /** Updates the endpoint and returns the existing API client. */
   update(http: ServerConnection.HttpBase): ServerApi
   /** The current base URL. */
   readonly url: string
@@ -176,33 +176,31 @@ export function createServerTransport(input: {
   fetch?: typeof globalThis.fetch
 }): ServerTransport {
   const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
+  // Snapshot values so a reactive plugin endpoint cannot hide a change before the stream resyncs.
+  const state = { http: { url: input.http.url, password: input.http.password } }
+  // Queries and feature controllers retain API groups and methods across reconnects. Keep their
+  // identity stable and resolve the endpoint and credentials when each request is prepared.
 
-  // Keeps the endpoint as plain values: a plugin's endpoint can be a store proxy that already reads the next password,
-  // and the client built here keeps the one it started with.
-  const build = (input: ServerConnection.HttpBase) => {
-    const http = { url: input.url, password: input.password }
-
-    return { http, api: createApiForServer({ server: http, fetch: queue.fetch }) }
-  }
-
-  const state = { current: build(input.http) }
+  const api = createApiForServer({
+    get server() {
+      return state.http
+    },
+    fetch: queue.fetch,
+  })
 
   return {
     update(http: ServerConnection.HttpBase) {
-      if (sameEndpoint(http, state.current.http)) return state.current.api
-      state.current = build(http)
+      state.http = { url: http.url, password: http.password }
 
-      return state.current.api
+      return api
     },
     get url() {
-      return state.current.http.url
+      return state.http.url
     },
     get http() {
-      return state.current.http
+      return state.http
     },
-    get api() {
-      return state.current.api
-    },
+    api,
   }
 }
 
