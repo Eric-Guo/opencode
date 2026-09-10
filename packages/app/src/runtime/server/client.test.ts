@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
+import { QueryClient } from "@tanstack/solid-query"
+import { createServer } from "node:http"
 import { createOpenCodeEventSource, createServerTransport } from "./client"
+import { loadGlobalConfigQuery } from "./global-sync/bootstrap"
+import { ServerScope } from "./scope"
 
 const permission = {
   id: "evt_permission",
@@ -85,7 +89,7 @@ describe("server event stream", () => {
   })
 })
 
-test("rotates HTTP and PTY clients together", async () => {
+test("keeps HTTP and PTY clients across endpoint changes", async () => {
   const requests: Array<{ url: string; authorization: string | null }> = []
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init)
@@ -106,7 +110,7 @@ test("rotates HTTP and PTY clients together", async () => {
   await transport.api.health.get()
 
   expect(replacement).toBe(transport.api)
-  expect(transport.pty).not.toBe(initialPty)
+  expect(transport.pty).toBe(initialPty)
   expect(transport.url).toBe("http://127.0.0.1:4200")
   expect(requests).toEqual([
     {
@@ -118,4 +122,47 @@ test("rotates HTTP and PTY clients together", async () => {
       authorization: `Basic ${btoa("opencode:second")}`,
     },
   ])
+})
+
+test("cached config queries use the reconnected endpoint and credentials", async () => {
+  const requests: Array<{ port: string; authorization: string | null }> = []
+  // Happy DOM replaces Response, so use node:http for real listeners in the browser test environment.
+  const servers = await Promise.all(
+    ["first", "second"].map(async (shell) => {
+      const server = createServer((request, response) => {
+        response.setHeader("access-control-allow-origin", "*")
+        response.setHeader("access-control-allow-headers", "authorization")
+        if (request.method === "OPTIONS") return response.end()
+        requests.push({ port: String(request.socket.localPort), authorization: request.headers.authorization ?? null })
+        response.setHeader("content-type", "application/json")
+        response.end(JSON.stringify({ shell }))
+      })
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+      const address = server.address()
+      if (!address || typeof address === "string") throw new Error("Expected a TCP listener")
+      return { server, port: String(address.port), url: `http://127.0.0.1:${address.port}` }
+    }),
+  )
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const transport = createServerTransport({ http: { url: servers[0]!.url, password: "first" } })
+  const query = loadGlobalConfigQuery(ServerScope.local, transport.api.config)
+
+  try {
+    expect(await queryClient.fetchQuery(query)).toEqual({ shell: "first" })
+    transport.update({ url: servers[1]!.url, password: "second" })
+    expect(await queryClient.fetchQuery(query)).toEqual({ shell: "second" })
+    transport.update({ url: servers[1]!.url })
+    await queryClient.fetchQuery(query)
+    expect(requests).toEqual([
+      { port: String(servers[0]!.port), authorization: `Basic ${btoa("opencode:first")}` },
+      { port: String(servers[1]!.port), authorization: `Basic ${btoa("opencode:second")}` },
+      { port: String(servers[1]!.port), authorization: null },
+    ])
+  } finally {
+    queryClient.clear()
+    servers.forEach(({ server }) => {
+      server.closeAllConnections()
+      server.close()
+    })
+  }
 })
