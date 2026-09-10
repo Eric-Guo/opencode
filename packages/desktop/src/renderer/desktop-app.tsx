@@ -128,7 +128,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
             />
             <DesktopEffects api={props.api} os={platform.os} />
             <Suspense fallback={null}>
-              <Show when={activeSidecar()} keyed>
+              <Show when={servers().find(ServerConnection.builtin)} keyed>
                 {(server) => <MigrationStatus server={server} />}
               </Show>
             </Suspense>
