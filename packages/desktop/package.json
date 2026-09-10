@@ -12,7 +12,8 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
-    "test": "bun test --timeout 30000",
+    "test": "bun test --timeout 30000 ./src && bun run test:browser",
+    "test:browser": "bun test --conditions=browser ./test-browser",
     "dev": "bun ./scripts/dev.ts",
     "migration": "bun ./scripts/migration.ts",
     "prebuild": "bun ./scripts/prebuild.ts",
