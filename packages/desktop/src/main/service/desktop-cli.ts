@@ -51,7 +51,7 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
     ? {
         version,
         command: [
-          "bun",
+          process.env.OPENCODE_DESKTOP_BUN ?? "bun",
           "run",
           "--cwd",
           development,
