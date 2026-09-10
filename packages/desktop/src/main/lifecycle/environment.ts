@@ -43,7 +43,7 @@ export const configureApplication = Effect.fn("Application.configure")(function*
   } catch {}
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const appID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop"
+  const appID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop.dev"
   app.setName(app.isPackaged ? appNames[CHANNEL] : "SigmaAgents")
   app.setAppUserModelId(appID)
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
