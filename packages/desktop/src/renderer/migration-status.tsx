@@ -1,16 +1,16 @@
-import { OpenCode, type MigrationV1StatusOutput } from "@opencode/client/promise"
-import { useLanguage } from "@opencode/app/desktop"
+import type { MigrationV1StatusOutput } from "@opencode/client/promise"
+import { useGlobal, useLanguage, type ServerConnection } from "@opencode/app/desktop"
 import { Loader } from "@opencode/ui/loader"
 import { showToast, toaster, Toast } from "@opencode/ui/toast"
-import { createRoot, createSignal, onCleanup, onMount } from "solid-js"
-import type { ServerReadyData } from "../shared/ipc-contract"
+import { createRoot, createSignal } from "solid-js"
+import { createMigrationStatusPoller } from "./migration-status-poller"
 
 type Progress = Extract<MigrationV1StatusOutput, { status: "running" }>["progress"]
 
-export function MigrationStatus(props: { server: ServerReadyData }) {
+export function MigrationStatus(props: { server: ServerConnection.Any }) {
   const language = useLanguage()
+  const sdk = useGlobal().ensureServerCtx(props.server).sdk
   const [progress, setProgress] = createSignal<Progress>()
-  const abort = new AbortController()
   let toastID: number | undefined
   let disposeToast: (() => void) | undefined
 
@@ -45,25 +45,15 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
     )
   }
 
-  onMount(async () => {
-    await wait(1_000, abort.signal)
-    if (abort.signal.aborted) return
-
-    // The main process credentials sidecar requests; see `wireRendererHeaders`.
-    const client = OpenCode.make({ baseUrl: props.server.url })
-
-    void (async () => {
-      while (true) {
-        const status = await client.migration.v1.status({ signal: abort.signal })
-        setProgress(status.status === "running" ? status.progress : undefined)
-        if (status.status === "running") show()
-        else hide()
-        if (status.status === "completed") return
-        if (status.status === "error") throw new Error(status.error)
-        await wait(1_000, abort.signal)
-      }
-    })().catch((error) => {
-      if (abort.signal.aborted) return
+  createMigrationStatusPoller({
+    connected: () => sdk.connection.status() === "connected",
+    status: (signal) => sdk.api.migration.v1.status({ signal }),
+    onStatus(status) {
+      setProgress(status.status === "running" ? status.progress : undefined)
+      if (status.status === "running") return show()
+      hide()
+    },
+    onError(error) {
       hide()
       showToast({
         variant: "error",
@@ -71,12 +61,8 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
         description: error instanceof Error ? error.message : String(error),
         duration: 10_000,
       })
-    })
-  })
-
-  onCleanup(() => {
-    abort.abort()
-    hide()
+    },
+    onCleanup: hide,
   })
 
   return null
@@ -87,16 +73,4 @@ function format(progress: Progress | undefined) {
   if (progress.numerator === undefined) return progress.label
   if (progress.denominator === undefined) return `${progress.label} ${progress.numerator}`
   return `${progress.label} ${progress.numerator}/${progress.denominator}`
-}
-
-function wait(delay: number, signal: AbortSignal) {
-  return new Promise<void>((resolve) => {
-    const timer = setTimeout(done, delay)
-    signal.addEventListener("abort", done, { once: true })
-    function done() {
-      clearTimeout(timer)
-      signal.removeEventListener("abort", done)
-      resolve()
-    }
-  })
 }
