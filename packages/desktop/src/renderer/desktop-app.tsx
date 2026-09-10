@@ -138,7 +138,7 @@ function DesktopWindow(props: {
               />
               <DesktopEffects api={props.api} platform={platform} />
               <Suspense fallback={null}>
-                <Show when={initializationData(sidecar)} keyed>
+                <Show when={servers().find(ServerConnection.builtin)} keyed>
                   {(server) => <MigrationStatus server={server} />}
                 </Show>
               </Suspense>
