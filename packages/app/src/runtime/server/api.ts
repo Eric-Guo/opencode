@@ -35,15 +35,15 @@ export type ServerRequestOptions = OpenCode.RequestOptions & { readonly mediaRef
 export function createApiForServer(input: { server: ServerConnection.HttpBase; fetch?: typeof globalThis.fetch }) {
   return withMediaRefs(
     OpenCode.make({
-      baseUrl: input.server.url,
+      get baseUrl() {
+        return input.server.url
+      },
       fetch: input.fetch,
-      headers: input.server.password
-        ? {
-            Authorization: `Basic ${authTokenFromCredentials({
-              password: input.server.password,
-            })}`,
-          }
-        : undefined,
+      get headers() {
+        return input.server.password
+          ? { Authorization: `Basic ${authTokenFromCredentials({ password: input.server.password })}` }
+          : undefined
+      },
     }),
   )
 }
