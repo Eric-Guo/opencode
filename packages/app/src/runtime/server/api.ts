@@ -21,15 +21,15 @@ export function createApiForServer(input: {
   fetch?: typeof globalThis.fetch
 }): OpenCodeClient {
   return OpenCode.make({
-    baseUrl: input.server.url,
+    get baseUrl() {
+      return input.server.url
+    },
     fetch: input.fetch,
-    headers: input.server.password
-      ? {
-          Authorization: `Basic ${authTokenFromCredentials({
-            password: input.server.password,
-          })}`,
-        }
-      : undefined,
+    get headers() {
+      return input.server.password
+        ? { Authorization: `Basic ${authTokenFromCredentials({ password: input.server.password })}` }
+        : undefined
+    },
   })
 }
 

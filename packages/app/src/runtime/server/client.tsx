@@ -126,25 +126,30 @@ export function createServerTransport(input: { http: ServerConnection.HttpBase; 
   readonly pty: ReturnType<typeof createPtyClient>
 } {
   const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
-  const build = (http: ServerConnection.HttpBase) => {
-    const api = createApiForServer({ server: http, fetch: queue.fetch })
-    return { http, api, pty: createPtyClient(api, { url: http.url }) }
-  }
-  const state = { current: build(input.http) }
+  const state = { http: input.http }
+  // Queries and feature controllers retain API groups and methods across reconnects. Keep their
+  // identity stable and resolve the endpoint and credentials when each request is prepared.
+  const api = createApiForServer({
+    get server() {
+      return state.http
+    },
+    fetch: queue.fetch,
+  })
+  const pty = createPtyClient(api, {
+    get url() {
+      return state.http.url
+    },
+  })
   return {
     update(http: ServerConnection.HttpBase) {
-      state.current = build(http)
-      return state.current.api
+      state.http = http
+      return api
     },
     get url() {
-      return state.current.http.url
+      return state.http.url
     },
-    get api() {
-      return state.current.api
-    },
-    get pty() {
-      return state.current.pty
-    },
+    api,
+    pty,
   }
 }
 
