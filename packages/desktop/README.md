@@ -18,24 +18,16 @@ bundle the assets as an application. The resulting app will be in `dist/`.
 bun run build && bun run package
 ```
 
-Production builds require a prebuilt V2 CLI distribution. The release workflow supplies the artifact from the same run:
+All channels build the embedded server sidecar from source during prebuild, along with its assets and the 7777 UI.
+Production builds use the same flow:
 
 ```bash
-OPENCODE_CHANNEL=prod OPENCODE_CLI_DIST=/absolute/path/to/packages/cli/dist bun run build
+OPENCODE_CHANNEL=prod bun run build
 OPENCODE_CHANNEL=prod bun run package
 ```
 
-Set `OPENCODE_CLI_TARGET` when packaging for a different architecture. The CLI is placed outside `app.asar` in the
-application's resources directory, and packaging fails if it is missing.
+Set `RUST_TARGET` when building the sidecar for a different architecture, and pass the matching platform and architecture
+flags to `electron-builder` when packaging. The sidecar and its assets are included under `out/main` in the app archive.
+A separate CLI distribution is not required.
 
-CLI preparation uses these channel rules:
-
-| Channel                                | Without `OPENCODE_CLI_DIST`    | With `OPENCODE_CLI_DIST`                      |
-| -------------------------------------- | ------------------------------ | --------------------------------------------- |
-| `dev`, `local`, unset, or unrecognized | Download the dev CLI           | Download the dev CLI; ignore the distribution |
-| `beta`                                 | Download the beta CLI          | Copy the supplied CLI; fail if it is missing  |
-| `prod`, `latest`                       | Fail before changing resources | Copy the supplied CLI; fail if it is missing  |
-
-`bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
-default. `bun dev --download-server <version>` instead downloads that CLI version for local development. Neither path
-requires `OPENCODE_CLI_DIST` or runs the production prebuild.
+`bun dev` builds the embedded sidecar from source and starts the development renderer with the dev app identity.
