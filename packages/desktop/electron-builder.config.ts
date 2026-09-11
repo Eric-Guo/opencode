@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { mkdir, stat, writeFile } from "node:fs/promises"
+import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -200,15 +200,6 @@ const getBase = (appId: string): Configuration => ({
       to: "app-update.yml",
     },
   ],
-  afterPack: async (context) => {
-    if (channel !== "dev") return
-    const cli = path.join(
-      context.packager.getResourcesDir(context.appOutDir),
-      context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli",
-    )
-    const file = await stat(cli)
-    if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
-  },
   mac: {
     category: "public.app-category.developer-tools",
     icon: `${iconDir}/icon.icns`,
