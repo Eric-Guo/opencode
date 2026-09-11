@@ -5,7 +5,7 @@ import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
-import { KimiKeyRotation } from "../integration/kimi-key-rotation.js"
+import { KimiEnvironment } from "../integration/kimi-environment.js"
 
 // These catalog entries require inference profiles on Bedrock Runtime.
 // Opus/Sonnet 4.6 and Opus 5.5 support in-region calls in eu-west-2 and must remain available.
@@ -87,7 +87,7 @@ export const ModelsDevPlugin = define({
 })
 
 function environmentNames(provider: ModelsDev.Snapshot) {
-  if (provider.info.id === "kimi-for-coding") return [...KimiKeyRotation.environmentNames]
+  if (provider.info.id === "kimi-for-coding") return KimiEnvironment.names()
   return [...provider.environment]
 }
 
