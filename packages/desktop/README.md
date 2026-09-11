@@ -11,7 +11,7 @@ bun dev
 
 ## Build
 
-`bun run build` prepares `resources/` (icons, metainfo and the bundled CLI) and builds the app into `out/`.
+`bun run build` prepares `resources/` (icons and metainfo) and builds the app into `out/`.
 `bun run pack` then packages it, unsigned, into `dist/desktop/` at the repository root: a `.app` tarball on macOS,
 the unpacked app on Windows, and AppImage/deb/rpm on Linux. The release workflow signs and notarizes afterwards.
 
@@ -21,18 +21,16 @@ bun run build && bun run pack
 
 Both read the same environment as every other release package:
 
-| Variable           | Meaning                                                                                                         |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity, icons and bundled CLI.                     |
-| `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
-| `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
+| Variable | Meaning |
+| --- | --- |
+| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity and icons. |
+| `OPENCODE_VERSION` | Version stamped into the app and its packages. |
+| `OPENCODE_TARGET` | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
-The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
-`bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)
-downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`latest` fail.
+All channels build the embedded server sidecar from source, along with its assets and the 7777 UI.
+The sidecar and its assets are included under `out/main` in the app archive. A separate CLI distribution is not required.
 
-`bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
-default. `bun dev --download-server <version>` instead downloads that CLI version for local development.
+`bun dev` builds the embedded sidecar from source and starts the development renderer with the dev app identity.
 
 ## Beta channel
 
