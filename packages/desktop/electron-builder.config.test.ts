@@ -70,9 +70,6 @@ test("shared packaging defaults", async () => {
   expect(config.nsis?.include).toBe(include)
   expect(await Bun.file(include).exists()).toBe(true)
   expect(config.files).toContain("!resources/opencode-cli*")
-  expect(config.extraResources).toContainEqual(
-    { from: "resources/", to: "", filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"] },
-  )
 })
 
 test("trims external dependencies without excluding runtime files", async () => {
@@ -157,7 +154,7 @@ test("the trimmed Zip.js package can still export compressed logs", async () => 
   }
 })
 
-for (const channel of ["beta", "prod"] as const) {
+for (const channel of ["dev", "beta", "prod"] as const) {
   test(`does not bundle the CLI in ${channel} builds`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel
@@ -166,10 +163,11 @@ for (const channel of ["beta", "prod"] as const) {
     if (previous === undefined) delete process.env.OPENCODE_CHANNEL
     else process.env.OPENCODE_CHANNEL = previous
 
+    expect(config.files).toContain("!resources/opencode-cli*")
     expect(config.extraResources).not.toContainEqual({
       from: "resources/",
       to: "",
-      filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
+      filter: ["opencode-cli", "opencode-cli.exe"],
     })
   })
 }
