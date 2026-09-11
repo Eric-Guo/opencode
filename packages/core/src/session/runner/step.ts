@@ -304,7 +304,7 @@ function kimiFallbackError(error: SessionError.Error, fallback: KimiKeyRotation.
     }
   return {
     type: error.type,
-    message: `${fallback.previous.name} reached Kimi's five-hour rolling usage limit and is unavailable until ${unavailableUntil}. Both Kimi accounts are cooling down, so no account was switched. The earliest account becomes available at ${new Date(fallback.earliestAvailableAt).toISOString()}. Start a blank session after that time.`,
+    message: `${fallback.previous.name} reached Kimi's five-hour rolling usage limit and is unavailable until ${unavailableUntil}. All configured Kimi accounts are cooling down, so no account was switched. The earliest account becomes available at ${new Date(fallback.earliestAvailableAt).toISOString()}. Start a blank session after that time.`,
     ...(error.status === undefined ? {} : { status: error.status }),
   }
 }
