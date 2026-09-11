@@ -1,3 +1,4 @@
+import { app } from "electron"
 import { NodeServices } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Schema, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -8,8 +9,6 @@ import { Ssh, SshConfig } from "./contract"
 import { createSshController } from "./controller"
 
 const setup: Plugin.MainSetup = async (ctx) => {
-  const cli = ctx.cli
-
   // The saved hosts; stored before in the desktop settings file.
   const saved = builtinMainContext(ctx).storage.store("servers", {
     schema: Schema.Array(SshConfig),
@@ -29,10 +28,10 @@ const setup: Plugin.MainSetup = async (ctx) => {
 
   const controller = await runtime.runPromise(
     createSshController({
-      version: cli.version,
-      development: cli.development,
-      binary: cli.binary ?? cli.command[0] ?? "opencode",
-      command: cli.command,
+      version: ctx.app.version,
+      development: !app.isPackaged,
+      binary: process.execPath,
+      command: process.defaultApp ? [process.execPath, app.getAppPath()] : undefined,
       configs: saved.value,
       save: (configs) => Effect.try({ try: () => saved.set(configs), catch: SshFailure.from }),
     }).pipe(Scope.provide(scope)),
