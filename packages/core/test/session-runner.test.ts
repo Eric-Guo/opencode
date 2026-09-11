@@ -93,8 +93,10 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { KimiEnvironment } from "@opencode/core/integration/kimi-environment"
 import { KimiKeyRotation } from "@opencode/core/integration/kimi-key-rotation"
 import { Hash } from "@opencode/util/hash"
+import { withEnv } from "./fixture/env"
 
 const projectDirectory = AbsolutePath.make(import.meta.dir)
 const movedDirectory = AbsolutePath.make(path.dirname(import.meta.dir))
@@ -5567,64 +5569,54 @@ describe("SessionRunnerLLM", () => {
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
   })
 
-  it.effect("rotates a Kimi rolling quota once without replaying the failed step", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = { primary: process.env.KIMI_API_KEY, secondary: process.env.KIMI_API_KEY_2 }
-        process.env.KIMI_API_KEY = "runner-account-a"
-        process.env.KIMI_API_KEY_2 = "runner-account-b"
-        return previous
-      }),
+  it.effect("rotates through Kimi keys without replaying failed steps", () => {
+    const keys = ["runner-account-a", "runner-account-b", "runner-account-c", "runner-account-d"]
+    return withEnv(
+      {
+        ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
+        ...Object.fromEntries(keys.map((key, index) => [KimiEnvironment.name(index), key])),
+      },
       () =>
         Effect.gen(function* () {
           const s = yield* setup
-          const failure = kimiRollingQuota()
-          s.currentConnection = {
-            integrationID: KimiKeyRotation.integrationID,
-            ref: { type: "env", name: "KIMI_API_KEY" },
-            fingerprint: Hash.sha256("runner-account-a"),
-          }
-          yield* s.llm.push(Stream.fail(failure))
+          yield* Effect.forEach(keys, (key, index) =>
+            Effect.gen(function* () {
+              const failure = kimiRollingQuota()
+              s.currentConnection = {
+                integrationID: KimiKeyRotation.integrationID,
+                ref: { type: "env", name: KimiEnvironment.name(index) },
+                fingerprint: Hash.sha256(key),
+              }
+              yield* s.llm.push(Stream.fail(failure))
 
-          expect(yield* s.runPrompt("Rotate Kimi account").pipe(Effect.flip)).toBe(failure)
-          expect(s.requests).toHaveLength(1)
-          expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
-          expect(requireAssistant(yield* s.context).error).toMatchObject({
-            type: "provider.quota",
-            message: expect.stringContaining("KIMI_API_KEY_2 is now selected"),
-            recovery: {
-              type: "connection-fallback",
-              integrationID: "kimi-for-coding",
-              previous: { type: "env", name: "KIMI_API_KEY" },
-              promoted: { type: "env", name: "KIMI_API_KEY_2" },
-              unavailableUntil: KimiKeyRotation.cooldown,
-            },
-          })
-          s.currentConnection = {
-            integrationID: KimiKeyRotation.integrationID,
-            ref: { type: "env", name: "KIMI_API_KEY_2" },
-            fingerprint: Hash.sha256("runner-account-b"),
-          }
-          const secondFailure = kimiRollingQuota()
-          yield* s.llm.push(Stream.fail(secondFailure))
-          expect(yield* s.runPrompt("Both accounts cooling").pipe(Effect.flip)).toBe(secondFailure)
-          expect(s.requests).toHaveLength(2)
-          const assistants = (yield* s.context).filter((message) => message.type === "assistant")
-          expect(assistants.at(-1)?.error).toMatchObject({
-            type: "provider.quota",
-            message: expect.stringContaining("Both Kimi accounts are cooling down"),
-          })
-          expect(assistants.at(-1)?.error?.recovery).toBeUndefined()
+              expect(yield* s.runPrompt("Rotate Kimi account").pipe(Effect.flip)).toBe(failure)
+              expect(s.requests).toHaveLength(index + 1)
+              expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+              const assistant = (yield* s.context).filter((message) => message.type === "assistant").at(-1)
+              if (index === keys.length - 1) {
+                expect(assistant?.error).toMatchObject({
+                  type: "provider.quota",
+                  message: expect.stringContaining("All configured Kimi accounts are cooling down"),
+                })
+                expect(assistant?.error?.recovery).toBeUndefined()
+                return
+              }
+              expect(assistant?.error).toMatchObject({
+                type: "provider.quota",
+                message: expect.stringContaining(`${KimiEnvironment.name(index + 1)} is now selected`),
+                recovery: {
+                  type: "connection-fallback",
+                  integrationID: "kimi-for-coding",
+                  previous: { type: "env", name: KimiEnvironment.name(index) },
+                  promoted: { type: "env", name: KimiEnvironment.name(index + 1) },
+                  unavailableUntil: KimiKeyRotation.cooldown,
+                },
+              })
+            }),
+          )
         }),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous.primary === undefined) delete process.env.KIMI_API_KEY
-          else process.env.KIMI_API_KEY = previous.primary
-          if (previous.secondary === undefined) delete process.env.KIMI_API_KEY_2
-          else process.env.KIMI_API_KEY_2 = previous.secondary
-        }),
-    ),
-  )
+    )
+  })
 
   scenario("settles malformed streamed tool input before the provider failure", function* (s) {
     const failure = new AIError({
