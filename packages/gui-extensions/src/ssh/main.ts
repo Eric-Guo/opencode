@@ -1,3 +1,4 @@
+import { app } from "electron"
 import { NodeServices } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -8,7 +9,6 @@ import { createSshController } from "./controller"
 import type definition from "./index"
 
 const setup: MainSetup<typeof definition> = async (ctx) => {
-  const cli = ctx.cli
   const saved = ctx.stores.servers
 
   // Each resource's teardown is registered as it is acquired, so a setup that fails or is aborted part way releases
@@ -23,10 +23,10 @@ const setup: MainSetup<typeof definition> = async (ctx) => {
 
   const controller = await runtime.runPromise(
     createSshController({
-      version: cli.version,
-      development: cli.development,
-      binary: cli.binary ?? cli.command[0] ?? "opencode",
-      command: cli.command,
+      version: ctx.build.version,
+      development: !app.isPackaged,
+      binary: process.execPath,
+      command: process.defaultApp ? [process.execPath, app.getAppPath()] : undefined,
       configs: saved.value,
       save: (configs) => Effect.try({ try: () => saved.set(configs), catch: SshFailure.from }),
     }).pipe(Scope.provide(scope)),
