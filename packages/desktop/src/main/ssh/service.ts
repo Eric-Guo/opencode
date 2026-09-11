@@ -7,7 +7,7 @@ import { app, shell, type WebContents } from "electron"
 import { homedir } from "node:os"
 import { SshConfig, type SshState } from "@opencode/app/ssh"
 import { SshChanged } from "../../shared/ipc-rpc/events"
-import { DesktopCli } from "../service/desktop-cli"
+import { VERSION } from "../constants"
 import { Shutdown } from "../lifecycle/shutdown"
 import { getStore } from "../storage/store"
 import { emitIpcEvent } from "../ipc-events"
@@ -18,17 +18,17 @@ export class Service extends Context.Service<Service, Effect.Success<ReturnType<
   "opencode/desktop/Ssh",
 ) {}
 
-const make = Effect.fn("Ssh.make")(function* (cli: DesktopCli.Resolved) {
+const make = Effect.fn("Ssh.make")(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const scope = yield* Scope.Scope
   const runFork = Effect.runForkWith(yield* Effect.context())
   const stored = Schema.decodeUnknownOption(Schema.Array(SshConfig))(getStore().get("ssh.servers"))
   const controller = yield* createSshController({
-    version: cli.version,
-    development: !app.isPackaged && cli.binary === undefined,
-    binary: cli.binary ?? cli.command[0] ?? "opencode",
-    command: cli.command,
+    version: VERSION,
+    development: !app.isPackaged,
+    binary: process.execPath,
+    command: process.defaultApp ? [process.execPath, app.getAppPath()] : undefined,
     configs: stored._tag === "Some" ? stored.value : [],
     save: (configs) => Effect.try({ try: () => getStore().set("ssh.servers", configs), catch: SshFailure.from }),
   })
@@ -78,9 +78,7 @@ const make = Effect.fn("Ssh.make")(function* (cli: DesktopCli.Resolved) {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const cli = yield* DesktopCli.Service
-    const resolved = yield* cli.resolve
-    const service = yield* make(resolved)
+    const service = yield* make()
     const shutdown = yield* Shutdown.Service
     const close = service.close
     const off = yield* shutdown.add(close)
