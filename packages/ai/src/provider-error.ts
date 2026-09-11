@@ -75,8 +75,10 @@ const SERVER_CODES = new Set([
 const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded/i
-const KIMI_ROLLING_QUOTA_TEXT =
-  "you've reached your usage limit for this period. your quota will be refreshed in the next period."
+const KIMI_ROLLING_QUOTA_TEXTS = [
+  "you've reached your usage limit for this period. your quota will be refreshed in the next period.",
+  "you've reached your weekly (7-day) usage limit. your quota will reset when the current 7-day window ends. to continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
+]
 const KIMI_ORDINARY_QUOTA_TEXT =
   /you(?:'|’)ve reached (?:your usage limit for this billing cycle|kimi monthly usage limit)\b/i
 const KIMI_CONCURRENT_RATE_LIMIT_TEXT =
@@ -168,7 +170,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
 }
 
 function isKimiRollingQuota(value: string) {
-  return value.trim().replaceAll("’", "'").toLowerCase() === KIMI_ROLLING_QUOTA_TEXT
+  return KIMI_ROLLING_QUOTA_TEXTS.includes(value.trim().replaceAll("’", "'").toLowerCase())
 }
 
 function isKimiConcurrentRateLimit(value: string) {
