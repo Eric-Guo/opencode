@@ -1,5 +1,6 @@
 import { Effect, ManagedRuntime } from "effect"
 import { Observability } from "@opencode/util/observability"
+import { KimiEnvironment } from "./integration/kimi-environment.js"
 
 const SSO_ME_URL = "https://sso.thape.com.cn/api/me.json"
 const runtime = ManagedRuntime.make(Observability.layer())
@@ -7,17 +8,19 @@ const bun = globalThis as typeof globalThis & { Bun?: { env: Record<string, stri
 let hideAgents: string[] = []
 let loaded = false
 
-export const API_KEY_ENV_NAMES = [
+const API_KEY_ENV_NAMES: readonly string[] = [
   "OPENCODE_API_KEY",
-  "KIMI_API_KEY",
-  "KIMI_API_KEY_2",
   "DOC_MOONSHOT_API_KEY",
   "DEEPSEEK_API_KEY",
   "SILICONFLOW_CN_API_KEY",
   "EXA_API_KEY",
   "CEREBRAS_API_KEY",
   "VIPAI_API_KEY",
-] as const
+]
+
+export function isApiKeyEnvName(name: string) {
+  return API_KEY_ENV_NAMES.includes(name) || KimiEnvironment.isName(name)
+}
 
 function runtimeEnv(key: string) {
   return bun.Bun?.env[key] ?? process.env[key]
@@ -87,8 +90,7 @@ export async function ensureSsoUsername() {
           email: string
           clerk_code: string
           opencode_api_key: string
-          kimi_api_key_1: string
-          kimi_api_key_2?: string
+          kimi_api_keys: unknown
           siliconflow_cn_api_key: string
           moonshot_api_key: string
           exa_api_key: string
@@ -108,8 +110,11 @@ export async function ensureSsoUsername() {
     ? payload.hide_agents.filter((agent): agent is string => typeof agent === "string")
     : []
   loaded = true
-  if (payload.kimi_api_key_1) setRuntimeEnv("KIMI_API_KEY", payload.kimi_api_key_1)
-  if (payload.kimi_api_key_2) setRuntimeEnv("KIMI_API_KEY_2", payload.kimi_api_key_2)
+  const kimiKeys = Array.isArray(payload.kimi_api_keys)
+    ? payload.kimi_api_keys.filter((key): key is string => typeof key === "string" && key.trim().length > 0)
+    : []
+  KimiEnvironment.names().forEach(deleteRuntimeEnv)
+  kimiKeys.forEach((key, index) => setRuntimeEnv(KimiEnvironment.name(index), key))
   if (payload.moonshot_api_key) setRuntimeEnv("DOC_MOONSHOT_API_KEY", payload.moonshot_api_key)
   if (payload.deepseek_api_key) setRuntimeEnv("DEEPSEEK_API_KEY", payload.deepseek_api_key)
   setRuntimeEnv("THAPE_SSO_USER_NAME", payload.chinese_name || payload.email)

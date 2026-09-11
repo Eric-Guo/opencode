@@ -3,7 +3,7 @@ export * as ThapeSsoProtection from "./thape-sso-protection"
 import { define, type Context as PluginContext } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
-import { API_KEY_ENV_NAMES } from "../thape-sso"
+import { isApiKeyEnvName } from "../thape-sso"
 
 export const ID = "opencode.protection.thape-sso"
 export const REDACTED = "[REDACTED]"
@@ -25,10 +25,12 @@ export const Plugin = define({
     yield* ctx.tool
       .hook("execute.after", (event) =>
         Effect.sync(() => {
-          const secrets = API_KEY_ENV_NAMES.flatMap((name) => {
-            const value = typeof Bun === "undefined" ? process.env[name] : (Bun.env[name] ?? process.env[name])
-            return value ? [value] : []
-          })
+          const secrets = Object.keys(process.env)
+            .filter(isApiKeyEnvName)
+            .flatMap((name) => {
+              const value = typeof Bun === "undefined" ? process.env[name] : (Bun.env[name] ?? process.env[name])
+              return value ? [value] : []
+            })
           if (secrets.length === 0) return
           if (event.status === "error") {
             event.error = redact(event.error, secrets)
