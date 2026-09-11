@@ -1,12 +1,22 @@
 // Imported first so its evaluation stamps the moment Electron handed control to this module.
 import { marks } from "./lifecycle/marks"
-import { app } from "electron"
-import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
-import { startSidecarProbe } from "./service/sidecar-probe"
-import { registerStorageSnapshotHandler } from "./storage/snapshot"
-import { createEarlyWindow } from "./windows/early"
-import { rendererAssetsServed } from "./windows/protocol"
-import { registerRendererScheme } from "./windows/scheme"
+
+// OpenSSH invokes the desktop executable directly. Handle prompts before loading
+// application lifecycle code, acquiring its single-instance lock, or starting a sidecar.
+if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
+  const { NodeServices } = await import("@effect/platform-node")
+  const { Effect } = await import("effect")
+  const { askpass } = await import("./ssh/askpass-client")
+  process.exit(await Effect.runPromise(askpass.pipe(Effect.provide(NodeServices.layer))))
+}
+
+const { app } = await import("electron")
+const { acquireApplicationLock, configureApplication } = await import("./lifecycle/configure")
+const { startSidecarProbe } = await import("./service/sidecar-probe")
+const { registerStorageSnapshotHandler } = await import("./storage/snapshot")
+const { createEarlyWindow } = await import("./windows/early")
+const { rendererAssetsServed } = await import("./windows/protocol")
+const { registerRendererScheme } = await import("./windows/scheme")
 
 // This module stays small on purpose. Electron holds the ready event until the entry module has
 // finished, and the first window should be on screen before the rest of the main process — a few
