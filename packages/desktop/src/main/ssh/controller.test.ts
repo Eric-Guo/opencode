@@ -115,7 +115,7 @@ posix(
     const controller = yield* createSshController({
       configs: [config],
       binary: process.execPath,
-      command: [process.execPath, "run", path.resolve("../cli/src/index.ts")],
+      command: [process.execPath, "run", path.resolve("src/main/index.ts")],
       version: "2.0.0",
       save: () => Effect.die("must not save"),
     })
