@@ -38,20 +38,23 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
-  const cors = loadDesktopTabs().flatMap((tab) => ("url" in tab && tab.localServer ? [new URL(tab.url).origin] : []))
-  const command = [
-    ...cli.command,
-    "service",
-    ...(cors.length === 0 ? ["unset", "cors"] : ["set", "cors", cors.join(",")]),
-  ]
-  const file = command[0]
-  if (!file) return yield* Effect.die("V2 CLI command is empty")
-  yield* Effect.logInfo("v2 CLI command started", { command })
-  const configured = yield* Effect.tryPromise(async () => {
-    const result = await promisify(execFile)(file, command.slice(1))
-    return { stdout: result.stdout.trim(), stderr: result.stderr.trim() }
-  })
-  yield* Effect.logInfo("v2 CLI command completed", { command, ...configured })
+  // Configuration changes stop the service. Reconnecting an event stream must only resolve its endpoint.
+  if (mode === "initial") {
+    const cors = loadDesktopTabs().flatMap((tab) => ("url" in tab && tab.localServer ? [new URL(tab.url).origin] : []))
+    const command = [
+      ...cli.command,
+      "service",
+      ...(cors.length === 0 ? ["unset", "cors"] : ["set", "cors", cors.join(",")]),
+    ]
+    const file = command[0]
+    if (!file) return yield* Effect.die("V2 CLI command is empty")
+    yield* Effect.logInfo("v2 CLI command started", { command })
+    const configured = yield* Effect.tryPromise(async () => {
+      const result = await promisify(execFile)(file, command.slice(1))
+      return { stdout: result.stdout.trim(), stderr: result.stderr.trim() }
+    })
+    yield* Effect.logInfo("v2 CLI command completed", { command, ...configured })
+  }
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
   const service = yield* Effect.tryPromise(() =>
     client.Service.ensure({
