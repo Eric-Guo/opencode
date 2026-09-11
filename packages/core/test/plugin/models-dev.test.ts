@@ -654,43 +654,62 @@ describe("ModelsDevPlugin", () => {
     }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),
   )
 
-  it.effect("registers both environment slots for Kimi", () =>
-    Effect.gen(function* () {
-      const integrations = yield* Integration.Service
-      const catalog = yield* Catalog.Service
-      const providerID = Provider.ID.make("kimi-for-coding")
-      yield* ModelsDevPlugin.effect(
-        host({
-          catalog: catalogHost(catalog),
-          integration: integrationHost(integrations),
-        }),
-      ).pipe(
-        Effect.provideService(
-          ModelsDev.Service,
-          ModelsDev.Service.of({
-            get: () =>
-              Effect.succeed([
-                {
-                  info: {
-                    id: providerID,
-                    name: "Kimi For Coding",
-                    activation: "auto",
-                    package: Provider.aisdk("@ai-sdk/openai-compatible"),
-                  },
-                  environment: ["KIMI_API_KEY"],
-                  models: [],
-                },
-              ] satisfies readonly ModelsDev.Snapshot[]),
-            refresh: () => Effect.void,
-          }),
-        ),
-      )
+  it.effect("registers all configured environment slots for Kimi", () =>
+    withEnv(
+      {
+        KIMI_API_KEY: "account-a",
+        KIMI_API_KEY_2: "account-b",
+        KIMI_API_KEY_3: "account-c",
+        KIMI_API_KEY_4: "account-d",
+      },
+      () =>
+        Effect.gen(function* () {
+          const integrations = yield* Integration.Service
+          const catalog = yield* Catalog.Service
+          const providerID = Provider.ID.make("kimi-for-coding")
+          yield* ModelsDevPlugin.effect(
+            host({
+              catalog: catalogHost(catalog),
+              integration: integrationHost(integrations),
+            }),
+          ).pipe(
+            Effect.provideService(
+              ModelsDev.Service,
+              ModelsDev.Service.of({
+                get: () =>
+                  Effect.succeed([
+                    {
+                      info: {
+                        id: providerID,
+                        name: "Kimi For Coding",
+                        activation: "auto",
+                        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+                      },
+                      environment: ["KIMI_API_KEY"],
+                      models: [],
+                    },
+                  ] satisfies readonly ModelsDev.Snapshot[]),
+                refresh: () => Effect.void,
+              }),
+            ),
+          )
 
-      expect((yield* integrations.get(Integration.ID.make(providerID)))?.methods).toContainEqual({
-        type: "env",
-        names: ["KIMI_API_KEY", "KIMI_API_KEY_2"],
-      })
-    }),
+          expect((yield* integrations.get(Integration.ID.make(providerID)))?.methods).toContainEqual({
+            type: "env",
+            names: ["KIMI_API_KEY", "KIMI_API_KEY_2", "KIMI_API_KEY_3", "KIMI_API_KEY_4"],
+          })
+          expect((yield* integrations.get(Integration.ID.make(providerID)))?.connections).toEqual([
+            { type: "env", name: "KIMI_API_KEY" },
+            { type: "env", name: "KIMI_API_KEY_2" },
+            { type: "env", name: "KIMI_API_KEY_3" },
+            { type: "env", name: "KIMI_API_KEY_4" },
+          ])
+          expect(yield* integrations.connection.resolve({ type: "env", name: "KIMI_API_KEY_4" })).toMatchObject({
+            type: "key",
+            key: "account-d",
+          })
+        }),
+    ),
   )
 
   it.effect("preserves provider and model URL templates in the catalog", () =>
