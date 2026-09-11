@@ -98,8 +98,11 @@ const GATEWAY_CODE_LABEL = /^[^:\n]+: \[([A-Za-z0-9_.-]+)\]/
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 // Only consulted on 429, where throttles and account caps share a status.
 const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded|budget exceeded|usage limit/i
-const KIMI_ROLLING_QUOTA_TEXT =
-  "you've reached your usage limit for this period. your quota will be refreshed in the next period."
+const KIMI_ROLLING_QUOTA_TEXTS = [
+  "you've reached your usage limit for this period. your quota will be refreshed in the next period.",
+  "you've reached your 5-hour usage limit. your quota will reset when the current 5-hour window ends. to continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
+  "you've reached your weekly (7-day) usage limit. your quota will reset when the current 7-day window ends. to continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
+]
 const KIMI_ORDINARY_QUOTA_TEXT =
   /you(?:'|’)ve reached (?:your usage limit for this billing cycle|kimi monthly usage limit)\b/i
 const KIMI_CONCURRENT_RATE_LIMIT_TEXT =
@@ -206,7 +209,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
 }
 
 function isKimiRollingQuota(value: string) {
-  return value.trim().replaceAll("’", "'").toLowerCase() === KIMI_ROLLING_QUOTA_TEXT
+  return KIMI_ROLLING_QUOTA_TEXTS.includes(value.trim().replaceAll("’", "'").toLowerCase())
 }
 
 function isKimiConcurrentRateLimit(value: string) {
