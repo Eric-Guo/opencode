@@ -1,13 +1,14 @@
+import { app } from "electron"
 import { NodeServices } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Schema, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import { Cli, MainStorage, Windows, type Setup } from "../sdk/main"
+import { MainApp, MainStorage, Windows, type Setup } from "../sdk/main"
 import { SshFailure } from "./command"
 import { Ssh, SshConfig } from "./contract"
 import { createSshController } from "./controller"
 
 const setup: Setup = async (ctx) => {
-  const cli = ctx.use(Cli)
+  const host = ctx.use(MainApp)
   const saved = ctx.use(MainStorage).store("servers", {
     schema: Schema.Array(SshConfig),
     initial: [],
@@ -17,10 +18,10 @@ const setup: Setup = async (ctx) => {
   const scope = await runtime.runPromise(Scope.make())
   const controller = await runtime.runPromise(
     createSshController({
-      version: cli.version,
-      development: cli.development,
-      binary: cli.binary ?? cli.command[0] ?? "opencode",
-      command: cli.command,
+      version: host.version,
+      development: !app.isPackaged,
+      binary: process.execPath,
+      command: process.defaultApp ? [process.execPath, app.getAppPath()] : undefined,
       configs: saved.get(),
       save: (configs) => Effect.try({ try: () => saved.set(configs), catch: SshFailure.from }),
     }).pipe(Scope.provide(scope)),
