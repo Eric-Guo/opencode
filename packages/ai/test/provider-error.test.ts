@@ -361,6 +361,36 @@ describe("provider error classification", () => {
     })
   })
 
+  test.each(
+    [403, 429, undefined].flatMap((status) =>
+      [
+        "You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
+        "You've reached your weekly (7-day) usage limit. Your quota will reset when the current 7-day window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
+      ].map((message) => [status, message] as const),
+    ),
+  )(
+    "classifies Kimi's rolling quota response with status %s as rotation-triggering: %s",
+    (status, message) => {
+
+      expect(classifyProviderFailure({ message, status })).toMatchObject({
+        _tag: "QuotaExceeded",
+        classification: "rolling-window",
+        message,
+      })
+      expect(
+        classifyProviderFailure({
+          message: "Request failed",
+          rawBody: `  ${message.replaceAll("'", "’").toUpperCase()}\n`,
+          status,
+        }),
+      ).toMatchObject({ _tag: "QuotaExceeded", classification: "rolling-window", message: "Request failed" })
+      expect(classifyProviderFailure({ message: `${message} Contact support.`, status })).not.toHaveProperty(
+        "classification",
+        "rolling-window",
+      )
+    },
+  )
+
   test("leaves unrecognized failures unclassified for the retry default", () => {
     expect(classifyProviderFailure({ message: '{"error":{"message":"no_kv_space"}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
