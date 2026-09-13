@@ -34,7 +34,9 @@ export const appHandlers = AppRpcs.toLayer(
     const background = yield* BackgroundService.Service
     const desktopCli = yield* DesktopCli.Service
     const logging = yield* DesktopLogging.Service
-    const runFork = Effect.runForkWith(yield* Effect.context())
+    const services = yield* Effect.context()
+    const runFork = Effect.runForkWith(services)
+    const runPromise = Effect.runPromiseWith(services)
     return AppRpcs.of({
       AppAwaitInitialization: (_args, context) =>
         Effect.gen(function* () {
@@ -82,7 +84,10 @@ export const appHandlers = AppRpcs.toLayer(
           })
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
-      AppQuit: () => background.stop.pipe(Effect.ensuring(Effect.sync(lifecycle.quit))),
+      AppQuit: () =>
+        promise(() => extension.beforeQuit?.({ stopService: () => runPromise(background.stop) })).pipe(
+          Effect.ensuring(Effect.sync(lifecycle.quit)),
+        ),
     })
   }),
 )
