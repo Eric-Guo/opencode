@@ -491,7 +491,7 @@
     },
     "packages/desktop-tab": {
       "name": "@opencode/desktop-tab",
-      "version": "0.1.0",
+      "version": "2.0.9",
       "dependencies": {
         "electron-context-menu": "4.1.2",
         "jsonc-parser": "3.3.1",
