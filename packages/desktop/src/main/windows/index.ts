@@ -24,6 +24,7 @@ import {
 } from "./appearance"
 import { loadWebContents, registerRendererOrigin, registerRendererProtocol, setProtocolReporter } from "./protocol"
 import { createWindowRegistry } from "./registry"
+import { createRendererLoader } from "./renderer-loading"
 import { makeWindowRecovery } from "./recovery"
 import { takeEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
@@ -162,6 +163,11 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     const openExternal = (url: string) => {
       runFork(openExternalURL(url))
     }
+
+    const loads = createRendererLoader<Electron.WebContents>((error) => {
+      runFork(Effect.logError("renderer load failed", { error }))
+    })
+
     const wire = (contents: Electron.WebContents, name: string) => {
       trackWebContents(win, contents, true)
       allowRendererPermissions(contents)
@@ -187,11 +193,8 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
         wire(view.webContents, options.id)
         view.setBackgroundColor(appearance.backgroundColor)
-        // The primary renderer is loaded after reveal listeners and theme readiness are installed.
-        if (options.id !== "opencode")
-          void loadWebContents(view.webContents, options.html, options).catch((error) =>
-            runFork(Effect.logError("renderer load failed", { error })),
-          )
+        loads.add(view.webContents, () => loadWebContents(view.webContents, options.html, options))
+
         return view
       },
       trackContents: (contents) => trackWebContents(win, contents),
@@ -216,6 +219,10 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     }
 
     if (!shell && !early?.loaded) wire(win.webContents, id)
+
+    const loadPrimary =
+      loads.primary(getPrimaryWebContents(win)) ?? (() => loadWebContents(getPrimaryWebContents(win), "index.html"))
+
     win.on("focus", notifyNavigationHistory)
     win.on("closed", () => shell?.dispose())
 
@@ -256,7 +263,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     win.once("closed", () => themeReady.delete(win))
 
     if (shell || !early?.loaded)
-      void loadWebContents(getPrimaryWebContents(win), "index.html")
+      void loadPrimary()
         .catch((error) => runFork(Effect.logError("renderer load failed", { error })))
         .finally(ready)
     return win
@@ -284,5 +291,4 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
   return { create, restore }
 })
-
 
