@@ -1,5 +1,4 @@
 export const SETTINGS_STORE = "opencode.settings"
-export const DESKTOP_TAB_COOKIES_STORE = "opencode.desktop-tab-cookies"
 export const DEFAULT_SERVER_URL_KEY = "defaultServerUrl"
 export const FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY = "firstLaunchOnboardingComplete"
 export const WSL_SERVERS_KEY = "wslServers"

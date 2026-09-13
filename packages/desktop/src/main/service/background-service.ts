@@ -2,7 +2,7 @@ import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { loadDesktopTabs } from "../desktop-tabs"
+import extension from "#desktop-main-extension"
 import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages, DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
@@ -49,8 +49,8 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const version = mode === "initial" ? cli.version : undefined
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   // Configuration changes stop the service. Reconnecting an event stream must only resolve its endpoint.
-  if (mode === "initial") {
-    const cors = loadDesktopTabs().flatMap((tab) => ("url" in tab && tab.localServer ? [new URL(tab.url).origin] : []))
+  if (mode === "initial" && extension.serviceCors) {
+    const cors = extension.serviceCors()
     const command = [
       ...cli.command,
       "service",
@@ -87,9 +87,6 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const ready = {
     url: url.origin,
     password: service.auth.password,
-    ...(process.env.THAPE_SSO_BEARER_API_KEY
-      ? { ssoJwtSecretKey: process.env.THAPE_SSO_BEARER_API_KEY }
-      : {}),
   } satisfies SidecarCredentials.Data
   SidecarCredentials.set(ready)
   return ready

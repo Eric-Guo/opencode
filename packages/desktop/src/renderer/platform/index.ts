@@ -1,9 +1,4 @@
-import {
-  ACCEPTED_FILE_EXTENSIONS,
-  ServerConnection,
-  type Platform,
-  type UpdaterPlatform,
-} from "@opencode/app/desktop"
+import { ACCEPTED_FILE_EXTENSIONS, ServerConnection, type Platform, type UpdaterPlatform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
@@ -22,7 +17,6 @@ export function createDesktopPlatform(
   api: ElectronAPI,
   windowState: DesktopWindowState,
   updater: UpdaterPlatform,
-  thapeSsoConfigured: () => boolean,
 ): Platform {
   const os = desktopOS()
   return {
@@ -79,8 +73,6 @@ export function createDesktopPlatform(
     setDefaultServer: async (url) => {
       await api.setDefaultServerUrl(url)
     },
-    signInToThapeSso: (credentials) => api.signInToThapeSso(credentials),
-    thapeSsoConfigured,
     quit: () => api.quit(),
     wslServers: os === "windows" ? api.wslServers : undefined,
     sshServers: api.sshServers,

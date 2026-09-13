@@ -1,11 +1,6 @@
 import { BrowserWindow } from "electron"
 import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
-import {
-  getPrimaryWebContents,
-  navigateDesktopTab,
-  reloadDesktopTab,
-  updateTitlebar,
-} from "../windows"
+import { getActiveWebContents, navigateWindow, reloadWindow, updateTitlebar } from "../windows"
 
 export type DesktopMenuActionHandlers = Partial<{
   checkForUpdates: () => void
@@ -46,13 +41,13 @@ export function runDesktopMenuAction(
       win?.maximize()
       return
     case "view.reload":
-      reloadDesktopTab(win)
+      reloadWindow(win)
       return
     case "history.back":
-      navigateDesktopTab(win, "back")
+      navigateWindow(win, "back")
       return
     case "history.forward":
-      navigateDesktopTab(win, "forward")
+      navigateWindow(win, "forward")
       return
     case "view.toggleDevTools":
       getContents(win)?.toggleDevTools()
@@ -95,11 +90,11 @@ export function runDesktopMenuAction(
 
 function getContents(win: BrowserWindow | null) {
   if (!win) return
-  return getPrimaryWebContents(win)
+  return getActiveWebContents(win)
 }
 
 function setZoom(win: BrowserWindow | null, value: number) {
   if (!win) return
-  getPrimaryWebContents(win).setZoomFactor(Math.min(Math.max(value, 0.2), 10))
+  getActiveWebContents(win).setZoomFactor(Math.min(Math.max(value, 0.2), 10))
   updateTitlebar(win)
 }

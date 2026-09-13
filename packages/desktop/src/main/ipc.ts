@@ -1,6 +1,6 @@
 export * as Ipc from "./ipc"
 
-import { app, ipcMain, MessageChannelMain, net } from "electron"
+import { ipcMain, MessageChannelMain } from "electron"
 import type { WebContents } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
@@ -23,15 +23,13 @@ import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
 import { BackgroundService } from "./service/background-service"
-import { getCybrosCurrentUser } from "./thape-sso"
+import extension from "#desktop-main-extension"
 import { Updater } from "./updater"
 import {
-  getDesktopTabHistory,
-  getDesktopTabInitializationFromWebContents,
+  getNavigationHistory,
   getLastFocusedWindow,
-  goToDesktopTabHistory,
-  notifyDesktopTabState,
-  subscribeDesktopTabHistory,
+  goToNavigationHistory,
+  subscribeNavigationHistory,
   subscribeWebContents,
 } from "./windows"
 import { Wsl } from "./wsl/start"
@@ -73,9 +71,9 @@ export const registerIpcHandlers = Effect.gen(function* () {
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
     relaunch: lifecycle.relaunch,
-    getHistory: () => getDesktopTabHistory(getLastFocusedWindow()),
-    goToHistory: (index: number) => goToDesktopTabHistory(getLastFocusedWindow(), index),
-    onHistoryChange: subscribeDesktopTabHistory,
+    getHistory: () => getNavigationHistory(getLastFocusedWindow()),
+    goToHistory: (index: number) => goToNavigationHistory(getLastFocusedWindow(), index),
+    onHistoryChange: subscribeNavigationHistory,
   }
   const wire = (contents: WebContents) => {
     contents.on("before-input-event", (_event, input) => {
@@ -90,30 +88,12 @@ export const registerIpcHandlers = Effect.gen(function* () {
     })
   }
   const unsubscribe = subscribeWebContents(wire)
-  const awaitInitialization = (event: Electron.IpcMainInvokeEvent) =>
-    runPromise(background.connection).then((data) => ({
-      ...data,
-      ...getDesktopTabInitializationFromWebContents(event.sender),
-    }))
-  const handleCybrosCurrentUser = () =>
-    getCybrosCurrentUser(
-      app.getPath("userData"),
-      process.env.THAPE_SSO_BEARER_API_KEY,
-      () => {
-        delete process.env.THAPE_SSO_BEARER_API_KEY
-        notifyDesktopTabState()
-      },
-      (input, init) => net.fetch(input, init),
-    )
-  yield* Effect.sync(() => {
-    ipcMain.handle("await-initialization", awaitInitialization)
-    ipcMain.handle("get-cybros-current-user", handleCybrosCurrentUser)
-  })
+  const handlers = extension.ipc?.({ connection: () => runPromise(background.connection) }) ?? {}
+  Object.entries(handlers).forEach(([channel, handle]) => ipcMain.handle(channel, handle))
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       unsubscribe()
-      ipcMain.removeHandler("await-initialization")
-      ipcMain.removeHandler("get-cybros-current-user")
+      Object.keys(handlers).forEach((channel) => ipcMain.removeHandler(channel))
     }),
   )
   return {

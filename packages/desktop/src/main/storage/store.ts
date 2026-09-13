@@ -26,7 +26,3 @@ export function getStore(name = SETTINGS_STORE) {
   cache.set(name, next)
   return next
 }
-
-export function forgetStore(name: string) {
-  cache.delete(name)
-}

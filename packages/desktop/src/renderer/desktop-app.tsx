@@ -4,8 +4,8 @@
 import {
   AppBaseProviders,
   AppInterface,
-  currentRoute,
   DialogUserLogin,
+  currentRoute,
   PlatformProvider,
   preloadRoute,
   ServerConnection,
@@ -16,10 +16,10 @@ import {
   useWslServers,
   useSsh,
   type LayoutRoute,
-  type Platform,
   type UpdaterPlatform,
 } from "@opencode/app/desktop"
 import { useDialog } from "@opencode/ui/context/dialog"
+import extension from "#desktop-renderer-extension"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
@@ -80,12 +80,7 @@ function DesktopWindow(props: {
   onRoute: (route: LayoutRoute) => void
 }) {
   const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
-  const platform = createDesktopPlatform(
-    props.api,
-    props.windowState,
-    props.updater,
-    () => Boolean(sidecar.latest?.ssoJwtSecretKey),
-  )
+  const platform = createDesktopPlatform(props.api, props.windowState, props.updater)
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(() => preloadStoredLocale(platform))
   const [initialRoute] = createResource(() => preloadRoute(getLastActiveUrl(props.windowState.id)))
@@ -136,7 +131,7 @@ function DesktopWindow(props: {
                 initialUrl={getLastActiveUrl(props.windowState.id)}
                 serverKey={key}
               />
-              <DesktopEffects api={props.api} platform={platform} />
+              <DesktopEffects api={props.api} />
               <Suspense fallback={null}>
                 <Show when={servers().find(ServerConnection.builtin)} keyed>
                   {(server) => <MigrationStatus server={server} />}
@@ -179,17 +174,16 @@ function DesktopStartupReady(props: {
   return null
 }
 
-function DesktopEffects(props: { api: ElectronAPI; platform: Platform }) {
+function DesktopEffects(props: { api: ElectronAPI }) {
   const command = useCommand()
   const dialog = useDialog()
+  const effects = extension.setup?.({
+    showLogin: (onLogin) => {
+      void dialog.show(() => <DialogUserLogin onLogin={onLogin} onExit={() => props.api.quit()} />)
+    },
+  })
   bindDesktopMenu((id) => {
-    if (id !== "sso.login") return command.trigger(id)
-    void dialog.show(() => (
-      <DialogUserLogin
-        onLogin={(credentials) => props.platform.signInToThapeSso?.(credentials)}
-        onExit={() => props.platform.quit?.()}
-      />
-    ))
+    if (!effects?.command(id)) command.trigger(id)
   })
   const theme = useTheme()
 

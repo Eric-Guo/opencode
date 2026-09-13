@@ -1,5 +1,5 @@
 import { app, net, protocol } from "electron"
-import type { BrowserWindow } from "electron"
+import type { WebContents } from "electron"
 import { pathToFileURL } from "node:url"
 import { Effect, Path } from "effect"
 import { scoped } from "../native/logging"
@@ -8,6 +8,11 @@ import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
 
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
+const rendererOrigins = new Set<string>()
+
+export function registerRendererOrigin(url?: string | false) {
+  if (url && URL.canParse(url)) rendererOrigins.add(new URL(url).origin)
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -65,13 +70,14 @@ export const registerRendererProtocol = Effect.fn("Window.registerRendererProtoc
   })
 })
 
-export function loadWindow(win: BrowserWindow, html: string) {
-  const devUrl = process.env.ELECTRON_RENDERER_URL
-  if (devUrl) {
-    void win.loadURL(new URL(html, devUrl).toString())
-    return
-  }
-  void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
+export function loadWebContents(
+  contents: WebContents,
+  html: string,
+  options: { devURL?: string | false; devHtml?: string } = {},
+) {
+  const devURL = options.devURL === false ? undefined : (options.devURL ?? process.env.ELECTRON_RENDERER_URL)
+  if (devURL) return contents.loadURL(new URL(options.devHtml ?? html, devURL).toString())
+  return contents.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
 }
 
 export function isRendererUrl(value?: string, html = false) {
@@ -79,6 +85,7 @@ export function isRendererUrl(value?: string, html = false) {
   const url = new URL(value)
   if (html && !url.pathname.endsWith(".html")) return false
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
+  if (rendererOrigins.has(url.origin)) return true
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (!devUrl || !URL.canParse(devUrl)) return false
   return url.origin === new URL(devUrl).origin

@@ -1,20 +1,6 @@
 // The sidecar password never crosses into the renderer; the main process adds it to sidecar requests.
 export type ServerReadyData = {
   url: string
-  ssoJwtSecretKey?: string
-  localAgent?: string
-  welcomeText?: string
-  suggestedQuestions?: string[]
-}
-
-export type CybrosCurrentUser = {
-  chinese_name: string
-  clerk_code: string
-}
-
-export type SsoSignInCredentials = {
-  username: string
-  password: string
 }
 
 export type TitlebarTheme = {

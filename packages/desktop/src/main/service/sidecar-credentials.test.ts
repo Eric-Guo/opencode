@@ -16,10 +16,9 @@ describe("sidecar authorization", () => {
     expect(ready(sidecar)).toEqual({ url: sidecar.url })
   })
 
-  test("preserves SSO initialization data without the sidecar password", () => {
-    expect(ready({ ...sidecar, ssoJwtSecretKey: "sso-token" })).toEqual({
+  test("does not forward extension secrets through the core sidecar boundary", () => {
+    expect(ready(Object.assign({}, sidecar, { ssoJwtSecretKey: "sso-token" }))).toEqual({
       url: sidecar.url,
-      ssoJwtSecretKey: "sso-token",
     })
   })
 

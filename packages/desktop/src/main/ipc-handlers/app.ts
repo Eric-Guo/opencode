@@ -1,5 +1,4 @@
 import { parseDesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
-import { app, net } from "electron"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
 import { openExternalURL } from "../files"
@@ -16,18 +15,16 @@ import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
-import { getCybrosCurrentUser, signInToThapeSso } from "../thape-sso"
+import extension from "#desktop-main-extension"
 import { Updater } from "../updater"
 import {
-  getDesktopTabHistory,
+  getNavigationHistory,
   getLastFocusedWindow,
-  getDesktopTabInitializationFromWebContents,
   getPrimaryWebContents,
   getWindowFromWebContents,
-  goToDesktopTabHistory,
-  notifyDesktopTabState,
+  goToNavigationHistory,
   setBackgroundColor,
-  subscribeDesktopTabHistory,
+  subscribeNavigationHistory,
 } from "../windows"
 import { sender } from "./context"
 
@@ -44,32 +41,11 @@ export const appHandlers = AppRpcs.toLayer(
       AppAwaitInitialization: (_args, context) =>
         Effect.gen(function* () {
           const data = yield* background.connection.pipe(Effect.map(SidecarCredentials.ready))
-          return { ...data, ...getDesktopTabInitializationFromWebContents(sender(handoff, context)) }
+          return { ...data, ...extension.rendererData?.(sender(handoff, context)) }
         }),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
-      AppGetCybrosCurrentUser: () => {
-        if (!process.env.THAPE_SSO_BEARER_API_KEY?.trim()) return Effect.succeed(null)
-        return promise(() =>
-          getCybrosCurrentUser(
-            app.getPath("userData"),
-            process.env.THAPE_SSO_BEARER_API_KEY,
-            () => {
-              delete process.env.THAPE_SSO_BEARER_API_KEY
-              notifyDesktopTabState()
-            },
-            (input, init) => net.fetch(input, init),
-          ),
-        )
-      },
-      AppSignInToThapeSso: ({ credentials }) =>
-        promise(async () => {
-          process.env.THAPE_SSO_BEARER_API_KEY = await signInToThapeSso(
-            app.getPath("userData"),
-            credentials,
-            (input, init) => net.fetch(input, init),
-          )
-          notifyDesktopTabState()
-        }),
+      AppGetCybrosCurrentUser: (_args, context) =>
+        promise(() => extension.request?.(sender(handoff, context), "account.current-user") ?? null),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
       AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),
@@ -103,9 +79,9 @@ export const appHandlers = AppRpcs.toLayer(
             createWindow: lifecycle.createWindow,
             openExternal: (url) => runFork(openExternalURL(url)),
             relaunch: lifecycle.relaunch,
-            getHistory: () => getDesktopTabHistory(getLastFocusedWindow()),
-            goToHistory: (index) => goToDesktopTabHistory(getLastFocusedWindow(), index),
-            onHistoryChange: subscribeDesktopTabHistory,
+            getHistory: () => getNavigationHistory(getLastFocusedWindow()),
+            goToHistory: (index) => goToNavigationHistory(getLastFocusedWindow(), index),
+            onHistoryChange: subscribeNavigationHistory,
           })
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),

@@ -19,7 +19,7 @@ export function get() {
 
 /** Renderer initialization data excludes the sidecar credential. */
 export function ready(data: Data): ServerReadyData {
-  return { url: data.url, ...(data.ssoJwtSecretKey ? { ssoJwtSecretKey: data.ssoJwtSecretKey } : {}) }
+  return { url: data.url }
 }
 
 /** The Basic credential for a request to the sidecar origin, or undefined for any other URL. */

@@ -29,6 +29,7 @@ target
 .cache
 .direnv/
 packages/7777/
+packages/desktop-tab/
 
 # Local dev files
 opencode-dev

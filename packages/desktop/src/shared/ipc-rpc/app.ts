@@ -1,30 +1,15 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
-const ServerReadyData = Schema.Struct({
-  url: Schema.String,
-  ssoJwtSecretKey: Schema.optionalKey(Schema.String),
-  localAgent: Schema.optionalKey(Schema.String),
-  welcomeText: Schema.optionalKey(Schema.String),
-  suggestedQuestions: Schema.optionalKey(Schema.Array(Schema.String)),
-})
-const CybrosCurrentUser = Schema.Struct({
-  chinese_name: Schema.String,
-  clerk_code: Schema.String,
-})
+const ServerReadyData = Schema.StructWithRest(Schema.Struct({ url: Schema.String }), [
+  Schema.Record(Schema.String, Schema.Unknown),
+])
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
+// Wire compatibility for existing bundled renderers. The optional extension owns the implementation.
 export const AppGetCybrosCurrentUser = Rpc.make("AppGetCybrosCurrentUser", {
-  success: Schema.NullOr(CybrosCurrentUser),
-})
-export const AppSignInToThapeSso = Rpc.make("AppSignInToThapeSso", {
-  payload: {
-    credentials: Schema.Struct({
-      username: Schema.String,
-      password: Schema.String,
-    }),
-  },
+  success: Schema.Unknown,
 })
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
   success: Schema.Array(Schema.String),
@@ -75,9 +60,8 @@ export const AppRelaunch = Rpc.make("AppRelaunch")
 export const AppQuit = Rpc.make("AppQuit")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
-  AppReconnectService,
   AppGetCybrosCurrentUser,
-  AppSignInToThapeSso,
+  AppReconnectService,
   AppConsumeInitialDeepLinks,
   AppGetDefaultServerUrl,
   AppSetDefaultServerUrl,

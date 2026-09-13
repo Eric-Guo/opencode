@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { recentDesktopTabHistory } from "./desktop-tab-history"
+import { recentNavigationHistory } from "./navigation-history"
 
 describe("desktop tab history", () => {
   test("returns the latest ten URLs with navigation indexes", () => {
-    const history = recentDesktopTabHistory(
+    const history = recentNavigationHistory(
       Array.from({ length: 12 }, (_, index) => ({ url: `https://example.com/${index}` })),
       7,
     )
