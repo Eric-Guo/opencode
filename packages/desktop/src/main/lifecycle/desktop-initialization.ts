@@ -48,7 +48,7 @@ export const layer = Layer.effect(
       }),
     )
     yield* Effect.promise(() => app.whenReady())
-    if (extension.apiVersion !== 1) throw new Error("Unsupported desktop extension API")
+
     if (extension.initialize) yield* Effect.promise(() => extension.initialize!())
     yield* Effect.promise(() => ensureSsoUsername())
     yield* prepareDesktop

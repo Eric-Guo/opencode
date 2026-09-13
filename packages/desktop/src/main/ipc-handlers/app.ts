@@ -26,6 +26,8 @@ export const appHandlers = AppRpcs.toLayer(
     const lifecycle = yield* ApplicationLifecycle.Service
     const background = yield* BackgroundService.Service
     const logging = yield* DesktopLogging.Service
+    const services = yield* Effect.context()
+    const runPromise = Effect.runPromiseWith(services)
 
     return AppRpcs.of({
       AppAwaitInitialization: (_args, context) =>
@@ -77,7 +79,10 @@ export const appHandlers = AppRpcs.toLayer(
           setNativeTranslations(bundle)
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
-      AppQuit: () => background.stop.pipe(Effect.ensuring(Effect.sync(lifecycle.quit))),
+      AppQuit: () =>
+        promise(() => extension.beforeQuit?.({ stopService: () => runPromise(background.stop) })).pipe(
+          Effect.ensuring(Effect.sync(lifecycle.quit)),
+        ),
     })
   }),
 )
