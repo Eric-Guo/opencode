@@ -49,7 +49,6 @@ export const layer = Layer.effect(
       yield* Effect.logInfo("electron session proxy applied", {
         hasBypassRules: Boolean(sessionProxy.proxyBypassRules),
       })
-    if (extension.apiVersion !== 1) throw new Error("Unsupported desktop extension API")
     if (extension.initialize) yield* Effect.promise(() => extension.initialize!())
     yield* Effect.promise(() => ensureSsoUsername())
     yield* logging.startNetwork

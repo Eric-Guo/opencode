@@ -30,7 +30,10 @@ export type DesktopWindowExtension = {
 }
 export type DesktopExtension = {
   apiVersion: 1
+  /** Apply distribution defaults after the user's shell environment has been loaded. */
+  environment?(host: { resourcesPath: string }): void
   initialize?(): Promise<void>
+  beforeQuit?(host: { stopService(): Promise<void> }): Promise<void>
   serviceCors?(): string[]
   request?(contents: WebContents, method: string, input?: unknown): Promise<unknown>
   rendererData?(contents: WebContents): Record<string, unknown>
