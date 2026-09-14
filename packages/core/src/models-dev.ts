@@ -16,7 +16,7 @@ import { AISDKNative } from "./aisdk-native.js"
 import { Provider } from "./provider.js"
 import { Variant } from "./variant.js"
 import { KV } from "./kv.js"
-import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
+import { load } from "./models-dev/snapshot.js"
 import { isV1, toV2 } from "./models-dev/v1.js"
 
 // Only the fields opencode reads are decoded. Unknown keys are ignored, and a model that
@@ -691,7 +691,8 @@ const bundledSnapshot = (recommended: boolean, speeds: boolean) =>
     const cached = bundledCache.get(key)
     return cached
       ? Effect.succeed(cached)
-      : decodeSnapshot(snapshotText, recommended, speeds).pipe(
+      : Effect.try(load).pipe(
+          Effect.flatMap((text) => decodeSnapshot(text, recommended, speeds)),
           Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, snapshot))),
         )
   })
