@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
 import type { Extension } from "./extension.js"
-import { executeProgram } from "./interpreter/execute.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
@@ -176,6 +175,9 @@ export const make = <
       return prepared.catalog
     },
     execute: (code) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => extensionGlobals(ctx, extensions)),
+      Effect.gen(function* () {
+        const { executeProgram } = yield* Effect.promise(() => import("./interpreter/execute.js"))
+        return yield* executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => extensionGlobals(ctx, extensions))
+      }),
   }
 }
