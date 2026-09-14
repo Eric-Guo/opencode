@@ -15,7 +15,7 @@ import { AISDKNative } from "./aisdk-native.js"
 import { Provider } from "./provider.js"
 import { Variant } from "./variant.js"
 import { KV } from "./kv.js"
-import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
+import { load } from "./models-dev/snapshot.js"
 import { isV1, toV2 } from "./models-dev/v1.js"
 
 // Only the fields opencode reads are decoded. Unknown keys are ignored, and a model that
@@ -512,14 +512,15 @@ export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.
 // packages/core/src/models-dev/snapshot.txt and refreshed via
 // `bun run script/update-models-snapshot.ts`. Release builds bundle the live
 // catalog in its place when it can be fetched. Decoded and normalized once per
-// isolate: the snapshot is a multi-MB module-level constant and one isolate can
+// isolate: the normalized catalog occupies multiple MB and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
 let bundledCache: readonly Snapshot[] | undefined
 const bundledSnapshot = Effect.suspend(() =>
   bundledCache
     ? Effect.succeed(bundledCache)
-    : decodeSnapshot(snapshotText).pipe(
+    : Effect.try(load).pipe(
+        Effect.flatMap(decodeSnapshot),
         Effect.map((snapshot) => {
           bundledCache = snapshot
           return bundledCache
