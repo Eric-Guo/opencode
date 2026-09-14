@@ -1,0 +1,57 @@
+diff --git a/dist/recorder.js b/dist/recorder.js
+index 2ced706710302562a641a42930d5781721aeefd7..46d0181b5a88ad8d29491d803f3d6098a5584254 100644
+--- a/dist/recorder.js
++++ b/dist/recorder.js
+@@ -42,6 +42,7 @@ export class AudioRecorder {
+     #disposed = false;
+     #session = null;
+     #retained = null;
++    #failure = null;
+     #availability = { ...INITIAL_AVAILABILITY };
+     #status = {
+         state: 'idle',
+@@ -129,6 +130,7 @@ export class AudioRecorder {
+             });
+             const session = this.#createSession(recordingID, encoder, inspection.addon);
+             this.#session = session;
++            this.#failure = null;
+             let started = false;
+             if (inspection.status.backend === 'native' && inspection.addon) {
+                 started = this.#startNative(session, inspection.addon);
+@@ -209,6 +211,8 @@ export class AudioRecorder {
+         if (this.#retained?.id === recordingID) {
+             return copyBytes(this.#retained.bytes);
+         }
++        if (this.#failure?.id === recordingID)
++            throw this.#failure.error;
+         const session = this.#session;
+         if (!session || session.id !== recordingID) {
+             throw recorderError('RECORDING_ID_MISMATCH', `Recording ${recordingID} is not the current or retained recording.`);
+@@ -449,6 +453,10 @@ export class AudioRecorder {
+         const artifact = concatBytes(session.encodedChunks);
+         const endedAt = this.#runtime.now();
+         this.#updateProgress(session);
++        // Native callbacks can outlive capture; release the encoder and chunks too.
++        session.encoder = null;
++        session.encodedChunks = [];
++        this.#session = null;
+         if (isValidMp3(artifact)) {
+             this.#retained = { id: session.id, bytes: copyBytes(artifact) };
+             const partialError = session.terminalError ?? finalizationError;
+@@ -488,6 +496,7 @@ export class AudioRecorder {
+             errorMessage: failure.message,
+             guidance: this.#guidanceForError(failure.code),
+         };
++        this.#failure = { id: session.id, error: failure };
+         session.rejectResult(failure);
+     }
+     #updateProgress(session) {
+@@ -532,6 +541,8 @@ export class AudioRecorder {
+                 // The start failure remains the actionable error.
+             }
+         }
++        session.encoder = null;
++        session.encodedChunks = [];
+         session.resolveResult(new Uint8Array());
+         if (this.#session === session)
+             this.#session = null;

@@ -8,7 +8,10 @@ type EncodedAssetMap = Readonly<Record<string, { readonly content: string; reado
 
 export const load = Effect.fn("cli.app-assets.load")(function* () {
   const embedded = yield* Effect.tryPromise(() => import("virtual:opencode-app-assets")).pipe(Effect.option)
-  if (Option.isSome(embedded) && embedded.value.default.length > 0) return decodeArchive(embedded.value.default)
+  if (Option.isSome(embedded)) {
+    const archive = yield* Effect.try(() => embedded.value.default())
+    if (archive.length > 0) return decodeArchive(archive)
+  }
   if (!OPENCODE_LOCAL) return yield* Effect.fail(new Error("Web UI assets are missing from the CLI build"))
   return decode(yield* sourceAssets())
 })
