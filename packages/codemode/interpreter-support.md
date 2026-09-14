@@ -14,6 +14,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 
 ## Source and execution model
 
+- The interpreter and TypeScript compiler load on the first execution; preparing a tool catalog does not load them.
+
 - [x] JavaScript parsed with the latest syntax accepted by Acorn, then restricted by the interpreter allowlist.
       TypeScript-only syntax is rejected rather than stripped before execution.
 - [x] Top-level `await` and `return` through the program's implicit async-function scope.
