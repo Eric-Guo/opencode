@@ -1,7 +1,6 @@
 import { Effect, Schema } from "effect"
 import { fromJson } from "./data.js"
 import type { Extension } from "./extension.js"
-import { executeProgram } from "./interpreter/execute.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
 import { scanTools } from "./scan.js"
@@ -182,9 +181,13 @@ export const make = <
       return prepared.catalog
     },
     execute: (code, bindings) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
-        ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-        ...extensionGlobals(ctx, extensions),
-      ]),
+      Effect.gen(function* () {
+        const { executeProgram } = yield* Effect.promise(() => import("./interpreter/execute.js"))
+
+        return yield* executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
+          ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
+          ...extensionGlobals(ctx, extensions),
+        ])
+      }),
   }
 }
