@@ -24,15 +24,29 @@ export function rawTextPlugin(): Plugin {
   }
 }
 
-function appAssetsPlugin(archive: string): Plugin {
+export function payloadAssetsPlugin(archive: string): Plugin {
+  const snapshot = path.resolve(dir, "../core/src/models-dev/snapshot.ts")
   return {
-    name: "opencode:app-assets",
+    name: "opencode:payload-assets",
+    enforce: "pre",
+    async buildStart() {
+      this.emitFile({ type: "asset", fileName: "app-archive.txt", source: archive })
+      this.emitFile({
+        type: "asset",
+        fileName: "models-dev.json",
+        source: await readFile(path.resolve(dir, "../core/src/models-dev/snapshot.txt")),
+      })
+    },
     resolveId(id) {
       if (id === "virtual:opencode-app-assets") return "\0virtual:opencode-app-assets"
     },
     load(id) {
-      if (id !== "\0virtual:opencode-app-assets") return
-      return `export default ${JSON.stringify(archive)}`
+      if (id.replaceAll("\\", "/") === snapshot.replaceAll("\\", "/"))
+        return `import { readFileSync } from "node:fs"
+export function load() { return readFileSync(new URL("./models-dev.json", import.meta.url), "utf8") }`
+      if (id === "\0virtual:opencode-app-assets")
+        return `import { readFileSync } from "node:fs"
+export default function load() { return readFileSync(new URL("./app-archive.txt", import.meta.url), "utf8") }`
     },
   }
 }
@@ -55,6 +69,37 @@ function simulationGraphPlugin(): Plugin {
     name: "opencode:simulation-graph",
     generateBundle() {
       verifySimulationGraph(this.getModuleIds())
+    },
+  }
+}
+
+function serverGraphPlugin(): Plugin {
+  return {
+    name: "opencode:server-graph",
+    generateBundle(_, bundle) {
+      const visited = new Set<string>()
+      const visit = (file: string): string[] => {
+        const chunk = bundle[file]
+        if (!chunk || chunk.type !== "chunk" || visited.has(file)) return []
+        visited.add(file)
+        return [...Object.keys(chunk.modules), ...chunk.imports.flatMap(visit)]
+      }
+      const roots = Object.values(bundle).filter(
+        (chunk) =>
+          chunk.type === "chunk" &&
+          Object.keys(chunk.modules).some((id) =>
+            [
+              "/cli/src/node/index.ts",
+              "/cli/src/index.ts",
+              "/cli/src/commands/handlers/serve.ts",
+              "/server/src/process.ts",
+            ].some((entry) => id.replaceAll("\\", "/").endsWith(entry)),
+          ),
+      )
+      const eager = roots.flatMap((chunk) => visit(chunk.fileName)).map((id) => id.replaceAll("\\", "/"))
+      const forbidden = ["/node_modules/@opentui/core/", "/node_modules/typescript/", "/models-dev/snapshot.txt"]
+      const leaked = eager.filter((id) => forbidden.some((marker) => id.includes(marker)))
+      if (leaked.length > 0) this.error(`Server startup eagerly loads optional code or payloads: ${leaked.join(", ")}`)
     },
   }
 }
@@ -252,11 +297,12 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
   return defineConfig({
     root: dir,
     plugins: [
-      appAssetsPlugin(input.appArchive),
+      payloadAssetsPlugin(input.appArchive),
       rawTextPlugin(),
       runtimeRequirePlugin(),
       fffNodePlugin(),
       simulationGraphPlugin(),
+      serverGraphPlugin(),
       solid({
         solid: {
           generate: "universal",
@@ -278,12 +324,22 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
     ssr: { noExternal: true },
     build: {
       ssr: "src/node/index.ts",
+      ssrEmitAssets: true,
       target: "node26",
-      outDir: "dist-node",
+      outDir: "dist-node/assets/cli",
       emptyOutDir: false,
       minify: true,
       rollupOptions: {
-        output: output("opencode.mjs", nodePrelude(input)),
+        output: {
+          format: "esm",
+          entryFileNames: "index.mjs",
+          chunkFileNames: "[name]-[hash].mjs",
+          // CommonJS dependencies still need these bindings in each lazy chunk.
+          banner: `import __cjs_mod__ from "node:module"
+const require = __cjs_mod__.createRequire(import.meta.url)
+const __filename = import.meta.filename
+const __dirname = import.meta.dirname`,
+        },
       },
     },
   })
