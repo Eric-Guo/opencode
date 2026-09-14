@@ -9,11 +9,12 @@ import { build } from "vite"
 import { Script } from "@opencode/script"
 import pkg from "../package.json"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
-import { mainConfig } from "../vite.node.config"
+import { mainConfig, nodePrelude } from "../vite.node.config"
 import { sidecarConfig } from "../vite.sidecar.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact } from "./verify-artifact"
+import { collectFiles } from "./files"
 
 const NODE_VERSION = "26.8.1"
 const dir = path.resolve(import.meta.dirname, "..")
@@ -69,20 +70,23 @@ const builder =
 // Vite silently rewrites text imports of known asset types (.txt) to asset
 // URL strings when the raw-text plugin doesn't intercept them first — the
 // bundle still builds and `--help` still runs, so only content assertions
-// catch it. Guards the models.dev snapshot and the prompt/tool description
-// text that ships inside the bundle.
-async function assertTextImportsInlined(bundlePath: string) {
-  const bundle = await readFile(bundlePath, "utf8")
+// catch it. The large models snapshot is a separate payload; prompt/tool
+// descriptions should still be inlined into the JavaScript chunks.
+async function assertTextImportsInlined(root: string) {
+  const files = (await collectFiles(root)).filter((file) => file.endsWith(".mjs"))
   const markers = [
-    { marker: '"zhipuai"', source: "models-dev snapshot" },
-    { marker: "/assets/snapshot", source: "models-dev snapshot inlined as asset URL", forbidden: true },
-    { marker: '="/assets/', source: "text import inlined as asset URL", forbidden: true },
+    { marker: "/assets/snapshot", source: "models-dev snapshot inlined as asset URL" },
+    { marker: '="/assets/', source: "text import inlined as asset URL" },
   ]
-  for (const { marker, source, forbidden } of markers) {
-    const present = bundle.includes(marker)
-    if (forbidden ? present : !present)
-      throw new Error(`${bundlePath}: ${source} — text imports are not inlined as content (marker ${marker})`)
+  for (const file of files) {
+    const bundle = await readFile(path.join(root, file), "utf8")
+    for (const { marker, source } of markers) {
+      if (bundle.includes(marker))
+        throw new Error(`${file}: ${source} — text imports are not inlined as content (marker ${marker})`)
+    }
   }
+  if (!(await Bun.file(path.join(root, "models-dev.json")).json()).zhipuai)
+    throw new Error("Packaged models-dev snapshot is missing zhipuai")
 }
 
 for (const target of targets) {
@@ -100,11 +104,27 @@ for (const target of targets) {
   await copyNodeAssets(assets)
   if (!sidecarOnly) {
     await build(mainConfig(input))
-    await assertTextImportsInlined("dist-node/opencode.mjs")
+    await assertTextImportsInlined("dist-node/assets/cli")
+    // SEA's own import() only accepts builtins. A filesystem CommonJS loader
+    // enters Node's normal ESM loader, including top-level await and lazy imports.
+    await writeFile("dist-node/assets/cli/load.cjs", 'module.exports = import("./index.mjs")\n')
+    // Include code and payloads in the cache identity, even when native assets
+    // and the development version have not changed between builds.
+    const packaged = await seaAssetMap()
+    await writeFile(
+      "dist-node/opencode.mjs",
+      `${nodePrelude({
+        ...input,
+        assetHash: await hashNodeAssets(Object.entries(packaged).map(([key, source]) => ({ key, source }))),
+      })}\nawait require(__ocPath.join(__ocAssetRoot, "cli/load.cjs"))\n`,
+    )
   }
   await build(sidecarConfig(input))
   if (sidecarOnly) continue
-  if (bundleOnly) await verifyArtifact("dist-node/opencode.mjs")
+  if (bundleOnly) {
+    await verifyArtifact("dist-node/opencode.mjs")
+    await verifyArtifact("dist-node/assets")
+  }
 
   const host = target.platform === process.platform && target.arch === process.arch
   if (host) {

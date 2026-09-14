@@ -52,7 +52,7 @@
     "ws": "8.21.0"
   },
   "devDependencies": {
-    "@mixtint/audio-recorder-node": "1.0.0",
+    "@mixtint/audio-recorder-node": "1.0.1",
     "@opencode/script": "workspace:*",
     "@opencode/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",
