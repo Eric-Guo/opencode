@@ -9,10 +9,11 @@ type EncodedAssetMap = Readonly<Record<string, string>>
 
 export const load = Effect.fn("cli.app-assets.load")(function* () {
   const embedded = yield* Effect.tryPromise(() => import("virtual:opencode-app-assets")).pipe(Effect.option)
-  if (Option.isSome(embedded) && (Object.keys(embedded.value.default).length > 0 || !OPENCODE_LOCAL))
-    return lazy(embedded.value.default, (key) =>
-      brotliDecompressSync(Buffer.from(embedded.value.default[key]!, "base64")),
-    )
+  if (Option.isSome(embedded)) {
+    const assets = yield* Effect.try(() => JSON.parse(embedded.value.default()) as EncodedAssetMap)
+    if (Object.keys(assets).length > 0 || !OPENCODE_LOCAL)
+      return lazy(assets, (key) => brotliDecompressSync(Buffer.from(assets[key]!, "base64")))
+  }
   if (!OPENCODE_LOCAL) return yield* Effect.fail(new Error("Web UI assets are missing from the CLI build"))
   return yield* sourceAssets()
 })
