@@ -13,7 +13,7 @@ import { AISDKNative } from "./aisdk-native.js"
 import { Provider } from "./provider.js"
 import { Variant } from "./variant.js"
 import { KV } from "./kv.js"
-import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
+import { load } from "./models-dev/snapshot.js"
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -292,14 +292,15 @@ const defaultSource = "https://models.opencode.ai"
 // Bundled snapshot of https://models.opencode.ai/api.json, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
 // `bun run script/update-models-snapshot.ts`. Decoded and normalized once per
-// isolate: the snapshot is a multi-MB module-level constant and one isolate can
-// host many runtimes (Cloudflare colocates Durable Object instances), so
-// per-runtime decoding would multiply the cost.
+// isolate: the normalized catalog occupies multiple MB and one isolate can host
+// many runtimes (Cloudflare colocates Durable Object instances), so per-runtime
+// decoding would multiply the cost.
 let bundledCache: readonly Snapshot[] | undefined
 const bundledSnapshot = Effect.suspend(() =>
   bundledCache
     ? Effect.succeed(bundledCache)
-    : decodeCatalog(snapshotText).pipe(
+    : Effect.try(load).pipe(
+        Effect.flatMap(decodeCatalog),
         Effect.map((catalog) => {
           bundledCache = normalize(catalog)
           return bundledCache
