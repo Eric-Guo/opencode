@@ -111,6 +111,64 @@ const failed = (plugins: Plugin.Interface) =>
   )
 
 describe("PluginSupervisor reload", () => {
+  it.live("reuses module evaluation across Locations and eviction while repeating scoped setup and cleanup", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const root = path.join(directory.path, "shared-plugin")
+      const events = path.join(directory.path, "lifecycle.jsonl")
+      const refs = ["first", "second"].map((name) =>
+        Location.Ref.make({ directory: AbsolutePath.make(path.join(directory.path, name)) }),
+      )
+      yield* Effect.promise(async () => {
+        await Bun.write(
+          path.join(root, "index.ts"),
+          `import { appendFile } from "node:fs/promises"
+          const record = (event) => appendFile(${JSON.stringify(events)}, JSON.stringify(event) + "\\n")
+          await record(["evaluate"])
+          export default {
+            id: "shared",
+            async setup(ctx) {
+              await record(["setup", ctx.location.directory])
+              await ctx.command.transform(editor => editor.add({
+                name: "shared", description: ctx.location.directory, execute: async () => {},
+              }))
+              return () => record(["cleanup", ctx.location.directory])
+            },
+          }`,
+        )
+        await Promise.all(
+          refs.map((ref) =>
+            Bun.write(path.join(ref.directory, ".opencode/opencode.json"), JSON.stringify({ plugins: [root] })),
+          ),
+        )
+      })
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.forEach([refs[0], refs[1], refs[0]], (ref) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            const plugins = yield* Plugin.Service
+            const commands = yield* Command.Service
+            yield* plugins.awaitActivation
+            expect(yield* commands.get("shared")).toMatchObject({ description: ref.directory })
+          }).pipe(Effect.provide(locations.get(ref)), Effect.scoped)
+          yield* locations.invalidate(ref)
+        }),
+      )
+      expect(yield* Effect.promise(() => Bun.file(events).text())).toBe(
+        [
+          ["evaluate"],
+          ["setup", refs[0].directory],
+          ["cleanup", refs[0].directory],
+          ["setup", refs[1].directory],
+          ["cleanup", refs[1].directory],
+          ["setup", refs[0].directory],
+          ["cleanup", refs[0].directory],
+        ]
+          .map((event) => JSON.stringify(event) + "\n")
+          .join(""),
+      )
+    }),
+  )
   ;(
     [
       { name: "on a helper-only save", helper: "nested/helper.ts", touchEntry: false },
