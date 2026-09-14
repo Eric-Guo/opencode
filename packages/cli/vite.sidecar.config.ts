@@ -43,5 +43,4 @@ export default sidecarConfig({
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
-  appArchive: "",
 })
