@@ -1,18 +1,31 @@
 export * as ConfigWatch from "./watch.js"
 
 import path from "path"
+import { Effect } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
 import type { ConfigDiscovery } from "./discovery.js"
 
-export function plan(sources: ConfigDiscovery.Sources) {
+export const plan = Effect.fn("ConfigWatch.plan")(function* (sources: ConfigDiscovery.Sources) {
+  const fs = yield* FSUtil.Service
+  const userPresent = sources.user ? yield* fs.isDir(sources.user) : false
+  // A recursive watch cannot attach to a missing root. Follow its nearest
+  // existing ancestor until creation lets reconciliation watch the root itself.
+  let userEntry: string | undefined = sources.user
+  while (userEntry && !(yield* fs.isDir(path.dirname(userEntry)))) {
+    const parent = path.dirname(userEntry)
+    if (parent === userEntry) break
+    userEntry = parent
+  }
   const directories = [
     ...(sources.system?.present ? [sources.system.path] : []),
+    ...(sources.user && userPresent ? [sources.user] : []),
     ...(sources.global ? [sources.global] : []),
     ...sources.project.filter((root) => root.present).map((root) => root.path),
   ]
   const files = [
     ...(sources.system ? [sources.system.path] : []),
+    ...(userEntry ? [userEntry] : []),
     ...sources.direct,
     ...sources.project.map((root) => root.path),
     ...sources.claude,
@@ -38,4 +51,4 @@ export function plan(sources: ConfigDiscovery.Sources) {
       })),
     ].map((target) => [JSON.stringify(target), target satisfies Watcher.WatchInput]),
   )
-}
+})
