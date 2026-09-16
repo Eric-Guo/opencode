@@ -43,6 +43,7 @@ export const Server = {
           },
           config: {
             directory: configDirectory(),
+            user: Global.Path.config,
             project: !truthy(
               process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
             ),
