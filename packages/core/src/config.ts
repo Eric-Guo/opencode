@@ -63,8 +63,10 @@ export interface Interface {
 }
 
 export const Options = Schema.Struct({
+  // Standard user configuration still loads when the host selects a custom directory.
+  user: Schema.optional(Schema.String),
   project: Schema.optional(Schema.Boolean),
-  // false skips the system and global config dirs, ~/.claude, and ~/.agents;
+  // false skips system, user, and global config dirs, ~/.claude, and ~/.agents;
   // wellknown, file, and content entries still load.
   global: Schema.optional(Schema.Boolean),
   system: Schema.optional(Schema.Union([Schema.Boolean, Schema.String])),
@@ -331,7 +333,8 @@ export const layer = (options?: Options) =>
         )
         // Integration documents load right after managed policies: every remote, user, and project layer overrides
         // their settings, and since policies evaluate earliest-loaded first, only managed policies outrank theirs.
-        // Global entries sit below explicit and direct files; project directories rank above them.
+        // Standard user configuration follows wellknown defaults. The selected global
+        // directory, explicit files, and project configuration can override it.
         const globalSupplementary = sources.global ? yield* loadDirectory(sources.global).pipe(Effect.orDie) : []
         const projectSupplementary = yield* Effect.forEach(
           sources.project.filter((root) => root.present),
@@ -369,6 +372,7 @@ export const layer = (options?: Options) =>
           ...managedPolicies,
           ...integrated,
           ...wellknownDocuments.flat(),
+          ...(sources.user ? yield* loadDirectory(sources.user).pipe(Effect.orDie) : []),
           ...globalSupplementary,
           ...explicit,
           ...direct,
@@ -387,7 +391,7 @@ export const layer = (options?: Options) =>
       const requestReload = PubSub.publish(reloads, undefined).pipe(Effect.asVoid)
       const watched = yield* FiberMap.make<string>()
       const reconcile = Effect.fn("Config.reconcileWatches")(function* (sources: ConfigDiscovery.Sources) {
-        const plan = ConfigWatch.plan(sources)
+        const plan = yield* ConfigWatch.plan(sources)
         for (const key of Array.from(watched, ([key]) => key)) {
           if (!plan.has(key)) yield* FiberMap.remove(watched, key)
         }
