@@ -123,6 +123,7 @@ function makeRoutes<AuthError, AuthServices>(
     Global.node.replace(Global.layerWith(options.config?.directory ? { config: options.config.directory } : {})),
     Config.node.replace(
       Config.configured({
+        user: options.config?.user,
         project: options.config?.project,
         file: options.config?.file,
         content: options.config?.content,
