@@ -30,6 +30,7 @@ export const AppOptions = Schema.Struct({
   config: Schema.optional(
     Schema.Struct({
       directory: Schema.optional(Schema.String),
+      user: Schema.optional(Schema.String),
       project: Schema.optional(Schema.Boolean),
       claude: Schema.optional(Schema.Boolean),
       file: Schema.optional(Schema.String),
