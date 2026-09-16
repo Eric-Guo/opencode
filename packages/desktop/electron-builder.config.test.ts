@@ -154,23 +154,19 @@ test("the trimmed Zip.js package can still export compressed logs", async () => 
   }
 })
 
-for (const channel of ["dev", "beta", "prod"] as const) {
-  test(`does not bundle the CLI in ${channel} builds`, async () => {
-    const previous = process.env.OPENCODE_CHANNEL
-    process.env.OPENCODE_CHANNEL = channel
-    const module = await import(`./electron-builder.config.ts?no-cli-resource=${channel}`)
-    const config = module.default as Configuration
-    if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-    else process.env.OPENCODE_CHANNEL = previous
+test.each(channels)("bundles the CLI only in development ($channel)", async ({ channel }) => {
+  const config = await load(channel)
+  const cli = { from: "resources/", to: "", filter: ["opencode-cli", "opencode-cli.exe"] }
+  expect(config.files).toContain("!resources/opencode-cli*")
 
-    expect(config.files).toContain("!resources/opencode-cli*")
-    expect(config.extraResources).not.toContainEqual({
-      from: "resources/",
-      to: "",
-      filter: ["opencode-cli", "opencode-cli.exe"],
-    })
-  })
-}
+  if (channel === "dev") {
+    expect(config.extraResources).toContainEqual(cli)
+
+    return
+  }
+
+  expect(config.extraResources).not.toContainEqual(cli)
+})
 
 test("excludes non-Windows native dependencies from Windows builds", async () => {
   const module = await import("./electron-builder.config.ts?windows-native-dependencies")
@@ -194,4 +190,19 @@ test("excludes non-Windows native dependencies from Windows builds", async () =>
     "@yuuang/ffi-rs-win32-arm64-msvc",
     "@yuuang/ffi-rs-win32-x64-msvc",
   ].forEach((packageName) => expect(config.win?.files).not.toContain(`!**/node_modules/${packageName}{,/**/*}`))
+})
+
+
+test("bundled config excludes repository instructions and retains runtime files", async () => {
+  const config = await load("dev")
+  const resources = Array.isArray(config.extraResources) ? config.extraResources : []
+  const entry = resources.find((item) => typeof item === "object" && item.from === "resources/thape-config")
+
+  if (!entry || typeof entry === "string") throw new Error("Missing config packaging entry")
+  const filter = new FileMatcher(import.meta.dirname, "", (value: string) => value, entry.filter).createFilter()
+  const include = (name: string) => filter(path.join(import.meta.dirname, name), statSync(import.meta.filename))
+  expect(include("AGENTS.md")).toBe(false)
+  expect(include("opencode.json")).toBe(true)
+  expect(include("plugin/index.ts")).toBe(true)
+  expect(include("node_modules/effect/dist/index.js")).toBe(true)
 })
