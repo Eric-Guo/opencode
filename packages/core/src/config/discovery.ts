@@ -16,6 +16,7 @@ export interface Sources {
   readonly system?: { readonly path: AbsolutePath; readonly present: boolean }
   /** macOS MDM managed preferences plist (`ai.opencode.managed`), when one is deployed. */
   readonly preferences?: AbsolutePath
+  readonly user?: AbsolutePath
   readonly global?: AbsolutePath
   readonly explicit?: AbsolutePath
   readonly direct: readonly AbsolutePath[]
@@ -66,9 +67,10 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     return systemDirectory()
   })()
   const globalDirectory = AbsolutePath.make(global.config)
+  const user = options?.user ? AbsolutePath.make(yield* fs.resolve(path.resolve(options.user))) : undefined
+  const configDirectories = [globalDirectory, ...(system ? [system] : []), ...(user ? [user] : [])]
   const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
   const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
-  const configDirectories = [...(system ? [system] : []), globalDirectory]
   const globalRoots = yield* Effect.forEach(
     [...configDirectories, globalClaudeDirectory, globalAgentsDirectory],
     (item) => fs.resolve(item),
@@ -119,6 +121,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   return {
     system: globalEnabled && system ? { path: system, present: yield* fs.isDir(system) } : undefined,
     preferences,
+    user: globalEnabled && user !== globalRoots[0] ? user : undefined,
     global: globalEnabled ? globalDirectory : undefined,
     explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
     direct: visible.filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item))).toReversed(),
