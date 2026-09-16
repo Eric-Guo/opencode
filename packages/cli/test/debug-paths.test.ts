@@ -2,8 +2,18 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { tmpdir } from "../../core/test/fixture/tmpdir"
+import { isolatedEnv } from "./fixture/environment"
 
 describe("debug paths command", () => {
+  test("honors an explicit user config directory", async () => {
+    await using tmp = await tmpdir("opencode-debug-paths-")
+    const config = path.join(tmp.path, "custom-config")
+    const result = await cli(["debug", "paths", "config"], isolatedEnv(tmp.path, { OPENCODE_CONFIG_DIR: `  ${config}  ` }))
+    expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
+    expect(result.stdout.trim()).toBe(config)
+  })
+
   test("is included in troubleshooting help", async () => {
     const [debug, paths] = await Promise.all([cli(["debug", "--help"]), cli(["debug", "paths", "--help"])])
 
@@ -19,6 +29,7 @@ describe("debug paths command", () => {
 
     try {
       const result = await cli(["debug", "paths"], {
+        OPENCODE_CONFIG_DIR: undefined,
         XDG_DATA_HOME: path.join(root, "data"),
         XDG_CONFIG_HOME: path.join(root, "config"),
         XDG_CACHE_HOME: path.join(root, "cache"),
@@ -50,7 +61,7 @@ describe("debug paths command", () => {
   })
 })
 
-async function cli(args: string[], env?: Record<string, string>) {
+async function cli(args: string[], env?: Record<string, string | undefined>) {
   const child = Bun.spawn([process.execPath, "run", path.join(import.meta.dir, "../src/index.ts"), ...args], {
     cwd: path.join(import.meta.dir, ".."),
     env: { ...process.env, ...env },
