@@ -12,6 +12,7 @@ export const names = ["opencode.json", "opencode.jsonc"]
 
 /** Eligible sources in priority order, including paths that may appear later. */
 export interface Sources {
+  readonly user?: AbsolutePath
   readonly global?: AbsolutePath
   readonly explicit?: AbsolutePath
   readonly direct: readonly AbsolutePath[]
@@ -25,13 +26,17 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   const global = yield* Global.Service
   const location = yield* Location.Service
   const globalDirectory = AbsolutePath.make(global.config)
+  const user = options?.user ? AbsolutePath.make(yield* fs.resolve(path.resolve(options.user))) : undefined
+  const configDirectories = [globalDirectory, ...(user ? [user] : [])]
   const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
   const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
-  const globalRoots = yield* Effect.forEach([globalDirectory, globalClaudeDirectory, globalAgentsDirectory], (item) =>
-    fs.resolve(item),
+  const globalRoots = yield* Effect.forEach(
+    [...configDirectories, globalClaudeDirectory, globalAgentsDirectory],
+    (item) => fs.resolve(item),
   )
   const directories =
-    (yield* fs.resolve(location.directory)) === globalRoots[0] || options?.project === false
+    globalRoots.slice(0, configDirectories.length).includes(yield* fs.resolve(location.directory)) ||
+    options?.project === false
       ? []
       : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
   const discovered = yield* Effect.forEach(directories, (directory) =>
@@ -50,7 +55,10 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   )
 
   const globalEnabled = options?.global !== false
-  const globalFiles = yield* Effect.forEach(names, (name) => fs.resolve(path.join(globalDirectory, name)))
+  const globalFiles = yield* Effect.forEach(
+    configDirectories.flatMap((directory) => names.map((name) => path.join(directory, name))),
+    (file) => fs.resolve(file),
+  )
   // Global sources must not re-enter through the project walk.
   const visible = discovered
     .filter(({ resolved }) =>
@@ -61,6 +69,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     .map(({ item }) => item)
 
   return {
+    user: globalEnabled && user !== globalRoots[0] ? user : undefined,
     global: globalEnabled ? globalDirectory : undefined,
     explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
     direct: visible.filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item))).toReversed(),
