@@ -67,11 +67,15 @@ describe("ConfigPolicyPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("prevents project policy from overriding user-global policy", () =>
+  it.effect("prevents selected global and project policy from overriding standard user policy", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
-      yield* addPlugin([document(provider("deny", "openai")), document(provider("allow", "openai"))])
+      yield* addPlugin([
+        document(provider("deny", "openai")),
+        document(provider("allow", "openai")),
+        document(provider("allow", "openai")),
+      ])
 
       expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
     }),
