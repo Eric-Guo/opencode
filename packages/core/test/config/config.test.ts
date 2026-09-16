@@ -2,7 +2,7 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Logger, Schedule, Schema, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
@@ -78,6 +78,103 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.live("deduplicates standard user config that resolves to the selected global directory", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const global = AbsolutePath.make(path.join(tmp.path, "global"))
+      const user = path.join(tmp.path, "user")
+      const project = path.join(tmp.path, "project")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(global, { recursive: true })
+        await fs.mkdir(project, { recursive: true })
+        await fs.symlink(global, user, process.platform === "win32" ? "junction" : undefined)
+        await Bun.write(path.join(global, "opencode.json"), JSON.stringify({ shell: "user" }))
+      })
+      yield* Effect.gen(function* () {
+        const config = yield* Config.Service
+        const entries = yield* config.entries()
+        expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([global])
+        expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual(["user"])
+        const watcher = yield* Watcher.Test
+        expect(
+          (yield* watcher.subscriptions())
+            .filter((subscription) => subscription.type === "directory")
+            .map((item) => item.path),
+        ).toEqual([global])
+      }).pipe(Effect.provide(testLayer(project, global, project, undefined, undefined, undefined, undefined, { user })))
+    }),
+  )
+
+  it.live("excludes standard user config from the project walk when global config is disabled", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const global = path.join(tmp.path, "global")
+      const user = path.join(tmp.path, "user")
+      const project = path.join(user, "plugins", "demo")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project, { recursive: true })
+        await Bun.write(path.join(user, "opencode.json"), JSON.stringify({ shell: "user" }))
+      })
+      yield* Effect.gen(function* () {
+        const config = yield* Config.Service
+        expect(yield* config.entries()).toEqual([])
+      }).pipe(
+        Effect.provide(
+          testLayer(project, global, project, undefined, undefined, undefined, undefined, { user, global: false }),
+        ),
+      )
+    }),
+  )
+
+  it.live("reloads standard user config when its missing ancestors and root are created or recreated", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const global = path.join(tmp.path, "custom")
+      const user = path.join(tmp.path, "home", ".config", "opencode")
+      yield* Effect.gen(function* () {
+        const config = yield* Config.Service
+        const waitForShell = (shell: string | undefined) =>
+          config.entries().pipe(
+            Effect.map((entries) => Config.latest(entries, "shell")),
+            Effect.repeat({ while: (value) => value !== shell, schedule: Schedule.spaced("20 millis") }),
+            Effect.timeout("5 seconds"),
+          )
+        expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+        // Let startup readiness rescans finish so only filesystem events can find the new directory.
+        yield* Effect.sleep("250 millis")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(user, { recursive: true })
+          await Bun.write(path.join(user, "opencode.jsonc"), JSON.stringify({ shell: "created" }))
+        })
+        expect(yield* waitForShell("created")).toBe("created")
+        yield* Effect.promise(() => fs.rm(user, { recursive: true }))
+        expect(yield* waitForShell(undefined)).toBeUndefined()
+        yield* Effect.promise(async () => {
+          await fs.mkdir(user, { recursive: true })
+          await Bun.write(path.join(user, "opencode.jsonc"), JSON.stringify({ shell: "recreated" }))
+        })
+        expect(yield* waitForShell("recreated")).toBe("recreated")
+        yield* Effect.promise(() => Bun.write(path.join(user, "opencode.jsonc"), JSON.stringify({ shell: "edited" })))
+        expect(yield* waitForShell("edited")).toBe("edited")
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+            Config.node.replace(Config.configured({ user, project: false })),
+            Location.node.replace(
+              Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+              ),
+            ),
+            Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+            Credential.node.replace(emptyCredentialNode),
+            WellKnown.node.replace(emptyWellknownNode),
+          ]),
+        ),
+      )
+    }),
+  )
+
   it.live("excludes home-level claude and agents directories when global is disabled", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
@@ -448,17 +545,18 @@ describe("Config", () => {
     expect(Config.latest(entries, "default_agent")).toBeUndefined()
   })
 
-  it.live("tolerates unavailable authenticated wellknown config and reloads it later", () =>
+  it.live("keeps standard user config above wellknown defaults when an empty custom directory is selected", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
         Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
+          const global = path.join(tmp.path, "custom")
+          const user = path.join(tmp.path, "user")
           const project = path.join(tmp.path, "project")
           yield* Effect.promise(async () => {
-            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(user, { recursive: true })
             await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
+            await fs.writeFile(path.join(user, "opencode.json"), JSON.stringify({ shell: "user" }))
             await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
           })
 
@@ -520,7 +618,7 @@ describe("Config", () => {
             expect(Config.latest(initial, "shell")).toBe("project")
             expect(
               initial.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
-            ).toEqual(["global", "project"])
+            ).toEqual(["user", "project"])
             const updated = yield* bus
               .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
@@ -536,10 +634,18 @@ describe("Config", () => {
             const refreshed = yield* config.entries()
             expect(Config.latest(refreshed, "shell")).toBe("project")
             expect(
+              Config.latest(
+                refreshed.filter((entry) => entry.path !== path.join(project, "opencode.json")),
+                "shell",
+              ),
+            ).toBe("user")
+            expect(
               refreshed.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
-            ).toEqual(["next", "global", "project"])
+            ).toEqual(["next", "user", "project"])
           }).pipe(
-            Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
+            Effect.provide(
+              testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, { user }),
+            ),
           )
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
