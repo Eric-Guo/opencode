@@ -184,6 +184,8 @@ const getBase = (appId: string): Configuration => ({
       to: "thape-config",
       filter: [
         "**/*",
+        // Repository maintenance instructions must not become global session instructions.
+        "!AGENTS.md",
         "!**/.git/**",
         "!tmp/**",
         "!opencode-thape.sublime-workspace",
