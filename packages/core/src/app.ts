@@ -2,6 +2,7 @@ export * as App from "./app.js"
 
 import { Context, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import pkg from "../package.json" with { type: "json" }
 
 export interface Info {
   readonly name: string
@@ -22,7 +23,12 @@ export function make(input: Partial<Info> = {}): Info {
 }
 
 export function useragent(app: Info) {
-  return `opencode/${app.channel}/${app.version}/${app.name}`
+  // Development build identifiers do not represent the version used by provider compatibility checks.
+  const version =
+    app.version === "local" || app.version === "unknown" || /^0\.0\.0(?:-|$)/.test(app.version)
+      ? pkg.version
+      : app.version
+  return `opencode/${app.channel}/${version}/${app.name}`
 }
 
 export const layer = (input?: Partial<Info>) => Layer.succeed(Metadata, make(input))
