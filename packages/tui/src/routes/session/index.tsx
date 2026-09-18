@@ -2513,7 +2513,7 @@ export function GeneratedFile(props: { part: SessionMessageAssistantFile; width:
           />
         </box>
       </Show>
-      <text fg={theme.text.subdued}>Generated file: {props.part.filename ?? props.part.mime}</text>
+      <text fg={theme.text.muted}>Generated file: {props.part.filename ?? props.part.mime}</text>
     </box>
   )
 }
