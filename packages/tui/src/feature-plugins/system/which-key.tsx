@@ -88,7 +88,7 @@ function text(value: unknown) {
 
 function skin(context: Plugin.Context): Skin {
   return {
-    panel: context.theme.background.surface.overlay,
+    panel: context.theme.background.raised.high,
     text: context.theme.text.default,
     muted: context.theme.text.subdued,
     subtle: context.theme.border.default,
