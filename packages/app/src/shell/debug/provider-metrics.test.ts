@@ -151,3 +151,17 @@ test("uses the first tool call as first output for tool-first history", () => {
     e2e: 2_800,
   })
 })
+
+test("leaves file-first history unavailable even when a later part has timing", () => {
+  expect(
+    projectedProviderMetrics([
+      {
+        ...assistant,
+        content: [
+          { type: "file", id: "file_1", mime: "image/png", url: "data:image/png;base64,aGVsbG8=" },
+          tool(2_500),
+        ],
+      },
+    ]),
+  ).toEqual({ tps: undefined, ttft: undefined, ttfa: undefined, e2e: 2_800 })
+})
