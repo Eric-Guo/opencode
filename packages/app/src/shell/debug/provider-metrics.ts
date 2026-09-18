@@ -87,8 +87,8 @@ export function foldProviderMetrics(events: readonly ProviderMetricEvent[]) {
 }
 
 /**
- * Baseline from already-loaded history. Text parts carry no start timestamp yet, so TTFT, TTFA,
- * and TPS stay unavailable for text-first requests until a live request supplies them.
+ * Baseline from already-loaded history. Text and file parts carry no start timestamp yet, so TTFT,
+ * TTFA, and TPS stay unavailable for requests starting with those parts until a live request supplies them.
  */
 export function projectedProviderMetrics(messages: readonly SessionMessageInfo[]): ProviderMetrics | undefined {
   const message = messages.findLast(
@@ -96,9 +96,9 @@ export function projectedProviderMetrics(messages: readonly SessionMessageInfo[]
       item.type === "assistant" && item.time.streamed !== undefined && item.tokens !== undefined,
   )
   if (!message) return
-  // Content is chronological; only a non-text head carries the first-output time.
+  // Content is chronological; only a reasoning or tool head carries the first-output time.
   const head = message.content[0]
-  const first = head && head.type !== "text" ? head.time?.created : undefined
+  const first = head?.type === "reasoning" || head?.type === "tool" ? head.time?.created : undefined
   // Reasoning ends when the answer starts, so a reasoning part right before the first text
   // approximates the live `session.text.started` timestamp.
   const text = message.content.findIndex((item) => item.type === "text")
