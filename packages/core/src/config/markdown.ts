@@ -3,10 +3,11 @@ export * as ConfigMarkdown from "./markdown.js"
 import matter from "gray-matter"
 export function parse(content: string) {
   const template = substituteEnv(content)
+  // Passing options bypasses gray-matter's unbounded cache of full input strings.
   try {
-    return matter(template)
+    return matter(template, {})
   } catch {
-    return matter(sanitize(template))
+    return matter(sanitize(template), {})
   }
 }
 
