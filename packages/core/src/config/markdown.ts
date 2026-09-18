@@ -6,7 +6,7 @@ import { InstructionVariable } from "../instruction-variable.js"
 export function parse(content: string) {
   const template = InstructionVariable.substitute(content)
 
-  // Passing options bypasses gray-matter's module-global content cache, which
+  // Passing options bypasses gray-matter's unbounded module-global cache, which
   // it populates before parsing: a failed YAML parse poisons the entry and
   // every later parse of the same content replays it without throwing, so the
   // sanitize fallback below never runs. Upstream: jonschlinkert/gray-matter#166.
