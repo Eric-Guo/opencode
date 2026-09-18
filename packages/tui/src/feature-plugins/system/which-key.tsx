@@ -46,7 +46,7 @@ const UNKNOWN = "Unknown"
 
 type Layout = "dock" | "overlay"
 
-type Color = Plugin.Context["theme"]["text"]["default"]
+type Color = Plugin.Context["theme"]["text"]["base"]
 
 type Skin = {
   panel: Color
@@ -88,11 +88,11 @@ function text(value: unknown) {
 
 function skin(context: Plugin.Context): Skin {
   return {
-    panel: context.theme.background.surface.overlay,
-    text: context.theme.text.default,
-    muted: context.theme.text.subdued,
-    subtle: context.theme.border.default,
-    accent: context.theme.text.action.primary.default,
+    panel: context.theme.background.raised.high,
+    text: context.theme.text.base,
+    muted: context.theme.text.muted,
+    subtle: context.theme.border.base,
+    accent: context.theme.text.action.primary.base,
     tab: context.theme.background.action.primary.selected,
     tabText: context.theme.text.action.primary.selected,
   }
