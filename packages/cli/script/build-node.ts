@@ -16,7 +16,7 @@ import { buildAppArchive } from "./app-assets"
 import { verifyArtifact } from "./verify-artifact"
 import { collectFiles } from "./files"
 
-const NODE_VERSION = "26.8.1"
+const NODE_VERSION = "26.8.2"
 const dir = path.resolve(import.meta.dirname, "..")
 const outdir = path.resolve(
   dir,
