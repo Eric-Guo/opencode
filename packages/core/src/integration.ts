@@ -370,7 +370,7 @@ const layer = Layer.effect(
         .toReversed()
       const names = (entry?.methods ?? []).filter((method) => method.type === "env").flatMap((method) => method.names)
       const env =
-        entry?.ref.id === KimiKeyRotation.integrationID
+        entry && KimiKeyRotation.supports(entry.ref.id)
           ? yield* kimi.connections(names)
           : names.filter((name) => process.env[name]).map((name) => ({ type: "env" as const, name }))
       return [...credentials, ...env]
