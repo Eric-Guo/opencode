@@ -11,6 +11,16 @@ import { KV } from "../kv.js"
 import { KimiEnvironment } from "./kimi-environment.js"
 
 export const integrationID = Integration.ID.make("kimi-for-coding")
+const integrationIDs = [
+  integrationID,
+  Integration.ID.make("kimi-code-plan-cn"),
+  Integration.ID.make("kimi-code-plan-global"),
+]
+
+export function supports(id: string) {
+  return integrationIDs.some((integrationID) => integrationID === id)
+}
+
 export const cooldown = 5 * 60 * 60 * 1000
 
 const Slot = Schema.Struct({
@@ -67,17 +77,21 @@ export const layer = Layer.effect(
 
     const switched = (previous: string | undefined, promoted: string | undefined) => {
       if (!previous || !promoted || previous === promoted) return Effect.void
-      return bus
-        .publish(
-          Integration.Event.ConnectionSwitched,
-          {
-            integrationID,
-            previous: connection(previous),
-            promoted: connection(promoted),
-          },
-          { global: true },
-        )
-        .pipe(Effect.asVoid)
+      // The legacy and regional integrations share the same environment key pool.
+      return Effect.forEach(
+        integrationIDs,
+        (integrationID) =>
+          bus.publish(
+            Integration.Event.ConnectionSwitched,
+            {
+              integrationID,
+              previous: connection(previous),
+              promoted: connection(promoted),
+            },
+            { global: true },
+          ),
+        { discard: true },
+      )
     }
 
     return Service.of({

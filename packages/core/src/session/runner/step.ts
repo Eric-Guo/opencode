@@ -189,15 +189,22 @@ export const make = Effect.gen(function* () {
           baseLLMError &&
           llmFailure?.reason._tag === "QuotaExceeded" &&
           llmFailure.reason.classification === "rolling-window" &&
-          input.model.connection?.integrationID === KimiKeyRotation.integrationID &&
+          input.model.connection &&
+          KimiKeyRotation.supports(input.model.connection.integrationID) &&
           input.model.connection.ref.type === "env" &&
           input.model.connection.fingerprint
-            ? yield* kimi.fail({
-                connection: input.model.connection.ref,
-                fingerprint: input.model.connection.fingerprint,
-              })
+            ? {
+                integrationID: input.model.connection.integrationID,
+                failure: yield* kimi.fail({
+                  connection: input.model.connection.ref,
+                  fingerprint: input.model.connection.fingerprint,
+                }),
+              }
             : undefined
-        const llmError = baseLLMError && fallback ? kimiFallbackError(baseLLMError, fallback) : baseLLMError
+        const llmError =
+          baseLLMError && fallback?.failure
+            ? kimiFallbackError(baseLLMError, fallback.failure, fallback.integrationID)
+            : baseLLMError
         const tokens = recorded.finish?.usage
         yield* Effect.annotateCurrentSpan({
           ...(firstOutputAt === undefined ? {} : { "opencode.llm.first_output_ms": firstOutputAt - started }),
@@ -326,7 +333,11 @@ const isInterruptedStream = (failure: AIError) => {
   return false
 }
 
-function kimiFallbackError(error: SessionError.Error, fallback: KimiKeyRotation.Failure): SessionError.Error {
+function kimiFallbackError(
+  error: SessionError.Error,
+  fallback: KimiKeyRotation.Failure,
+  integrationID: SessionError.ConnectionFallbackRecovery["integrationID"],
+): SessionError.Error {
   const unavailableUntil = new Date(fallback.unavailableUntil).toISOString()
   if (fallback.promoted)
     return {
@@ -335,7 +346,7 @@ function kimiFallbackError(error: SessionError.Error, fallback: KimiKeyRotation.
       ...(error.status === undefined ? {} : { status: error.status }),
       recovery: {
         type: "connection-fallback",
-        integrationID: KimiKeyRotation.integrationID,
+        integrationID,
         previous: fallback.previous,
         promoted: fallback.promoted,
         unavailableUntil: fallback.unavailableUntil,
