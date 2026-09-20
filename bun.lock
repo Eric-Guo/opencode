@@ -32,7 +32,7 @@
     },
     "packages/7777": {
       "name": "@opencode/7777",
-      "version": "2.0.7",
+      "version": "2.0.9",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/schema": "workspace:*",
