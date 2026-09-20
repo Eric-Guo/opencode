@@ -1,7 +1,7 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode/schema/money"
-import { Context, Effect, Exit, Layer, Scope } from "effect"
+import { Context, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Integration } from "@opencode/core/integration"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -11,6 +11,9 @@ import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { ModelsDevPlugin } from "@opencode/core/plugin/models-dev"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { KimiKeyRotation } from "@opencode/core/integration/kimi-key-rotation"
+import { Hash } from "@opencode/util/hash"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { ProviderPlugins } from "@opencode/core/plugin/provider"
@@ -32,6 +35,12 @@ const layer = AppNodeBuilder.build(LayerNode.group([Provider.node, Model.node, I
 const it = testEffect(layer)
 const real = testEffect(PluginTestLayer)
 const isolated = testEffect(Layer.empty)
+const kimi = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([ModelResolver.node, Provider.node, Integration.node, KimiKeyRotation.node, Bus.node]),
+    [Location.node.replace(locationLayer)],
+  ),
+)
 const models = (file: string) =>
   AppNodeBuilder.build(ModelsDev.node, [ModelsDev.node.replace(ModelsDev.configured({ file, fetch: false }))])
 
@@ -714,7 +723,7 @@ describe("ModelsDevPlugin", () => {
     }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),
   )
 
-  it.effect("registers all configured environment slots for Kimi", () =>
+  kimi.effect("registers and rotates Kimi environment slots for legacy and regional providers", () =>
     withEnv(
       {
         KIMI_API_KEY: "account-a",
@@ -726,7 +735,9 @@ describe("ModelsDevPlugin", () => {
         Effect.gen(function* () {
           const integrations = yield* Integration.Service
           const providers = yield* Provider.Service
-          const providerID = Provider.ID.make("kimi-for-coding")
+          const resolver = yield* ModelResolver.Service
+          const rotation = yield* KimiKeyRotation.Service
+          const ids = ["kimi-for-coding", "kimi-code-plan-cn", "kimi-code-plan-global"].map((id) => Provider.ID.make(id))
           yield* ModelsDevPlugin.effect(
             host({
               provider: providerHost(providers),
@@ -737,37 +748,91 @@ describe("ModelsDevPlugin", () => {
               ModelsDev.Service,
               ModelsDev.Service.of({
                 get: () =>
-                  Effect.succeed([
-                    {
+                  Effect.succeed(
+                    ids.map((providerID) => ({
                       info: {
                         id: providerID,
                         name: "Kimi For Coding",
                         activation: "auto",
-                        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+                        package: "@opencode/ai/providers/openai-compatible",
+                        settings: { baseURL: "https://kimi.test/v1" },
                       },
                       environment: ["KIMI_API_KEY"],
                       models: [],
-                    },
-                  ] satisfies readonly ModelsDev.Snapshot[]),
+                    })) satisfies readonly ModelsDev.Snapshot[],
+                  ),
                 refresh: () => Effect.void,
               }),
             ),
           )
 
-          expect((yield* integrations.get(Integration.ID.make(providerID)))?.methods).toContainEqual({
-            type: "env",
-            names: ["KIMI_API_KEY", "KIMI_API_KEY_2", "KIMI_API_KEY_3", "KIMI_API_KEY_4"],
+          yield* Effect.forEach(ids, (providerID) =>
+            Effect.gen(function* () {
+              expect((yield* integrations.get(Integration.ID.make(providerID)))?.methods).toContainEqual({
+                type: "env",
+                names: ["KIMI_API_KEY", "KIMI_API_KEY_2", "KIMI_API_KEY_3", "KIMI_API_KEY_4"],
+              })
+              expect((yield* integrations.get(Integration.ID.make(providerID)))?.connections).toEqual([
+                { type: "env", name: "KIMI_API_KEY" },
+                { type: "env", name: "KIMI_API_KEY_2" },
+                { type: "env", name: "KIMI_API_KEY_3" },
+                { type: "env", name: "KIMI_API_KEY_4" },
+              ])
+              expect(yield* integrations.connection.resolve({ type: "env", name: "KIMI_API_KEY_4" })).toMatchObject({
+                type: "key",
+                key: "account-d",
+              })
+              expect(
+                (yield* resolver.resolveModel(
+                  Model.Info.make({
+                    ...Model.Info.default(providerID, Model.ID.make("k3-256k")),
+                    package: "@opencode/ai/providers/openai-compatible",
+                  }),
+                )).connection,
+              ).toEqual({
+                integrationID: Integration.ID.make(providerID),
+                ref: { type: "env", name: "KIMI_API_KEY" },
+                fingerprint: Hash.sha256("account-a"),
+              })
+            }),
+          )
+
+          const bus = yield* Bus.Service
+          const switched = yield* bus.subscribe(Integration.Event.ConnectionSwitched).pipe(
+            Stream.take(ids.length),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          yield* rotation.fail({
+            connection: { type: "env", name: "KIMI_API_KEY" },
+            fingerprint: Hash.sha256("account-a"),
           })
-          expect((yield* integrations.get(Integration.ID.make(providerID)))?.connections).toEqual([
-            { type: "env", name: "KIMI_API_KEY" },
-            { type: "env", name: "KIMI_API_KEY_2" },
-            { type: "env", name: "KIMI_API_KEY_3" },
-            { type: "env", name: "KIMI_API_KEY_4" },
-          ])
-          expect(yield* integrations.connection.resolve({ type: "env", name: "KIMI_API_KEY_4" })).toMatchObject({
-            type: "key",
-            key: "account-d",
-          })
+          expect((yield* Fiber.join(switched)).map((event) => event.data)).toEqual(
+            ids.map((id) => ({
+              integrationID: Integration.ID.make(id),
+              previous: { type: "env", name: "KIMI_API_KEY" },
+              promoted: { type: "env", name: "KIMI_API_KEY_2" },
+            })),
+          )
+          yield* Effect.forEach(ids, (providerID) =>
+            Effect.gen(function* () {
+              expect(yield* integrations.connection.active(Integration.ID.make(providerID))).toEqual({
+                type: "env",
+                name: "KIMI_API_KEY_2",
+              })
+              expect(
+                (yield* resolver.resolveModel(
+                  Model.Info.make({
+                    ...Model.Info.default(providerID, Model.ID.make("k3-256k")),
+                    package: "@opencode/ai/providers/openai-compatible",
+                  }),
+                )).connection,
+              ).toMatchObject({
+                ref: { type: "env", name: "KIMI_API_KEY_2" },
+                fingerprint: Hash.sha256("account-b"),
+              })
+            }),
+          )
         }),
     ),
   )
