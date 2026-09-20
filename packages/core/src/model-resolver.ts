@@ -402,9 +402,7 @@ export const layer = Layer.effect(
               connection: {
                 integrationID,
                 ref: connection,
-                ...(integrationID === KimiKeyRotation.integrationID &&
-                connection.type === "env" &&
-                credential?.type === "key"
+                ...(KimiKeyRotation.supports(integrationID) && connection.type === "env" && credential?.type === "key"
                   ? { fingerprint: Hash.sha256(credential.key) }
                   : {}),
               },
