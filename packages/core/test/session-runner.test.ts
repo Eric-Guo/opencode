@@ -21,6 +21,7 @@ import {
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/route/client"
+import { RequestExecutor } from "@opencode/ai/route"
 import { TestLLM } from "@opencode/ai/testing"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Database } from "@opencode/core/database/database"
@@ -89,6 +90,7 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { Integration } from "@opencode/core/integration"
 import { KimiEnvironment } from "@opencode/core/integration/kimi-environment"
 import { KimiKeyRotation } from "@opencode/core/integration/kimi-key-rotation"
 import { Hash } from "@opencode/util/hash"
@@ -5691,54 +5693,62 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
   })
+  ;["kimi-for-coding", "kimi-code-plan-cn", "kimi-code-plan-global"].forEach((integrationID) => {
+    it.effect(`rotates through ${integrationID} keys without replaying failed steps`, () => {
+      const keys = ["runner-account-a", "runner-account-b", "runner-account-c", "runner-account-d"]
+      return withEnv(
+        {
+          ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
+          ...Object.fromEntries(keys.map((key, index) => [KimiEnvironment.name(index), key])),
+        },
+        () =>
+          Effect.gen(function* () {
+            const s = yield* setup
+            yield* Effect.forEach(keys, (key, index) =>
+              Effect.gen(function* () {
+                const failure =
+                  index % 2 === 0
+                    ? kimiRollingQuota()
+                    : RequestExecutor.httpFailure({
+                        message:
+                          "You've reached your concurrent request limit. Please wait for your ongoing requests to finish and try again.",
+                        status: 403,
+                      })
+                s.currentConnection = {
+                  integrationID: Integration.ID.make(integrationID),
+                  ref: { type: "env", name: KimiEnvironment.name(index) },
+                  fingerprint: Hash.sha256(key),
+                }
+                yield* s.llm.push(Stream.fail(failure))
 
-  it.effect("rotates through Kimi keys without replaying failed steps", () => {
-    const keys = ["runner-account-a", "runner-account-b", "runner-account-c", "runner-account-d"]
-    return withEnv(
-      {
-        ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
-        ...Object.fromEntries(keys.map((key, index) => [KimiEnvironment.name(index), key])),
-      },
-      () =>
-        Effect.gen(function* () {
-          const s = yield* setup
-          yield* Effect.forEach(keys, (key, index) =>
-            Effect.gen(function* () {
-              const failure = kimiRollingQuota()
-              s.currentConnection = {
-                integrationID: KimiKeyRotation.integrationID,
-                ref: { type: "env", name: KimiEnvironment.name(index) },
-                fingerprint: Hash.sha256(key),
-              }
-              yield* s.llm.push(Stream.fail(failure))
-
-              expect(yield* s.runPrompt("Rotate Kimi account").pipe(Effect.flip)).toBe(failure)
-              expect(s.requests).toHaveLength(index + 1)
-              expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
-              const assistant = (yield* s.context).filter((message) => message.type === "assistant").at(-1)
-              if (index === keys.length - 1) {
+                expect(yield* s.runPrompt("Rotate Kimi account").pipe(Effect.flip)).toBe(failure)
+                expect(s.requests).toHaveLength(index + 1)
+                expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+                const assistant = (yield* s.context).filter((message) => message.type === "assistant").at(-1)
+                if (index === keys.length - 1) {
+                  expect(assistant?.error).toMatchObject({
+                    type: "provider.quota",
+                    message: expect.stringContaining("All configured Kimi accounts are cooling down"),
+                  })
+                  expect(assistant?.error?.recovery).toBeUndefined()
+                  return
+                }
                 expect(assistant?.error).toMatchObject({
                   type: "provider.quota",
-                  message: expect.stringContaining("All configured Kimi accounts are cooling down"),
+                  message: expect.stringContaining(`${KimiEnvironment.name(index + 1)} is now selected`),
+                  recovery: {
+                    type: "connection-fallback",
+                    integrationID,
+                    previous: { type: "env", name: KimiEnvironment.name(index) },
+                    promoted: { type: "env", name: KimiEnvironment.name(index + 1) },
+                    unavailableUntil: KimiKeyRotation.cooldown,
+                  },
                 })
-                expect(assistant?.error?.recovery).toBeUndefined()
-                return
-              }
-              expect(assistant?.error).toMatchObject({
-                type: "provider.quota",
-                message: expect.stringContaining(`${KimiEnvironment.name(index + 1)} is now selected`),
-                recovery: {
-                  type: "connection-fallback",
-                  integrationID: "kimi-for-coding",
-                  previous: { type: "env", name: KimiEnvironment.name(index) },
-                  promoted: { type: "env", name: KimiEnvironment.name(index + 1) },
-                  unavailableUntil: KimiKeyRotation.cooldown,
-                },
-              })
-            }),
-          )
-        }),
-    )
+              }),
+            )
+          }),
+      )
+    })
   })
 
   scenario("settles malformed streamed tool input before the provider failure", function* (s) {
