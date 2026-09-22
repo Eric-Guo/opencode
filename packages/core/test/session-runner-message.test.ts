@@ -115,8 +115,7 @@ describe("toLLMMessages", () => {
     expect(messages[0]?.content).toEqual([
       {
         type: "media",
-        mediaType: "image/png",
-        data: "data:image/png;base64,aGVsbG8=",
+        media: Media.base64("aGVsbG8=", "image/png"),
         filename: "generated-image.png",
         providerMetadata: { provider: { thoughtSignature: "image-signature" } },
       },
