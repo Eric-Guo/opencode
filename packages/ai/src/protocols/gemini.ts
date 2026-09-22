@@ -667,6 +667,19 @@ const step = (state: ParserState, event: GeminiEvent) => {
     else if (signature !== undefined && "text" in part) textSignature = signature
     // Image-capable Gemini models return generated images as inline data parts; surface them as first-class output.
     if ("inlineData" in part) {
+      if (part.thought) continue
+      if (reasoningId !== undefined) {
+        lifecycle = Lifecycle.reasoningEnd(
+          lifecycle,
+          events,
+          reasoningId,
+          reasoningSignature
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+            : undefined,
+        )
+        reasoningId = undefined
+        reasoningSignature = undefined
+      }
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.media({
@@ -729,29 +742,6 @@ const step = (state: ParserState, event: GeminiEvent) => {
         textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
       )
       textSignature = undefined
-      continue
-    }
-
-    if ("inlineData" in part) {
-      if (part.thought) continue
-      lifecycle = Lifecycle.reasoningEnd(
-        lifecycle,
-        events,
-        "reasoning-0",
-        reasoningSignature
-          ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
-          : undefined,
-      )
-      lifecycle = Lifecycle.stepStart(lifecycle, events)
-      events.push(
-        LLMEvent.file({
-          mediaType: part.inlineData.mimeType,
-          data: part.inlineData.data,
-          providerMetadata: part.thoughtSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
-            : undefined,
-        }),
-      )
       continue
     }
 
