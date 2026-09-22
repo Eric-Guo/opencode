@@ -1534,7 +1534,7 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("emits generated inline images as file events", () =>
+  it.effect("emits generated inline images as media events", () =>
     Effect.gen(function* () {
       const body = sseEvents({
         candidates: [
@@ -1560,13 +1560,12 @@ describe("Gemini route", () => {
       })
       const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
 
-      expect(response.events.find((event) => event.type === "file")).toEqual({
-        type: "file",
-        mediaType: "image/png",
-        data: "AAECAw==",
+      expect(response.events.find((event) => event.type === "media")).toEqual({
+        type: "media",
+        media: Media.base64("AAECAw==", "image/png"),
         providerMetadata: { google: { thoughtSignature: "final_image" } },
       })
-      expect(response.events.filter((event) => event.type === "file")).toHaveLength(1)
+      expect(response.events.filter((event) => event.type === "media")).toHaveLength(1)
       expect(response.message.content).toEqual([
         {
           type: "text",
@@ -1575,8 +1574,7 @@ describe("Gemini route", () => {
         },
         {
           type: "media",
-          mediaType: "image/png",
-          data: "AAECAw==",
+          media: Media.base64("AAECAw==", "image/png"),
           providerMetadata: { google: { thoughtSignature: "final_image" } },
         },
       ])
