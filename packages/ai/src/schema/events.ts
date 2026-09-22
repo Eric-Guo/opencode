@@ -654,8 +654,10 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
     case "file":
       return appendContent(next, {
         type: "media",
-        mediaType: event.mediaType,
-        data: event.data,
+        media:
+          typeof event.data === "string"
+            ? (Media.parseDataUrl(event.data) ?? Media.base64(event.data, event.mediaType))
+            : Media.bytes(event.data, event.mediaType),
         providerMetadata: event.providerMetadata,
       })
     case "text-start":
