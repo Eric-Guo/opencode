@@ -182,8 +182,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
       return [
         {
           type: "media",
-          mediaType: item.mime,
-          data: item.url,
+          media: Media.parseDataUrl(item.url) ?? Media.url(item.url, { mediaType: item.mime }),
           filename: item.filename,
           providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.state) : undefined,
         },
