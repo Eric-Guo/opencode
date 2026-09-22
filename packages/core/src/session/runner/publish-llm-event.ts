@@ -437,8 +437,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       case "reasoning-end":
         yield* reasoning.end(event.id, providerState(event.providerMetadata), event.text)
         return
-      case "file": {
+      case "file":
+      case "media": {
         retryEvidence = true
+        const mime = event.type === "media" ? event.media.mediaType : event.mediaType
         const messageID = yield* startAssistant()
         const index = nextFile++
         const id = `generated-${messageID}-${index}`
@@ -448,8 +450,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           file: {
             type: "file",
             id,
-            mime: event.mediaType,
-            filename: `${id}.${fileExtension(event.mediaType)}`,
+            mime,
+            filename: `${id}.${fileExtension(mime)}`,
             url: fileDataUrl(event),
             state: providerState(event.providerMetadata),
           },
@@ -642,7 +644,13 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   }
 }
 
-function fileDataUrl(event: Extract<LLMEvent, { type: "file" }>) {
+function fileDataUrl(event: Extract<LLMEvent, { type: "file" | "media" }>) {
+  if (event.type === "media") {
+    const inline = event.media.inline()
+    if (inline) return inline.dataUrl
+    if (event.media.source.type === "url") return event.media.source.url
+    throw new Error("Cannot persist a provider media reference without file content")
+  }
   if (typeof event.data === "string") {
     if (event.data.startsWith("data:")) return event.data
     return `data:${event.mediaType};base64,${event.data}`

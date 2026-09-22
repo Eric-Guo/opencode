@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { eq } from "drizzle-orm"
-import { LLMEvent } from "@opencode/ai"
+import { LLMEvent, Media } from "@opencode/ai"
 import { Money } from "@opencode/schema/money"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
@@ -303,17 +303,23 @@ test("provider metadata is flattened using the route key", async () => {
   })
 })
 
-test("model-generated files are persisted as assistant content", async () => {
+test.each([
+  LLMEvent.file({
+    mediaType: "image/png",
+    data: new TextEncoder().encode("image"),
+    providerMetadata: { google: { thoughtSignature: "image-signature" } },
+  }),
+  LLMEvent.media({
+    media: Media.bytes(new TextEncoder().encode("image"), "image/png"),
+    providerMetadata: { google: { thoughtSignature: "image-signature" } },
+  }),
+  LLMEvent.media({
+    media: Media.base64("aW1hZ2U=", "image/png"),
+    providerMetadata: { google: { thoughtSignature: "image-signature" } },
+  }),
+])("model-generated files are persisted as assistant content ($type)", async (event) => {
   const { published, publisher } = capture("google")
-  await Effect.runPromise(
-    publisher.publish(
-      LLMEvent.file({
-        mediaType: "image/png",
-        data: new TextEncoder().encode("image"),
-        providerMetadata: { google: { thoughtSignature: "image-signature" } },
-      }),
-    ),
-  )
+  await Effect.runPromise(publisher.publish(event))
 
   expect(published.map((event) => event.type)).toEqual(["session.step.started.1", "session.file.generated.1"])
   expect(published.at(-1)?.data).toMatchObject({
