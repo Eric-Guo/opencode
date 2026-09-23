@@ -347,19 +347,25 @@ describe("provider error classification", () => {
     ).toEqual(ordinary.map(() => undefined))
   })
 
-  test("classifies Kimi's HTTP 403 concurrent-request response as rotation-triggering", () => {
-    expect(
-      classifyProviderFailure({
-        message:
-          "You've reached your concurrent request limit. Please wait for your ongoing requests to finish and try again.",
-        status: 403,
-      }),
-    ).toMatchObject({
-      _tag: "QuotaExceeded",
-      classification: "rolling-window",
-      message: expect.stringContaining("concurrent request limit"),
-    })
-  })
+  test.each([403, 429, undefined])(
+    "classifies Kimi's concurrent-request response with status %s as a temporary rate limit",
+    (status) => {
+      const message =
+        "You've reached your concurrent request limit. Please wait for your ongoing requests to finish and try again."
+      const http = { url: "https://api.kimi.com/coding/v1/messages", status: status ?? 403, headers: {} }
+      const rateLimit = { remaining: { requests: "0" } }
+      const reason = classifyProviderFailure({ message, status, http, retryAfterMs: 5_000, rateLimit })
+      expect(reason).toMatchObject({ _tag: "RateLimit", message, http, retryAfterMs: 5_000, rateLimit })
+      expect(reason).not.toHaveProperty("classification", "rolling-window")
+
+      const rawBody = `  ${message.replaceAll("'", "’").toUpperCase()}\n`
+      expect(classifyProviderFailure({ message: "Request failed", rawBody, status })).toMatchObject({
+        _tag: "RateLimit",
+        message: "Request failed",
+        body: rawBody,
+      })
+    },
+  )
 
   test.each(
     [403, 429, undefined].flatMap((status) =>
