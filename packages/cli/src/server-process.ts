@@ -177,7 +177,7 @@ const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions
 })
 
 function serviceURL(hostname: string, port: number) {
-  return `http://${hostname.includes(":") ? `[${hostname}]` : hostname}:${port}`
+  return ServiceRegistration.localURL({ _tag: "TcpAddress", hostname, port })
 }
 
 function truthy(value?: string) {
