@@ -27,7 +27,13 @@ describe("web UI", () => {
         },
       })
       const server = yield* ServerProcess.start<never, never>(
-        { hostname: "127.0.0.1", port: 0, password: "secret", database: { path: ":memory:" } },
+        {
+          hostname: "127.0.0.1",
+          port: 0,
+          password: "secret",
+          database: { path: ":memory:" },
+          config: { content: JSON.stringify({ username: "测试用户", clerk_code: "12345" }) },
+        },
         undefined,
         transform,
       )
@@ -55,7 +61,7 @@ describe("web UI", () => {
             )
           }),
       )
-      yield* Effect.forEach(["/api", "/api/info", "/api/event", "/api/missing", "/openapi.json"], (pathname) =>
+      yield* Effect.forEach(["/api", "/api/info", "/api/event", "/api/missing", "/openapi.json", "/global/config"], (pathname) =>
         Effect.gen(function* () {
           const response = yield* Effect.promise(() => fetch(new URL(pathname, origin)))
           expect(response.status).toBe(401)
@@ -86,6 +92,15 @@ describe("web UI", () => {
       const authorized = yield* Effect.promise(() => fetch(new URL("/api/info", origin), { headers: { cookie } }))
       expect(authorized.status).toBe(200)
       yield* Effect.promise(() => authorized.arrayBuffer())
+      const config = yield* Effect.promise(() =>
+        fetch(new URL("/global/config", origin), { headers: { authorization: `Basic ${btoa("opencode:secret")}` } }),
+      )
+      expect(config.status).toBe(200)
+      expect(config.headers.get("content-type")).toContain("application/json")
+      expect(yield* Effect.promise(() => config.json())).toMatchObject({
+        username: "测试用户",
+        clerk_code: "12345",
+      })
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   )
 
