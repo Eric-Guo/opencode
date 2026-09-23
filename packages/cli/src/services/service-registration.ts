@@ -23,7 +23,7 @@ export const register = Effect.fnUntraced(function* (options: {
   const info = {
     id: options.id,
     version: OPENCODE_VERSION,
-    url: HttpServer.formatAddress(options.address),
+    url: localURL(options.address),
     pid: process.pid,
     password: options.password,
   }
@@ -69,3 +69,15 @@ export const register = Effect.fnUntraced(function* (options: {
     Effect.ignore,
   )
 })
+
+/** Local discovery must connect to loopback, not a wildcard bind address that may go through a proxy. */
+export function localURL(address: HttpServer.Address) {
+  if (address._tag !== "TcpAddress") return HttpServer.formatAddress(address)
+  const hostname =
+    address.hostname === "0.0.0.0"
+      ? "127.0.0.1"
+      : address.hostname === "::" || address.hostname === "[::]"
+        ? "::1"
+        : address.hostname
+  return `http://${hostname.includes(":") && !hostname.startsWith("[") ? `[${hostname}]` : hostname}:${address.port}`
+}
