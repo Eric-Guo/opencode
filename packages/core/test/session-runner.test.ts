@@ -702,6 +702,13 @@ const kimiRollingQuota = () =>
     }),
   })
 
+const kimiConcurrentLimit = () =>
+  RequestExecutor.httpFailure({
+    message:
+      "You've reached your concurrent request limit. Please wait for your ongoing requests to finish and try again.",
+    status: 403,
+  })
+
 const setupOverflowRecovery = Effect.fnUntraced(function* (s: Scenario) {
   yield* s.llm.push(TestLLM.text("Earlier answer", "text-earlier"))
   yield* s.runPrompt("Earlier question ".repeat(700))
@@ -5914,7 +5921,155 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
   })
+
+  for (const count of [1, 2]) {
+    it.effect(`bounds Kimi concurrency retries with ${count} busy keys and resets counts for the next step`, () =>
+      withEnv(
+        {
+          ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
+          ...Object.fromEntries(
+            Array.from({ length: count }, (_, index) => [KimiEnvironment.name(index), `busy-account-${index}`]),
+          ),
+        },
+        () =>
+          Effect.gen(function* () {
+            const s = yield* setup
+            const rotation = yield* KimiKeyRotation.Service
+            const selected: string[] = []
+            s.modelResolveHook = Effect.gen(function* () {
+              const connection = (yield* rotation.connections(KimiEnvironment.names()))[0]!
+              selected.push(connection.name)
+              s.currentConnection = {
+                integrationID: KimiKeyRotation.integrationID,
+                ref: connection,
+                fingerprint: Hash.sha256(process.env[connection.name]!),
+              }
+            })
+            const failure = kimiConcurrentLimit()
+            yield* s.admit("All Kimi accounts are busy")
+            yield* s.llm.always(Stream.fail(failure))
+            const scheduled = yield* subscribeRetries(s)
+            const run = yield* s.resume.pipe(Effect.forkChild)
+            for (const delay of RETRY_GAPS_MAX) {
+              yield* Queue.take(scheduled)
+              yield* TestClock.adjust(delay)
+            }
+            expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
+            expect(selected).toEqual([
+              "KIMI_API_KEY",
+              "KIMI_API_KEY",
+              ...Array<string>(RETRY_GAPS.length - 1).fill(KimiEnvironment.name(count - 1)),
+            ])
+            expect(requireAssistant(yield* s.context).error).toMatchObject({ type: "provider.rate-limit" })
+            expect(requireAssistant(yield* s.context).error?.recovery).toBeUndefined()
+
+            yield* s.admit("Try again after the busy request")
+            yield* s.llm.push(Stream.fail(failure), TestLLM.text("Recovered", "kimi-busy-recovered"))
+            const next = yield* s.resume.pipe(Effect.forkChild)
+            yield* Queue.take(scheduled)
+            yield* TestClock.adjust(RETRY_GAPS_MAX[0])
+            yield* Fiber.join(next)
+            expect(selected.slice(-2)).toEqual(Array<string>(2).fill(KimiEnvironment.name(count - 1)))
+            expect((yield* rotation.connections(KimiEnvironment.names()))[0]?.name).toBe(
+              KimiEnvironment.name(count - 1),
+            )
+          }),
+      ),
+    )
+  }
+
+  it.effect("does not rotate Kimi for ordinary rate limits or separated concurrency failures", () =>
+    withEnv(
+      {
+        ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
+        KIMI_API_KEY: "runner-account-a",
+        KIMI_API_KEY_2: "runner-account-b",
+      },
+      () =>
+        Effect.gen(function* () {
+          const s = yield* setup
+          const rotation = yield* KimiKeyRotation.Service
+          s.currentConnection = {
+            integrationID: KimiKeyRotation.integrationID,
+            ref: { type: "env", name: "KIMI_API_KEY" },
+            fingerprint: Hash.sha256("runner-account-a"),
+          }
+          yield* s.admit("Retry different rate limits")
+          yield* s.llm.push(
+            ...[kimiConcurrentLimit(), rateLimited(), rateLimited(), kimiConcurrentLimit()].map(Stream.fail),
+            TestLLM.text("Recovered", "kimi-mixed-recovered"),
+          )
+          const scheduled = yield* subscribeRetries(s)
+          const run = yield* s.resume.pipe(Effect.forkChild)
+          for (const delay of RETRY_GAPS_MAX.slice(0, 4)) {
+            yield* Queue.take(scheduled)
+            yield* TestClock.adjust(delay)
+            expect((yield* rotation.connections(KimiEnvironment.names()))[0]?.name).toBe("KIMI_API_KEY")
+          }
+          yield* Fiber.join(run)
+          expect(s.requests).toHaveLength(5)
+        }),
+    ),
+  )
   ;["kimi-for-coding", "kimi-code-plan-cn", "kimi-code-plan-global"].forEach((integrationID) => {
+    it.effect(`rotates ${integrationID} on each key's second concurrency limit within the same step`, () => {
+      const keys = ["runner-account-a", "runner-account-b", "runner-account-c"]
+      return withEnv(
+        {
+          ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
+          ...Object.fromEntries(keys.map((key, index) => [KimiEnvironment.name(index), key])),
+        },
+        () =>
+          Effect.gen(function* () {
+            const s = yield* setup
+            const rotation = yield* KimiKeyRotation.Service
+            const selected: string[] = []
+            s.modelResolveHook = Effect.gen(function* () {
+              const connection = (yield* rotation.connections(KimiEnvironment.names()))[0]!
+              selected.push(connection.name)
+              s.currentConnection = {
+                integrationID: Integration.ID.make(integrationID),
+                ref: connection,
+                fingerprint: Hash.sha256(process.env[connection.name]!),
+              }
+            })
+            yield* s.admit("Rotate busy Kimi keys")
+            yield* s.llm.push(
+              ...Array.from({ length: 4 }, () => Stream.fail(kimiConcurrentLimit())),
+              TestLLM.text("Recovered", "kimi-rotation-recovered"),
+            )
+
+            const scheduled = yield* subscribeRetries(s)
+            const run = yield* s.resume.pipe(Effect.forkChild)
+            for (const delay of RETRY_GAPS_MAX.slice(0, 4)) {
+              yield* Queue.take(scheduled)
+              yield* TestClock.adjust(delay)
+            }
+            yield* Fiber.join(run)
+
+            expect(selected).toEqual([
+              "KIMI_API_KEY",
+              "KIMI_API_KEY",
+              "KIMI_API_KEY_2",
+              "KIMI_API_KEY_2",
+              "KIMI_API_KEY_3",
+            ])
+            expect(s.requests).toHaveLength(5)
+            expect(yield* s.context).toMatchObject([
+              { type: "user" },
+              Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+            ])
+            expect(
+              yield* rotation.rotate({
+                connection: { type: "env", name: "KIMI_API_KEY_3" },
+                fingerprint: Hash.sha256(keys[2]!),
+                excluded: new Set(),
+              }),
+            ).toEqual({ type: "env", name: "KIMI_API_KEY" })
+          }),
+      )
+    })
+
     it.effect(`retries ${integrationID} concurrency limits without cooling down or switching accounts`, () =>
       withEnv(
         {
@@ -5932,11 +6087,7 @@ describe("SessionRunnerLLM", () => {
               ref: { type: "env", name: "KIMI_API_KEY" },
               fingerprint: Hash.sha256("runner-account-a"),
             }
-            const failure = RequestExecutor.httpFailure({
-              message:
-                "You've reached your concurrent request limit. Please wait for your ongoing requests to finish and try again.",
-              status: 403,
-            })
+            const failure = kimiConcurrentLimit()
             expect(failure.reason._tag).toBe("RateLimit")
             yield* s.admit("Retry Kimi when the account is free")
             yield* s.llm.push(Stream.fail(failure), TestLLM.text("Recovered", "kimi-concurrency-recovered"))
