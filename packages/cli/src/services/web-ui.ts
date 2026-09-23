@@ -18,7 +18,8 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
         url.pathname === "/api" ||
         url.pathname.startsWith("/api/") ||
         url.pathname.startsWith("/auth/") ||
-        url.pathname === "/openapi.json"
+        url.pathname === "/openapi.json" ||
+        url.pathname === "/global/config"
       )
         return yield* api.pipe(
           Effect.catchIf(isRouteNotFound, () => Effect.succeed(HttpServerResponse.empty({ status: 404 }))),
