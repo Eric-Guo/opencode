@@ -351,12 +351,20 @@ describe("provider error classification", () => {
       const http = { url: "https://api.kimi.com/coding/v1/messages", status: status ?? 403, headers: {} }
       const rateLimit = { remaining: { requests: "0" } }
       const reason = classifyProviderFailure({ message, status, http, retryAfterMs: 5_000, rateLimit })
-      expect(reason).toMatchObject({ _tag: "RateLimit", message, http, retryAfterMs: 5_000, rateLimit })
+      expect(reason).toMatchObject({
+        _tag: "RateLimit",
+        classification: "concurrency",
+        message,
+        http,
+        retryAfterMs: 5_000,
+        rateLimit,
+      })
       expect(reason).not.toHaveProperty("classification", "rolling-window")
 
       const rawBody = `  ${message.replaceAll("'", "’").toUpperCase()}\n`
       expect(classifyProviderFailure({ message: "Request failed", rawBody, status })).toMatchObject({
         _tag: "RateLimit",
+        classification: "concurrency",
         message: "Request failed",
         body: rawBody,
       })
