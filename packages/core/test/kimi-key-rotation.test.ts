@@ -14,6 +14,70 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(LayerNode.compile(LayerNode.group([KimiKeyRotation.node, KV.node])))
 
 describe("KimiKeyRotation", () => {
+  it.effect("rotates busy keys without cooldowns and skips exhausted or quota-limited backups", () =>
+    withKeys(
+      ["account-a", "account-b", "account-b", "account-d"],
+      Effect.gen(function* () {
+        const rotation = yield* KimiKeyRotation.Service
+        yield* rotation.fail({
+          connection: { type: "env", name: "KIMI_API_KEY" },
+          fingerprint: Hash.sha256("account-a"),
+        })
+        expect(
+          yield* rotation.rotate({
+            connection: { type: "env", name: "KIMI_API_KEY_2" },
+            fingerprint: Hash.sha256("account-b"),
+            excluded: new Set([Hash.sha256("account-b")]),
+          }),
+        ).toEqual({ type: "env", name: "KIMI_API_KEY_4" })
+        expect(
+          yield* rotation.rotate({
+            connection: { type: "env", name: "KIMI_API_KEY_4" },
+            fingerprint: Hash.sha256("account-d"),
+            excluded: new Set([Hash.sha256("account-b"), Hash.sha256("account-d")]),
+          }),
+        ).toBeUndefined()
+        expect((yield* rotation.connections(KimiEnvironment.names()))[0]?.name).toBe("KIMI_API_KEY_4")
+        expect(
+          yield* rotation.rotate({
+            connection: { type: "env", name: "KIMI_API_KEY_4" },
+            fingerprint: Hash.sha256("account-d"),
+            excluded: new Set(),
+          }),
+        ).toEqual({ type: "env", name: "KIMI_API_KEY_2" })
+        const kv = yield* KV.Service
+        expect(yield* kv.get("integration:kimi-for-coding:key-rotation")).toEqual({
+          version: 1,
+          selected: "KIMI_API_KEY_2",
+          slots: {
+            KIMI_API_KEY: { fingerprint: Hash.sha256("account-a"), unavailableUntil: KimiKeyRotation.cooldown },
+            KIMI_API_KEY_2: { fingerprint: Hash.sha256("account-b") },
+            KIMI_API_KEY_4: { fingerprint: Hash.sha256("account-d") },
+          },
+        })
+      }),
+    ),
+  )
+
+  it.effect("ignores busy failures from replaced keys", () =>
+    withKeys(
+      ["account-a", "account-b"],
+      Effect.gen(function* () {
+        const rotation = yield* KimiKeyRotation.Service
+        yield* rotation.connections(KimiEnvironment.names())
+        process.env.KIMI_API_KEY = "new-account-a"
+        expect(
+          yield* rotation.rotate({
+            connection: { type: "env", name: "KIMI_API_KEY" },
+            fingerprint: Hash.sha256("account-a"),
+            excluded: new Set(),
+          }),
+        ).toBeUndefined()
+        expect((yield* rotation.connections(KimiEnvironment.names()))[0]?.name).toBe("KIMI_API_KEY")
+      }),
+    ),
+  )
+
   it.effect("rotates through every key in numeric order and recovers after the pool is exhausted", () => {
     const keys = Array.from({ length: 12 }, (_, index) => `account-${index + 1}`)
     return withKeys(

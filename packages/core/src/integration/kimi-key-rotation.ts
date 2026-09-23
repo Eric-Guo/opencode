@@ -47,14 +47,20 @@ export type Failure = {
   readonly earliestAvailableAt: number
 }
 
+type FailureInput = {
+  readonly connection: Connection.EnvInfo
+  readonly fingerprint: string
+}
+
 export interface Interface {
   /** Returns distinct configured Kimi environment connections with the sticky selection first. */
   readonly connections: (registered: readonly string[]) => Effect.Effect<Connection.EnvInfo[]>
   /** Marks the exact key used by a failed request unavailable and promotes one eligible backup. */
-  readonly fail: (input: {
-    readonly connection: Connection.EnvInfo
-    readonly fingerprint: string
-  }) => Effect.Effect<Failure | undefined>
+  readonly fail: (input: FailureInput) => Effect.Effect<Failure | undefined>
+  /** Selects an eligible backup without assigning a quota cooldown to the busy key. */
+  readonly rotate: (
+    input: FailureInput & { readonly excluded: ReadonlySet<string> },
+  ) => Effect.Effect<Connection.EnvInfo | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/KimiKeyRotation") {}
@@ -111,6 +117,32 @@ export const layer = Layer.effect(
                 (a, b) => Number(b.name === promoted.state.selected) - Number(a.name === promoted.state.selected),
               )
               .map((slot) => connection(slot.name))
+          }),
+        ),
+      ),
+      rotate: Effect.fn("KimiKeyRotation.rotate")((input) =>
+        lock.withPermit(
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis
+            const runtime = runtimeSlots(KimiEnvironment.names())
+            const stored = yield* load()
+            const reconciled = reconcile(stored, runtime)
+            const failed = runtime.find((slot) => slot.name === input.connection.name)
+            if (!failed || failed.fingerprint !== input.fingerprint) {
+              yield* save(stored, reconciled)
+              return undefined
+            }
+            const candidates = runtime.filter(
+              (slot) =>
+                slot.name !== failed.name &&
+                !input.excluded.has(slot.fingerprint) &&
+                eligible(reconciled.slots[slot.name], now),
+            )
+            const backup = candidates.find((slot) => slot.name === reconciled.selected) ?? candidates[0]
+            const next = backup ? { ...reconciled, selected: backup.name } : reconciled
+            yield* save(stored, next)
+            yield* switched(reconciled.selected, next.selected)
+            return backup ? connection(backup.name) : undefined
           }),
         ),
       ),
