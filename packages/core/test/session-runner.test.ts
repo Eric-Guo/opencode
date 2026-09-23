@@ -472,6 +472,7 @@ const layer = Layer.unwrap(
       LayerNode.group([
         Database.node,
         Bus.node,
+        KimiKeyRotation.node,
         Form.node,
         SessionProjector.node,
         SessionStore.node,
@@ -5914,6 +5915,54 @@ describe("SessionRunnerLLM", () => {
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
   })
   ;["kimi-for-coding", "kimi-code-plan-cn", "kimi-code-plan-global"].forEach((integrationID) => {
+    it.effect(`retries ${integrationID} concurrency limits without cooling down or switching accounts`, () =>
+      withEnv(
+        {
+          ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
+          KIMI_API_KEY: "runner-account-a",
+          KIMI_API_KEY_2: "runner-account-b",
+        },
+        () =>
+          Effect.gen(function* () {
+            const s = yield* setup
+            const rotation = yield* KimiKeyRotation.Service
+            const connections = yield* rotation.connections(KimiEnvironment.names())
+            s.currentConnection = {
+              integrationID: Integration.ID.make(integrationID),
+              ref: { type: "env", name: "KIMI_API_KEY" },
+              fingerprint: Hash.sha256("runner-account-a"),
+            }
+            const failure = RequestExecutor.httpFailure({
+              message:
+                "You've reached your concurrent request limit. Please wait for your ongoing requests to finish and try again.",
+              status: 403,
+            })
+            expect(failure.reason._tag).toBe("RateLimit")
+            yield* s.admit("Retry Kimi when the account is free")
+            yield* s.llm.push(Stream.fail(failure), TestLLM.text("Recovered", "kimi-concurrency-recovered"))
+
+            const scheduled = yield* subscribeRetries(s)
+            const run = yield* s.resume.pipe(Effect.forkChild)
+            yield* Queue.take(scheduled)
+            yield* TestClock.adjust("2400 millis")
+            yield* Fiber.join(run)
+
+            expect(s.requests).toHaveLength(2)
+            expect(yield* s.context).toMatchObject([
+              { type: "user" },
+              Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+            ])
+            expect(yield* rotation.connections(KimiEnvironment.names())).toEqual(connections)
+            expect(
+              yield* rotation.fail({
+                connection: { type: "env", name: "KIMI_API_KEY_2" },
+                fingerprint: Hash.sha256("runner-account-b"),
+              }),
+            ).toMatchObject({ promoted: { type: "env", name: "KIMI_API_KEY" } })
+          }),
+      ),
+    )
+
     it.effect(`rotates through ${integrationID} keys without replaying failed steps`, () => {
       const keys = ["runner-account-a", "runner-account-b", "runner-account-c", "runner-account-d"]
       return withEnv(
@@ -5926,14 +5975,7 @@ describe("SessionRunnerLLM", () => {
             const s = yield* setup
             yield* Effect.forEach(keys, (key, index) =>
               Effect.gen(function* () {
-                const failure =
-                  index % 2 === 0
-                    ? kimiRollingQuota()
-                    : RequestExecutor.httpFailure({
-                        message:
-                          "You've reached your concurrent request limit. Please wait for your ongoing requests to finish and try again.",
-                        status: 403,
-                      })
+                const failure = kimiRollingQuota()
                 s.currentConnection = {
                   integrationID: Integration.ID.make(integrationID),
                   ref: { type: "env", name: KimiEnvironment.name(index) },
