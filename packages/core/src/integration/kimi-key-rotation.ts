@@ -29,6 +29,7 @@ const Slot = Schema.Struct({
 })
 
 const RotationState = Schema.Struct({
+  version: Schema.optional(Schema.Literal(1)),
   selected: Schema.optional(Schema.String),
   slots: Schema.Record(Schema.String, Slot),
 })
@@ -185,10 +186,12 @@ function reconcile(state: RotationState, runtime: readonly RuntimeSlot[]): Rotat
   const selected =
     state.selected && runtime.some((slot) => slot.name === state.selected) ? state.selected : runtime[0]?.name
   return {
+    version: 1,
     ...(selected ? { selected } : {}),
     slots: Object.fromEntries(
       runtime.map((slot) => {
-        const stored = state.slots[slot.name]
+        // Legacy cooldowns include concurrency failures with no recorded cause, so discard them once.
+        const stored = state.version === 1 ? state.slots[slot.name] : undefined
         return [slot.name, stored?.fingerprint === slot.fingerprint ? stored : { fingerprint: slot.fingerprint }]
       }),
     ),
