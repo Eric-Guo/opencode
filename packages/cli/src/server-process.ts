@@ -183,7 +183,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
 })
 
 function serviceURL(hostname: string, port: number) {
-  return `http://${hostname.includes(":") ? `[${hostname}]` : hostname}:${port}`
+  return ServiceRegistration.localURL({ _tag: "TcpAddress", hostname, port })
 }
 
 function truthy(value?: string) {
