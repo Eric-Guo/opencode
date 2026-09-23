@@ -11,7 +11,7 @@ import { Hash } from "@opencode/util/hash"
 import { withEnv } from "./fixture/env"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(LayerNode.compile(KimiKeyRotation.node))
+const it = testEffect(LayerNode.compile(LayerNode.group([KimiKeyRotation.node, KV.node])))
 
 describe("KimiKeyRotation", () => {
   it.effect("rotates through every key in numeric order and recovers after the pool is exhausted", () => {
@@ -265,6 +265,46 @@ describe("KimiKeyRotation", () => {
       }),
     ),
   )
+
+  it.effect("clears legacy cooldowns once while preserving the selected account", () => {
+    const keys = ["account-a", "account-b", "account-c", "account-d"]
+    return withKeys(
+      keys,
+      Effect.gen(function* () {
+        const kv = yield* KV.Service
+        const rotation = yield* KimiKeyRotation.Service
+        yield* kv.set("integration:kimi-for-coding:key-rotation", {
+          selected: "KIMI_API_KEY_4",
+          slots: Object.fromEntries(
+            keys.map((key, index) => [
+              KimiEnvironment.name(index),
+              { fingerprint: Hash.sha256(key), unavailableUntil: KimiKeyRotation.cooldown },
+            ]),
+          ),
+        })
+
+        expect((yield* rotation.connections(KimiEnvironment.names()))[0]?.name).toBe("KIMI_API_KEY_4")
+        expect(yield* kv.get("integration:kimi-for-coding:key-rotation")).toEqual({
+          version: 1,
+          selected: "KIMI_API_KEY_4",
+          slots: Object.fromEntries(
+            keys.map((key, index) => [KimiEnvironment.name(index), { fingerprint: Hash.sha256(key) }]),
+          ),
+        })
+        expect(
+          yield* rotation.fail({
+            connection: { type: "env", name: "KIMI_API_KEY_4" },
+            fingerprint: Hash.sha256(keys[3]!),
+          }),
+        ).toMatchObject({ promoted: { type: "env", name: "KIMI_API_KEY" } })
+        yield* rotation.connections(KimiEnvironment.names())
+        expect(yield* kv.get("integration:kimi-for-coding:key-rotation")).toMatchObject({
+          version: 1,
+          slots: { KIMI_API_KEY_4: { unavailableUntil: KimiKeyRotation.cooldown } },
+        })
+      }),
+    )
+  })
 
   it.effect("keeps single-key behavior for missing or duplicate backups", () =>
     withKeys(
