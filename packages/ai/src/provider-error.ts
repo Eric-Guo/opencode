@@ -164,8 +164,9 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if ([input.message, body].some(isKimiRollingQuota))
     return new QuotaExceededError({ ...details, classification: "rolling-window" })
   if (KIMI_ORDINARY_QUOTA_TEXT.test(text)) return new QuotaExceededError(details)
+  // Kimi uses 403 for temporary concurrency limits; handle these before authentication failures.
   if ([input.message, body].some(isKimiConcurrentRateLimit))
-    return new QuotaExceededError({ ...details, classification: "rolling-window" })
+    return new RateLimitError({ ...details, retryAfterMs: input.retryAfterMs, rateLimit: input.rateLimit })
   if (
     input.status === 402 ||
     codes.some((code) => QUOTA_CODES.has(code)) ||
