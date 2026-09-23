@@ -8,7 +8,7 @@ import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@/shell/layout/helpers"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
-import { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { useServerCollectionController } from "@/servers/registry/controller"
 import { AddServerMenu } from "@/servers/wsl/settings"
@@ -190,6 +190,7 @@ function RootSettings() {
   const layout = useLayout()
   const tabs = useTabs()
   const servers = useServerCollectionController()
+  const connections = useServers()
   const inventory = useSettingsServers()
   const platform = usePlatform()
   const [state, setState] = createStore({ worktreeFilterReset: 0 })
@@ -213,11 +214,11 @@ function RootSettings() {
       const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
       return connectionFor(list(), draft?.server)
     }
-    return connectionFor(list(), layout.home.selection().server)
+    return connectionFor(connections.visible, layout.home.selection().server) ?? connections.visible[0]
   })
   const sourceDirectory = useSettingsDirectory(sourceServer)
   const serverCtx = useServerCtx(sourceServer)
-  const title = useSettingsDialogTitle(() => serverCtx()?.sync)
+  const title = useSettingsDialogTitle(() => serverCtx()?.sync, sourceDirectory)
   const addServer = () =>
     void dialog.push(() => (
       <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
