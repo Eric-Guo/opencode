@@ -47,6 +47,7 @@ const layer = Layer.effect(
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* Plugin.Service
     const title = yield* SessionTitle.Service
+    const kimi = yield* KimiKeyRotation.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
@@ -207,6 +208,9 @@ const layer = Layer.effect(
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
+      // Busy keys are excluded only within this logical Step, never from the persistent quota pool.
+      const concurrencyFailures = new Set<string>()
+      const busy = new Set<string>()
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
@@ -273,13 +277,34 @@ const layer = Layer.effect(
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
-          Retry: (outcome) =>
-            retry.wait({
+          Retry: Effect.fnUntraced(function* (outcome) {
+            const connection = loaded.model.connection
+            if (
+              outcome.concurrencyLimited &&
+              connection &&
+              KimiKeyRotation.supports(connection.integrationID) &&
+              connection.ref.type === "env" &&
+              connection.fingerprint
+            ) {
+              if (concurrencyFailures.has(connection.fingerprint) && !busy.has(connection.fingerprint)) {
+                busy.add(connection.fingerprint)
+                yield* kimi.rotate({
+                  connection: connection.ref,
+                  fingerprint: connection.fingerprint,
+                  excluded: busy,
+                })
+              }
+              concurrencyFailures.add(connection.fingerprint)
+            }
+            if (!outcome.concurrencyLimited) concurrencyFailures.clear()
+            yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
-            }),
+            })
+          }),
           Continue: Effect.fnUntraced(function* (outcome) {
+            concurrencyFailures.clear()
             yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
