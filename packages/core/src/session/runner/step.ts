@@ -31,6 +31,7 @@ import { SessionRunnerRetry } from "./retry.js"
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
   Retry: {
+    readonly concurrencyLimited: boolean
     readonly error: SessionError.Error
     readonly decision: SessionRunnerRetry.Decision
     readonly freshAssistant?: boolean
@@ -278,7 +279,12 @@ export const make = Effect.gen(function* () {
         if (llmError && retry?.retry && !recorded.outputStarted) {
           // Retry state projects onto the existing assistant, even before it has produced output.
           yield* publisher.startAssistant()
-          return Outcome.Retry({ error: llmError, decision: retry })
+          return Outcome.Retry({
+            error: llmError,
+            decision: retry,
+            concurrencyLimited:
+              llmFailure?.reason._tag === "RateLimit" && llmFailure.reason.classification === "concurrency",
+          })
         }
         if (llmError) yield* publisher.failAssistant(llmError)
 
@@ -338,7 +344,7 @@ export const make = Effect.gen(function* () {
         }
 
         if (llmError && retry?.retry && tools.declines.length === 0 && !tools.interrupted)
-          return Outcome.Retry({ error: llmError, decision: retry, freshAssistant: true })
+          return Outcome.Retry({ error: llmError, decision: retry, freshAssistant: true, concurrencyLimited: false })
 
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {
