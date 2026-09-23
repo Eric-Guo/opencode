@@ -77,6 +77,7 @@ export class AuthenticationError extends Schema.TaggedError<AuthenticationError>
 
 export class RateLimitError extends Schema.TaggedError<RateLimitError>("AI.Error.RateLimit")("RateLimit", {
   ...ReasonFields,
+  classification: Schema.optional(Schema.Literal("concurrency")),
   retryAfterMs: Schema.optional(Schema.Number),
   rateLimit: Schema.optional(HttpRateLimitDetails),
 }) {}
