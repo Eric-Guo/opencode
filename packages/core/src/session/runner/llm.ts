@@ -62,6 +62,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
+    const kimi = yield* KimiKeyRotation.Service
     const steps = yield* SessionStep.make
     const cwd = yield* SessionCwd.make
     const pty = yield* PersistentPty.Service
@@ -246,6 +247,9 @@ const layer = Layer.effect(
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
+      // Busy keys are excluded only within this logical Step, never from the persistent quota pool.
+      const concurrencyFailures = new Set<string>()
+      const busy = new Set<string>()
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
@@ -349,6 +353,26 @@ const layer = Layer.effect(
           }),
           Retry: Effect.fnUntraced(function* (outcome) {
             retryAttempt = outcome.decision.attempt
+
+            const connection = loaded.model.connection
+            if (
+              outcome.concurrencyLimited &&
+              connection &&
+              KimiKeyRotation.supports(connection.integrationID) &&
+              connection.ref.type === "env" &&
+              connection.fingerprint
+            ) {
+              if (concurrencyFailures.has(connection.fingerprint) && !busy.has(connection.fingerprint)) {
+                busy.add(connection.fingerprint)
+                yield* kimi.rotate({
+                  connection: connection.ref,
+                  fingerprint: connection.fingerprint,
+                  excluded: busy,
+                })
+              }
+              concurrencyFailures.add(connection.fingerprint)
+            }
+            if (!outcome.concurrencyLimited) concurrencyFailures.clear()
             yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
