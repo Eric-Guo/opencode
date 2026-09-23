@@ -17,9 +17,10 @@ import {
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
-import { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { DialogServer } from "@/servers/connect/dialog"
 import { LocationProvider } from "@/workspaces/location"
@@ -248,6 +249,9 @@ function RootSettings() {
   const dialog = useDialog()
   const surface = useSettingsSurface()
   const global = useGlobal()
+  const layout = useLayout()
+  const tabs = useTabs()
+  const connections = useServers()
   const inventory = useSettingsServers()
   const platform = usePlatform()
 
@@ -279,8 +283,26 @@ function RootSettings() {
     if (view.tab === "gui-extensions" && !guiExtensions) surface.open("general")
   })
 
+  const sourceServer = createMemo(() => {
+    const route = surface.route()
+
+    if (route.type === "session")
+      return connections.visible.find((server) => ServerConnection.key(server) === route.server)
+
+    if (route.type === "draft") {
+      const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
+
+      return connections.visible.find((server) => ServerConnection.key(server) === draft?.server)
+    }
+
+    return (
+      connections.visible.find((server) => ServerConnection.key(server) === layout.home.selection().server) ??
+      connections.visible[0]
+    )
+  })
+  const sourceDirectory = useSettingsDirectory(sourceServer)
   const serverCtx = useServerCtx(sourceServer)
-  const title = useSettingsDialogTitle(() => serverCtx()?.sync)
+  const title = useSettingsDialogTitle(() => serverCtx()?.sync, sourceDirectory)
 
   const selectServer = (server: ServerConnection.Any) => surface.selectServer(ServerConnection.key(server))
 
