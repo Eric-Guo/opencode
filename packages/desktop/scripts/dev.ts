@@ -2,6 +2,7 @@ import { $ } from "bun"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { prepareDevElectron } from "./dev-electron"
+import { prepareDevExtension } from "./dev-extension"
 import { downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
@@ -17,6 +18,7 @@ async function main() {
   process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "1"
   await prepareDesktop()
   await prepareServer(options.server)
+  await prepareDevExtension()
   await startDesktop(options.electron)
 }
 
