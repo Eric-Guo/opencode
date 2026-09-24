@@ -10,14 +10,23 @@ type Manifest = {
   preload: string
   preloads: Record<string, string>
   assets: Record<string, string>
+  builds?: Record<string, string>
 }
 
-/** Build-time opt-in: no extension checkout or dependencies are required for the base desktop. */
-export function desktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) {
+export function readDesktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) {
   if (!root || root === "none") return undefined
   const directory = resolve(root)
   const manifest: unknown = JSON.parse(readFileSync(join(directory, "desktop-extension.json"), "utf8"))
   if (!isManifest(manifest)) throw new Error("Invalid desktop extension manifest")
+  return { directory, manifest }
+}
+
+/** Build-time opt-in: no extension checkout or dependencies are required for the base desktop. */
+export function desktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) {
+  const config = readDesktopExtension(root)
+  if (!config) return undefined
+  const directory = config.directory
+  const manifest = config.manifest
   const file = (value: string) => {
     const path = resolve(directory, value)
     if (!existsSync(path)) throw new Error(`Desktop extension entry is missing: ${path}`)
@@ -28,6 +37,15 @@ export function desktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) 
     const path = file(value)
     return { name, path, directory: statSync(path).isDirectory() }
   })
+  const copyAssets = async (output = resolve("out/renderer")) => {
+    await Promise.all(
+      assets.map(async (asset) => {
+        const destination = resolve(output, asset.name)
+        await mkdir(dirname(destination), { recursive: true })
+        await cp(asset.path, destination, { recursive: true })
+      }),
+    )
+  }
   const assetsPlugin: Plugin = {
     name: "opencode:extension-assets",
     configureServer(server) {
@@ -39,13 +57,7 @@ export function desktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) 
       })
     },
     async writeBundle() {
-      await Promise.all(
-        assets.map(async (asset) => {
-          const destination = resolve("out/renderer", asset.name)
-          await mkdir(dirname(destination), { recursive: true })
-          await cp(asset.path, destination, { recursive: true })
-        }),
-      )
+      await copyAssets()
     },
   }
   return {
@@ -54,6 +66,7 @@ export function desktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) 
     preload: file(manifest.preload),
     preloads: Object.fromEntries(Object.entries(manifest.preloads).map(([name, path]) => [name, file(path)])),
     assetsPlugin,
+    copyAssets,
   }
 }
 
@@ -66,7 +79,8 @@ function isManifest(value: unknown): value is Manifest {
     typeof record.renderer === "string" &&
     typeof record.preload === "string" &&
     isPaths(record.preloads) &&
-    isPaths(record.assets)
+    isPaths(record.assets) &&
+    (record.builds === undefined || isPaths(record.builds))
   )
 }
 function isPaths(value: unknown): value is Record<string, string> {
