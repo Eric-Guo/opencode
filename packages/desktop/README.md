@@ -17,6 +17,10 @@ OPENCODE_DESKTOP_EXTENSION=../desktop-tab bun run dev
 
 Alternatively, run `bun run dev` from `packages/desktop-tab`; its script selects the extension automatically. Development rebuilds from source, so a previous extension-enabled build does not select the extension for a later `dev` command. An environment variable prefixed to one command applies only to that command.
 
+With an extension selected, `dev` runs its manifest's optional `builds` scripts and copies its assets into
+`out/renderer` before starting Electron. Local tabs without their own development server therefore use freshly built
+bundles. For renderer hot reload, run each renderer's dev server and set its tab-specific renderer URL.
+
 ## Build
 
 Run the `build` script to build the app's JS assets, then `package` to
