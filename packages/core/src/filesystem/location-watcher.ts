@@ -9,7 +9,9 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "../git.js"
 import { Location } from "../location.js"
 import { Plugin } from "../plugin.js"
+import { Ignore } from "./ignore.js"
 import { LocationWatcherPolicy } from "./location-watcher-policy.js"
+import { Protected } from "./protected.js"
 import { Watcher } from "./watcher.js"
 
 export interface Interface {}
@@ -51,29 +53,56 @@ const layer = Layer.effect(
     )
     const lock = Semaphore.makeUnsafe(1)
     let stopped = false
-    let active: { path: string; scope: Scope.Closeable } | undefined
+    const active = new Map<string, Scope.Closeable>()
     const reconcile = () =>
       lock.withPermit(
         Effect.gen(function* () {
           if (stopped) return
           const resolved = yield* target
           const ignore = policy.current()
-          const next = resolved && !resolved.aliases.some((alias) => ignore.includes(alias)) ? resolved.path : undefined
-          if (active?.path === next) return
-          if (active) yield* Scope.close(active.scope, Exit.void)
-          active = undefined
-          if (!next) return
-          const scope = yield* Scope.make()
-          active = { path: next, scope }
-          yield* Effect.gen(function* () {
-            const updates = yield* watcher.subscribe({ path: next, type: "file" })
-            yield* Stream.runForEach(updates, publish)
-          }).pipe(
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterrupts(cause),
-              (cause) => Effect.logError("location watcher subscription failed", { path: next, cause }),
-            ),
-            Effect.forkIn(scope, { startImmediately: true }),
+          // Filesystem events drive client trees independently of version control.
+          // Keep branch metadata separate from the recursive watch's VCS ignores.
+          const targets: Watcher.WatchInput[] = [
+            {
+              path: location.directory,
+              type: "directory",
+              ignore: [
+                ...new Set([
+                  ...Ignore.PATTERNS,
+                  ...ignore,
+                  ...Protected.paths().filter(
+                    (item) => item !== location.directory && FSUtil.contains(location.directory, item),
+                  ),
+                ]),
+              ].toSorted(),
+            },
+            ...(resolved && !resolved.aliases.some((alias) => ignore.includes(alias))
+              ? [{ path: resolved.path, type: "file" as const }]
+              : []),
+          ]
+          const next = new Map(targets.map((input) => [JSON.stringify(input), input]))
+          yield* Effect.forEach(
+            [...active].filter(([key]) => !next.has(key)),
+            ([key, scope]) =>
+              Scope.close(scope, Exit.void).pipe(Effect.tap(() => Effect.sync(() => active.delete(key)))),
+          )
+          yield* Effect.forEach(
+            [...next].filter(([key]) => !active.has(key)),
+            ([key, input]) =>
+              Effect.gen(function* () {
+                const scope = yield* Scope.make()
+                active.set(key, scope)
+                yield* Effect.gen(function* () {
+                  const updates = yield* watcher.subscribe(input)
+                  yield* Stream.runForEach(updates, publish)
+                }).pipe(
+                  Effect.catchCauseIf(
+                    (cause) => !Cause.hasInterrupts(cause),
+                    (cause) => Effect.logError("location watcher subscription failed", { path: input.path, cause }),
+                  ),
+                  Effect.forkIn(scope, { startImmediately: true }),
+                )
+              }),
           )
         }).pipe(Effect.withSpan("LocationWatcher.reconcile", { attributes: { directory: location.directory } })),
       )
@@ -81,8 +110,8 @@ const layer = Layer.effect(
       lock.withPermit(
         Effect.gen(function* () {
           stopped = true
-          if (active) yield* Scope.close(active.scope, Exit.void)
-          active = undefined
+          yield* Effect.forEach(active.values(), (scope) => Scope.close(scope, Exit.void))
+          active.clear()
         }),
       ),
     )
