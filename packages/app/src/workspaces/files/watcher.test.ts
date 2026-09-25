@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode/client/promise"
+import type { FileNode } from "@/runtime/server/types"
+import { createPathHelpers } from "./path"
+import { createFileTreeStore } from "./tree-store"
 import { invalidateFromWatcher } from "./watcher"
 
 type FilesystemEvent = Extract<OpenCodeEvent, { type: "filesystem.changed" }>
@@ -12,6 +15,44 @@ const filesystemEvent = (file: string, event: FilesystemEvent["data"]["event"]):
 })
 
 describe("file watcher invalidation", () => {
+  test.each(["", "nested"])("removes deleted Unicode files from the loaded tree in '%s'", async (parent) => {
+    const directory = "/projects/plain-folder"
+    const paths = createPathHelpers(() => directory)
+    const name = "某项目合同-招标事项5-报价清单.xlsx.markdown"
+    const file = parent ? `${parent}/${name}` : name
+    const fixture: { files: FileNode[] } = {
+      files: [{ path: file, absolute: `${directory}/${file}`, name, type: "file", ignored: false }],
+    }
+    const tree = createFileTreeStore({
+      scope: () => directory,
+      normalizeDir: paths.normalizeDir,
+      list: async () => fixture.files,
+      onError: (message) => {
+        throw new Error(message)
+      },
+    })
+    await tree.listDir(parent)
+    expect(tree.children(parent).map((node) => node.path)).toEqual([file])
+
+    fixture.files = []
+    const refresh: Promise<void>[] = []
+    invalidateFromWatcher(filesystemEvent(`${directory}/${file}`, "unlink"), {
+      normalize: paths.normalize,
+      hasFile: () => false,
+      loadFile: () => {},
+      node: tree.node,
+      isDirLoaded: tree.isLoaded,
+      refreshDir: (dir) => {
+        refresh.push(tree.listDir(dir, { force: true }))
+      },
+    })
+    await Promise.all(refresh)
+
+    expect(refresh).toHaveLength(1)
+    expect(tree.children(parent)).toEqual([])
+    expect(tree.node(file)).toBeUndefined()
+  })
+
   test("reloads open files and refreshes loaded parent on add", () => {
     const loads: string[] = []
     const refresh: string[] = []
