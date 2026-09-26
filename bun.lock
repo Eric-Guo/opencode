@@ -40,7 +40,6 @@
         "@opencode/ui": "workspace:*",
         "@opencode/util": "workspace:*",
         "@solid-primitives/event-listener": "catalog:",
-        "@tanstack/solid-virtual": "catalog:",
         "dompurify": "catalog:",
         "effect": "catalog:",
         "marked": "catalog:",
