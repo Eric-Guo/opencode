@@ -38,6 +38,13 @@ export const AudioHandler = HttpApiBuilder.group(Api, "server.audio", (handlers)
           ),
         ),
       )
+      .handleRaw("audio.recording.release", (request) =>
+        trusted(request.request, config).pipe(
+          Effect.andThen(audio.release(request.params.recordingID)),
+          Effect.mapError(mapError),
+          Effect.as(HttpServerResponse.empty({ status: 204 })),
+        ),
+      )
       .handle("audio.recording.status", () => audio.status)
       .handle(
         "audio.transcriptions",
