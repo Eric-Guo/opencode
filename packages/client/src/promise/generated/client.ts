@@ -292,6 +292,8 @@ import type {
   AudioRecordingStartOutput,
   AudioRecordingStopInput,
   AudioRecordingStopOutput,
+  AudioRecordingReleaseInput,
+  AudioRecordingReleaseOutput,
   AudioRecordingStatusOutput,
   AudioTranscriptionsInput,
   AudioTranscriptionsOutput,
@@ -2464,6 +2466,17 @@ export function make(options: ClientOptions) {
               declaredStatuses: [400, 401, 403, 409, 500, 503],
               empty: false,
               binary: true,
+            },
+            requestOptions,
+          ),
+        release: (input: AudioRecordingReleaseInput, requestOptions?: RequestOptions) =>
+          request<AudioRecordingReleaseOutput>(
+            {
+              method: "POST",
+              path: `/api/audio/recording/${encodeURIComponent(input.recordingID)}/release`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403, 409, 500, 503],
+              empty: true,
             },
             requestOptions,
           ),
