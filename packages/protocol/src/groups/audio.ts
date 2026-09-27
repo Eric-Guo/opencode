@@ -47,6 +47,21 @@ export const AudioGroup = HttpApiGroup.make("server.audio")
       ),
   )
   .add(
+    HttpApiEndpoint.post("audio.recording.release", "/api/audio/recording/:recordingID/release", {
+      params: { recordingID: Schema.String },
+      success: HttpApiSchema.NoContent,
+      error: errors,
+    })
+      .middleware(Authorization)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.audio.recording.release",
+          summary: "Release saved audio recording",
+          description: "Release the retained MP3 bytes after the client has saved the recording successfully.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.get("audio.recording.status", "/api/audio/recording/status", {
       success: Audio.Status,
     }).annotateMerge(
