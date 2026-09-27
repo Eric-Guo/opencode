@@ -7288,6 +7288,10 @@ export type AudioRecordingStopInput = { readonly recordingID: { readonly recordi
 
 export type AudioRecordingStopOutput = globalThis.Uint8Array
 
+export type AudioRecordingReleaseInput = { readonly recordingID: { readonly recordingID: string }["recordingID"] }
+
+export type AudioRecordingReleaseOutput = void
+
 export type AudioRecordingStatusOutput = AudioStatus
 
 export type AudioTranscriptionsInput = {

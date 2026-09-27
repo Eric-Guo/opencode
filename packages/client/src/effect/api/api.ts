@@ -2780,6 +2780,12 @@ export type AudioRecordingStopOperation<E = never> = (
   input: AudioRecordingStopInput,
 ) => Effect.Effect<AudioRecordingStopOutput, E>
 
+export type AudioRecordingReleaseInput = { readonly recordingID: string }
+export type AudioRecordingReleaseOutput = void
+export type AudioRecordingReleaseOperation<E = never> = (
+  input: AudioRecordingReleaseInput,
+) => Effect.Effect<AudioRecordingReleaseOutput, E>
+
 export type AudioRecordingStatusOutput = {
   readonly state: "idle" | "starting" | "recording" | "stopping" | "completed" | "failed"
   readonly recordingID: string | null
@@ -2829,6 +2835,7 @@ export interface AudioApi<E = never> {
   readonly recording: {
     readonly start: AudioRecordingStartOperation<E>
     readonly stop: AudioRecordingStopOperation<E>
+    readonly release: AudioRecordingReleaseOperation<E>
     readonly status: AudioRecordingStatusOperation<E>
   }
   readonly transcriptions: AudioTranscriptionsOperation<E>
