@@ -45,6 +45,43 @@ test("failed finalization releases the encoder and preserves repeated-stop error
   await fixture.recorder.dispose()
 })
 
+test("saved recordings can release the retained MP3 without affecting an active capture", async () => {
+  const fixture = recorder()
+  const started = await fixture.recorder.start()
+  expect(() => fixture.recorder.release(started.recordingID!)).toThrow("is still active")
+  fixture.capture.onData(Buffer.alloc(32_000))
+  const saved = await fixture.recorder.stop(started.recordingID!)
+  expect(() => fixture.recorder.release("other-recording")).toThrow("is not retained")
+  expect(await fixture.recorder.stop(started.recordingID!)).toEqual(saved)
+
+  fixture.recorder.release(started.recordingID!)
+  expect(fixture.recorder.status()).toMatchObject({
+    state: "completed",
+    active: false,
+    recordingID: null,
+    durationMs: 1000,
+  })
+  await expect(fixture.recorder.stop(started.recordingID!)).rejects.toMatchObject({ code: "RECORDING_ID_MISMATCH" })
+  // A stale native callback must not revive the released artifact.
+  fixture.capture.onData(Buffer.alloc(32_000))
+  expect(fixture.recorder.status().recordingID).toBeNull()
+  const next = await fixture.recorder.start()
+  fixture.capture.onData(Buffer.alloc(32_000))
+  expect((await fixture.recorder.stop(next.recordingID!)).byteLength).toBeGreaterThan(0)
+  await fixture.recorder.dispose()
+})
+
+test("release frees the stop result even when a native callback keeps the capture session alive", async () => {
+  const fixture = recorder()
+  const started = await fixture.recorder.start()
+  fixture.capture.onData(Buffer.alloc(32_000))
+  const result = new WeakRef(await fixture.recorder.stop(started.recordingID!))
+  fixture.recorder.release(started.recordingID!)
+  await released([result])
+  fixture.capture.onData(Buffer.alloc(32_000))
+  await fixture.recorder.dispose()
+})
+
 test("automatic duration stops release the encoder without a stop caller", async () => {
   const fixture = recorder({ maxDurationMs: 10 })
   const started = await fixture.recorder.start()
