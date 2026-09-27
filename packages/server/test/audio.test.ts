@@ -73,6 +73,7 @@ it.live("keeps status public while authenticating recording mutations", () =>
 
     expect((yield* request(handler, "/api/audio/recording/start", { method: "POST" })).status).toBe(401)
     expect((yield* request(handler, "/api/audio/recording/recording-1/stop", { method: "POST" })).status).toBe(401)
+    expect((yield* request(handler, "/api/audio/recording/recording-1/release", { method: "POST" })).status).toBe(401)
   }),
 )
 
@@ -134,6 +135,38 @@ it.live("returns retained MP3 bytes and metadata for repeated stop requests", ()
     expect(first.headers.get("content-length")).toBe("4")
     expect(firstBytes).toEqual(new Uint8Array([0x49, 0x44, 0x33, 0x04]))
     expect(secondBytes).toEqual(firstBytes)
+  }),
+)
+
+it.live("releases saved audio through the authenticated local recording endpoint", () =>
+  Effect.gen(function* () {
+    const released: string[] = []
+    const handler = yield* makeHandler(
+      service({
+        release: (id) =>
+          Effect.sync(() => {
+            released.push(id)
+          }),
+      }),
+    )
+    const response = yield* request(handler, "/api/audio/recording/recording-1/release", {
+      method: "POST",
+      headers: auth,
+    })
+    expect(response.status).toBe(204)
+    expect(released).toEqual(["recording-1"])
+    const denied = yield* makeHandler(service(), { allowRemote: false })
+    expect(
+      (yield* request(denied, "/api/audio/recording/recording-1/release", { method: "POST", headers: auth })).status,
+    ).toBe(403)
+    const active = yield* makeHandler(
+      service({
+        release: () => Effect.fail(new AudioRecording.Error({ code: "RECORDER_BUSY", message: "Still recording" })),
+      }),
+    )
+    expect(
+      (yield* request(active, "/api/audio/recording/recording-1/release", { method: "POST", headers: auth })).status,
+    ).toBe(409)
   }),
 )
 
@@ -245,6 +278,7 @@ function service(overrides: Partial<AudioRecording.Interface> = {}) {
     status: Effect.succeed(idle),
     start: Effect.succeed({ status: recording, created: true }),
     stop: () => Effect.succeed({ data: new Uint8Array([0x49, 0x44, 0x33, 0x04]), status: completed }),
+    release: () => Effect.void,
     ...overrides,
   })
 }
@@ -253,6 +287,10 @@ function statefulService(initial: Audio.Status = idle) {
   const state = { status: initial }
   return AudioRecording.Service.of({
     status: Effect.sync(() => state.status),
+    release: () =>
+      Effect.sync(() => {
+        state.status = { ...state.status, recordingID: null }
+      }),
     start: Effect.sync(() => {
       if (state.status.state === "recording") return { status: state.status, created: false }
       state.status = recording
