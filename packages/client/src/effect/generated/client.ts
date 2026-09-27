@@ -327,6 +327,8 @@ import type {
   AudioRecordingStartOutput,
   AudioRecordingStopInput,
   AudioRecordingStopOutput,
+  AudioRecordingReleaseInput,
+  AudioRecordingReleaseOutput,
   AudioRecordingStatusOutput,
   AudioTranscriptionsInput,
   AudioTranscriptionsOutput,
@@ -2015,6 +2017,13 @@ const EndpointAudioRecordingStop = (raw: RawClient["server.audio"]) => (input: A
     ),
   )
 
+const EndpointAudioRecordingRelease = (raw: RawClient["server.audio"]) => (input: AudioRecordingReleaseInput) =>
+  preserveEffect<AudioRecordingReleaseOutput>()(
+    raw["audio.recording.release"]({ params: { recordingID: input["recordingID"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointAudioRecordingStatus = (raw: RawClient["server.audio"]) => () =>
   preserveEffect<AudioRecordingStatusOutput>()(raw["audio.recording.status"]({}).pipe(Effect.mapError(mapClientError)))
 
@@ -2034,6 +2043,7 @@ const adaptGroupAudio = (raw: RawClient["server.audio"]) => ({
   recording: {
     start: EndpointAudioRecordingStart(raw),
     stop: EndpointAudioRecordingStop(raw),
+    release: EndpointAudioRecordingRelease(raw),
     status: EndpointAudioRecordingStatus(raw),
   },
   transcriptions: EndpointAudioTranscriptions(raw),
