@@ -16,6 +16,7 @@ export interface Interface {
   readonly stop: (
     recordingID: string,
   ) => Effect.Effect<{ readonly data: Uint8Array; readonly status: Audio.Status }, Error>
+  readonly release: (recordingID: string) => Effect.Effect<void, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ServerAudioRecording") {}
@@ -69,6 +70,7 @@ export const unavailable = Layer.effect(
               message: status.errorMessage ?? "Audio recording is unavailable.",
             }),
           ),
+        release: () => Effect.void,
       }),
     ),
   ),
