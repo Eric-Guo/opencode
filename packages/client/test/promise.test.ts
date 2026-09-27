@@ -56,7 +56,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "update"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
-  expect(Object.keys(client.audio.recording)).toEqual(["start", "stop", "status"])
+  expect(Object.keys(client.audio.recording)).toEqual(["start", "stop", "release", "status"])
   expect(client.audio.transcriptions).toBeFunction()
 })
 
@@ -68,15 +68,18 @@ test("audio recording accepts created starts and returns MP3 bytes", async () =>
       const request = input instanceof Request ? input : new Request(input, init)
       requests.push(request)
       if (request.url.endsWith("/start")) return Response.json({ state: "recording" }, { status: 201 })
+      if (request.url.endsWith("/release")) return new Response(null, { status: 204 })
       return new Response(new Uint8Array([0x49, 0x44, 0x33]), { headers: { "content-type": "audio/mpeg" } })
     },
   })
 
   expect(await client.audio.recording.start()).toEqual({ state: "recording" })
   expect(Array.from(await client.audio.recording.stop({ recordingID: "recording-1" }))).toEqual([0x49, 0x44, 0x33])
+  await client.audio.recording.release({ recordingID: "recording-1" })
   expect(requests.map((request) => [request.method, new URL(request.url).pathname])).toEqual([
     ["POST", "/api/audio/recording/start"],
     ["POST", "/api/audio/recording/recording-1/stop"],
+    ["POST", "/api/audio/recording/recording-1/release"],
   ])
 })
 
