@@ -36,6 +36,7 @@ export function layer(options: Options = {}) {
               })
         const service = AudioRecording.Service.of({
           status: Effect.sync(() => recorder.status()),
+          release: (recordingID) => Effect.try({ try: () => recorder.release(recordingID), catch: failure }),
           start: Effect.gen(function* () {
             const current = recorder.status()
             if (current.state === "recording") {
