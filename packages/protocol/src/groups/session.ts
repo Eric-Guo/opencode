@@ -173,10 +173,13 @@ export const SessionsQuery = Schema.Struct({
   cursor: SessionsCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
-export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(
-  sessionLocationMiddleware: Context.Key<I, S>,
-  formLocationMiddleware: Context.Key<FormI, FormS>,
-) =>
+// Keep the endpoint inference split so declaration emit does not expand the entire group through one node.
+const makeSessionPrimaryGroup = <
+  I extends HttpApiMiddleware.AnyId,
+  S,
+  FormI extends HttpApiMiddleware.AnyId,
+  FormS,
+>(sessionLocationMiddleware: Context.Key<I, S>, formLocationMiddleware: Context.Key<FormI, FormS>) =>
   HttpApiGroup.make("server.session")
     .add(
       HttpApiEndpoint.get("session.list", "/api/session", {
@@ -565,6 +568,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         .middleware(sessionLocationMiddleware)
         .annotateMerge(OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" })),
     )
+
+const makeSessionAuxiliaryGroup = <
+  I extends HttpApiMiddleware.AnyId,
+  S,
+  FormI extends HttpApiMiddleware.AnyId,
+  FormS,
+>(sessionLocationMiddleware: Context.Key<I, S>, formLocationMiddleware: Context.Key<FormI, FormS>) =>
+  HttpApiGroup.make("server.session")
     .add(
       HttpApiEndpoint.get("session.context", "/api/session/:sessionID/context", {
         params: { sessionID: Session.ID },
@@ -898,9 +909,37 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         }),
       ),
     )
+
+type SessionGroup<
+  I extends HttpApiMiddleware.AnyId,
+  S,
+  FormI extends HttpApiMiddleware.AnyId,
+  FormS,
+> = HttpApiGroup.HttpApiGroup<
+  "server.session",
+  | HttpApiGroup.Endpoints<ReturnType<typeof makeSessionPrimaryGroup<I, S, FormI, FormS>>>
+  | HttpApiGroup.Endpoints<ReturnType<typeof makeSessionAuxiliaryGroup<I, S, FormI, FormS>>>
+>
+
+export const makeSessionGroup = <
+  I extends HttpApiMiddleware.AnyId,
+  S,
+  FormI extends HttpApiMiddleware.AnyId,
+  FormS,
+>(
+  sessionLocationMiddleware: Context.Key<I, S>,
+  formLocationMiddleware: Context.Key<FormI, FormS>,
+): SessionGroup<I, S, FormI, FormS> => {
+  const endpoints = [
+    ...Object.values(makeSessionPrimaryGroup(sessionLocationMiddleware, formLocationMiddleware).endpoints),
+    ...Object.values(makeSessionAuxiliaryGroup(sessionLocationMiddleware, formLocationMiddleware).endpoints),
+  ]
+  return HttpApiGroup.make("server.session")
+    .add(endpoints[0], ...endpoints.slice(1))
     .annotateMerge(
       OpenApi.annotations({
         title: "session",
         description: "Experimental session routes.",
       }),
     )
+}
