@@ -69,7 +69,13 @@ export interface PathAttachmentPart {
   path: string
 }
 
-export type ContentPart = TextPart | FileAttachmentPart | AgentPart | SkillPart | ImageAttachmentPart | PathAttachmentPart
+export type ContentPart =
+  | TextPart
+  | FileAttachmentPart
+  | AgentPart
+  | SkillPart
+  | ImageAttachmentPart
+  | PathAttachmentPart
 export type Prompt = ContentPart[]
 
 export type PromptModel = {
@@ -88,26 +94,19 @@ export type FileContextItem = {
   preview?: string
 }
 
-export type BrowserElement = {
-  ref?: string
-  selector: string
+export type NoteComment = {
+  type: "note"
+  origin: string
   label: string
-  role?: string
-  name?: string
-  text?: string
-}
-
-export type BrowserComment = {
-  type: "browser"
-  tabID: string
-  url: string
-  title?: string
-  element: BrowserElement
+  icon: string
+  subject: string
+  href?: string
+  live?: { subject: string; href?: string }
   comment: string
 }
 
-export type BrowserContextItem = BrowserComment & { commentID: string }
-export type ContextItem = FileContextItem | BrowserContextItem
+export type NoteContextItem = NoteComment & { commentID: string }
+export type ContextItem = FileContextItem | NoteContextItem
 export type PromptScope = { draftID: string } | { dir: string; id?: string }
 
 export type ComposerStore = {

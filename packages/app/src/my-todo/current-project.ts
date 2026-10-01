@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js"
 import { useData, useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { sameDirectory } from "@/workspaces/paths"
+import { sameDirectory } from "@opencode/util/path"
 import { projectForSession } from "@/shell/layout/helpers"
 
 export function useMyTodoProject(sessionID?: () => string | undefined) {

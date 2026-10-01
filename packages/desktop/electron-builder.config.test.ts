@@ -200,7 +200,5 @@ test("excludes non-Windows native dependencies from Windows builds", async () =>
     "@parcel/watcher-win32-x64",
     "@yuuang/ffi-rs-win32-arm64-msvc",
     "@yuuang/ffi-rs-win32-x64-msvc",
-  ].forEach((packageName) =>
-    expect(config.win?.files).not.toContain(`!**/node_modules/${packageName}{,/**/*}`),
-  )
+  ].forEach((packageName) => expect(config.win?.files).not.toContain(`!**/node_modules/${packageName}{,/**/*}`))
 })

@@ -64,7 +64,8 @@ export function createBrowserPane(input: {
       if (server.username && !server.password) throw new Error("browser.pane.endpoint.invalid")
       const win = input.windows.get(window)
       if (!win || entries.has(binding)) throw new Error("browser.pane.owner.invalid")
-      if (win.isDestroyed() || input.windows.contents(win).isDestroyed()) throw new Error("browser.pane.owner.unavailable")
+      if (win.isDestroyed() || input.windows.contents(win).isDestroyed())
+        throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
       const saved = restore.load(storageKey)
@@ -319,7 +320,8 @@ export function createBrowserPane(input: {
   }
 
   function publish(entry: Entry, event: PaneEvent) {
-    if (!entries.has(entry.binding) || entry.win.isDestroyed() || input.windows.contents(entry.win).isDestroyed()) return
+    if (!entries.has(entry.binding) || entry.win.isDestroyed() || input.windows.contents(entry.win).isDestroyed())
+      return
     input.emit(entry.window, { binding: entry.binding, event })
   }
 

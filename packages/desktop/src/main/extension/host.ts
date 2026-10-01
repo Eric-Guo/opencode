@@ -125,7 +125,8 @@ export function createHost(input: {
   const closed = new Set<(win: BrowserWindow) => void>()
   const status = { sequence: 0, disposed: false, menubarQueued: false }
 
-  const broadcast = (event: DesktopEvent) => getMainWindows().forEach((win) => emitIpcEvent(getPrimaryWebContents(win), event))
+  const broadcast = (event: DesktopEvent) =>
+    getMainWindows().forEach((win) => emitIpcEvent(getPrimaryWebContents(win), event))
   const changed = () => broadcast(new ExtensionsChanged({ list: installed() }))
 
   const subscribers = (remote: string, window?: number) => {

@@ -24,5 +24,4 @@ describe("sidecar authorization", () => {
       url: sidecar.url,
     })
   })
-
 })

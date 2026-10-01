@@ -196,12 +196,7 @@ function DesktopMenuItem(props: {
   onSelect: () => void
 }) {
   return (
-    <Menu.Item
-      disabled={props.disabled}
-      onSelect={props.onSelect}
-      shortcut={props.keybind}
-      title={props.title}
-    >
+    <Menu.Item disabled={props.disabled} onSelect={props.onSelect} shortcut={props.keybind} title={props.title}>
       {props.label}
     </Menu.Item>
   )
