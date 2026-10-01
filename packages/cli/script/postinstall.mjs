@@ -112,20 +112,11 @@ function copyBinary(source) {
     fs.copyFileSync(source, targetBinary)
   }
   fs.chmodSync(targetBinary, 0o755)
-  const assets = path.join(path.dirname(source), "assets")
-  const targetAssets = path.join(path.dirname(targetBinary), "assets")
-  if (!fs.existsSync(assets)) return
-  fs.rmSync(targetAssets, { recursive: true, force: true })
-  fs.cpSync(assets, targetAssets, { recursive: true })
 }
 
 function resolveBinary(name) {
-  return binaryFromPackage(require.resolve(`${name}/package.json`))
-}
-
-function binaryFromPackage(packagePath) {
-  const dependency = JSON.parse(fs.readFileSync(packagePath, "utf8"))
-  return path.resolve(path.dirname(packagePath), dependency.bin?.[command] ?? path.join("bin", sourceBinary))
+  const packagePath = require.resolve(`${name}/package.json`)
+  return path.join(path.dirname(packagePath), "bin", sourceBinary)
 }
 
 function installPackage(name) {
@@ -145,7 +136,7 @@ function installPackage(name) {
       { stdio: "inherit", windowsHide: true },
     )
     if (result.status !== 0) return false
-    copyBinary(binaryFromPackage(path.join(temp, "node_modules", name, "package.json")))
+    copyBinary(path.join(temp, "node_modules", name, "bin", sourceBinary))
     return true
   } finally {
     fs.rmSync(temp, { recursive: true, force: true })

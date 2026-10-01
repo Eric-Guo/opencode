@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
+import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { build } from "vite"
@@ -38,14 +38,13 @@ const allTargets = [
   nodeTarget("linux", "arm64"),
   nodeTarget("linux", "x64"),
   nodeTarget("darwin", "arm64"),
-  nodeTarget("darwin", "x64"),
   nodeTarget("win32", "arm64"),
   nodeTarget("win32", "x64"),
 ]
 const targets = requested
   ? allTargets.filter((target) => targetName(target) === requested)
   : single || bundleOnly
-    ? [nodeTarget(process.platform, process.arch)]
+    ? allTargets.filter((target) => target.platform === process.platform && target.arch === process.arch)
     : allTargets
 
 process.chdir(dir)
@@ -57,7 +56,7 @@ if (appArchiveOnly) {
   process.exit(0)
 }
 if (targets.length === 0) {
-  throw new Error(`Unknown Node target: ${requested}`)
+  throw new Error(`Unknown Node target: ${requested ?? `${process.platform}-${process.arch}`}`)
 }
 const appArchive = archivePath ? (await Bun.file(archivePath).text()).trim() : await buildAppArchive(Script.channel)
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
@@ -135,35 +134,6 @@ for (const target of targets) {
   if (bundleOnly) continue
 
   const name = `cli-node-${targetName(target)}`
-  if (target.platform === "darwin" && target.arch === "x64") {
-    const root = path.join(outdir, name, "bin")
-    const output = path.join(root, "opencode.mjs")
-    await mkdir(root, { recursive: true })
-    await copyFile("dist-node/opencode.mjs", output)
-    await cp("dist-node/assets", path.join(root, "assets"), { recursive: true })
-    await chmod(output, 0o755)
-    await writeFile(
-      path.join(outdir, name, "package.json"),
-      `${JSON.stringify(
-        {
-          name: `@opencode/${name}`,
-          version: Script.version,
-          type: "module",
-          bin: { "opencode2-node": "./bin/opencode.mjs" },
-          engines: { node: `>=${NODE_VERSION}` },
-          license: pkg.license,
-          repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
-          os: [target.platform],
-          cpu: [target.arch],
-        },
-        null,
-        2,
-      )}\n`,
-    )
-    await verifyArtifact(path.join(outdir, name))
-    if (host) await smoke(output)
-    continue
-  }
   const binary = target.platform === "win32" ? "opencode2-node.exe" : "opencode2-node"
   const output = path.join(outdir, name, "bin", binary)
   if (!builder) throw new Error("Node SEA builder is unavailable")
@@ -281,9 +251,6 @@ async function smoke(output: string) {
   const root = await mkdtemp(path.join(os.tmpdir(), "opencode-node-smoke-"))
   const executable = path.join(root, path.basename(output))
   await copyFile(output, executable)
-  if (path.basename(output) === "opencode.mjs") {
-    await cp(path.join(path.dirname(output), "assets"), path.join(root, "assets"), { recursive: true })
-  }
   if (process.platform !== "win32") await chmod(executable, 0o755)
   run(executable, ["--version"], root)
   run(executable, ["--help"], root)
