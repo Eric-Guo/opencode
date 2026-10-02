@@ -175,6 +175,11 @@ const table = sqliteTable("session", {
 - Run `bun run check` from the repository root as the canonical full lint and type-check verification.
 - During focused iteration, run `bun typecheck` from the affected package directory (for example, `packages/core`). Never run `tsc` directly.
 
+## Lint Hygiene
+
+- Follow `anti-slop/require-readable-spacing` in new and changed code; add the blank lines requested between statements.
+- `bun run lint` includes an upstream advisory-warning backlog. Distinguish warnings from errors, keep the rules enabled, and avoid reformatting unrelated upstream code when fixing branch-specific findings.
+
 ## V2 Session Core
 
 - Keep durable events minimal: record irreducible new facts and do not repeat state derivable by folding the ordered aggregate history. Enrich projections and read models with previous or derived state when consumers need self-contained views.
