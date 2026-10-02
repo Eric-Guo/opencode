@@ -124,6 +124,7 @@ export const Recorder = {
 export const AllowDeselect = {
   render: () => {
     const [value, setValue] = createSignal<string | null>("a")
+
     return (
       <div style={{ display: "grid", gap: "12px", "justify-items": "start" }}>
         <SegmentedControl value={value()} allowDeselect onChange={setValue} aria-label="Optional selection">

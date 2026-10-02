@@ -2299,6 +2299,7 @@ ToolRegistry.register({
             <For each={questions()}>
               {(q, i) => {
                 const answer = () => answers()[i()] ?? []
+
                 return (
                   <div data-slot="question-answer-item">
                     <div data-slot="question-text">{q.question}</div>
