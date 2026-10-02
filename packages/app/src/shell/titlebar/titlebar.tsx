@@ -328,6 +328,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 case "connect":
                 case "home": {
                   const selection = layout.home.selection()
+
                   const conn =
                     global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
                     global.servers.list()[0]
