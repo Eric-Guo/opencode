@@ -209,6 +209,11 @@ const table = sqliteTable("session", {
 - Clients are responsible for making sure what they need is loaded before they call. Long-lived clients refresh on the matching `*.updated` event (`model.updated`, `agent.updated`, `skill.updated`, `integration.updated`, `plugin.updated`, ...). One-shot clients (CLI commands, ACP, SDK callers) wait on their side, for example by polling `plugin.list` or the entry they need. See `packages/cli/src/services/plugin-startup.ts`.
 - Running the hooks that are registered and waiting for their result is fine (for example `hooks.trigger("session", "http.request", ...)`). What is not allowed is waiting for plugins to load first: if the plugin that adds a hook hasn't loaded yet, the call runs without that hook.
 
+## Lint Hygiene
+
+- Follow `anti-slop/require-readable-spacing` in new and changed code; add the blank lines requested between statements.
+- `bun run lint` includes an upstream advisory-warning backlog. Distinguish warnings from errors, keep the rules enabled, and avoid reformatting unrelated upstream code when fixing branch-specific findings.
+
 ## Session Core
 
 - Keep durable events minimal: record irreducible new facts and do not repeat state derivable by folding the ordered aggregate history. Enrich projections and read models with previous or derived state when consumers need self-contained views.
