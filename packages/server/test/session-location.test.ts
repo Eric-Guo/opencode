@@ -9,7 +9,7 @@ import { ServerFetch } from "../src/fetch"
 
 const SessionResponse = Schema.Struct({ data: Schema.toEncoded(Session.Info) })
 
-it.live("creates and restores session directories through Core before providing the session location", () =>
+it.live("creates the first session directory and returns 404 for deleted session locations", () =>
   Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
     const directory = path.join(tmp.path, "agent7777", "agent7777")
@@ -35,13 +35,34 @@ it.live("creates and restores session directories through Core before providing 
       expect((await stat(directory)).isDirectory()).toBe(true)
 
       await rm(directory, { recursive: true })
-      const restored = await handler(new Request(`http://opencode.local/api/session/${created.data.id}`))
-      expect(restored.status).toBe(200)
-      expect(Schema.decodeUnknownSync(SessionResponse)(await restored.json()).data.location.directory).toBe(directory)
-      expect((await stat(directory)).isDirectory()).toBe(true)
+      const recorded = await handler(new Request(`http://opencode.local/api/session/${created.data.id}`))
+      expect(recorded.status).toBe(200)
+      expect(Schema.decodeUnknownSync(SessionResponse)(await recorded.json()).data.location.directory).toBe(directory)
+      await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
 
-      // This endpoint also passes through SessionLocationMiddleware.
-      await rm(directory, { recursive: true })
+      const repeated = await handler(
+        new Request("http://opencode.local/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: created.data.id, location: { directory } }),
+        }),
+      )
+      expect(repeated.status).toBe(200)
+      expect(Schema.decodeUnknownSync(SessionResponse)(await repeated.json()).data.id).toBe(created.data.id)
+      await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
+
+      const second = await handler(
+        new Request("http://opencode.local/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ location: { directory } }),
+        }),
+      )
+      expect(second.status).toBe(200)
+      expect(Schema.decodeUnknownSync(SessionResponse)(await second.json()).data.id).not.toBe(created.data.id)
+      await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
+
+      // This endpoint needs the session's Location graph.
       const switched = await handler(
         new Request(`http://opencode.local/api/session/${created.data.id}/agent`, {
           method: "POST",
@@ -49,8 +70,13 @@ it.live("creates and restores session directories through Core before providing 
           body: JSON.stringify({ agent: "build" }),
         }),
       )
-      expect(switched.status).toBe(204)
-      expect((await stat(directory)).isDirectory()).toBe(true)
+      expect(switched.status).toBe(404)
+      expect(await switched.json()).toEqual({
+        _tag: "LocationNotFoundError",
+        location: { directory },
+        message: `Location not found: ${directory}`,
+      })
+      await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
 
       const missing = Session.ID.create()
       const unknown = await handler(
