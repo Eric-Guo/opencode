@@ -103,6 +103,35 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("Session.create", () => {
+  it.live("creates directories only for their first session and never restores deleted locations", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const sessions = yield* Session.Service
+      const ref = Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "nested", "project")) })
+      const first = yield* sessions.create({ location: ref })
+      expect((yield* Effect.promise(() => fs.stat(ref.directory))).isDirectory()).toBe(true)
+
+      yield* Effect.promise(() => fs.rm(ref.directory, { recursive: true }))
+      expect(yield* sessions.get(first.id)).toEqual(first)
+      expect(yield* sessions.create({ id: first.id, location: ref })).toEqual(first)
+      yield* Effect.promise(async () => {
+        await expect(fs.stat(ref.directory)).rejects.toMatchObject({ code: "ENOENT" })
+      })
+
+      const second = yield* sessions.create({ location: ref })
+      const child = yield* sessions.create({ parentID: first.id })
+      expect(second.location).toEqual(ref)
+      expect(child.location).toEqual(ref)
+      yield* Effect.promise(async () => {
+        await expect(fs.stat(ref.directory)).rejects.toMatchObject({ code: "ENOENT" })
+      })
+
+      const other = AbsolutePath.make(path.join(tmp.path, "other"))
+      yield* sessions.create({ location: Location.Ref.make({ directory: other }) })
+      expect((yield* Effect.promise(() => fs.stat(other))).isDirectory()).toBe(true)
+    }),
+  )
+
   liveIt.live("preserves the project canonical directory when creating a session in another clone", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
