@@ -1,5 +1,6 @@
-import { Message, Model, Part, Session, SnapshotFileDiff } from "@opencode-ai/sdk/v2"
-import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { ModelInfo, SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { FileDiff } from "@opencode/schema/file-diff"
+import type { SessionV1 } from "@opencode/schema/session-v1"
 import z from "zod"
 import { Storage } from "./storage"
 
@@ -20,10 +21,10 @@ function currentMessage(input: unknown): input is SessionMessageInfo {
   )
 }
 
-type LegacySession = Session
+type LegacySession = typeof SessionV1.SessionInfo.Encoded
 
 export namespace Share {
-  export type SessionDiff = SnapshotFileDiff & { file: string; patch: string }
+  export type SessionDiff = FileDiff.LegacyInfo & { file: string; patch: string }
   export type Session = LegacySession | SessionInfo
   export const Messages = z.object({
     sessionID: z.string(),
@@ -45,7 +46,7 @@ export namespace Share {
     }),
     z.object({
       type: z.literal("message"),
-      data: z.custom<Message>(),
+      data: z.custom<typeof SessionV1.Info.Encoded>(),
     }),
     z.object({
       type: z.literal("messages"),
@@ -53,7 +54,7 @@ export namespace Share {
     }),
     z.object({
       type: z.literal("part"),
-      data: z.custom<Part>(),
+      data: z.custom<typeof SessionV1.Part.Encoded>(),
     }),
     z.object({
       type: z.literal("session_diff"),
@@ -61,7 +62,7 @@ export namespace Share {
     }),
     z.object({
       type: z.literal("model"),
-      data: z.custom<Model[]>(),
+      data: z.custom<Pick<ModelInfo, "id" | "name">[]>(),
     }),
   ])
   export type Data = z.infer<typeof Data>
