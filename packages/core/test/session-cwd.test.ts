@@ -72,6 +72,7 @@ const state = testEffect(
     ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
+      Session.node.replace(Session.configured({ createDirectories: false })),
       Project.node.replace(globalProjectNode),
       LocationServiceMap.node.replace(promptLocationNode),
       SessionExecution.node.replace(SessionExecution.noopLayer),
