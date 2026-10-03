@@ -263,13 +263,15 @@ const layer = Layer.effect(
       create: Effect.fn("Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
-        if (recorded) return yield* sessions.forSession(sessionID).get()
+        if (recorded) return recorded
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
         const location = parent?.location ?? input.location
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
-        yield* fs.ensureDir(location.directory).pipe(Effect.orDie)
+        // Only the first session may create its directory; deleted locations stay missing.
+        if ((yield* store.list({ directory: location.directory, limit: 1 })).length === 0)
+          yield* fs.ensureDir(location.directory).pipe(Effect.orDie)
         const project = yield* projects.resolve(location.directory)
         const projected = yield* bus
           .publish(
