@@ -38,6 +38,8 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
     const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
       yield* Effect.promise(() => created.json()),
     ).data
+    yield* Effect.promise(() => fs.rm(directory, { recursive: true }))
+
     const endpoints = [
       "/api/model",
       "/api/integration",
