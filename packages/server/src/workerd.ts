@@ -9,6 +9,7 @@ import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { Pty } from "@opencode/core/pty"
+import { Session } from "@opencode/core/session"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Vcs } from "@opencode/core/vcs"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -82,6 +83,7 @@ export function replacements(options: Options): LayerNode.Replacements {
     FileSystem.node.replace(fileSystemLayer),
     FileSystemSearch.node.replace(fileSystemSearchLayer),
     Pty.node.replace(ptyLayer),
+    Session.node.replace(Session.configured({ createDirectories: false })),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),
