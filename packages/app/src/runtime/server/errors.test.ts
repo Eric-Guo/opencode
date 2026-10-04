@@ -1,8 +1,10 @@
+import { Data } from "effect"
 
 import { describe, expect, test } from "bun:test"
 import type { FileNotFoundError, SessionNotFoundError } from "@opencode/client/promise"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./errors"
 import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./errors"
+
 
 
 function fill(text: string, vars?: Record<string, string | number>) {
@@ -85,11 +87,10 @@ describe("formatServerError", () => {
     },
     {
       name: "typed server error message",
-      error: {
-        _tag: "FileNotFoundError",
+      error: Data.taggedEnum<FileNotFoundError>().FileNotFoundError({
         path: "deleted.txt",
         message: "File not found: deleted.txt",
-      } satisfies FileNotFoundError,
+      }),
       expected: "File not found: deleted.txt",
     },
     { name: "string error", error: "Failed to connect to server", expected: "Failed to connect to server" },
@@ -130,11 +131,10 @@ describe("formatServerError", () => {
 })
 
 describe("isSessionNotFoundError", () => {
-  const body = {
-    _tag: "SessionNotFoundError",
+  const body = Data.taggedEnum<SessionNotFoundError>().SessionNotFoundError({
     sessionID: "ses_missing",
     message: "Session not found",
-  } satisfies SessionNotFoundError
+  })
 
   test("matches an SDK-wrapped or direct structured error for the requested session", () => {
     expect(isSessionNotFoundError(new Error(body.message, { cause: { body, status: 404 } }), body.sessionID)).toBe(true)
@@ -170,7 +170,12 @@ describe("isSessionNotFoundError", () => {
     expect(
       isSessionNotFoundError(
         new Error("Provider not found", {
-          cause: { body: { _tag: "ProviderNotFoundError", providerID: "missing" }, status: 404 },
+          cause: {
+            body: Data.taggedEnum<{ _tag: "ProviderNotFoundError"; providerID: string }>().ProviderNotFoundError({
+              providerID: "missing",
+            }),
+            status: 404,
+          },
         }),
         "ses_tab",
       ),
