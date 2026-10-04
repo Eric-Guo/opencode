@@ -3,15 +3,6 @@ import { startVisualCapture, stopVisualCapture, type VisualCapture } from "./cap
 import type { VisualMarker, VisualObservation, VisualProbeResult } from "./model"
 import type { VisualRegionDefinition } from "./regions"
 
-type ProbeWindow<RegionName extends string = string> = Window & {
-  __visualStabilityProbe?: {
-    startedAt: number
-    markers: VisualMarker[]
-    samples: VisualObservation<RegionName>[]
-    stop: () => void
-  }
-}
-
 const captures = new WeakMap<Page, VisualCapture>()
 
 export async function startVisualProbe<Regions extends Record<string, VisualRegionDefinition>>(
@@ -20,7 +11,7 @@ export async function startVisualProbe<Regions extends Record<string, VisualRegi
 ) {
   await stopCapture(page)
   await page.evaluate(() => {
-    ;(window as ProbeWindow).__visualStabilityProbe?.stop()
+    window.__visualStabilityProbe?.stop()
   })
 
   const startedAtEpoch = await page.evaluate((regions) => {
@@ -197,7 +188,7 @@ export async function startVisualProbe<Regions extends Record<string, VisualRegi
       }, 0)
     }
 
-    ;(window as ProbeWindow).__visualStabilityProbe = {
+    window.__visualStabilityProbe = {
       startedAt,
       markers,
       samples,
@@ -227,7 +218,7 @@ export async function stopVisualProbe<RegionName extends string = string>(
 ): Promise<VisualProbeResult<RegionName>> {
   return page
     .evaluate(() => {
-      const probe = (window as ProbeWindow).__visualStabilityProbe
+      const probe = window.__visualStabilityProbe
 
       if (!probe) throw new Error("Visual stability probe is not running")
       probe.stop()
@@ -249,7 +240,7 @@ export async function stopVisualProbe<RegionName extends string = string>(
 
 export async function markVisualProbe(page: Page, label: string) {
   await page.evaluate((label) => {
-    const probe = (window as ProbeWindow).__visualStabilityProbe
+    const probe = window.__visualStabilityProbe
 
     if (!probe) return
     probe.markers.push({ at: performance.now() - probe.startedAt, label })
@@ -262,4 +253,15 @@ async function stopCapture(page: Page) {
   if (capture) captures.delete(page)
 
   return stopVisualCapture(capture)
+}
+
+declare global {
+  interface Window {
+    __visualStabilityProbe?: {
+      startedAt: number
+      markers: VisualMarker[]
+      samples: VisualObservation[]
+      stop: () => void
+    }
+  }
 }

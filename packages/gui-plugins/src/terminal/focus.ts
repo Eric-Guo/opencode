@@ -14,7 +14,7 @@ export const focusTerminalById = (id: string) => {
 
   terminal.focus({ preventScroll: true })
   terminal.dispatchEvent(
-    typeof PointerEvent === "function"
+    typeof PointerEvent !== "undefined"
       ? new PointerEvent("pointerdown", { bubbles: true, cancelable: true })
       : new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
   )

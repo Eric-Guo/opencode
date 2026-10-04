@@ -1,5 +1,6 @@
 import type { Component, JSX } from "solid-js"
 import { createMemo, splitProps } from "solid-js"
+
 import sprite from "./provider-icons/sprite.svg"
 import { iconNames } from "./provider-icons/types"
 
