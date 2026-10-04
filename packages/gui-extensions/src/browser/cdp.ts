@@ -12,6 +12,7 @@ export function createCdp(contents: WebContents) {
     if (!sessions.has(sessionID ?? "")) return
 
     if (name === "Target.attachedToTarget") {
+      // SAFETY: Electron reports Target.attachedToTarget with the payload for that exact CDP event name.
       const event = params as ProtocolMapping.Events["Target.attachedToTarget"][0]
 
       if (event.targetInfo.type === "iframe") sessions.add(event.sessionId)

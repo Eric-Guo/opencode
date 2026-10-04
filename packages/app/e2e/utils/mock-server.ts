@@ -300,6 +300,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
 
   // Server-side events the mock publishes itself; delivery failures other than a missing document fail the test.
   const emit = (events: OpenCodeEvent[]) =>
+    // SAFETY: browser evaluation may reject with arbitrary thrown values; retryableDelivery classifies the I/O failure.
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters
     void push(events).catch((cause: unknown) => {
       if (page.isClosed() || retryableDelivery(cause)) return
       throw cause
@@ -322,6 +324,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           () => {
             pump.pending.splice(0, batch.length)
           },
+          // SAFETY: browser evaluation failures cross the process boundary without an Error-only guarantee.
+          // oxlint-disable-next-line anti-slop/no-unknown-parameters
           (cause: unknown) => {
             if (page.isClosed()) return clearInterval(timer)
 
@@ -537,6 +541,8 @@ function answers(page: Page, server: string, url: URL) {
 }
 
 // The document is not loaded yet or is being replaced; the pump retries on its next tick.
+// SAFETY: Playwright can reject browser evaluation with arbitrary thrown values, so this I/O classifier accepts unknown.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 function retryableDelivery(cause: unknown) {
   const message = cause instanceof Error ? cause.message : String(cause)
 
