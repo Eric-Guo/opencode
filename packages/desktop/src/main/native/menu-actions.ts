@@ -46,24 +46,31 @@ export function runDesktopMenuAction(
       return
     case "view.reload":
       reloadWindow(win)
+
       return
     case "history.back":
       navigateWindow(win, "back")
+
       return
     case "history.forward":
       navigateWindow(win, "forward")
+
       return
     case "view.toggleDevTools":
       getContents(win)?.toggleDevTools()
+
       return
     case "view.resetZoom":
       setZoom(win, 1)
+
       return
     case "view.zoomIn":
       setZoom(win, (getContents(win)?.getZoomFactor() ?? 1) + 0.2)
+
       return
     case "view.zoomOut":
       setZoom(win, (getContents(win)?.getZoomFactor() ?? 1) - 0.2)
+
       return
     case "view.toggleFullscreen":
       win?.setFullScreen(!win.isFullScreen())
@@ -71,18 +78,23 @@ export function runDesktopMenuAction(
       return
     case "edit.undo":
       getContents(win)?.undo()
+
       return
     case "edit.redo":
       getContents(win)?.redo()
+
       return
     case "edit.cut":
       getContents(win)?.cut()
+
       return
     case "edit.copy":
       getContents(win)?.copy()
+
       return
     case "edit.paste":
       getContents(win)?.paste()
+
       return
     case "edit.delete":
       getContents(win)?.delete()
