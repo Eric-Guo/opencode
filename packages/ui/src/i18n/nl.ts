@@ -385,4 +385,4 @@ export const dict = {
   "ui.question.singleHint": "Selecteer één antwoord",
   "ui.question.classic.multiHint": "Selecteer alle antwoorden die van toepassing zijn",
   "ui.question.custom.answerPlaceholder": "Typ je eigen antwoord…",
-}
+} satisfies Record<string, string>

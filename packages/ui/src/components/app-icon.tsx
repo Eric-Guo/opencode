@@ -1,5 +1,6 @@
 import type { Component, ComponentProps } from "solid-js"
 import { createSignal, onCleanup, onMount, splitProps } from "solid-js"
+
 import type { IconName } from "./app-icons/types"
 
 import androidStudio from "../assets/icons/app/android-studio.svg"
@@ -47,7 +48,7 @@ const themed: Partial<Record<IconName, { light: string; dark: string }>> = {
 }
 
 const scheme = () => {
-  if (!("document" in globalThis)) return "light" as const
+  if (typeof document === "undefined") return "light" as const
 
   if (document.documentElement.dataset.colorScheme === "dark") return "dark" as const
 

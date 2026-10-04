@@ -38,6 +38,18 @@ export function Avatar(props: AvatarProps) {
 
   const src = split.src // did this so i can zero it out to test fallback
 
+  const style = () => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid style props explicitly accept CSS text or a typed style map.
+    if (typeof split.style === "string")
+      return `${split.style};${!src && split.background ? `--avatar-bg:${split.background};` : ""}${!src && split.foreground ? `--avatar-fg:${split.foreground};` : ""}`
+
+    return {
+      ...split.style,
+      "--avatar-bg": !src && split.background ? split.background : split.style?.["--avatar-bg"],
+      "--avatar-fg": !src && split.foreground ? split.foreground : split.style?.["--avatar-fg"],
+    }
+  }
+
   return (
     <div
       {...rest}
@@ -49,11 +61,7 @@ export function Avatar(props: AvatarProps) {
         ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
-      style={{
-        ...(typeof split.style === "object" ? split.style : {}),
-        ...(!src && split.background ? { "--avatar-bg": split.background } : {}),
-        ...(!src && split.foreground ? { "--avatar-fg": split.foreground } : {}),
-      }}
+      style={style()}
     >
       <Show when={src} fallback={first(split.fallback)}>
         {(src) => <img src={src()} draggable={false} data-slot="avatar-image" />}
