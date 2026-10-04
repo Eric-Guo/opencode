@@ -259,4 +259,4 @@ export const dict = {
   "ui.messagePart.context.updates": "Actualizări",
   "ui.promptInput.cancelUpload": "Anulează încărcarea",
   "ui.promptInput.uploading": "{{percent}}%",
-}
+} satisfies Record<string, string>

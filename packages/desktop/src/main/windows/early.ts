@@ -1,7 +1,7 @@
+import { isString } from "effect/Predicate"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { app, BrowserWindow, screen, shell } from "electron"
-import { Predicate } from "effect"
 import { resolveExternalURL } from "../files/external-url"
 import { windowArguments } from "./bootstrap"
 import { APP_NAME } from "../constants"
@@ -37,7 +37,7 @@ const displays = {
 // bundle, the layers and the renderer boot. restoreWindows() adopts it through takeEarlyWindow().
 export function createEarlyWindow() {
   const ids = getStore().get(WINDOW_IDS_KEY)
-  const id = Array.isArray(ids) && Predicate.isString(ids[0]) ? ids[0] : randomUUID()
+  const id = Array.isArray(ids) && isString(ids[0]) ? ids[0] : randomUUID()
   const root = app.getAppPath()
   const file = path.join(app.getPath("userData"), windowStateFile(id))
   const state = resolveWindowState(readWindowState(file), { width: 1280, height: 800 }, displays)

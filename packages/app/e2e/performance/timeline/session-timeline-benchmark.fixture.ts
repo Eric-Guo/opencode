@@ -74,7 +74,7 @@ export async function setupTimelineBenchmark(
     historyTurns: number
     eventBatch: number
     vcsDiff?: unknown[]
-    turnDiffs?: unknown[]
+    turnDiffs?: JsonValue[]
     busy?: boolean
     historyKind?: "mixed" | "tool-heavy"
   },
@@ -83,7 +83,7 @@ export async function setupTimelineBenchmark(
   let eventBatch = options.eventBatch
 
   const currentUserMessage = options.turnDiffs
-    ? { ...userMessage, metadata: { diffs: options.turnDiffs as JsonValue } }
+    ? { ...userMessage, metadata: { diffs: options.turnDiffs } }
     : userMessage
 
   const messages = [
@@ -230,7 +230,7 @@ function performanceTurn(index: number) {
   const before = historicalSource(index, false)
   const after = historicalSource(index, true)
 
-  const parts = [
+  const parts: ContentSeed[] = [
     ...(index % 5 === 0
       ? [
           {
@@ -241,7 +241,7 @@ function performanceTurn(index: number) {
             text: `Reviewing the existing implementation. ${"constraint analysis ".repeat(20)}`,
             time: { start: 1690000001000 + index * 2_000, end: 1690000001200 + index * 2_000 },
           },
-        ]
+        ] satisfies ContentSeed[]
       : []),
     {
       id: `prt_0000_${suffix}_assistant`,
@@ -270,7 +270,7 @@ function performanceTurn(index: number) {
               completed: 1690000001400 + index * 2_000,
             },
           },
-        ]
+        ] satisfies ContentSeed[]
       : []),
     ...(index % 12 === 0
       ? [
@@ -290,7 +290,7 @@ function performanceTurn(index: number) {
               completed: 1690000001500 + index * 2_000,
             },
           },
-        ]
+        ] satisfies ContentSeed[]
       : []),
     ...(index % 16 === 0
       ? [
@@ -316,9 +316,9 @@ function performanceTurn(index: number) {
               completed: 1690000001700 + index * 2_000,
             },
           },
-        ]
+        ] satisfies ContentSeed[]
       : []),
-  ] as unknown as ContentSeed[]
+  ]
 
   return [
     {
@@ -358,9 +358,9 @@ type ToolSeed = {
   name: string
   state: {
     status: "completed"
-    input: Record<string, unknown>
+    input: Record<string, JsonValue>
     content: [{ type: "text"; text: string }]
-    metadata: Record<string, unknown>
+    metadata: Record<string, JsonValue>
   }
   time: { created: number; ran: number; completed: number }
 }
@@ -380,9 +380,9 @@ function toolContent(part: ToolSeed): SessionMessageAssistant["content"][number]
     time: part.time,
     state: {
       status: "completed",
-      input: part.state.input as Record<string, JsonValue>,
+      input: part.state.input,
       content: part.state.content,
-      metadata: part.state.metadata as Record<string, JsonValue>,
+      metadata: part.state.metadata,
     },
   }
 }

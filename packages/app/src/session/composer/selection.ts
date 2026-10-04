@@ -1,26 +1,23 @@
+import { Option, Predicate, Schema } from "effect"
+import type { SessionMessageUser } from "@opencode/client/promise"
+import { Persistence } from "@/runtime/persistence/schema"
+
 export function resolveSessionComposerSelection(
   info: { agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined,
-  metadata: Record<string, unknown> | undefined,
+  metadata: SessionMessageUser["metadata"],
 ) {
-  const model = metadata?.model
-
-  const historical =
-    model &&
-    typeof model === "object" &&
-    !Array.isArray(model) &&
-    "providerID" in model &&
-    "modelID" in model &&
-    typeof model.providerID === "string" &&
-    typeof model.modelID === "string"
-      ? {
-          providerID: model.providerID,
-          modelID: model.modelID,
-          variant: "variant" in model && typeof model.variant === "string" ? model.variant : undefined,
-        }
-      : undefined
+  const historical = Option.getOrUndefined(
+    Schema.decodeUnknownOption(
+      Schema.Struct({
+        providerID: Schema.String,
+        modelID: Schema.String,
+        variant: Persistence.optional(Schema.String),
+      }),
+    )(metadata?.model),
+  )
 
   return {
-    agent: info?.agent ?? (typeof metadata?.agent === "string" ? metadata.agent : undefined),
+    agent: info?.agent ?? (Predicate.isString(metadata?.agent) ? metadata.agent : undefined),
     model: info?.model
       ? { providerID: info.model.providerID, modelID: info.model.id, variant: info.model.variant }
       : historical,

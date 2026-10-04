@@ -59,7 +59,8 @@ Terminal.prototype.open = function (element) {
       probe.draws++
 
       if (hidden) probe.hiddenDraws++
-      draw.apply(this, args)
+      // SAFETY: This wrapper forwards drawImage's original argument tuple without changing its selected overload.
+      draw.apply(this, args as Parameters<typeof draw>)
     }
   }
 }
