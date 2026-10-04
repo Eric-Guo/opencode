@@ -385,4 +385,4 @@ export const dict = {
   "ui.question.singleHint": "აირჩიეთ ერთი პასუხი",
   "ui.question.classic.multiHint": "აირჩიეთ ყველა შესაბამისი პასუხი",
   "ui.question.custom.answerPlaceholder": "აკრიფეთ საკუთარი პასუხი…",
-}
+} satisfies Record<string, string>

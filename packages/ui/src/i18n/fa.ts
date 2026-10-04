@@ -385,4 +385,4 @@ export const dict = {
   "ui.question.singleHint": "یک پاسخ انتخاب کنید",
   "ui.question.classic.multiHint": "همه پاسخ‌های درست را انتخاب کنید",
   "ui.question.custom.answerPlaceholder": "پاسخ خود را بنویسید…",
-}
+} satisfies Record<string, string>

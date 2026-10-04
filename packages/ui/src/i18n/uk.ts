@@ -477,4 +477,4 @@ export const dict = {
   "ui.question.singleHint": "Виберіть одну відповідь",
   "ui.question.classic.multiHint": "Виберіть усі відповідні варіанти",
   "ui.question.custom.answerPlaceholder": "Введіть власну відповідь…",
-}
+} satisfies Record<string, string>
