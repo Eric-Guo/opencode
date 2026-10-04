@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -68,7 +70,13 @@ describe("debug config command", () => {
       await fs.mkdir(path.dirname(registration), { recursive: true })
       await fs.writeFile(
         registration,
-        JSON.stringify({ version: OPENCODE_VERSION, url: server.url.toString(), pid: process.pid, password: "secret" }),
+        JSON.stringify({
+          version: OPENCODE_VERSION,
+          url: server.url.toString(),
+          pid: process.pid,
+          password: "secret",
+          provenance: await Effect.runPromise(Service.provenance),
+        }),
       )
       const result = await cli(["debug", "config"], project, { XDG_STATE_HOME: path.join(root, "state") })
 
