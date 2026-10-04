@@ -60,5 +60,5 @@ function sessionInfo(id: string, archived = false) {
     time: { created: 1, updated: 1, archived: archived ? 2 : undefined },
     title: id,
     location: { directory: "/repo" },
-  } as SessionInfo
+  } satisfies SessionInfo
 }
