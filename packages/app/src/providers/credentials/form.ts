@@ -2,6 +2,14 @@ const PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 
 const OPENAI_COMPATIBLE = "@ai-sdk/openai-compatible"
 
+type CustomProviderConfig = {
+  npm: string
+  name: string
+  env?: string[]
+  options: { baseURL: string; headers?: Record<string, string> }
+  models: Record<string, { name: string }>
+}
+
 type Translator = (key: string, vars?: Record<string, string | number | boolean>) => string
 
 export type ModelErr = {
@@ -145,6 +153,17 @@ export function validateCustomProvider(input: ValidateArgs) {
 
   if (!ok) return { err, models, headers }
 
+  const config: CustomProviderConfig = {
+    npm: OPENAI_COMPATIBLE,
+    name,
+    options: { baseURL },
+    models: modelConfig,
+  }
+
+  if (env) config.env = [env]
+
+  if (Object.keys(headerConfig).length) config.options.headers = headerConfig
+
   return {
     err,
     models,
@@ -153,16 +172,7 @@ export function validateCustomProvider(input: ValidateArgs) {
       providerID,
       name,
       key,
-      config: {
-        npm: OPENAI_COMPATIBLE,
-        name,
-        ...(env ? { env: [env] } : {}),
-        options: {
-          baseURL,
-          ...(Object.keys(headerConfig).length ? { headers: headerConfig } : {}),
-        },
-        models: modelConfig,
-      },
+      config,
     },
   }
 }
