@@ -1,5 +1,5 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
-import { Option, Schema } from "effect"
+import { Predicate, Option, Schema } from "effect"
 import { mediaHashFromUri } from "@/runtime/server/media"
 import {
   createDraftRetentionState,
@@ -13,6 +13,9 @@ import {
   transitionDraftRetention,
   type DraftRetentionEvent,
 } from "./drafts-machine"
+
+// Encoded draft codecs emit JSON values plus omitted optional fields before serialization.
+type DraftValue = null | number | boolean | string | undefined | DraftValue[] | { [key: string]: DraftValue }
 
 /* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-known-value-widening -- the store walks opaque persisted JSON in every shape earlier releases wrote, and IndexedDB hands back untyped values */
 
@@ -154,21 +157,21 @@ function blobUrl(id: string, blob: Blob, graceMs?: number) {
 }
 
 // Image ids a document references: `{ blob: { id } }` parts, not text chunk lists.
-function imageIDs(value: unknown, into = new Set<string>()): Set<string> {
+function imageIDs(value: DraftValue, into = new Set<string>()): Set<string> {
   if (Array.isArray(value)) {
     value.forEach((entry) => imageIDs(entry, into))
 
     return into
   }
 
-  if (!value || typeof value !== "object") return into
-  const item = value as Record<string, unknown>
+  if (!value || !Predicate.isObject(value)) return into
+  const item = value
   const blob = item.blob
 
-  if (blob && typeof blob === "object" && !("kind" in blob)) {
-    const id = (blob as Record<string, unknown>).id
+  if (Predicate.isObject(blob) && !("kind" in blob)) {
+    const id = blob.id
 
-    if (typeof id === "string") into.add(id)
+    if (Predicate.isString(id)) into.add(id)
 
     return into
   }
@@ -249,10 +252,10 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
 
         return id
       },
-      (error: unknown) => {
+      (cause: unknown) => {
         // A failed upload must not be reused as the answer for this content on later saves.
         if (chunkIds.get(chunk) === id) chunkIds.delete(chunk)
-        throw error
+        throw cause
       },
     )
 
@@ -278,8 +281,8 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
   // `pin` claims an image id for the running save before its bytes get an object URL.
   type Pin = (id: string) => void
 
-  const encode = async (value: unknown, sources: Sources, pin: Pin): Promise<unknown> => {
-    if (typeof value === "string" && value.length >= draftTextThreshold) {
+  const encode = async (value: DraftValue, sources: Sources, pin: Pin): Promise<DraftValue> => {
+    if (Predicate.isString(value) && value.length >= draftTextThreshold) {
       const pieces = split(value)
       const ids = await externalize(value)
       ids.forEach((id, index) =>
@@ -291,10 +294,10 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
 
     if (Array.isArray(value)) return Promise.all(value.map((entry) => encode(entry, sources, pin)))
 
-    if (!value || typeof value !== "object") return value
-    const item = value as Record<string, unknown>
+    if (!value || !Predicate.isObject(value)) return value
+    const item = value
 
-    if (item.type === "image" && typeof item.dataUrl === "string") {
+    if (item.type === "image" && Predicate.isString(item.dataUrl)) {
       const blob = await fetch(item.dataUrl).then((response) => response.blob())
       const { dataUrl: _, ...rest } = item
       const id = await driver.putBlob(blob)
@@ -303,12 +306,12 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
       return { ...rest, blob: { id } }
     }
 
-    if ("blob" in item && item.blob && typeof item.blob === "object") {
-      const blob = item.blob as Record<string, unknown>
+    if ("blob" in item && Predicate.isObject(item.blob)) {
+      const blob = item.blob
 
       if (blob.kind === "text") return item
 
-      if (typeof blob.id === "string" && blob.id.startsWith("data:")) {
+      if (Predicate.isString(blob.id) && blob.id.startsWith("data:")) {
         const data = await fetch(blob.id).then((response) => response.blob())
         const id = await driver.putBlob(data)
         sources.set(id, { blob: async () => data })
@@ -319,11 +322,11 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
       // Drafts own their bytes: the server sweeps a media blob once no message or inbox item references
       // it, so the first save copies the bytes into the draft store and later saves reuse that copy.
       if (
-        typeof blob.id === "string" &&
+        Predicate.isString(blob.id) &&
         mediaHashFromUri(blob.id) &&
         !(retention.aliases.has(blob.id) && selectRetainedBlob(retention, blob.id))
       ) {
-        const data = await loadMediaBlob(blob.id, typeof blob.server === "string" ? blob.server : undefined)
+        const data = await loadMediaBlob(blob.id, Predicate.isString(blob.server) ? blob.server : undefined)
 
         // Nothing serves the bytes anymore; the reference is dropped on read like any blob with no bytes.
         if (!data) return { ...item, blob: { id: blob.id } }
@@ -336,12 +339,12 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
         return { ...item, blob: { id } }
       }
 
-      if (typeof blob.id === "string") {
+      if (Predicate.isString(blob.id)) {
         // A live reference keeps the id it was created with; publish the id its bytes now live under.
         const id = resolveBlobAlias(retention, blob.id)
         const retained = selectRetainedBlob(retention, id)
         const kept = retained?.blob
-        const url = typeof blob.url === "string" && !mediaHashFromUri(blob.url) ? blob.url : retained?.url
+        const url = Predicate.isString(blob.url) && !mediaHashFromUri(blob.url) ? blob.url : retained?.url
 
         if (kept) sources.set(id, { blob: async () => kept })
         else if (url) sources.set(id, { blob: () => fetch(url).then((response) => response.blob()) })
@@ -357,14 +360,14 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
     )
   }
 
-  const decode = async (value: unknown): Promise<unknown> => {
+  const decode = async (value: DraftValue): Promise<DraftValue> => {
     if (Array.isArray(value)) return Promise.all(value.map(decode))
 
-    if (!value || typeof value !== "object") return value
-    const item = value as Record<string, unknown>
+    if (!value || !Predicate.isObject(value)) return value
+    const item = value
 
-    if (item.blob && typeof item.blob === "object") {
-      const ref = item.blob as Record<string, unknown>
+    if (Predicate.isObject(item.blob)) {
+      const ref = item.blob
 
       if (ref.kind === "text" && Array.isArray(ref.ids)) {
         return (await Promise.all(ref.ids.map((id) => loadChunk(String(id))))).join("")
@@ -372,7 +375,7 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
 
       // Bytes stay in the store until something renders or sends the image (see resolveBlobUrl);
       // only an image already pinned in this page gets its URL back immediately.
-      if (typeof ref.id === "string") {
+      if (Predicate.isString(ref.id)) {
         const url = selectRetainedBlob(retention, ref.id)?.url
 
         return { ...item, blob: url ? { id: ref.id, url } : { id: ref.id } }
@@ -414,19 +417,19 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
     return renamed
   }
 
-  const rename = (value: unknown, renamed: Map<string, string>): unknown => {
+  const rename = (value: DraftValue, renamed: Map<string, string>): DraftValue => {
     if (Array.isArray(value)) return value.map((entry) => rename(entry, renamed))
 
-    if (!value || typeof value !== "object") return value
-    const item = value as Record<string, unknown>
+    if (!value || !Predicate.isObject(value)) return value
+    const item = value
 
-    if (item.blob && typeof item.blob === "object") {
-      const ref = item.blob as Record<string, unknown>
+    if (Predicate.isObject(item.blob)) {
+      const ref = item.blob
 
       if (Array.isArray(ref.ids))
         return { ...item, blob: { ...ref, ids: ref.ids.map((id) => renamed.get(String(id)) ?? id) } }
 
-      if (typeof ref.id === "string") return { ...item, blob: { ...ref, id: renamed.get(ref.id) ?? ref.id } }
+      if (Predicate.isString(ref.id)) return { ...item, blob: { ...ref, id: renamed.get(ref.id) ?? ref.id } }
     }
 
     return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, rename(entry, renamed)]))
@@ -434,7 +437,7 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
 
   // The image ids the stored document now references, or undefined when a later save or remove
   // superseded this one before it wrote.
-  const write = async (key: string, document: unknown, attempt: number) => {
+  const write = async (key: string, document: DraftValue, attempt: number) => {
     const pin = (id: string) =>
       dispatch({ type: "save.referenced", storeId, key, attempt, ids: new Set([id]), graceMs: grace })
 
@@ -464,10 +467,12 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
   }
 
   const setDocument = async (key: string, document: unknown) => {
-    dispatch({ type: "save.started", storeId, key, ids: imageIDs(document), graceMs: grace })
+    // SAFETY: documents come from persistence encoders or JSON.parse in setItem; no application objects enter this traversal.
+    const value = document as DraftValue
+    dispatch({ type: "save.started", storeId, key, ids: imageIDs(value), graceMs: grace })
     const attempt = selectLatestMutation(retention, storeId, key)
 
-    await write(key, document, attempt).then(
+    await write(key, value, attempt).then(
       (ids) =>
         dispatch(
           ids
@@ -487,7 +492,7 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
       const value = await driver.get(key)
 
       if (value === null) return null
-      const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(value)
+      const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.MutableJson))(value)
 
       // Let the owning persistence codec apply its invalid-document policy.
       if (Option.isNone(parsed)) return value
@@ -564,7 +569,7 @@ export function createBrowserDraftStore(): DraftStore {
     })
   }
 
-  const write = async (store: string, key: string, value?: unknown) => {
+  const write = async (store: string, key: string, value?: string | Blob) => {
     const transaction = (await db).transaction(store, "readwrite")
 
     if (value === undefined) transaction.objectStore(store).delete(key)
@@ -577,7 +582,7 @@ export function createBrowserDraftStore(): DraftStore {
   }
 
   return createDraftStore({
-    get: async (key) => ((await get("documents", key)) as string | undefined) ?? null,
+    get: async (key) => Option.getOrNull(Schema.decodeUnknownOption(Schema.String)(await get("documents", key))),
     set: async (key, value, strict) => {
       // One readwrite transaction over both stores: IndexedDB serialises overlapping readwrite
       // transactions in creation order, so a later save or removal cannot commit between the
@@ -617,7 +622,8 @@ export function createBrowserDraftStore(): DraftStore {
 
       return id
     },
-    getBlob: async (id) => ((await get("blobs", id)) as Blob | undefined) ?? null,
+    getBlob: async (id) =>
+      Option.getOrNull(Schema.decodeUnknownOption(Schema.instanceOf(Blob))(await get("blobs", id))),
   })
 }
 
@@ -625,9 +631,9 @@ export function createBrowserDraftStore(): DraftStore {
 function referenced(json: string) {
   const ids = new Set<string>()
   JSON.parse(json, (_key, item) => {
-    if (item?.blob && typeof item.blob.id === "string") ids.add(item.blob.id)
+    if (item?.blob && Predicate.isString(item.blob.id)) ids.add(item.blob.id)
 
-    if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => ids.add(String(id)))
+    if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: Schema.Json) => ids.add(String(id)))
 
     return item
   })
@@ -650,7 +656,7 @@ export async function blobDataUrl(blob: BlobReference, mime: string) {
     const reader = new FileReader()
     reader.addEventListener("error", () => reject(reader.error))
     reader.addEventListener("load", () => {
-      const value = typeof reader.result === "string" ? reader.result : ""
+      const value = Predicate.isString(reader.result) ? reader.result : ""
       resolve(`data:${mime};base64,${value.slice(value.indexOf(",") + 1)}`)
     })
     reader.readAsDataURL(data)
