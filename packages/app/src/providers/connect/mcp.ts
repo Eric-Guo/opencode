@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { useMutation } from "@tanstack/solid-query"
 import type { Accessor } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -28,8 +29,7 @@ export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess
   return useMutation(() => ({
     mutationFn: async (input: string | { name: string; enabled: boolean; directory?: string }) => {
       // A bare name toggles the server; an object sets an explicit state.
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminates this function's own input union
-      const request: { name: string; enabled?: boolean; directory?: string } = typeof input === "string" ? { name: input } : input
+      const request: { name: string; enabled?: boolean; directory?: string } = Predicate.isString(input) ? { name: input } : input
       const name = request.name
       const ref = request.directory ? { directory: request.directory } : location()
       const server = (await serverSDK.api.mcp.list({ location: ref })).data.find((item) => item.name === name)

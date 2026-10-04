@@ -1,4 +1,3 @@
-import type { NavigationMilestoneSample } from "./navigation-milestones"
 import { measureNavigationMilestones } from "./navigation-milestones"
 import { benchmark, expect } from "../benchmark"
 
@@ -17,7 +16,7 @@ benchmark(
           element.focus()
         })
         await page.waitForFunction(() => {
-          const samples = (window as Window & { __navigationMilestones?: { samples: NavigationMilestoneSample[] } })
+          const samples = (window)
             .__navigationMilestones?.samples
 
           return samples?.some((sample) => sample.milestones.editor && !sample.milestones.model)

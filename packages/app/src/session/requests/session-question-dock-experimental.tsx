@@ -22,7 +22,7 @@ import { questionKey, type QuestionKeyZone } from "./question-keys"
 import { questionMotion } from "./question-motion"
 import { questionCache } from "./question-state"
 
-const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const group = "Timeline"
 
@@ -273,9 +273,9 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
   const [store, setStore] = createStore({
     tab: cached?.tab ?? 0,
-    answers: cached?.answers ?? [],
-    custom: cached?.custom ?? [],
-    customOn: cached?.customOn ?? [],
+    answers: cached?.answers ?? new Array<string[]>(),
+    custom: cached?.custom ?? new Array<string>(),
+    customOn: cached?.customOn ?? new Array<boolean>(),
     editing: false,
     focus: 0,
     highlight: false,
@@ -562,7 +562,10 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     })
   })
 
-  const fail = (err: Error) => showToast({ title: language.t("common.requestFailed"), description: err.message })
+  const fail = (cause: unknown) => {
+    const message = cause instanceof Error ? cause.message : String(cause)
+    showToast({ title: language.t("common.requestFailed"), description: message })
+  }
 
   const replyMutation = useMutation(() => ({
     mutationFn: (answer: FormAnswer) =>
