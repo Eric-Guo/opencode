@@ -37,6 +37,7 @@ function mix(style: ComponentProps<"div">["style"], value?: string) {
 
   if (!style) return { "--card-accent": value }
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid style props explicitly accept CSS text or a typed style map.
   if (typeof style === "string") return `${style};--card-accent:${value};`
 
   return { ...(style as Record<string, string | number>), "--card-accent": value }

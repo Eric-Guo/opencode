@@ -7,6 +7,7 @@ export function analyzeVisualObservations<RegionName extends string>(
 ) {
   const issues: string[] = []
   const invariants = plan.invariants
+  // SAFETY: each observation's region dictionary is created from the configured RegionName selectors.
   const names = [...new Set(observations.flatMap((sample) => Object.keys(sample.regions) as RegionName[]))]
   const required = regions(invariants, "required")
 

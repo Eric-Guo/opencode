@@ -42,6 +42,8 @@ const Heap = Schema.Struct({
   strings: Schema.Array(Schema.String),
 })
 
+// SAFETY: This file-analysis entry point decodes the external capture with its schema before reading it.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function analyzeTrace(value: unknown, limit = 100) {
   const decoded = Schema.decodeUnknownOption(Trace)(value)
 
@@ -84,6 +86,8 @@ export function analyzeTrace(value: unknown, limit = 100) {
   }
 }
 
+// SAFETY: This file-analysis entry point decodes the external capture with its schema before reading it.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function analyzeCpu(value: unknown, limit = 100) {
   const decoded = Schema.decodeUnknownOption(Cpu)(value)
 
@@ -117,6 +121,8 @@ const malformedHeap = () =>
     "Heap snapshot layout is unsupported or incomplete. Use a complete capture from browser.heap.snapshot; if this tool produced it, report a parser/Chromium compatibility issue instead of repeatedly capturing the same heap.",
   )
 
+// SAFETY: This file-analysis entry point decodes the external capture with its schema before reading it.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function parseHeap(value: unknown) {
   const decoded = Schema.decodeUnknownOption(Heap)(value)
 

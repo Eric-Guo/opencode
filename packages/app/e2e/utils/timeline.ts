@@ -1086,6 +1086,7 @@ function jsonRecord(value: JsonRecord | undefined): Record<string, JsonValue> {
 
   return decodeJsonRecord(JSON.stringify(value))
 }
+/* oxlint-enable anti-slop/no-runtime-typeof */
 
 function provider() {
   return {

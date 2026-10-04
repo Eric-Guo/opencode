@@ -98,6 +98,7 @@ export function createProfiling(
       const complete = Promise.withResolvers<{ stream?: string; dataLossOccurred: boolean }>()
       const off = cdp.on("Tracing.tracingComplete", (event) => complete.resolve(event))
 
+      // SAFETY: The trace owner initializes its timer later and always clears it during teardown; undefined is the valid inactive timer state.
       const owner = {
         owner: contents,
         pid: contents.getOSProcessId(),
