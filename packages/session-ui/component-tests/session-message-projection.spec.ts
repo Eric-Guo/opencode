@@ -6,7 +6,7 @@ story("keeps a manually collapsed tool collapsed when later assistant content st
   const tool = timeline.locator('[data-timeline-part-id="tool_edit_status"]')
   const trigger = tool.locator('[data-scope="apply-patch"] button')
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
-  await tool.evaluate((element) => ((element as HTMLElement).dataset.regressionMarker = "before-stream"))
+  await tool.evaluate((element) => element.setAttribute("data-regression-marker", "before-stream"))
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await timeline.getByRole("button", { name: "Stream sibling content" }).click()

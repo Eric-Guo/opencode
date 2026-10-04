@@ -158,7 +158,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
 }
 
 function HomeProjectsPanel(props: HomeProjectsViewProps) {
-  const [contextMenu, setContextMenu] = createStore({ open: undefined as string | undefined })
+  const [contextMenu, setContextMenu] = createStore<{ open: string | undefined }>({ open: undefined })
 
   const contextMenuProps = {
     contextMenuOpen: (id: string) => contextMenu.open === id,

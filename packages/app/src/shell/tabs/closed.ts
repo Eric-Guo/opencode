@@ -15,7 +15,9 @@ export function pushClosedTab(stack: ClosedTab[], tab: Tab, index: number): Clos
 
 // Pops the most recently closed tab that is not open again,
 // discarding stale entries along the way.
-export function takeClosedTab(stack: ClosedTab[], tabs: Tab[]): { entry?: ClosedTab; stack: ClosedTab[] } {
+type ClosedTabSelection = { entry?: ClosedTab; stack: ClosedTab[] }
+
+export function takeClosedTab(stack: ClosedTab[], tabs: Tab[]): ClosedTabSelection {
   const remaining = [...stack]
 
   while (remaining.length) {

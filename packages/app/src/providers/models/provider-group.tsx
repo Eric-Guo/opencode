@@ -6,6 +6,7 @@ import { Menu } from "@opencode/ui/menu"
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import type { JSX } from "solid-js"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
+
 import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
 import { OpenCodeLogo } from "@/providers/opencode-logo"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -30,7 +31,7 @@ export function ProviderModelIcon(props: { provider: ModelProvider; class?: stri
       props.provider.canonical,
       props.provider.canonical?.replace(/-token-plan$/, ""),
       props.provider.id.replace(/^console-/, ""),
-    ].find((id): id is IconName => !!id && id !== "synthetic" && iconNames.includes(id as IconName))
+    ].find((id): id is IconName => !!id && id !== "synthetic" && iconNames.some((name) => name === id))
 
   return (
     <Switch>
@@ -239,7 +240,9 @@ export function ProviderModelGroup(props: {
                 />
                 <Menu.Portal>
                   <Menu.Content>
-                    <Menu.Item onSelect={() => setVisibility(true)}>{language.t("settings.models.enableAll")}</Menu.Item>
+                    <Menu.Item onSelect={() => setVisibility(true)}>
+                      {language.t("settings.models.enableAll")}
+                    </Menu.Item>
                     <Menu.Item onSelect={() => setVisibility(false)}>
                       {language.t("settings.models.disableAll")}
                     </Menu.Item>

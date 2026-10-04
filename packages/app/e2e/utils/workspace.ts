@@ -12,7 +12,13 @@ import {
   type SeedInput,
   type TabSeed,
 } from "./app"
-import { mockOpenCodeServer, type MockServerConfig } from "./mock-server"
+import {
+  mockOpenCodeServer,
+  type MockServerConfig,
+  type MockProject,
+  type MockSession,
+  type MockPrompt,
+} from "./mock-server"
 import { APP_READY_TIMEOUT, expectSessionTitle } from "./waits"
 
 export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "project" | "sessions" | "server">> & {
@@ -20,9 +26,9 @@ export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "proje
   name: string
   directory?: string
   // Merged over the default project.
-  project?: Record<string, unknown>
+  project?: Partial<MockProject>
   // Defaults to one session titled `name`. Omitted fields come from `session()`.
-  sessions?: ({ id: string; title?: string } & Record<string, unknown>)[]
+  sessions?: MockSession[]
   // Merged over the default seed: the project expanded and last opened, and a tab for every session.
   seed?: SeedInput
 }
@@ -31,7 +37,7 @@ export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "proje
 export async function mockWorkspace(page: Page, input: WorkspaceInput) {
   const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")
   const directory = input.directory ?? `C:/OpenCode/${input.name}`
-  const projectID = typeof input.project?.id === "string" ? input.project.id : `proj_${slug}`
+  const projectID = input.project?.id ?? `proj_${slug}`
 
   const sessions = (input.sessions ?? [{ id: `ses_${slug}`, title: input.name }]).map((item) =>
     session({ directory, projectID, ...item }),
@@ -90,9 +96,9 @@ export async function openDraft(page: Page, input: WorkspaceInput & { draftID?: 
 export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
   const worktree = Promise.withResolvers<{ status: number; json: unknown }>()
   const calls: string[] = []
-  const worktreeRequests: { url: URL; body: Record<string, unknown> }[] = []
-  const creates: Record<string, unknown>[] = []
-  const prompts: { sessionID: string; body: Record<string, unknown> }[] = []
+  const worktreeRequests: { url: URL; body: { directory?: string; name?: string } }[] = []
+  const creates: Parameters<NonNullable<MockServerConfig["onSessionCreate"]>>[0][] = []
+  const prompts: { sessionID: string; body: MockPrompt }[] = []
   page.on("request", (request) => {
     if (request.method() !== "POST") return
     const url = new URL(request.url())

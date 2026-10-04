@@ -40,7 +40,7 @@ import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import {
   CONSOLE_INTEGRATION,
   CONSOLE_PROVIDERS,
@@ -61,7 +61,7 @@ type IntegrationForm = NonNullable<ProviderConnectMethod["form"]>[number]
 type StringForm = Extract<IntegrationForm, { type: "string" }>
 
 export function useProviderConnectController() {
-  const [store, setStore] = createStore({ selected: undefined as string | undefined })
+  const [store, setStore] = createStore<{ selected: string | undefined }>({ selected: undefined })
   const reset = () => setStore("selected", undefined)
 
   return {
@@ -83,9 +83,14 @@ export const DialogConnectProvider: Component<{
   const fallback = useProviderConnectController()
   const controller = props.controller ?? fallback
 
-  const [state, setState] = createStore({
+  const [state, setState] = createStore<{
+    completed: boolean
+    modelProvider: { id: string; name: string } | undefined
+    authorization: boolean
+    chatgptWelcome: boolean
+  }>({
     completed: false,
-    modelProvider: undefined as { id: string; name: string } | undefined,
+    modelProvider: undefined,
     authorization: false,
     chatgptWelcome: false,
   })
@@ -132,8 +137,7 @@ export const DialogConnectProvider: Component<{
               onConnected={(methodID) => {
                 props.onConnected?.(provider)
 
-                if (provider === "openai" && methodID === "chatgpt-token-sharing")
-                  setState("chatgptWelcome", true)
+                if (provider === "openai" && methodID === "chatgpt-token-sharing") setState("chatgptWelcome", true)
               }}
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
@@ -172,7 +176,8 @@ export const DialogConnectProvider: Component<{
       }}
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3": consoleSelected() && !state.modelProvider,
+        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3":
+          consoleSelected() && !state.modelProvider,
         "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider,
       }}
     >
@@ -216,11 +221,13 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
 
-  const [store, setStore] = createStore({
-    filter: "",
-    active: undefined as string | undefined,
-    connecting: undefined as string | undefined,
-  })
+  const [store, setStore] = createStore<{ filter: string; active: string | undefined; connecting: string | undefined }>(
+    {
+      filter: "",
+      active: undefined,
+      connecting: undefined,
+    },
+  )
 
   const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
@@ -421,16 +428,25 @@ function ProviderConnection(props: {
   const isConsole = CONSOLE_PROVIDERS.has(props.provider)
   const remote = isConsole && authServerName(sdk.server) !== undefined
 
-  const [state, setState] = createStore({
+  const [state, setState] = createStore<{
+    copied: boolean
+    copyFailed: boolean
+    firstConnection: boolean | undefined
+    models: boolean
+    noModels: boolean
+    catalogPending: boolean
+    selectedModel: string
+    collapsed: Record<string, boolean>
+  }>({
     copied: false,
     copyFailed: false,
-    firstConnection: undefined as boolean | undefined,
+    firstConnection: undefined,
     models: false,
     noModels: false,
     // The workspace providers had not loaded when the wait ran out.
     catalogPending: false,
     selectedModel: "",
-    collapsed: {} as Record<string, boolean>,
+    collapsed: {},
   })
 
   const controller = createProviderConnectionController({
@@ -452,9 +468,7 @@ function ProviderConnection(props: {
       props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
       // The picker only lists the newest model per family by default, which hides most of
       // what a new connection just unlocked. Show everything the connected integration offers.
-      global.models.show(
-        connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })),
-      )
+      global.models.show(connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })))
 
       if (state.catalogPending) {
         setState("noModels", true)
@@ -578,7 +592,9 @@ function ProviderConnection(props: {
   })
   createEffect(() => {
     const current = controller.auth.state()
-    props.onAuthorization(controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"))
+    props.onAuthorization(
+      controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"),
+    )
   })
 
   const provider = createMemo(() => ({
@@ -642,10 +658,10 @@ function ProviderConnection(props: {
   function AuthFormView() {
     const defaults = providerFormDefaults(controller.currentMethod()?.form)
 
-    const [formStore, setFormStore] = createStore({
+    const [formStore, setFormStore] = createStore<{ value: Record<string, string>; index: number }>({
       value: Object.fromEntries(
-        Object.entries(defaults).flatMap(([key, value]) => (typeof value === "string" ? [[key, value]] : [])),
-      ) as Record<string, string>,
+        Object.entries(defaults).flatMap(([key, value]) => (Predicate.isString(value) ? [[key, value]] : [])),
+      ),
       index: 0,
     })
 
@@ -876,9 +892,9 @@ function ProviderConnection(props: {
     let apiKey: HTMLInputElement | undefined
     const errorID = createUniqueId()
 
-    const [formStore, setFormStore] = createStore({
+    const [formStore, setFormStore] = createStore<{ value: string; error: string | undefined }>({
       value: "",
-      error: undefined as string | undefined,
+      error: undefined,
     })
 
     onMount(() => {
@@ -890,7 +906,7 @@ function ProviderConnection(props: {
 
       if (!(e.currentTarget instanceof HTMLFormElement)) return
       const value = new FormData(e.currentTarget).get("apiKey")
-      const apiKey = typeof value === "string" ? value : ""
+      const apiKey = Predicate.isString(value) ? value : ""
 
       if (!apiKey?.trim()) {
         setFormStore("error", language.t("provider.connect.apiKey.required"))
@@ -954,9 +970,9 @@ function ProviderConnection(props: {
     let codeInput: HTMLInputElement | undefined
     const errorID = createUniqueId()
 
-    const [formStore, setFormStore] = createStore({
+    const [formStore, setFormStore] = createStore<{ value: string; error: string | undefined }>({
       value: "",
-      error: undefined as string | undefined,
+      error: undefined,
     })
 
     onMount(() => {
@@ -968,7 +984,7 @@ function ProviderConnection(props: {
 
       if (!(e.currentTarget instanceof HTMLFormElement)) return
       const value = new FormData(e.currentTarget).get("code")
-      const code = typeof value === "string" ? value : ""
+      const code = Predicate.isString(value) ? value : ""
 
       if (!code?.trim()) {
         setFormStore("error", language.t("provider.connect.oauth.code.required"))

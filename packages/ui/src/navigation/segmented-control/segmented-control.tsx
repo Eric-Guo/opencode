@@ -10,6 +10,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import type { ComponentProps } from "solid-js"
+
 import "./segmented-control.css"
 
 type OnChange = (value: string | null) => void
@@ -45,7 +46,7 @@ export type SegmentedControlProps = Omit<ComponentProps<"div">, "onChange"> &
   }>
 
 export function SegmentedControl(props: SegmentedControlProps) {
-  const isControlled = createMemo(() => Object.hasOwn(props as object, "value"))
+  const isControlled = createMemo(() => Object.hasOwn(props, "value"))
   const merged = mergeProps({ allowDeselect: false, disabled: false }, props)
 
   const [local, rest] = splitProps(merged, [
@@ -103,8 +104,8 @@ export function SegmentedControl(props: SegmentedControlProps) {
   const assignRef = (el: HTMLDivElement | undefined) => {
     const r = local.ref
 
-    if (typeof r === "function") (r as (el: HTMLDivElement | undefined) => void)(el)
-    else if (r != null && typeof r === "object" && "value" in r) (r as { value: HTMLDivElement | undefined }).value = el
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid ref props accept a callback or an element; assignment is only meaningful for callbacks.
+    if (typeof r === "function" && el) r(el)
   }
 
   return (
@@ -134,9 +135,12 @@ export type SegmentedControlItemProps = Omit<ComponentProps<"button">, "type" | 
 
 function invokeButtonHandler<E extends Event>(
   handler: JSX.EventHandlerUnion<HTMLButtonElement, E> | undefined,
-  e: E & { currentTarget: HTMLButtonElement },
+  e: E & { currentTarget: HTMLButtonElement; target: Element },
 ) {
-  if (typeof handler === "function") (handler as (ev: typeof e) => void)(e)
+  if (Array.isArray(handler)) handler[0](handler[1], e)
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid handlers are typed callbacks or bound-handler tuples.
+  if (typeof handler === "function") handler(e)
 }
 
 export function SegmentedControlItem(props: SegmentedControlItemProps) {
@@ -178,7 +182,7 @@ export function SegmentedControlItem(props: SegmentedControlItemProps) {
       ctx.focusNext(t, horizontal)
     } else if (e.key === "ArrowLeft") {
       e.preventDefault()
-      ctx.focusNext(t, -horizontal as 1 | -1)
+      ctx.focusNext(t, horizontal === 1 ? -1 : 1)
     }
 
     // accessibility stuff
