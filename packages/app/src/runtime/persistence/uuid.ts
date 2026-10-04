@@ -1,11 +1,13 @@
+import { Predicate } from "effect"
+
 const fallback = () => Math.random().toString(16).slice(2)
 
 export function uuid() {
   const c = globalThis.crypto
 
-  if (!c || typeof c.randomUUID !== "function") return fallback()
+  if (!c || !Predicate.isFunction(c.randomUUID)) return fallback()
 
-  if (typeof globalThis.isSecureContext === "boolean" && !globalThis.isSecureContext) return fallback()
+  if (Predicate.isBoolean(globalThis.isSecureContext) && !globalThis.isSecureContext) return fallback()
 
   try {
     return c.randomUUID()

@@ -3,7 +3,7 @@
 export function createWriteBehind<T>(input: {
   delay: number
   write: (batch: Map<string, T>) => void
-  onError?: (error: unknown) => void
+  onError?: (cause: unknown) => void
 }) {
   const pending = new Map<string, T>()
   let timer: ReturnType<typeof setTimeout> | undefined

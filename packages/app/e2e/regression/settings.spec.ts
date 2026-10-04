@@ -836,7 +836,7 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   // SAFETY: a worktree.updated event carries only the project ID, which is all the app reads from it.
   await view.push([
     { id: "evt_settings_worktree_updated", created: Date.now(), type: "worktree.updated", data: { projectID } },
-  ] as OpenCodeEvent[])
+  ])
   expect((await listed).ok()).toBe(true)
   await expect(settings.getByText(discovered, { exact: true })).toBeVisible()
   expect((await read).ok()).toBe(true)
@@ -919,7 +919,6 @@ test.describe("worktrees prefetch", () => {
     const { settings } = await open(page)
 
     const calls = { projects: 0, worktrees: new Array<string>(), refreshes: new Array<string>() }
-
     page.on("request", (request) => {
       if (new URL(request.url()).pathname === "/api/worktree/refresh")
         calls.refreshes.push(request.postDataJSON().projectID)
