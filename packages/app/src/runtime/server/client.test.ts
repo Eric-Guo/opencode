@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
@@ -93,18 +94,20 @@ describe("server event stream", () => {
 test("keeps the HTTP client across endpoint changes", async () => {
   const requests: Array<{ url: string; authorization: string | null }> = []
 
-  // SAFETY: the transport only calls fetch with a request and init; `preconnect` and other statics are never read.
-  const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const request = input instanceof Request ? input : new Request(input, init)
-    requests.push({ url: request.url, authorization: request.headers.get("authorization") })
+  const fetch = Object.assign(
+    async (input: string | URL | Request, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push({ url: request.url, authorization: request.headers.get("authorization") })
 
-    return Response.json({
-      version: "2.0.0-test",
-      pid: 1,
-      urls: [request.url],
-      paths: { tmp: "/tmp/opencode" },
-    })
-  }) as typeof globalThis.fetch
+      return Response.json({
+        version: "2.0.0-test",
+        pid: 1,
+        urls: [request.url],
+        paths: { tmp: "/tmp/opencode" },
+      })
+    },
+    { preconnect() {} },
+  )
 
   const transport = createServerTransport({
     http: { url: "http://127.0.0.1:4100", password: "first" },
@@ -153,7 +156,7 @@ test("cached config queries use the reconnected endpoint and credentials", async
       await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
       const address = server.address()
 
-      if (!address || typeof address === "string") throw new Error("Expected a TCP listener")
+      if (!address || Predicate.isString(address)) throw new Error("Expected a TCP listener")
 
       return { server, port: String(address.port), url: `http://127.0.0.1:${address.port}` }
     }),

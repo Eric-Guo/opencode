@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
 
@@ -10,7 +11,7 @@ function sessionTreeRequest<T>(
   const ids = sessionTreeIDs(session, sessionID)
 
   if (!ids.length) return
-  const list = (id: string) => (request instanceof Function ? request(id) : request[id])
+  const list = (id: string) => (Predicate.isFunction(request) ? request(id) : request[id])
   const id = ids.find((id) => list(id)?.some(include))
 
   if (!id) return
