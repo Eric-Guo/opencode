@@ -7,7 +7,8 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
-import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
+import { Archive, Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
+import { readArchive } from "./filesystem/archive.js"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
@@ -98,6 +99,7 @@ export interface File {
 }
 
 export interface Interface {
+  readonly archive: (input: ReadInput) => Effect.Effect<Archive, NotFoundError>
   readonly read: (input: ReadInput) => Effect.Effect<File, NotFoundError>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
@@ -154,6 +156,37 @@ const baseLayer = Layer.effect(
     })
     return Service.of({
       find: search.find,
+      archive: Effect.fn("FileSystem.archive")(function* (input) {
+        const target = yield* resolve(input.path).pipe(
+          Effect.catchReason(
+            "PlatformError",
+            "NotFound",
+            () => Effect.fail(new NotFoundError({ path: input.path })),
+            (_, error) => Effect.die(error),
+          ),
+        )
+        const info = yield* fs.stat(target.real).pipe(
+          Effect.catchReason(
+            "PlatformError",
+            "NotFound",
+            () => Effect.fail(new NotFoundError({ path: input.path })),
+            (_, error) => Effect.die(error),
+          ),
+        )
+
+        if (info.type !== "File") return { status: "unsupported", size: 0 } satisfies Archive
+
+        const file = yield* fs.open(target.real, { flag: "r" }).pipe(
+          Effect.catchReason(
+            "PlatformError",
+            "NotFound",
+            () => Effect.fail(new NotFoundError({ path: input.path })),
+            (_, error) => Effect.die(error),
+          ),
+        )
+
+        return yield* readArchive(file)
+      }, Effect.scoped),
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(

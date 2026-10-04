@@ -2194,6 +2194,13 @@ export interface PermissionApi<E = never> {
   readonly reply: PermissionReplyOperation<E>
 }
 
+export type FileArchiveInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+export type FileArchiveOutput = { readonly location: Location.PublicRef; readonly data: FileSystem.Archive }
+export type FileArchiveOperation<E = never> = (input: FileArchiveInput) => Effect.Effect<FileArchiveOutput, E>
+
 export type FileListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly path?: string | undefined
@@ -2211,6 +2218,7 @@ export type FileFindOutput = { readonly location: Location.PublicRef; readonly d
 export type FileFindOperation<E = never> = (input: FileFindInput) => Effect.Effect<FileFindOutput, E>
 
 export interface FileApi<E = never> {
+  readonly archive: FileArchiveOperation<E>
   readonly list: FileListOperation<E>
   readonly find: FileFindOperation<E>
 }

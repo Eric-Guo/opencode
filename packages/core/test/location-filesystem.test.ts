@@ -213,6 +213,8 @@ describe("FileSystem", () => {
           const filesystem = yield* FileSystem.Service
           const result = yield* filesystem.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)
           expect(Exit.isFailure(result)).toBe(true)
+          const archive = yield* filesystem.archive({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)
+          expect(Exit.isFailure(archive)).toBe(true)
         }).pipe(provide(current))
       }),
     ),
@@ -235,6 +237,8 @@ describe("FileSystem", () => {
           ])
           const result = yield* filesystem.read({ path: RelativePath.make("link/file.txt") }).pipe(Effect.exit)
           expect(Exit.isFailure(result)).toBe(true)
+          const archive = yield* filesystem.archive({ path: RelativePath.make("link/file.txt") }).pipe(Effect.exit)
+          expect(Exit.isFailure(archive)).toBe(true)
         }).pipe(provide(current))
       }),
     ),
