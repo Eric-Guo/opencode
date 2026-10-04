@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { ConfigEntry, OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
+import type { ConfigEntry, WorktreeDirectory } from "@opencode/client/promise"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
 import { mockRemoteServer, mockWorkspace, openSettings, type WorkspaceInput } from "../utils/workspace"
 
@@ -463,7 +463,7 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
     worktrees: () => inventory,
     onWorktreeRemove: (body) => {
       inventory.splice(
-        inventory.findIndex((item) => item.directory === (body as { directory: string }).directory),
+        inventory.findIndex((item) => item.directory === body.directory),
         1,
       )
     },
@@ -501,7 +501,7 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   inventory.push({ directory: discovered, strategy: "git" })
   await view.push([
     { id: "evt_settings_worktree_updated", created: Date.now(), type: "worktree.updated", data: { projectID } },
-  ] as OpenCodeEvent[])
+  ])
   expect((await listed).ok()).toBe(true)
   await expect(settings.getByText(discovered, { exact: true })).toBeVisible()
   expect((await read).ok()).toBe(true)
@@ -582,7 +582,7 @@ test.describe("worktrees prefetch", () => {
 
   test("server Worktrees hover only prefetches metadata", async ({ page }) => {
     const { settings } = await open(page)
-    const calls = { projects: 0, worktrees: [] as string[], refreshes: [] as string[] }
+    const calls = { projects: 0, worktrees: Array<string>(), refreshes: Array<string>() }
     page.on("request", (request) => {
       if (new URL(request.url()).pathname === "/api/worktree/refresh")
         calls.refreshes.push(request.postDataJSON().projectID)

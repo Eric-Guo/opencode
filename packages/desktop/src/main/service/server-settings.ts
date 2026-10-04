@@ -1,10 +1,11 @@
+import { isString } from "effect/Predicate"
 import { DEFAULT_SERVER_URL_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 
 export function getDefaultServerUrl(): string | null {
   const value = getStore().get(DEFAULT_SERVER_URL_KEY)
 
-  return typeof value === "string" ? value : null
+  return isString(value) ? value : null
 }
 
 export function setDefaultServerUrl(url: string | null) {

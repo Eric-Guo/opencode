@@ -1,13 +1,16 @@
+import { Predicate } from "effect"
 import { onCleanup } from "solid-js"
 
 const FOCUS_LOCK = "opencode:notification-focus"
 
 const MAX_CLAIMED = 500
 
+type NotificationFocus = { pending: boolean; release?: () => void }
+
 export function createNotificationCoordinator() {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks
   const claimed = new Set<string>()
-  const focus = { pending: false, release: undefined as (() => void) | undefined }
+  const focus: NotificationFocus = { pending: false }
 
   const updateFocus = () => {
     if (typeof document === "undefined" || !document.hasFocus()) {
@@ -47,7 +50,7 @@ export function createNotificationCoordinator() {
     })
   }
 
-  const once = async (kind: "sound" | "system", eventID: string, run: () => Promise<unknown> | void) => {
+  const once = async (kind: "sound" | "system", eventID: string, run: () => void) => {
     const key = `${kind}:${eventID}`
 
     const execute = async () => {
@@ -60,10 +63,10 @@ export function createNotificationCoordinator() {
   }
 
   return {
-    sound(eventID: string, run: () => Promise<unknown> | void) {
+    sound(eventID: string, run: () => void) {
       return once("sound", eventID, run)
     },
-    system(eventID: string, run: () => Promise<unknown> | void) {
+    system(eventID: string, run: () => void) {
       return once("system", eventID, async () => {
         if (typeof document !== "undefined" && document.hasFocus()) return
 
@@ -84,7 +87,7 @@ function claim(kind: "sound" | "system", eventID: string, claimed: Set<string>) 
     try {
       const storageKey = `opencode:notification-${kind}`
       const value: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]")
-      const events = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+      const events = Array.isArray(value) ? value.filter((item): item is string => Predicate.isString(item)) : []
 
       if (events.includes(eventID)) {
         claimed.add(eventID)

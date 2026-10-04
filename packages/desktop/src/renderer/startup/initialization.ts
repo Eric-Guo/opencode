@@ -35,8 +35,8 @@ function sameSidecar(current: SidecarData | undefined, next: SidecarData) {
   return current?.url === next.url
 }
 
-function markLocalServerStartup(error: unknown) {
-  const failure = error instanceof Error ? error : new Error(String(error))
+function markLocalServerStartup(cause: unknown) {
+  const failure = cause instanceof Error ? cause : new Error(String(cause))
   Object.defineProperty(failure, "localServerStartup", { value: true })
 
   return failure

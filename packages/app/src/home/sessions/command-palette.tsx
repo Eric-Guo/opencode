@@ -11,6 +11,8 @@ import {
 } from "@/shell/commands/palette"
 import { CommandPaletteView, matchesCommandPaletteEntry } from "@/shell/commands/dialog"
 
+type PaletteActivation = { cleanup: (() => void) | void; committed: boolean }
+
 export function HomeCommandPalette(props: {
   server: ServerConnection.Any
   onSelectSession: (entry: CommandPaletteEntry) => void
@@ -20,7 +22,7 @@ export function HomeCommandPalette(props: {
   const global = useGlobal()
   const language = useLanguage()
   const server = global.ensureServerCtx(props.server)
-  const state = { cleanup: undefined as (() => void) | void, committed: false }
+  const state: PaletteActivation = { cleanup: undefined, committed: false }
 
   const commandEntries = createMemo(() => {
     const category = language.t("palette.group.commands")
