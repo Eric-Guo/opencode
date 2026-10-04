@@ -45,15 +45,17 @@ export function settingsServers(connections: readonly ServerConnection.Any[], so
         source,
       }
     }),
-    ...sources
-      .filter((item) => !connected.has(item.key))
-      .map(
-        (item): SettingsServer => ({
-          key: ServerConnection.Key.make(item.key),
-          name: item.entry.name,
-          source: item,
-        }),
-      ),
+    ...sources.flatMap((item): SettingsServer[] =>
+      connected.has(item.key)
+        ? []
+        : [
+            {
+              key: ServerConnection.Key.make(item.key),
+              name: item.entry.name,
+              source: item,
+            },
+          ],
+    ),
   ]
 }
 

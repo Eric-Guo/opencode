@@ -336,12 +336,15 @@ export function desktopMenuWithExtensions<Entry, Extra extends { readonly id: st
   base: readonly { readonly key?: string; readonly entry: Entry }[],
   extra: readonly Extra[],
 ) {
-  return extra.reduce<readonly { readonly key?: string; readonly entry: Entry | Extra }[]>((list, item) => {
-    const next = { key: item.id, entry: item }
-    const index = item.after ? list.findIndex((entry) => entry.key === item.after) : -1
+  return extra.reduce<{ readonly key?: string; readonly entry: Entry | Extra }[]>(
+    (list, item) => {
+      const next = { key: item.id, entry: item }
+      const index = item.after ? list.findIndex((entry) => entry.key === item.after) : -1
 
-    if (index < 0) return [...list, next]
+      list.splice(index < 0 ? list.length : index + 1, 0, next)
 
-    return [...list.slice(0, index + 1), next, ...list.slice(index + 1)]
-  }, base)
+      return list
+    },
+    [...base],
+  )
 }
