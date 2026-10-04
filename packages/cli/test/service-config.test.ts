@@ -1,11 +1,11 @@
 import { NodeServices } from "@effect/platform-node"
+import { Service } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
 import { expect, test } from "bun:test"
-import { Effect, FileSystem } from "effect"
+import { Effect, FileSystem, Schedule } from "effect"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { ServiceConfig } from "../src/services/service-config"
-import { OPENCODE_VERSION } from "../src/version"
 import { it } from "../../core/test/lib/effect"
 import { isolatedEnv } from "./fixture/environment"
 import { tmpdir } from "./fixture/tmpdir"
@@ -88,12 +88,15 @@ test("CLI refuses to overwrite an invalid service.json on serve --service while 
   await fs.mkdir(path.dirname(registration), { recursive: true })
   await fs.writeFile(file, raw)
 
-  const cli = async (...args: string[]) => {
-    const child = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), ...args], {
+  const spawn = (...args: string[]) =>
+    Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), ...args], {
       env: isolatedEnv(root.path),
       stdout: "pipe",
       stderr: "pipe",
     })
+
+  const cli = async (...args: string[]) => {
+    const child = spawn(...args)
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
@@ -109,19 +112,22 @@ test("CLI refuses to overwrite an invalid service.json on serve --service while 
   expect(await Bun.file(file).text()).toBe(raw)
   expect(await Bun.file(registration).exists()).toBe(false)
 
-  using server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () => Response.json({ version: OPENCODE_VERSION, pid: 2_147_483_647, urls: [] }),
-  })
-  const url = server.url.origin
-  await fs.writeFile(
-    registration,
-    JSON.stringify({ id: "running", version: OPENCODE_VERSION, url, pid: 2_147_483_647 }),
+  await fs.rm(file)
+  await using owner = spawn("serve", "--service", "--port", "0")
+  const endpoint = await Effect.runPromise(
+    Service.discover({ file: registration }).pipe(
+      Effect.filterOrFail((found) => found !== undefined),
+      Effect.retry(Schedule.spaced("50 millis")),
+      Effect.timeout("20 seconds"),
+      Effect.provide(NodeServices.layer),
+    ),
   )
+  await fs.writeFile(file, raw)
 
-  expect(await cli("service", "status")).toEqual({ stdout: url, stderr: "", exitCode: 0 })
+  expect(await cli("service", "status")).toEqual({ stdout: endpoint.url, stderr: "", exitCode: 0 })
   expect(await cli("service", "stop")).toEqual({ stdout: "", stderr: "", exitCode: 0 })
-  expect(await Bun.file(registration).exists()).toBe(false)
+  await owner.exited
+  // Windows terminates the owner before its registration cleanup can run.
+  if (process.platform !== "win32") expect(await Bun.file(registration).exists()).toBe(false)
   expect(await Bun.file(file).text()).toBe(raw)
 })
