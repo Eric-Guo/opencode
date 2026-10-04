@@ -160,7 +160,7 @@ export function createHomeIndexFixture(input: { count: number; now: number; dire
     return {
       id: `ses_${base62(random, 26)}`,
       projectID: directory.projectID,
-      ...(random() < 0.97 ? { title: title(random, index) } : {}),
+      title: random() < 0.97 ? title(random, index) : undefined,
       agent: agents[Math.floor(random() * agents.length)],
       model: models[Math.floor(random() * models.length)],
       // USD at $3/M input, $15/M output, $0.30/M cache read, $3.75/M cache write.
@@ -174,7 +174,7 @@ export function createHomeIndexFixture(input: { count: number; now: number; dire
         created: updated - duration,
         updated,
         idle: updated - Math.floor(random() * 2_000),
-        ...(random() < 0.8 ? { viewed: updated } : {}),
+        viewed: random() < 0.8 ? updated : undefined,
       },
       location: { directory: directory.directory },
     }
