@@ -11,6 +11,8 @@ export function registerRendererOrigin(url?: string | false) {
   if (url && URL.canParse(url)) rendererOrigins.add(new URL(url).origin)
 }
 
+// SAFETY: Protocol diagnostics carry heterogeneous Error causes and request facts directly to the structured logger.
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type
 export type ProtocolReport = (level: "warning" | "error", message: string, data: Record<string, unknown>) => void
 
 export type ExtensionAssets = (request: Request, url: URL) => Response | Promise<Response>
