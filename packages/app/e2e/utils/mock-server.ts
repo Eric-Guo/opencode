@@ -5,6 +5,7 @@ import { Permission } from "@opencode/schema/permission"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { Model } from "@opencode/schema/model"
 import { Worktree } from "@opencode/schema/worktree"
+import type { FileSystem } from "@opencode/schema/filesystem"
 import type { MyTodo } from "@opencode/schema/my-todo"
 import { Effect, Layer, Option, Predicate, Schema } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http"
@@ -207,6 +208,7 @@ export interface MockServerConfig {
   onCommand?: (input: { sessionID: string; body: unknown }) => void
   fileList?: (path: string) => unknown[] | Promise<unknown[]>
   fileContent?: (path: string) => MockFileContent | Promise<MockFileContent>
+  archive?: (path: string) => FileSystem.Archive | Promise<FileSystem.Archive>
   // Paths become directory entries.
   findFiles?: (input: { query: string; dirs?: string; limit?: number; directory: string }) => unknown[]
   sessionStatus?: Resolvable<Record<string, { type: string }>>
@@ -770,6 +772,13 @@ function mockHandlers(
               : new TextEncoder().encode(value?.content ?? ""),
             options,
           )
+        }),
+      )
+      .handle("fsArchive", (ctx) =>
+        Effect.gen(function* () {
+          const data = yield* Effect.promise(() => Promise.resolve(config.archive?.(ctx.query.path ?? "")))
+
+          return { location: location(config, requestDirectory(config, ctx.request)), data }
         }),
       )
       // Raw, so a hook's answer can replace the status and body.
