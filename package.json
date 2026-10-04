@@ -124,7 +124,7 @@
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "catalog:",
-    "turbo": "2.11.4"
+    "turbo": "2.11.10"
   },
   "dependencies": {
     "@opencode/plugin": "workspace:*",
