@@ -84,6 +84,8 @@ export function ExtensionServerCover(props: ParentProps) {
   )
 }
 
+type ExtensionEndpoint = { id: ServerConnection.Key; url: string; password?: string }
+
 /** Tells main the server endpoints so main extensions can reach them. */
 export function ExtensionServerEndpoints() {
   const servers = useServers()
@@ -97,7 +99,11 @@ export function ExtensionServerEndpoints() {
         if (conn.type === "sidecar" || (conn.type === "extension" && conn.state !== "ready")) return []
         const password = conn.http.password
 
-        return [{ id: ServerConnection.key(conn), url: conn.http.url, ...(password ? { password } : {}) }]
+        const endpoint: ExtensionEndpoint = { id: ServerConnection.key(conn), url: conn.http.url }
+
+        if (password) endpoint.password = password
+
+        return [endpoint]
       })
 
       const value = JSON.stringify(endpoints)
