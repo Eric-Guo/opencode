@@ -466,8 +466,9 @@ test("the original managed service contender binds when the occupied port is rel
       id: "stale",
       version: OPENCODE_VERSION,
       url: "http://127.0.0.1:1",
-      pid: 2_147_483_647,
+      pid: process.pid,
       password: "stale",
+      provenance: await Effect.runPromise(Service.provenance),
     }),
   )
   const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
@@ -480,6 +481,8 @@ test("the original managed service contender binds when the occupied port is rel
     // The first probe is preflight; the second only happens after start() fails to bind.
     expect(await Promise.race([recognizing.promise.then(() => true), Bun.sleep(20_000).then(() => false)])).toBe(true)
     expect(requests).toEqual(["/api/info", "/api/info"])
+    // Retire the probe fixture before the contender publishes its own registration.
+    await fs.rm(registration)
     await listener.stop(true)
 
     const info = await Promise.race([
@@ -538,6 +541,7 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
     url: "http://127.0.0.1:1",
     pid: process.pid,
     password: "stale",
+    provenance: await Effect.runPromise(Service.provenance),
   }
   await fs.writeFile(registration, JSON.stringify(stale))
   const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
@@ -585,10 +589,11 @@ test("port contender recognizes an incumbent registered during the bind race", a
     registration,
     JSON.stringify({
       id: "stale",
-      version: OPENCODE_VERSION,
+      version: "stale-version",
       url: "http://127.0.0.1:1",
-      pid: 2_147_483_647,
+      pid: process.pid,
       password: "stale",
+      provenance: await Effect.runPromise(Service.provenance),
     }),
   )
   const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
@@ -606,6 +611,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
       url: `http://127.0.0.1:${listener.port}`,
       pid: process.pid,
       password: "incumbent",
+      provenance: await Effect.runPromise(Service.provenance),
     }
     await fs.writeFile(registration, JSON.stringify(info))
 
@@ -626,10 +632,11 @@ test.each([
 ])("service registration replaces a stale owner with a connectable address: %s", async (hostname, url) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-stale-"))
   const registration = path.join(root, "state", "opencode", "service-local.json")
+  const provenance = await Effect.runPromise(Service.provenance)
   await fs.mkdir(path.dirname(registration), { recursive: true })
   await fs.writeFile(
     registration,
-    JSON.stringify({ id: "dead", version: "dead", url: "http://127.0.0.1:4321", pid: 2_147_483_647 }),
+    JSON.stringify({ id: "dead", version: "dead", url: "http://127.0.0.1:4321", pid: 2_147_483_647, provenance }),
   )
   try {
     const cleanup = await Effect.runPromise(
@@ -647,6 +654,7 @@ test.each([
       url,
       pid: process.pid,
       password: "secret",
+      provenance,
     })
     await Effect.runPromise(cleanup.pipe(Effect.provide(NodeFileSystem.layer)))
     expect(await Bun.file(registration).exists()).toBe(false)

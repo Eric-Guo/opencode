@@ -1,4 +1,4 @@
-import { readFile, rm } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
 import {
   contenderFailure,
@@ -10,6 +10,7 @@ import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { fallback, headers, probeResult, same } from "../service-probe.js"
+import { checkDomain, ownerAlive } from "../service-provenance.js"
 
 export * from "../service.js"
 export { headers }
@@ -113,6 +114,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           lastSpawn = 0
         }
       } else {
+        if (registration.info !== undefined) await checkDomain(registration.info)
         if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
         const finished = [...contenders].filter(contenderFinished)
         failure ??= finished.map(contenderFailure).find((error) => error !== undefined)
@@ -139,6 +141,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const info = await read(options.file)
+  if (info !== undefined) await checkDomain(info)
+  if (info !== undefined && (await ownerAlive(info)) === false) return terminate(info, options, defaultEnsureTiming)
   // Terminal handoff is best-effort; it must never keep the old service running.
   await (
     options.pty === "handoff" && info !== undefined
@@ -149,39 +153,53 @@ export async function stop(options: StopOptions = {}) {
 }
 
 async function read(file?: string) {
-  const text = await readFile(file ?? fallback(), "utf8").catch(() => undefined)
+  const text = await readFile(file ?? fallback(), "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined
+    throw error
+  })
   if (text === undefined) return undefined
   try {
-    return JSON.parse(text) as Info
-  } catch {
-    return undefined
+    const info = JSON.parse(text) as Info
+    if (!info || typeof info.url !== "string" || !Number.isInteger(info.pid) || info.pid <= 0)
+      throw new Error("Invalid registration fields")
+    return info
+  } catch (cause) {
+    throw new Error("Invalid service registration; cannot safely replace its owner", { cause })
   }
 }
 
 async function registered(file?: string, timeout?: number) {
   const info = await read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
+  await checkDomain(info)
+  if ((await ownerAlive(info)) === false) return { info, service: undefined, timedOut: false }
   return { info, ...(await probeResult(info, timeout)) }
 }
 
-function signal(pid: number, name: NodeJS.Signals) {
+async function signal(info: Info, name: NodeJS.Signals) {
+  if ((await ownerAlive(info)) === false) return
   try {
-    process.kill(pid, name)
-  } catch {}
-}
-
-function stopped(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return false
-  } catch {
-    return true
+    process.kill(info.pid, name)
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH") return
+    throw error
   }
 }
 
-async function waitUntilStopped(pid: number, timing: EnsureTiming) {
+async function stopped(info: Info) {
+  if ((await ownerAlive(info)) === false) return true
+  try {
+    process.kill(info.pid, 0)
+    return false
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH") return true
+    throw error
+  }
+}
+
+async function waitUntilStopped(info: Info, timing: EnsureTiming) {
   for (let attempt = 0; attempt <= timing.stopPollAttempts; attempt++) {
-    if (stopped(pid)) return true
+    if (await stopped(info)) return true
     if (attempt < timing.stopPollAttempts) await delay(timing.stopPollInterval)
   }
   return false
@@ -190,16 +208,17 @@ async function waitUntilStopped(pid: number, timing: EnsureTiming) {
 async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
-  signal(info.pid, "SIGTERM")
-  // The registration can disappear or change hands before this process exits. Only the PID we
-  // signalled can tell us whether it has stopped, so escalate based on that process.
-  if (!(await waitUntilStopped(info.pid, timing))) {
-    signal(info.pid, "SIGKILL")
-    if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
+  await checkDomain(info)
+  if ((await ownerAlive(info)) === false) {
+    return
   }
-  const latest = await read(options.file)
-  if (latest === undefined || !same(latest, info)) return
-  await rm(options.file ?? fallback(), { force: true })
+  await signal(info, "SIGTERM")
+  // Registration may disappear before the owner exits; wait and escalate using its process identity.
+  if (!(await waitUntilStopped(info, timing))) {
+    await signal(info, "SIGKILL")
+    if (!(await waitUntilStopped(info, timing))) throw new Error(`Server process ${info.pid} is still running`)
+  }
+  // Only the server removes registration while holding its publication lease.
 }
 
 function delay(milliseconds: number) {

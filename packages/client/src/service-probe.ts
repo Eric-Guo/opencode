@@ -1,6 +1,7 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Endpoint, Info } from "./service.js"
+import { sameProvenance } from "./service-provenance.js"
 import { defaultEnsureTiming } from "./service-timing.js"
 
 // Shared by the Effect and Promise clients. Keep this module free of Effect so the
@@ -21,7 +22,13 @@ export function fallback() {
 
 /** Whether two registrations describe the same service instance. */
 export function same(left: Info, right: Info) {
-  return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
+  return (
+    left.id === right.id &&
+    left.version === right.version &&
+    left.url === right.url &&
+    left.pid === right.pid &&
+    sameProvenance(left, right)
+  )
 }
 
 /** Ask a registered owner for its health and classify the answer. */
