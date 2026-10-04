@@ -10,6 +10,21 @@ import { response } from "../location"
 export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handlers) =>
   Effect.gen(function* () {
     return handlers
+      .handle("fs.archive", (ctx) =>
+        response(
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.Service
+
+            return yield* fs
+              .archive({ path: RelativePath.make(ctx.query.path) })
+              .pipe(
+                Effect.mapError(
+                  (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
+                ),
+              )
+          }),
+        ),
+      )
       .handleRaw("fs.read", (ctx) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.Service
