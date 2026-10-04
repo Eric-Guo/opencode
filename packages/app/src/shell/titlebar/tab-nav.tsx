@@ -51,33 +51,46 @@ export function TabNavItem(props: {
     event.stopPropagation()
     props.onClose()
   }
+
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
+
   const project = createMemo(() => {
     const session = props.session
+
     if (!session) return
+
     return serverCtx()?.projects.forSession(session)
   })
+
   const title = createMemo(() => {
     const session = props.session
+
     return sessionTabTitle(session ? session.title : props.fallbackTitle, language.t("session.tab.session"))
   })
 
   const projectName = createMemo(() => {
     const session = props.session
+
     if (!session) return
+
     return displayName(project() ?? { worktree: session.location.directory })
   })
+
   const previewPath = createMemo(() => {
     const session = props.session
+
     if (!session) return
     const home = serverCtx()?.sync.data.path.home
+
     return home ? session.location.directory.replace(home, "~") : session.location.directory
   })
+
   // Only label the server when multiple servers are connected.
   const serverLabel = createMemo(() => {
     if (servers.list.length <= 1) return
     const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
+
     return conn ? serverName(conn) : undefined
   })
 
@@ -87,8 +100,10 @@ export function TabNavItem(props: {
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
       setTitleOverflowing(false)
+
       return
     }
+
     setTitleOverflowing(titleEl.scrollWidth > titleEl.clientWidth)
   }
 
@@ -140,8 +155,10 @@ export function TabNavItem(props: {
 
   createEffect(() => {
     if (editing()) return
+
     if (!titleEl) return
     const value = title()
+
     if (value === undefined) return
     titleEl.textContent = value
   })
@@ -149,8 +166,10 @@ export function TabNavItem(props: {
   const openRename = (event?: MouseEvent) => {
     event?.preventDefault()
     event?.stopPropagation()
+
     if (props.dragging || editing() || rename.isPending) return
     const session = props.session
+
     if (!session) return
     titleEl.textContent = session.title ?? ""
     setEditing(true)
@@ -169,7 +188,9 @@ export function TabNavItem(props: {
       "pointerdown",
       (event) => {
         const target = event.target
+
         if (!(target instanceof Node)) return
+
         if (tabRoot.contains(target)) return
         void closeRename(true)
       },
@@ -183,6 +204,7 @@ export function TabNavItem(props: {
     <div
       ref={(el) => {
         tabRoot = el
+
         if (typeof props.ref === "function") props.ref(el)
       }}
       data-titlebar-tab
@@ -221,15 +243,20 @@ export function TabNavItem(props: {
         onMouseDown={(event) => {
           // Navigate on mousedown to shave the press-release delay off tab switches.
           if (event.button !== 0) return
+
           if (editing()) return
+
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
         onClick={(event) => {
           event.preventDefault()
+
           // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
           if (event.detail > 0) return
+
           if (editing()) return
+
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
@@ -277,11 +304,14 @@ export function TabNavItem(props: {
           onDblClick={openRename}
           onKeyDown={(event) => {
             event.stopPropagation()
+
             if (event.key === "Enter") {
               event.preventDefault()
               void closeRename(true)
+
               return
             }
+
             if (event.key !== "Escape") return
             event.preventDefault()
             titleEl.textContent = props.session?.title ?? ""
@@ -321,6 +351,7 @@ export function TabNavItem(props: {
       modal={false}
       onOpenChange={(open) => {
         setMenu("open", open)
+
         if (open) setPopoverOpen(false)
       }}
     >
@@ -372,11 +403,13 @@ export function DraftTabItem(props: {
   orientation?: "horizontal" | "vertical"
 }) {
   const language = useLanguage()
+
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
     props.onClose()
   }
+
   return (
     <div
       ref={(el) => {
@@ -412,13 +445,16 @@ export function DraftTabItem(props: {
         onMouseDown={(event) => {
           // Navigate on mousedown to shave the press-release delay off tab switches.
           if (event.button !== 0) return
+
           if (props.suppressNavigation) return
           props.onNavigate()
         }}
         onClick={(event) => {
           event.preventDefault()
+
           // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
           if (event.detail > 0) return
+
           if (props.suppressNavigation) return
           props.onNavigate()
         }}

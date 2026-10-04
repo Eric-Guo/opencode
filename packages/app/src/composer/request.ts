@@ -38,8 +38,11 @@ type BuildPromptRequestInput = {
 
 const absolute = (directory: string, path: string) => {
   if (path.startsWith("/")) return path
+
   if (/^[A-Za-z]:[\\/]/.test(path) || /^[A-Za-z]:$/.test(path)) return path
+
   if (path.startsWith("\\\\") || path.startsWith("//")) return path
+
   return `${directory.replace(/[\\/]+$/, "")}/${path}`
 }
 
@@ -51,14 +54,19 @@ const mention = /(^|[\s([{"'])@(\S+)/g
 const parseCommentMentions = (comment: string) => {
   return Array.from(comment.matchAll(mention)).flatMap((match) => {
     const path = (match[2] ?? "").replace(/[.,!?;:)}\]"']+$/, "")
+
     if (!path) return []
+
     return [path]
   })
 }
 
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
+
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
+
 const isSkillAttachment = (part: Prompt[number]): part is SkillPart => part.type === "skill"
+
 const isPathAttachment = (part: Prompt[number]): part is PathAttachmentPart => part.type === "path"
 
 export function buildPromptRequest(input: BuildPromptRequestInput): PromptRequest {
@@ -67,8 +75,10 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     name: attachment.name,
     mention: { start: attachment.start, end: attachment.end, text: attachment.content },
   }))
+
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)
+
     return {
       uri: attachment.url ?? `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
       mime: attachment.mime ?? "text/plain",
@@ -84,16 +94,21 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
 
   const used = new Set(files.map((file) => file.uri))
   const comments: PromptComment[] = []
+
   const mentioned = (comment: string) =>
     parseCommentMentions(comment).flatMap((path) => {
       const uri = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
+
       if (used.has(uri)) return []
       used.add(uri)
+
       return [{ uri, mime: "text/plain", name: getFilename(path) }]
     })
+
   const context = input.context.flatMap((item) => {
     if (item.type === "note") {
       const comment = item.comment.trim()
+
       if (!comment) return []
       comments.push({
         type: "note",
@@ -105,15 +120,19 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
         ...(item.live ? { live: { ...item.live } } : {}),
         comment,
       })
+
       return mentioned(comment)
     }
+
     const path = absolute(input.sessionDirectory, item.path)
     const uri = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
+
     if (!comment && used.has(uri)) return []
     used.add(uri)
 
     const file = { uri, mime: "text/plain", name: getFilename(item.path) }
+
     if (!comment) return [file]
 
     comments.push({
@@ -123,6 +142,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
       preview: item.preview,
       origin: item.commentOrigin,
     })
+
     return [file, ...mentioned(comment)]
   })
 
@@ -131,6 +151,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     mime: attachment.mime,
     name: attachment.sourcePath ?? attachment.filename,
   }))
+
   // Like comments, path references reach the model as text and the message UI through metadata.
   const attachments = input.prompt
     .filter(isPathAttachment)

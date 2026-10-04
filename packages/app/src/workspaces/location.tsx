@@ -4,6 +4,7 @@ import { retry } from "@opencode/util/retry"
 import { type Accessor, createEffect, createMemo, onCleanup } from "solid-js"
 import { type LocationContext, useServerSDK } from "@/runtime/server/client"
 import { useData, useServer } from "@/runtime/server/current"
+
 export type { LocationContext } from "@/runtime/server/client"
 
 export type WorkspaceLocation = LocationContext & {
@@ -17,6 +18,7 @@ const context = createSimpleContext({
     const serverSDK = useServerSDK()
     const server = useServer()
     const data = useData()
+
     const ref = createMemo(
       () => ({
         directory: typeof props.directory === "function" ? props.directory() : props.directory,
@@ -27,6 +29,7 @@ const context = createSimpleContext({
         equals: (previous, next) => previous.directory === next.directory && previous.workspaceID === next.workspaceID,
       },
     )
+
     const current = createMemo(() => data.location.info(ref()))
 
     createEffect(() => {
@@ -35,6 +38,7 @@ const context = createSimpleContext({
       onCleanup(() => {
         stale = true
       })
+
       if (serverSDK.connection.status() !== "connected") return
       // A failed sync does not prove the directory is missing. Keep recovery local to reads.
       void retry(() => (stale ? Promise.resolve() : data.location.sync(location)), {
@@ -43,12 +47,14 @@ const context = createSimpleContext({
     })
     createEffect(() => {
       const id = current()?.project.id
+
       if (!id || serverSDK.connection.status() !== "connected") return
       // Showing a Location is the demand for its project's worktree inventory (workspace styling, picker).
       void server.ctx.sync.worktrees.list(id).then(() => server.ctx.sync.worktrees.refresh(id))
     })
 
     const location = createMemo(() => serverSDK.ensureDirSdkContext(current()?.directory ?? ref().directory))
+
     return createMemo<WorkspaceLocation>(() => ({
       ...location(),
       ref: ref(),
@@ -58,4 +64,5 @@ const context = createSimpleContext({
 })
 
 export const useWorkspaceLocation: () => Accessor<WorkspaceLocation> = context.use
+
 export const LocationProvider = context.provider
