@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 
 const number = Schema.Finite
 
@@ -47,7 +47,7 @@ const Heap = Schema.Struct({
 export function analyzeTrace(value: unknown, limit = 100) {
   const decoded = Schema.decodeUnknownOption(Trace)(value)
 
-  if (decoded._tag === "None")
+  if (Option.isNone(decoded))
     throw new Error(
       "Selected file is not a Chromium performance trace. Use a fileID returned by browser.trace.stop for this tab; CPU profiles and heap snapshots use their own analysis tools.",
     )
@@ -91,7 +91,7 @@ export function analyzeTrace(value: unknown, limit = 100) {
 export function analyzeCpu(value: unknown, limit = 100) {
   const decoded = Schema.decodeUnknownOption(Cpu)(value)
 
-  if (decoded._tag === "None")
+  if (Option.isNone(decoded))
     throw new Error(
       "Selected file is not a CPU profile. Use a fileID returned by browser.cpu.stop for this tab, not a trace or heap snapshot.",
     )
@@ -126,7 +126,7 @@ const malformedHeap = () =>
 export function parseHeap(value: unknown) {
   const decoded = Schema.decodeUnknownOption(Heap)(value)
 
-  if (decoded._tag === "None")
+  if (Option.isNone(decoded))
     throw new Error(
       "Selected file is not a V8 heap snapshot. Use a fileID returned by browser.heap.snapshot for this tab, not a trace or CPU profile.",
     )
