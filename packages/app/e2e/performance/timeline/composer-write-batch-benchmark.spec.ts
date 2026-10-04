@@ -141,6 +141,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
           const value = index < 0 ? undefined : JSON.parse(values.result[index])
           probe.active = active
 
+          // SAFETY: The benchmark writes this exact composer document and reads its matching draft key above.
           return value as { prompt: { content: string }[]; cursor: number; context: { items: unknown[] } } | undefined
         } finally {
           db.close()

@@ -194,6 +194,7 @@ for (const mode of ["compact", "ungrouped"] as const) {
         messageResources: await page.evaluate((sessionID) => {
           const start = performance.getEntriesByName("session-switch:start").at(-1)!.startTime
 
+          // SAFETY: getEntriesByType("resource") returns Resource Timing entries with transfer and initiator fields.
           return (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
             .filter(
               (entry) =>
