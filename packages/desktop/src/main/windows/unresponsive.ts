@@ -17,6 +17,7 @@ export const makeUnresponsiveSampler = Effect.gen(function* () {
     const samples = new Map<string, number>()
 
     const active = () => sampling && !win.isDestroyed() && !contents.isDestroyed()
+
     const clearTimers = () => {
       if (sampleTimer) clearTimeout(sampleTimer)
 
