@@ -327,6 +327,8 @@ const childMessages = Array.from({ length: 4 }, (_, index) => [
   assistantMessage(childID, index + 2000, id("msg_user", index + 2000), [textPart(index + 2000, 0, 240)]),
 ]).flat()
 
+// SAFETY: this fixture exposes a Session-ID dictionary to generic history consumers.
+// oxlint-disable-next-line anti-slop/no-known-value-widening
 const messages: Record<string, SessionMessageInfo[]> = {
   [sourceID]: sourceMessages,
   [targetID]: targetMessages,
