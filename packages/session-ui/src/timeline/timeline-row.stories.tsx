@@ -625,8 +625,7 @@ export const Conversation = {
   render: (args: { scenario: string; mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) => {
     if (args.scenario === "reasoning") return <AgentReasoningStory {...args} />
 
-    // SAFETY: the scenario control only offers conversationScenarios keys, and "reasoning" returned above.
-    return conversationScenarios[args.scenario as Exclude<keyof typeof conversationScenarios, "reasoning">].render()
+    return Object.entries(conversationScenarios).find(([key]) => key === args.scenario)?.[1].render()
   },
 }
 

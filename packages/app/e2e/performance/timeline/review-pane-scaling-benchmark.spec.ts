@@ -109,7 +109,7 @@ async function measureBroadReviewSearch(page: Page, expectedRows: number) {
     element.addEventListener(
       "input",
       () => {
-        ;(window as Window & { __reviewSearchStartedAt?: number }).__reviewSearchStartedAt = performance.now()
+        ;(window).__reviewSearchStartedAt = performance.now()
       },
       { once: true, capture: true },
     )
@@ -117,7 +117,7 @@ async function measureBroadReviewSearch(page: Page, expectedRows: number) {
   await filter.fill("file-")
 
   return page.evaluate((expectedRows) => {
-    const startedAt = (window as Window & { __reviewSearchStartedAt?: number }).__reviewSearchStartedAt!
+    const startedAt = (window).__reviewSearchStartedAt!
 
     return new Promise<{ stableMs: number; logicalRows: number; renderedRows: number }>((resolve) => {
       let previous = -1
@@ -202,14 +202,14 @@ async function measureReviewPaneLoad(page: Page, input: { expectedFile: string; 
   await toggle.click()
   await page.waitForFunction(
     () =>
-      (window as Window & { __reviewPaneScalingProbe?: ReviewPaneScalingProbe }).__reviewPaneScalingProbe
+      (window).__reviewPaneScalingProbe
         ?.stableReadyMs !== undefined,
     undefined,
     { timeout: completionTimeoutMs },
   )
 
   return page.evaluate(() => {
-    const probe = (window as Window & { __reviewPaneScalingProbe?: ReviewPaneScalingProbe }).__reviewPaneScalingProbe!
+    const probe = (window).__reviewPaneScalingProbe!
     probe.stop()
     const startedAt = probe.startedAt!
     const final = probe.samples.at(-1)!
@@ -351,8 +351,20 @@ async function installReviewPaneScalingProbe(page: Page, input: { expectedFile: 
         },
         { capture: true, once: true },
       )
-      ;(window as Window & { __reviewPaneScalingProbe?: ReviewPaneScalingProbe }).__reviewPaneScalingProbe = probe
+      ;(window).__reviewPaneScalingProbe = probe
     },
     { ...input, stableFrames: readyFrames },
   )
+}
+
+declare global {
+  interface Window {
+    __reviewSearchStartedAt?: number
+  }
+}
+
+declare global {
+  interface Window {
+    __reviewPaneScalingProbe?: ReviewPaneScalingProbe
+  }
 }
