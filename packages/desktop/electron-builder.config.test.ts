@@ -1,3 +1,4 @@
+import { isString, isObject } from "effect/Predicate"
 import { expect, test } from "bun:test"
 import { statSync } from "node:fs"
 import { cp, mkdtemp, rm } from "node:fs/promises"
@@ -39,11 +40,11 @@ function load(channel: string, target?: string): Configuration {
 }
 
 function trimFilter(dir: string, config: Configuration) {
-  const patterns = Array.isArray(config.files) ? config.files.flatMap((value) => (value ? [String(value)] : [])) : []
-
   return new FileMatcher(dir, "", (value: string) => value, [
     "**/*",
-    ...patterns.filter((value) => value.startsWith("!")),
+    ...(Array.isArray(config.files) ? config.files : []).filter(
+      (value): value is string => isString(value) && value.startsWith("!"),
+    ),
   ]).createFilter()
 }
 
@@ -227,9 +228,9 @@ test("excludes native dependencies for other platforms and Windows architectures
 test("bundled config excludes repository instructions and retains runtime files", async () => {
   const config = await load("dev")
   const resources = Array.isArray(config.extraResources) ? config.extraResources : []
-  const entry = resources.find((item) => typeof item === "object" && item.from === "resources/thape-config")
+  const entry = resources.find((item) => isObject(item) && item.from === "resources/thape-config")
 
-  if (!entry || typeof entry === "string") throw new Error("Missing config packaging entry")
+  if (!entry || isString(entry)) throw new Error("Missing config packaging entry")
   const filter = new FileMatcher(import.meta.dirname, "", (value: string) => value, entry.filter).createFilter()
   const include = (name: string) => filter(path.join(import.meta.dirname, name), statSync(import.meta.filename))
   expect(include("AGENTS.md")).toBe(false)

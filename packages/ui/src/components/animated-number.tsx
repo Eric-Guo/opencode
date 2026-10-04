@@ -81,9 +81,11 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
     return Math.max(0, Math.round(props.value))
   })
 
+  type NumberState = { value: number; direction: 1 | -1; places: number; resizing: boolean }
+
   // A spare leading zero waits outside the clipped width to roll in. A digit that leaves stays until the width has
   // shrunk past it, so it rolls to zero instead of vanishing.
-  const [state, setState] = createStore<{ value: number; direction: 1 | -1; places: number; resizing: boolean }>({
+  const [state, setState] = createStore<NumberState>({
     value: target(),
     direction: 1,
     places: String(target()).length + 1,

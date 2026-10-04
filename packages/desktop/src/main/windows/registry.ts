@@ -1,3 +1,5 @@
+import { Schema } from "effect"
+
 // Tracks open windows and the persisted window id list used to restore
 // windows (and their per-window persisted state) across app launches.
 export function createWindowRegistry<W>(persistence: {
@@ -15,7 +17,7 @@ export function createWindowRegistry<W>(persistence: {
 
     if (!Array.isArray(value)) return []
 
-    return value.filter((id): id is string => typeof id === "string" && id.length > 0)
+    return value.filter((id): id is string => Schema.is(Schema.String)(id) && id.length > 0)
   }
 
   return {
