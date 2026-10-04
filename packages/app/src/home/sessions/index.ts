@@ -36,7 +36,7 @@ export async function loadHomeSessionIndex(
         limit: HOME_V2_SESSION_PAGE_LIMIT,
         order: "desc",
         parentID: null,
-        ...(cursor ? { cursor } : {}),
+        cursor: cursor || undefined,
       },
       { signal },
     )
