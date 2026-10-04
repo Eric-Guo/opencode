@@ -1298,12 +1298,11 @@ function FileAccordionGroup(props: { children: JSX.Element }) {
         if (index < 0) return
         event.preventDefault()
 
-        const next =
-          event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? triggers.length - 1
-              : (index + (event.key === "ArrowDown" ? 1 : -1) + triggers.length) % triggers.length
+        const next = value(event.key).pipe(
+          when("Home", () => 0),
+          when("End", () => triggers.length - 1),
+          orElse(() => (index + (event.key === "ArrowDown" ? 1 : -1) + triggers.length) % triggers.length),
+        )
 
         triggers[next]?.focus()
       }}
@@ -2382,11 +2381,11 @@ ToolRegistry.register({
     const [expanded, setExpanded] = createSignal<string[]>([])
 
     const title = createMemo(() =>
-      props.tool === "edit"
-        ? i18n.t("ui.messagePart.title.edit")
-        : props.tool === "write"
-          ? i18n.t("ui.messagePart.title.write")
-          : i18n.t("ui.tool.patch"),
+      value(props.tool).pipe(
+        when("edit", () => i18n.t("ui.messagePart.title.edit")),
+        when("write", () => i18n.t("ui.messagePart.title.write")),
+        orElse(() => i18n.t("ui.tool.patch")),
+      ),
     )
 
     const open = createMemo(() => {

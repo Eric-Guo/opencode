@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import { expect, story } from "../../storybook/playwright/story"
 
@@ -17,7 +18,7 @@ for (const tool of ["shell", "execute", "subagent"]) {
       await timeline.getByRole("button", { name: "Start tool", exact: true }).click()
       await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
       const original = await group.elementHandle()
-      const title = tool === "subagent" ? "Agent" : tool === "execute" ? "Execute" : "Shell"
+      const title = Match.value(tool).pipe(Match.when("subagent", () => "Agent"), Match.when("execute", () => "Execute"), Match.orElse(() => "Shell"))
 
       for (const action of [undefined, "Complete input", "Run command", "Complete command"]) {
         if (action) await timeline.getByRole("button", { name: action, exact: true }).click()
