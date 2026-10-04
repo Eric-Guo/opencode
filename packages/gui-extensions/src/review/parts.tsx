@@ -7,11 +7,15 @@ import type { ChangeMode, ReviewModel } from "./model"
 
 export function ReviewTitle(props: { review: ReviewModel }) {
   const ctx = useExtension()
+
   const label = (option: ChangeMode) => {
     if (option === "git") return ctx.t("ui.sessionReview.title.git")
+
     if (option === "branch") return ctx.t("ui.sessionReview.title.branch")
+
     return ctx.t("ui.sessionReview.title.lastTurn")
   }
+
   return (
     <Show when={props.review.canReview() && props.review.options().length > 0}>
       <Select
@@ -29,11 +33,15 @@ export function ReviewTitle(props: { review: ReviewModel }) {
 export function ReviewEmpty(props: { review: ReviewModel; loadingClass: string }) {
   const ctx = useExtension()
   const loading = () => !props.review.ready()
+
   const text = () => {
     if (props.review.mode() === "git") return ctx.t("empty.git")
+
     if (props.review.mode() === "branch") return ctx.t("empty.branch")
+
     return ctx.t("noChanges")
   }
+
   return (
     <Switch>
       <Match when={loading()}>
@@ -56,6 +64,7 @@ export function ReviewEmpty(props: { review: ReviewModel; loadingClass: string }
 export function ReviewPanelEmpty(props: { review: ReviewModel }) {
   const ctx = useExtension()
   const loading = () => !props.review.ready()
+
   return (
     <Switch>
       <Match when={loading()}>

@@ -28,6 +28,7 @@ describe("visibleTimelineMessages", () => {
     delivery: "steer",
     payload: { text: "queued" },
   } satisfies SessionInboxInfo
+
   const work = {
     id: "msg_5",
     type: "assistant",
@@ -67,6 +68,7 @@ describe("visibleTimelineMessages", () => {
         timelineDetail: () => timelinePresets[2].value,
         pendingUserMessageIDs: () => new Set([steer.id]),
       })
+
       expect(projection.activeMessageID()).toBe("msg_1")
       expect(projection.rows().map((row) => [row._tag, row.userMessageID])).toEqual([
         ["UserMessage", "msg_1"],
@@ -185,6 +187,7 @@ describe("applyTimelineMessageHandoff", () => {
       ...handoff,
       files: [{ data: "YQ==", mime: "image/png", source: { type: "inline" } }],
     } satisfies SessionMessageInfo
+
     expect(applyTimelineMessageHandoff([durable], handoff)).toEqual([durable])
   })
 })

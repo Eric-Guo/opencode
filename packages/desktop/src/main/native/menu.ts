@@ -41,6 +41,7 @@ export type MenubarEntry = {
 }
 
 let menubar: () => readonly MenubarEntry[] = () => []
+
 let installed: Deps | undefined
 
 let stopHistory: (() => void) | undefined
@@ -58,9 +59,11 @@ export function refreshMenu() {
 
 export function createMenu(deps: Deps) {
   installed = deps
+
   if (process.platform !== "darwin") return
 
   const extra = menubar()
+
   const template = DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "macos")).map((menu) =>
     nativeMenu(
       menu,
@@ -70,12 +73,15 @@ export function createMenu(deps: Deps) {
   )
 
   const built = Menu.buildFromTemplate(template)
+
   // Electron freezes a built item's state; contributions re-read theirs whenever a menu opens.
   const refresh = () =>
     extra.forEach((item) => {
       const target = built.getMenuItemById(item.id)
+
       if (target) target.enabled = item.enabled()
     })
+
   if (extra.length) built.items.forEach((item) => item.submenu?.on("menu-will-show", refresh))
 
   const updateHistory = () => {
@@ -106,20 +112,24 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 
 function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Deps): MenuItemConstructorOptions {
   if (menu.role && !extra.length) return { role: nativeRole(menu.role), label: nativeT(menu.labelKey) }
+
   const items = desktopMenuWithExtensions(
     (menu.items ?? [])
       .filter((entry) => desktopMenuVisible(entry, "macos"))
       .map((entry) => ({ key: desktopMenuKey(entry), entry })),
     extra,
   )
+
   return {
     ...(menu.role ? { role: nativeRole(menu.role) } : {}),
     label: nativeT(menu.labelKey),
     submenu: [
       ...items.map((item) => {
         const entry = item.entry
+
         if ("menu" in entry)
           return { id: entry.id, label: entry.label, enabled: entry.enabled(), click: () => entry.run() }
+
         return nativeItem(entry, deps)
       }),
       ...(menu.id === "history"
@@ -143,6 +153,7 @@ function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Dep
 
 function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOptions {
   if (entry.type === "separator") return { type: "separator" }
+
   if (entry.role) return { role: nativeRole(entry.role), label: entry.labelKey ? nativeT(entry.labelKey) : undefined }
 
   const item: MenuItemConstructorOptions = {
@@ -154,6 +165,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
     const command = entry.command
     item.click = () => deps.trigger(command)
   }
+
   if (entry.action) {
     const action = entry.action
     item.click = () =>
@@ -163,6 +175,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
         relaunch: deps.relaunch,
       })
   }
+
   if (entry.href) {
     const href = entry.href
     item.click = () => deps.openExternal(href)

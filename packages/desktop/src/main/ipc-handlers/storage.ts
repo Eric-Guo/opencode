@@ -11,6 +11,7 @@ export const storageHandlers = StorageRpcs.toLayer(
   Effect.gen(function* () {
     const storage = yield* DesktopStorage.Service
     const handoff = yield* IpcPortHandoff
+
     return StorageRpcs.of({
       StorageItems: ({ name }) => Effect.sync(() => storage.state.items(name)),
       StorageUpdate: ({ name, insert, remove }, context) =>
@@ -23,6 +24,7 @@ export const storageHandlers = StorageRpcs.toLayer(
           for (const contents of rendererContents()) {
             if (contents !== origin) emitIpcEvent(contents, event)
           }
+
           return revision
         }),
       StorageClear: ({ name }) => Effect.sync(() => storage.state.clear(name)),

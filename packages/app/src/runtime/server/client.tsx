@@ -57,6 +57,7 @@ export function createOpenCodeEventSource() {
 }
 
 export type ServerConnectionStatus = ClientConnectionStatus
+
 type ServerSDKBase = {
   server: ServerConnection.Any
   scope: ServerScope
@@ -74,6 +75,7 @@ type ServerSDKBase = {
 function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
   const platform = usePlatform()
   const transport = createServerTransport({ http: server.http, fetch: platform.fetch })
+
   if (server.type === "extension") {
     createEffect(
       on(
@@ -83,6 +85,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       ),
     )
   }
+
   const events = createOpenCodeEventSource()
   const reconnect = server.type === "extension" || server.type === "sidecar" ? server.reconnect : undefined
 
@@ -141,6 +144,7 @@ export function createServerTransport(input: { http: ServerConnection.HttpBase; 
       return state.http.url
     },
   })
+
   return {
     update(http: ServerConnection.HttpBase) {
       state.http = http
@@ -161,6 +165,7 @@ export type ServerSDK = ServerSDKBase & {
 
 export function createServerSdkContext(server: ServerConnection.Any, scope: ServerScope): ServerSDK {
   const sdk = createServerSdkContextBase(server, scope)
+
   return Object.assign(sdk, {
     ensureDirSdkContext: createRefCountMap((dir) => createDirSdkContext(dir, sdk)),
   })
@@ -168,6 +173,7 @@ export function createServerSdkContext(server: ServerConnection.Any, scope: Serv
 
 export const useServerSDK = () => {
   const server = useServer()
+
   return server.ctx.sdk
 }
 

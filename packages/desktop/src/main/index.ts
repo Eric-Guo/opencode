@@ -29,6 +29,7 @@ const { registerRendererScheme } = await import("./windows/scheme")
 // hundred milliseconds of module evaluation and layers — loads. Configuration and the scheme must
 // precede ready; the window is created the moment ready fires; everything else is imported after.
 configureApplication()
+
 if (acquireApplicationLock()) {
   registerRendererScheme()
   // Window first, then the bundle: starting the import before ready delays ready itself, because the
@@ -45,6 +46,7 @@ if (acquireApplicationLock()) {
     if (!process.env.ELECTRON_RENDERER_URL && !import.meta.env.OPENCODE_DESKTOP_EXTENSION)
       await rendererAssetsServed({ quietMs: 40, capMs: 400 })
     marks.served = Date.now()
+
     return import("./desktop")
   })
 }
