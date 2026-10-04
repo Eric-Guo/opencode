@@ -2,6 +2,8 @@ import { and, eq, sql } from "drizzle-orm"
 import type { Database } from "../storage/database"
 import { extension, extensionFile } from "../storage/schema"
 
+// SAFETY: This lookup table serves dynamic file extensions from outside the literal key set; absent entries keep the existing fallback.
+// oxlint-disable-next-line anti-slop/no-known-value-widening
 const types: Record<string, string> = {
   css: "text/css",
   js: "text/javascript",

@@ -24,6 +24,8 @@ export type Displays = {
 // Bounds are only trusted when they still fit on one of the current displays; otherwise the window
 // falls back to the default size on the primary display. A saved maximized or fullscreen state
 // without bounds is kept so manage() can restore it.
+// SAFETY: This persisted-state boundary validates bounds against current displays before restoring them.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function resolveWindowState(saved: unknown, defaults: { width: number; height: number }, displays: Displays) {
   const state = isState(saved) ? saved : undefined
 
@@ -53,6 +55,8 @@ export function windowStateFile(id: string) {
   return `window-state-${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
+// SAFETY: This reader hands raw historical JSON directly to resolveWindowState's validation boundary.
+// oxlint-disable-next-line anti-slop/no-unknown-returns
 export function readWindowState(file: string): unknown {
   if (!existsSync(file)) return undefined
 

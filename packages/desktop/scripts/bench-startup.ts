@@ -410,6 +410,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
 
   while (Date.now() < deadline) {
     const result = await cdp.send("Runtime.evaluate", { expression: probe, returnByValue: true })
+    // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
     last = result.result?.result?.value as Probe | undefined
     const t = Date.now() - spawnAt
 
@@ -425,6 +426,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     if (last?.rows && !seen.timelineRows) seen.timelineRows = t
 
     if (last?.home && !seen.homeReady) seen.homeReady = t
+    // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
     const metrics = (await cdp.send("Performance.getMetrics")).result?.metrics as { name: string; value: number }[]
     const task = (metrics.find((m) => m.name === "TaskDuration")?.value ?? 0) * 1000
     scriptMs = (metrics.find((m) => m.name === "ScriptDuration")?.value ?? 0) * 1000
@@ -451,6 +453,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     console.log("renderer profile:", rendererProfilePath)
   }
 
+  // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
   const finalMetrics = (await cdp.send("Performance.getMetrics")).result?.metrics as { name: string; value: number }[]
   const metric = (name: string) => finalMetrics.find((m) => m.name === name)?.value ?? 0
 
@@ -550,6 +553,7 @@ async function mainBootTiming() {
 
   if (typeof value !== "string") return undefined
 
+  // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
   return JSON.parse(value) as {
     created: number
     origin: number
@@ -625,6 +629,7 @@ async function freePort() {
 }
 
 async function targets(port: number) {
+  // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
   return fetch(`http://127.0.0.1:${port}/json`)
     .then((r) => r.json() as Promise<{ type: string; url: string; webSocketDebuggerUrl: string }[]>)
     .catch(() => [] as { type: string; url: string; webSocketDebuggerUrl: string }[])
