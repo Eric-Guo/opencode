@@ -13,7 +13,7 @@ export function attached(file: PromptFileAttachment) {
 // language metadata only; grammars stay behind shiki's lazy imports
 const LANGUAGE_NAMES = new Map<string, string>(
   bundledLanguagesInfo.flatMap((info) =>
-    [info.id, ...(info.aliases ?? [])].map((alias) => [alias, info.name] as [string, string]),
+    [info.id, ...(info.aliases ?? [])].map((alias) => [alias, info.name] as const),
   ),
 )
 

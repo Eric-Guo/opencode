@@ -5,6 +5,7 @@ import type { DesktopTheme } from "../src/theme/types"
 
 const themePath = import.meta.dir + "/../src/theme/themes/oc-2.json"
 
+// SAFETY: This repository-owned oc-2 asset follows DesktopTheme; JSON parsing widens its color literals.
 const theme = (await Bun.file(themePath).json()) as DesktopTheme
 
 const css = await Bun.file(import.meta.dir + "/../src/styles/tokens/theme.css").text()

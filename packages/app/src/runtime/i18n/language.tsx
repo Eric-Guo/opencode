@@ -99,6 +99,7 @@ const base = flatten({ ...en, ...dict })
 
 const dicts = new Map<Locale, Dictionary>([["en", base]])
 
+// SAFETY: every locale is merged over the complete English dictionary and only string translation values are added.
 const merge = (app: Promise<Source>, ui: Promise<Source>) =>
   Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
 
@@ -207,6 +208,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       initialValue: dicts.get(initial) ?? base,
     })
 
+    // SAFETY: the translator accepts all dictionary keys; this signature narrows callers to ordinary keys while retaining its string result.
     const t = translator(() => dictionary() ?? base, resolveTemplate) as <
       Key extends Extract<keyof Dictionary, string>,
     >(
@@ -219,6 +221,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       category: UiPluralCategory,
       params?: Record<string, string | number | boolean>,
     ) => {
+      // SAFETY: the current dictionary contains only string translations, including dynamic plural-category keys.
       const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
       const candidate = `${key}.${category}`
       const fallback = `${key}.other`
@@ -239,6 +242,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       key: TranslationKey<Key>,
       params: Record<string, JSX.Element>,
     ) => {
+      // SAFETY: the current dictionary contains only string translations, including dynamic plural-category keys.
       const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
 
       return richTemplateParts(current[key] ?? key, params)
@@ -298,6 +302,7 @@ export function UiI18nBridge(props: { children?: JSX.Element }) {
       value={{
         locale: language.intl,
         layoutLocale: language.layoutLocale,
+        // SAFETY: the UI bridge passes ordinary UI keys; the translator returns missing runtime keys verbatim as its fallback.
         t: language.t as UiI18n["t"],
         plural: language.plural,
         pluralForm: language.pluralForm,
