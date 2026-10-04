@@ -1,3 +1,4 @@
+import { Data } from "effect"
 
 import { describe, expect, test } from "bun:test"
 import { resolveObjectURL } from "node:buffer"
@@ -111,9 +112,15 @@ describe("readLocalImage", () => {
 
   // oxlint-disable anti-slop-effect/no-manual-tagged-construction -- these are the JSON error bodies the server sends
   test.each([
-    [400, { _tag: "RequestError", message: "Cannot read image" }],
-    [401, { _tag: "RequestError", message: "Cannot read image" }],
-    [404, { _tag: "FileNotFoundError", path: "image.png", message: "File not found: image.png" }],
+    [400, Data.taggedEnum<{ _tag: "RequestError"; message: string }>().RequestError({ message: "Cannot read image" })],
+    [401, Data.taggedEnum<{ _tag: "RequestError"; message: string }>().RequestError({ message: "Cannot read image" })],
+    [
+      404,
+      Data.taggedEnum<{ _tag: "FileNotFoundError"; path: string; message: string }>().FileNotFoundError({
+        path: "image.png",
+        message: "File not found: image.png",
+      }),
+    ],
   ])("propagates declared API errors (%s)", async (status, error) => {
     // oxlint-enable anti-slop-effect/no-manual-tagged-construction
     const { api } = setup(() => Response.json(error, { status }))
