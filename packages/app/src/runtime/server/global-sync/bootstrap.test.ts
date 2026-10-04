@@ -1,3 +1,4 @@
+import { ServerConnection } from "@/runtime/server/registry"
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
 import { OpenCode, type LocationGetInput } from "@opencode/client/promise"
@@ -119,7 +120,7 @@ describe("query keys", () => {
 
         return { shell: "bash" }
       },
-    } as unknown as ServerApi["config"]
+    }
 
     const result = await new QueryClient().fetchQuery(loadGlobalConfigQuery(ServerScope.local, api))
 
@@ -135,12 +136,11 @@ describe("query keys", () => {
       get: async (input?: LocationGetInput) => {
         calls.push(input)
 
-        return { directory: "/repo/subpath", project: { id: "project", directory: "/repo" } }
+        return { directory: "/repo/subpath", project: { id: "project", directory: "/repo", canonical: "/repo" } }
       },
-    } as ServerApi["location"]
+    }
 
-    // SAFETY: a remote server's scope is its origin string, which is how the app scopes it.
-    const remote = "https://debian.example" as typeof ServerScope.local
+    const remote = ServerScope.fromServerKey(ServerConnection.Key.make("https://debian.example"))
 
     expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
     expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])

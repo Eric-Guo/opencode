@@ -1,7 +1,4 @@
-/* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters, anti-slop-effect/prefer-effect-match --
-   this file parses tool metadata as it did before the New timeline, which only added the optional `context`; the
-   parsing is shared with the current timeline and keeps its shape until it is rewritten on its own. */
-import type { FileDiffInfo } from "@opencode/client/promise"
+import { Match, Schema } from "effect"
 import { completePatchContents, normalize, type ViewDiff } from "./session-diff"
 
 type Kind = "add" | "update" | "delete"
@@ -17,32 +14,28 @@ export type ApplyPatchFile = {
 
 export type ApplyPatchFileGroup = Omit<ApplyPatchFile, "view" | "contents"> & { views: ViewDiff[] }
 
-export function changedFileDiff(value: unknown): value is FileDiffInfo {
-  if (!value || typeof value !== "object") return false
-
-  if (!("file" in value) || typeof value.file !== "string") return false
-
-  if (!("patch" in value) || typeof value.patch !== "string") return false
-
-  if (!("additions" in value) || typeof value.additions !== "number") return false
-
-  if (!("deletions" in value) || typeof value.deletions !== "number") return false
-
-  if (!("status" in value)) return false
-
-  if (value.status !== "added" && value.status !== "deleted" && value.status !== "modified") return false
-
-  return value.additions > 0 || value.deletions > 0
-}
+export const changedFileDiff = Schema.is(
+  Schema.Struct({
+    file: Schema.String,
+    patch: Schema.String,
+    additions: Schema.Number,
+    deletions: Schema.Number,
+    status: Schema.Literals(["added", "deleted", "modified"]),
+  }).check(Schema.makeFilter((value) => value.additions > 0 || value.deletions > 0)),
+)
 
 /** `context` is how many unchanged lines the diff keeps around each change. */
-export function patchFile(value: unknown, context?: number): ApplyPatchFile | undefined {
+export function patchFile(value: Schema.Json, context?: number): ApplyPatchFile | undefined {
   if (!changedFileDiff(value)) return
   let view: ViewDiff | undefined
 
   return {
     path: value.file,
-    type: value.status === "added" ? "add" : value.status === "deleted" ? "delete" : "update",
+    type: Match.value(value.status).pipe(
+      Match.when("added", () => "add" as const),
+      Match.when("deleted", () => "delete" as const),
+      Match.orElse(() => "update" as const),
+    ),
     additions: value.additions,
     deletions: value.deletions,
     get view() {
@@ -52,13 +45,13 @@ export function patchFile(value: unknown, context?: number): ApplyPatchFile | un
   }
 }
 
-export function patchFiles(value: unknown, context?: number) {
+export function patchFiles(value: Schema.Json | undefined, context?: number) {
   if (!Array.isArray(value)) return []
 
   return value.map((file) => patchFile(file, context)).filter((file): file is ApplyPatchFile => !!file)
 }
 
-export function patchFileGroups(value: unknown, context?: number): ApplyPatchFileGroup[] {
+export function patchFileGroups(value: Schema.Json | undefined, context?: number): ApplyPatchFileGroup[] {
   const groups = patchFiles(value, context).reduce((result, file) => {
     const files = result.get(file.path)
 
@@ -96,7 +89,11 @@ export function patchFileGroups(value: unknown, context?: number): ApplyPatchFil
               file: path,
               before: first.contents!.before,
               after: last.contents!.after,
-              status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
+              status: Match.value(type).pipe(
+                Match.when("add", () => "added" as const),
+                Match.when("delete", () => "deleted" as const),
+                Match.orElse(() => "modified" as const),
+              ),
               additions: 0,
               deletions: 0,
             },

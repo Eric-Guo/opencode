@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from "bun:test"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { checkServerHealth } from "./health"
@@ -136,7 +137,7 @@ describe("checkServerHealth", () => {
     const fetch = fakeFetch(async () => {
       count += 1
 
-      if (count < 3) throw new TypeError("network")
+        if (count < 3) throw new TypeError("network")
 
       return info()
     })

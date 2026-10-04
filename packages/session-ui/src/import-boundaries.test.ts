@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 const forbidden = /["']@opencode\/(?:core|sdk|server)(?:\/[^"']*)?["']/
 
@@ -12,7 +12,7 @@ describe("Session UI package boundaries", () => {
 
   test("does not declare server runtime dependencies", async () => {
     const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json()
-    const dependencies = pkg.dependencies as Record<string, string>
+    const dependencies = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(pkg.dependencies)
 
     expect(dependencies["@opencode/core"]).toBeUndefined()
     expect(dependencies["@opencode/sdk"]).toBeUndefined()
@@ -25,7 +25,7 @@ describe("Session UI package boundaries", () => {
 
   test("exports the current Session document surface", async () => {
     const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json()
-    const exports = pkg.exports as Record<string, string>
+    const exports = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(pkg.exports)
 
     expect(exports["./actions"]).toBe("./src/actions.ts")
     expect(exports["./document"]).toBe("./src/document.ts")
