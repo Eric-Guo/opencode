@@ -6,7 +6,7 @@ import type {
   SessionMessageUser,
   SessionStatus,
 } from "@opencode/client/promise"
-import { Option, Predicate, Schema } from "effect"
+import { Match, Option, Predicate, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
 import {
   currentContentDefaultOpen,
@@ -70,7 +70,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     if (!messageRowIndex.has(row.userMessageID)) messageRowIndex.set(row.userMessageID, index)
     messageLastRowIndex.set(row.userMessageID, index)
 
-    if (row._tag === "AssistantPart") lastAssistantGroupKey.set(row.userMessageID, row.group.key)
+    if (Predicate.isTagged(row, "AssistantPart")) lastAssistantGroupKey.set(row.userMessageID, row.group.key)
   })
 
   return {
@@ -164,7 +164,7 @@ export function createReactiveTimelineProjection(input: {
   const lastAssistantGroupKey = createMemo(() => {
     const result = new Map<string, string>()
     rows().forEach((row) => {
-      if (row._tag === "AssistantPart") result.set(row.userMessageID, row.group.key)
+      if (Predicate.isTagged(row, "AssistantPart")) result.set(row.userMessageID, row.group.key)
     })
 
     return result
@@ -504,8 +504,8 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
     const previous = result.at(-1)
 
     const current =
-      ((row._tag === "Notice" && detail.notices.placement === "grouped") ||
-        (row._tag === "Shell" && detail.shell.placement === "grouped")) &&
+      ((Predicate.isTagged(row, "Notice") && detail.notices.placement === "grouped") ||
+        (Predicate.isTagged(row, "Shell") && detail.shell.placement === "grouped")) &&
       !separate.has(row.messageID)
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
@@ -522,7 +522,7 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
     if (
       previous?._tag === "AssistantPart" &&
       previous.group.type === "context" &&
-      current._tag === "AssistantPart" &&
+      Predicate.isTagged(current, "AssistantPart") &&
       current.group.type === "context" &&
       previous.userMessageID === current.userMessageID
     ) {
@@ -545,12 +545,12 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
   const groupByPart = new Map<string, PriorGroup>()
   previous.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type === "part") return
+    if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "part") return
     row.group.refs.forEach((ref) => groupByPart.set(groupPartKey(ref), { index, row }))
   })
   const reserved = new Map<string, number>()
   rows.forEach((row, index) => {
-    if (row._tag !== "AssistantPart" || row.group.type === "part") return
+    if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "part") return
     const key = TimelineRow.key(row)
 
     if (byKey.has(key) && !reserved.has(key)) reserved.set(key, index)
@@ -654,7 +654,7 @@ function stabilizeGroupKey(
   rowIndex: number,
   claimed: Set<string>,
 ) {
-  if (row._tag !== "AssistantPart" || row.group.type === "part") return row
+  if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "part") return row
 
   const existing = row.group.refs.reduce<PriorGroup | undefined>((result, ref) => {
     const candidate = groupByPart.get(groupPartKey(ref))
@@ -745,20 +745,21 @@ function groupContent(
   }
 
   items.forEach((item) => {
-    const type =
-      item.content.type === "tool"
-        ? toolGroupType(
-            item.content,
-            shellToolDefaultOpen,
-            editToolDefaultOpen,
-            adjacent?.type === "context" && adjacent.tools,
-            detail,
-          )
-        : item.content.type === "reasoning"
-          ? detail && detail.thinking.placement !== "grouped"
-            ? undefined
-            : "context"
-          : undefined
+    const type = Match.value(item.content).pipe(
+      Match.when({ type: "tool" }, (content) =>
+        toolGroupType(
+          content,
+          shellToolDefaultOpen,
+          editToolDefaultOpen,
+          adjacent?.type === "context" && adjacent.tools,
+          detail,
+        ),
+      ),
+      Match.when({ type: "reasoning" }, () =>
+        detail && detail.thinking.placement !== "grouped" ? undefined : ("context" as const),
+      ),
+      Match.orElse(() => undefined),
+    )
 
     if (type) {
       if (adjacent?.type !== type) flush()
