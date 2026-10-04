@@ -1,8 +1,10 @@
 import type { SettingsView } from "./surface"
 
 /** Reveal one explicit search activation, including targets mounted by an asynchronous scoped page. */
+type SearchRevealState = { disposed: boolean; row?: HTMLElement; tabIndex: string | null }
+
 export function revealSettingsSearch(root: HTMLElement, view: SettingsView) {
-  const state = { disposed: false, row: undefined as HTMLElement | undefined, tabIndex: null as string | null }
+  const state: SearchRevealState = { disposed: false, tabIndex: null }
 
   const restore = () => {
     const row = state.row

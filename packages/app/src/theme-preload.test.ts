@@ -6,7 +6,7 @@ const run = () => Function(src)()
 
 const setSystemDark = (matches: boolean) =>
   Object.defineProperty(window, "matchMedia", {
-    value: () => ({ matches }) as MediaQueryList,
+    value: () => ({ matches }),
     configurable: true,
   })
 

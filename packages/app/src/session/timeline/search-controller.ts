@@ -21,7 +21,7 @@ const HIGHLIGHT_ACTIVE = "timeline-search-hit-active"
 const TEXT_SELECTORS = '[data-slot="text-part-body"], [data-slot="user-message-text"]'
 
 function supportsHighlights() {
-  return typeof CSS !== "undefined" && typeof CSS.highlights === "object" && CSS.highlights !== null
+  return typeof CSS !== "undefined" && CSS.highlights !== undefined && CSS.highlights !== null
 }
 
 function clearHighlights() {
@@ -47,7 +47,7 @@ function collectRanges(
     const isActivePart = activePartID !== undefined && partID === activePartID
     let occurrenceInPart = 0
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
-    let node = walker.nextNode() as Text | null
+    let node = walker.nextNode()
 
     while (node) {
       const value = node.nodeValue ?? ""
@@ -67,7 +67,7 @@ function collectRanges(
         at = lowerValue.indexOf(lower, from)
       }
 
-      node = walker.nextNode() as Text | null
+      node = walker.nextNode()
     }
   }
 

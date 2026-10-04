@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createWindowRegistry } from "./registry"
 
-function setup(initial: unknown = []) {
+function setup(initial: string | (string | number)[] | undefined = []) {
   const state = { stored: initial }
 
   const registry = createWindowRegistry<{ name: string }>({

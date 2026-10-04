@@ -1,5 +1,6 @@
 import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode/ui/theme/types"
+import { isString } from "effect/Predicate"
 import { nativeTheme } from "electron"
 import oc2ThemeJson from "../../../../ui/src/theme/themes/oc-2.json"
 import { BACKGROUND_COLOR_KEY } from "../storage/keys"
@@ -24,7 +25,7 @@ export function tone() {
 export function storedBackgroundColor() {
   const stored = getStore().get(BACKGROUND_COLOR_KEY)
 
-  if (typeof stored === "string") return stored
+  if (isString(stored)) return stored
   const dark = tone() === "dark"
 
   return resolveThemeVariant(dark ? oc2Theme.dark : oc2Theme.light, dark)["background-base"]

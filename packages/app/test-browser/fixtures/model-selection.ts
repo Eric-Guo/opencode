@@ -28,6 +28,8 @@ Bun.plugin({
   },
 })
 
+type SelectionRoute = { id: string | undefined }
+
 type Commit = { agent?: string; model?: { providerID: string; id: string; variant?: string } }
 
 type Event = { data: { sessionID: string } }
@@ -54,7 +56,10 @@ let active: ReturnType<typeof fixture>
 
 mock.module("@solidjs/router", () => ({ useParams: () => active.state.route }))
 
-mock.module("@/runtime/server/current", () => ({ useData: () => active.data }))
+mock.module("@/runtime/server/current", () => ({
+  useData: () => active.data,
+  useServer: () => ({ ctx: { sync: { data: { config: { hide_agents: [] } } } } }),
+}))
 
 mock.module("@/runtime/server/client", () => ({ useServerSDK: () => active.sdk }))
 
@@ -100,16 +105,20 @@ afterEach(() =>
 
 function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigModel; preferred?: string } = {}) {
   const directory = `/selection-test/${crypto.randomUUID()}`
+  const route: SelectionRoute = { id: "ses_a" }
+  // SAFETY: this mutable fixture cache accepts additional Session IDs during promotion and navigation tests.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening
+  const sessions: Record<string, Commit | undefined> = { ses_a: input.session }
 
   // SAFETY: fixture transitions clear the route as well as selecting session IDs.
   const [state, set] = createStore({
     visible: true,
     configLoaded: true,
     connection: "connected",
-    route: { id: "ses_a" as string | undefined },
+    route,
     agents: input.agents ?? [agent("build"), agent("plan")],
     config: input.config,
-    sessions: Object.fromEntries([["ses_a", input.session]]),
+    sessions,
     providers: [{ id: "provider", name: "Provider", package: "@ai-sdk/test", activation: "enabled" }],
     models: ["a", "b", "c"].map((id) => ({
       id,
@@ -128,11 +137,14 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
     })),
   })
 
-  // SAFETY: empty collections are valid preferences; tests later populate them with the declared model keys and variants.
-  const [preferences, setPreferences] = createStore({
-    user: [] as Array<ModelKey & { visibility: "show" | "hide" }>,
-    recent: [] as ModelKey[],
-    variant: (input.preferred ? { "provider/a": input.preferred } : {}) as Record<string, string>,
+  const [preferences, setPreferences] = createStore<{
+    user: Array<ModelKey & { visibility: "show" | "hide" }>
+    recent: ModelKey[]
+    variant: Record<string, string>
+  }>({
+    user: [],
+    recent: [],
+    variant: input.preferred ? { "provider/a": input.preferred } : {},
   })
 
   const events = new Map<string, Set<(event: Event) => void>>()
