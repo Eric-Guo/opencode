@@ -40,6 +40,7 @@ test("filters agents hidden locally or by SSO", () => {
 })
 
 const agents = [{ name: "plan" }, { name: "build" }, { name: "custom" }]
+
 const rows: { name: string; agents: { name: string }[]; requested?: string; expected: string }[] = [
   { name: "the requested available agent", agents, requested: "custom", expected: "custom" },
   { name: "build without a request", agents, requested: undefined, expected: "build" },

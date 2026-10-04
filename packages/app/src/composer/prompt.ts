@@ -38,11 +38,14 @@ type Inline =
 
 function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["selection"] {
   const queryIndex = url.indexOf("?")
+
   if (queryIndex === -1) return undefined
   const params = new URLSearchParams(url.slice(queryIndex + 1))
   const startLine = Number(params.get("start"))
   const endLine = Number(params.get("end"))
+
   if (!Number.isFinite(startLine) || !Number.isFinite(endLine)) return undefined
+
   return {
     startLine,
     endLine,
@@ -58,17 +61,23 @@ export function extractPromptFromMessage(
   const text = readPromptPresentation(message.metadata)?.displayText ?? message.text
   const directory = opts?.directory
   const attachmentName = opts?.attachmentName ?? "attachment"
+
   const toRelative = (path: string) => {
     if (!directory) return path
     const prefix = directory.endsWith("/") ? directory : directory + "/"
+
     if (path.startsWith(prefix)) return path.slice(prefix.length)
+
     return path
   }
+
   const inline: Inline[] = []
   const images: ImageAttachmentPart[] = []
+
   for (const file of message.files ?? []) {
     const mention = file.mention
     const uri = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+
     if (mention) {
       inline.push({
         type: "file",
@@ -80,12 +89,14 @@ export function extractPromptFromMessage(
       })
       continue
     }
+
     const dataUrl =
       file.source.type === "uri" && file.source.uri.startsWith("data:")
         ? file.source.uri
         : file.data
           ? `data:${file.mime};base64,${file.data}`
           : undefined
+
     if (!dataUrl) continue
     images.push({
       type: "image",
@@ -95,8 +106,10 @@ export function extractPromptFromMessage(
       blob: createLegacyBlobReference(dataUrl),
     })
   }
+
   for (const agent of message.agents ?? []) {
     const mention = agent.mention
+
     if (!mention) continue
     inline.push({
       type: "agent",
@@ -106,8 +119,10 @@ export function extractPromptFromMessage(
       name: agent.name,
     })
   }
+
   for (const attached of message.skills ?? []) {
     const mention = attached.mention
+
     if (!mention) continue
     inline.push({
       type: "skill",
@@ -118,6 +133,7 @@ export function extractPromptFromMessage(
       name: Skill.Name.make(attached.name),
     })
   }
+
   return buildPrompt(text, inline, images)
 }
 
@@ -128,6 +144,7 @@ export function extractPromptComments(message: SessionMessageUser) {
 function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart[]): Prompt {
   inline.sort((a, b) => {
     if (a.start !== b.start) return a.start - b.start
+
     return a.end - b.end
   })
 
@@ -148,6 +165,7 @@ function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart
 
   const pushFile = (item: Extract<Inline, { type: "file" }>) => {
     const content = item.value
+
     const attachment: FileAttachmentPart = {
       type: "file",
       path: item.path,
@@ -158,12 +176,14 @@ function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart
       mime: item.mime,
       filename: item.filename,
     }
+
     result.push(attachment)
     position += content.length
   }
 
   const pushAgent = (item: Extract<Inline, { type: "agent" }>) => {
     const content = item.value
+
     const mention: AgentPart = {
       type: "agent",
       name: item.name,
@@ -171,12 +191,14 @@ function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart
       start: position,
       end: position + content.length,
     }
+
     result.push(mention)
     position += content.length
   }
 
   const pushSkill = (item: Extract<Inline, { type: "skill" }>) => {
     const content = item.value
+
     const skill: SkillPart = {
       type: "skill",
       id: item.id,
@@ -185,6 +207,7 @@ function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart
       start: position,
       end: position + content.length,
     }
+
     result.push(skill)
     position += content.length
   }
@@ -193,17 +216,21 @@ function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart
     if (item.start < 0 || item.end < item.start) continue
 
     const expected = item.value
+
     if (!expected) continue
 
     const mismatch = item.end > text.length || item.start < cursor || text.slice(item.start, item.end) !== expected
     const start = mismatch ? text.indexOf(expected, cursor) : item.start
+
     if (start === -1) continue
     const end = mismatch ? start + expected.length : item.end
 
     pushText(text.slice(cursor, start))
 
     if (item.type === "file") pushFile(item)
+
     if (item.type === "agent") pushAgent(item)
+
     if (item.type === "skill") pushSkill(item)
 
     cursor = end
@@ -216,5 +243,6 @@ function buildPrompt(text: string, inline: Inline[], images: ImageAttachmentPart
   }
 
   if (images.length === 0) return result
+
   return [...result, ...images]
 }

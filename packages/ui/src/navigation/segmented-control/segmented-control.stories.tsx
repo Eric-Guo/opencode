@@ -50,6 +50,7 @@ export const Basic = {
 export const Controlled = {
   render: () => {
     const [value, setValue] = createSignal("b")
+
     return (
       <div style={{ display: "grid", gap: "12px", "justify-items": "start" }}>
         <SegmentedControl value={value()} onChange={setValue} aria-label="View mode">
@@ -85,6 +86,7 @@ export const Recorder = {
         </span>
       </SegmentedControlItem>
     )
+
     return (
       <div style={{ display: "grid", gap: "12px", "justify-items": "start" }}>
         <SegmentedControl

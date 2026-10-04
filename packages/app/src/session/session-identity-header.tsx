@@ -55,15 +55,19 @@ export function SessionProjectMenu(props: {
   const layout = useLayout()
   const settingsSurface = useSettingsSurface()
   const navigate = useNavigate()
+
   const [state, setState] = createStore({
     open: false,
     projectTruncated: false,
     pathTruncated: false,
     pathFocused: false,
   })
+
   const projectName = createMemo(() => displayName(props.project ?? { worktree: props.directory ?? "" }))
+
   const canOpenPath = () =>
     platform.platform === "desktop" && !!platform.openPath && server.isLocal && !!props.directory
+
   const openPath = () => {
     if (!canOpenPath() || !platform.openPath || !props.directory) return
     void platform.openPath(props.directory).catch((cause: unknown) =>
@@ -73,8 +77,10 @@ export function SessionProjectMenu(props: {
       }),
     )
   }
+
   const openProjectSettings = () => {
     const current = props.project
+
     if (!current) return
     settingsSurface.openProject({
       server: ServerConnection.key(server.conn),
@@ -119,6 +125,7 @@ export function SessionProjectMenu(props: {
               disabled={!props.project}
               onSelect={() => {
                 const project = props.project
+
                 if (!project) return
                 server.ctx.projects.open(project.worktree)
                 layout.home.setSelection({ server: server.key, directory: project.worktree })
@@ -211,10 +218,12 @@ export function SessionAncestorTrail(props: {
   const tabs = useTabs()
   const navigate = useNavigate()
   const language = useLanguage()
+
   const ancestors = createMemo(() => {
     const path: { id: string; title: string; direct: boolean }[] = []
     const seen = new Set([props.sessionID])
     let id: string | undefined = props.parentID
+
     while (id && !seen.has(id)) {
       seen.add(id)
       const info = server.ctx.data.session.get(id)
@@ -227,8 +236,10 @@ export function SessionAncestorTrail(props: {
       })
       id = info?.parentID
     }
+
     return path
   })
+
   const open = (id: string) => {
     const tab = tabs.store.find(
       (item) =>
@@ -236,6 +247,7 @@ export function SessionAncestorTrail(props: {
         item.server === server.key &&
         (item.sessionId === props.sessionID || item.routeSessionId === props.sessionID),
     )
+
     if (tab?.type === "session") tabs.rememberSessionRoute(tab, id, server.ctx.data.session.get(id)?.parentID)
     navigate(sessionHref(server.key, id))
   }
@@ -291,6 +303,7 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   const tabs = useTabs()
   const language = useLanguage()
   const pending = createMemo(() => tabs.pendingSession(server.key, props.sessionID))
+
   const tab = createMemo(() =>
     tabs.store.find(
       (item) =>
@@ -299,48 +312,64 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
         (item.sessionId === props.sessionID || item.routeSessionId === props.sessionID),
     ),
   )
+
   const info = createMemo(() => {
     const current = tab()
+
     return current ? tabs.info[tabKey(current)] : undefined
   })
+
   const parentID = createMemo(() => {
     if (props.session?.parentID) return props.session.parentID
     const current = tab()
+
     if (current?.type !== "session" || current.routeSessionId !== props.sessionID) return
+
     return current.routeParentId ?? current.sessionId
   })
+
   const parent = createMemo(() => {
     const id = parentID()
+
     return id ? server.ctx.data.session.get(id) : undefined
   })
+
   const parentTitle = createMemo(() => {
     const id = parentID()
     const current = tab()
+
     return sessionTitle(
       parent()?.title ?? (current?.type === "session" && current.sessionId === id ? info()?.title : undefined),
     )
   })
+
   const directory = createMemo(
     () => props.session?.location.directory ?? pending()?.draft.directory ?? info()?.directory,
   )
+
   const title = createMemo(() =>
     pending()
       ? language.t("session.tab.session")
       : sessionTitle(props.session?.title ?? (parentID() ? undefined : info()?.title)),
   )
+
   const project = createMemo(() => {
     if (props.session) return server.ctx.projects.forSession(props.session)
     const projects = server.ctx.projects.list()
     const value = directory()
+
     if (!value) return undefined
     const key = pathKey(value)
+
     return (
       projects.find(
         (item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
       ) ?? server.ctx.sync.data.project.find((item) => isProjectDirectory(item, value))
     )
   })
+
   const workspaceSession = createMemo(() => !!pending() || isWorkspaceDirectory(project(), directory() ?? ""))
+
   return (
     <Show when={title() || parentTitle()}>
       <SessionTitleHeader>

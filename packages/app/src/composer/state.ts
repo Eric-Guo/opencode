@@ -14,6 +14,7 @@ import {
 } from "./schema"
 
 export { DEFAULT_PROMPT } from "./schema"
+
 export type {
   AgentPart,
   ComposerStore,
@@ -72,6 +73,7 @@ function composerTarget(serverScope: ServerScope, scope: PromptScope) {
 
 function initialComposerStore(initial?: InitialPrompt): ComposerStore {
   const text = initial?.prompt
+
   return {
     prompt:
       text === undefined ? clonePrompt(DEFAULT_PROMPT) : [{ type: "text", content: text, start: 0, end: text.length }],
@@ -85,9 +87,11 @@ function initialComposerStore(initial?: InitialPrompt): ComposerStore {
 
 function createComposerStateValue(store: ComposerStore, setStore: SetStoreFunction<ComposerStore>) {
   const actions = createComposerActions(setStore)
+
   const clearRetry = () => {
     if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
   }
+
   const value = {
     store: [() => store, setStore] as [Accessor<ComposerStore>, SetStoreFunction<ComposerStore>],
     current: () => store.prompt,
@@ -114,6 +118,7 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
       items: () => store.context.items,
       add(item: ContextItem) {
         const key = contextItemKey(item)
+
         if (store.context.items.find((x) => x.key === key)) return
         setStore("context", "items", (items) => [...items, { key, ...item }])
         clearRetry()
@@ -132,8 +137,10 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
         setStore("context", "items", (items) =>
           items.map((item) => {
             if (item.commentID !== commentID) return item
+
             const value =
               item.type === "file" ? { ...item, ...next } : { ...item, comment: next.comment ?? item.comment }
+
             return { ...value, key: contextItemKey(value) }
           }),
         )
@@ -151,6 +158,7 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
     reset: () => actions.reset(),
     capture: () => value,
   }
+
   return value
 }
 
@@ -160,6 +168,7 @@ function createPersistedComposer(
   platform?: Platform,
 ) {
   const [store, setStore, _, ready] = persisted(target, ComposerStore, initialComposerStore(initial), platform)
+
   return { ready, ...createComposerStateValue(store, setStore) }
 }
 
@@ -187,6 +196,7 @@ export function createComposerReady(session: Accessor<ComposerState>) {
 export function createMemoryComposerState(initial?: InitialPrompt) {
   const [store, setStore] = createStore<ComposerStore>(initialComposerStore(initial))
   const ready = Object.assign(() => true, { promise: Promise.resolve(true) })
+
   return {
     ready,
     ...createComposerStateValue(store, setStore),

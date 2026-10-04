@@ -142,6 +142,7 @@ function session(input: {
 describe("Composer submission", () => {
   test("runs a client argument command without admitting it to the session", async () => {
     const state = createMemoryComposerState().capture()
+
     const image = {
       type: "image" as const,
       id: "attachment",
@@ -149,6 +150,7 @@ describe("Composer submission", () => {
       mime: "image/png",
       blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
     }
+
     state.set([{ type: "text", content: "/btw why this approach?", start: 0, end: 23 }, image])
     state.context.add({ type: "file", path: "src/retry.ts" })
     const calls: string[] = []
@@ -156,6 +158,7 @@ describe("Composer submission", () => {
 
     await submitInput(active(state, session({ calls })), undefined, "normal", undefined, history, (text) => {
       expect(text).toBe("/btw why this approach?")
+
       return () => {
         calls.push("btw")
       }
@@ -203,6 +206,7 @@ describe("Composer submission", () => {
     const started = Promise.withResolvers<void>()
     const committed = Promise.withResolvers<void>()
     const completed = Promise.withResolvers<void>()
+
     const target = session({
       calls,
       switchAgent: async (request) => {
@@ -224,6 +228,7 @@ describe("Composer submission", () => {
         completed.resolve()
       },
     })
+
     selected.model.selection = {
       ...selection,
       trackSessionCommit: (_id, value) => {
@@ -233,6 +238,7 @@ describe("Composer submission", () => {
           variant: "balanced",
         })
         calls.push("track")
+
         return () => calls.push("cancel")
       },
     }
@@ -258,6 +264,7 @@ describe("Composer submission", () => {
     const selected = controls()
     const failed = Promise.withResolvers<unknown>()
     const error = new Error("model unavailable")
+
     const target = session({
       calls,
       switchModel: async () => {
@@ -267,10 +274,12 @@ describe("Composer submission", () => {
         calls.push("command")
       },
     })
+
     selected.model.selection = {
       ...selection,
       trackSessionCommit: () => {
         calls.push("track")
+
         return () => {
           calls.push("cancel")
         }
@@ -325,6 +334,7 @@ describe("Composer submission", () => {
 
   test("restores and retries an unacknowledged admission", async () => {
     const state = createMemoryComposerState().capture()
+
     const prompt: Prompt = [
       { type: "text", content: "retry ", start: 0, end: 6 },
       { type: "file", path: "src/app.ts", content: "@src/app.ts", start: 6, end: 17 },
@@ -336,11 +346,13 @@ describe("Composer submission", () => {
         blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
       },
     ]
+
     state.set(prompt)
     const attempts: string[] = []
     const statuses: ("idle" | "running")[] = []
     const first = Promise.withResolvers<void>()
     const second = Promise.withResolvers<void>()
+
     const target = session({
       calls: [],
       statuses,
@@ -349,10 +361,12 @@ describe("Composer submission", () => {
         throw new Error("network unavailable")
       },
     })
+
     const notify = {
       missingSelection() {},
       failed: () => (attempts.length === 2 ? first.resolve() : second.resolve()),
     }
+
     const history: string[] = []
     const submission = submitInput(active(state, target), notify, "normal", () => [], history)
 
@@ -387,8 +401,10 @@ describe("Composer submission", () => {
     const promoted = createMemoryComposerState().capture()
     const failed = Promise.withResolvers<void>()
     const target = session({ calls: [], shell: async () => Promise.reject(new Error("send failed")) })
+
     const adapter = fresh(draft, async (_selection, submission) => {
       submission.retarget(promoted)
+
       return { session: target, cleanupReady: Promise.resolve() }
     })
 
@@ -406,10 +422,12 @@ describe("Composer submission", () => {
     const state = createMemoryComposerState({ prompt: "admitted prompt" }).capture()
     const checked = Promise.withResolvers<void>()
     const attempts: string[] = []
+
     const target = session({
       calls: [],
       admitted: () => {
         checked.resolve()
+
         return true
       },
       prompt: async (value) => {
@@ -428,6 +446,7 @@ describe("Composer submission", () => {
 
   test("hands off image-only first prompts and admits them before cleanup is ready", async () => {
     const draft = createMemoryComposerState().capture()
+
     const prompt: Prompt = [
       { type: "text", content: "", start: 0, end: 0 },
       {
@@ -438,10 +457,12 @@ describe("Composer submission", () => {
         blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
       },
     ]
+
     draft.set(prompt)
     const handedOff = Promise.withResolvers<SessionMessageUser>()
     const admitted = Promise.withResolvers<void>()
     const cleanup = Promise.withResolvers<void>()
+
     const target = session({
       calls: [],
       handoff: { set: handedOff.resolve, clear() {} },
@@ -451,6 +472,7 @@ describe("Composer submission", () => {
     const submitted = submitInput(
       fresh(draft, async () => ({ session: target, cleanupReady: cleanup.promise })),
     ).submit(new Event("submit"))
+
     await admitted.promise
     expect(draft.current()).toEqual(prompt)
     cleanup.resolve()
@@ -507,6 +529,7 @@ describe("Composer submission", () => {
     const catalog = [{ name: "review" }]
     const sent = Promise.withResolvers<"prompt" | "command">()
     const requests: Parameters<ComposerSession["api"]["command"]>[0][] = []
+
     const target = session({
       calls: [],
       prompt: async () => sent.resolve("prompt"),
@@ -515,11 +538,14 @@ describe("Composer submission", () => {
         sent.resolve("command")
       },
     })
+
     target.directory = "C:/new-worktree"
     target.data.location.command.list = () => undefined
+
     const adapter = fresh(state, async () => {
       // The destination catalog has not loaded, and the source composer is leaving.
       catalog.splice(0)
+
       return { session: target, cleanupReady: Promise.resolve() }
     })
 

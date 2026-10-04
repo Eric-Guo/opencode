@@ -101,6 +101,7 @@ export namespace TimelineRow {
       case "Retry":
         return `retry:${row.userMessageID}`
     }
+
     return row
   }
 
