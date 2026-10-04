@@ -73,9 +73,9 @@ export function createSessionBackground(input: {
     return {
       // Completion notices can identify the shell or its original tool call.
       subagents: subagents.filter((task) => !completed.has(task.id)),
-      shells: shells
-        .filter((item) => !completed.has(item.partID) && !completed.has(item.task.id))
-        .map((item) => item.task),
+      shells: shells.flatMap((item) =>
+        !completed.has(item.partID) && !completed.has(item.task.id) ? [item.task] : [],
+      ),
       blocking:
         assistant?.content.flatMap((part) => {
           if (part.type !== "tool" || part.state.status !== "running") return []
