@@ -75,9 +75,11 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         pendingMarkdown: content.querySelectorAll('[data-component="markdown"]:not([data-markdown-ready])').length,
         viewportHeight: viewport.clientHeight,
         scrollTop: viewport.scrollTop,
-        clipped: mounted
-          .filter((element) => element.firstElementChild!.getBoundingClientRect().height > element.offsetHeight + 1)
-          .map((element) => element.dataset.timelineKey),
+        clipped: mounted.flatMap((element) =>
+          element.firstElementChild!.getBoundingClientRect().height > element.offsetHeight + 1
+            ? [element.dataset.timelineKey]
+            : [],
+        ),
       })
     })
 
