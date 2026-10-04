@@ -88,6 +88,7 @@ const names: Record<string, string> = {
   zenburn: "Zenburn",
 }
 
+// SAFETY: The bundled oc-2 asset follows DesktopTheme; JSON imports widen hex and CSS literals to string.
 const oc2Theme = oc2ThemeJson as DesktopTheme
 
 function resolveStoredTheme(id: string | null | undefined, registered?: Record<string, DesktopTheme>) {

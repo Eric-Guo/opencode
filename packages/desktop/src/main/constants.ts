@@ -8,12 +8,16 @@ export const CHANNEL: Channel = raw === "local" || raw === "dev" || raw === "bet
 
 export const VERSION = app.isPackaged ? app.getVersion() : (process.env.OPENCODE_VERSION ?? app.getVersion())
 
+// SAFETY: This lookup table serves dynamic build-channel ids from outside the literal key set; absent entries keep the existing fallback.
+// oxlint-disable-next-line anti-slop/no-known-value-widening
 const appNames: Record<string, string> = {
   dev: "SigmaAgents",
   beta: "SigmaAgents",
   prod: "SigmaAgents",
 }
 
+// SAFETY: This lookup table serves dynamic build-channel ids from outside the literal key set; absent entries keep the existing fallback.
+// oxlint-disable-next-line anti-slop/no-known-value-widening
 const appIDs: Record<string, string> = {
   dev: "ai.opencode.desktop",
   beta: "ai.opencode.desktop",

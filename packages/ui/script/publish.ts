@@ -8,6 +8,7 @@ import { pack } from "./pack"
 
 process.chdir(fileURLToPath(new URL("..", import.meta.url)))
 
+// SAFETY: The repository-owned package manifest declares name and version string fields.
 const pkg = (await Bun.file("package.json").json()) as { name: string; version: string }
 
 const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`

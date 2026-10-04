@@ -122,6 +122,7 @@ export function BasicTool(props: BasicToolProps) {
   const triggerContent = createMemo(() => {
     const value = props.trigger
 
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- BasicTool triggers explicitly accept a render callback or display content.
     return typeof value === "function" ? value(open) : value
   })
 
