@@ -10,7 +10,7 @@ import { getStore } from "../storage/store"
 // Frame defaults shared by the early window (created on ready, before the renderer exists) and the
 // full window setup in appearance.ts, so both draw the same frame.
 
-// SAFETY: oc-2.json is the bundled default theme, which the UI package loads as a DesktopTheme too.
+// SAFETY: The bundled oc-2 theme uses hex palette values; JSON imports widen those literals to string.
 const oc2Theme = oc2ThemeJson as DesktopTheme
 // Match the desktop shell's 40px native-control area.
 
