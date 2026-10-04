@@ -56,6 +56,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const context = yield* Effect.context()
   const runFork = Effect.runForkWith(context)
   const runPromise = Effect.runPromiseWith(context)
+
   const menu = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -99,6 +100,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
       Object.keys(handlers).forEach((channel) => ipcMain.removeHandler(channel))
     }),
   )
+
   return {
     installMenu: () => createMenu(menu),
   }
