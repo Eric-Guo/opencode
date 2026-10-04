@@ -74,6 +74,7 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   const configQuery = () => globalQueries[0]
   const pathQuery = () => globalQueries[1]
+
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     project: [],
     provider_auth: {},
