@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { ChangeKind } from "./contract"
@@ -49,7 +50,12 @@ export function reviewDiffKinds(diffs: readonly RenderDiff[]) {
 
   for (const diff of diffs) {
     const file = normalizePath(diff.file)
-    const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
+
+    const kind = Match.value(diff.status).pipe(
+      Match.when("added", () => "add" as const),
+      Match.when("deleted", () => "del" as const),
+      Match.orElse(() => "mix" as const),
+    )
 
     out.set(file, kind)
 

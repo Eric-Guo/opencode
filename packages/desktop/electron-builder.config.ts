@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import { execFile } from "node:child_process"
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises"
@@ -139,23 +140,17 @@ const APP_IDS = {
 const getBase = (appId: string): Configuration => {
   const target = getCurrentCli()
 
-  const windowsArchitectureExclusions = (
-    target.rustTarget === "x86_64-pc-windows-msvc"
-      ? [
-          "@ff-labs/fff-bin-win32-arm64",
-          "@lydell/node-pty-win32-arm64",
-          "@parcel/watcher-win32-arm64",
-          "@yuuang/ffi-rs-win32-arm64-msvc",
-        ]
-      : target.rustTarget === "aarch64-pc-windows-msvc"
-        ? [
-            "@ff-labs/fff-bin-win32-x64",
-            "@lydell/node-pty-win32-x64",
-            "@msgpackr-extract/msgpackr-extract-win32-x64",
-            "@parcel/watcher-win32-x64",
-            "@yuuang/ffi-rs-win32-x64-msvc",
-          ]
-        : []
+  const windowsArchitectureExclusions = Match.value(target.rustTarget).pipe(
+    Match.when("x86_64-pc-windows-msvc", () => [
+      "@ff-labs/fff-bin-win32-arm64", "@lydell/node-pty-win32-arm64",
+      "@parcel/watcher-win32-arm64", "@yuuang/ffi-rs-win32-arm64-msvc",
+    ]),
+    Match.when("aarch64-pc-windows-msvc", () => [
+      "@ff-labs/fff-bin-win32-x64", "@lydell/node-pty-win32-x64",
+      "@msgpackr-extract/msgpackr-extract-win32-x64", "@parcel/watcher-win32-x64",
+      "@yuuang/ffi-rs-win32-x64-msvc",
+    ]),
+    Match.orElse(() => []),
   ).map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
 
   const channel = resolveChannel()
