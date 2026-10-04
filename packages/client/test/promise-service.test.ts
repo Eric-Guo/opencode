@@ -300,14 +300,15 @@ test("stop escalates when the registration disappears before the process exits",
   await stop({ file: registration })
 
   expect(await fixture.signal()).toBe(stopSignal)
+  await existing.exited
+  if (catchesSigterm) expect(existing.signalCode).toBe("SIGKILL")
   expect(() => process.kill(original.pid, 0)).toThrow()
   await expectNotListening(original.url)
   expect(await Bun.file(registration).exists()).toBe(false)
-  await existing.exited
 }, 15_000)
 
 test.skipIf(process.platform === "win32")(
-  "stop fails when the process survives SIGKILL",
+  "stop handles an unreaped process after SIGKILL",
   async () => {
     await using fixture = await serviceFixture()
     const registration = fixture.registration
@@ -315,7 +316,14 @@ test.skipIf(process.platform === "win32")(
     await fixture.waitForFile()
     const original = await Bun.file(registration).json()
 
-    await expect(stop({ file: registration })).rejects.toThrow(`Server process ${original.pid} is still running`)
+    const stopping = stop({ file: registration })
+
+    // Linux can identify a dead zombie through procfs even while kill(pid, 0) still succeeds.
+    await (process.platform === "linux"
+      ? expect(stopping).resolves.toBeUndefined()
+      : expect(stopping).rejects.toThrow(`Server process ${original.pid} is still running`))
+    if (process.platform === "linux")
+      expect(await Bun.file(`/proc/${original.pid}/status`).text()).toMatch(/^State:\s+Z/m)
     expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
   },
   15_000,
@@ -342,7 +350,9 @@ test.skipIf(!catchesSigterm)(
       expect(replacement.pid).toBe(successor.pid)
 
       await stopping
+      await existing.exited
 
+      expect(existing.signalCode).toBe("SIGKILL")
       expect(() => process.kill(original.pid, 0)).toThrow()
       await expectNotListening(original.url)
       expect(await Bun.file(registration).json()).toEqual(replacement)
