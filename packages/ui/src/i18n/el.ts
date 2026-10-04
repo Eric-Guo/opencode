@@ -385,4 +385,4 @@ export const dict = {
   "ui.question.singleHint": "Επιλέξτε μία απάντηση",
   "ui.question.classic.multiHint": "Επιλέξτε όλες τις απαντήσεις που ισχύουν",
   "ui.question.custom.answerPlaceholder": "Πληκτρολογήστε τη δική σας απάντηση…",
-}
+} satisfies Record<string, string>

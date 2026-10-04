@@ -408,4 +408,4 @@ export const dict = {
   "ui.question.singleHint": "Pilih satu jawaban",
   "ui.question.classic.multiHint": "Pilih semua jawaban yang sesuai",
   "ui.question.custom.answerPlaceholder": "Ketik jawaban Anda sendiri…",
-}
+} satisfies Record<string, string>
