@@ -14,6 +14,7 @@ export function SessionPermissionDock(props: {
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.action}.description`
+    // SAFETY: permission descriptions use the existing tool-key family; unknown actions intentionally fall back to the key.
     const value = language.t(key as Parameters<typeof language.t>[0])
 
     if (value === key) return ""

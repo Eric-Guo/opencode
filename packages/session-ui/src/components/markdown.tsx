@@ -149,6 +149,7 @@ function createCopyButton(labels: CopyLabels) {
   }, host)
 
   state.dispose = dispose
+  // SAFETY: Solid render executes synchronously, assigning both setters before returning the disposer.
   copyButtonState.set(host, state as CopyButtonState)
 
   return host

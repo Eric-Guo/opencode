@@ -53,6 +53,7 @@ export function createCommentMetadata(input: PromptFileComment) {
   }
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This metadata reader owns decoding legacy and current server message payloads.
 export function readCommentMetadata(value: unknown) {
   if (!value || typeof value !== "object") return
   const meta = (value as { opencodeComment?: unknown }).opencodeComment

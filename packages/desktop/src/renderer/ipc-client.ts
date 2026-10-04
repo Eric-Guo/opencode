@@ -42,6 +42,7 @@ const port = new Promise<MessagePort>((resolve) => {
 
     if (!value) return
     window.removeEventListener("message", onMessage)
+    // SAFETY: Main's RpcServer validates this method's schema; the request id or event tag selects the matching payload on the trusted MessagePort.
     value.addEventListener("message", (message) => receive(value, message.data as RpcMessage.FromServerEncoded))
     value.start()
     resolve(value)
@@ -58,6 +59,7 @@ window.addEventListener(
 )
 
 void request("DesktopEvents", null, (values) => {
+  // SAFETY: Main's RpcServer validates this method's schema; the request id or event tag selects the matching payload on the trusted MessagePort.
   for (const value of values as ReadonlyArray<DesktopEvent>) listeners.get(value._tag)?.forEach((fn) => fn(value))
 })
 
@@ -68,6 +70,7 @@ export function onBeforeDispose(callback: () => Promise<unknown> | void) {
 }
 
 export function invoke<Tag extends InvokeTag>(tag: Tag, ...payload: InvokeArgs<Tag>): Promise<InvokeResult<Tag>> {
+  // SAFETY: Main's RpcServer validates this method's schema; the request id or event tag selects the matching payload on the trusted MessagePort.
   return request(tag, payload[0] ?? null) as Promise<InvokeResult<Tag>>
 }
 
@@ -81,10 +84,12 @@ export function cancellable<Tag extends InvokeTag>(
   payload: InvokeArgs<Tag>[0],
   signal: AbortSignal | undefined,
 ): Promise<InvokeResult<Tag>> {
+  // SAFETY: Main's RpcServer validates this method's schema; the request id or event tag selects the matching payload on the trusted MessagePort.
   return request(tag, payload ?? null, undefined, signal) as Promise<InvokeResult<Tag>>
 }
 
 export function listen<Tag extends EventTag>(tag: Tag, listener: (value: EventValue<Tag>) => void) {
+  // SAFETY: Main's RpcServer validates this method's schema; the request id or event tag selects the matching payload on the trusted MessagePort.
   const callback = listener as (value: unknown) => void
   const callbacks = listeners.get(tag) ?? new Set()
   callbacks.add(callback)

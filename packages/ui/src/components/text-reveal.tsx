@@ -2,6 +2,7 @@ import { createEffect, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 
 const px = (value: number | string | undefined, fallback: number) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This typed CSS prop accepts numeric units or an authored CSS string.
   if (typeof value === "number") return `${value}px`
 
   if (typeof value === "string") return value
@@ -10,6 +11,7 @@ const px = (value: number | string | undefined, fallback: number) => {
 }
 
 const ms = (value: number | string | undefined, fallback: number) => {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This typed CSS prop accepts numeric units or an authored CSS string.
   if (typeof value === "number") return `${value}ms`
 
   if (typeof value === "string") return value
