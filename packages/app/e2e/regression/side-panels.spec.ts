@@ -321,7 +321,7 @@ async function expectTreeSentinel(page: Page) {
 // Pauses each CSS transition as it starts, so a real toggle can be measured mid-motion.
 function holdTransitions(page: Page) {
   return page.evaluate(() => {
-    const host = window as Window & { e2eHold?: { active: boolean } }
+    const host = window
 
     if (!host.e2eHold) {
       const hold = { active: false }
@@ -341,7 +341,7 @@ function holdTransitions(page: Page) {
 
 function releaseTransitions(page: Page) {
   return page.evaluate(() => {
-    ;(window as Window & { e2eHold?: { active: boolean } }).e2eHold!.active = false
+    window.e2eHold!.active = false
     document
       .getAnimations()
       .filter((item) => item instanceof CSSTransition && item.playState === "paused")
@@ -353,13 +353,14 @@ function releaseTransitions(page: Page) {
 async function stackGeometry(page: Page, progress?: number) {
   const held = () =>
     page.evaluate(() =>
-      document
-        .getAnimations()
-        .filter(
-          (item) =>
-            item instanceof CSSTransition && item.playState === "paused" && item.transitionProperty === "height",
-        )
-        .map((item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot")),
+      document.getAnimations().flatMap((item) => {
+        if (!(item instanceof CSSTransition) || item.playState !== "paused" || item.transitionProperty !== "height")
+          return []
+
+        if (!(item.effect instanceof KeyframeEffect) || !(item.effect.target instanceof Element)) return []
+
+        return [item.effect.target.getAttribute("data-slot")]
+      }),
     )
 
   if (progress !== undefined) {
@@ -372,7 +373,10 @@ async function stackGeometry(page: Page, progress?: number) {
       .filter((item): item is CSSTransition => item instanceof CSSTransition && item.playState === "paused")
 
     const region = transitions.find(
-      (item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot") === "session-side-region",
+      (item) =>
+        item.effect instanceof KeyframeEffect &&
+        item.effect.target instanceof Element &&
+        item.effect.target.getAttribute("data-slot") === "session-side-region",
     )
 
     if (progress !== undefined) {
@@ -388,7 +392,11 @@ async function stackGeometry(page: Page, progress?: number) {
     const content = box('[data-slot="terminal-panel-content"]')!
 
     return {
-      moving: transitions.map((item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot")),
+      moving: transitions.flatMap((item) =>
+        item.effect instanceof KeyframeEffect && item.effect.target instanceof Element
+          ? [item.effect.target.getAttribute("data-slot")]
+          : [],
+      ),
       terminalRegion: terminalRegion.height,
       terminalBottom: terminal.bottom,
       anchor: Math.abs(terminal.top - content.top),
@@ -414,7 +422,8 @@ async function expectTerminalControlsAligned(terminal: Locator, toggle: Locator)
       const centers = await Promise.all(
         [terminal.getByRole("button", { name: "New terminal", exact: true }), toggle].map((button) =>
           button.locator("svg").evaluate((element) => {
-            const svg = element as SVGSVGElement
+            if (!(element instanceof SVGSVGElement)) throw new Error("Expected the review SVG element")
+            const svg = element
             const path = svg.getBBox()
 
             return new DOMPoint(path.x + path.width / 2, path.y + path.height / 2).matrixTransform(svg.getScreenCTM()!)
@@ -426,4 +435,10 @@ async function expectTerminalControlsAligned(terminal: Locator, toggle: Locator)
       return centers[0]! - centers[1]!
     })
     .toBeCloseTo(0, 1)
+}
+
+declare global {
+  interface Window {
+    e2eHold?: { active: boolean }
+  }
 }

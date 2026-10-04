@@ -7,9 +7,9 @@ type HomeSession = Pick<SessionInfo, "id" | "location">
 export async function archiveHomeSession(input: {
   server: ServerConnection.Key
   session: HomeSession
-  archive: (sessionID: string) => Promise<unknown>
+  archive: (sessionID: string) => Promise<void>
   remove: () => void
-  onError?: (error: unknown) => void
+  onError?: (cause: unknown) => void
 }) {
   await input
     .archive(input.session.id)

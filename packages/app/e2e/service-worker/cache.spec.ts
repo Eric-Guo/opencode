@@ -1,7 +1,7 @@
+import { Predicate } from "effect"
 import { expect, test, type Page } from "@playwright/test"
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { createServer, type ServerResponse } from "node:http"
-import type { AddressInfo } from "node:net"
 import { once } from "node:events"
 import { createHash } from "node:crypto"
 import { join, extname, relative, sep } from "node:path"
@@ -146,8 +146,9 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
 
     server.listen(0, "127.0.0.1")
     await once(server, "listening")
-    // SAFETY: a server listening on a host and port reports an AddressInfo; only pipe servers report a string.
-    const address = server.address() as AddressInfo
+    const address = server.address()
+
+    if (!address || Predicate.isString(address)) throw new Error("Expected a TCP address")
 
     try {
       await use({
@@ -420,8 +421,9 @@ test("the production build precaches every deployable file except on-demand Offi
 
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
-  // SAFETY: a server listening on a host and port reports an AddressInfo; only pipe servers report a string.
-  const address = server.address() as AddressInfo
+  const address = server.address()
+
+  if (!address || Predicate.isString(address)) throw new Error("Expected a TCP address")
   const url = `http://127.0.0.1:${address.port}`
 
   try {
