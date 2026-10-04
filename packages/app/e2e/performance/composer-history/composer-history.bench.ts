@@ -2,11 +2,11 @@ import { benchmark, expect } from "../benchmark"
 
 benchmark.use({ traceScope: "page" })
 
-for (const shape of ["text", "unique", "repeated"]) {
-  benchmark(`composer global history: ${shape}, cold and warm mounts`, async ({ page, report }, testInfo) => {
+for (const historyKind of ["text", "unique", "repeated"]) {
+  benchmark(`composer global history: ${historyKind}, cold and warm mounts`, async ({ page, report }, testInfo) => {
     const errors: string[] = []
     page.on("pageerror", (error) => errors.push(error.message))
-    await page.goto(`/?shape=${shape}`)
+    await page.goto(`/?shape=${historyKind}`)
     const button = page.getByRole("button", { name: "Mount empty composer", exact: true })
     const input = page.getByRole("textbox", { name: "Prompt", exact: true })
     const samples = []
@@ -25,9 +25,9 @@ for (const shape of ["text", "unique", "repeated"]) {
       await input.press("ArrowUp")
       await expect(input).toContainText("Review the retry policy in src/network/request-0.ts.")
       const images = page.getByRole("img", { name: "request-0.png", exact: true })
-      await expect(images).toHaveCount(shape === "text" ? 0 : 1)
+      await expect(images).toHaveCount(historyKind === "text" ? 0 : 1)
 
-      if (shape !== "text")
+      if (historyKind !== "text")
         await expect
           .poll(() => images.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth === 1440))
           .toBe(true)
@@ -48,6 +48,6 @@ for (const shape of ["text", "unique", "repeated"]) {
       },
     )
 
-    if (testInfo.repeatEachIndex === 0) await page.screenshot({ path: testInfo.outputPath(`${shape}.png`) })
+    if (testInfo.repeatEachIndex === 0) await page.screenshot({ path: testInfo.outputPath(`${historyKind}.png`) })
   })
 }
