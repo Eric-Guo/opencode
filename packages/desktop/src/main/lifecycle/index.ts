@@ -13,6 +13,8 @@ import {
   getLastFocusedWindow,
   getPrimaryWebContents,
   getWindowByID,
+  // SAFETY: This factory composes explicit Electron window dependencies; it is not an Effect service constructor.
+  // oxlint-disable-next-line anti-slop-effect/no-service-constructor-imports
   makeMainWindows,
   setAppQuitting,
   setRelaunchHandler,
