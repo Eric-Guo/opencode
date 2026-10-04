@@ -1,4 +1,4 @@
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Deferred, Effect, Exit, Fiber, Match } from "effect"
 import type { UpdaterState } from "./contract"
 
 export type UpdateTarget =
@@ -157,11 +157,11 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
     pending = deferred
 
     const update =
-      state.status === "ready"
-        ? refreshStaged(platform, state.version)
-        : state.status === "download-required"
-          ? refreshExternal(platform)
-          : findAndStage(platform)
+      Match.value(state).pipe(
+        Match.when({ status: "ready" }, (ready) => refreshStaged(platform, ready.version)),
+        Match.when({ status: "download-required" }, () => refreshExternal(platform)),
+        Match.orElse(() => findAndStage(platform)),
+      )
 
     return update.pipe(
       Effect.tap((result) => Deferred.succeed(deferred, result)),
