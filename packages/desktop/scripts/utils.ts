@@ -64,14 +64,18 @@ export const RUST_TARGET = Bun.env.RUST_TARGET
 
 function nativeTarget() {
   const { platform, arch } = process
+
   if (platform === "darwin") return arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin"
+
   if (platform === "win32") return arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc"
+
   if (platform === "linux") return arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu"
   throw new Error(`Unsupported platform: ${platform}/${arch}`)
 }
 
 export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   const binaryConfig = CLI_BINARIES.find((item) => item.rustTarget === target)
+
   if (!binaryConfig) throw new Error(`CLI configuration not available for target '${target}'`)
 
   return binaryConfig
@@ -84,6 +88,7 @@ export function getCliResourcePath(cli = getCurrentCli()) {
 export async function downloadCliToResources(version = CLI_VERSION, dest = getCliResourcePath()) {
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
+
   try {
     await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
     await copyCliToResources(
@@ -156,13 +161,16 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
 
 async function prepareCli(dest: string) {
   if (process.platform !== "win32") await chmod(dest, 0o755)
+
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
     await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
   }
+
   if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
 }
 
 export function windowsify(path: string) {
   if (path.endsWith(".exe")) return path
+
   return `${path}${process.platform === "win32" ? ".exe" : ""}`
 }
