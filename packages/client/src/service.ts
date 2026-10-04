@@ -43,6 +43,15 @@ export type StopOptions = {
 }
 
 /** Contents of the local service registration file. */
+export type Provenance = {
+  readonly platform: "linux"
+  readonly host?: string
+  readonly boot: string
+  readonly pidNamespace: string
+  readonly netNamespace: string
+  readonly started: string
+}
+
 export type Info = {
   /** Unique service instance identifier. */
   readonly id?: string
@@ -54,4 +63,6 @@ export type Info = {
   readonly pid: number
   /** Private service password, when authentication is enabled. */
   readonly password?: string
+  /** Origin of the PID and loopback address; absent in legacy registrations. */
+  readonly provenance?: Provenance
 }
