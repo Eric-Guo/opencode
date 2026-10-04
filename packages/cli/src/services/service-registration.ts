@@ -1,6 +1,7 @@
 export * as ServiceRegistration from "./service-registration"
 
 import { Service, type Info } from "@opencode/client/effect/service"
+import { DatabaseProcessOwner } from "@opencode/core/database/process-owner"
 import path from "node:path"
 import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
@@ -20,12 +21,29 @@ export const register = Effect.fnUntraced(function* (options: {
   const fs = yield* FileSystem.FileSystem
   const temp = options.file + "." + options.id + ".tmp"
   yield* fs.makeDirectory(path.dirname(options.file), { recursive: true })
+  const directory = yield* fs.realPath(path.dirname(options.file))
+  yield* DatabaseProcessOwner.lease(
+    path.join(directory, path.basename(options.file) + ".owner.sqlite"),
+    "Another managed service owns this registration",
+  )
+  const previous = yield* fs.readFileString(options.file).pipe(
+    Effect.catchIf(
+      (error) => error.reason._tag === "NotFound",
+      () => Effect.succeed(undefined),
+    ),
+  )
+  if (previous !== undefined) {
+    const owner = yield* decodeInfo(previous)
+    if ((yield* Service.ownerAlive(owner)) !== false)
+      return yield* Effect.fail(new Error("A live service still owns this registration"))
+  }
   const info = {
     id: options.id,
     version: OPENCODE_VERSION,
     url: localURL(options.address),
     pid: process.pid,
     password: options.password,
+    provenance: yield* Service.provenance,
   }
   const encoded = yield* encodeInfo(info)
   const current = fs.readFileString(options.file).pipe(Effect.flatMap(decodeInfo))
@@ -34,7 +52,8 @@ export const register = Effect.fnUntraced(function* (options: {
     found.version === info.version &&
     found.url === info.url &&
     found.pid === info.pid &&
-    found.password === info.password
+    found.password === info.password &&
+    JSON.stringify(found.provenance) === JSON.stringify(info.provenance)
   yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, options.file)))
   yield* current.pipe(
     Effect.catchCause((cause) =>
