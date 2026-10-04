@@ -224,7 +224,7 @@ function App() {
       new MutationObserver((records) => {
         const callbackTime = performance.now()
         records.forEach((record) => {
-          ;([...(record.removedNodes ?? [])] as Node[]).forEach((node) => {
+          ;[...record.removedNodes].forEach((node) => {
             if (node !== route) return
             phase = "detached"
             mutationEvents.push({
@@ -235,7 +235,7 @@ function App() {
               nativeOffsetInCallback: viewport.scrollTop,
             })
           })
-          ;([...(record.addedNodes ?? [])] as Node[]).forEach((node) => {
+          ;[...record.addedNodes].forEach((node) => {
             if (node !== route) return
             phase = "reinserted"
             mutationEvents.push({

@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { describe, expect, test } from "bun:test"
 import { createNamespaceStorage, type NamespaceDriver, type NamespaceStorage } from "./namespace"
 
@@ -49,7 +50,7 @@ function host(initial: Record<string, Record<string, string>> = {}) {
     events,
     updates: () => calls.filter((call) => call.kind === "update"),
     setFail: (value: boolean | ((insert: Record<string, string>) => boolean)) =>
-      (fail = typeof value === "boolean" ? () => value : value),
+      (fail = Predicate.isBoolean(value) ? () => value : value),
     setGate: (value: Promise<void> | undefined) => (gate = value),
     deliver: (target: NamespaceStorage, index: number) => {
       const event = events[index]!
