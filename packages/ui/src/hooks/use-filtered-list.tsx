@@ -27,6 +27,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [grouped, { refetch }] = createResource(
     () => ({
       filter: store.filter,
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Items explicitly accepts a static array or a filter callback.
       items: typeof props.items === "function" ? props.items(store.filter) : props.items,
     }),
     async ({ filter, items }) => {

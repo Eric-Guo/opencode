@@ -29,6 +29,8 @@ test.each(["dev", "beta", "prod", "local"])("bundles %s app icons", async (chann
 
     if (file?.type !== "asset") throw new Error(`Missing asset: ${path}`)
 
+    // SAFETY: Rolldown assets expose either source text or already encoded bytes, both returned losslessly.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof
     return typeof file.source === "string" ? new TextEncoder().encode(file.source) : file.source
   })
 })
@@ -47,6 +49,8 @@ test.each(["dev", "beta", "prod"])("serves %s app icons", async (channel) => {
     await server.listen()
     const address = server.httpServer?.address()
 
+    // SAFETY: a Node listener may expose a Unix path; this fixture explicitly requires a TCP port.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof
     if (!address || typeof address === "string") throw new Error("Expected an HTTP port")
 
     await check(channel, async (path) => {

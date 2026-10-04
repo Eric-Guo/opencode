@@ -66,6 +66,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
             const id = nextClientId++
 
             const onMessage = (event: Electron.MessageEvent) => {
+              // SAFETY: This trusted renderer port carries RpcMessage frames; RpcServer validates payloads against method schemas.
               Queue.offerUnsafe(inbound, [id, event.data as RpcMessage.FromClientEncoded] as const)
             }
 

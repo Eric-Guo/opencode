@@ -157,6 +157,7 @@ function call(port: MessageChannel["port2"], id: number, tag: string, payload: u
 function sender(id: number) {
   const events = new EventEmitter()
 
+  // SAFETY: The Electron test adapter forwards only the id/lifetime and MessagePort members used by IpcPortHandoff; the real RpcServer validates the wire data.
   return {
     id,
     isDestroyed: () => false,
@@ -168,6 +169,7 @@ function sender(id: number) {
 function serverPort(port: MessageChannel["port1"]) {
   const listeners = new Map<(event: Electron.MessageEvent) => void, (data: unknown) => void>()
 
+  // SAFETY: The Electron test adapter forwards only the id/lifetime and MessagePort members used by IpcPortHandoff; the real RpcServer validates the wire data.
   return {
     on(event: string, listener: (event: Electron.MessageEvent) => void) {
       if (event !== "message") {
@@ -176,6 +178,7 @@ function serverPort(port: MessageChannel["port1"]) {
         return
       }
 
+      // SAFETY: The Electron test adapter forwards only the id/lifetime and MessagePort members used by IpcPortHandoff; the real RpcServer validates the wire data.
       const wrapped = (data: unknown) => listener({ data } as Electron.MessageEvent)
       listeners.set(listener, wrapped)
       port.on("message", wrapped)

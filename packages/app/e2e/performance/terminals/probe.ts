@@ -39,6 +39,8 @@ Terminal.prototype.open = function (element) {
   open.call(this, element)
   // Ghostty does not expose render events. This benchmark-only wrapper observes its
   // actual renderer; it does not alter scheduling, parsing, or drawing.
+  // SAFETY: The installed Ghostty Terminal owns this private renderer; this benchmark forwards render arguments unchanged.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions
   const renderer = (this as unknown as { renderer: { render: (...args: unknown[]) => void } }).renderer
   const render = renderer.render
   let hidden = false

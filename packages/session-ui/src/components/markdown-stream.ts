@@ -80,6 +80,7 @@ export function stream(text: string, live: boolean): Block[] {
     while (tokens[index + 1]?.type === "space" && index + 1 < tail) raw += tokens[++index]!.raw
 
     if (token.type === "code") {
+      // SAFETY: Marked's code discriminant identifies Code; its Generic token type overlaps every discriminant.
       const code = token as Tokens.Code
       result.push({ raw, src: code.text, mode: "code", language: language(code.lang), complete: true })
       continue
@@ -95,6 +96,7 @@ export function stream(text: string, live: boolean): Block[] {
 
   if (last.type !== "code") return [...result, { raw, src: heal(raw), mode: "live" }]
 
+  // SAFETY: The guard above identified a code token; Marked's Generic token type prevents exhaustive narrowing.
   const code = last as Tokens.Code
 
   if (!open(code.raw))

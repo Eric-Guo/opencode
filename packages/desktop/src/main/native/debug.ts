@@ -76,6 +76,8 @@ export async function setForceFocus(contents: WebContents, enabled: boolean) {
   )
 }
 
+// SAFETY: Electron returns untyped CDP responses; these decoders own the response boundary.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 function readDocumentNodeId(value: unknown) {
   if (
     !value ||
@@ -92,6 +94,8 @@ function readDocumentNodeId(value: unknown) {
   return value.root.nodeId
 }
 
+// SAFETY: The DOM.querySelectorAll response is validated before any ids are used by CSS.forcePseudoState.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 function readNodeIds(value: unknown) {
   if (
     !value ||
