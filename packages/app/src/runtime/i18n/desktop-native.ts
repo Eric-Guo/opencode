@@ -311,6 +311,7 @@ export type DesktopNativeMessages = Record<DesktopNativeKey, string>
 
 export type DesktopNativeBundle = { locale: DesktopNativeLocale; messages: DesktopNativeMessages }
 
+// SAFETY: this constant has only the explicitly declared native translation keys and no runtime-added properties.
 export const DESKTOP_NATIVE_KEYS = Object.keys(DESKTOP_NATIVE_ENGLISH) as DesktopNativeKey[]
 
 export const DESKTOP_NATIVE_MAX_PAYLOAD_BYTES = 64 * 1024
@@ -321,6 +322,7 @@ export function createDesktopNativeBundle(
 ): DesktopNativeBundle {
   return {
     locale,
+    // SAFETY: every declared native key is enumerated exactly once and translate returns a string.
     messages: Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key) => [key, translate(key)])) as DesktopNativeMessages,
   }
 }
