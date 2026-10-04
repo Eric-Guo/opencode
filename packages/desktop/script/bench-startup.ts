@@ -29,7 +29,7 @@
 // splash or a fade reads as "painted" long before the interface is on screen. `--window-at` puts
 // the window somewhere the developer's foreground window does not cover. BENCH_SCREEN_DUMP=<dir>
 // also saves every sample as PNG, BENCH_EXTRA_ARGS passes extra Chromium switches to the app.
-import { Predicate, Schema } from "effect"
+import { Match, Predicate, Schema } from "effect"
 import { execFileSync, spawn } from "node:child_process"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
@@ -568,7 +568,7 @@ async function mainBootTiming() {
 }
 
 function defaultExe() {
-  const unpacked = join(packageDir, "dist", process.platform === "win32" ? "win-unpacked" : process.platform === "darwin" ? "mac" : "linux-unpacked")
+  const unpacked = join(packageDir, "dist", Match.value(process.platform).pipe(Match.when("win32", () => "win-unpacked"), Match.when("darwin", () => "mac"), Match.orElse(() => "linux-unpacked")))
 
   if (!existsSync(unpacked)) return join(unpacked, "OpenCode Dev.exe")
   const candidate = readdirSync(unpacked).find((f) => (process.platform === "win32" ? f.endsWith(".exe") : f.endsWith(".app") || !f.includes(".")))
