@@ -6,6 +6,7 @@ import type { PromptHistoryComment } from "./history/entry"
 import type { ImageAttachmentPart, Prompt } from "./state"
 import { clonePrompt, promptLength } from "./prompt-parts"
 import { isAttachment } from "./prompt-parts"
+
 import type { ComposerAdapter, ComposerDelivery, ComposerSelection, ComposerSession } from "./adapter"
 import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest, noteComment } from "./request"
