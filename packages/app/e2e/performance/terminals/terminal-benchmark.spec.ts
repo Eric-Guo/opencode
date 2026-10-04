@@ -9,7 +9,7 @@ import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
 import type {} from "./probe"
 
-// Use the same installed native PTY package as Core, with a fixture-owned process.
+// SAFETY: This resolves the same installed node-pty package used by Core; its exported spawn API matches the contract below.
 const native = createRequire(new URL("../../../../core/package.json", import.meta.url))("@lydell/node-pty") as {
   spawn: (
     file: string,
