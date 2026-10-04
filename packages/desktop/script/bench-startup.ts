@@ -29,6 +29,7 @@
 // splash or a fade reads as "painted" long before the interface is on screen. `--window-at` puts
 // the window somewhere the developer's foreground window does not cover. BENCH_SCREEN_DUMP=<dir>
 // also saves every sample as PNG, BENCH_EXTRA_ARGS passes extra Chromium switches to the app.
+import { Predicate, Schema } from "effect"
 import { execFileSync, spawn } from "node:child_process"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
@@ -128,6 +129,8 @@ const env = {
   // Beta and prod builds check for updates on start; a closed proxy port fails that fast and offline.
   ...(args.values.offline || appId !== "ai.opencode.desktop.dev" ? { HTTPS_PROXY: "http://127.0.0.1:9" } : {}),
 }
+
+if (args.values.offline || appId !== "ai.opencode.desktop.dev") env.HTTPS_PROXY = "http://127.0.0.1:9"
 
 const cdpPort = await freePort()
 
@@ -410,7 +413,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
 
   while (Date.now() < deadline) {
     const result = await cdp.send("Runtime.evaluate", { expression: probe, returnByValue: true })
-    // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
+    // SAFETY: The owned probe expression returns the Probe fields read below.
     last = result.result?.result?.value as Probe | undefined
     const t = Date.now() - spawnAt
 
@@ -426,7 +429,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     if (last?.rows && !seen.timelineRows) seen.timelineRows = t
 
     if (last?.home && !seen.homeReady) seen.homeReady = t
-    // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
+    // SAFETY: Performance.getMetrics returns Chromium name/value metric pairs.
     const metrics = (await cdp.send("Performance.getMetrics")).result?.metrics as { name: string; value: number }[]
     const task = (metrics.find((m) => m.name === "TaskDuration")?.value ?? 0) * 1000
     scriptMs = (metrics.find((m) => m.name === "ScriptDuration")?.value ?? 0) * 1000
@@ -453,7 +456,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     console.log("renderer profile:", rendererProfilePath)
   }
 
-  // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
+  // SAFETY: Performance.getMetrics returns Chromium name/value metric pairs.
   const finalMetrics = (await cdp.send("Performance.getMetrics")).result?.metrics as { name: string; value: number }[]
   const metric = (name: string) => finalMetrics.find((m) => m.name === name)?.value ?? 0
 
@@ -551,9 +554,9 @@ async function mainBootTiming() {
   cdp.close()
   const value = result.result?.result?.value
 
-  if (typeof value !== "string") return undefined
+  if (!Predicate.isString(value)) return undefined
 
-  // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
+  // SAFETY: mainTiming serializes the timing fields captured by the owned main-process probe.
   return JSON.parse(value) as {
     created: number
     origin: number
@@ -623,13 +626,13 @@ async function freePort() {
     const server = createServer()
     server.listen(0, "127.0.0.1", () => {
       const address = server.address()
-      server.close(() => (typeof address === "object" && address ? resolvePort(address.port) : reject(new Error("no port"))))
+      server.close(() => (address && Predicate.isObject(address) ? resolvePort(address.port) : reject(new Error("no port"))))
     })
   })
 }
 
 async function targets(port: number) {
-  // SAFETY: This benchmark controls the CDP probe expressions and commands; their serialized responses have the requested metrics, timing, target or service-registration fields.
+  // SAFETY: The local Chromium debug endpoint returns target descriptors; failed connections return an empty list.
   return fetch(`http://127.0.0.1:${port}/json`)
     .then((r) => r.json() as Promise<{ type: string; url: string; webSocketDebuggerUrl: string }[]>)
     .catch(() => [] as { type: string; url: string; webSocketDebuggerUrl: string }[])
@@ -667,7 +670,7 @@ async function connect(url: string) {
 
   return {
     events,
-    send: (method: string, params: Record<string, unknown> = {}) =>
+    send: (method: string, params: Record<string, typeof Schema.Json.Type> = {}) =>
       new Promise<any>((resolvePromise) => {
         const n = ++id
         pending.set(n, resolvePromise)
@@ -833,7 +836,7 @@ async function windowRaiser(): Promise<{ raise: (pid: number) => void; screen: (
 }
 
 async function processTree(root: number) {
-  const script =
+  const script: [string, string[]] =
     process.platform === "win32"
       ? [
           "powershell",
@@ -846,7 +849,7 @@ async function processTree(root: number) {
       : ["sh", ["-c", `ps -eo pid=,ppid=,rss=,comm= | awk -v r=${root} 'BEGIN{ids[r]=1} {p[$1]=$2; rss[$1]=$3; c[$1]=$4} END{for(k=0;k<8;k++) for(i in p) if(p[i] in ids) ids[i]=1; for(i in ids) if(i in rss) print i "|" c[i] "|" rss[i]*1024 "|"}'`]]
 
   const out = await new Promise<string>((done) => {
-    const child = spawn(script[0] as string, script[1] as string[], { stdio: ["ignore", "pipe", "ignore"] })
+    const child = spawn(script[0], script[1], { stdio: ["ignore", "pipe", "ignore"] })
     let text = ""
     child.stdout?.on("data", (chunk) => (text += chunk))
     child.on("close", () => done(text))
@@ -909,7 +912,7 @@ async function warmService() {
 
   while (Date.now() < deadline) {
     if (existsSync(paths.registration)) {
-      const registration = JSON.parse(readFileSync(paths.registration, "utf8")) as { url?: string }
+      const registration = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ url: Schema.optionalKey(Schema.String) })))(readFileSync(paths.registration, "utf8"))
 
       if (registration.url && (await fetch(`${registration.url}/api/info`).then((r) => r.status < 500).catch(() => false))) {
         console.log(`service warm at ${registration.url}`)
@@ -926,7 +929,7 @@ async function warmService() {
 
 async function stopService() {
   if (existsSync(paths.registration)) {
-    const registration = JSON.parse(readFileSync(paths.registration, "utf8")) as { pid?: number }
+    const registration = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ pid: Schema.optionalKey(Schema.Number) })))(readFileSync(paths.registration, "utf8"))
 
     if (registration.pid) {
       try {

@@ -1,9 +1,11 @@
+import { Option, Predicate, Schema } from "effect"
+
 export type ConfigInvalidError = {
   name: "ConfigInvalidError"
   data: {
     path?: string
     message?: string
-    issues?: Array<{ message: string; path: string[] }>
+    issues?: ReadonlyArray<{ message: string; path: readonly string[] }>
   }
 }
 
@@ -12,7 +14,7 @@ export type ProviderModelNotFoundError = {
   data: {
     providerID: string
     modelID: string
-    suggestions?: string[]
+    suggestions?: readonly string[]
   }
 }
 
@@ -27,37 +29,53 @@ function tr(translator: Translator | undefined, key: string, text: string, vars?
   return out
 }
 
-export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
-  const unwrapped = unwrapNamedError(error)
+const configError = Schema.Struct({
+  name: Schema.Literal("ConfigInvalidError"),
+  data: Schema.Struct({
+    path: Schema.optional(Schema.String),
+    message: Schema.optional(Schema.String),
+    issues: Schema.optional(Schema.Array(Schema.Struct({ message: Schema.String, path: Schema.Array(Schema.String) }))),
+  }),
+})
 
-  if (isConfigInvalidErrorLike(unwrapped)) return parseReadableConfigInvalidError(unwrapped, translate)
+const modelError = Schema.Struct({
+  name: Schema.Literal("ProviderModelNotFoundError"),
+  data: Schema.Struct({
+    providerID: Schema.String,
+    modelID: Schema.String,
+    suggestions: Schema.optional(Schema.Array(Schema.String)),
+  }),
+})
 
-  if (isProviderModelNotFoundErrorLike(unwrapped)) return parseReadableProviderModelNotFoundError(unwrapped, translate)
+export function formatServerError(cause: unknown, translate?: Translator, fallback?: string) {
+  const unwrapped = unwrapNamedError(cause)
+  const config = Schema.decodeUnknownOption(configError)(unwrapped)
 
-  if (
-    typeof unwrapped === "object" &&
-    unwrapped !== null &&
-    "message" in unwrapped &&
-    typeof unwrapped.message === "string" &&
-    unwrapped.message
-  )
-    return unwrapped.message
+  if (Option.isSome(config)) return parseReadableConfigInvalidError(config.value, translate)
+  const model = Schema.decodeUnknownOption(modelError)(unwrapped)
 
-  if (error instanceof Error && error.message) return error.message
+  if (Option.isSome(model)) return parseReadableProviderModelNotFoundError(model.value, translate)
+  const message = Schema.decodeUnknownOption(Schema.Struct({ message: Schema.String }))(unwrapped)
 
-  if (typeof error === "string" && error) return error
+  if (Option.isSome(message) && message.value.message) return message.value.message
+
+  if (cause instanceof Error && cause.message) return cause.message
+
+  if (Predicate.isString(cause) && cause) return cause
 
   if (fallback) return fallback
 
   return tr(translate, "error.chain.unknown", "Unknown error")
 }
 
-function unwrapNamedError(error: unknown): unknown {
-  if (!(error instanceof Error) || !error.cause || typeof error.cause !== "object") return error
+// SAFETY: exceptions and transport causes can carry arbitrary values; each consumer decodes its own error contract.
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- Preserve the raw cause until its owning error schema decodes it.
+function unwrapNamedError(cause: unknown): unknown {
+  if (!(cause instanceof Error) || !Predicate.isObjectOrArray(cause.cause)) return cause
 
-  if ("body" in error.cause) return (error.cause as Record<string, unknown>).body
+  if (Predicate.hasProperty(cause.cause, "body")) return cause.cause.body
 
-  return error.cause
+  return cause.cause
 }
 
 // Client-synthesized session not-found errors share one constructor and
@@ -69,35 +87,22 @@ export function sessionNotFoundError(sessionID: string) {
   return new Error(sessionNotFoundMessage(sessionID))
 }
 
-export function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
-  return error instanceof Error && error.message === sessionNotFoundMessage(sessionID)
+export function isLocalSessionNotFoundError(cause: unknown, sessionID: string) {
+  return cause instanceof Error && cause.message === sessionNotFoundMessage(sessionID)
 }
 
-export function isSessionNotFoundError(error: unknown, sessionID: string) {
-  const unwrapped = unwrapNamedError(error)
+export function isSessionNotFoundError(cause: unknown, sessionID: string) {
+  const unwrapped = unwrapNamedError(cause)
+  const current = Schema.decodeUnknownOption(Schema.Struct({ sessionID: Schema.String }))(unwrapped)
 
-  if (typeof unwrapped !== "object" || unwrapped === null) return false
-  const value = unwrapped as Record<string, unknown>
+  if (Predicate.isTagged(unwrapped, "SessionNotFoundError") && Option.isSome(current))
+    return current.value.sessionID === sessionID
 
-  if (value._tag === "SessionNotFoundError" && value.sessionID === sessionID) return true
+  const legacy = Schema.decodeUnknownOption(
+    Schema.Struct({ name: Schema.Literal("NotFoundError"), data: Schema.Struct({ message: Schema.String }) }),
+  )(unwrapped)
 
-  if (value.name !== "NotFoundError" || typeof value.data !== "object" || value.data === null) return false
-
-  return (value.data as Record<string, unknown>).message === sessionNotFoundMessage(sessionID)
-}
-
-function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
-  if (typeof error !== "object" || error === null) return false
-  const o = error as Record<string, unknown>
-
-  return o.name === "ConfigInvalidError" && typeof o.data === "object" && o.data !== null
-}
-
-function isProviderModelNotFoundErrorLike(error: unknown): error is ProviderModelNotFoundError {
-  if (typeof error !== "object" || error === null) return false
-  const o = error as Record<string, unknown>
-
-  return o.name === "ProviderModelNotFoundError" && typeof o.data === "object" && o.data !== null
+  return Option.isSome(legacy) && legacy.value.data.message === sessionNotFoundMessage(sessionID)
 }
 
 export function parseReadableConfigInvalidError(errorInput: ConfigInvalidError, translator?: Translator) {
