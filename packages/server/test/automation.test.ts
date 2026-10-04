@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
 import { OpenCode } from "@opencode/client"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -251,7 +251,7 @@ it.live("runs due automations in standalone ServerProcess.start without lifecycl
   }).pipe(Effect.scoped),
 )
 
-it.live("starts one child for a due automation when two servers share a database", () =>
+it.live("starts one child for a due automation when two servers contend for its database", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-automation-leader-")).path
     const dbPath = path.join(dir, "shared.db")
@@ -302,8 +302,11 @@ it.live("starts one child for a due automation when two servers share a database
         fs: { filewatcher: false },
         models: { fetch: false },
       })
-    const [first] = yield* Effect.all([boot(), boot()], { concurrency: 2 })
-    const base = `http://127.0.0.1:${"port" in first.address ? first.address.port : 0}`
+    // Linux grants the database to one server; other platforms also exercise automation leader election.
+    const boots = yield* Effect.all([boot().pipe(Effect.exit), boot().pipe(Effect.exit)], { concurrency: 2 })
+    const servers = boots.filter(Exit.isSuccess).map((exit) => exit.value)
+    expect(servers).toHaveLength(process.platform === "linux" ? 1 : 2)
+    const base = `http://127.0.0.1:${"port" in servers[0]!.address ? servers[0]!.address.port : 0}`
     const api = OpenCode.make({
       baseUrl: base,
       headers: { authorization: `Basic ${btoa("opencode:secret")}` },
