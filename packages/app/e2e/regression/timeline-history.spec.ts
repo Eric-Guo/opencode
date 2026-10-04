@@ -209,8 +209,9 @@ test.describe("timeline history", () => {
       const roots: { sessionID: string; messageID: string }[] = []
       const sequence: string[] = []
       const messages = rootHistory()
-      // SAFETY: rootHistory ends each generated turn with an assistant message.
-      const last = messages.at(-1) as SessionMessageAssistant
+      const last = messages.at(-1)
+
+      if (last?.type !== "assistant") throw new Error("Expected the final assistant fixture message")
       await page.addInitScript(installVisibilityProbe)
 
       const timeline = await setupTimeline(page, {
@@ -257,7 +258,7 @@ test.describe("timeline history", () => {
       ])
       expect(roots).toEqual([])
 
-      const completed = {
+      const completed: SessionMessageAssistant = {
         ...last,
         time: { ...last.time, completed: last.time.created + 15_000 },
       }
