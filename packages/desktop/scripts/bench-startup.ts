@@ -127,7 +127,7 @@ const env = {
   OPENCODE_DB: paths.db,
   OPENCODE_CONFIG_DIR: paths.config,
   // Beta and prod builds check for updates on start; a closed proxy port fails that fast and offline.
-  ...(args.values.offline || appId !== "ai.opencode.desktop.dev" ? { HTTPS_PROXY: "http://127.0.0.1:9" } : {}),
+
 }
 
 if (args.values.offline || appId !== "ai.opencode.desktop.dev") env.HTTPS_PROXY = "http://127.0.0.1:9"

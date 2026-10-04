@@ -1,5 +1,3 @@
-import { Match } from "effect"
-
 import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
 import { Match } from "effect"
 import { createMemo, createSignal } from "solid-js"
@@ -279,10 +277,16 @@ function InteractiveCommandStory(props: {
   existingGroup?: boolean
   tool?: "shell" | "execute" | "subagent"
 }) {
-  const initialPhase: "streaming" | "input" | "running" | "completed" = props.streaming ? "streaming" : "completed"
+  type CommandState = {
+    phase: "streaming" | "input" | "running" | "completed"
+    started: boolean
+    lines: number
+    sibling: boolean
+    busy: boolean
+  }
 
-  const [state, setState] = createStore({
-    phase: initialPhase,
+  const [state, setState] = createStore<CommandState>({
+    phase: props.streaming ? "streaming" : "completed",
     started: !props.existingGroup,
     lines: 3,
     sibling: false,
