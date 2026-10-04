@@ -19,6 +19,8 @@ type Driver = {
 export type DraftStore = AsyncStorage & {
   putBlob(blob: Blob): Promise<BlobReference>
   /** Persist an already-encoded document without re-parsing its serialized form. */
+  // SAFETY: callers pass their persistence codec's encoded JSON document; the draft layer only replaces blob references.
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This generic persistence boundary accepts the codec's encoded output.
   setDocument(key: string, document: unknown): Promise<void>
 }
 
@@ -367,6 +369,8 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
     return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, rename(entry, renamed)]))
   }
 
+  // SAFETY: persistence codecs own the document's schema; this boundary preserves their JSON representation, including omitted fields.
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Accept each caller's schema-encoded draft document.
   const setDocument = async (key: string, document: unknown) => {
     const version = (versions.get(key) ?? 0) + 1
     versions.set(key, version)

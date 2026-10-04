@@ -15,6 +15,8 @@ const tailwindGenerate = tailwind.find((plugin) => plugin.name === "@tailwindcss
 const tailwindHotUpdate = tailwindGenerate?.hotUpdate
 
 // Tailwind 4.3.3 expects a server that Vite's bundled dev hook does not provide.
+// SAFETY: Vite hooks support callback and object forms; this pinned Tailwind adapter wraps only its callback hook.
+// oxlint-disable-next-line anti-slop/no-runtime-typeof
 if (tailwindGenerate && typeof tailwindHotUpdate === "function") {
   tailwindGenerate.hotUpdate = function (context) {
     if (!context.server) return
@@ -45,6 +47,8 @@ const dropUnloadedOfficeFiles = {
     handler(_, bundle) {
       const files = Object.values(bundle).filter((file) => !file.fileName.endsWith(".map"))
       const name = (file) => file.fileName.split("/").pop() ?? file.fileName
+      // SAFETY: Rollup types an asset's source as string | Uint8Array; only a string source can name another file.
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof
       const source = (file) => (file.type === "chunk" ? file.code : typeof file.source === "string" ? file.source : "")
       const named = (file) => files.some((other) => other !== file && source(other).includes(name(file)))
 

@@ -20,7 +20,10 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
 
       const name = language in bundledLanguages ? language : "text"
 
-      if (!highlighter.getLoadedLanguages().includes(name)) await highlighter.loadLanguage(name as BundledLanguage)
+      if (!highlighter.getLoadedLanguages().includes(name)) {
+        // SAFETY: name is a bundledLanguages key or Shiki's built-in text language.
+        await highlighter.loadLanguage(name as BundledLanguage)
+      }
 
       return highlighter.codeToHtml(code, {
         lang: name,
