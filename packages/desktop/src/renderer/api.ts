@@ -8,6 +8,7 @@ type Mutable<Value> =
       ? { -readonly [Key in keyof Value]: Mutable<Value[Key]> }
       : Value
 
+// SAFETY: IPC produces an owned structured clone; removing readonly changes its type, not shared main-process state.
 const mutable = <Value>(value: Value) => value as Mutable<Value>
 
 const toArrayBuffer = (value: Uint8Array) =>

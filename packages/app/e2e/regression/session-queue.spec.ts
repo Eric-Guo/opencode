@@ -40,6 +40,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
     data: Extract<OpenCodeEvent, { type: Type }>["data"],
   ) => {
     sequence += 1
+    // SAFETY: Type couples the event discriminator and extracted data; fixture emissions use the matching durable version.
     events.push({
       id: `evt_queue_${sequence}`,
       type,

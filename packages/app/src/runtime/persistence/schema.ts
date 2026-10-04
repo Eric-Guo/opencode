@@ -42,6 +42,8 @@ export function withInitial<S extends Schema.ConstraintCodec<object, unknown>>(
 }
 
 // Object-level codecs own their recovery. Plain structs can recover fields independently.
+// SAFETY: schema AST recovery necessarily handles arbitrary decoded fields before the owning codec validates the final document.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Generic schema interpreter, with the final decode at withInitial.
 function recover(ast: SchemaAST.AST, value: unknown, initial: unknown): unknown {
   if (value === undefined) return initial
 
@@ -63,6 +65,8 @@ function recover(ast: SchemaAST.AST, value: unknown, initial: unknown): unknown 
   return Option.isSome(decoded) ? decoded.value : initial
 }
 
+// SAFETY: merged fields are intermediate values in withInitial and are decoded by the owning schema before consumers receive them.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Generic recovery merge, followed by the owning document codec.
 function merge(initial: unknown, value: unknown): unknown {
   if (value === undefined) return initial
 

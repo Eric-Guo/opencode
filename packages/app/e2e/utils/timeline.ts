@@ -382,6 +382,8 @@ export function toolCalled(data: Extract<OpenCodeEvent, { type: "session.tool.ca
   return makeEvent("session.tool.called", data)
 }
 
+// SAFETY: this exported validation boundary intentionally accepts malformed fixture events for schema rejection.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function validateTimelineEvent(input: unknown): OpenCodeEvent {
   if (!input || typeof input !== "object") throw new Error("Timeline event must be an object")
 
@@ -1074,6 +1076,7 @@ function jsonValue(value: unknown): JsonValue | undefined {
 
   return jsonRecord(value as Record<string, unknown>)
 }
+/* oxlint-enable anti-slop/no-runtime-typeof */
 
 function provider() {
   return {

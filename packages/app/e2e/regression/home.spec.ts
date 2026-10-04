@@ -85,8 +85,11 @@ test("Home shows loaded sessions before the location request resolves", async ({
 test("Home and the directory picker load without newer browser APIs", async ({ page }) => {
   await page.addInitScript(() => {
     // Safari 16.6 has none of these APIs. Remove them before the web entry runs.
+    // SAFETY: this isolated browser fixture intentionally removes Map.groupBy to emulate an older browser.
     delete (Map as Partial<typeof Map>).groupBy
+    // SAFETY: withResolvers is intentionally absent in the browser compatibility fixture.
     delete (Promise as Partial<typeof Promise>).withResolvers
+    // SAFETY: Promise.try is intentionally absent in the browser compatibility fixture.
     delete (Promise as Partial<typeof Promise>).try
   })
   await openHome(page, { fileList: () => [] })
