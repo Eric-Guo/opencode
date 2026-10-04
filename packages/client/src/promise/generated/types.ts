@@ -326,6 +326,17 @@ export type PermissionSavedInfo = {
   time: { created: number; updated: number }
 }
 
+export type FileSystemArchiveEntry = {
+  id: number
+  name: string
+  directory: boolean
+  size: number
+  compressedSize: number
+  encrypted: boolean
+  symlink: boolean
+  compressionMethod: number
+}
+
 export type FileSystemEntry = { path: string; type: "file" | "directory" }
 
 export type FileSystemWrite = { path: string }
@@ -1551,6 +1562,10 @@ export type PermissionAsked = {
     message?: string
   }
 }
+
+export type FileSystemArchive =
+  | { status: "ready"; size: number; entries: Array<FileSystemArchiveEntry> }
+  | { status: "invalid" | "unsupported" | "limit" | "timeout"; size: number }
 
 export type PermissionReplied = {
   id: string
@@ -6805,6 +6820,19 @@ export type PermissionReplyInput = {
 }
 
 export type PermissionReplyOutput = void
+
+export type FileArchiveInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly path: string
+  }["location"]
+  readonly path: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly path: string
+  }["path"]
+}
+
+export type FileArchiveOutput = { location: LocationPublicRef; data: FileSystemArchive }
 
 export type FileReadInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
