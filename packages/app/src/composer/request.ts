@@ -1,6 +1,15 @@
 import { encodeFilePath, getFilename } from "@opencode/util/path"
 import type { FileSelection } from "@/workspaces/files/model"
-import type { AgentPart, ContextItem, FileAttachmentPart, ImageAttachmentPart, PathAttachmentPart, Prompt, SkillPart } from "@/composer/state"
+import type {
+  AgentPart,
+  ContextItem,
+  FileAttachmentPart,
+  ImageAttachmentPart,
+  NoteComment,
+  PathAttachmentPart,
+  Prompt,
+  SkillPart,
+} from "@/composer/state"
 import {
   formatAttachmentReference,
   formatCommentNote,
@@ -102,16 +111,20 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
       const comment = item.comment.trim()
 
       if (!comment) return []
-      comments.push({
+
+      const note: NoteComment = {
         type: "note",
         origin: item.origin,
         label: item.label,
         icon: item.icon,
         subject: item.subject,
-        ...(item.href ? { href: item.href } : {}),
-        ...(item.live ? { live: { ...item.live } } : {}),
         comment,
-      })
+      }
+
+      if (item.href) note.href = item.href
+
+      if (item.live) note.live = { ...item.live }
+      comments.push(note)
 
       return mentioned(comment)
     }

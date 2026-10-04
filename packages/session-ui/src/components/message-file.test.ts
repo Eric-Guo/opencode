@@ -7,7 +7,7 @@ function file(source: PromptFileAttachment["source"], mention = false): PromptFi
     data: "",
     mime: "text/plain",
     source,
-    ...(mention ? { mention: { text: "@README.md", start: 0, end: 10 } } : {}),
+    mention: mention ? { text: "@README.md", start: 0, end: 10 } : undefined,
   }
 }
 

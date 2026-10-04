@@ -210,7 +210,15 @@ function InteractiveCommandStory(props: {
   existingGroup?: boolean
   tool?: "shell" | "execute" | "subagent"
 }) {
-  const [state, setState] = createStore({
+  type CommandState = {
+    phase: "streaming" | "input" | "running" | "completed"
+    started: boolean
+    lines: number
+    sibling: boolean
+    busy: boolean
+  }
+
+  const [state, setState] = createStore<CommandState>({
     phase: props.streaming ? "streaming" : "completed",
     started: !props.existingGroup,
     lines: 3,
@@ -219,7 +227,7 @@ function InteractiveCommandStory(props: {
   })
 
   const document = createMemo(() => {
-    const phase = state.phase as "streaming" | "input" | "running" | "completed"
+    const phase = state.phase
 
     const content: SessionMessageAssistant["content"] = [
       ...(props.existingGroup
@@ -243,7 +251,7 @@ function InteractiveCommandStory(props: {
                   phase === "running"
                     ? "still running"
                     : Array.from({ length: state.lines }, (_, index) => `line ${index + 1}`).join("\n"),
-                ...(phase === "streaming" ? { raw: "" } : {}),
+                raw: phase === "streaming" ? "" : undefined,
               },
             ),
           ]

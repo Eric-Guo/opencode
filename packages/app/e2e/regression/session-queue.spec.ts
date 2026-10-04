@@ -119,7 +119,7 @@ async function openQueue(page: Page, mock: ReturnType<typeof createQueueMock>, f
     onPrompt: mock.onPrompt,
     onInboxChange: mock.onInboxChange,
     events: mock.events,
-    ...(followUpBehavior ? { seed: { settings: { general: { followUpBehavior } } } } : {}),
+    seed: followUpBehavior ? { settings: { general: { followUpBehavior } } } : undefined,
   })
   const composer = page.locator('[data-component="composer"]')
 

@@ -6,6 +6,7 @@ import type { PromptHistoryComment } from "./history/entry"
 import type { ImageAttachmentPart, Prompt } from "./state"
 import { clonePrompt, promptLength } from "./prompt-parts"
 import { isAttachment } from "./prompt-parts"
+
 import type { ComposerAdapter, ComposerDelivery, ComposerSelection, ComposerSession } from "./adapter"
 import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest } from "./request"
@@ -203,6 +204,14 @@ function submissionText(prompt: Prompt) {
   return prompt.map((part) => ("content" in part ? part.content : "")).join("")
 }
 
+function submissionModel(selection: ComposerSubmission["selection"]) {
+  const model: ComposerSubmission["selection"]["model"] & { variant?: string } = { ...selection.model }
+
+  if (selection.variant) model.variant = selection.variant
+
+  return model
+}
+
 function handoffMessage(value: ComposerSubmission): SessionMessageUser {
   return {
     id: value.id,
@@ -224,35 +233,35 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
 
         if (!comment) return []
 
-        if (item.type === "note")
-          return [
-            {
-              type: "note",
-              origin: item.origin,
-              label: item.label,
-              icon: item.icon,
-              subject: item.subject,
-              ...(item.href ? { href: item.href } : {}),
-              ...(item.live ? { live: { ...item.live } } : {}),
-              comment,
-            },
-          ]
-
-        return [
-          {
-            path: item.path,
+        if (item.type === "note") {
+          const note: Extract<PromptComment, { type: "note" }> = {
+            type: "note",
+            origin: item.origin,
+            label: item.label,
+            icon: item.icon,
+            subject: item.subject,
             comment,
-            ...(item.selection ? { selection: { ...item.selection } } : {}),
-            ...(item.preview !== undefined ? { preview: item.preview } : {}),
-            ...(item.commentOrigin ? { origin: item.commentOrigin } : {}),
-          },
-        ]
+          }
+
+          if (item.href) note.href = item.href
+
+          if (item.live) note.live = { ...item.live }
+
+          return [note]
+        }
+
+        const file: Exclude<PromptComment, { type: "note" }> = { path: item.path, comment }
+
+        if (item.selection) file.selection = { ...item.selection }
+
+        if (item.preview !== undefined) file.preview = item.preview
+
+        if (item.commentOrigin) file.origin = item.commentOrigin
+
+        return [file]
       }),
       agent: value.selection.agent,
-      model: {
-        ...value.selection.model,
-        ...(value.selection.variant ? { variant: value.selection.variant } : {}),
-      },
+      model: submissionModel(value.selection),
     },
     time: { created: Date.now() },
   }
@@ -475,10 +484,7 @@ async function sendPrompt(
       comments: request.comments,
       attachments: request.attachments,
       agent: value.selection.agent,
-      model: {
-        ...value.selection.model,
-        ...(value.selection.variant ? { variant: value.selection.variant } : {}),
-      },
+      model: submissionModel(value.selection),
     },
   }
 
