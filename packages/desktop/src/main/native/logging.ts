@@ -70,11 +70,13 @@ const nativeLogger = Logger.make((options) => {
     const scope = Predicate.isString(entry.annotations.scope) ? entry.annotations.scope : "main"
     const annotations = Object.fromEntries(Object.entries(entry.annotations).filter(([key]) => key !== "scope"))
 
-    const context = {
-      ...(Object.keys(annotations).length === 0 ? {} : { annotations }),
-      ...(Object.keys(entry.spans).length === 0 ? {} : { spans: entry.spans }),
-      ...(entry.cause === undefined ? {} : { cause: entry.cause }),
-    }
+    const context = {}
+
+    if (Object.keys(annotations).length) Object.assign(context, { annotations })
+
+    if (Object.keys(entry.spans).length) Object.assign(context, { spans: entry.spans })
+
+    if (entry.cause !== undefined) Object.assign(context, { cause: entry.cause })
 
     const messages = Array.isArray(options.message) ? options.message : [options.message]
     log.scope(safeLogName(scope))[methods[options.logLevel]](
