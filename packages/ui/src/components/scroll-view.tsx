@@ -79,7 +79,10 @@ export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey
   }
 }
 
-export function canScrollKey(element: HTMLElement, key: NonNullable<ReturnType<typeof scrollKey>>) {
+export function canScrollKey(
+  element: Pick<HTMLElement, "scrollTop" | "clientHeight" | "scrollHeight">,
+  key: NonNullable<ReturnType<typeof scrollKey>>,
+) {
   const up = key === "up" || key === "page-up" || key === "home"
 
   return up ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight

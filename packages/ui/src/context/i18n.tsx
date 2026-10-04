@@ -3,6 +3,7 @@ import { I18nProvider } from "@kobalte/core/i18n"
 import { dict as en } from "../i18n/en"
 import type { Key, LocaleKey, PluralCategory, PluralKey, PluralLookupKey } from "../i18n/en"
 
+
 export type UiI18nKey = Key
 
 export type UiI18nPluralKey = PluralKey
@@ -50,9 +51,8 @@ export function pluralCategory(locale: string, count: number): UiPluralCategory 
   return next.select(count)
 }
 
-export function pluralKey(key: UiI18nPluralKey, category: UiPluralCategory) {
-  // SAFETY: `PluralKey` names a base whose `.one`/`.other` forms exist, so `${key}.${category}` is a lookup key.
-  return `${key}.${category}` as UiI18nPluralLookupKey
+export function pluralKey(key: UiI18nPluralKey, category: UiPluralCategory): UiI18nPluralLookupKey {
+  return `${key}.${category}`
 }
 
 export function localizedListSeparator(locale: string, index: number, count: number) {
@@ -104,20 +104,19 @@ export function createUiI18n(source: UiI18nSource): UiI18n {
   }
 }
 
+const english = new Map<string, string>(Object.entries(en))
+
 const fallbackSource: UiI18nSource = {
   locale: () => "en",
   t: (key, params) => {
-    // SAFETY: the fallback source only translates keys from the UI dictionary; any other key falls back to itself.
-    const value = en[key as UiI18nKey] ?? String(key)
+    const value = english.get(key) ?? String(key)
 
     return resolveTemplate(value, params)
   },
   plural: (key, count, params) =>
     fallback.pluralForm!(key, pluralCategory(fallback.locale(), count), { ...params, count }),
   pluralForm: (key, category, params) => {
-    // SAFETY: locale keys are a subset of the dictionary keys, and every value is a string.
-    const values = en as Partial<Record<UiI18nLocaleKey, string>>
-    const value = values[pluralKey(key, category)] ?? values[`${key}.other`] ?? `${key}.other`
+    const value = english.get(pluralKey(key, category)) ?? english.get(`${key}.other`) ?? `${key}.other`
 
     return resolveTemplate(value, params)
   },

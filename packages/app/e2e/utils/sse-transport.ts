@@ -51,9 +51,6 @@ type BrowserCommand<T> =
   | { type: "acknowledgements" }
 
 // Keyed by server origin so every installed server keeps its own connections and commands.
-type BrowserTransport = Window & {
-  __testSseTransports?: Record<string, { command: (command: BrowserCommand<unknown>) => unknown }>
-}
 
 // `keepalive` (default true) writes an SSE comment every 15 s like the real server, so long scenarios do not trip the
 // client's stall watchdog. Set it to false only to test that watchdog.
@@ -65,10 +62,6 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
   await page.addInitScript(
     ({ server, retry, keepalive }) => {
       type Connection = SseConnectionRecord & { controller: ReadableStreamDefaultController<Uint8Array> }
-
-      type ProbeWindow = Window & {
-        __visualStabilityProbe?: { startedAt: number; markers: { at: number; label: string }[] }
-      }
 
       const originalFetch = window.fetch.bind(window)
       const connections: Connection[] = []
@@ -96,13 +89,16 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
 
       const marker = (label?: string) => {
         if (!label) return
-        const probe = (window as ProbeWindow).__visualStabilityProbe
+        const probe = window.__visualStabilityProbe
 
         if (!probe) return
         probe.markers.push({ at: performance.now() - probe.startedAt, label })
       }
 
-      const frame = (payload: unknown, eventOptions: SseEventOptions = {}) =>
+      const frame = (
+        payload: OpenCodeEvent | { id: string; type: "server.connected"; data: Record<string, never> },
+        eventOptions: SseEventOptions = {},
+      ) =>
         [
           eventOptions.event === undefined ? "" : `event: ${eventOptions.event}\n`,
           eventOptions.id === undefined ? "" : `id: ${eventOptions.id}\n`,
@@ -122,7 +118,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
           bytes,
           chunkCount,
           deliveredAt: performance.now(),
-          ...(eventID === undefined ? {} : { eventID }),
+          eventID,
         }
 
         acknowledgements.push(acknowledgement)
@@ -154,7 +150,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
         connection.controller.error(error)
       }
 
-      const command = (input: BrowserCommand<unknown>) => {
+      const command = (input: BrowserCommand<OpenCodeEvent>) => {
         if (input.type === "connections")
           return connections.map(({ controller: _controller, ...connection }) => connection)
 
@@ -194,8 +190,12 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
         return acknowledge(connection, encoded[0]!.bytes.byteLength, output.length, encoded[0]!.delivery.options?.id)
       }
 
-      const host = window as BrowserTransport
-      host.__testSseTransports = { ...host.__testSseTransports, [server]: { command } }
+      const host = window
+      // SAFETY: command dispatches on the same type/burst fields as BrowserCommandResult and returns that branch's result.
+      host.__testSseTransports = {
+        ...host.__testSseTransports,
+        [server]: { command: command as BrowserTransportCommand },
+      }
 
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
@@ -205,18 +205,19 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
 
         const id = ++nextConnectionID
 
-        const record = {
+        const record: Omit<Connection, "controller"> & { controller?: Connection["controller"] } = {
           id,
           url: url.href,
-          path: url.pathname,
+          path: "/api/event",
           headers: Object.fromEntries(request.headers.entries()),
           openedAt: performance.now(),
-        } as Connection
+        }
 
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             record.controller = controller
-            connections.push(record)
+            // SAFETY: start assigned the required controller immediately above, before exposing the record.
+            connections.push(record as Connection)
 
             if (retry !== undefined) controller.enqueue(encoder.encode(`retry: ${retry}\n\n`))
             controller.enqueue(
@@ -268,14 +269,16 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
   // SAFETY: each public transport method supplies its command variant and corresponding declared result type.
   const command = <Result>(input: BrowserCommand<T>) =>
     page.evaluate(
-      ({ server, input }) => {
-        const transport = (window as BrowserTransport).__testSseTransports?.[server]
+      ({ server, serialized }) => {
+        // SAFETY: the browser command was serialized by this typed transport immediately before evaluation.
+        const input: BrowserCommand<OpenCodeEvent> = JSON.parse(serialized)
+        const transport = window.__testSseTransports?.[server]
 
         if (!transport) throw new Error(`SSE transport for ${server} was not installed before page load`)
 
-        return transport.command(input as BrowserCommand<unknown>)
+        return transport.command(input)
       },
-      { server, input },
+      { server, serialized: JSON.stringify(input) },
     ) as Promise<Result>
 
   return {
@@ -283,8 +286,8 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
     async waitForConnection(input = {}) {
       const connection = await page.waitForFunction(
         ({ server, after }) => {
-          const transport = (window as BrowserTransport).__testSseTransports?.[server]
-          const connections = transport?.command({ type: "connections" }) as SseConnectionRecord[] | undefined
+          const transport = window.__testSseTransports?.[server]
+          const connections = transport?.command({ type: "connections" })
 
           return connections?.findLast((connection) => connection.id > after && connection.endedAt === undefined)
         },
@@ -351,5 +354,25 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
     acknowledgements() {
       return command({ type: "acknowledgements" })
     },
+  }
+}
+
+type BrowserCommandResult<Command extends BrowserCommand<OpenCodeEvent>> = Command extends { type: "connections" }
+  ? SseConnectionRecord[]
+  : Command extends { type: "acknowledgements" }
+    ? SseDeliveryAcknowledgement[]
+    : Command extends { type: "end" }
+      ? void
+      : Command extends { type: "send"; burst: true }
+        ? SseDeliveryAcknowledgement[]
+        : SseDeliveryAcknowledgement
+
+type BrowserTransportCommand = <Command extends BrowserCommand<OpenCodeEvent>>(
+  command: Command,
+) => BrowserCommandResult<Command>
+
+declare global {
+  interface Window {
+    __testSseTransports?: Record<string, { command: BrowserTransportCommand }>
   }
 }

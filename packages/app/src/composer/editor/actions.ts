@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { batch, untrack, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import type {
@@ -18,14 +19,12 @@ type ComposerStateStore = [
 export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStateStore>
 
 export function createComposerEditorActions(input: ComposerStateStoreInput, onChange?: () => void) {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- this typed union explicitly accepts either a store tuple or an accessor
-  const tuple = () => (typeof input === "function" ? input() : input)
+  const tuple = () => (Predicate.isFunction(input) ? input() : input)
 
   const store = () => {
     const value = tuple()[0]
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- resolve the accessor branch of the typed store union
-    return typeof value === "function" ? value() : value
+    return Predicate.isFunction(value) ? value() : value
   }
 
   const setStore = () => tuple()[1]

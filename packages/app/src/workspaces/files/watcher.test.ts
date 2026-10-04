@@ -21,8 +21,10 @@ describe("file watcher invalidation", () => {
     const name = "某项目合同-招标事项5-报价清单.xlsx.markdown"
     const file = parent ? `${parent}/${name}` : name
 
-    const fixture: { files: FileNode[] } = {
-      files: [{ path: file, absolute: `${directory}/${file}`, name, type: "file", ignored: false }],
+    const fixture = {
+      files: [
+        { path: file, absolute: `${directory}/${file}`, name, type: "file", ignored: false },
+      ] satisfies FileNode[],
     }
 
     const tree = createFileTreeStore({
