@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
+import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from "electron"
 import { Schema, type Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"
 import { WindowFullscreenChanged, WindowPinchZoomChanged, WindowZoomChanged } from "../../shared/ipc-rpc/events"
@@ -25,30 +25,24 @@ let backgroundColor: string | undefined
 export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
   const mode = tone()
 
-  return {
+  const options = {
     title: "SigmaAgents",
     icon: iconPath(path, paths),
     backgroundColor: backgroundColor ?? storedBackgroundColor(),
-    ...(process.platform === "darwin"
-      ? {
-          titleBarStyle: "hidden" as const,
-          trafficLightPosition: { x: 14, y: 14 },
-        }
-      : {}),
-    ...(process.platform === "win32"
-      ? {
-          frame: false,
-          titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode }),
-        }
-      : {}),
     webPreferences: {
       preload: paths.preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
-  }
+  } satisfies BrowserWindowConstructorOptions
+
+  if (process.platform === "darwin") Object.assign(options, { titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 14 } })
+
+  if (process.platform === "win32") Object.assign(options, { frame: false, titleBarStyle: "hidden", titleBarOverlay: overlay({ mode }) })
+
+  return options
+
 }
 
 export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
@@ -96,10 +90,11 @@ export function setControlColor(win: BrowserWindow, color?: string) {
 
 export function updateTitlebar(win: BrowserWindow) {
   if (process.platform !== "win32") return
-  win.setTitleBarOverlay({
-    ...overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor()),
-    ...(controlColors.has(win) ? { symbolColor: controlColors.get(win)! } : {}),
-  })
+  const options = overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor())
+  const color = controlColors.get(win)
+
+  if (color !== undefined) options.symbolColor = color
+  win.setTitleBarOverlay(options)
 }
 
 export function setPinchZoomEnabled(enabled: boolean) {

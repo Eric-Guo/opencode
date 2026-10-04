@@ -91,7 +91,7 @@ function CodebaseExplorationStory() {
       time: {
         created: STORY_TIME,
         ran: STORY_TIME + 100,
-        ...(completed ? { completed: STORY_TIME + 200 } : {}),
+        completed: completed ? STORY_TIME + 200 : undefined,
       },
     } satisfies SessionMessageAssistantTool
   }
@@ -108,7 +108,7 @@ function CodebaseExplorationStory() {
             agent: "build",
             model: STORY_MODEL,
             content: [tool("read", state.read), tool("glob", state.glob)],
-            time: { created: STORY_TIME, ...(state.read && state.glob ? { completed: STORY_TIME + 300 } : {}) },
+            time: { created: STORY_TIME, completed: state.read && state.glob ? STORY_TIME + 300 : undefined },
           } satisfies SessionMessageAssistant,
         ],
         status: { type: state.read && state.glob ? "idle" : "busy" },
