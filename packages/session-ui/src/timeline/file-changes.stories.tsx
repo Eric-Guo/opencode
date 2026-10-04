@@ -256,7 +256,7 @@ export const AppendingToolCalls = {
 export const ChangingFiles = {
   args: { scenario: "streaming" },
   argTypes: { scenario: { control: "select", options: Object.keys(fileScenarios) } },
-  render: (args: { scenario: string }) => fileScenarios[args.scenario as keyof typeof fileScenarios].render(),
+  render: (args: { scenario: string }) => Object.entries(fileScenarios).find(([key]) => key === args.scenario)?.[1].render(),
 }
 
 export const CreatedANewFile = {

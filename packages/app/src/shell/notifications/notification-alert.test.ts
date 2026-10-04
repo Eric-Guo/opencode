@@ -2,18 +2,18 @@ import { afterAll, beforeAll, expect, mock, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ServerSDK } from "@/runtime/server/client"
-import type { Data } from "@opencode/client/solid"
-import type { ServerConnection } from "@/runtime/server/registry"
+import { sessionInfo } from "@/test/fixtures"
+import { ServerConnection } from "@/runtime/server/registry"
 import { ServerScope } from "@/runtime/server/scope"
 import type { Tab } from "@/shell/tabs/tabs"
 
-const server = "local\nhttp://localhost:4096" as ServerConnection.Key
+const server = ServerConnection.Key.make("local\nhttp://localhost:4096")
 
-const session = { id: "session-1", title: "Test session", location: { directory: "/project" } }
+const session = sessionInfo({ id: "session-1", title: "Test session", location: { directory: "/project" } })
 
 const alerts: string[] = []
 
-const tabs: { store: Tab[] } = { store: [] }
+const tabs = { store: new Array<Tab>() }
 
 let createServerNotificationState: typeof import("./notification").createServerNotificationState
 
@@ -60,7 +60,7 @@ test.each([
 ] as const)("system alert for %s requires an open session tab", async (type, title) => {
   alerts.length = 0
   tabs.store = [{ type: "session", server, sessionId: "another-session" }]
-  let listener: ((event: unknown) => void) | undefined
+  let listener: Parameters<ServerSDK["event"]["listen"]>[0] | undefined
 
   const dispose = createRoot((dispose) => {
     const state = createServerNotificationState({
@@ -74,29 +74,45 @@ test.each([
             return () => {}
           },
         },
-      } as unknown as ServerSDK,
-      data: { session: { get: () => session } } as unknown as Data,
-      coordinator: { system: async (_id: string, fn: () => Promise<void>) => fn() },
-    } as Parameters<typeof createServerNotificationState>[0])
+      },
+      data: { session: { get: () => session, sync: async () => undefined } },
+      coordinator: {
+        system: async (_id: string, fn: () => void) => {
+          fn()
+        },
+        sound: async (_id: string, fn: () => void) => {
+          fn()
+        },
+      },
+    })
 
     return { dispose, state }
   })
 
-  listener?.({
-    type,
-    id: "event-1",
-    data: { sessionID: session.id, error: { type: "api", message: "failed", status: 500 } },
-  })
+  const event = (id: string) =>
+    type === "session.execution.failed"
+      ? {
+          type,
+          id,
+          created: 0,
+          durable: { aggregateID: session.id, seq: 1, version: 1 as const },
+          data: { sessionID: session.id, error: { type: "api" as const, message: "failed", status: 500 } },
+        }
+      : {
+          type,
+          id,
+          created: 0,
+          durable: { aggregateID: session.id, seq: 1, version: 1 as const },
+          data: { sessionID: session.id },
+        }
+
+  listener?.(event("event-1"))
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(dispose.state.session.all(session.id)).toHaveLength(1)
   expect(alerts).toEqual([])
 
   tabs.store = [{ type: "session", server, sessionId: session.id }]
-  listener?.({
-    type,
-    id: "event-2",
-    data: { sessionID: session.id, error: { type: "api", message: "failed", status: 500 } },
-  })
+  listener?.(event("event-2"))
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(alerts).toEqual([title])
   dispose.dispose()

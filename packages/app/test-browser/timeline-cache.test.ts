@@ -7,14 +7,19 @@ import { createTimelineCache } from "../src/session/timeline/cache"
 
 function setup() {
   return createRoot((dispose) => {
-    const [state, setState] = createStore({
+    const [state, setState] = createStore<{
+      id: string
+      directory: string
+      visible: boolean
+      messages: Record<string, SessionMessageInfo[]>
+    }>({
       id: "ses_a",
       directory: "/repo",
       visible: true,
       messages: {
         ses_a: [{ id: "msg_a", type: "user", text: "First session", time: { created: 1 } }],
         ses_b: [{ id: "msg_b", type: "user", text: "Second session", time: { created: 2 } }],
-      } as Record<string, SessionMessageInfo[]>,
+      },
     })
 
     const views = new Map<
@@ -175,7 +180,7 @@ for (const order of ["session-first", "workspace-first"] as const) {
           input.setState("messages", id, [
             { id: `msg_live_${index}`, type: "user", text: "Live update", time: { created: index + 3 } },
           ])
-          expect((render.selected() as HTMLDivElement).dataset.messages).toBe(`msg_live_${index}`)
+          expect(render.selected()?.getAttribute("data-messages")).toBe(`msg_live_${index}`)
           expect(input.views.get(id)!.active()).toBe(true)
           visited.push(id)
         },
