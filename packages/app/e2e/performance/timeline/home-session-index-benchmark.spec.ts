@@ -312,6 +312,7 @@ async function readProbe(page: Page) {
 
     // Resource timing marks when the last index page finished arriving, so
     // rows - listEnd isolates parse, merge, and render from transfer and boot.
+    // SAFETY: The resource entry type requested below provides responseEnd for each timing entry.
     const listEnd = Math.max(
       0,
       ...performance
