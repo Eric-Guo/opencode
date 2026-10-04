@@ -29,7 +29,7 @@ async function fixture(builds = true, failure = "") {
           "7777": "../7777/dist",
           "plm-meeting": "../plm-meeting/dist",
         },
-        ...(builds ? { builds: { "../7777": "bundle", "../plm-meeting": "bundle" } } : {}),
+        builds: builds ? { "../7777": "bundle", "../plm-meeting": "bundle" } : undefined,
       }),
     ),
     Bun.write(join(root, "entry.ts"), "export {}"),
