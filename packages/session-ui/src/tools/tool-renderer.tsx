@@ -117,6 +117,7 @@ function optional<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S)
 const toolInput = Schema.decodeUnknownSync(
   Schema.Struct({
     path: optional(Schema.String),
+    file: optional(Schema.String),
     pattern: optional(Schema.String),
     include: optional(Schema.String),
     offset: optional(Schema.Number),
@@ -1113,14 +1114,10 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
   }
 }
 
-// SAFETY: tool input and metadata are open per-tool records. GenericTool shows arbitrary input keys, and
-// renderers decode the fields they read with `toolInput` and `toolMetadata`.
 export interface ToolProps {
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
-  input: Record<string, unknown>
+  input: ReturnType<typeof currentToolInput>
+  metadata: ReturnType<typeof currentToolMetadata>
   error?: string
-  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
-  metadata: Record<string, unknown>
   tool: string
   sessionID?: string
   output?: string
@@ -1671,7 +1668,7 @@ ToolRegistry.register({
   name: "audio_transcriptions",
   render(props) {
     const i18n = useI18n()
-    const file = createMemo(() => (typeof props.input.file === "string" ? `file=${props.input.file}` : undefined))
+    const file = createMemo(() => toolInput(props.input).file)
 
     return (
       <BasicTool
@@ -1680,7 +1677,7 @@ ToolRegistry.register({
         icon="mcp"
         trigger={{
           title: i18n.t("ui.basicTool.called", { tool: props.tool }),
-          args: file() ? [file()!] : [],
+          args: file() === undefined ? [] : [`file=${file()}`],
         }}
       >
         <Show when={props.output}>

@@ -1,3 +1,5 @@
+import type { Model } from "@/runtime/server/types"
+
 type AgentModel = {
   providerID: string
   modelID: string
@@ -8,8 +10,8 @@ type Agent = {
   variant?: string
 }
 
-type Model = AgentModel & {
-  variants?: Record<string, unknown>
+type VariantModel = AgentModel & {
+  variants?: Model["variants"]
 }
 
 type VariantInput = {
@@ -19,7 +21,7 @@ type VariantInput = {
   preferred?: string
 }
 
-export function getConfiguredAgentVariant(input: { agent: Agent | undefined; model: Model | undefined }) {
+export function getConfiguredAgentVariant(input: { agent: Agent | undefined; model: VariantModel | undefined }) {
   if (!input.agent?.variant) return undefined
 
   if (!input.agent.model) return undefined
