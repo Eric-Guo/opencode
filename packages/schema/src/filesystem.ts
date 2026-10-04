@@ -20,6 +20,33 @@ export const Entry = Schema.Struct({
   type: Schema.Literals(["file", "directory"]),
 }).annotate({ identifier: "FileSystem.Entry" })
 
+export interface ArchiveEntry extends Schema.Schema.Type<typeof ArchiveEntry> {}
+export const ArchiveEntry = Schema.Struct({
+  /** Central-directory ordinal; duplicate names remain distinct entries. */
+  id: NonNegativeInt,
+  /** Display text inside the archive, never a host filesystem path. */
+  name: Schema.String,
+  directory: Schema.Boolean,
+  size: NonNegativeInt,
+  compressedSize: NonNegativeInt,
+  encrypted: Schema.Boolean,
+  symlink: Schema.Boolean,
+  compressionMethod: NonNegativeInt,
+}).annotate({ identifier: "FileSystem.ArchiveEntry" })
+
+export const Archive = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("ready"),
+    size: NonNegativeInt,
+    entries: Schema.Array(ArchiveEntry),
+  }),
+  Schema.Struct({
+    status: Schema.Literals(["invalid", "unsupported", "limit", "timeout"]),
+    size: NonNegativeInt,
+  }),
+]).annotate({ identifier: "FileSystem.Archive" })
+export type Archive = typeof Archive.Type
+
 export interface Submatch extends Schema.Schema.Type<typeof Submatch> {}
 export const Submatch = Schema.Struct({
   text: Schema.String,
