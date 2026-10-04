@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInfo, SessionMessageInfo, SessionPromptInput } from "@opencode/client/promise"
+import { PromptMention, AgentAttachment } from "@opencode/schema/prompt"
 import { Permission } from "@opencode/schema/permission"
 import { Worktree } from "@opencode/schema/worktree"
 import { Duration, Effect, Layer, Option, Predicate, Schema } from "effect"
@@ -17,6 +18,33 @@ import {
 } from "./mock-api"
 import { installSseTransport } from "./sse-transport"
 
+const PromptPayload = Schema.Struct({
+  text: Schema.String,
+  files: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        uri: Schema.String,
+        name: Schema.optional(Schema.String),
+        description: Schema.optional(Schema.String),
+        mention: Schema.optional(PromptMention),
+      }),
+    ),
+  ),
+  agents: Schema.optional(Schema.Array(AgentAttachment)),
+  skills: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        mention: Schema.optional(PromptMention),
+      }),
+    ),
+  ),
+  id: Schema.optional(Schema.NullOr(Schema.String)),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+  delivery: Schema.optional(Schema.NullOr(Schema.Literals(["steer", "queue"]))),
+  resume: Schema.optional(Schema.NullOr(Schema.Boolean)),
+})
+
 type Resolvable<T> = T | (() => T)
 
 // A hook's replacement response.
@@ -29,9 +57,30 @@ export type MockProviderCatalog = {
   default?: { providerID?: string; modelID?: string }
 }
 
-// A session in any shape a scenario seeds, current or legacy (`directory`, `path`); `currentSession` reads it.
-// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- scenarios seed arbitrary session fields
-export type MockSession = { id: string } & Record<string, unknown>
+export type MockSession = Partial<Omit<SessionInfo, "time" | "location">> & {
+  id: string
+  directory?: string
+  path?: string
+  created?: number
+  slug?: string
+  version?: string
+  time?: Partial<SessionInfo["time"]>
+  location?: { directory?: string }
+}
+
+export type MockProject = {
+  id: string
+  canonical?: string
+  worktree?: string
+  sandboxes?: string[]
+  vcs?: string
+  name?: string
+  icon?: { url?: string; color?: string; override?: string }
+  commands?: { start?: string }
+  time?: { created: number; updated: number }
+}
+
+export type MockPrompt = Omit<SessionPromptInput, "sessionID" | "location" | "abortSignal">
 
 export type MockMcpStatus = { status: string; error?: string }
 
@@ -58,9 +107,9 @@ export interface MockServerConfig {
   onFileWrite?: (input: { path: string; directory: string; body: string }) => void
   configEntries?: unknown[]
   directory: string
-  project: unknown
+  project: MockProject
   // Replaces the `/api/project` inventory, which defaults to `[project]`.
-  projects?: Resolvable<unknown[]>
+  projects?: Resolvable<MockProject[]>
   sessions: MockSession[]
   pageMessages: (
     sessionId: string,
@@ -124,7 +173,7 @@ export interface MockServerConfig {
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown[]
   sessionStatus?: Resolvable<Record<string, { type: string }>>
   inbox?: unknown[] | (() => unknown[])
-  onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  onPrompt?: (input: { sessionID: string; body: MockPrompt }) => void
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are the first unused `${prefix}<n>` (prefix must start with "pty").
@@ -1165,7 +1214,7 @@ function mockHandlers(
         sessionPrompt: (ctx) =>
           Effect.sync(() => {
             const body = Option.getOrElse(decodeJsonObject(ctx.payload), () => ({}))
-            config.onPrompt?.({ sessionID: ctx.params.sessionID, body })
+            config.onPrompt?.({ sessionID: ctx.params.sessionID, body: Schema.decodeUnknownSync(PromptPayload)(body) })
             const prompt = Option.getOrUndefined(decodePromptRequest(body))
 
             return {

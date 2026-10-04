@@ -210,13 +210,20 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
   const checkServerHealth = useCheckServerHealth()
   const healthPreview = createServerHealthPreview(checkServerHealth)
 
-  const [store, setStore] = createStore({
-    mode: "list" as FormMode,
-    originalUrl: undefined as string | undefined,
+  const [store, setStore] = createStore<{
+    mode: FormMode
+    originalUrl?: string
+    values: { url: string; name: string; password: string }
+    scanning: boolean
+    error: string
+    status?: boolean
+  }>({
+    mode: "list",
+    originalUrl: undefined,
     values: { url: "", name: "", password: "" },
     scanning: false,
     error: "",
-    status: undefined as boolean | undefined,
+    status: undefined,
   })
 
   onCleanup(healthPreview.cancel)

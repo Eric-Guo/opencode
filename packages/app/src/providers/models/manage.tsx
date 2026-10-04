@@ -24,7 +24,7 @@ export const DialogManageModels: Component = () => {
   const local = useLocal()
   const language = useLanguage()
   const dialog = useDialog()
-  const [store, setStore] = createStore({ collapsed: {} as Record<string, boolean> })
+  const [store, setStore] = createStore<{ collapsed: Record<string, boolean> }>({ collapsed: {} })
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {

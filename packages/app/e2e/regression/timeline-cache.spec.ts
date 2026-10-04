@@ -30,7 +30,7 @@ for (const width of [1440, 390]) {
 
         const spacer = content.querySelector('[data-timeline-row="bottom-spacer"]')
 
-        ;(window as Window & { __coldReveal?: Reveal }).__coldReveal = {
+        window.__coldReveal = {
           pending: content.querySelectorAll('[data-component="markdown"]:not([data-markdown-ready])').length,
           clipped: [...content.querySelectorAll<HTMLElement>("[data-timeline-key]")].flatMap((row) =>
             (row.firstElementChild?.getBoundingClientRect().height ?? 0) > row.getBoundingClientRect().height + 1
@@ -55,7 +55,7 @@ for (const width of [1440, 390]) {
       await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "hidden")
       release.resolve()
       await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
-      const reveal = await page.evaluate(() => (window as Window & { __coldReveal?: Reveal }).__coldReveal)
+      const reveal = await page.evaluate(() => window.__coldReveal)
       expect(reveal).toMatchObject({ pending: 0, clipped: [], tables: 1, codeBlocks: 4 })
       expect(Math.abs(reveal?.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
       // The gap above the composer is part of the tail.
@@ -574,5 +574,17 @@ async function sampleTabPaint(page: Page, sessionID: string) {
 
         return state.removed
       }),
+  }
+}
+
+declare global {
+  interface Window {
+    __coldReveal?: Reveal
+  }
+}
+
+declare global {
+  interface Window {
+    __tabPaint?: TabPaint
   }
 }

@@ -15,7 +15,7 @@ afterEach(() => {
   document.body.innerHTML = ""
 })
 
-function createTerminal(cols = 80, rows = 24): { term: Terminal; addon: SerializeAddon; container: HTMLElement } {
+function createTerminal(cols = 80, rows = 24) {
   const container = document.createElement("div")
   document.body.appendChild(container)
 

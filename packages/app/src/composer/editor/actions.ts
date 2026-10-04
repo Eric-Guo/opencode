@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { batch, untrack, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import type {
@@ -17,12 +18,12 @@ export type ComposerStateStore = [
 export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStateStore>
 
 export function createComposerEditorActions(input: ComposerStateStoreInput, onChange?: () => void) {
-  const tuple = () => (typeof input === "function" ? input() : input)
+  const tuple = () => (Predicate.isFunction(input) ? input() : input)
 
   const store = () => {
     const value = tuple()[0]
 
-    return typeof value === "function" ? value() : value
+    return Predicate.isFunction(value) ? value() : value
   }
 
   const setStore = () => tuple()[1]
@@ -37,7 +38,10 @@ export function createComposerEditorActions(input: ComposerStateStoreInput, onCh
     },
     setPrompt(prompt: ComposerPrompt, cursor?: number) {
       // Persisted setters encode on every call, even inside a reactive batch.
-      batch(() => setStore()({ prompt, ...(cursor !== undefined ? { cursor } : {}), retry: undefined }))
+      const update: Partial<ComposerPersistedState> = { prompt, retry: undefined }
+
+      if (cursor !== undefined) update.cursor = cursor
+      batch(() => setStore()(update))
       onChange?.()
     },
     setCursor(cursor: number) {
@@ -53,10 +57,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput, onCh
     setText(content: string) {
       batch(() =>
         setStore()((state) => ({
-          prompt: [
-            { type: "text", content, start: 0, end: content.length },
-            ...state.prompt.filter(isAttachment),
-          ],
+          prompt: [{ type: "text", content, start: 0, end: content.length }, ...state.prompt.filter(isAttachment)],
           cursor: content.length,
           retry: undefined,
         })),

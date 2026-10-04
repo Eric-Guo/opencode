@@ -6,11 +6,11 @@ const DRAFT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 const DRAFT_KEEP_RECENT = 100
 
-const Entries = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+const Entries = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json))
 
 const decode = Schema.decodeUnknownOption(Entries)
 
-type Candidate = { name: string; path: string; modified: number; entries: Record<string, unknown> }
+type Candidate = { name: string; path: string; modified: number; entries: typeof Entries.Type }
 
 // Before the state table existed, every namespace the renderer persisted was an electron-store
 // JSON file in userData. Copy them into SQLite once and remove them; this is the only place the
@@ -68,7 +68,7 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
       Object.entries(file.entries).map(([key, value]) => ({
         name: file.name,
         key,
-        value: typeof value === "string" ? value : JSON.stringify(value),
+        value: Schema.is(Schema.String)(value) ? value : JSON.stringify(value),
         updated_at: file.modified,
       })),
     )

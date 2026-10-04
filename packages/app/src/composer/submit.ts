@@ -5,12 +5,13 @@ import type { PromptComment } from "./comment-note"
 import type { PromptHistoryComment } from "./history/entry"
 import type { ImageAttachmentPart, Prompt } from "./state"
 import { clonePrompt, promptLength } from "./prompt-parts"
+import { isAttachment } from "./prompt-parts"
 import type { ComposerAdapter, ComposerDelivery, ComposerSelection, ComposerSession } from "./adapter"
 import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest } from "./request"
 import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
-import { isAttachment } from "./prompt-parts"
+
 import type { ModelSelection } from "@/providers/models/selection"
 import { parseSlashCommand } from "./client-slash-command"
 
@@ -42,7 +43,7 @@ type ComposerSubmitInput = {
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
   notify: {
     missingSelection: () => void
-    failed: (kind: "shell" | "command" | "prompt", error: unknown) => void
+    failed: (kind: "shell" | "command" | "prompt", cause: unknown) => void
   }
   comments: {
     capture: () => PromptHistoryComment[]
@@ -507,7 +508,7 @@ function failSubmission(
   input: ComposerSubmitInput,
   session: ComposerSession,
   kind: "shell" | "command" | "prompt",
-  error: unknown,
+  cause: unknown,
   restore: () => boolean,
   messageID?: string,
   rollback?: () => void,
@@ -517,5 +518,5 @@ function failSubmission(
   if (messageID) session.handoff?.clear(messageID)
   rollback?.()
   restore()
-  input.notify.failed(kind, error)
+  input.notify.failed(kind, cause)
 }

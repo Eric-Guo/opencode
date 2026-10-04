@@ -10,8 +10,26 @@ import type { ComposerStateTarget } from "./submission-state"
 const selectedModel = {
   id: "model-1",
   name: "Model 1",
-  provider: { id: "provider-1" },
-} as NonNullable<ReturnType<ModelSelection["current"]>>
+  providerID: "provider-1",
+  latest: false,
+  api: { id: "model-1", url: "", npm: "" },
+  capabilities: {
+    temperature: false,
+    reasoning: false,
+    attachment: false,
+    toolcall: false,
+    input: { text: true, audio: false, image: false, video: false, pdf: false },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: false,
+  },
+  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+  limit: { context: 1, output: 1 },
+  status: "active",
+  options: {},
+  headers: {},
+  release_date: "",
+  provider: { id: "provider-1", name: "Provider 1", source: "api", env: [], options: {}, models: {} },
+} satisfies NonNullable<ReturnType<ModelSelection["current"]>>
 
 const selection = {
   ready: Object.assign(() => true, { promise: undefined }),
@@ -65,7 +83,7 @@ function fresh(state: ComposerStateTarget, start: NewSessionComposerAdapter["sta
 
 function submitInput(
   adapter: ActiveComposerAdapter | NewSessionComposerAdapter,
-  notify = { missingSelection() {}, failed(_kind: "shell" | "command" | "prompt", _error: unknown) {} },
+  notify = { missingSelection() {}, failed(_kind: "shell" | "command" | "prompt", cause: unknown) {} },
   mode: "normal" | "shell" = "normal",
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
@@ -97,7 +115,7 @@ function session(input: {
   statuses?: ("idle" | "running")[]
   current?: ComposerSession["current"]
   admitted?: (messageID: string) => boolean
-  shell?: () => Promise<unknown>
+  shell?: () => Promise<void>
   command?: ComposerSession["api"]["command"]
   switchAgent?: ComposerSession["api"]["switchAgent"]
   switchModel?: ComposerSession["api"]["switchModel"]
@@ -301,8 +319,8 @@ describe("Composer submission", () => {
     async (mode) => {
       const state = createMemoryComposerState({ prompt: "hello" }).capture()
       const calls: string[] = []
-      const projects = { first: 42, second: undefined as number | undefined }
-      const current = { project: "first" as keyof typeof projects }
+      const projects = { first: 42, second: new Map<string, number>().get("second") }
+      const current = { project: "first" }
 
       const adapter: NewSessionComposerAdapter = {
         kind: "new-session",
@@ -310,7 +328,7 @@ describe("Composer submission", () => {
         ready: () => true,
         controls,
         working: () => false,
-        canStart: () => !!projects[current.project],
+        canStart: () => !!projects[current.project === "first" ? "first" : "second"],
         submitted() {},
         async start() {
           calls.push(current.project)

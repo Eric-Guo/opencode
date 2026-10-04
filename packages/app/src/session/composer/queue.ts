@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
@@ -334,7 +335,7 @@ export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original
 export function queuedPromptText(item: QueuedPrompt) {
   const display = item.payload.metadata?.["displayText"]
 
-  return typeof display === "string" && display.length > 0 ? display : item.payload.text
+  return Predicate.isString(display) && display.length > 0 ? display : item.payload.text
 }
 
 // Inline attachments are the files the composer added itself, so they return

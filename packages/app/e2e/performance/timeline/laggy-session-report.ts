@@ -1,9 +1,6 @@
-export {}
+import { Schema } from "effect"
 
-type Pair = {
-  mode: "compact" | "ungrouped"
-  samples: { phase: string; firstCorrectObservedMs: number | null; messageRequests: number }[]
-}
+const Pair = Schema.Struct({ mode: Schema.Literals(["compact", "ungrouped"]), samples: Schema.Array(Schema.Struct({ phase: Schema.String, firstCorrectObservedMs: Schema.NullOr(Schema.Number), messageRequests: Schema.Number })) })
 
 const directory = Bun.argv[2]
 
@@ -11,7 +8,7 @@ if (!directory) throw new Error("Pass the directory containing session-load pair
 
 const pairs = await Promise.all(
   [...new Bun.Glob("{compact,ungrouped}-*.json").scanSync(directory)].map(async (file) => {
-    const pair = (await Bun.file(`${directory}/${file}`).json()) as Pair
+    const pair = Schema.decodeUnknownSync(Pair)(await Bun.file(`${directory}/${file}`).json())
     const cold = pair.samples.find((sample) => sample.phase === "cold")
     const warm = pair.samples.find((sample) => sample.phase === "warm")
 
