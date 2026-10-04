@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import { execFile } from "node:child_process"
 import { mkdir, writeFile } from "node:fs/promises"
@@ -82,23 +83,17 @@ const windowsNativeExclusions = [
   "@yuuang/ffi-rs-win32-ia32-msvc",
 ].map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
 
-const windowsArchitectureExclusions = (
-  process.env.RUST_TARGET === "x86_64-pc-windows-msvc"
-    ? [
-        "@ff-labs/fff-bin-win32-arm64",
-        "@lydell/node-pty-win32-arm64",
-        "@parcel/watcher-win32-arm64",
-        "@yuuang/ffi-rs-win32-arm64-msvc",
-      ]
-    : process.env.RUST_TARGET === "aarch64-pc-windows-msvc"
-      ? [
-          "@ff-labs/fff-bin-win32-x64",
-          "@lydell/node-pty-win32-x64",
-          "@msgpackr-extract/msgpackr-extract-win32-x64",
-          "@parcel/watcher-win32-x64",
-          "@yuuang/ffi-rs-win32-x64-msvc",
-        ]
-      : []
+const windowsArchitectureExclusions = Match.value(process.env.RUST_TARGET).pipe(
+  Match.when("x86_64-pc-windows-msvc", () => [
+    "@ff-labs/fff-bin-win32-arm64", "@lydell/node-pty-win32-arm64",
+    "@parcel/watcher-win32-arm64", "@yuuang/ffi-rs-win32-arm64-msvc",
+  ]),
+  Match.when("aarch64-pc-windows-msvc", () => [
+    "@ff-labs/fff-bin-win32-x64", "@lydell/node-pty-win32-x64",
+    "@msgpackr-extract/msgpackr-extract-win32-x64", "@parcel/watcher-win32-x64",
+    "@yuuang/ffi-rs-win32-x64-msvc",
+  ]),
+  Match.orElse(() => []),
 ).map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
 
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
