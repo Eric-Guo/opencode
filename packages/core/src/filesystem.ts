@@ -1,6 +1,7 @@
 export * as FileSystem from "./filesystem.js"
 
-import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
+import path from "node:path"
+import { Archive, Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Context, Effect, Layer, Option, PlatformError, Schema, Stream } from "effect"
@@ -8,6 +9,7 @@ import { Environment } from "./environment/index.js"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
+import { readArchive } from "./filesystem/archive.js"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
 export interface ReadInput {
@@ -96,6 +98,7 @@ export interface File {
 }
 
 export interface Interface {
+  readonly archive: (input: ReadInput) => Effect.Effect<Archive, NotFoundError>
   readonly read: (input: ReadInput) => Effect.Effect<File, NotFoundError>
   /** Fails with `NotFoundError` when the path is missing or is not a directory. */
   readonly list: (input?: ListInput) => Effect.Effect<Entry[], NotFoundError>
@@ -168,7 +171,7 @@ const baseLayer = Layer.effect(
       return absolute
     })
 
-    const readLocal = Effect.fnUntraced(function* (input: RelativePath) {
+    const resolveLocal = Effect.fnUntraced(function* (input: RelativePath) {
       const absolute = yield* confine(input)
       const real = yield* fs.realPath(absolute).pipe(
         Effect.catchReason(
@@ -179,6 +182,11 @@ const baseLayer = Layer.effect(
         ),
       )
       if (!FSUtil.contains(root, real, envPath)) return yield* new NotFoundError({ path: input })
+      return real
+    })
+
+    const readLocal = Effect.fnUntraced(function* (input: RelativePath) {
+      const real = yield* resolveLocal(input)
       const info = yield* fs.stat(real).pipe(
         Effect.catchReason(
           "PlatformError",
@@ -232,6 +240,35 @@ const baseLayer = Layer.effect(
 
     return Service.of({
       find: search.find,
+      archive: Effect.fn("FileSystem.archive")(function* (input) {
+        if (!environment.local) {
+          const file = yield* readRemote(input.path)
+          return { status: "unsupported", size: file.size } satisfies Archive
+        }
+
+        const real = yield* resolveLocal(input.path)
+        const info = yield* fs.stat(real).pipe(
+          Effect.catchReason(
+            "PlatformError",
+            "NotFound",
+            () => Effect.fail(new NotFoundError({ path: input.path })),
+            (_, error) => Effect.die(error),
+          ),
+        )
+
+        if (info.type !== "File") return { status: "unsupported", size: 0 } satisfies Archive
+
+        const file = yield* fs.open(real, { flag: "r" }).pipe(
+          Effect.catchReason(
+            "PlatformError",
+            "NotFound",
+            () => Effect.fail(new NotFoundError({ path: input.path })),
+            (_, error) => Effect.die(error),
+          ),
+        )
+
+        return yield* readArchive(file)
+      }, Effect.scoped),
       read: Effect.fn("FileSystem.read")((input) => readFile(input.path)),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         // Navigation can leave the cwd without activating another Location.
