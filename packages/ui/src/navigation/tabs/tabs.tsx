@@ -1,6 +1,7 @@
 import { Content, List, Root, Trigger } from "@kobalte/core/tabs"
 import { createContext, Show, splitProps, useContext, type JSX } from "solid-js"
 import type { Component, ComponentProps, ParentProps } from "solid-js"
+
 import { useI18n } from "../../context/i18n"
 import "./tabs-current.css"
 
@@ -162,13 +163,23 @@ function TabsCloseButton(props: TabsCloseButtonProps) {
       onPointerDown={(event) => {
         event.stopPropagation()
 
-        if (typeof local.onPointerDown === "function") local.onPointerDown(event)
+        const handler = local.onPointerDown
+
+        if (Array.isArray(handler)) handler[0](handler[1], event)
+
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid handlers are typed callbacks or bound-handler tuples.
+        if (typeof handler === "function") handler(event)
       }}
       onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
 
-        if (typeof local.onClick === "function") local.onClick(event)
+        const handler = local.onClick
+
+        if (Array.isArray(handler)) handler[0](handler[1], event)
+
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid handlers are typed callbacks or bound-handler tuples.
+        if (typeof handler === "function") handler(event)
       }}
     >
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

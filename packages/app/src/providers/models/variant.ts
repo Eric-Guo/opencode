@@ -1,3 +1,5 @@
+import type { Model } from "@/runtime/server/types"
+
 type AgentModel = {
   providerID: string
   modelID: string
@@ -8,9 +10,8 @@ type Agent = {
   variant?: string
 }
 
-// Only the presence of variants matters here.
-type Model = AgentModel & {
-  variants?: object
+type VariantModel = AgentModel & {
+  variants?: Model["variants"]
 }
 
 /** What a selection says about the variant: follow preferences and configuration, the explicit Default, or a name. */
@@ -44,7 +45,7 @@ export function durableVariantSelection(value: string | undefined): VariantSelec
   return value === undefined ? DEFAULT_VARIANT : { type: "named", value }
 }
 
-export function getConfiguredAgentVariant(input: { agent: Agent | undefined; model: Model | undefined }) {
+export function getConfiguredAgentVariant(input: { agent: Agent | undefined; model: VariantModel | undefined }) {
   if (!input.agent?.variant) return undefined
 
   if (!input.agent.model) return undefined

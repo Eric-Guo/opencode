@@ -248,4 +248,4 @@ export const dict = {
   "ui.messagePart.context.updates": "යාවත්කාලීන",
   "ui.promptInput.cancelUpload": "උඩුගත කිරීම අවලංගු කරන්න",
   "ui.promptInput.uploading": "{{percent}}%",
-}
+} satisfies Record<string, string>
