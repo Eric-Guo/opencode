@@ -101,7 +101,7 @@ type Step = { readonly state: ActiveState; readonly effects: readonly ThemeEffec
 const NO_EFFECTS: readonly ThemeEffect[] = []
 
 export function parseColorScheme(value: string | null | undefined): ColorScheme {
-  return value === "light" || value === "dark" ? value : "system"
+  return value === "light" || value === "system" ? value : "dark"
 }
 
 export function createThemeState(input: {

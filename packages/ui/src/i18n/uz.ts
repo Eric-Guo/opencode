@@ -385,4 +385,4 @@ export const dict = {
   "ui.question.singleHint": "Bitta javobni tanlang",
   "ui.question.classic.multiHint": "Barcha mos javoblarni tanlang",
   "ui.question.custom.answerPlaceholder": "O‘z javobingizni yozing…",
-}
+} satisfies Record<string, string>

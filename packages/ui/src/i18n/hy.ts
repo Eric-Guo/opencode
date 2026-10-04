@@ -384,4 +384,4 @@ export const dict = {
   "ui.question.singleHint": "Ընտրեք մեկ պատասխան",
   "ui.question.classic.multiHint": "Ընտրեք բոլոր համապատասխան պատասխանները",
   "ui.question.custom.answerPlaceholder": "Մուտքագրեք ձեր սեփական պատասխանը…",
-}
+} satisfies Record<string, string>

@@ -388,4 +388,4 @@ export const dict = {
   "ui.question.singleHint": "ལན་གཅིག་སེལ་འཐུ་འབད།",
   "ui.question.classic.multiHint": "འཇུག་མི་ལན་ཚུ་ ཆ་མཉམ་སེལ་འཐུ་འབད།",
   "ui.question.custom.answerPlaceholder": "ཁྱོད་རའི་ལན་ ཡིག་དཔར་རྐྱབས…",
-}
+} satisfies Record<string, string>

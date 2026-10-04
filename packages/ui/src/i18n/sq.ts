@@ -382,4 +382,4 @@ export const dict = {
   "ui.question.singleHint": "Zgjidhni një përgjigje",
   "ui.question.classic.multiHint": "Zgjidhni të gjitha përgjigjet që zbatohen",
   "ui.question.custom.answerPlaceholder": "Shkruani përgjigjen tuaj…",
-}
+} satisfies Record<string, string>

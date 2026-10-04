@@ -383,4 +383,4 @@ export const dict = {
   "ui.question.singleHint": "Veldu eitt svar",
   "ui.question.classic.multiHint": "Veldu öll svör sem eiga við",
   "ui.question.custom.answerPlaceholder": "Sláðu inn þitt eigið svar…",
-}
+} satisfies Record<string, string>

@@ -452,4 +452,4 @@ export const dict = {
   "ui.question.singleHint": "Pasirinkite vieną atsakymą",
   "ui.question.classic.multiHint": "Pasirinkite visus tinkamus atsakymus",
   "ui.question.custom.answerPlaceholder": "Įveskite savo atsakymą…",
-}
+} satisfies Record<string, string>

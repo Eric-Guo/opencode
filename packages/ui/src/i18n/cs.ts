@@ -452,4 +452,4 @@ export const dict = {
   "ui.question.singleHint": "Vyberte jednu odpověď",
   "ui.question.classic.multiHint": "Vyberte všechny platné odpovědi",
   "ui.question.custom.answerPlaceholder": "Napište vlastní odpověď…",
-}
+} satisfies Record<string, string>

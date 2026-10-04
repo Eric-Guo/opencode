@@ -98,7 +98,7 @@ function installShortcuts() {
 }
 
 function clearHighlightFind() {
-  const api = globalThis.CSS?.highlights
+  const api = typeof CSS === "undefined" ? undefined : CSS.highlights
 
   if (!api) return
   api.delete("opencode-find")
@@ -106,7 +106,7 @@ function clearHighlightFind() {
 }
 
 function supportsHighlights() {
-  return "Highlight" in globalThis && !!globalThis.CSS?.highlights
+  return typeof Highlight !== "undefined" && typeof CSS !== "undefined" && CSS.highlights != null
 }
 
 function scrollParent(el: HTMLElement): HTMLElement | undefined {
@@ -434,9 +434,9 @@ export function createFileFind(opts: CreateFileFindOptions) {
   }
 
   const setHighlights = (ranges: readonly Range[], currentIndex: number) => {
-    const api = globalThis.CSS?.highlights
+    const api = typeof CSS === "undefined" ? undefined : CSS.highlights
 
-    if (!api || !("Highlight" in globalThis)) return false
+    if (!api || typeof Highlight === "undefined") return false
 
     api.delete("opencode-find")
     api.delete("opencode-find-current")

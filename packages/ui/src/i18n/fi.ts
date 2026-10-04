@@ -383,4 +383,4 @@ export const dict = {
   "ui.question.singleHint": "Valitse yksi vastaus",
   "ui.question.classic.multiHint": "Valitse kaikki sopivat vastaukset",
   "ui.question.custom.answerPlaceholder": "Kirjoita oma vastauksesi…",
-}
+} satisfies Record<string, string>

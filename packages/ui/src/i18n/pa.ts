@@ -389,4 +389,4 @@ export const dict = {
   "ui.question.singleHint": "اک جواب چنو",
   "ui.question.classic.multiHint": "لاگو ہون آلے سارے جواب چنو",
   "ui.question.custom.answerPlaceholder": "اپنا جواب ٹائپ کرو…",
-}
+} satisfies Record<string, string>

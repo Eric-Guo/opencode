@@ -383,4 +383,4 @@ export const dict = {
   "ui.question.singleHint": "Válasszon egy választ",
   "ui.question.classic.multiHint": "Válassza ki az összes megfelelő választ",
   "ui.question.custom.answerPlaceholder": "Írja be a saját válaszát…",
-}
+} satisfies Record<string, string>

@@ -388,4 +388,4 @@ export const dict = {
   "ui.question.singleHint": "एउटा उत्तर चयन गर्नुहोस्",
   "ui.question.classic.multiHint": "लागू हुने सबै उत्तरहरू चयन गर्नुहोस्",
   "ui.question.custom.answerPlaceholder": "आफ्नै उत्तर टाइप गर्नुहोस्…",
-}
+} satisfies Record<string, string>

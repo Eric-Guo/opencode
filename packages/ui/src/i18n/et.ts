@@ -381,4 +381,4 @@ export const dict = {
   "ui.question.singleHint": "Vali üks vastus",
   "ui.question.classic.multiHint": "Vali kõik sobivad vastused",
   "ui.question.custom.answerPlaceholder": "Sisesta oma vastus…",
-}
+} satisfies Record<string, string>

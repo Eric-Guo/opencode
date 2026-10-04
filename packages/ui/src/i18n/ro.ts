@@ -418,4 +418,4 @@ export const dict = {
   "ui.question.singleHint": "Selectează un răspuns",
   "ui.question.classic.multiHint": "Selectează toate răspunsurile care se aplică",
   "ui.question.custom.answerPlaceholder": "Scrie propriul răspuns…",
-}
+} satisfies Record<string, string>

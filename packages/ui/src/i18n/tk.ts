@@ -381,4 +381,4 @@ export const dict = {
   "ui.question.singleHint": "Bir jogap saýlaň",
   "ui.question.classic.multiHint": "Laýyk gelýän ähli jogaplary saýlaň",
   "ui.question.custom.answerPlaceholder": "Öz jogabyňyzy ýazyň…",
-}
+} satisfies Record<string, string>

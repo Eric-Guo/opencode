@@ -416,4 +416,4 @@ export const dict = {
   "ui.question.singleHint": "Izvēlieties vienu atbildi",
   "ui.question.classic.multiHint": "Izvēlieties visas atbilstošās atbildes",
   "ui.question.custom.answerPlaceholder": "Ierakstiet savu atbildi…",
-}
+} satisfies Record<string, string>
