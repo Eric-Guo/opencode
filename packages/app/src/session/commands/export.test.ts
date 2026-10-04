@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
-import type { ServerApi } from "@/runtime/server/api"
+import { sessionInfo, userMessage } from "@/test/fixtures"
 import type { Platform } from "@/runtime/platform/platform"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "./export"
 
@@ -16,9 +15,9 @@ describe("sessionExportFilename", () => {
 
 describe("fetchSessionExport", () => {
   test("fetches every native message page without exporting cursors", async () => {
-    const info = { id: "ses_1", title: "Test Session" } as SessionInfo
-    const first = { id: "msg_1", type: "model-selected" } as unknown as SessionMessageInfo
-    const second = { id: "msg_2", type: "user" } as SessionMessageInfo
+    const info = sessionInfo({ id: "ses_1", title: "Test Session" })
+    const first = { id: "msg_1", type: "agent-switched", agent: "build", time: { created: 0 } } as const
+    const second = userMessage({ id: "msg_2" })
     const calls: unknown[] = []
 
     const api = {
@@ -32,7 +31,7 @@ describe("fetchSessionExport", () => {
           return { data: [second], cursor: {} }
         },
       },
-    } as unknown as Pick<ServerApi, "session" | "message">
+    } satisfies Parameters<typeof fetchSessionExport>[0]["api"]
 
     const result = await fetchSessionExport({ sessionID: "ses_1", api })
 

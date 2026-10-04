@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
+import type { SessionInfo, SessionMessageInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionBackground } from "@/session/requests/background"
@@ -90,8 +90,14 @@ describe("createSessionBackground", () => {
 
   test("joins live tasks while idle without rescanning history, then switches sessions", () => {
     createRoot((dispose) => {
-      const [store, setStore] = createStore({
-        id: "root" as string | undefined,
+      const [store, setStore] = createStore<{
+        id: string | undefined
+        messages: SessionMessageInfo[]
+        sessions: SessionInfo[]
+        status: Record<string, "idle" | "running">
+        shells: ShellInfo[]
+      }>({
+        id: "root",
         messages: [
           assistant("assistant", [
             tool("shell-part", "shell", { status: "running", shellID: "shell" }, { command: "old command" }),
@@ -99,8 +105,8 @@ describe("createSessionBackground", () => {
           ]),
         ],
         sessions: [session("live-child"), session("child")],
-        status: { root: "idle", child: "idle", "live-child": "idle" } as Record<string, "idle" | "running">,
-        shells: [{ ...shell("shell", "command"), status: "exited" as ShellInfo["status"] }],
+        status: { root: "idle", child: "idle", "live-child": "idle" },
+        shells: [{ ...shell("shell", "command"), status: "exited" }],
       })
 
       let scans = 0
@@ -153,7 +159,11 @@ describe("createSessionBackground", () => {
 
   test("tracks blocking, backgrounding, and completion through nested store updates", () => {
     createRoot((dispose) => {
-      const [store, setStore] = createStore({
+      const [store, setStore] = createStore<{
+        messages: ReturnType<typeof assistant>[]
+        notification: ReturnType<typeof notification>
+        status: Record<string, "idle" | "running">
+      }>({
         messages: [
           assistant("earlier", [tool("old-part", "subagent", { sessionID: "old-child" }, {}, "running")]),
           assistant("current", [
@@ -163,7 +173,7 @@ describe("createSessionBackground", () => {
           assistant("completed", [], 0),
         ],
         notification: notification("notice", { source: "subagent", childID: "other-child" }),
-        status: { child: "running", "old-child": "running" } as Record<string, "idle" | "running">,
+        status: { child: "running", "old-child": "running" },
       })
 
       const messages = store.messages

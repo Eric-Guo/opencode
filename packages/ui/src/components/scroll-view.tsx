@@ -49,7 +49,10 @@ export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey
   }
 }
 
-export function canScrollKey(element: HTMLElement, key: NonNullable<ReturnType<typeof scrollKey>>) {
+export function canScrollKey(
+  element: Pick<HTMLElement, "scrollTop" | "clientHeight" | "scrollHeight">,
+  key: NonNullable<ReturnType<typeof scrollKey>>,
+) {
   const up = key === "up" || key === "page-up" || key === "home"
 
   return up ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight
@@ -168,9 +171,21 @@ export function ScrollView(props: ScrollViewProps) {
   const thumbHover = () => local.thumbHoverTarget
   const hoverRoot = () => !local.thumbHoverTarget && !local.thumbContainer
 
-  const [state, setState] = createStore({
+  type ScrollState = {
+    isHovered: boolean
+    dragging?: "vertical" | "horizontal"
+    isScrolling: boolean
+    verticalThumbSize: number
+    verticalThumbStart: number
+    showVerticalThumb: boolean
+    horizontalThumbSize: number
+    horizontalThumbStart: number
+    showHorizontalThumb: boolean
+  }
+
+  const [state, setState] = createStore<ScrollState>({
     isHovered: false,
-    dragging: undefined as "vertical" | "horizontal" | undefined,
+    dragging: undefined,
     isScrolling: false,
     verticalThumbSize: 0,
     verticalThumbStart: 0,
@@ -262,7 +277,10 @@ export function ScrollView(props: ScrollViewProps) {
     // appears later), after layout. Measuring here as well would force a synchronous layout per
     // ScrollView while the page is still rendering.
     createResizeObserver(
-      () => [viewportRef, viewportRef.firstElementChild, thumbMount()].filter(Boolean) as HTMLElement[],
+      () =>
+        [viewportRef, viewportRef.firstElementChild, thumbMount()].filter(
+          (element): element is HTMLElement => element instanceof HTMLElement,
+        ),
       updateThumb,
     )
   })
@@ -482,29 +500,40 @@ export function ScrollView(props: ScrollViewProps) {
           updateThumb()
           markScrolling()
 
-          if (typeof events.onScroll === "function") events.onScroll(e as any)
+          const handler = events.onScroll
+
+          if (Array.isArray(handler)) handler[0](handler[1], e)
+
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid event props are a typed callback or a bound-handler tuple.
+          if (typeof handler === "function") handler(e)
         }}
         onWheel={(e) => {
           markScrolling()
           const handler = events.onWheel
 
-          if (typeof handler === "function") handler(e as any)
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid event props are a typed callback or a bound-handler tuple.
+          if (typeof handler === "function") handler(e)
 
-          if (Array.isArray(handler)) handler[0](handler[1], e as any)
+          if (Array.isArray(handler)) handler[0](handler[1], e)
         }}
-        onTouchStart={events.onTouchStart as any}
-        onTouchMove={events.onTouchMove as any}
-        onTouchEnd={events.onTouchEnd as any}
-        onTouchCancel={events.onTouchCancel as any}
-        onPointerDown={events.onPointerDown as any}
-        onClick={events.onClick as any}
+        onTouchStart={events.onTouchStart}
+        onTouchMove={events.onTouchMove}
+        onTouchEnd={events.onTouchEnd}
+        onTouchCancel={events.onTouchCancel}
+        onPointerDown={events.onPointerDown}
+        onClick={events.onClick}
         tabIndex={0}
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
         onKeyDown={(e) => {
           onKeyDown(e)
 
-          if (typeof events.onKeyDown === "function") events.onKeyDown(e as any)
+          const handler = events.onKeyDown
+
+          if (Array.isArray(handler)) handler[0](handler[1], e)
+
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid event props are a typed callback or a bound-handler tuple.
+          if (typeof handler === "function") handler(e)
         }}
       >
         {local.children}

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
-import type { Path } from "effect"
+import { Schema, type Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"
 import { WindowFullscreenChanged, WindowPinchZoomChanged, WindowZoomChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
@@ -73,7 +73,7 @@ export function setBackgroundColor(color: string) {
 export function getBackgroundColor() {
   const stored = getStore().get(BACKGROUND_COLOR_KEY)
 
-  return backgroundColor ?? (typeof stored === "string" ? stored : undefined)
+  return backgroundColor ?? (Schema.is(Schema.String)(stored) ? stored : undefined)
 }
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
