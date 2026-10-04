@@ -9,5 +9,5 @@ test("handles clipboard files, and native images only when the clipboard has no 
 })
 
 function clipboard(types: string[] = [], items: Array<{ kind: string }> = []) {
-  return { types, items } as unknown as DataTransfer
+  return { types, items }
 }

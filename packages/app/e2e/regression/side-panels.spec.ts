@@ -356,8 +356,7 @@ async function expectTreeSentinel(page: Page) {
 // Pauses each CSS transition as it starts, so a real toggle can be measured mid-motion.
 function holdTransitions(page: Page) {
   return page.evaluate(() => {
-    // SAFETY: only these two helpers write this optional global, in the declared shape.
-    const host = window as Window & { e2eHold?: { active: boolean } }
+    const host = window
 
     if (!host.e2eHold) {
       const hold = { active: false }
@@ -377,9 +376,7 @@ function holdTransitions(page: Page) {
 
 function releaseTransitions(page: Page) {
   return page.evaluate(() => {
-    // SAFETY: `holdTransitions` installed this global, in this shape, before any release.
-    const host = window as Window & { e2eHold?: { active: boolean } }
-    host.e2eHold!.active = false
+    window.e2eHold!.active = false
     document
       .getAnimations()
       .filter((item) => item instanceof CSSTransition && item.playState === "paused")
@@ -391,13 +388,14 @@ function releaseTransitions(page: Page) {
 async function stackGeometry(page: Page, progress?: number) {
   const held = () =>
     page.evaluate(() =>
-      document
-        .getAnimations()
-        .filter(
-          (item) =>
-            item instanceof CSSTransition && item.playState === "paused" && item.transitionProperty === "height",
-        )
-        .map((item) => (item.effect instanceof KeyframeEffect ? item.effect.target?.getAttribute("data-slot") : null)),
+      document.getAnimations().flatMap((item) => {
+        if (!(item instanceof CSSTransition) || item.playState !== "paused" || item.transitionProperty !== "height")
+          return []
+
+        if (!(item.effect instanceof KeyframeEffect) || !(item.effect.target instanceof Element)) return []
+
+        return [item.effect.target.getAttribute("data-slot")]
+      }),
     )
 
   if (progress !== undefined) {
@@ -409,10 +407,12 @@ async function stackGeometry(page: Page, progress?: number) {
       .getAnimations()
       .filter((item): item is CSSTransition => item instanceof CSSTransition && item.playState === "paused")
 
-    const slot = (item: CSSTransition) =>
-      item.effect instanceof KeyframeEffect ? item.effect.target?.getAttribute("data-slot") : null
-
-    const region = transitions.find((item) => slot(item) === "session-side-region")
+    const region = transitions.find(
+      (item) =>
+        item.effect instanceof KeyframeEffect &&
+        item.effect.target instanceof Element &&
+        item.effect.target.getAttribute("data-slot") === "session-side-region",
+    )
 
     if (progress !== undefined) {
       const time = Number(region!.effect!.getTiming().duration) * progress
@@ -428,7 +428,11 @@ async function stackGeometry(page: Page, progress?: number) {
     const content = box('[data-slot="terminal-panel-content"]')!
 
     return {
-      moving: transitions.map(slot),
+      moving: transitions.flatMap((item) =>
+        item.effect instanceof KeyframeEffect && item.effect.target instanceof Element
+          ? [item.effect.target.getAttribute("data-slot")]
+          : [],
+      ),
       terminalRegion: terminalRegion.height,
       terminalBottom: terminal.bottom,
       anchor: Math.abs(terminal.top - content.top),
@@ -468,4 +472,10 @@ async function expectTerminalControlsAligned(terminal: Locator, toggle: Locator)
       return centers[0]! - centers[1]!
     })
     .toBeCloseTo(0, 1)
+}
+
+declare global {
+  interface Window {
+    e2eHold?: { active: boolean }
+  }
 }

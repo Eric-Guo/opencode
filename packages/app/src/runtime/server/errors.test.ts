@@ -1,7 +1,9 @@
+
 import { describe, expect, test } from "bun:test"
 import type { FileNotFoundError, SessionNotFoundError } from "@opencode/client/promise"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./errors"
 import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./errors"
+
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -16,18 +18,20 @@ function fill(text: string, vars?: Record<string, string | number>) {
 }
 
 function useLanguageMock() {
-  const dict: Record<string, string> = {
-    "error.chain.unknown": "Erro desconhecido",
-    "error.chain.configInvalid": "Arquivo de config em {{path}} invalido",
-    "error.chain.configInvalidWithMessage": "Arquivo de config em {{path}} invalido: {{message}}",
-    "error.chain.modelNotFound": "Modelo nao encontrado: {{provider}}/{{model}}",
-    "error.chain.didYouMean": "Voce quis dizer: {{suggestions}}",
-    "error.chain.checkConfig": "Revise provider/model no config",
-  }
+  const dict = new Map(
+    Object.entries({
+      "error.chain.unknown": "Erro desconhecido",
+      "error.chain.configInvalid": "Arquivo de config em {{path}} invalido",
+      "error.chain.configInvalidWithMessage": "Arquivo de config em {{path}} invalido: {{message}}",
+      "error.chain.modelNotFound": "Modelo nao encontrado: {{provider}}/{{model}}",
+      "error.chain.didYouMean": "Voce quis dizer: {{suggestions}}",
+      "error.chain.checkConfig": "Revise provider/model no config",
+    }),
+  )
 
   return {
     t(key: string, vars?: Record<string, string | number>) {
-      const text = dict[key]
+      const text = dict.get(key)
 
       if (!text) return key
 
