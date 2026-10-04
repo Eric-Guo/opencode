@@ -86,6 +86,7 @@ export const Recorder = {
         </span>
       </SegmentedControlItem>
     )
+
     return (
       <div style={{ display: "grid", gap: "12px", "justify-items": "start" }}>
         <SegmentedControl
