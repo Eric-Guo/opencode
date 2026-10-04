@@ -1,6 +1,8 @@
 // Tracks open windows and the persisted window id list used to restore
 // windows (and their per-window persisted state) across app launches.
 export function createWindowRegistry<W>(persistence: {
+  // SAFETY: The settings reader returns raw JSON; persisted() validates the id list before use.
+  // oxlint-disable-next-line anti-slop/no-unknown-returns
   read: () => unknown
   write: (ids: string[]) => void
 }) {

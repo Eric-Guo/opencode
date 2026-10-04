@@ -113,7 +113,7 @@ export function createDraftStore(
     getBlob(id: string): Uint8Array<ArrayBuffer> | null {
       const data = db.select({ data: blobs.data }).from(blobs).where(eq(blobs.id, id)).get()?.data
 
-      // node:sqlite allocates a dedicated ArrayBuffer per BLOB column value.
+      // SAFETY: node:sqlite allocates a dedicated ArrayBuffer per BLOB column value.
       return data ? (data as Uint8Array<ArrayBuffer>) : null
     },
     flush: writer.flush,
