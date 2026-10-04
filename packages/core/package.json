@@ -95,6 +95,7 @@
     "drizzle-kit": "catalog:"
   },
   "dependencies": {
+    "@zip.js/zip.js": "2.7.62",
     "@ai-sdk/cohere": "3.0.27",
     "@ai-sdk/perplexity": "3.0.26",
     "@ai-sdk/provider": "3.0.8",

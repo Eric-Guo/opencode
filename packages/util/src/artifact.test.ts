@@ -19,6 +19,7 @@ describe("artifactKind", () => {
     ["Makefile", "text"],
     [".env", "text"],
     ["archive.tar.gz", "text"],
+    ["中文.ZIP", "archive"],
   ] as const)("classifies %s as %s", (path, kind) => {
     expect(artifactKind(path)).toBe(kind)
   })
