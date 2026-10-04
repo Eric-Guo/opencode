@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { FileSystem } from "@opencode/schema/filesystem"
 import {
   NO_PROVIDER,
   REMOTE_SERVER,
@@ -21,6 +22,132 @@ const a = { id: "ses_tab_a", title: "Tab A session" }
 const b = { id: "ses_tab_b", title: "Tab B session" }
 
 const c = { id: "ses_tab_c", title: "Tab C session" }
+
+test("ZIP file tabs search and expand metadata without downloading members or retaining another file's state", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const pending = Promise.withResolvers<FileSystem.Archive>()
+  const started = Promise.withResolvers<void>()
+  const reads: string[] = []
+
+  const entries = [
+    "中文/文件.txt",
+    "中文/文件.txt",
+    "中文/nested/b.txt",
+    ...Array.from({ length: 2_000 }, (_, index) => `flat-${String(index).padStart(4, "0")}.txt`),
+  ].map((name, id) => ({
+    id,
+    name,
+    directory: false,
+    size: 12,
+    compressedSize: 8,
+    encrypted: id === 0,
+    symlink: id === 1,
+    compressionMethod: 0,
+  }))
+
+  const directory = "C:/OpenCode/ArchivePreview"
+
+  await openSession(page, {
+    name: "ArchivePreview",
+    fileList: (path) =>
+      path
+        ? []
+        : ["sample.zip", "slow.zip", "empty.zip", "broken.zip", "limited.zip", "timed.zip", "split.zip"].map((file) =>
+            fileNode(directory, file),
+          ),
+    fileContent: (path) => {
+      reads.push(path)
+
+      return "unexpected archive bytes"
+    },
+    archive: (path) => {
+      if (path === "slow.zip") {
+        started.resolve()
+
+        return pending.promise
+      }
+
+      if (path === "empty.zip") return { status: "ready", size: 22, entries: [] }
+
+      if (path === "broken.zip") return { status: "invalid", size: 50 }
+
+      if (path === "limited.zip") return { status: "limit", size: 200 }
+
+      if (path === "timed.zip") return { status: "timeout", size: 200 }
+
+      if (path === "split.zip") return { status: "unsupported", size: 200 }
+
+      return { status: "ready", size: 5_000_000_000, entries }
+    },
+    seed: { panes: { ses_archivepreview: { review: true } } },
+  })
+
+  const panel = page.locator("#review-panel")
+
+  const open = async (file: string) => {
+    await panel.getByRole("button", { name: "Open file" }).click()
+    await panel.getByRole("button", { name: file, exact: true }).click()
+    await expect(panel.getByRole("tab", { name: file, exact: true })).toHaveAttribute("aria-selected", "true")
+  }
+
+  await open("sample.zip")
+  await expect(panel.getByText("ZIP directory · Read only", { exact: true })).toBeVisible()
+  await expect(panel.getByText("2003 entries", { exact: true })).toBeVisible()
+  await expect(panel.getByText("5 GB", { exact: true })).toBeVisible()
+  await panel.getByRole("button", { name: "中文", exact: true }).click()
+  await expect(panel.getByText("文件.txt", { exact: true })).toHaveCount(2)
+  await expect(panel.getByText("Duplicate name", { exact: true })).toHaveCount(2)
+  await expect(panel.getByLabel("Encrypted member", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Symbolic link", { exact: true })).toBeVisible()
+  await panel.getByRole("button", { name: "nested", exact: true }).click()
+  await expect(panel.getByText("b.txt", { exact: true })).toBeVisible()
+  expect(await panel.getByRole("listitem").count()).toBeLessThan(60)
+
+  const search = panel.getByRole("searchbox", { name: "Search archive entries" })
+  await search.fill("flat-1999")
+  await expect(panel.getByText("flat-1999.txt", { exact: true })).toBeVisible()
+  await search.fill("missing")
+  await expect(panel.getByText("No matching entries.", { exact: true })).toBeVisible()
+  await search.fill("b.txt")
+  await expect(panel.getByText("b.txt", { exact: true })).toBeVisible()
+  await page.setViewportSize({ width: 800, height: 700 })
+  await panel.getByRole("button", { name: "Toggle file tree" }).click()
+  await expect(search).toBeVisible()
+  await expect(panel.getByText("b.txt", { exact: true })).toBeVisible()
+
+  await open("slow.zip")
+  await started.promise
+  await expect(panel.getByRole("status")).toHaveText("Reading ZIP directory…")
+
+  const cancelled = page.waitForEvent("requestfailed", (request) => {
+    const url = new URL(request.url())
+
+    return url.pathname === "/api/fs/archive" && url.searchParams.get("path") === "slow.zip"
+  })
+
+  await open("empty.zip")
+  await expect(panel.getByRole("status")).toHaveText("This ZIP archive is empty.")
+  expect((await cancelled).failure()?.errorText).toContain("ERR_ABORTED")
+  pending.resolve({ status: "ready", size: 999, entries: [{ ...entries[0]!, name: "stale.txt" }] })
+  await expect(panel.getByText("stale.txt", { exact: true })).toHaveCount(0)
+
+  for (const [file, message] of [
+    ["broken.zip", "The ZIP directory is damaged or unreadable."],
+    ["limited.zip", "This ZIP directory exceeds the preview limits:"],
+    ["timed.zip", "Reading the ZIP directory exceeded the 5-second time limit."],
+    ["split.zip", "This archive uses an unsupported directory format"],
+  ]) {
+    await open(file!)
+    await expect(panel.getByRole("alert")).toContainText(message!)
+  }
+
+  await open("sample.zip")
+  await expect(search).toHaveValue("")
+  await expect(panel.getByRole("button", { name: "中文", exact: true })).toHaveAttribute("aria-expanded", "false")
+  expect(reads).toEqual([])
+})
 
 test.use({ serviceWorkers: "block" })
 
