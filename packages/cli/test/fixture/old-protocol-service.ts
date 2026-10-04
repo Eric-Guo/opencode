@@ -1,5 +1,7 @@
 import { mkdir, rename, rm } from "node:fs/promises"
 import path from "node:path"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
 
 // Stands in for a background server from before `/api/info` existed: it owns the registration
 // and the port, but answers every request with 404.
@@ -23,6 +25,7 @@ await Bun.write(
     url: `http://127.0.0.1:${server.port}`,
     pid: process.pid,
     password: "old",
+    provenance: await Effect.runPromise(Service.provenance),
   }),
 )
 await rename(registration + ".tmp", registration)
