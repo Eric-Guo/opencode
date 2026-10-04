@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import { createEffect, createMemo, createUniqueId, For, on, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -210,11 +211,13 @@ export function SettingsSearch() {
 
           const next =
             shown()[
-              event.key === "Home"
-                ? 0
-                : event.key === "End"
-                  ? shown().length - 1
-                  : Math.max(0, Math.min(shown().length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))
+              Match.value(event.key).pipe(
+                Match.when("Home", () => 0),
+                Match.when("End", () => shown().length - 1),
+                Match.orElse(() =>
+                  Math.max(0, Math.min(shown().length - 1, index + (event.key === "ArrowDown" ? 1 : -1))),
+                ),
+              )
             ]
 
           if (!next) return
