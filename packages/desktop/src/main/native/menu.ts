@@ -126,8 +126,10 @@ function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Dep
     submenu: [
       ...items.map((item) => {
         const entry = item.entry
+
         if ("menu" in entry)
           return { id: entry.id, label: entry.label, enabled: entry.enabled(), click: () => entry.run() }
+
         return nativeItem(entry, deps)
       }),
       ...(menu.id === "history"
