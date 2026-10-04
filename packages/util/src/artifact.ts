@@ -10,9 +10,11 @@ export type ArtifactKind =
   | "mermaid"
   | "table"
   | "font"
+  | "archive"
   | "text"
 
 const mimes = new Map([
+  ["zip", "application/zip"],
   ["png", "image/png"],
   ["jpg", "image/jpeg"],
   ["jpeg", "image/jpeg"],
@@ -70,6 +72,7 @@ export function artifactMime(path: string) {
 export function artifactKind(path: string): ArtifactKind {
   const mime = artifactMime(path)
   if (!mime) return "text"
+  if (mime === "application/zip") return "archive"
   if (mime === "image/svg+xml") return "svg"
   if (mime === "application/pdf") return "pdf"
   if (mime === "text/html") return "html"
