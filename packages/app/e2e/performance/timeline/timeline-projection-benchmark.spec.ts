@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { createServer, type ServerResponse } from "node:http"
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
@@ -46,7 +47,7 @@ for (const scenario of [
     await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve))
     const address = source.address()
 
-    if (!address || typeof address === "string") throw new Error("Missing fixture SSE address")
+    if (!address || Predicate.isString(address)) throw new Error("Missing fixture SSE address")
     let timer: ReturnType<typeof setInterval> | undefined
 
     const send = (events: OpenCodeEvent[]) =>

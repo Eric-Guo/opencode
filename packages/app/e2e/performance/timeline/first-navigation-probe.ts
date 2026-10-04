@@ -60,7 +60,7 @@ export async function measureFirstNavigation(
         },
         { capture: true, once: true },
       )
-      ;(window as Window & { __firstNavigationProbe?: FirstNavigationProbe }).__firstNavigationProbe = {
+      ;(window).__firstNavigationProbe = {
         samples,
         stop: () => {
           running = false
@@ -77,7 +77,7 @@ export async function measureFirstNavigation(
   )
   await input.navigate()
   await page.waitForFunction(() => {
-    const samples = (window as Window & { __firstNavigationProbe?: FirstNavigationProbe }).__firstNavigationProbe
+    const samples = (window).__firstNavigationProbe
       ?.samples
 
     if (!samples) return false
@@ -86,11 +86,17 @@ export async function measureFirstNavigation(
   })
 
   const samples = await page.evaluate(() => {
-    const probe = (window as Window & { __firstNavigationProbe?: FirstNavigationProbe }).__firstNavigationProbe!
+    const probe = (window).__firstNavigationProbe!
     probe.stop()
 
     return probe.samples
   })
 
   return { summary: summarizeFirstNavigation(samples), samples }
+}
+
+declare global {
+  interface Window {
+    __firstNavigationProbe?: FirstNavigationProbe
+  }
 }

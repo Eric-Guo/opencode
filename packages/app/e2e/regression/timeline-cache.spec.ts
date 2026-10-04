@@ -600,3 +600,15 @@ async function sampleTabPaint(page: Page, sessionID: string) {
       }),
   }
 }
+
+declare global {
+  interface Window {
+    __coldReveal?: Reveal
+  }
+}
+
+declare global {
+  interface Window {
+    __tabPaint?: TabPaint
+  }
+}

@@ -11,13 +11,15 @@ const buildDragImage = (target: HTMLElement) => {
     "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-12-regular text-text-strong"
   image.style.position = "absolute"
   image.style.top = "-1000px"
-  image.innerHTML = (icon as SVGElement).outerHTML + (text as HTMLSpanElement).outerHTML
+  image.innerHTML = icon.outerHTML + text.outerHTML
 
   return image
 }
 
 const withFileDragImage = (event: DragEvent) => {
-  const image = buildDragImage(event.currentTarget as HTMLElement)
+  if (!(event.currentTarget instanceof HTMLElement)) return
+
+  const image = buildDragImage(event.currentTarget)
 
   if (!image) return
   document.body.appendChild(image)
