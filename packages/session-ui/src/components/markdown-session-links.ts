@@ -22,7 +22,9 @@ export function markSessionLinks(root: HTMLElement) {
   const nodes: Text[] = []
 
   while (walker.nextNode()) {
-    const node = walker.currentNode as Text
+    const node = walker.currentNode
+
+    if (!(node instanceof Text)) continue
 
     if (node.parentElement?.closest("a, button, code, pre")) continue
 

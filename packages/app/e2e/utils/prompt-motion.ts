@@ -44,7 +44,7 @@ export async function readPromptPositions(
       const positions: { frame: number; top: number | null }[] = []
 
       for (const [frame, encoded] of frames.entries()) {
-        const position = { frame, top: null as number | null }
+        const position: PromptPosition = { frame, top: null }
 
         const image = await createImageBitmap(
           new Blob([Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0))], { type: "image/jpeg" }),

@@ -1,5 +1,6 @@
 import { attachSpring, motionValue } from "motion"
 import type { SpringOptions } from "motion"
+
 import { createComputed, createEffect, createSignal, onCleanup } from "solid-js"
 
 type Opt = Partial<Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">>
@@ -12,7 +13,8 @@ const eq = (a: Opt | undefined, b: Opt | undefined) =>
   a?.mass === b?.mass &&
   a?.velocity === b?.velocity
 
-export function useSpring(target: () => number, options?: Opt | (() => Opt), snapKey?: () => unknown) {
+export function useSpring<Key>(target: () => number, options?: Opt | (() => Opt), snapKey?: () => Key) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The public spring options explicitly accept a value or a reactive accessor.
   const read = () => (typeof options === "function" ? options() : options)
   const [value, setValue] = createSignal(target())
   const source = motionValue(value())

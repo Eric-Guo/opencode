@@ -1,3 +1,4 @@
+import { createStore } from "solid-js/store"
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { ModelState, serverState } from "./persistence"
@@ -106,7 +107,7 @@ describe("server persistence schema", () => {
   })
 
   test("reads the latest canonical local prop on each decode", () => {
-    const props: { canonicalLocalServer?: string } = {}
+    const [props, setProps] = createStore<{ canonicalLocalServer?: string }>({})
     const schema = serverSchema(() => props.canonicalLocalServer)
     const decode = Schema.decodeUnknownSync(schema)
 
@@ -116,13 +117,13 @@ describe("server persistence schema", () => {
     }
 
     expect(decode(input).projects).toEqual(input.projects)
-    props.canonicalLocalServer = "remote"
+    setProps("canonicalLocalServer", "remote")
     expect(decode(input).projects).toEqual({ local: [{ worktree: "/project", expanded: true }] })
     expect(decode(input).lastProject).toEqual({ local: "/project" })
     props.canonicalLocalServer = "local"
     expect(decode(input).projects).toEqual(input.projects)
     expect(input.lastProject).toEqual({ remote: "/project" })
-    props.canonicalLocalServer = "remote"
+    setProps("canonicalLocalServer", "remote")
     expect(decode({ lastProject: { remote: "/project" } })).toEqual({ ...initial, lastProject: { local: "/project" } })
   })
 })

@@ -36,7 +36,7 @@ function parse(content: string): LatestYml {
   let current: Partial<FileEntry> | undefined
 
   const flush = () => {
-    if (current?.url && current.sha512 && current.size) files.push(current as FileEntry)
+    if (current?.url && current.sha512 && current.size) files.push({ url: current.url, sha512: current.sha512, size: current.size, blockMapSize: current.blockMapSize })
     current = undefined
   }
 

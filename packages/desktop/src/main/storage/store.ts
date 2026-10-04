@@ -1,8 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import electron from "electron"
+import { Schema } from "effect"
 
 import { SETTINGS_STORE } from "./keys"
+
+const Entries = Schema.Record(Schema.String, Schema.Json)
 
 const cache = new Map<string, SettingsStore>()
 
@@ -40,8 +43,8 @@ export function createSettingsStore(file: string) {
 
   return {
     path: file,
-    get: (key: string): unknown => data[key],
-    set: (key: string, value: unknown) => {
+    get: (key: string): typeof Schema.Json.Type | undefined => data[key],
+    set: (key: string, value: typeof Schema.Json.Type | undefined) => {
       if (value === undefined) throw new TypeError(`Use \`delete()\` to clear values: ${key}`)
       data = { ...data, [key]: value }
       write()
@@ -54,13 +57,11 @@ export function createSettingsStore(file: string) {
 }
 
 // A missing file is an empty store. An unreadable one is set aside instead of blocking startup.
-function read(file: string): Record<string, unknown> {
+function read(file: string): typeof Entries.Type {
   if (!existsSync(file)) return {}
 
   try {
-    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"))
-
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
+    return Schema.decodeUnknownSync(Schema.fromJsonString(Entries))(readFileSync(file, "utf8"))
   } catch {
     renameSync(file, `${file}.corrupt`)
 

@@ -63,17 +63,15 @@ export function readShadowLineSelection(opts: {
   sideForNode?: (node: Node | null) => SelectedLineRange["side"]
   preserveTextSelection?: boolean
 }) {
-  const selection =
-    (opts.root as unknown as { getSelection?: () => Selection | null }).getSelection?.() ?? window.getSelection()
+  type SelectionRoot = ShadowRoot & { getSelection?: () => Selection | null }
+
+  // SAFETY: Chromium exposes optional getSelection on ShadowRoot; absence falls back to the window selection.
+  const root = opts.root as SelectionRoot
+  const selection = root.getSelection?.() ?? window.getSelection()
 
   if (!selection || selection.isCollapsed) return
 
-  const domRange =
-    (
-      selection as unknown as {
-        getComposedRanges?: (options?: { shadowRoots?: ShadowRoot[] }) => StaticRange[]
-      }
-    ).getComposedRanges?.({ shadowRoots: [opts.root] })?.[0] ??
+  const domRange = selection.getComposedRanges?.({ shadowRoots: [opts.root] })?.[0] ??
     (selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined)
 
   const startNode = domRange?.startContainer ?? selection.anchorNode

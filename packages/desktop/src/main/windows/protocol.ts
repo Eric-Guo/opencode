@@ -1,5 +1,6 @@
 import { net, protocol } from "electron"
 import type { WebContents } from "electron"
+
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
@@ -81,7 +82,7 @@ async function serve(request: Request, rendererRoot: string) {
   if (url.host === extensionHost) {
     return Promise.resolve()
       .then(() => extensionAssets(request, url))
-      .catch((error: unknown) => {
+      .catch((error) => {
         report("error", "extension asset error", { url: request.url, error })
 
         return new Response(null, { status: 500 })

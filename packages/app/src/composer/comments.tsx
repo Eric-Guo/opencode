@@ -80,9 +80,9 @@ function group(comments: LineComment[]) {
 }
 
 function createCommentSessionState(store: Store<CommentStore>, setStore: SetStoreFunction<CommentStore>) {
-  const [state, setState] = createStore({
-    focus: null as CommentFocus | null,
-    active: null as CommentFocus | null,
+  const [state, setState] = createStore<{ focus: CommentFocus | null; active: CommentFocus | null }>({
+    focus: null,
+    active: null,
   })
 
   // Reuse the previous array when contents are unchanged so consumers keep a stable

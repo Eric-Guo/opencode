@@ -384,8 +384,10 @@ export function displayPickerPath(path: string, input: string, home: string) {
   return pickerTilde(value, home) || value
 }
 
+type FilePickerSDK = { api: { file: Pick<ServerSDK["api"]["file"], "find" | "list"> } }
+
 export async function listPickerDirectory(
-  sdk: ServerSDK,
+  sdk: FilePickerSDK,
   location: { directory: string; workspace?: string },
   directory: string,
 ) {
@@ -399,7 +401,7 @@ export async function listPickerDirectory(
 }
 
 export function createDirectorySearch(args: {
-  sdk: ServerSDK
+  sdk: FilePickerSDK
   location: () => { directory: string; workspace?: string } | undefined
   base: () => string | undefined
   home: () => string
@@ -459,7 +461,7 @@ export function createDirectorySearch(args: {
     const input = scoped(value)
     const location = args.location()
 
-    if (!input || !location) return [] as string[]
+    if (!input || !location) return new Array<string>()
     const raw = normalizePickerDrive(value)
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)

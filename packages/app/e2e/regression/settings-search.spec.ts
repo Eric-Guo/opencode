@@ -290,7 +290,10 @@ test("all indexed client controls resolve to visible production controls", async
   const view = await open(page)
 
   for (const entry of clientSettings.filter((entry) => entry.target && !entry.available)) {
-    await view.search.fill(en[entry.label as keyof typeof en])
+    const label = Object.entries(en).find(([key]) => key === entry.label)?.[1]
+
+    if (label === undefined) throw new Error(`Missing English setting label: ${entry.label}`)
+    await view.search.fill(label)
     const result = view.results.locator(`[data-setting-target="${entry.target}"]`)
     await expect(result).toHaveCount(1)
     await result.click()

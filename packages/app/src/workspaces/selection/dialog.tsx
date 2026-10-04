@@ -237,7 +237,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return items[activeSuggestion()] ?? items[0]
   }
 
-  const keyActions = new Map([
+  const keyActions = new Map<string, () => void>([
     ["ArrowDown", () => moveSuggestion(1)],
     ["ArrowUp", () => moveSuggestion(-1)],
     [

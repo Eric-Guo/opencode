@@ -1,18 +1,21 @@
 import { describe, expect, test } from "bun:test"
-import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
+import type { FormInfo, PermissionRequest } from "@opencode/client/promise"
+import { sessionInfo } from "@/test/fixtures"
 import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 
 const session = (input: { id: string; parentID?: string }) =>
-  ({
+  sessionInfo({
     id: input.id,
     parentID: input.parentID,
-  }) as SessionInfo
+  })
 
 const permission = (id: string, sessionID: string) =>
   ({
     id,
     sessionID,
-  }) as PermissionRequest
+    action: "read",
+    resources: ["*"],
+  }) satisfies PermissionRequest
 
 const question = (id: string, sessionID: string) =>
   ({
@@ -21,7 +24,7 @@ const question = (id: string, sessionID: string) =>
     title: "Questions",
     metadata: { kind: "question" },
     fields: [{ key: "q0", type: "string" }],
-  }) as FormInfo
+  }) satisfies FormInfo
 
 describe("sessionTreeIDs", () => {
   test("returns only the current session and its descendants", () => {

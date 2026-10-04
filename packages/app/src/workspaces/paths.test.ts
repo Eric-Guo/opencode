@@ -1,5 +1,5 @@
+import { sessionInfo } from "@/test/fixtures"
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
 import {
   filterWorkspaceInventory,
   inspectWorkspaceDeletion,
@@ -123,7 +123,7 @@ test("groups and filters workspace inventory by project", () => {
 })
 
 test("reports every workspace deletion condition", () => {
-  const session = (directory: string) => ({ location: { directory }, time: { created: 1, updated: 1 } }) as SessionInfo
+  const session = (directory: string) => sessionInfo({ location: { directory }, time: { created: 1, updated: 1 } })
   expect(
     inspectWorkspaceDeletion({
       workspace: "/workspace",
@@ -152,9 +152,7 @@ test("reports every workspace deletion condition", () => {
   expect(
     inspectWorkspaceDeletion({
       workspace: "/workspace",
-      sessions: [
-        { location: { directory: "/workspace" }, time: { created: 1, updated: 1, archived: 2 } } as SessionInfo,
-      ],
+      sessions: [sessionInfo({ location: { directory: "/workspace" }, time: { created: 1, updated: 1, archived: 2 } })],
       status: "clean",
     }),
   ).toEqual({ active: false, linked: false, dirty: false })
@@ -162,7 +160,7 @@ test("reports every workspace deletion condition", () => {
 
 test("groups nested non-archived workspace sessions by latest activity", () => {
   const session = (id: string, directory: string, updated: number, archived?: number) =>
-    ({ id, location: { directory }, time: { created: 1, updated, archived } }) as SessionInfo
+    sessionInfo({ id, location: { directory }, time: { created: 1, updated, archived } })
 
   const sessions = sessionsForWorkspace(
     [
@@ -179,7 +177,7 @@ test("groups nested non-archived workspace sessions by latest activity", () => {
 
 test("merges workspace placement by freshness with authoritative server ties", () => {
   const session = (directory: string, updated: number) =>
-    ({ id: "session", location: { directory }, time: { created: 1, updated } }) as SessionInfo
+    sessionInfo({ id: "session", location: { directory }, time: { created: 1, updated } })
 
   expect(
     mergeWorkspaceSessionInventory([session("/destination", 3)], [session("/source", 2)])[0]?.location.directory,

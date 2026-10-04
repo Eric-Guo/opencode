@@ -1,5 +1,6 @@
 import { expect, type Page, type Request } from "@playwright/test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { JsonValue, SessionMessageInfo } from "@opencode/client/promise"
+import type { MockProject, MockSession } from "./mock-server"
 import { base64Encode, checksum } from "@opencode/util/encode"
 
 // The mocked default server. Production builds connect to their own origin, so CI points this at the app.
@@ -38,6 +39,10 @@ export type TabSeed =
   | { session: string; server?: string }
   | { draft: string; directory: string; server?: string }
 
+export type SeedValue = null | boolean | number | string | readonly SeedValue[] | SeedObject
+
+export type SeedObject = { [key: string]: SeedValue | undefined }
+
 export type SeedInput = {
   servers?: (string | { url: string; name?: string })[]
   // Key `local` is the default server; other keys are server origins.
@@ -46,12 +51,18 @@ export type SeedInput = {
   // A string is a session ID on the default server.
   tabs?: TabSeed[]
   // Keyed by session ID on the default server.
-  panes?: Record<string, Record<string, unknown>>
-  settings?: Record<string, unknown>
+  panes?: Record<string, SeedObject>
+  settings?: SeedObject
   locale?: string
   theme?: { id: string; scheme: "light" | "dark" }
   // Any other storage key. Strings are written as is, other values as JSON.
-  storage?: Record<string, unknown>
+  storage?: SeedObject
+}
+
+type SeedServerState = {
+  list?: (string | { type: "http"; displayName?: string; http: { url: string } })[]
+  projects?: SeedInput["projects"]
+  lastProject?: SeedInput["lastProject"]
 }
 
 const seeds = { next: 0 }
@@ -66,14 +77,16 @@ export async function seed(page: Page, input: SeedInput) {
       if (sessionStorage.getItem(marker)) return
       sessionStorage.setItem(marker, "1")
 
-      const plain = (value: unknown): value is Record<string, unknown> =>
+      // SAFETY: persisted JSON is untrusted here; this boundary only distinguishes objects for shallow merging.
+      const plain = (value: unknown): value is SeedObject =>
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof
         !!value && typeof value === "object" && !Array.isArray(value)
 
       entries.forEach(([key, value, merge]) => {
         const current: unknown = merge ? JSON.parse(localStorage.getItem(key) ?? "null") : undefined
 
         if (!plain(current)) return localStorage.setItem(key, value)
-        const next: Record<string, unknown> = JSON.parse(value)
+        const next: SeedObject = JSON.parse(value)
 
         const merged = Object.entries({ ...current, ...next }).map(([field, item]) => {
           const before = current[field]
@@ -90,33 +103,39 @@ export async function seed(page: Page, input: SeedInput) {
 }
 
 function storageEntries(input: SeedInput): [string, string, boolean][] {
-  const server = {
-    ...(input.servers
-      ? {
-          list: input.servers.map((item) =>
-            typeof item === "string" ? item : { type: "http", displayName: item.name, http: { url: item.url } },
-          ),
-        }
-      : {}),
-    ...(input.projects ? { projects: input.projects } : {}),
-    ...(input.lastProject ? { lastProject: input.lastProject } : {}),
+  const server: SeedServerState = {}
+
+  if (input.servers)
+    server.list = input.servers.map((item) => {
+      // SAFETY: SeedInput explicitly accepts both saved server URLs and named server descriptors.
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof
+      return typeof item === "string" ? item : { type: "http", displayName: item.name, http: { url: item.url } }
+    })
+
+  if (input.projects) server.projects = input.projects
+
+  if (input.lastProject) server.lastProject = input.lastProject
+  const values: SeedObject = {}
+
+  if (Object.keys(server).length) values["opencode.global.dat:server"] = server
+
+  if (input.tabs) values["opencode.window.browser.dat:tabs"] = input.tabs.map(tabEntry)
+
+  if (input.panes)
+    values["opencode.window.browser.dat:tabs.panes"] = Object.fromEntries(
+      Object.entries(input.panes).map(([sessionID, pane]) => [tabKey(sessionID), pane]),
+    )
+
+  if (input.settings) values["settings.v3"] = input.settings
+
+  if (input.locale) values["opencode.global.dat:language"] = { locale: input.locale }
+
+  if (input.theme) {
+    values["opencode-theme-id"] = input.theme.id
+    values["opencode-color-scheme"] = input.theme.scheme
   }
 
-  const values: Record<string, unknown> = {
-    ...(Object.keys(server).length ? { "opencode.global.dat:server": server } : {}),
-    ...(input.tabs ? { "opencode.window.browser.dat:tabs": input.tabs.map(tabEntry) } : {}),
-    ...(input.panes
-      ? {
-          "opencode.window.browser.dat:tabs.panes": Object.fromEntries(
-            Object.entries(input.panes).map(([sessionID, pane]) => [tabKey(sessionID), pane]),
-          ),
-        }
-      : {}),
-    ...(input.settings ? { "settings.v3": input.settings } : {}),
-    ...(input.locale ? { "opencode.global.dat:language": { locale: input.locale } } : {}),
-    ...(input.theme ? { "opencode-theme-id": input.theme.id, "opencode-color-scheme": input.theme.scheme } : {}),
-    ...input.storage,
-  }
+  Object.assign(values, input.storage)
 
   return Object.entries(values).map(([key, value]) => [
     key,
@@ -139,7 +158,7 @@ function tabEntry(tab: TabSeed) {
   return { type: "draft", draftID: tab.draft, server: tab.server ?? SERVER, directory: tab.directory }
 }
 
-export function project(input: { id: string; directory: string; name?: string } & Record<string, unknown>) {
+export function project(input: MockProject & { directory: string }) {
   const { directory, ...rest } = input
 
   return {
@@ -148,17 +167,12 @@ export function project(input: { id: string; directory: string; name?: string } 
     name: directory.split(/[\\/]/).at(-1),
     vcs: "git",
     time: { created: T0, updated: T0 },
-    sandboxes: [] as string[],
+    sandboxes: Array<string>(),
     ...rest,
   }
 }
 
-export function session(
-  input: { id: string; directory: string; title?: string; projectID?: string; created?: number } & Record<
-    string,
-    unknown
-  >,
-) {
+export function session(input: MockSession & { directory: string; created?: number }) {
   const { created = T0, ...rest } = input
 
   return {
@@ -170,7 +184,13 @@ export function session(
   }
 }
 
-export type ModelSeed = { id: string; name: string } & Record<string, unknown>
+export type ModelSeed = {
+  id: string
+  name: string
+  limit?: { context?: number; output?: number }
+  variants?: Record<string, JsonValue>
+  cost?: { input: number; output: number }
+}
 
 // A connected `opencode` provider whose first model is the default.
 export function provider(...models: ModelSeed[]) {
