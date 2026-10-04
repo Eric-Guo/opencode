@@ -3,6 +3,31 @@ export default {
   "tab.notFound": "Archivo no encontrado: {{name}}",
   "mobile.title": "Archivos",
   "mobile.openTabs": "Archivos abiertos",
+  "view.archive.readOnly": "Directorio ZIP · Solo lectura",
+  "view.archive.details": "Detalles de la vista previa",
+  "view.archive.loading": "Leyendo el directorio ZIP…",
+  "view.archive.requestFailed":
+    "No se pudo cargar el directorio ZIP. Comprueba la conexión y si el archivo aún existe.",
+  "view.archive.retry": "Reintentar",
+  "view.archive.search": "Buscar entradas en el archivo comprimido",
+  "view.archive.directory": "Directorio del archivo comprimido",
+  "view.archive.entries.one": "{{count}} entrada",
+  "view.archive.entries.many": "{{count}} entradas",
+  "view.archive.entries.other": "{{count}} entradas",
+  "view.archive.empty": "Este archivo ZIP está vacío.",
+  "view.archive.noResults": "No hay entradas coincidentes.",
+  "view.archive.duplicate": "Nombre duplicado",
+  "view.archive.encrypted": "Elemento cifrado",
+  "view.archive.symlink": "Enlace simbólico",
+  "view.archive.boundary":
+    "Solo metadatos del directorio. No se abren ni se verifican el contenido, los enlaces, el cifrado ni la compresión. Se admiten ZIP y ZIP64, pero no los archivos divididos en varios volúmenes.",
+  "view.archive.invalid":
+    "El directorio ZIP está dañado o no se puede leer. No se ha comprobado el contenido de los elementos.",
+  "view.archive.unsupported":
+    "Este archivo comprimido usa un formato de directorio no admitido, volúmenes divididos o nombres con caracteres de control.",
+  "view.archive.limit":
+    "Este directorio ZIP supera los límites de la vista previa: 5.000 registros, nombres de 1.024 bytes, 64 niveles o 4 MiB de datos de directorio.",
+  "view.archive.timeout": "La lectura del directorio ZIP superó el límite de tiempo de 5 segundos.",
   "open.in": "Abrir en",
   "open.ariaLabel": "Abrir en {{app}}",
   "open.menu": "Opciones de apertura",
