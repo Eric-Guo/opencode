@@ -267,4 +267,4 @@ export const dict = {
   "ui.tool.browser": "Peramban",
   "ui.common.fileCount.one": "{{count}} berkas",
   "ui.common.fileCount.other": "{{count}} berkas",
-}
+} satisfies Record<string, string>
