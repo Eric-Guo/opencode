@@ -1,3 +1,4 @@
+import { Option, Schema } from "effect"
 import type { Accessor } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -58,8 +59,13 @@ function write(
     xhr.upload.addEventListener("progress", (event) => report(event.loaded))
     xhr.addEventListener("load", () => {
       if (xhr.status !== 200) return reject(new Error(`Upload failed with status ${xhr.status}`))
-      // SAFETY: a 200 from `fs.write` is its declared success body, `Location.response(FileSystem.Write)`.
-      resolve((xhr.response as { data: { path: string } }).data.path)
+
+      const response = Schema.decodeUnknownOption(Schema.Struct({ data: Schema.Struct({ path: Schema.String }) }))(
+        xhr.response,
+      )
+
+      if (Option.isNone(response)) return reject(new Error("Upload failed"))
+      resolve(response.value.data.path)
     })
     xhr.addEventListener("error", () => reject(new Error("Upload failed")))
     xhr.addEventListener("abort", () => reject(new DOMException("Upload aborted", "AbortError")))

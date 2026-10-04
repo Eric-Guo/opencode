@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import {
   createThemeState,
+  parseColorScheme,
   selectColorScheme,
   selectMode,
   selectThemeId,
@@ -79,6 +80,18 @@ function storage(effects: readonly ThemeEffect[]) {
       effect.type === "clear-cache",
   )
 }
+
+test.each([
+  [null, "dark"],
+  [undefined, "dark"],
+  ["", "dark"],
+  ["invalid", "dark"],
+  ["light", "light"],
+  ["dark", "dark"],
+  ["system", "system"],
+] as const)("saved color scheme %p resolves to %s", (value, expected) => {
+  expect(parseColorScheme(value)).toBe(expected)
+})
 
 test("a system light/dark flip keeps a previewed scheme until the preview follows the system", () => {
   const previewed = run(start({ scheme: "system", systemMode: "dark" }).state, {
