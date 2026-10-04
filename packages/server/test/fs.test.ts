@@ -6,6 +6,50 @@ import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
 
+it.live("serves ZIP metadata and declared missing-file errors through the public route", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const empty = new Uint8Array(22)
+
+    new DataView(empty.buffer).setUint32(0, 0x06054b50, true)
+
+    yield* Effect.promise(async () => {
+      await fs.writeFile(path.join(tmp.path, "empty.zip"), empty)
+      await fs.writeFile(path.join(tmp.path, "broken.zip"), "not a zip")
+    })
+
+    const server = yield* startServer(path.join(tmp.path, "config"))
+
+    yield* Effect.promise(async () => {
+      const request = (file: string) => {
+        const url = new URL("/api/fs/archive", server.base)
+
+        url.searchParams.set("location[directory]", tmp.path)
+        url.searchParams.set("path", file)
+
+        return fetch(url, { headers: server.headers })
+      }
+      const response = await request("empty.zip")
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        location: { directory: tmp.path },
+        data: { status: "ready", size: 22, entries: [] },
+      })
+
+      const invalid = await request("broken.zip")
+
+      expect(invalid.status).toBe(200)
+      expect(await invalid.json()).toMatchObject({ data: { status: "invalid", size: 9 } })
+
+      const missing = await request("missing.zip")
+
+      expect(missing.status).toBe(404)
+      expect(await missing.json()).toMatchObject({ _tag: "FileNotFoundError", path: "missing.zip" })
+    })
+  }),
+)
+
 it.live(
   "browsing parents and siblings reuses the current Location and its MCP process",
   () =>
