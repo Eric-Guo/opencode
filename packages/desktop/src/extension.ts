@@ -1,3 +1,6 @@
+// SAFETY: These type-only, versioned plugin hooks intentionally carry plugin-owned payloads.
+// Each plugin validates its own input and result; the host cannot prescribe a schema for them.
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type */
 import type { BrowserWindow, IpcMainInvokeEvent, WebContents, WebContentsView, View } from "electron"
 
 /** Versioned, type-only contract. Extensions must not import desktop internals. */
