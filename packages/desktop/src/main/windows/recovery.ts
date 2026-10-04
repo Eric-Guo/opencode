@@ -4,6 +4,8 @@ import { Effect } from "effect"
 import { DesktopLogging, scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { safeWebContentsURL } from "./state"
+// SAFETY: This imperative factory takes explicit dependencies; it is not an Effect contextual service.
+// oxlint-disable-next-line anti-slop-effect/no-service-constructor-imports
 import { makeUnresponsiveSampler } from "./unresponsive"
 
 export const makeWindowRecovery = Effect.gen(function* () {
