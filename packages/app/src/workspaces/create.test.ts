@@ -70,9 +70,9 @@ describe("worktree creation", () => {
         })
         expect(requests.find((request) => request.method === "POST")?.url).toBe("http://localhost:3000/api/worktree")
         expect(
-          requests
-            .filter((request) => request.method === "GET")
-            .map((request) => new URL(request.url).searchParams.get("location[directory]")),
+          requests.flatMap((request) =>
+            request.method === "GET" ? [new URL(request.url).searchParams.get("location[directory]")] : [],
+          ),
         ).toEqual(input.cached ? ["/created"] : [input.directory, "/created"])
         expect(data.location.info({ directory: "/created" })).toEqual({ directory: "/created", project })
         const count = requests.length
