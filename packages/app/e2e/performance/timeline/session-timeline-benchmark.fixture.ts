@@ -396,6 +396,7 @@ function timelineEvent<Type extends "session.text.started" | "session.text.delta
 ): Extract<OpenCodeEvent, { type: Type }> {
   eventSequence++
 
+  // SAFETY: Type and data are correlated by the same generic event discriminant; fixture provenance is assigned here.
   return {
     id: `evt_timeline_benchmark_${eventSequence}`,
     created: 1700000002000 + eventSequence,

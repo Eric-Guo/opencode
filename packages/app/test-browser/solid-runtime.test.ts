@@ -26,6 +26,8 @@ test("a memo created during a paused transition has a committed value", async ()
       createComponent(Suspense, {
         fallback: "Loading",
         get children() {
+          // SAFETY: Solid's DOM renderer supports accessor children; JSX.Element omits this imperative renderer input.
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions
           return createMemo(() => {
             if (!session()) return "Home"
             memos.push(createMemo(() => "Session"))

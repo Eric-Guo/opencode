@@ -10,6 +10,7 @@ test("teardown during a pending start resolves only after the started process ex
 
   const controller = createWslServersController({
     cli: { version: "1.0.0" },
+    // SAFETY: This teardown case supplies spawnSidecar directly, so none of WslRuntime's process-launch members are used.
     runtime: {} as WslRuntime,
     t: (key) => key,
     log: () => undefined,
