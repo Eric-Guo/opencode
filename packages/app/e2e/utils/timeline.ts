@@ -1,13 +1,4 @@
-import type {
-  JsonValue,
-  OpenCodeEvent,
-  SessionInfo,
-  SessionMessageAssistant,
-  SessionMessageInfo,
-  SessionMessageUser,
-  SessionStatus,
-  SessionStructuredError,
-} from "@opencode/client/promise"
+import type { JsonValue, OpenCodeEvent, SessionInfo, SessionMessageAssistant, SessionMessageInfo, SessionMessageUser, SessionStatus, SessionStructuredError } from "@opencode/client/promise"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
@@ -395,8 +386,8 @@ export function validateTimelineEvent(input: OpenCodeEvent | JsonValue): OpenCod
 
   if (!definition) throw new Error(`Unknown timeline event: ${header.type}`)
 
-  // SAFETY: the matching canonical event schema validates the payload; OpenCodeEvent is generated from those schemas.
-  return Schema.decodeUnknownSync(definition)(input) as OpenCodeEvent
+  // SAFETY: the manifest codec validates and re-encodes the public event used to generate OpenCodeEvent.
+  return Schema.encodeSync(definition)(Schema.decodeUnknownSync(definition)(input)) as OpenCodeEvent
 }
 
 export function validateTimelineMessages(input: readonly TimelineMessage[]): TimelineMessage[] {
@@ -975,7 +966,7 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
         sessionID,
         assistantMessageID: messageID,
         id: part.id,
-        input: part.state.input,
+        input: jsonRecord(part.state.input),
         executed: part.executed ?? true,
         native: jsonRecord(part.native),
       }),
@@ -1075,8 +1066,8 @@ function makeEvent<Type extends OpenCodeEvent["type"]>(
         }
       : base
 
-  // SAFETY: the matching canonical event schema validates the payload; OpenCodeEvent is generated from those schemas.
-  return Schema.decodeUnknownSync(definition)(input) as OpenCodeEvent
+  // SAFETY: the manifest codec validates and re-encodes the public event used to generate OpenCodeEvent.
+  return Schema.encodeSync(definition)(Schema.decodeUnknownSync(definition)(input)) as OpenCodeEvent
 }
 
 const decodeJsonRecord = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))
@@ -1086,7 +1077,6 @@ function jsonRecord(value: JsonRecord | undefined): Record<string, JsonValue> {
 
   return decodeJsonRecord(JSON.stringify(value))
 }
-/* oxlint-enable anti-slop/no-runtime-typeof */
 
 function provider() {
   return {
