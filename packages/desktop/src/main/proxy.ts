@@ -121,9 +121,10 @@ export async function configureSessionProxy(session: Session, env: Record<string
   return config
 }
 
-export function configureNodeProxyFromEnv(onError?: (error: unknown) => void) {
+export function configureNodeProxyFromEnv(onError?: (cause: unknown) => void) {
   try {
-    ;(http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv?.()
+    // SAFETY: This probes Node's optional newer environment-proxy API; unsupported versions skip the call.
+    (http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv?.()
   } catch (error) {
     onError?.(error)
   }
