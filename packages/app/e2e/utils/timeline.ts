@@ -1,4 +1,14 @@
-import type { JsonValue, OpenCodeEvent, SessionInfo, SessionMessageAssistant, SessionMessageInfo, SessionMessageUser, SessionStatus, SessionStructuredError } from "@opencode/client/promise"
+import type {
+  JsonValue,
+  OpenCodeEvent,
+  SessionInfo,
+  SessionMessageAssistant,
+  SessionMessageAssistantTool,
+  SessionMessageInfo,
+  SessionMessageUser,
+  SessionStatus,
+  SessionStructuredError,
+} from "@opencode/client/promise"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
@@ -622,33 +632,35 @@ export function userMessage(
     files: seeds.flatMap((part) => {
       if (part.type !== "file") return []
 
-      const mention = part.source?.text
-        ? { text: part.source.text.value, start: part.source.text.start, end: part.source.text.end }
-        : undefined
-
-      const file: NonNullable<SessionMessageUser["files"]>[number] = {
+      const attachment: NonNullable<SessionMessageUser["files"]>[number] = {
         data: part.url.match(/^data:[^,]*;base64,(.*)$/)?.[1] ?? "",
         mime: part.mime,
-        source: part.url.startsWith("data:")
-          ? { type: "inline" }
-          : { type: "uri", uri: part.source?.path ?? part.url },
+        source: part.url.startsWith("data:") ? { type: "inline" } : { type: "uri", uri: part.source?.path ?? part.url },
       }
 
-      if (part.filename) file.name = part.filename
+      if (part.filename) attachment.name = part.filename
 
-      if (mention) file.mention = mention
+      if (part.source?.text)
+        attachment.mention = {
+          text: part.source.text.value,
+          start: part.source.text.start,
+          end: part.source.text.end,
+        }
 
-      return [file]
+      return [attachment]
     }),
     agents: seeds.flatMap((part) => {
       if (part.type !== "agent") return []
-
-      const agent: NonNullable<SessionMessageUser["agents"]>[number] = { name: part.name }
+      const attachment: NonNullable<SessionMessageUser["agents"]>[number] = { name: part.name }
 
       if (part.source)
-        agent.mention = { text: part.source.value, start: part.source.start, end: part.source.end }
+        attachment.mention = {
+          text: part.source.value,
+          start: part.source.start,
+          end: part.source.end,
+        }
 
-      return [agent]
+      return [attachment]
     }),
   }
 
@@ -865,13 +877,11 @@ function messageContent(
   const time = "time" in state ? state.time : undefined
   const completed = state.status === "completed" || state.status === "error" ? state.time.end : undefined
 
-  const base: Omit<Extract<SessionMessageAssistant["content"][number], { type: "tool" }>, "state"> = {
+  const base: Omit<SessionMessageAssistantTool, "state"> = {
     type: "tool",
     id: part.id,
     name: part.name,
-    time: {
-      created: time?.start ?? 1700000001000,
-    },
+    time: { created: time?.start ?? 1700000001000 },
   }
 
   if (time?.start !== undefined) base.time.ran = time.start
