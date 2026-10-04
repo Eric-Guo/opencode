@@ -37,9 +37,9 @@ describe("extension notes", () => {
       displayText: "hi",
       comments: [
         note,
-        { ...note, label: 42 },
+        { ...note, label: 42, path: "src/fallback.ts" },
         browser,
-        { ...browser, element: { label: "button" } },
+        { ...browser, element: { label: "button" }, path: "src/fallback.ts" },
         { path: "src/app.ts", comment: "Keep" },
       ],
     })

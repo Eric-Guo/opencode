@@ -1,3 +1,4 @@
+import type { Schema } from "effect"
 import type { ProjectListOutput, WorktreeDirectory } from "@opencode/client/promise"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
@@ -62,7 +63,7 @@ export type Agent = {
   model?: { modelID: string; providerID: string }
   variant?: string
   prompt?: string
-  options: Record<string, unknown>
+  options: Record<string, Schema.Json>
   steps?: number
 }
 
@@ -122,10 +123,10 @@ export type Model = {
     output: number
   }
   status: "alpha" | "beta" | "deprecated" | "active"
-  options: Record<string, unknown>
+  options: Record<string, Schema.Json>
   headers: Record<string, string>
   release_date: string
-  variants?: Record<string, Record<string, unknown>>
+  variants?: Record<string, Record<string, Schema.Json>>
 }
 
 export type Provider = {
@@ -137,7 +138,7 @@ export type Provider = {
   source: "env" | "config" | "custom" | "api"
   env: string[]
   key?: string
-  options: Record<string, unknown>
+  options: Record<string, Schema.Json>
   models: Record<string, Model>
 }
 
@@ -147,7 +148,7 @@ export type ProviderListResponse = {
   connected: string[]
 }
 
-export type ProviderAuthResponse = Record<string, unknown>
+export type ProviderAuthResponse = Record<string, Schema.Json>
 
 export type Config = {
   model?: string
@@ -158,16 +159,16 @@ export type Config = {
   share?: "manual" | "auto" | "disabled"
   autoshare?: boolean
   shell?: string
-  plugin?: Array<string | [string, Record<string, unknown>]>
-  provider?: Record<string, { npm?: string; models?: Record<string, unknown> }>
-  mcp?: Record<string, unknown>
-  agent?: Record<string, unknown>
-  command?: Record<string, unknown>
+  plugin?: Array<string | [string, Record<string, Schema.Json>]>
+  provider?: Record<string, { npm?: string; models?: Record<string, Schema.Json> }>
+  mcp?: Record<string, Schema.Json>
+  agent?: Record<string, Schema.Json>
+  command?: Record<string, Schema.Json>
   instructions?: string[]
   disabled_providers?: string[]
   enabled_providers?: string[]
-  permission?: string | Record<string, unknown>
+  permission?: string | Record<string, Schema.Json>
   tools?: Record<string, boolean>
-  experimental?: Record<string, unknown>
-  [key: string]: unknown
+  experimental?: Record<string, Schema.Json>
+  [key: string]: Schema.Json | undefined
 }

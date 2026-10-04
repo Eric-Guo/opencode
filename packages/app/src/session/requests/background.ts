@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { SessionInfo, SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
 import { createMemo } from "solid-js"
 
@@ -20,13 +21,13 @@ export function createSessionBackground(input: {
 
     const assistant = (id ? input.messages(id) : []).reduce<SessionMessageAssistant | undefined>((latest, message) => {
       if (message.type === "synthetic") {
-        if (message.metadata?.source === "subagent" && typeof message.metadata.childID === "string")
+        if (message.metadata?.source === "subagent" && Predicate.isString(message.metadata.childID))
           completed.add(message.metadata.childID)
 
         if (message.metadata?.source === "shell") {
-          if (typeof message.metadata.shellID === "string") completed.add(message.metadata.shellID)
+          if (Predicate.isString(message.metadata.shellID)) completed.add(message.metadata.shellID)
 
-          if (typeof message.metadata.jobID === "string") completed.add(message.metadata.jobID)
+          if (Predicate.isString(message.metadata.jobID)) completed.add(message.metadata.jobID)
         }
 
         return latest
@@ -41,14 +42,14 @@ export function createSessionBackground(input: {
         if (part.name === "subagent") {
           const sessionID = part.state.metadata.sessionID
 
-          if (typeof sessionID !== "string") return
+          if (!Predicate.isString(sessionID)) return
           const description = part.state.input.description
           const agent = part.state.input.agent
           subagents.push({
             id: sessionID,
             type: "subagent",
-            label: typeof description === "string" ? description : sessionID,
-            agent: typeof agent === "string" ? agent : undefined,
+            label: Predicate.isString(description) ? description : sessionID,
+            agent: Predicate.isString(agent) ? agent : undefined,
           })
 
           return
@@ -59,9 +60,9 @@ export function createSessionBackground(input: {
         shells.push({
           partID: part.id,
           task: {
-            id: typeof shellID === "string" ? shellID : part.id,
+            id: Predicate.isString(shellID) ? shellID : part.id,
             type: "shell",
-            label: typeof command === "string" ? command : part.id,
+            label: Predicate.isString(command) ? command : part.id,
           },
         })
       })
@@ -85,10 +86,10 @@ export function createSessionBackground(input: {
 
           return [
             {
-              type: part.name as "shell" | "subagent",
+              type: part.name === "shell" ? ("shell" as const) : ("subagent" as const),
               partID: part.id,
-              id: typeof value === "string" ? value : undefined,
-              label: typeof label === "string" ? label : undefined,
+              id: Predicate.isString(value) ? value : undefined,
+              label: Predicate.isString(label) ? label : undefined,
             },
           ]
         }) ?? [],

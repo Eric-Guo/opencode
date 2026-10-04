@@ -1,4 +1,5 @@
 import { TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js"
+
 import { ExtensionError } from "./error"
 import { archivePath, decodeManifest } from "./manifest"
 import { mainImportAllowed } from "./module"
@@ -19,7 +20,7 @@ export async function readArchive(data: Uint8Array) {
   })
 
   return read(reader)
-    .catch((error: unknown) => {
+    .catch((error) => {
       if (error instanceof ExtensionError) throw error
       throw new ExtensionError("invalidArchive", { cause: error })
     })

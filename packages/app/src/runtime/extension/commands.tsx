@@ -33,10 +33,9 @@ export function ExtensionCommands() {
         hidden: item.value.hidden,
         editable: item.value.editable,
         when: item.value.scope
-          ? (event: KeyboardEvent) =>
-              event.target instanceof Element && !!event.target.closest(item.value.scope as string)
+          ? (event: KeyboardEvent) => event.target instanceof Element && !!event.target.closest(item.value.scope ?? "")
           : undefined,
-        onSelect: (_source: unknown, input?: string) => item.value.run(input),
+        onSelect: (_source, input) => item.value.run(input),
       })),
   )
 
