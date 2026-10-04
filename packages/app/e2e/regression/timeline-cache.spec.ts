@@ -482,7 +482,7 @@ async function sampleTabPaint(page: Page, sessionID: string) {
         },
       }
 
-      ;(window as Window & { __tabPaint?: TabPaint }).__tabPaint = state
+      window.__tabPaint = state
       new MutationObserver((records) => {
         if (!state.settled || !running) return
         records.forEach((record) =>
@@ -520,10 +520,11 @@ async function sampleTabPaint(page: Page, sessionID: string) {
             )
           }
 
-          const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-            .filter(inView)
-            .map((element) => element.dataset.messageId!)
-            .filter((id) => destination.has(id))
+          const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")].flatMap((element) => {
+            const id = element.dataset.messageId!
+
+            return inView(element) && destination.has(id) ? [id] : []
+          })
 
           const spacer = root.querySelector('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
           const bottomError = spacer ? spacer.bottom - view.bottom : undefined
@@ -556,20 +557,18 @@ async function sampleTabPaint(page: Page, sessionID: string) {
       last: history.findLast((message) => message.type === "user")!.id,
     },
   )
-  const read = () => page.evaluate(() => (window as Window & { __tabPaint?: TabPaint }).__tabPaint!.first)
+  const read = () => page.evaluate(() => window.__tabPaint!.first)
 
   return {
     async firstPaint() {
       await expect.poll(read).toBeDefined()
-      await expect
-        .poll(() => page.evaluate(() => (window as Window & { __tabPaint?: TabPaint }).__tabPaint!.settled))
-        .toBe(true)
+      await expect.poll(() => page.evaluate(() => window.__tabPaint!.settled)).toBe(true)
 
       return (await read())!
     },
     stop: () =>
       page.evaluate(() => {
-        const state = (window as Window & { __tabPaint?: TabPaint }).__tabPaint!
+        const state = window.__tabPaint!
         state.stop()
 
         return state.removed
