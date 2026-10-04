@@ -3,6 +3,30 @@ export default {
   "tab.notFound": "Datei nicht gefunden: {{name}}",
   "mobile.title": "Dateien",
   "mobile.openTabs": "Geöffnete Dateien",
+  "view.archive.readOnly": "ZIP-Verzeichnis · Schreibgeschützt",
+  "view.archive.details": "Vorschaudetails",
+  "view.archive.loading": "ZIP-Verzeichnis wird gelesen…",
+  "view.archive.requestFailed":
+    "Das ZIP-Verzeichnis konnte nicht geladen werden. Überprüfen Sie die Verbindung und ob die Datei noch vorhanden ist.",
+  "view.archive.retry": "Erneut versuchen",
+  "view.archive.search": "Archiveinträge suchen",
+  "view.archive.directory": "Archivverzeichnis",
+  "view.archive.entries.one": "{{count}} Eintrag",
+  "view.archive.entries.other": "{{count}} Einträge",
+  "view.archive.empty": "Dieses ZIP-Archiv ist leer.",
+  "view.archive.noResults": "Keine passenden Einträge.",
+  "view.archive.duplicate": "Doppelter Name",
+  "view.archive.encrypted": "Verschlüsselter Eintrag",
+  "view.archive.symlink": "Symbolische Verknüpfung",
+  "view.archive.boundary":
+    "Nur Verzeichnismetadaten. Inhalte, Verknüpfungen, Verschlüsselung und Komprimierung werden nicht geöffnet oder geprüft. ZIP und ZIP64 werden unterstützt; aufgeteilte Archive nicht.",
+  "view.archive.invalid":
+    "Das ZIP-Verzeichnis ist beschädigt oder nicht lesbar. Der Inhalt der Einträge wurde nicht geprüft.",
+  "view.archive.unsupported":
+    "Dieses Archiv verwendet ein nicht unterstütztes Verzeichnisformat, aufgeteilte Volumes oder Namen mit Steuerzeichen.",
+  "view.archive.limit":
+    "Dieses ZIP-Verzeichnis überschreitet die Vorschaugrenzen: 5.000 Einträge, 1.024 Byte lange Namen, 64 Ebenen oder 4 MiB Verzeichnisdaten.",
+  "view.archive.timeout": "Das Lesen des ZIP-Verzeichnisses hat das Zeitlimit von 5 Sekunden überschritten.",
   "open.in": "Öffnen in",
   "open.ariaLabel": "In {{app}} öffnen",
   "open.menu": "Öffnen-Optionen",
