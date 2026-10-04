@@ -444,14 +444,14 @@ function urls(text: string | undefined) {
   if (!text) return []
   const seen = new Set<string>()
 
-  return [...text.matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)]
-    .map((item) => item[0].replace(/[),.;:!?]+$/g, ""))
-    .filter((item) => {
-      if (seen.has(item)) return false
-      seen.add(item)
+  return [...text.matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)].flatMap((match) => {
+    const item = match[0].replace(/[),.;:!?]+$/g, "")
 
-      return true
-    })
+    if (seen.has(item)) return []
+    seen.add(item)
+
+    return [item]
+  })
 }
 
 function sessionLink(id: string | undefined, href?: (id: string) => string | undefined) {
