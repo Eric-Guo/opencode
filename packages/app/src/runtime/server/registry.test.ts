@@ -76,9 +76,9 @@ test("keeps exact persisted server identities and prevents removing provided ser
 test("project actions update schema-derived state and follow dynamic server scopes", () => {
   const [store, setStore] = createStore(Schema.decodeUnknownSync(serverSchema())({}))
 
-  const props: { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key } = {
+  const [props, setProps] = createStore<{ server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key }>({
     server: ServerConnection.Key.make("https://remote.example"),
-  }
+  })
 
   const projects = createServerProjects({
     store,
@@ -91,7 +91,7 @@ test("project actions update schema-derived state and follow dynamic server scop
   projects.touch("/remote")
   expect(projects.list()).toEqual([{ worktree: "/remote", expanded: false }])
   expect(projects.last()).toBe("/remote")
-  props.canonicalLocalServer = props.server
+  setProps("canonicalLocalServer", props.server)
   expect(projects.list()).toEqual([])
   projects.open("/local")
   projects.close("/local")

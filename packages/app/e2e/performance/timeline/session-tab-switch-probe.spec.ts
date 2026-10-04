@@ -1,6 +1,5 @@
 import { benchmark, expect } from "../benchmark"
 import { measureSessionSwitch } from "./session-tab-switch-probe"
-import type { SessionSwitchSample } from "./session-tab-switch-metrics"
 
 for (const tag of ["a", "button"] as const) {
   benchmark(
@@ -36,13 +35,13 @@ for (const tag of ["a", "button"] as const) {
             .getByRole(tag === "a" ? "link" : "button", { name: "Destination", exact: true })
             .dispatchEvent("mousedown", { button: 0 })
           await page.waitForFunction(() => {
-            const host = window as Window & { __sessionSwitchProbe?: { samples: SessionSwitchSample[] } }
+            const host = window
 
             return host.__sessionSwitchProbe?.samples.some((sample) => !sample.hasVisibleRows)
           })
           await page.locator("[data-message-id]").evaluate((row) => row.style.removeProperty("visibility"))
           await page.waitForFunction(() => {
-            const host = window as Window & { __sessionSwitchProbe?: { samples: SessionSwitchSample[] } }
+            const host = window
 
             return host.__sessionSwitchProbe?.samples.some(
               (sample) => sample.destination.length > 0 && sample.requiredPartVisible === false,
@@ -57,13 +56,13 @@ for (const tag of ["a", "button"] as const) {
             answer.querySelector('[data-component="markdown"]')!.setAttribute("data-markdown-ready", "")
 
             return (
-              (window as Window & { __sessionSwitchProbe?: { samples: SessionSwitchSample[] } }).__sessionSwitchProbe
+              (window).__sessionSwitchProbe
                 ?.samples.length ?? 0
             )
           })
 
           await page.waitForFunction((count) => {
-            const host = window as Window & { __sessionSwitchProbe?: { samples: SessionSwitchSample[] } }
+            const host = window
 
             return host.__sessionSwitchProbe?.samples
               .slice(count)
