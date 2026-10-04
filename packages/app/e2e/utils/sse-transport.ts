@@ -265,6 +265,7 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
     { server, retry: options.retry, keepalive: options.keepalive !== false },
   )
 
+  // SAFETY: each public transport method supplies its command variant and corresponding declared result type.
   const command = <Result>(input: BrowserCommand<T>) =>
     page.evaluate(
       ({ server, input }) => {
@@ -328,6 +329,8 @@ export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEven
     writeRaw(value, cuts, marker) {
       return command({
         type: "raw",
+        // SAFETY: writeRaw accepts precisely UTF-8 text or an already encoded byte array.
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof
         bytes: Array.from(typeof value === "string" ? new TextEncoder().encode(value) : value),
         cuts: cuts ? [...cuts] : undefined,
         marker,
