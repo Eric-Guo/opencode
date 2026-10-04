@@ -144,6 +144,7 @@ export function createServerTransport(input: { http: ServerConnection.HttpBase; 
       return state.http.url
     },
   })
+
   return {
     update(http: ServerConnection.HttpBase) {
       state.http = http
