@@ -1773,6 +1773,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const file = createMemo(() => (typeof props.input.file === "string" ? `file=${props.input.file}` : undefined))
+
     return (
       <BasicTool
         {...props}

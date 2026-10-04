@@ -66,6 +66,7 @@ const runtime = Layer.effect(
       const win = target ?? getLastFocusedWindow()
 
       if (win) emitIpcEvent(getPrimaryWebContents(win), new DeepLinksOpened({ urls }))
+
       return win
     }
 
@@ -87,6 +88,7 @@ const runtime = Layer.effect(
       setAppQuitting()
       runFork(shutdown.run.pipe(Effect.ensuring(Effect.sync(() => app.exit(0)))))
     }
+
     const secondInstance = (_event: Event, argv: string[]) => {
       const urls = argv.filter((arg) => arg.startsWith("opencode://"))
 
