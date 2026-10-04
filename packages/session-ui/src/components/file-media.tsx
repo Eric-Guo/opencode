@@ -10,6 +10,7 @@ import {
   type FileMediaEvent,
 } from "./file-media-machine"
 import {
+  type MediaValue,
   dataUrlFromMediaValue,
   hasMediaValue,
   isBinaryContent,
@@ -21,9 +22,9 @@ import {
 export type FileMediaOptions = {
   mode?: "auto" | "off"
   path?: string
-  current?: unknown
-  before?: unknown
-  after?: unknown
+  current?: MediaValue
+  before?: MediaValue
+  after?: MediaValue
   deleted?: boolean
   readFile?: (path: string) => Promise<PresentationFileContent | undefined>
   onLoad?: () => void
