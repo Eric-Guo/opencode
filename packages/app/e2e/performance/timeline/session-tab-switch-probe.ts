@@ -26,7 +26,7 @@ async function installSessionSwitchProbe(
       let started: number | undefined
       let running = true
 
-      const reviewLevels: Record<string, string> = {
+      const reviewLevels = {
         panel: "#review-panel",
         tabs: '#review-panel [data-component="tabs"]',
         body: '#review-panel [data-slot="session-review-v2-body"]',
@@ -85,9 +85,9 @@ async function installSessionSwitchProbe(
               )
             }
 
-            const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-              .filter(inViewport)
-              .map((element) => element.dataset.messageId!)
+            const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")].flatMap((element) =>
+              inViewport(element) ? [element.dataset.messageId!] : [],
+            )
 
             const hasVisibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].some(inViewport)
 
@@ -153,7 +153,7 @@ async function installSessionSwitchProbe(
       // Tabs activate on mousedown; click alone misses the synchronous navigation work.
       document.addEventListener("mousedown", start, true)
       document.addEventListener("click", start, true)
-      ;(window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe = {
+      ;(window).__sessionSwitchProbe = {
         samples,
         stop: () => {
           running = false

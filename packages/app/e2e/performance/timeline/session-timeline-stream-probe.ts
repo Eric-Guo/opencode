@@ -588,9 +588,11 @@ export async function collectTimelineStreamMetrics(
           maxDistancePx: Math.max(0, ...state.geometry.map((sample) => sample.distance)),
           finalDistancePx: state.geometry.at(-1)?.distance ?? 0,
           final: state.geometry.at(-1),
-          distanceTransitionsPx: state.geometry
-            .map((sample) => Math.round(sample.distance))
-            .filter((value, index, values) => index === 0 || value !== values[index - 1]),
+          distanceTransitionsPx: state.geometry.flatMap((sample, index) => {
+            const distance = Math.round(sample.distance)
+
+            return index === 0 || distance !== Math.round(state.geometry[index - 1]!.distance) ? [distance] : []
+          }),
           bottomDriftTransitions: state.geometry.slice(1).filter((value, index) => {
             const previous = state.geometry[index]?.distance ?? 0
 

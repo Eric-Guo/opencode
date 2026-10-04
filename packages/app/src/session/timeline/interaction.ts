@@ -18,7 +18,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     messageID: string | undefined
     pendingMessage: string | undefined
     scroll: { overflow: boolean; jump: boolean }
-    follow: { sessionKey: string; pinned: boolean }
+    follow: { sessionKey: ReturnType<typeof session.identity.sessionKey>; pinned: boolean }
     /** The composer region's height; the timeline scrolls on underneath it and fades out at its top. */
     inset: number
     refs: {
