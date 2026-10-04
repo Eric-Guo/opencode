@@ -202,7 +202,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
   name: "Models",
   gate: false,
-  init: (props: { directory?: string } = {}) => {
+  init: (props: { directory?: string }) => {
     return createModelsController(() => props.directory)
   },
 })

@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from "bun:test"
 import { resolveObjectURL } from "node:buffer"
 import { resolveBlobUrl, setMediaBlobLoader } from "../persistence/drafts"
@@ -12,12 +13,14 @@ function setup(
 
   const api = createApiForServer({
     server: { url: "https://server.example:4096", password: "secret" },
-    // SAFETY: the API client only calls fetch with a URL and init, which this stub accepts.
-    fetch: (async (input: string | URL | Request, init?: RequestInit) => {
-      requests.push({ url: new URL(input instanceof Request ? input.url : input), init })
+    fetch: Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        requests.push({ url: new URL(input instanceof Request ? input.url : input), init })
 
-      return respond(init)
-    }) as typeof fetch,
+        return respond(init)
+      },
+      { preconnect() {} },
+    ),
   })
 
   return { api, requests }
