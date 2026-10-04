@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionInfo, SessionMessageInfo, SessionPromptInput } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { PromptMention, AgentAttachment } from "@opencode/schema/prompt"
 import { Permission } from "@opencode/schema/permission"
 import { Worktree } from "@opencode/schema/worktree"
@@ -81,7 +81,7 @@ export type MockProject = {
   time?: { created: number; updated: number }
 }
 
-export type MockPrompt = Omit<SessionPromptInput, "sessionID" | "location" | "abortSignal">
+export type MockPrompt = typeof PromptPayload.Type
 
 export type MockMcpStatus = { status: string; error?: string }
 
@@ -224,7 +224,7 @@ type MockStreamState = {
 // The `installSseTransport` command that delivers events.
 type MockSendCommand = { type: "send"; deliveries: { payload: unknown }[]; burst: boolean }
 
-type MockStreamWindow = Window & {
+export type MockStreamWindow = Window & {
   // Set to any value by benchmarks that bring their own event stream.
   __testSseTransport?: unknown
   // `installSseTransport` registrations.
@@ -1558,7 +1558,7 @@ const decodeSession = Schema.decodeUnknownSync(
         updated: lenient(Schema.Number),
         idle: lenient(Schema.Number),
         viewed: lenient(Schema.Number),
-        archived: Schema.optionalKey(Schema.Unknown),
+        archived: lenient(Schema.Number),
       }),
     ),
     location: lenient(Schema.Struct({ directory: lenient(Schema.String) })),
@@ -1566,4 +1566,6 @@ const decodeSession = Schema.decodeUnknownSync(
   }),
 )
 
-const decodeSessionOutcome = Schema.decodeUnknownSync(Schema.Struct({ outcome: lenient(Schema.String) }))
+const decodeSessionOutcome = Schema.decodeUnknownSync(
+  Schema.Struct({ outcome: lenient(Schema.Literals(["succeeded", "failed", "interrupted"])) }),
+)
