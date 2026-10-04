@@ -16,7 +16,8 @@ const ListQuery = Schema.Struct({
 const WriteQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: Schema.String.annotate({
-    description: "An absolute path or a path relative to the requested location. Missing parent directories are created.",
+    description:
+      "An absolute path or a path relative to the requested location. Missing parent directories are created.",
   }),
 })
 
@@ -27,7 +28,28 @@ const FindQuery = Schema.Struct({
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
 })
 
+const ArchiveQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  path: Schema.String,
+})
+
 export const FileSystemGroup = HttpApiGroup.make("server.fs")
+  .add(
+    HttpApiEndpoint.get("fs.archive", "/api/fs/archive", {
+      query: ArchiveQuery,
+      success: Location.response(FileSystem.Archive),
+      error: FileNotFoundError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "fs.archive",
+          summary: "Preview ZIP directory",
+          description:
+            "Read only ZIP/ZIP64 central-directory metadata relative to the location. No member contents are read or verified. Limits: 5000 entries, 1024-byte names, 64 levels, 10000 tree nodes, 4 MiB per read, 12 MiB total reads, and 5 seconds. Encrypted members and arbitrary compression methods can be listed; split archives and unreadable directories are unsupported.",
+        }),
+      ),
+  )
   .add(
     HttpApiEndpoint.get("fs.read", "/api/fs/read/*", {
       query: LocationQuery,

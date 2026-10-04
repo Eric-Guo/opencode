@@ -198,6 +198,7 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branch", { success: Json }))
   .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { query: Query, success: Json }))
   .add(HttpApiEndpoint.get("fsList", "/api/fs/list", { query: Query, success: Json }))
+  .add(HttpApiEndpoint.get("fsArchive", "/api/fs/archive", { query: Query, success: Json }))
   .add(
     HttpApiEndpoint.get("fsRead", "/api/fs/read/*", {
       success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
