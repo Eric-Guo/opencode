@@ -1,6 +1,7 @@
+import { Schema } from "effect"
 import { expect, test } from "@playwright/test"
 import { base64Encode } from "@opencode/util/encode"
-import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
+import { currentSession, mockOpenCodeServer, type MockPrompt, type MockProject } from "../utils/mock-server"
 
 const directory = "C:/Users/test/opencode-new-project"
 
@@ -18,18 +19,18 @@ test.use({ serviceWorkers: "block" })
 
 for (const selection of ["missing", "unselected", "selected"] as const) {
   test(`new session submission with project ${selection}`, async ({ page }) => {
-    const prompts: { sessionID: string; body: Record<string, unknown> }[] = []
+    const prompts: { sessionID: string; body: MockPrompt }[] = []
     const sessions: ReturnType<typeof currentSession>[] = []
 
-    const project = {
+    const project: MockProject & { myTodo?: { project_id: number; project_name: string; work_package_id: number } } = {
       id: projectID,
       worktree: directory,
       canonical: directory,
       time: { created: 1700000000000, updated: 1700000000000 },
-      ...(selection === "selected"
-        ? { myTodo: { project_id: 1, project_name: "Test PLM project", work_package_id: 42 } }
-        : {}),
     }
+
+    if (selection === "selected")
+      project.myTodo = { project_id: 1, project_name: "Test PLM project", work_package_id: 42 }
 
     await mockOpenCodeServer(page, {
       directory,
@@ -54,10 +55,16 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
     )
     await page.route("**/api/session", (route) => {
       if (route.request().method() !== "POST") return route.fallback()
-      const body: Record<string, unknown> = route.request().postDataJSON()
+
+      const body = Schema.decodeUnknownSync(
+        Schema.Struct({
+          id: Schema.String,
+          location: Schema.Struct({ directory: Schema.String }),
+        }),
+      )(route.request().postDataJSON())
+
       expect(body.location).toEqual({ directory: selectedDirectory })
 
-      if (typeof body.id !== "string") throw new Error("Expected a client-reserved session ID")
       const session = currentSession({ ...body, id: body.id, projectID, title: "First session" }, directory)
       sessions.push(session)
 

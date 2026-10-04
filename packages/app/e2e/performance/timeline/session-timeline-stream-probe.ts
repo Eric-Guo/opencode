@@ -126,7 +126,7 @@ export async function installTimelineStreamProbe(
         start: () => {},
       }
 
-      ;(window as Window & { __timelineStreamBenchmark?: TimelineProbeState }).__timelineStreamBenchmark = state
+      ;(window).__timelineStreamBenchmark = state
       const scrollTo = Element.prototype.scrollTo
       const scrollTop = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")!
 
@@ -135,9 +135,9 @@ export async function installTimelineStreamProbe(
         function measuredScrollTo(this: Element, x: number, y: number): void
         function measuredScrollTo(this: Element, first?: number | ScrollToOptions, second?: number) {
           state.scroll.calls += 1
-          const top = typeof first === "object" ? first?.top : second
+          const top = first instanceof Object ? first.top : second
 
-          if (typeof top === "number") {
+          if (top !== undefined) {
             const target = Math.min(top, this.scrollHeight - this.clientHeight)
 
             if (Math.abs(this.scrollTop - target) < 1) state.scroll.callNoops += 1
@@ -145,7 +145,12 @@ export async function installTimelineStreamProbe(
 
           if (state.scroll.lastCallFrame === state.scroll.frame) state.scroll.sameFrameCalls += 1
           state.scroll.lastCallFrame = state.scroll.frame
-          scrollTo.apply(this, typeof first === "number" ? [first, second] : [first])
+          // SAFETY: The captured native method has both DOM scrollTo overloads; this selects its object overload.
+          const scrollOptions = scrollTo as (this: Element, options?: ScrollToOptions) => void
+
+          if (first instanceof Object || first === undefined) return scrollOptions.call(this, first)
+
+          scrollTo.call(this, first, second ?? 0)
         }
 
         Element.prototype.scrollTo = measuredScrollTo
@@ -451,7 +456,7 @@ export async function installTimelineStreamProbe(
 
 export function startTimelineStreamProbe(page: Page) {
   return page.evaluate(() => {
-    const state = (window as Window & { __timelineStreamBenchmark?: TimelineProbeState }).__timelineStreamBenchmark
+    const state = (window).__timelineStreamBenchmark
 
     if (!state) throw new Error("missing streaming benchmark state")
     state.start()
@@ -619,4 +624,10 @@ export async function collectTimelineStreamMetrics(
       domTextCharacters: part?.textContent?.length ?? 0,
     }
   }, options)
+}
+
+declare global {
+  interface Window {
+    __timelineStreamBenchmark?: TimelineProbeState
+  }
 }
