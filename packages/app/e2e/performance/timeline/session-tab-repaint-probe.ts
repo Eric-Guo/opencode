@@ -56,20 +56,19 @@ export async function installCachedRepaintProbe(
     const recordShifts = (entries: PerformanceEntry[]) => {
       if (!state.running) return
       state.shifts.push(
-        ...entries
-          .map((entry) => {
+        ...entries.flatMap((entry) => {
             if (
               entry.startTime < state.startedAtPerformanceMs ||
               entry.startTime > state.startedAtPerformanceMs + state.windowMs
             )
-              return
+              return []
 
-            return {
+            // SAFETY: recordShifts receives entries only from the layout-shift observer below.
+            return [{
               occurredAtMs: entry.startTime - state.startedAtPerformanceMs,
               value: (entry as PerformanceEntry & { value: number }).value,
-            }
-          })
-          .filter((entry): entry is { occurredAtMs: number; value: number } => entry !== undefined),
+            }]
+          }),
       )
     }
 
@@ -115,27 +114,19 @@ export async function installCachedRepaintProbe(
         if (root) {
           const view = root.getBoundingClientRect()
 
-          const rows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
-            .map((element) => ({
-              key: element.dataset.timelineKey,
-              node: id(element),
-              rect: element.getBoundingClientRect(),
-            }))
-            .filter((item) => item.rect.bottom > view.top && item.rect.top < view.bottom)
-            .map((item) => ({
-              key: item.key,
-              node: item.node,
-              top: item.rect.top - view.top,
-              bottom: item.rect.bottom - view.top,
-            }))
+          const rows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].flatMap((element) => {
+            const rect = element.getBoundingClientRect()
 
-          const messages = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-            .filter((element) => {
-              const rect = element.getBoundingClientRect()
+            if (rect.bottom <= view.top || rect.top >= view.bottom) return []
 
-              return rect.bottom > view.top && rect.top < view.bottom
-            })
-            .map((element) => element.dataset.messageId!)
+            return [{ key: element.dataset.timelineKey, node: id(element), top: rect.top - view.top, bottom: rect.bottom - view.top }]
+          })
+
+          const messages = [...root.querySelectorAll<HTMLElement>("[data-message-id]")].flatMap((element) => {
+            const rect = element.getBoundingClientRect()
+
+            return rect.bottom > view.top && rect.top < view.bottom ? [element.dataset.messageId!] : []
+          })
 
           const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
           state.samples.push({
