@@ -32,6 +32,7 @@ export const windowHandlers = WindowRpcs.toLayer(
       WindowThemeReady: (_args, context) =>
         Effect.sync(() => {
           const win = getWindowFromWebContents(sender(handoff, context))
+
           if (!win) throw new Error("Window not found")
           setWindowThemeReady(win)
         }),
@@ -48,6 +49,7 @@ export const windowHandlers = WindowRpcs.toLayer(
           const contents = sender(handoff, context)
           contents.setZoomFactor(factor)
           const win = getWindowFromWebContents(contents)
+
           if (win) updateTitlebar(win)
         }),
       WindowGetZoomLevel: () => Effect.sync(storedZoomLevel),
@@ -57,6 +59,7 @@ export const windowHandlers = WindowRpcs.toLayer(
       WindowSetTitlebar: ({ theme }, context) =>
         Effect.sync(() => {
           const win = getWindowFromWebContents(sender(handoff, context))
+
           if (win) setTitlebar(win, theme)
         }),
       WindowSetTrafficLightsPosition: (position, context) =>
