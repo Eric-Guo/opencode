@@ -322,14 +322,19 @@ export type SessionQueueView = Pick<
 export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original: string; replacement: string }) {
   const replaced = replacement && items.some((item) => item.id === replacement.replacement)
 
-  return items
-    .filter((item) => !replaced || item.id !== replacement.original)
-    .map((item) => ({
-      id: item.id,
-      text: queuedPromptText(item),
-      attachments:
-        (item.payload.files?.length ?? 0) + (readPromptPresentation(item.payload.metadata)?.attachments.length ?? 0),
-    }))
+  return items.flatMap((item) =>
+    replaced && item.id === replacement.original
+      ? []
+      : [
+          {
+            id: item.id,
+            text: queuedPromptText(item),
+            attachments:
+              (item.payload.files?.length ?? 0) +
+              (readPromptPresentation(item.payload.metadata)?.attachments.length ?? 0),
+          },
+        ],
+  )
 }
 
 export function queuedPromptText(item: QueuedPrompt) {

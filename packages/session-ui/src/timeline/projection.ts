@@ -278,9 +278,11 @@ export namespace Timeline {
       : turns
 
     const rows: TimelineRow.TimelineRow[] = [
-      ...leading
-        .filter(visibleNotice)
-        .map((message) => new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id })),
+      ...leading.flatMap((message) =>
+        visibleNotice(message)
+          ? [new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id })]
+          : [],
+      ),
       ...visibleTurns.flatMap((turn, index) => {
         if (turn.shell)
           return [
@@ -318,14 +320,13 @@ export namespace Timeline {
             rows,
             detail,
             new Set(
-              messages
-                .filter(
-                  (message) =>
-                    message.type === "compaction" ||
-                    message.type === "model-switched" ||
-                    message.type === "location-switched",
-                )
-                .map((message) => message.id),
+              messages.flatMap((message) =>
+                message.type === "compaction" ||
+                message.type === "model-switched" ||
+                message.type === "location-switched"
+                  ? [message.id]
+                  : [],
+              ),
             ),
           )
         : rows,
