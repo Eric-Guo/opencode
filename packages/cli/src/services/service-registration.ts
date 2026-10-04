@@ -1,7 +1,7 @@
 export * as ServiceRegistration from "./service-registration"
 
 import { Service, type Info } from "@opencode/client/effect/service"
-import { DatabaseProcessOwner } from "@opencode/core/database/process-owner"
+import { ProcessOwner } from "@opencode/util/process-owner"
 import path from "node:path"
 import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/http"
@@ -23,8 +23,8 @@ export const register = Effect.fnUntraced(function* (options: {
   const temp = options.file + "." + options.id + ".tmp"
   yield* fs.makeDirectory(path.dirname(options.file), { recursive: true })
   const directory = yield* fs.realPath(path.dirname(options.file))
-  yield* DatabaseProcessOwner.lease(
-    path.join(directory, path.basename(options.file) + ".owner.sqlite"),
+  yield* ProcessOwner.lease(
+    path.join(directory, path.basename(options.file) + ".owner"),
     "Another managed service owns this registration",
   )
   const previous = yield* fs.readFileString(options.file).pipe(
