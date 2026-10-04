@@ -400,6 +400,7 @@
         "@parcel/watcher": "2.5.1",
         "@silvia-odwyer/photon-node": "0.3.4",
         "@standard-schema/spec": "catalog:",
+        "@zip.js/zip.js": "2.7.62",
         "bun-pty": "0.4.9",
         "diff": "catalog:",
         "drizzle-orm": "catalog:",
