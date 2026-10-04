@@ -1,11 +1,12 @@
+import { Option, Predicate, Schema } from "effect"
 import { execFile } from "node:child_process"
 import { access, readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join, win32 } from "node:path"
 
 type Logger = {
-  log?: (message: string, meta?: Record<string, unknown>) => void
-  warn?: (message: string, meta?: Record<string, unknown>) => void
+  log?: (message: string, meta?: { pid?: number; pidFile?: string; port?: number; uptimeSeconds?: number; version?: string; error?: string; stderr?: string; stdout?: string; platform?: NodeJS.Platform; command?: string }) => void
+  warn?: (message: string, meta?: { pid?: number; pidFile?: string; port?: number; uptimeSeconds?: number; version?: string; error?: string; stderr?: string; stdout?: string; platform?: NodeJS.Platform; command?: string }) => void
 }
 
 type CommandResult = {
@@ -260,23 +261,29 @@ async function runCommand(command: string, args: string[], deps: Dependencies, o
   )
 }
 
+
+const Status = Schema.fromJsonString(Schema.Struct({
+  running: Schema.Boolean,
+  port: Schema.Unknown,
+  version: Schema.Unknown,
+  uptime_seconds: Schema.Unknown,
+}).mapFields((fields) => ({
+  ...fields,
+  port: Schema.optionalKey(fields.port),
+  version: Schema.optionalKey(fields.version),
+  uptime_seconds: Schema.optionalKey(fields.uptime_seconds),
+})))
+
 function parseStatus(stdout: string): DaemonStatus | undefined {
-  try {
-    const parsed: unknown = JSON.parse(stdout)
+  const status = Option.getOrUndefined(Schema.decodeUnknownOption(Status)(stdout))
 
-    if (!parsed || typeof parsed !== "object") return
-    const status = parsed as Record<string, unknown>
+  if (!status) return
 
-    if (typeof status.running !== "boolean") return
-
-    return {
-      running: status.running,
-      port: typeof status.port === "number" ? status.port : undefined,
-      version: typeof status.version === "string" ? status.version : undefined,
-      uptime_seconds: typeof status.uptime_seconds === "number" ? status.uptime_seconds : undefined,
-    }
-  } catch {
-    return
+  return {
+    running: status.running,
+    port: Predicate.isNumber(status.port) ? status.port : undefined,
+    version: Predicate.isString(status.version) ? status.version : undefined,
+    uptime_seconds: Predicate.isNumber(status.uptime_seconds) ? status.uptime_seconds : undefined,
   }
 }
 
@@ -304,19 +311,18 @@ function isProcessRunning(pid: number) {
   }
 }
 
-function commandErrorOutput(error: unknown, key: "stdout" | "stderr") {
-  if (!error || typeof error !== "object" || !(key in error)) return ""
-  const output = (error as Record<"stdout" | "stderr", unknown>)[key]
 
-  if (typeof output === "string") return output
+function commandErrorOutput(cause: unknown, key: "stdout" | "stderr") {
+  if (!Predicate.isObject(cause)) return ""
+  const output = key === "stdout" ? ("stdout" in cause ? cause.stdout : undefined) : ("stderr" in cause ? cause.stderr : undefined)
+
+  if (Predicate.isString(output)) return output
 
   if (Buffer.isBuffer(output)) return output.toString("utf8")
 
   return ""
 }
 
-function serializeError(error: unknown) {
-  if (error instanceof Error) return error.message
-
-  return String(error)
+function serializeError(cause: unknown) {
+  return cause instanceof Error ? cause.message : String(cause)
 }

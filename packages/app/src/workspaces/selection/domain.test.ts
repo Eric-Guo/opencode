@@ -17,16 +17,46 @@ import {
   pickerAbsoluteInput,
 } from "./domain"
 
-type Sdk = Parameters<typeof listPickerDirectory>[0]
+type FileAPI = Parameters<typeof listPickerDirectory>[0]["api"]["file"]
 
-type FileApi = {
-  find?: (input: never, options: never) => Promise<object>
-  list?: (input: never, options: never) => Promise<object>
-}
+type FileResult = Awaited<ReturnType<FileAPI["list"]>>
 
-// SAFETY: the picker only reads `api.file.find` and `api.file.list`, which every fake here provides.
-// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- a partial fake stands in for the generated SDK client
-const sdk = (file: FileApi) => ({ api: { file } }) as unknown as Sdk
+// The picker only reads `api.file.find` and `api.file.list`.
+const sdk = (file: {
+  find?: (
+    input: Parameters<FileAPI["find"]>[0],
+    options: Parameters<FileAPI["find"]>[1],
+  ) => Promise<Omit<FileResult, "location"> & Partial<Pick<FileResult, "location">>>
+  list?: (
+    input: NonNullable<Parameters<FileAPI["list"]>[0]>,
+    options: Parameters<FileAPI["list"]>[1],
+  ) => Promise<Omit<FileResult, "location"> & Partial<Pick<FileResult, "location">>>
+}) => ({
+  api: {
+    file: {
+      find: async (input: Parameters<FileAPI["find"]>[0], options?: Parameters<FileAPI["find"]>[1]) => {
+        if (!file.find) throw new Error("Unexpected directory search")
+        const result = await file.find(input, options)
+
+        return {
+          location: input.location?.directory ? { directory: input.location.directory } : { directory: "/repo" },
+          ...result,
+        }
+      },
+      list: async (input: Parameters<FileAPI["list"]>[0], options?: Parameters<FileAPI["list"]>[1]) => {
+        if (!file.list) throw new Error("Unexpected directory listing")
+
+        if (!input) throw new Error("Directory listing requires its request")
+        const result = await file.list(input, options)
+
+        return {
+          location: input.location?.directory ? { directory: input.location.directory } : { directory: "/repo" },
+          ...result,
+        }
+      },
+    },
+  },
+})
 
 test("maps server directory entries into Pierre paths", () => {
   expect(
@@ -182,7 +212,7 @@ test("lists absolute parents and preloads siblings through a stable workspace", 
   const location = { directory: "/repo/current", workspace: "workspace_1" }
 
   const api = sdk({
-    list: async (input: { path?: string }) => {
+    list: async (input) => {
       calls.push(input)
 
       return {
@@ -300,10 +330,13 @@ test("maps server-native drive and share paths without rebasing the location", a
   const calls: unknown[] = []
 
   const api = sdk({
-    list: async (input: { location: { directory: string }; path: string }) => {
+    list: async (input) => {
       calls.push(input)
 
-      return { location: input.location, data: [{ path: "../sibling/", type: "directory" }] }
+      return {
+        location: { directory: input.location?.directory ?? "/repo" },
+        data: [{ path: "../sibling/", type: "directory" }],
+      }
     },
   })
 
@@ -328,8 +361,8 @@ const projects = Array.from({ length: 60 }, (_, index) => ({ path: `project-${in
 const fallbacks: {
   name: string
   query: string
-  find: () => Promise<object>
-  list: () => Promise<object>
+  find: () => Promise<Omit<FileResult, "location"> & Partial<Pick<FileResult, "location">>>
+  list: () => Promise<Omit<FileResult, "location"> & Partial<Pick<FileResult, "location">>>
   expected: string[]
   listed: string[]
 }[] = [
@@ -498,7 +531,7 @@ test("a folder listing that failed once is read again by the next search", async
 
   const api = sdk({
     find: async () => ({ location, data: [] }),
-    list: async (input: { path: string }) => {
+    list: async (input) => {
       listed.push(input.path)
 
       if (listed.length === 1) throw new Error("server is starting")
@@ -520,15 +553,17 @@ test("a search passes its signal to the server search, and closing the picker ab
   const listing = Promise.withResolvers<AbortSignal>()
 
   const api = sdk({
-    find: async (_input: never, options: { signal?: AbortSignal }) => {
-      signals.push(options.signal)
+    find: async (_input, options) => {
+      signals.push(options?.signal)
 
       return { location, data: [] }
     },
-    list: (_input: never, options: { signal: AbortSignal }) => {
+    list: (_input, options) => {
+      if (!options?.signal) throw new Error("Directory listing requires its abort signal")
+
       listing.resolve(options.signal)
 
-      return new Promise<object>(() => {})
+      return new Promise<never>(() => {})
     },
   })
 
@@ -545,11 +580,11 @@ test("a search passes its signal to the server search, and closing the picker ab
 
 test("listing a folder passes the abort signal to the request", async () => {
   const controller = new AbortController()
-  const signals: unknown[] = []
+  const signals: (AbortSignal | undefined)[] = []
 
   const api = sdk({
-    list: async (_input: never, options: { signal?: AbortSignal }) => {
-      signals.push(options.signal)
+    list: async (_input, options) => {
+      signals.push(options?.signal)
 
       return { location: { directory: "/repo" }, data: [] }
     },

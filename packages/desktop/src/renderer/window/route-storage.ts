@@ -1,5 +1,5 @@
 export function getLastActiveUrl(windowID: string) {
-  if (typeof localStorage !== "object") return "/"
+  if (typeof localStorage === "undefined") return "/"
 
   try {
     return acceptedLastActiveUrl(localStorage.getItem(windowLastActiveUrlKey(windowID)))
@@ -9,7 +9,7 @@ export function getLastActiveUrl(windowID: string) {
 }
 
 export function setLastActiveUrl(windowID: string, value: string) {
-  if (typeof localStorage !== "object") return
+  if (typeof localStorage === "undefined") return
 
   try {
     localStorage.setItem(windowLastActiveUrlKey(windowID), value)

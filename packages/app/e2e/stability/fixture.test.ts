@@ -15,10 +15,10 @@ describe("timeline fixture validation", () => {
   })
 
   test("rejects malformed SDK values at runtime", () => {
-    // SAFETY: each value below is malformed on purpose; the validators must reject it at run time.
     expect(() =>
       assistantMessage([], {
-        error: { type: "APIError", message: 1 } as never,
+        // @ts-expect-error Intentionally malformed error exercises runtime schema validation.
+        error: { type: "APIError", message: 1 },
       }),
     ).toThrow()
     expect(() =>
@@ -29,18 +29,17 @@ describe("timeline fixture validation", () => {
         data: { sessionID: "ses_timeline_stability", status: { type: "retry", attempt: 1 } },
       }),
     ).toThrow()
-    // SAFETY: malformed on purpose, as above.
-    expect(() => validateTimelineMessages([{ ...userMessage(), id: "invalid" } as never])).toThrow()
-    // SAFETY: malformed on purpose, as above.
-    expect(() => validateTimelineMessages([{ ...userMessage(), time: { created: "invalid" } } as never])).toThrow()
-    // SAFETY: malformed on purpose, as above.
+    expect(() => validateTimelineMessages([{ ...userMessage(), id: "invalid" }])).toThrow()
+    // @ts-expect-error Intentionally malformed timestamp exercises runtime schema validation.
+    expect(() => validateTimelineMessages([{ ...userMessage(), time: { created: "invalid" } }])).toThrow()
     expect(() =>
       validateTimelineMessages([
         userMessage(),
         {
           ...assistantMessage(),
+          // @ts-expect-error Intentionally incomplete tool completion exercises runtime schema validation.
           content: [{ type: "tool", id: "call_invalid", name: "shell", state: { status: "completed" } }],
-        } as never,
+        },
       ]),
     ).toThrow()
   })
