@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
+import { sessionInfo } from "@/test/fixtures"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
 import {
   HOME_SESSION_INDEX_LIMIT,
@@ -12,14 +13,14 @@ import {
 } from "./index"
 
 const session = (id: string, input: Partial<SessionInfo> = {}) =>
-  ({
+  sessionInfo({
     id,
     projectID: "project",
     title: id,
     time: { created: 1, updated: 1 },
     location: { directory: "/repo" },
     ...input,
-  }) as SessionInfo
+  })
 
 // The loader anchors its recent window on the wall clock, so fixtures do too.
 const now = Date.now()

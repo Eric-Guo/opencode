@@ -107,10 +107,12 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   let scrollRef: HTMLDivElement | undefined
   let focusToken = 0
 
-  const [store, setStore] = createStore({
-    selection: null as SelectedLineRange | null,
-    commenting: null as SelectedLineRange | null,
-    opened: null as string | null,
+  type PreviewState = { selection: SelectedLineRange | null; commenting: SelectedLineRange | null; opened: string | null }
+
+  const [store, setStore] = createStore<PreviewState>({
+    selection: null,
+    commenting: null,
+    opened: null,
   })
 
   const view = createMemo(() => ({

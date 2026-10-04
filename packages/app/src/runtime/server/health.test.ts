@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from "bun:test"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { checkServerHealth } from "./health"
@@ -21,12 +22,15 @@ describe("checkServerHealth", () => {
   test.each([undefined, "secret"])("reads /api/info authenticating with only the password (%s)", async (password) => {
     const requests: { path: string; authorization: string | null }[] = []
 
-    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
-      requests.push({ path: url.pathname, authorization: new Headers(init?.headers).get("authorization") })
+    const fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
+        requests.push({ path: url.pathname, authorization: new Headers(init?.headers).get("authorization") })
 
-      return info("2.0.0")
-    }) as typeof globalThis.fetch
+        return info("2.0.0")
+      },
+      { preconnect() {} },
+    )
 
     expect(await checkServerHealth({ ...server, password }, fetch)).toEqual({ healthy: true, version: "2.0.0" })
     expect(requests).toEqual([
@@ -59,12 +63,12 @@ describe("checkServerHealth", () => {
       },
     })
 
-    const fetch = (async () => info()) as unknown as typeof globalThis.fetch
+    const fetch = Object.assign(async () => info(), { preconnect() {} })
 
     await checkServerHealth(server, fetch).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
 
-      if (!timeout) delete (AbortSignal as Partial<typeof AbortSignal>).timeout
+      if (!timeout) Object.defineProperty(AbortSignal, "timeout", { value: undefined })
     })
 
     expect(timeoutMs).toBe(30_000)
@@ -79,25 +83,28 @@ describe("checkServerHealth", () => {
 
     let aborted = false
 
-    const fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
-      new Promise<Response>((_resolve, reject) => {
-        const signal = abortFromInput(input, init)
-        signal?.addEventListener(
-          "abort",
-          () => {
-            aborted = true
-            reject(new DOMException("Aborted", "AbortError"))
-          },
-          { once: true },
-        )
-      })) as unknown as typeof globalThis.fetch
+    const fetch = Object.assign(
+      (input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = abortFromInput(input, init)
+          signal?.addEventListener(
+            "abort",
+            () => {
+              aborted = true
+              reject(new DOMException("Aborted", "AbortError"))
+            },
+            { once: true },
+          )
+        }),
+      { preconnect() {} },
+    )
 
     const result = await checkServerHealth(server, fetch, {
       timeoutMs: 10,
     }).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
 
-      if (!timeout) delete (AbortSignal as Partial<typeof AbortSignal>).timeout
+      if (!timeout) Object.defineProperty(AbortSignal, "timeout", { value: undefined })
     })
 
     expect(aborted).toBe(true)
@@ -107,11 +114,14 @@ describe("checkServerHealth", () => {
   test("uses provided abort signal", async () => {
     let signal: AbortSignal | undefined
 
-    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      signal = abortFromInput(input, init)
+    const fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        signal = abortFromInput(input, init)
 
-      return info()
-    }) as unknown as typeof globalThis.fetch
+        return info()
+      },
+      { preconnect() {} },
+    )
 
     const abort = new AbortController()
     await checkServerHealth(server, fetch, {
@@ -124,13 +134,16 @@ describe("checkServerHealth", () => {
   test("retries transient failures and eventually succeeds", async () => {
     let count = 0
 
-    const fetch = (async () => {
-      count += 1
+    const fetch = Object.assign(
+      async () => {
+        count += 1
 
-      if (count < 3) throw new TypeError("network")
+        if (count < 3) throw new TypeError("network")
 
-      return info()
-    }) as unknown as typeof globalThis.fetch
+        return info()
+      },
+      { preconnect() {} },
+    )
 
     const result = await checkServerHealth(server, fetch, {
       retryCount: 2,
@@ -144,10 +157,13 @@ describe("checkServerHealth", () => {
   test("returns unhealthy when retries are exhausted", async () => {
     let count = 0
 
-    const fetch = (async () => {
-      count += 1
-      throw new TypeError("network")
-    }) as unknown as typeof globalThis.fetch
+    const fetch = Object.assign(
+      async () => {
+        count += 1
+        throw new TypeError("network")
+      },
+      { preconnect() {} },
+    )
 
     const result = await checkServerHealth(server, fetch, {
       retryCount: 2,

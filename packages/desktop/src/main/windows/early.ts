@@ -1,6 +1,7 @@
+import { isString } from "effect/Predicate"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
-import { app, BrowserWindow, screen, shell } from "electron"
+import { app, BrowserWindow, screen, shell, type BrowserWindowConstructorOptions } from "electron"
 import { resolveExternalURL } from "../files/external-url"
 import { windowArguments } from "./bootstrap"
 import { APP_NAME } from "../constants"
@@ -36,13 +37,13 @@ const displays = {
 // bundle, the layers and the renderer boot. restoreWindows() adopts it through takeEarlyWindow().
 export function createEarlyWindow() {
   const ids = getStore().get(WINDOW_IDS_KEY)
-  const id = Array.isArray(ids) && typeof ids[0] === "string" ? ids[0] : randomUUID()
+  const id = Array.isArray(ids) && isString(ids[0]) ? ids[0] : randomUUID()
   const root = app.getAppPath()
   const file = path.join(app.getPath("userData"), windowStateFile(id))
   const state = resolveWindowState(readWindowState(file), { width: 1280, height: 800 }, displays)
   const icons = app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(root, "resources/icons")
 
-  const win = new BrowserWindow({
+  const options = {
     x: state.x,
     y: state.y,
     width: state.width,
@@ -52,8 +53,6 @@ export function createEarlyWindow() {
     title: APP_NAME,
     icon: path.join(icons, `icon.${process.platform === "win32" ? "ico" : "png"}`),
     backgroundColor: storedBackgroundColor(),
-    ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 14, y: 14 } } : {}),
-    ...(process.platform === "win32" ? { frame: false, titleBarStyle: "hidden" as const, titleBarOverlay: titlebarOverlay() } : {}),
     webPreferences: {
       preload: path.join(root, "out/preload/index.cjs"),
       contextIsolation: true,
@@ -61,7 +60,13 @@ export function createEarlyWindow() {
       sandbox: true,
       additionalArguments: windowArguments(id),
     },
-  })
+  } satisfies BrowserWindowConstructorOptions
+
+  if (process.platform === "darwin") Object.assign(options, { titleBarStyle: "hidden", trafficLightPosition: { x: 14, y: 14 } })
+
+  if (process.platform === "win32") Object.assign(options, { frame: false, titleBarStyle: "hidden", titleBarOverlay: titlebarOverlay() })
+
+  const win = new BrowserWindow(options)
 
   manageWindowState(win, file, state, displays)
   // Closing the only window before the rest of the app has adopted it is a quit.

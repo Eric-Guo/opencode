@@ -1,13 +1,10 @@
 let files: Record<string, () => Promise<string>> | undefined
 
-let loads: Record<SoundID, () => Promise<string>> | undefined
+let loads: Record<string, () => Promise<string>> | undefined
 
 function getFiles() {
   if (files) return files
-  files = import.meta.glob("../../../../ui/src/assets/audio/*.aac", { import: "default" }) as Record<
-    string,
-    () => Promise<string>
-  >
+  files = import.meta.glob<string>("../../../../ui/src/assets/audio/*.aac", { import: "default" })
 
   return files
 }
@@ -74,18 +71,18 @@ function getLoads() {
 
       return [[file.replace(/\.aac$/, ""), load] as const]
     }),
-  ) as Record<SoundID, () => Promise<string>>
+  )
 
   return loads
 }
 
-const cache = new Map<SoundID, Promise<string | undefined>>()
+const cache = new Map<string, Promise<string | undefined>>()
 
 export function soundSrc(id: string | undefined) {
   const loads = getLoads()
 
   if (!id || !(id in loads)) return Promise.resolve(undefined)
-  const key = id as SoundID
+  const key = id
   const hit = cache.get(key)
 
   if (hit) return hit
