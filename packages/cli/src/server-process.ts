@@ -7,7 +7,7 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
-import { Effect, Option, Redacted, Schema } from "effect"
+import { Effect, Option, Redacted, Schedule, Schema } from "effect"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/http"
 import { NetAddress } from "effect/net"
@@ -154,23 +154,30 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
-                  if (!config.password) yield* ServiceConfig.password(password)
-                  return yield* ServiceRegistration.register({
+                  const cleanup = yield* ServiceRegistration.register({
                     address,
                     password,
                     id: instanceID,
                     file: registrationFile,
                     shutdown,
                   })
+                  if (!config.password) yield* ServiceConfig.password(password)
+                  return cleanup
                 }),
             },
         transform,
         () => remote.urls,
       )
       const server = yield* launch.pipe(
-        Effect.catch((error) => {
-          if (findIncumbent === undefined || !addressInUse(error)) return Effect.fail(error)
-          return Effect.gen(function* () {
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            if (registrationFile !== undefined && error instanceof Error && error.name === "ProcessOwnerBusy") {
+              if (!(yield* recognizeIncumbent(registrationFile))) return yield* Effect.fail(error)
+
+              return
+            }
+
+            if (findIncumbent === undefined || !addressInUse(error)) return yield* Effect.fail(error)
             const deadline = Date.now() + 15_000
             while (Date.now() < deadline) {
               const found = yield* findIncumbent.pipe(Effect.timeoutOption(deadline - Date.now()))
@@ -189,8 +196,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                 { cause: error },
               ),
             )
-          })
-        }),
+          }),
+        ),
       )
       if (server === undefined) return
       if (registrationFile !== undefined && config.remote !== undefined && NetAddress.isInetAddress(server.address)) {
@@ -220,6 +227,15 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : Effect.never
     }).pipe(Effect.annotateLogs({ role: "server" })),
   )
+})
+
+const recognizeIncumbent = Effect.fnUntraced(function* (file: string) {
+  const found = yield* Service.incumbent({ file }).pipe(
+    Effect.filterOrFail((value) => value !== undefined),
+    Effect.retry(Schedule.spaced("100 millis")),
+    Effect.timeoutOption("15 seconds"),
+  )
+  return Option.isSome(found)
 })
 
 function serviceURL(hostname: string, port: number) {
