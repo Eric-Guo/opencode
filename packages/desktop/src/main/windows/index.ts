@@ -25,6 +25,8 @@ import {
 import { loadWebContents, registerRendererOrigin, registerRendererProtocol, setProtocolReporter } from "./protocol"
 import { createWindowRegistry } from "./registry"
 import { createRendererLoader } from "./renderer-loading"
+// SAFETY: This imperative factory takes explicit dependencies; it is not an Effect contextual service.
+// oxlint-disable-next-line anti-slop-effect/no-service-constructor-imports
 import { makeWindowRecovery } from "./recovery"
 import { takeEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"

@@ -19,6 +19,7 @@ export function createTabMemory(owner: Owner | null) {
 
   return {
     get<T>(key: string, name: string) {
+      // SAFETY: each consumer owns a unique tab/name pair and uses the same T for ensure and get.
       return entries.get(key)?.get(name)?.value as T | undefined
     },
     ensure<T>(key: string, name: string, init: () => T) {
@@ -27,7 +28,11 @@ export function createTabMemory(owner: Owner | null) {
       if (!entries.has(key)) entries.set(key, state)
       const existing = state.get(name)
 
-      if (existing) return existing.value as T
+      if (existing) {
+        // SAFETY: the tab/name pair is initialized once by this consumer with its T-valued initializer.
+        return existing.value as T
+      }
+
       const entry = createRoot((dispose) => ({ value: init(), dispose }), owner)
       state.set(name, entry)
 
