@@ -12,6 +12,7 @@ export async function buildLocalWslCli(input: { version: string; script: string;
   const root = join(dirname(input.script), "../../..")
 
   const build = async () => {
+    // SAFETY: This reads the checked-in repository package.json, whose packageManager is required by its build workflow.
     const packageManager = (
       JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { packageManager: string }
     ).packageManager
