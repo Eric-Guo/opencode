@@ -55,6 +55,7 @@ export function visualPlan<const Regions extends Record<string, VisualRegionDefi
   invariants: readonly VisualInvariant<Extract<keyof Regions, string>>[],
   options: Omit<VisualPlan<Extract<keyof Regions, string>>, "regionNames" | "invariants"> = {},
 ): VisualPlan<Extract<keyof Regions, string>> {
+  // SAFETY: regions is the fixture-owned selector dictionary, so its enumerable keys are its string region names.
   return { ...options, regionNames: Object.keys(regions) as Extract<keyof Regions, string>[], invariants }
 }
 

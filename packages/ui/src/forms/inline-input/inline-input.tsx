@@ -11,6 +11,7 @@ export function InlineInput(props: InlineInputProps) {
   const style = () => {
     if (!local.style) return { width: local.width }
 
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid style props explicitly accept CSS text or a typed style map.
     if (typeof local.style === "string") {
       if (!local.width) return local.style
 

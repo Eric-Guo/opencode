@@ -43,6 +43,7 @@ const probe = Effect.fn("ShellEnv.probe")(function* (shell: string, mode: "-il" 
     windowsHide: true,
   })
 
+  // SAFETY: spawnSync returns a Node errno-bearing system Error when process creation or timeout fails.
   const err = out.error as NodeJS.ErrnoException | undefined
 
   if (err) {
