@@ -15,12 +15,16 @@ export function createWebSearchRequest(input: {
   connected: () => boolean
   request: () => FormInfo | undefined
   providers: (sessionID: string) => Promise<FormOption[]>
-  reply: (input: SessionFormReplyInput) => Promise<unknown>
+  reply: (input: SessionFormReplyInput) => Promise<void>
   events: Pick<OpenCodeEventStream, "listen">
 }) {
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<{
+    selected: string
+    sending: { form: FormInfo; abort: AbortController } | undefined
+    error: boolean
+  }>({
     selected: "random",
-    sending: undefined as { form: FormInfo; abort: AbortController } | undefined,
+    sending: undefined,
     error: false,
   })
 
@@ -106,7 +110,7 @@ export async function replyWebSearch(input: {
   form: FormInfo
   selection: string | false
   signal: AbortSignal
-  reply: (input: SessionFormReplyInput) => Promise<unknown>
+  reply: (input: SessionFormReplyInput) => Promise<void>
   events: Pick<OpenCodeEventStream, "listen">
 }) {
   if (input.signal.aborted) return

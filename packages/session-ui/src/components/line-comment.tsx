@@ -189,9 +189,9 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     "mention",
   ])
 
-  const refs = {
-    textarea: undefined as HTMLTextAreaElement | undefined,
-  }
+  type CommentRefs = { textarea?: HTMLTextAreaElement }
+
+  const refs: CommentRefs = {}
 
   const [open, setOpen] = createSignal(false)
 
@@ -317,14 +317,14 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           value={split.value}
           style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
           on:input={(e) => {
-            const value = (e.currentTarget as HTMLTextAreaElement).value
+            const value = e.currentTarget.value
             split.onInput(value)
             syncMention()
           }}
           on:click={() => syncMention()}
           on:select={() => syncMention()}
           on:keydown={(e) => {
-            const event = e as KeyboardEvent
+            const event = e
 
             if (event.isComposing || event.keyCode === 229) return
             event.stopPropagation()
