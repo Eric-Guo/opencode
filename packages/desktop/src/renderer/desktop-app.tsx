@@ -65,6 +65,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
   const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
   const platform = createDesktopPlatform(props.api, windowState)
+
   const [defaultServer] = createResource(async () => {
     if (bootstrap.defaultServerUrl === undefined) return platform.getDefaultServer?.()
 
