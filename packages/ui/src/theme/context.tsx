@@ -128,9 +128,9 @@ function drop(key: string) {
 }
 
 function readScheme(): ColorScheme {
-  const value = read(STORAGE_KEYS.COLOR_SCHEME) ?? "dark"
+  const value = read(STORAGE_KEYS.COLOR_SCHEME)
 
-  return value === "light" || value === "dark" ? value : "system"
+  return value === "light" || value === "system" ? value : "dark"
 }
 
 function clear() {

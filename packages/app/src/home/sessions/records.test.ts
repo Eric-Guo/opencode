@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
+import { sessionInfo } from "@/test/fixtures"
 import type { LocalProject } from "@/shell/state/layout"
 import { buildHomeSessionRecords, homeSessionLocation } from "./records"
 
 const session = (id: string, directory: string, projectID: string) =>
-  ({
+  sessionInfo({
     id,
     projectID,
     title: id,
     location: { directory },
     time: { created: 1, updated: 1 },
-  }) as SessionInfo
+  })
 
 describe("buildHomeSessionRecords", () => {
   const opened = { id: "project-a", worktree: "/repo/a" } as LocalProject

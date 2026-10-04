@@ -16,7 +16,7 @@ export function createRefreshQueue(input: QueueInput) {
   const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   const take = (count: number) => {
-    if (queued.size === 0) return [] as string[]
+    if (queued.size === 0) return new Array<string>()
     const items: string[] = []
 
     for (const [id, directory] of queued) {
