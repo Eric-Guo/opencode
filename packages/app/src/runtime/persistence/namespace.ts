@@ -94,14 +94,18 @@ export function createNamespaceStorage(
     if (dirty.size > 0) {
       const batch = [...dirty].map((key) => ({ key, ...local.get(key)! }))
       dirty.clear()
-      const insert = Object.fromEntries(batch.filter((entry) => entry.value !== null).map((e) => [e.key, e.value!]))
-      const remove = batch.filter((entry) => entry.value === null).map((entry) => entry.key)
+
+      const insert = Object.fromEntries(
+        batch.flatMap((entry) => (entry.value !== null ? [[entry.key, entry.value]] : [])),
+      )
+
+      const remove = batch.flatMap((entry) => (entry.value === null ? [entry.key] : []))
       const current = (entry: { key: string; seq: number }) => local.get(entry.key)?.seq === entry.seq
 
       const request = driver
         .update(name, insert, remove)
         .then((revision) => batch.filter(current).forEach((entry) => acknowledge(entry.key, revision)))
-        .catch((error: unknown) => {
+        .catch((error) => {
           // Only a value nothing newer has replaced is worth retrying.
           batch.filter(current).forEach((entry) => dirty.add(entry.key))
           console.error(`[persistence] flush failed for ${name}`, error)
