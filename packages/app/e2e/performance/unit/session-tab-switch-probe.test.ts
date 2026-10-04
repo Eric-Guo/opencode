@@ -8,7 +8,7 @@ function testPage(waitFailure?: Error) {
   // SAFETY: These failure paths call only evaluate and waitForFunction; neither callback runs in this adapter.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions
   const page = {
-    evaluate: async (_callback: unknown, input?: unknown) => {
+    evaluate: async (_callback: Parameters<Page["evaluate"]>[0], input?: Parameters<Page["evaluate"]>[1]) => {
       if (input) return
       stops.push(undefined)
     },
