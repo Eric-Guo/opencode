@@ -801,18 +801,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
 
   const [local, others] = splitProps(props, textKeys)
 
-  const text = () => {
-    const value = local.file.contents as unknown
-
-    if (typeof value === "string") return value
-
-    if (Array.isArray(value)) return value.join("\n")
-
-    if (value == null) return ""
-
-    // oxlint-disable-next-line no-base-to-string -- file contents cast to unknown, coercion is intentional
-    return String(value)
-  }
+  const text = () => local.file.contents
 
   const lineCount = () => {
     const value = text()
@@ -821,24 +810,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     return Math.max(1, total)
   }
 
-  const bytes = createMemo(() => {
-    const value = local.file.contents as unknown
-
-    if (typeof value === "string") return value.length
-
-    if (Array.isArray(value)) {
-      return value.reduce(
-        // oxlint-disable-next-line no-base-to-string -- array parts coerced intentionally
-        (sum, part) => sum + (typeof part === "string" ? part.length + 1 : String(part).length + 1),
-        0,
-      )
-    }
-
-    if (value == null) return 0
-
-    // oxlint-disable-next-line no-base-to-string -- file contents cast to unknown, coercion is intentional
-    return String(value).length
-  })
+  const bytes = createMemo(() => local.file.contents.length)
 
   const virtual = createMemo(() => bytes() > VIRTUALIZE_BYTES)
 
@@ -1007,9 +979,8 @@ function TextViewer<T>(props: TextFileProps<T>) {
         instance = value
       },
       draw: (value) => {
-        const contents = text()
         value.render({
-          file: typeof local.file.contents === "string" ? local.file : { ...local.file, contents },
+          file: local.file,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })
@@ -1021,7 +992,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   useAnnotationRerender<LineAnnotation<T>>({
     viewer,
     current: () => instance,
-    annotations: () => (local.annotations as LineAnnotation<T>[] | undefined) ?? [],
+    annotations: () => local.annotations ?? [],
   })
 
   // -- cleanup --
@@ -1155,8 +1126,8 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       return Math.max(before.length, after.length) > 500_000
     }
 
-    const before = typeof local.before?.contents === "string" ? local.before.contents : ""
-    const after = typeof local.after?.contents === "string" ? local.after.contents : ""
+    const before = local.before?.contents ?? ""
+    const after = local.after?.contents ?? ""
 
     return Math.max(before.length, after.length) > 500_000
   })
@@ -1215,8 +1186,8 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     // Worker render options override per-viewer options, including the large-file fallback.
     const workerPool = getWorkerPool(large() ? "none" : "word-line")
     const virtualizer = virtuals.get()
-    const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
-    const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
+    const beforeContents = local.before?.contents ?? ""
+    const afterContents = local.after?.contents ?? ""
     const done = preserve(viewer)
 
     onCleanup(done)
@@ -1303,7 +1274,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   useAnnotationRerender<DiffLineAnnotation<T>>({
     viewer,
     current: () => instance,
-    annotations: () => (local.annotations as DiffLineAnnotation<T>[] | undefined) ?? [],
+    annotations: () => local.annotations ?? [],
   })
 
   // -- cleanup --
