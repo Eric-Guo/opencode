@@ -1,3 +1,4 @@
+import { isString } from "effect/Predicate"
 import { expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 import path from "node:path"
@@ -57,9 +58,10 @@ test("minifies only builds, previews onboarding only in development, and ships s
   expect(renderer?.build?.sourcemap).toBe(true)
 
   // Vite resolves publicDir from the renderer root, not from the config file.
-  const root = renderer?.root ?? ""
-  const publicDir = renderer?.publicDir || ""
-  expect(existsSync(path.resolve(import.meta.dirname, root, publicDir, "oc-theme-preload.js"))).toBe(true)
+  if (!renderer?.root || !isString(renderer.publicDir)) throw new Error("Missing renderer root or publicDir")
+  expect(existsSync(path.resolve(import.meta.dirname, renderer.root, renderer.publicDir, "oc-theme-preload.js"))).toBe(
+    true,
+  )
 })
 
 test("bundles one Effect runtime and Drizzle while keeping native dependencies external", async () => {

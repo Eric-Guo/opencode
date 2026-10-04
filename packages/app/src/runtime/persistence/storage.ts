@@ -114,31 +114,31 @@ function fallbackSet(scope: string) {
 
 // SAFETY: a thrown storage error has no schema; only `name`, `code` and `message` are read, each behind a guard.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
-function quota(error: unknown) {
-  if (error instanceof DOMException) {
-    if (error.name === "QuotaExceededError") return true
+function quota(cause: unknown) {
+  if (cause instanceof DOMException) {
+    if (cause.name === "QuotaExceededError") return true
 
-    if (error.name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+    if (cause.name === "NS_ERROR_DOM_QUOTA_REACHED") return true
 
-    if (error.name === "QUOTA_EXCEEDED_ERR") return true
+    if (cause.name === "QUOTA_EXCEEDED_ERR") return true
 
-    if (error.code === 22 || error.code === 1014) return true
+    if (cause.code === 22 || cause.code === 1014) return true
 
     return false
   }
 
-  const name = Predicate.hasProperty(error, "name") && Predicate.isString(error.name) ? error.name : undefined
+  const name = Predicate.hasProperty(cause, "name") && Predicate.isString(cause.name) ? cause.name : undefined
 
   if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") return true
 
   if (name && /quota/i.test(name)) return true
 
-  const code = Predicate.hasProperty(error, "code") ? error.code : undefined
+  const code = Predicate.hasProperty(cause, "code") ? cause.code : undefined
 
   if (code === 22 || code === 1014) return true
 
   const message =
-    Predicate.hasProperty(error, "message") && Predicate.isString(error.message) ? error.message : undefined
+    Predicate.hasProperty(cause, "message") && Predicate.isString(cause.message) ? cause.message : undefined
 
   return !!message && /quota/i.test(message)
 }

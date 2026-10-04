@@ -1,3 +1,4 @@
+import { Schema } from "effect"
 import type { PresentationFileContent } from "../file-presentation"
 
 export type MediaKind = "image" | "audio" | "svg"
@@ -6,17 +7,21 @@ const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "b
 
 const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
 
-type MediaValue = unknown
+export type MediaValue = Schema.Json | PresentationFileContent | undefined
 
-function mediaRecord(value: unknown) {
-  if (!value || typeof value !== "object") return
+const textValue = Schema.is(Schema.String)
 
-  return value as Partial<PresentationFileContent> & {
-    content?: unknown
-    encoding?: unknown
-    mimeType?: unknown
-    type?: unknown
-  }
+const isMediaRecord = Schema.is(
+  Schema.Struct({
+    content: Schema.optional(Schema.String),
+    encoding: Schema.optional(Schema.String),
+    mimeType: Schema.optional(Schema.String),
+    type: Schema.optional(Schema.String),
+  }),
+)
+
+function mediaRecord(value: MediaValue) {
+  return isMediaRecord(value) ? value : undefined
 }
 
 export function normalizeMimeType(type: string | undefined) {
@@ -70,7 +75,7 @@ function validDataUrl(value: string, kind: MediaKind) {
 export function dataUrlFromMediaValue(value: MediaValue, kind: MediaKind) {
   if (!value) return
 
-  if (typeof value === "string") {
+  if (textValue(value)) {
     return validDataUrl(value, kind)
   }
 
@@ -78,9 +83,9 @@ export function dataUrlFromMediaValue(value: MediaValue, kind: MediaKind) {
 
   if (!record) return
 
-  if (typeof record.content !== "string") return
+  if (record.content === undefined) return
 
-  const mime = normalizeMimeType(typeof record.mimeType === "string" ? record.mimeType : undefined)
+  const mime = normalizeMimeType(record.mimeType)
 
   if (!mime) return
 
@@ -102,13 +107,13 @@ export function dataUrlFromMediaValue(value: MediaValue, kind: MediaKind) {
 }
 
 function decodeBase64Utf8(value: string) {
-  if (typeof atob !== "function") return
+  if (typeof atob === "undefined") return
 
   try {
     const raw = atob(value)
     const bytes = Uint8Array.from(raw, (x) => x.charCodeAt(0))
 
-    if (typeof TextDecoder === "function") return new TextDecoder().decode(bytes)
+    if (typeof TextDecoder !== "undefined") return new TextDecoder().decode(bytes)
 
     return raw
   } catch {}
@@ -119,9 +124,9 @@ export function svgTextFromValue(value: MediaValue) {
 
   if (!record) return
 
-  if (typeof record.content !== "string") return
+  if (record.content === undefined) return
 
-  const mime = normalizeMimeType(typeof record.mimeType === "string" ? record.mimeType : undefined)
+  const mime = normalizeMimeType(record.mimeType)
 
   if (mime !== "image/svg+xml") return
 
@@ -131,10 +136,10 @@ export function svgTextFromValue(value: MediaValue) {
 }
 
 export function hasMediaValue(value: MediaValue) {
-  if (typeof value === "string") return value.length > 0
+  if (textValue(value)) return value.length > 0
   const record = mediaRecord(value)
 
   if (!record) return false
 
-  return typeof record.content === "string" && record.content.length > 0
+  return !!record.content?.length
 }

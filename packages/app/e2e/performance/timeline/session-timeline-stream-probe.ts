@@ -631,3 +631,9 @@ export async function collectTimelineStreamMetrics(
     }
   }, options)
 }
+
+declare global {
+  interface Window {
+    __timelineStreamBenchmark?: TimelineProbeState
+  }
+}

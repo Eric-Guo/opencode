@@ -109,7 +109,7 @@ const parts = steps.flatMap<ContextGroupPart>((step, index) => {
     return [storyTool(`read_group_shell_${index}`, "shell", "completed", { command: step.shell }, { output: "ok" })]
 
   return step.map((read, item) => {
-    const [path, args] = typeof read === "string" ? [read, {}] : read
+    const [path, args] = !Array.isArray(read) ? [read, {}] : read
 
     return storyTool(`read_group_read_${index}_${item}`, "read", "completed", { path, ...args })
   })

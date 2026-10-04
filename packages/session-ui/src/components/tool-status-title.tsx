@@ -39,10 +39,12 @@ export function ToolStatusTitle(props: {
   const activeTail = createMemo(() => (suffix() ? split().active : props.activeText))
   const doneTail = createMemo(() => (suffix() ? split().done : props.doneText))
 
-  const [state, setState] = createStore({
+  type TitleState = { active: boolean; animating: boolean; width?: string }
+
+  const [state, setState] = createStore<TitleState>({
     active: props.active,
     animating: false,
-    width: undefined as string | undefined,
+    width: undefined,
   })
 
   const width = () => state.width

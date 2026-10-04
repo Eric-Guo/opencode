@@ -2,13 +2,15 @@ import type { WebContents } from "electron"
 import type { ProtocolMapping } from "devtools-protocol/types/protocol-mapping.js"
 import { protocolError } from "./errors"
 
+type CdpEvent = ProtocolMapping.Events[keyof ProtocolMapping.Events][0]
+
 export type Cdp = ReturnType<typeof createCdp>
 
 export function createCdp(contents: WebContents) {
-  const listeners = new Map<string, Set<(params: unknown, sessionID?: string) => void>>()
+  const listeners = new Map<string, Set<(params: CdpEvent, sessionID?: string) => void>>()
   const sessions = new Set([""])
 
-  const receive = (_event: Electron.Event, name: string, params: unknown, sessionID?: string) => {
+  const receive = (_event: Electron.Event, name: string, params: CdpEvent, sessionID?: string) => {
     if (!sessions.has(sessionID ?? "")) return
 
     if (name === "Target.attachedToTarget") {
@@ -18,8 +20,12 @@ export function createCdp(contents: WebContents) {
       if (event.targetInfo.type === "iframe") sessions.add(event.sessionId)
     }
 
-    if (name === "Target.detachedFromTarget")
-      sessions.delete((params as ProtocolMapping.Events["Target.detachedFromTarget"][0]).sessionId)
+    if (name === "Target.detachedFromTarget") {
+      // SAFETY: The event name selects the detached-target payload from Chromium's CDP event mapping.
+      const event = params as ProtocolMapping.Events["Target.detachedFromTarget"][0]
+      sessions.delete(event.sessionId)
+    }
+
     listeners.get(name)?.forEach((callback) => callback(params, sessionID || undefined))
   }
 
@@ -28,7 +34,9 @@ export function createCdp(contents: WebContents) {
   return {
     async send<Method extends keyof ProtocolMapping.Commands>(
       method: Method,
-      params: object = {},
+      params?: ProtocolMapping.Commands[Method]["paramsType"] extends []
+        ? Record<string, never>
+        : ProtocolMapping.Commands[Method]["paramsType"][number],
       sessionID?: string,
     ): Promise<ProtocolMapping.Commands[Method]["returnType"]> {
       if (contents.isDestroyed())
@@ -40,7 +48,7 @@ export function createCdp(contents: WebContents) {
       try {
         if (!contents.debugger.isAttached()) contents.debugger.attach("1.3")
 
-        return await contents.debugger.sendCommand(method, params, sessionID)
+        return await contents.debugger.sendCommand(method, params ?? {}, sessionID)
       } catch (error) {
         throw protocolError(method, error)
       }
@@ -49,7 +57,8 @@ export function createCdp(contents: WebContents) {
       method: Method,
       callback: (params: ProtocolMapping.Events[Method][0], sessionID?: string) => void,
     ) {
-      const handler = (params: unknown, sessionID?: string) =>
+      // SAFETY: Listeners are indexed by the same event name used to select their typed callback.
+      const handler = (params: CdpEvent, sessionID?: string) =>
         callback(params as ProtocolMapping.Events[Method][0], sessionID)
 
       const handlers = listeners.get(method) ?? new Set()

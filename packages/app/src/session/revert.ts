@@ -28,7 +28,7 @@ export function createSessionRevert(input: {
       description: error instanceof Error ? error.message : String(error),
     })
 
-  const request = async <A>(action: () => Promise<A>) =>
+  const request = async <Value>(action: () => Promise<Value>) =>
     action()
       .then(() => true)
       .catch((error) => {

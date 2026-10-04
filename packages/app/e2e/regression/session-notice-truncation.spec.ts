@@ -59,7 +59,9 @@ for (const { width, ...profile } of [
         notices.evaluateAll((nodes) =>
           nodes.map((node) => {
             const style = getComputedStyle(node)
-            const element = node as HTMLElement
+
+            if (!(node instanceof HTMLElement)) throw new Error("Expected an HTML session notice")
+            const element = node
 
             return {
               direction: style.direction,

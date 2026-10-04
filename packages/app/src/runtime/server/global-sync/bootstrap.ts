@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { Config, Path, Project, ProviderAuthResponse } from "@/runtime/server/types"
 import type {
   LocationGetInput,
@@ -37,7 +38,7 @@ function waitForPaint() {
 
     const timer = setTimeout(finish, 50)
 
-    if (typeof requestAnimationFrame !== "function") return
+    if (!Predicate.isFunction(requestAnimationFrame)) return
     requestAnimationFrame(() => {
       setTimeout(() => {
         clearTimeout(timer)
@@ -51,7 +52,7 @@ function errors(list: PromiseSettledResult<unknown>[]) {
   return list.filter((item): item is PromiseRejectedResult => item.status === "rejected").map((item) => item.reason)
 }
 
-function runAll(list: Array<() => Promise<unknown>>) {
+function runAll<Work extends () => Promise<object | void>>(list: Work[]) {
   return Promise.allSettled(list.map((item) => item()))
 }
 

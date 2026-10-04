@@ -23,12 +23,7 @@ const sentry =
     : false
 
 export default defineConfig({
-  plugins: [
-    desktopPlugin,
-    icons(channel),
-    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
-    sentry,
-  ] as any,
+  plugins: [desktopPlugin, icons(channel), serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))), sentry],
   server: {
     host: "0.0.0.0",
     allowedHosts: true,

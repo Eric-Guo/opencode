@@ -16,7 +16,7 @@ describe("session routes", () => {
   })
 
   test("resolves the root session", async () => {
-    const sessions: Record<string, { id: string; parentID?: string }> = {
+    const sessions = {
       child: { id: "child", parentID: "parent" },
       parent: { id: "parent", parentID: "root" },
       root: { id: "root" },
@@ -24,7 +24,7 @@ describe("session routes", () => {
 
     expect(
       await rootSession(sessions.child, async (id) => {
-        const session = sessions[id]
+        const session = new Map(Object.entries(sessions)).get(id)
 
         if (!session) throw new Error(`Missing session: ${id}`)
 
@@ -34,12 +34,12 @@ describe("session routes", () => {
   })
 
   test("rejects a parent cycle", async () => {
-    const sessions: Record<string, { id: string; parentID?: string }> = {
+    const sessions = {
       child: { id: "child", parentID: "parent" },
       parent: { id: "parent", parentID: "child" },
     }
 
-    await expect(rootSession(sessions.child, async (id) => sessions[id]!)).rejects.toThrow(
+    await expect(rootSession(sessions.child, async (id) => new Map(Object.entries(sessions)).get(id)!)).rejects.toThrow(
       "Session parent cycle: child",
     )
   })

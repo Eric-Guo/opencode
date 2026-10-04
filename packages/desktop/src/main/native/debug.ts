@@ -1,3 +1,4 @@
+import { Schema } from "effect"
 import type { WebContents } from "electron"
 
 const focusDebuggerOwners = new WeakSet<WebContents>()
@@ -79,33 +80,11 @@ export async function setForceFocus(contents: WebContents, enabled: boolean) {
 // SAFETY: Electron returns untyped CDP responses; these decoders own the response boundary.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters
 function readDocumentNodeId(value: unknown) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("root" in value) ||
-    !value.root ||
-    typeof value.root !== "object" ||
-    !("nodeId" in value.root) ||
-    typeof value.root.nodeId !== "number"
-  ) {
-    throw new Error("Invalid DOM.getDocument response")
-  }
-
-  return value.root.nodeId
+  return Schema.decodeUnknownSync(Schema.Struct({ root: Schema.Struct({ nodeId: Schema.Number }) }))(value).root.nodeId
 }
 
 // SAFETY: The DOM.querySelectorAll response is validated before any ids are used by CSS.forcePseudoState.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters
 function readNodeIds(value: unknown) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("nodeIds" in value) ||
-    !Array.isArray(value.nodeIds) ||
-    !value.nodeIds.every((nodeId) => typeof nodeId === "number")
-  ) {
-    throw new Error("Invalid DOM.querySelectorAll response")
-  }
-
-  return value.nodeIds
+  return Schema.decodeUnknownSync(Schema.Struct({ nodeIds: Schema.Array(Schema.Number) }))(value).nodeIds
 }
