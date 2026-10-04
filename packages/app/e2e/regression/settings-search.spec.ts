@@ -32,7 +32,7 @@ async function open(page: Page, input: { count?: number; seed?: SeedInput } = {}
     projects,
     seed: {
       tabs: [],
-      ...(projects ? { projects: { local: projects.map((item) => ({ worktree: item.worktree })) } } : {}),
+      projects: projects ? { local: projects.map((item) => ({ worktree: item.worktree })) } : undefined,
       ...input.seed,
     },
   })
