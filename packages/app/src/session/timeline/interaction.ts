@@ -13,9 +13,15 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   const location = useLocation()
   const timeline = createTimelineModel({ session })
 
-  const [state, setState] = createStore({
-    messageID: undefined as string | undefined,
-    pendingMessage: undefined as string | undefined,
+  const [state, setState] = createStore<{
+    messageID?: string
+    pendingMessage?: string
+    scroll: { overflow: boolean; jump: boolean }
+    follow: { sessionKey: ReturnType<typeof session.identity.sessionKey>; pinned: boolean }
+    refs: { scroller?: HTMLDivElement; content?: HTMLDivElement; dock?: HTMLDivElement }
+  }>({
+    messageID: undefined,
+    pendingMessage: undefined,
     scroll: {
       overflow: false,
       jump: false,
@@ -25,9 +31,9 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       pinned: true,
     },
     refs: {
-      scroller: undefined as HTMLDivElement | undefined,
-      content: undefined as HTMLDivElement | undefined,
-      dock: undefined as HTMLDivElement | undefined,
+      scroller: undefined,
+      content: undefined,
+      dock: undefined,
     },
   })
 
@@ -62,16 +68,14 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     const box = scroller.getBoundingClientRect()
     const line = box.top + 100
 
-    const list = [...scroller.querySelectorAll<HTMLElement>("[data-message-id]")]
-      .map((element) => {
-        const id = element.dataset.messageId
+    const list = [...scroller.querySelectorAll<HTMLElement>("[data-message-id]")].flatMap((element) => {
+      const id = element.dataset.messageId
 
-        if (!id) return undefined
-        const rect = element.getBoundingClientRect()
+      if (!id) return []
+      const rect = element.getBoundingClientRect()
 
-        return { id, top: rect.top, bottom: rect.bottom }
-      })
-      .filter((item): item is { id: string; top: number; bottom: number } => !!item)
+      return [{ id, top: rect.top, bottom: rect.bottom }]
+    })
 
     const shown = list.filter((item) => item.bottom > box.top && item.top < box.bottom)
     const hit = shown.find((item) => item.top <= line && item.bottom >= line)
