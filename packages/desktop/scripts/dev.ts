@@ -7,6 +7,7 @@ import { prepareDevExtension } from "./dev-extension"
 import { downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
+
 type DevOptions = { server: ServerSource; electron: string[] }
 
 async function main() {
@@ -15,6 +16,7 @@ async function main() {
   process.env.OPENCODE_DISABLE_CHANNEL_DB = "0"
   process.env.OPENCODE_DESKTOP_BUN = process.execPath
   const options = selectOptions()
+
   if (options.server.type === "build") process.env.OPENCODE_DESKTOP_SERVER_CHANNEL = "local"
   process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "1"
   await prepareDesktop()
@@ -36,11 +38,14 @@ function selectOptions(): DevOptions {
   const args = process.argv.slice(2)
   const build = args.indexOf("--build-server")
   const download = args.indexOf("--download-server")
+
   if (build >= 0 && download >= 0) {
     throw new Error("--build-server and --download-server cannot be used together")
   }
+
   if (download >= 0 && !args[download + 1]) throw new Error("--download-server requires a version")
   const consumed = new Set([build, download, download >= 0 ? download + 1 : -1])
+
   return {
     server: download >= 0 ? { type: "download", version: args[download + 1] } : { type: "build" },
     electron: args.filter((_, index) => !consumed.has(index)),
@@ -52,6 +57,7 @@ async function prepareServer(source: ServerSource) {
     return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
   buildWebUi()
   process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
+
   if (process.platform !== "win32") return
   process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD = join(import.meta.dirname, "../../cli/script/build.ts")
   process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT = join(import.meta.dirname, "../resources/opencode-cli-wsl")
