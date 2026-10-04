@@ -25,6 +25,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
     test("only crosses the renderable boundary on text deltas, while retaining live content", () => {
       createRoot((dispose) => {
         let visits = 0
+
         const [state, setState] = createStore({
           messages: [
             {
@@ -33,6 +34,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
               text: "history",
               get time() {
                 visits++
+
                 return { created: 0 }
               },
             },
@@ -41,6 +43,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
             assistant("answer", [{ type: "text", text: "" }]),
           ] as SessionMessageInfo[],
         })
+
         const projection = factory({
           sessionMessages: () => state.messages,
           status: () => ({ type: "busy" }),
@@ -49,6 +52,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
           editToolDefaultOpen: () => false,
           pendingUserMessageIDs: () => new Set(),
         })
+
         const update = (text: string) =>
           setState(
             "messages",
@@ -57,6 +61,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
               if (message.type === "assistant" && message.content[0].type === "text") message.content[0].text = text
             }),
           )
+
         const empty = projection.rows()
         visits = 0
         update(" \n\t")
@@ -116,6 +121,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
           edit: false,
           pending: new Set<string>(),
         })
+
         const projection = factory({
           sessionMessages: () => state.messages,
           status: () => state.status,
@@ -124,7 +130,9 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
           editToolDefaultOpen: () => state.edit,
           pendingUserMessageIDs: () => state.pending,
         })
+
         let previous: TimelineRow.TimelineRow[] | undefined
+
         const verify = () => {
           const full = Timeline.constructSessionMessageRows(
             state.messages,
@@ -134,6 +142,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
             state.shell,
             state.edit,
           )
+
           previous = reuseTimelineRows(previous, full.rows)
           expect(projection.rows()).toEqual(previous)
           expect(projection.activeMessageID()).toBe(full.activeMessageID)
@@ -149,6 +158,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
             expect(projection.rowByKey().get(TimelineRow.key(row))).toBe(projection.rows()[index])
           })
         }
+
         const change = (update: (message: SessionMessageAssistant) => void) => {
           setState(
             "messages",
@@ -159,6 +169,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
           )
           verify()
         }
+
         verify()
         change((message) => {
           if (message.content[2].type === "text") message.content[2].text = "Split the context group"
@@ -215,6 +226,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
         verify()
         change((message) => {
           const tool = message.content.at(-1)
+
           if (tool?.type === "tool" && tool.state.status === "completed")
             tool.state.metadata = { files: [{ status: "modified" }] }
         })
@@ -224,6 +236,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
         expect(projection.rows().at(-1)?._tag).toBe("Thinking")
         change((message) => {
           const part = message.content.at(-1)
+
           if (part?.type === "reasoning") part.time = { created: 3, completed: 4 }
         })
         change((message) => {

@@ -13,13 +13,16 @@ describe("desktop RPC transport", () => {
   test("decodes renderer payloads whose optional fields are undefined", async () => {
     let received: unknown
     const rpcs = RpcGroup.make(FilesOpenFilePicker)
+
     const handlers = rpcs.toLayer({
       FilesOpenFilePicker: ({ options }) =>
         Effect.sync(() => {
           received = options
+
           return null
         }),
     })
+
     const live = RpcServer.layer(rpcs).pipe(Layer.provide(handlers), Layer.provideMerge(IpcServerProtocolLive))
     const runtime = ManagedRuntime.make(live)
     const handoff = await runtime.runPromise(IpcPortHandoff)
@@ -56,13 +59,16 @@ describe("desktop RPC transport", () => {
 
   test("keeps multiple renderer ports independent", async () => {
     let received: unknown
+
     const handlers = TestRpcs.toLayer(
       Effect.gen(function* () {
         const handoff = yield* IpcPortHandoff
+
         return TestRpcs.of({
           "test.focused": (_request, context) => Effect.succeed(handoff.sender(context.client.id)?.id === 1),
           "test.blob.put": ({ data }) => {
             received = data
+
             return Effect.succeed([...data].join(","))
           },
           "test.blob.get": () => Effect.succeed(new Uint8Array([3, 1, 4])),
@@ -70,6 +76,7 @@ describe("desktop RPC transport", () => {
         })
       }),
     )
+
     const live = RpcServer.layer(TestRpcs).pipe(Layer.provide(handlers), Layer.provideMerge(IpcServerProtocolLive))
     const runtime = ManagedRuntime.make(live)
     const handoff = await runtime.runPromise(IpcPortHandoff)
@@ -82,6 +89,7 @@ describe("desktop RPC transport", () => {
       call(first.port2, 0, "test.focused", null),
       call(second.port2, 0, "test.focused", null),
     ])
+
     expect(focused.exit).toEqual({ _tag: "Success", value: true })
     expect(unfocused.exit).toEqual({ _tag: "Success", value: false })
     const put = await call(first.port2, 1, "test.blob.put", omitUndefined({ data: new Uint8Array([2, 7, 1]) }))
@@ -98,18 +106,22 @@ describe("desktop RPC transport", () => {
 
     const reloaded = new MessageChannel()
     handoff.bind(sender(1), serverPort(reloaded.port1))
+
     const [reloadedFocused, stillUnfocused] = await Promise.all([
       call(reloaded.port2, 0, "test.focused", null),
       call(second.port2, 1, "test.focused", null),
     ])
+
     expect(reloadedFocused.exit).toEqual({ _tag: "Success", value: true })
     expect(stillUnfocused.exit).toEqual({ _tag: "Success", value: false })
+
     for (const port of [first.port2, second.port2, reloaded.port2]) port.close()
     await runtime.dispose()
   })
 })
 
 class TestEvent extends Schema.TaggedClass<TestEvent>()("TestEvent", { value: Schema.String }) {}
+
 const TestRpcs = RpcGroup.make(
   Rpc.make("test.focused", { success: Schema.Boolean }),
   Rpc.make("test.blob.put", { payload: { data: Transferable.Uint8Array }, success: Schema.String }),
@@ -121,17 +133,22 @@ const TestRpcs = RpcGroup.make(
 // and settle on the exit. The payload is posted as given so a test can send what omitUndefined drops.
 function call(port: MessageChannel["port2"], id: number, tag: string, payload: unknown) {
   const chunks: unknown[] = []
+
   return new Promise<{ chunks: unknown[]; exit: RpcMessage.ResponseExitEncoded["exit"] }>((resolve) => {
     const onMessage = (message: RpcMessage.FromServerEncoded) => {
       if (!("requestId" in message) || Number(message.requestId) !== id) return
+
       if (message._tag === "Chunk") {
         chunks.push(...message.values)
         port.postMessage({ _tag: "Ack", requestId: message.requestId } satisfies RpcMessage.AckEncoded)
+
         return
       }
+
       port.off("message", onMessage)
       resolve({ chunks, exit: message.exit })
     }
+
     port.on("message", onMessage)
     port.postMessage({ _tag: "Request", id, tag, payload, headers: [] })
   })
@@ -139,6 +156,7 @@ function call(port: MessageChannel["port2"], id: number, tag: string, payload: u
 
 function sender(id: number) {
   const events = new EventEmitter()
+
   return {
     id,
     isDestroyed: () => false,
@@ -149,12 +167,15 @@ function sender(id: number) {
 
 function serverPort(port: MessageChannel["port1"]) {
   const listeners = new Map<(event: Electron.MessageEvent) => void, (data: unknown) => void>()
+
   return {
     on(event: string, listener: (event: Electron.MessageEvent) => void) {
       if (event !== "message") {
         port.on(event, listener)
+
         return
       }
+
       const wrapped = (data: unknown) => listener({ data } as Electron.MessageEvent)
       listeners.set(listener, wrapped)
       port.on("message", wrapped)
@@ -162,9 +183,12 @@ function serverPort(port: MessageChannel["port1"]) {
     off(event: string, listener: (event: Electron.MessageEvent) => void) {
       if (event !== "message") {
         port.off(event, listener)
+
         return
       }
+
       const wrapped = listeners.get(listener)
+
       if (wrapped) port.off("message", wrapped)
     },
     postMessage: port.postMessage.bind(port),

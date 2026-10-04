@@ -68,6 +68,7 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
       if (widthRef) {
         animate(widthRef, { width: "auto" }, { type: "spring", visualDuration: 0.25, bounce: 0 })
       }
+
       if (valueRef) {
         animate(valueRef, { opacity: 1, filter: "blur(0px)" }, { duration: 0.32, ease: [0.16, 1, 0.3, 1] })
       }
@@ -101,6 +102,7 @@ interface Diagnostic {
 }
 
 type QuestionInfo = { question: string }
+
 type QuestionAnswer = string[]
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -117,15 +119,20 @@ function questionAnswer(value: unknown): value is QuestionAnswer {
 
 function isDiagnostic(value: unknown): value is Diagnostic {
   if (!value || typeof value !== "object") return false
+
   if (!("message" in value) || typeof value.message !== "string") return false
+
   if (!("range" in value) || !value.range || typeof value.range !== "object") return false
+
   return "start" in value.range && !!value.range.start && typeof value.range.start === "object"
 }
 
 function getDiagnostics(diagnosticsByFile: unknown, filePath: string | undefined): Diagnostic[] {
   if (!record(diagnosticsByFile) || !filePath) return []
   const diagnostics = diagnosticsByFile[filePath]
+
   if (!Array.isArray(diagnostics)) return []
+
   return diagnostics
     .filter(isDiagnostic)
     .filter((diagnostic) => diagnostic.severity === 1)
@@ -134,6 +141,7 @@ function getDiagnostics(diagnosticsByFile: unknown, filePath: string | undefined
 
 function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
   const i18n = useI18n()
+
   return (
     <Show when={props.diagnostics.length > 0}>
       <div data-component="diagnostics">
@@ -155,19 +163,26 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 
 function relativizeProjectPath(path: string, directory?: string) {
   if (!path) return ""
+
   if (!directory) return path
+
   if (directory === "/") return path
+
   if (directory === "\\") return path
+
   if (path === directory) return ""
 
   const separator = directory.includes("\\") ? "\\" : "/"
   const prefix = directory.endsWith(separator) ? directory : directory + separator
+
   if (!path.startsWith(prefix)) return path
+
   return path.slice(directory.length)
 }
 
 function displayDirectory(path: string | undefined) {
   const data = useData()
+
   return relativizeProjectPath(getDirectory(path), data.directory)
 }
 
@@ -181,6 +196,7 @@ export type ToolInfo = {
 
 function agentTitle(i18n: UiI18n, type?: string) {
   if (!type) return i18n.t("ui.tool.agent.default")
+
   return i18n.t("ui.tool.agent", { type })
 }
 
@@ -236,7 +252,9 @@ const agentPalette = [
 
 function tone(name: string) {
   let hash = 0
+
   for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+
   return agentPalette[hash % agentPalette.length]
 }
 
@@ -250,6 +268,7 @@ function taskAgent(
   const v2Tone = item?.color ? undefined : v2AgentTones[key]
   const color = agentColor(item?.color, agentThemeColors) ?? agentTones[key] ?? tone(key)
   const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone ?? color
+
   return {
     name: item?.name ?? `${raw[0].toUpperCase()}${raw.slice(1)}`,
     color,
@@ -259,6 +278,7 @@ function taskAgent(
 
 function agentColor(value: string | undefined, themeColors: Record<string, string>) {
   if (!value) return undefined
+
   return themeColors[value] ?? value
 }
 
@@ -273,12 +293,15 @@ function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI1
           : provider === "searchkimi"
             ? "SearchKimi"
             : `${provider[0].toUpperCase()}${provider.slice(1)}`
+
   if (name) return i18n.t("ui.tool.websearch.provider", { provider: name })
+
   return i18n.t("ui.tool.websearch")
 }
 
 function readToolPath(input: Record<string, unknown>) {
   if (typeof input.path === "string") return input.path
+
   return undefined
 }
 
@@ -291,8 +314,11 @@ function readArgs(input: Record<string, unknown>) {
 
 function skillToolName(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
   if (typeof metadata?.name === "string") return metadata.name
+
   if (typeof input.id === "string") return input.id
+
   if (typeof input.name === "string") return input.name
+
   return undefined
 }
 
@@ -302,15 +328,18 @@ export function getToolInfo(
   metadata: Record<string, unknown> | undefined = {},
 ): ToolInfo {
   const i18n = useI18n()
+
   switch (tool) {
     case "read": {
       const path = readToolPath(input)
+
       return {
         icon: "glasses",
         title: i18n.t("ui.tool.read"),
         subtitle: path ? getFilename(path) : undefined,
       }
     }
+
     case "list":
       return {
         icon: "bullet-list",
@@ -349,12 +378,14 @@ export function getToolInfo(
     case "subagent": {
       const raw = input.agent
       const type = typeof raw === "string" && raw ? raw[0].toUpperCase() + raw.slice(1) : undefined
+
       return {
         icon: "task",
         title: agentTitle(i18n, type),
         subtitle: typeof input.description === "string" ? input.description : undefined,
       }
     }
+
     case "shell":
       return {
         icon: "console",
@@ -414,17 +445,20 @@ export function getToolInfo(
 function urls(text: string | undefined) {
   if (!text) return []
   const seen = new Set<string>()
+
   return [...text.matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)]
     .map((item) => item[0].replace(/[),.;:!?]+$/g, ""))
     .filter((item) => {
       if (seen.has(item)) return false
       seen.add(item)
+
       return true
     })
 }
 
 function sessionLink(id: string | undefined, href?: (id: string) => string | undefined) {
   if (!id) return undefined
+
   return href?.(id)
 }
 
@@ -435,6 +469,7 @@ function taskSession(
 ) {
   if (!parentID) return undefined
   const description = typeof input.description === "string" ? input.description : ""
+
   return (sessions ?? [])
     .filter((session) => session.parentID === parentID && !session.time?.archived)
     .filter((session) => (description ? session.title?.startsWith(description) : true))
@@ -446,11 +481,15 @@ function ExaOutput(props: { output?: string }) {
   const [showAll, setShowAll] = createSignal(false)
   let firstRevealedRef: HTMLAnchorElement | undefined
   const links = createMemo(() => urls(props.output))
+
   const visibleLinks = createMemo(() => {
     const all = links()
+
     if (showAll() || all.length <= 10) return all
+
     return all.slice(0, 10)
   })
+
   const remaining = createMemo(() => Math.max(0, links().length - 10))
 
   const expand = (event: MouseEvent) => {
@@ -517,14 +556,17 @@ export function CurrentContextToolGroup(props: {
 }) {
   const i18n = useI18n()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
+
   const pending = createMemo(
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
+
   const names = createMemo(() =>
     i18n.list([
       ...new Set(
         props.parts.flatMap((part) => {
           if (part.type !== "tool" && part.type !== "shell") return []
+
           return [
             part.type !== "tool"
               ? i18n.t("ui.tool.shell")
@@ -539,12 +581,16 @@ export function CurrentContextToolGroup(props: {
       ),
     ]),
   )
+
   const label = createMemo(() => {
     const thoughts = props.parts.filter((part) => part.type === "reasoning").length
+
     if (!names() && !thoughts) {
       const text = i18n.t("ui.messagePart.context.updates")
+
       return { text, title: "", before: text, count: "", between: "", after: "" }
     }
+
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
     const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
     const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
@@ -553,7 +599,9 @@ export function CurrentContextToolGroup(props: {
     const countText = String(count)
     const countIndex = before.indexOf(countText)
     const after = text.slice(index + title.length).trim()
+
     if (countIndex === -1) return { text, title, before, count: "", between: "", after }
+
     return {
       text,
       title,
@@ -563,19 +611,25 @@ export function CurrentContextToolGroup(props: {
       after,
     }
   })
+
   const items = createMemo(() =>
     (props.open ? props.parts : []).reduce<
       (SessionMessageAssistantTool[] | Exclude<ContextGroupPart, SessionMessageAssistantTool>)[]
     >((groups, tool) => {
       if (tool.type !== "tool") {
         groups.push(tool)
+
         return groups
       }
+
       const previous = groups.at(-1)
+
       if (isFileChangeTool(tool) && Array.isArray(previous) && previous[0] && isFileChangeTool(previous[0])) {
         previous.push(tool)
+
         return groups
       }
+
       if (
         currentToolGroupedRead(tool) &&
         Array.isArray(previous) &&
@@ -583,8 +637,10 @@ export function CurrentContextToolGroup(props: {
         currentToolGroupedRead(previous[0])
       ) {
         previous.push(tool)
+
         return groups
       }
+
       if (
         tool.name === "skill" &&
         tool.state.status !== "error" &&
@@ -595,12 +651,16 @@ export function CurrentContextToolGroup(props: {
         skillToolName(currentToolInput(previous[0]), currentToolMetadata(previous[0]))
       ) {
         previous.push(tool)
+
         return groups
       }
+
       groups.push([tool])
+
       return groups
     }, []),
   )
+
   const patchKeys = createMemo(() => {
     const keys = new Map<SessionMessageAssistantTool, string>()
     items().forEach((item) => {
@@ -608,14 +668,18 @@ export function CurrentContextToolGroup(props: {
       const key = props.patchGroupKey?.(item) ?? item[0].id
       item.forEach((tool) => keys.set(tool, key))
     })
+
     return keys
   })
+
   let root: HTMLDivElement | undefined
+
   const change = (open: boolean) => {
     // Collapsing from the stuck header would leave the viewport far below the group, so keep the header in place.
     // Scroll before collapsing because the shorter content would clamp the scroll position first.
     const trigger = root?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
     const stuck = !open && root && trigger ? trigger.getBoundingClientRect().top - root.getBoundingClientRect().top : 0
+
     if (stuck > 0 && root) scrollParent(root)?.scrollBy({ top: -stuck, behavior: "instant" })
     props.onOpenChange(open)
     props.onSizeChange?.()
@@ -664,16 +728,22 @@ export function CurrentContextToolGroup(props: {
             {(item) => {
               const group = createMemo(() => {
                 const value = item()
+
                 return Array.isArray(value) ? value : undefined
               })
+
               const reasoning = createMemo(() => {
                 const value = item()
+
                 return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
               })
+
               const callback = createMemo(() => {
                 const value = item()
+
                 return !Array.isArray(value) && (value.type === "notice" || value.type === "shell") ? value : undefined
               })
+
               return (
                 <Show
                   when={group()}
@@ -705,16 +775,21 @@ export function CurrentContextToolGroup(props: {
                   {(group) => {
                     const tool = createMemo(() => group()[0]!)
                     const trigger = createMemo(() => currentContextToolTrigger(tool(), i18n))
+
                     const skills = createMemo(() =>
                       group().flatMap((item) => {
                         const name = skillToolName(currentToolInput(item), currentToolMetadata(item))
+
                         return name ? [name] : []
                       }),
                     )
+
                     const marker = "__OPENCODE_LOADED_SKILL__"
+
                     const loaded = createMemo(() =>
                       i18n.plural("ui.tool.loadedSkills", skills().length, { name: marker }),
                     )
+
                     return (
                       <div data-slot="context-tool-group-item">
                         <Show
@@ -866,23 +941,30 @@ export function CurrentReadToolGroup(props: {
   const [state, setState] = createStore({ open: false, truncated: false })
   const open = () => props.open ?? state.open
   const expandable = () => open() || state.truncated
+
   const pending = createMemo(() =>
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
+
   const files = createMemo(() =>
     props.tools.flatMap((tool) => {
       const input = currentToolInput(tool)
       const name = getFilename(readToolPath(input) ?? "")
+
       return name ? [{ id: tool.id, name, args: readArgs(input) }] : []
     }),
   )
+
   let list: HTMLSpanElement | undefined
+
   const measure = () => {
     if (!list || open()) return
     setState("truncated", list.scrollWidth > list.clientWidth)
   }
+
   createResizeObserver(() => list, measure)
   createEffect(on(files, measure))
+
   const toggle = () => {
     if (!expandable()) return
     const next = !open()
@@ -953,19 +1035,26 @@ export function CurrentFileToolGroup(props: {
   const files = createMemo((previous: { key: string; toolID: string; value: unknown }[]) => {
     const next = props.tools.flatMap((tool) => {
       const files = currentToolMetadata(tool).files
+
       if (Array.isArray(files) && files.length > 0)
         return files.map((value, index) => ({ key: `${tool.id}:${index}`, toolID: tool.id, value }))
       const input = currentToolInput(tool)
+
       if (typeof input.path !== "string") return []
+
       if (tool.name === "edit" && typeof input.oldString === "string" && typeof input.newString === "string") {
         const changes = diffLines(input.oldString, input.newString)
+
         const additions = changes
           .filter((change) => change.added)
           .reduce((total, change) => total + (change.count ?? 0), 0)
+
         const deletions = changes
           .filter((change) => change.removed)
           .reduce((total, change) => total + (change.count ?? 0), 0)
+
         if (additions === 0 && deletions === 0) return []
+
         return [
           {
             key: `${tool.id}:0`,
@@ -980,7 +1069,9 @@ export function CurrentFileToolGroup(props: {
           },
         ]
       }
+
       if (tool.name !== "write" || typeof input.content !== "string" || !input.content) return []
+
       return [
         {
           key: `${tool.id}:0`,
@@ -995,32 +1086,41 @@ export function CurrentFileToolGroup(props: {
         },
       ]
     })
+
     const updates = new Map(next.map((entry) => [entry.key, entry.value]))
     const existing = new Set(previous.map((entry) => entry.key))
     const owners = new Set(props.tools.map((tool) => tool.id))
+
     const result = [
       ...previous
         .filter((entry) => owners.has(entry.toolID))
         .map((entry) => {
           if (!updates.has(entry.key)) return entry
           const value = updates.get(entry.key)
+
           return samePatchFile(value, entry.value) ? entry : { ...entry, value }
         }),
       ...next.filter((entry) => !existing.has(entry.key)),
     ]
+
     return result.length === previous.length && result.every((entry, index) => entry === previous[index])
       ? previous
       : result
   }, [])
+
   const metadata = createMemo(() => ({
     files: files().map((entry) => entry.value),
   }))
+
   const pending = createMemo(() =>
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
+
   const render = ToolRegistry.render("patch") ?? GenericTool
+
   const tool = createMemo(() => {
     const name = props.tools[0]?.name
+
     return name === "edit" || name === "write" ? name : "patch"
   })
 
@@ -1048,8 +1148,11 @@ export function CurrentFileToolGroup(props: {
 
 function scrollParent(element: HTMLElement): HTMLElement | undefined {
   const parent = element.parentElement
+
   if (!parent) return
+
   if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) return parent
+
   return scrollParent(parent)
 }
 
@@ -1059,7 +1162,9 @@ function isFileChangeTool(tool: SessionMessageAssistantTool) {
 
 function samePatchFile(a: unknown, b: unknown) {
   if (a === b) return true
+
   if (!record(a) || !record(b)) return false
+
   return (
     a.file === b.file &&
     a.patch === b.patch &&
@@ -1076,12 +1181,15 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
   const pattern = typeof input.pattern === "string" ? input.pattern : undefined
   const include = typeof input.include === "string" ? input.include : undefined
   const count = tool.name === "glob" ? metadata.count : tool.name === "grep" ? metadata.matches : undefined
+
   const matches =
     typeof count === "number" && Number.isFinite(count) && count !== 0
       ? i18n.plural("ui.messagePart.context.match", count)
       : undefined
+
   if (tool.name === "list")
     return { title: i18n.t("ui.tool.list"), subtitle: displayDirectory(path), args: [], matches: undefined }
+
   if (tool.name === "glob")
     return {
       title: i18n.t("ui.tool.glob"),
@@ -1089,6 +1197,7 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
       args: pattern ? [`pattern=${pattern}`] : [],
       matches,
     }
+
   return {
     title: i18n.t("ui.tool.grep"),
     subtitle: displayDirectory(path),
@@ -1129,6 +1238,7 @@ const state: Record<
 
 export function registerTool(input: { name: string; render?: ToolComponent }) {
   state[input.name] = input
+
   return input
 }
 
@@ -1143,6 +1253,7 @@ export const ToolRegistry = {
 
 function FileTool(props: ToolProps & { title: string; count: number; children?: JSX.Element }) {
   const i18n = useI18n()
+
   return (
     <BasicTool
       {...props}
@@ -1170,23 +1281,31 @@ function FileAccordionGroup(props: { children: JSX.Element }) {
       data-scope="apply-patch"
       onKeyDown={(event) => {
         if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+
         if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
+
         if (!(event.target instanceof HTMLButtonElement) || event.target.dataset.slot !== "accordion-trigger") return
+
         if (event.target.closest('[data-component="accordion"]') !== event.currentTarget) return
+
         const triggers = [
           ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
             ':scope > [data-slot="accordion-item"] > [data-slot="accordion-header"] > [data-slot="accordion-trigger"]',
           ),
         ]
+
         const index = triggers.indexOf(event.target)
+
         if (index < 0) return
         event.preventDefault()
+
         const next =
           event.key === "Home"
             ? 0
             : event.key === "End"
               ? triggers.length - 1
               : (index + (event.key === "ArrowDown" ? 1 : -1) + triggers.length) % triggers.length
+
         triggers[next]?.focus()
       }}
     >
@@ -1203,6 +1322,7 @@ function FileAccordionItem(props: {
   children: JSX.Element
 }) {
   const id = createUniqueId()
+
   return (
     <div
       data-slot="accordion-item"
@@ -1257,6 +1377,7 @@ function ToolFileAccordion(props: {
   const [expanded, setExpanded] = createSignal(props.defaultOpen ?? false)
   const [visible, setVisible] = createSignal(false)
   const open = () => props.open ?? expanded()
+
   const change = (value: boolean) => {
     if (props.open === undefined) setExpanded(value)
     props.onOpenChange?.(value)
@@ -1269,8 +1390,10 @@ function ToolFileAccordion(props: {
   createEffect(() => {
     if (!open()) {
       setVisible(false)
+
       return
     }
+
     const frame = requestAnimationFrame(() => setVisible(true))
     onCleanup(() => cancelAnimationFrame(frame))
   })
@@ -1312,21 +1435,30 @@ export function ToolDisplay(
 ) {
   const data = useData()
   const i18n = useI18n()
+
   if (props.tool === "todowrite") return null
   const hideQuestion = () => props.tool === "question" && (props.status === "streaming" || props.status === "running")
+
   const taskId = createMemo(() => {
     if (props.tool !== "subagent") return undefined
     const value = props.metadata.sessionID
+
     if (typeof value === "string" && value) return value
+
     return undefined
   })
+
   const taskHref = createMemo(() => sessionLink(taskId(), data.sessionHref))
+
   const taskSubtitle = createMemo(() => {
     if (props.tool !== "subagent") return undefined
     const value = props.input.description
+
     if (typeof value === "string" && value) return value
+
     return taskId()
   })
+
   const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
   const error = createMemo(() => toolDisplayError(props, i18n.t("ui.toolErrorCard.failed")))
   const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
@@ -1338,6 +1470,7 @@ export function ToolDisplay(
           <Match when={error()}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
+
               if (props.tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
@@ -1347,6 +1480,7 @@ export function ToolDisplay(
                   </div>
                 )
               }
+
               return (
                 <ToolErrorCard
                   tool={props.tool}
@@ -1359,8 +1493,10 @@ export function ToolDisplay(
                   href={taskHref()}
                   onSubtitleClick={(event) => {
                     if (!data.navigateToSession) return
+
                     if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
                     const id = taskId()
+
                     if (!id) return
                     event.preventDefault()
                     data.navigateToSession(id)
@@ -1382,35 +1518,54 @@ export function ToolDisplay(
 // failed rows read like their non-error counterparts ("Shell sleep 30").
 function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   const text = (value: unknown) => (typeof value === "string" && value ? value : undefined)
+
   if (props.tool === "shell") return text(props.input.command) ?? text(props.metadata.command)
+
   if (props.tool === "execute") return text(props.input.code)
+
   if (props.tool === "read") return getFilename(readToolPath(props.input) ?? "")
+
   if (props.tool === "edit" || props.tool === "write") return getFilename(text(props.input.path) ?? "")
+
   if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
     return displayDirectory(text(props.input.path) ?? "/")
+
   if (props.tool === "webfetch") return text(props.input.url)
+
   if (props.tool === "websearch") return text(props.input.query)
+
   if (props.tool === "skill") return skillToolName(props.input, props.metadata)
+
   if (props.tool === "patch") {
     const count = new Set(
       Array.isArray(props.metadata.files) ? props.metadata.files.filter(changedFileDiff).map((file) => file.file) : [],
     ).size
+
     if (count === 0) return undefined
+
     return `${count} ${i18n.plural("ui.common.file", count)}`
   }
+
   if (props.tool === "question") {
     const count = Array.isArray(props.input.questions) ? props.input.questions.filter(questionInfo).length : 0
+
     if (count === 0) return undefined
+
     return `${count} ${i18n.plural("ui.common.question", count)}`
   }
+
   return undefined
 }
 
 function toolDisplayError(props: ToolProps & { error?: string }, fallback: string) {
   if (props.status === "error") return props.error
+
   if (props.tool !== "execute") return undefined
+
   if (!executeToolFailed(props.metadata)) return undefined
+
   if (typeof props.output === "string" && props.output) return props.output
+
   return fallback
 }
 
@@ -1420,20 +1575,27 @@ ToolRegistry.register({
     const data = useData()
     const i18n = useI18n()
     const image = createMemo(() => (props.status === "completed" ? readImagePath(props.input) : undefined))
+
     const loaded = createMemo(() => {
       if (props.status !== "completed") return []
       const value = props.metadata.loaded
+
       if (!value || !Array.isArray(value)) return []
+
       return value.filter((p): p is string => typeof p === "string")
     })
+
     const paths = createMemo(() =>
       loaded().map((filepath) => {
         const relative = relativizeProjectPath(filepath, data.directory)
+
         return relative === filepath ? relative : relative.replace(/^[/\\]/, "")
       }),
     )
+
     const marker = "__OPENCODE_LOADED_PATH__"
     const parts = createMemo(() => i18n.t("ui.tool.loadedFile", { path: marker }).split(marker))
+
     return (
       <>
         <BasicTool
@@ -1486,12 +1648,14 @@ function ReadImage(props: { path: string; onContentRendered?: () => void }) {
   let root!: HTMLDivElement
   createEffect(() => {
     previewImages(root)
+
     if (!markdown?.readImage) return
     const images = createMarkdownImages(markdown.readImage)
     images.update(root)
     onCleanup(() => images.dispose())
   })
   onMount(() => props.onContentRendered?.())
+
   return (
     <div ref={root} data-component="read-image">
       <img
@@ -1508,6 +1672,7 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     const i18n = useI18n()
+
     return (
       <BasicTool
         {...props}
@@ -1538,6 +1703,7 @@ ToolRegistry.register({
   name: "glob",
   render(props) {
     const i18n = useI18n()
+
     return (
       <BasicTool
         {...props}
@@ -1570,8 +1736,11 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const args: string[] = []
+
     if (typeof props.input.pattern === "string") args.push("pattern=" + props.input.pattern)
+
     if (typeof props.input.include === "string") args.push("include=" + props.input.include)
+
     return (
       <BasicTool
         {...props}
@@ -1604,6 +1773,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const file = createMemo(() => (typeof props.input.file === "string" ? `file=${props.input.file}` : undefined))
+
     return (
       <BasicTool
         {...props}
@@ -1635,11 +1805,15 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const pending = createMemo(() => props.status === "streaming" || props.status === "running")
+
     const url = createMemo(() => {
       const value = props.input.url
+
       if (typeof value !== "string") return ""
+
       return value
     })
+
     return (
       <BasicTool
         {...props}
@@ -1676,11 +1850,15 @@ ToolRegistry.register({
   name: "websearch",
   render(props) {
     const i18n = useI18n()
+
     const query = createMemo(() => {
       const value = props.input.query
+
       if (typeof value !== "string") return ""
+
       return value
     })
+
     const title = createMemo(() => webSearchProviderLabel(props.metadata.provider, i18n))
 
     return (
@@ -1698,37 +1876,50 @@ ToolRegistry.register({
     )
   },
 })
+
 ToolRegistry.register({
   name: "subagent",
   render(props) {
     const data = useData()
     const i18n = useI18n()
     const delegating = () => props.status === "streaming"
+
     const childSessionId = createMemo(() => {
       const value = props.metadata.sessionID
+
       if (typeof value === "string" && value) return value
+
       return taskSession(props.input, data.sessionID, data.store.session)
     })
+
     const agent = createMemo(() => taskAgent(props.input.agent, data.store.agent))
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
     const v2Tone = createMemo(() => agent().v2Color)
+
     const background = createMemo(() => {
       return props.metadata.background === true || (props.status === "completed" && props.metadata.status === "running")
     })
+
     const subtitle = createMemo(() => {
       const value =
         typeof props.input.description === "string" && props.input.description
           ? props.input.description
           : childSessionId()
+
       if (!value) return value
+
       if (background()) return `${value} (background)`
+
       return value
     })
+
     const running = createMemo(() => {
       if (props.status === "streaming" || props.status === "running") return true
       const id = childSessionId()
+
       if (!id) return false
+
       return (data.store.session_status[id]?.type ?? "idle") !== "idle"
     })
 
@@ -1737,18 +1928,22 @@ ToolRegistry.register({
 
     const open = () => {
       const id = childSessionId()
+
       if (!id) return
       data.navigateToSession?.(id)
     }
 
     const navigate = (event: MouseEvent) => {
       if (!data.navigateToSession) return
+
       if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
       event.preventDefault()
       open()
     }
+
     const navigateKey = (event: KeyboardEvent) => {
       if (!clickable() || href()) return
+
       if (event.key !== "Enter" && event.key !== " ") return
       event.preventDefault()
       open()
@@ -1829,6 +2024,7 @@ function ConsoleOutput(props: { copy: string; children: JSX.Element; variant?: "
 
   const copy = async () => {
     if (!props.copy) return
+
     if (!(await writeClipboard(props.copy))) return
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -1871,6 +2067,7 @@ ToolRegistry.register({
     const code = createMemo(() => (typeof props.input.code === "string" ? props.input.code : ""))
     const output = () => stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
     const sawPending = pending()
+
     return (
       <BasicTool
         {...props}
@@ -1907,36 +2104,47 @@ ToolRegistry.register({
     const i18n = useI18n()
     const data = useData()
     const streaming = () => props.status === "streaming"
+
     const pending = () =>
       streaming() ||
       props.status === "running" ||
       (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
+
     const sawStreaming = streaming()
+
     const command = () => {
       if (typeof props.input.command === "string") return props.input.command
+
       if (typeof props.metadata.command === "string") return props.metadata.command
+
       return ""
     }
+
     function Output() {
       const [streamed, setStreamed] = createSignal("")
+
       // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
       const saved = createMemo(() =>
         props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
           ? props.output
           : undefined,
       )
+
       createEffect(() => {
         if (saved() !== undefined) return
         const id = props.metadata.shellID
         const load = data.shellOutput
+
         if (typeof id !== "string" || !load) return
         onCleanup(followShellOutput({ id, directory: data.directory, running: pending(), load, onOutput: setStreamed }))
       })
+
       const output = createMemo(() =>
         stripAnsi(
           saved() ?? ((typeof props.metadata.shellID === "string" && streamed()) || props.output || ""),
         ).replace(/\r\n?/g, "\n"),
       )
+
       return (
         <ConsoleOutput copy={command()} variant="shell">
           <span data-slot="bash-command">{command()}</span>
@@ -1944,6 +2152,7 @@ ToolRegistry.register({
         </ConsoleOutput>
       )
     }
+
     return (
       <BasicTool
         {...props}
@@ -1988,13 +2197,19 @@ export function SessionShellMessage(props: {
 }) {
   const i18n = useI18n()
   const render = ToolRegistry.render("shell") ?? GenericTool
+
   const error = createMemo(() => {
     const message = props.message
+
     if (message.status === "timeout") return i18n.t("ui.tool.shell.timeout")
+
     if (message.status === "killed") return i18n.t("ui.tool.shell.cancelled")
+
     if (message.status !== "exited" || message.exit === undefined || message.exit === 0) return
+
     return i18n.t("ui.tool.shell.exit", { code: message.exit })
   })
+
   return (
     <div data-component="session-shell-message" data-timeline-part-id={props.message.id}>
       <Dynamic
@@ -2026,21 +2241,31 @@ ToolRegistry.register({
     const i18n = useI18n()
     const fileComponent = useFileComponent()
     const inputPath = () => (typeof props.input.path === "string" ? props.input.path : "")
+
     const diff = createMemo(() => {
       const files = props.metadata.files
+
       if (!Array.isArray(files)) return undefined
+
       return files.find(changedFileDiff)
     })
+
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, inputPath()))
+
     const path = createMemo(() => {
       const value = diff()
+
       return typeof value?.file === "string" ? value.file : inputPath()
     })
+
     const pending = () => props.status === "streaming" || props.status === "running"
+
     const diffSource = createMemo(
       () => {
         const source = diff()
+
         if (!source) return undefined
+
         return {
           file: typeof source.file === "string" ? source.file : inputPath(),
           patch: typeof source.patch === "string" ? source.patch : undefined,
@@ -2055,8 +2280,10 @@ ToolRegistry.register({
     const fileCompProps = createMemo(() => {
       try {
         const source = diffSource()
+
         if (source) {
           const fileDiff = resolveFileDiff(source)
+
           if (fileDiff) return { fileDiff, hunkSeparators: fileDiff.isPartial ? "simple" : "line-info-basic" }
         }
       } catch {}
@@ -2115,6 +2342,7 @@ ToolRegistry.register({
     const path = createMemo(() => (typeof props.input.path === "string" ? props.input.path : ""))
     const content = createMemo(() => (typeof props.input.content === "string" ? props.input.content : ""))
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, path()))
+
     return (
       <div data-component="write-tool">
         <Show when={content() && path()}>
@@ -2154,6 +2382,7 @@ ToolRegistry.register({
     const fileComponent = useFileComponent()
     const files = createMemo(() => patchFileGroups(props.metadata.files))
     const [expanded, setExpanded] = createSignal<string[]>([])
+
     const title = createMemo(() =>
       props.tool === "edit"
         ? i18n.t("ui.messagePart.title.edit")
@@ -2161,16 +2390,22 @@ ToolRegistry.register({
           ? i18n.t("ui.messagePart.title.write")
           : i18n.t("ui.tool.patch"),
     )
+
     const open = createMemo(() => {
       if (!props.fileOpen) return expanded()
+
       return files().flatMap((file) => (props.fileOpen?.(file.path) === true ? [file.path] : []))
     })
+
     const change = (value: string | string[]) => {
       const next = Array.isArray(value) ? value : value ? [value] : []
+
       if (!props.onFileOpenChange) {
         setExpanded(next)
+
         return
       }
+
       files().forEach((file) => props.onFileOpenChange?.(file.path, next.includes(file.path)))
     }
 
@@ -2187,6 +2422,7 @@ ToolRegistry.register({
                 createEffect(() => {
                   if (!active()) {
                     setVisible(false)
+
                     return
                   }
 
@@ -2269,18 +2505,24 @@ ToolRegistry.register({
   name: "question",
   render(props) {
     const i18n = useI18n()
+
     const questions = createMemo(() =>
       Array.isArray(props.input.questions) ? props.input.questions.filter(questionInfo) : [],
     )
+
     const answers = createMemo(() =>
       Array.isArray(props.metadata.answers) ? props.metadata.answers.filter(questionAnswer) : [],
     )
+
     const completed = createMemo(() => answers().length > 0)
 
     const subtitle = createMemo(() => {
       const count = questions().length
+
       if (count === 0) return ""
+
       if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
+
       return `${count} ${i18n.plural("ui.common.question", count)}`
     })
 

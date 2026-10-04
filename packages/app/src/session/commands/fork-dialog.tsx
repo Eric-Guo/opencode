@@ -38,6 +38,7 @@ export const DialogFork: Component = () => {
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
+
     if (!sessionID) return []
 
     const msgs = data.session.message.list(sessionID)
@@ -60,13 +61,17 @@ export const DialogFork: Component = () => {
     if (!item) return
 
     const sessionID = params.id
+
     if (!sessionID) return
     const message = data.session.message.get(sessionID, item.id)
+
     if (message?.type !== "user") return
+
     const restored = extractPromptFromMessage(message, {
       directory: location().directory,
       attachmentName: language.t("common.attachment"),
     })
+
     const dir = base64Encode(location().directory)
 
     serverSDK.api.session

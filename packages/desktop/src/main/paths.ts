@@ -13,6 +13,7 @@ export interface Resolved {
 export const resolve = Effect.fn("DesktopPaths.resolve")(function* (root: string) {
   const path = yield* Path.Path
   const preloadRoot = path.join(root, "out/preload")
+
   return {
     developmentResourcesRoot: path.join(root, "resources"),
     preloadRoot,

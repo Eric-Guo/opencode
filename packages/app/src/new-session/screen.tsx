@@ -18,17 +18,23 @@ export default function NewSessionPage(props: { draftId: string }) {
   const tabs = useTabs()
   const servers = useSettingsServers()
   const settingsSurface = useSettingsSurface()
+
   const draftTab = createMemo(() =>
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
   )
+
   const openWorkspaces = () => {
     const draft = draftTab()
+
     if (servers().length > 1 && draft) {
       settingsSurface.openServer(draft.server, "workspaces")
+
       return
     }
+
     settingsSurface.open("workspaces")
   }
+
   const workspace = createNewSessionWorkspaceController({
     selectedWorktree: () => draftTab()?.worktree,
     selectedBranch: () => draftTab()?.branch,
@@ -40,7 +46,9 @@ export default function NewSessionPage(props: { draftId: string }) {
     },
     onViewAll: openWorkspaces,
   })
+
   const mcp = createDraftMcpControls({ draftID: props.draftId, worktree: workspace.selection.value })
+
   const composer = createNewSessionComposerAdapter({
     draftID: props.draftId,
     worktree: workspace.selection.value,
@@ -48,12 +56,15 @@ export default function NewSessionPage(props: { draftId: string }) {
     submitted: workspace.selection.remember,
     mcp,
   })
+
   const model = createComposerModel(composer.adapter)
   useComposerCommands({ model: composer.model })
+
   const project = createPromptProjectController({
     controls: composer.project,
     onDone: model.restoreFocus,
   })
+
   useNewSessionCommands({
     restoreFocus: model.restoreFocus,
     project: {
@@ -73,12 +84,14 @@ export default function NewSessionPage(props: { draftId: string }) {
     if (!composer.ready()) return
     untrack(() => {
       const text = search.prompt
+
       if (!text) return
       composer.adapter.state.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
       setSearch({ ...search, prompt: undefined })
     })
   })
   const ready = Promise.resolve()
+
   const [suspendUntilPromptReady] = createResource(
     () => composer.ready.promise ?? ready,
     (promise) => promise.then(() => true),

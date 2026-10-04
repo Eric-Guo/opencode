@@ -26,6 +26,7 @@ describe("current session timeline rows", () => {
         time: { created: 5 },
       },
     ] satisfies SessionMessageInfo[]
+
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
     expect(result.activeMessageID).toBe("msg_3")
@@ -58,6 +59,7 @@ describe("current session timeline rows", () => {
         time: { created: 3 },
       },
     ] satisfies SessionMessageInfo[]
+
     const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 
     expect(result.activeMessageID).toBe("msg_shell")
@@ -174,6 +176,7 @@ describe("current session timeline rows", () => {
         time: { created: 11 },
       },
     ]
+
     const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -194,6 +197,7 @@ describe("current session timeline rows", () => {
       { id: "msg_z", type: "user", text: "existing", time: { created: 1 } },
       { id: "msg_a", type: "user", text: "pending", time: { created: 2 } },
     ] satisfies SessionMessageInfo[]
+
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
     expect(result.activeMessageID).toBe("msg_a")
@@ -205,6 +209,7 @@ describe("current session timeline rows", () => {
       { id: "msg_active", type: "user", text: "active", time: { created: 1 } },
       { id: "msg_queued", type: "user", text: "queued", time: { created: 2 } },
     ] satisfies SessionMessageInfo[]
+
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" }, new Set(["msg_queued"]))
 
     expect(result.activeMessageID).toBe("msg_active")
@@ -269,6 +274,7 @@ describe("current session timeline rows", () => {
 
   test.each(["hidden", "compact", "full"] as const)("only shows active reasoning in %s mode", (reasoningMode) => {
     const active = { type: "reasoning", text: "## Current thought", time: { created: 2 } } as const
+
     const cases: { content: SessionMessageAssistant["content"]; thinking: boolean }[] = [
       { content: [], thinking: false },
       { content: [active], thinking: true },
@@ -282,19 +288,23 @@ describe("current session timeline rows", () => {
         })),
       ),
     ]
+
     cases.forEach((profile) => {
       const document = storyDocument(profile.content, true)
+
       const result = createTimelineProjection({
         sessionMessages: document.messages,
         status: document.status,
         reasoningMode,
       })
+
       expect(result.rows.some((row) => row._tag === "Thinking")).toBe(reasoningMode !== "hidden" && profile.thinking)
     })
   })
 
   test("omits a grouped reasoning-only row while busy until other content or completion", () => {
     const thought = { type: "reasoning", text: "Thinking", time: { created: 1, completed: 2 } } as const
+
     const rows = (content: SessionMessageAssistant["content"], busy: boolean) =>
       createTimelineProjection({
         sessionMessages: storyDocument(content, busy).messages,
@@ -317,9 +327,11 @@ describe("current session timeline rows", () => {
     expect(rows([thought], false).map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
 
     const failed = storyDocument([thought], true)
+
     const messages = failed.messages.map((message) =>
       message.type === "assistant" ? { ...message, error: { type: "provider.error", message: "Failed" } } : message,
     )
+
     expect(
       createTimelineProjection({
         sessionMessages: messages,
@@ -346,15 +358,18 @@ describe("current session timeline rows", () => {
     expect(
       Timeline.constructSessionMessageRows(document.messages, true, { type: "idle" }).rows.map((row) => row._tag),
     ).toEqual(["UserMessage", "AssistantPart"])
+
     const endings = [
       { time: { created: 1, completed: 2 } },
       { error: { type: "Interrupted", message: "Stopped" } },
       { retry: { attempt: 1, at: 10, error: { type: "ProviderError", message: "Retry" } } },
     ]
+
     endings.forEach((ending) => {
       const messages = document.messages.map((message) =>
         message.type === "assistant" ? { ...message, ...ending } : message,
       )
+
       expect(
         Timeline.constructSessionMessageRows(messages, true, { type: "busy" }).rows.some(
           (row) => row._tag === "Thinking",
@@ -372,6 +387,7 @@ describe("current session timeline rows", () => {
       ],
       true,
     )
+
     const result = Timeline.constructSessionMessageRows(document.messages, true, { type: "busy" })
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Thinking"])
     expect(result.rows[1]).toMatchObject({
@@ -382,12 +398,14 @@ describe("current session timeline rows", () => {
 
   test("keeps actual thinking with the active prompt above an undelivered prompt", () => {
     const document = storyDocument([{ type: "reasoning", text: "Active thought" }], true)
+
     const result = Timeline.constructSessionMessageRows(
       [...document.messages, { type: "user", id: "queued", text: "Next task", time: { created: 10 } }],
       true,
       document.status,
       new Set(["queued"]),
     )
+
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Thinking", "TurnGap", "UserMessage"])
     expect(result.rows[1].userMessageID).toBe(document.messages[0].id)
   })
@@ -400,6 +418,7 @@ describe("current session timeline rows", () => {
       ],
       true,
     )
+
     const result = Timeline.constructSessionMessageRows(document.messages, true, document.status)
     expect(result.rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))).toEqual([
       "part",
@@ -421,6 +440,7 @@ describe("current session timeline rows", () => {
       { id: "msg_moved", type: "location-switched", location: { directory: "/tmp/next" }, time: { created: 4 } },
       { id: "msg_skill", type: "skill", skill: "review", name: "Review", text: "instructions", time: { created: 5 } },
     ] satisfies SessionMessageInfo[]
+
     const rows = Timeline.constructSessionMessageRows(
       source,
       false,
@@ -578,6 +598,7 @@ describe("current session timeline rows", () => {
         time: { created: 4 },
       },
     ] satisfies SessionMessageInfo[]
+
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
@@ -661,6 +682,7 @@ describe("current session timeline rows", () => {
       },
       time: { created: 2, ran: 3, completed: 4 },
     } satisfies SessionMessageAssistantTool
+
     const grep = {
       type: "tool",
       id: "tool_grep",
@@ -668,6 +690,7 @@ describe("current session timeline rows", () => {
       state: { status: "running", input: {}, metadata: {} },
       time: { created: 5 },
     } satisfies SessionMessageAssistantTool
+
     const source = [
       { id: "msg_user", type: "user", text: "inspect", time: { created: 1 } },
       {
@@ -706,6 +729,7 @@ describe("current session timeline rows", () => {
       state: { status: "running" as const, input: {}, metadata: {} },
       time: { created: 2 },
     })
+
     const assistant = (id: string, name: string) => ({
       id,
       type: "assistant" as const,
@@ -714,6 +738,7 @@ describe("current session timeline rows", () => {
       content: [tool(name)],
       time: { created: 2 },
     })
+
     const source = [
       { id: "msg_user", type: "user", text: "inspect", time: { created: 1 } },
       assistant("msg_assistant_1", "read"),
@@ -987,6 +1012,7 @@ describe("current session timeline rows", () => {
       status: { type: "busy" },
       reasoningMode: "hidden",
     })
+
     const phases = [
       { status: "streaming" },
       { status: "running" },
@@ -994,6 +1020,7 @@ describe("current session timeline rows", () => {
       { status: "completed" },
       { status: "error" },
     ] as const
+
     phases.reduce((previousRows, phase, index) => {
       const result = createTimelineProjection({
         sessionMessages: [
@@ -1008,6 +1035,7 @@ describe("current session timeline rows", () => {
         reasoningMode: "hidden",
         previousRows,
       })
+
       const groups = result.rows.filter((row) => row._tag === "AssistantPart")
       expect(groups).toHaveLength(1)
       expect(groups[0].group).toMatchObject({
@@ -1018,7 +1046,9 @@ describe("current session timeline rows", () => {
         ],
       })
       expect(TimelineRow.key(groups[0])).toBe(TimelineRow.key(initial.rows[1]))
+
       if (index > 0) expect(groups[0]).toBe(previousRows.find((row) => row._tag === "AssistantPart")!)
+
       return result.rows
     }, initial.rows)
   })
@@ -1036,6 +1066,7 @@ describe("current session timeline rows", () => {
       ...(profile.separator ? [{ type: profile.separator, text: "Visible boundary" }] : []),
       storyTool("active", profile.name, "running", {}),
     ]
+
     const rows = Timeline.constructSessionMessageRows(
       storyDocument(content).messages,
       profile.showReasoning ?? false,
@@ -1043,6 +1074,7 @@ describe("current session timeline rows", () => {
       undefined,
       profile.expanded ?? false,
     ).rows
+
     expect(rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))).toEqual([...profile.types])
   })
 
