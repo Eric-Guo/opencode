@@ -10,12 +10,13 @@ export const MAX_HISTORY = 100
 export type PromptHistoryStoredEntry = PromptHistoryEntry
 
 function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
-  return {
-    start: selection.start,
-    end: selection.end,
-    ...(selection.side ? { side: selection.side } : {}),
-    ...(selection.endSide ? { endSide: selection.endSide } : {}),
-  }
+  const cloned: SelectedLineRange = { start: selection.start, end: selection.end }
+
+  if (selection.side) cloned.side = selection.side
+
+  if (selection.endSide) cloned.endSide = selection.endSide
+
+  return cloned
 }
 
 export function clonePromptHistoryComments(comments: PromptHistoryComment[]) {
