@@ -73,7 +73,7 @@ export function analyzeVisualObservations<RegionName extends string>(
     }
 
     if (stable.has(name)) {
-      const identities = [...new Set(visible.map((sample) => sample.node).filter((node) => node > 0))]
+      const identities = [...new Set(visible.flatMap((sample) => (sample.node > 0 ? [sample.node] : [])))]
 
       if (identities.length > 1) issues.push(`${name} remounted ${identities.length - 1} times`)
     }
@@ -111,11 +111,11 @@ export function analyzeVisualObservations<RegionName extends string>(
 
     for (const invariant of motion.filter((invariant) => includes(invariant.regions, name))) {
       for (const metric of ["top", "bottom", "width", "height"] as const) {
-        const directions = visible
-          .slice(1)
-          .map((sample, index) => sample[metric] - visible[index]![metric])
-          .filter((delta) => Math.abs(delta) > (invariant.tolerance ?? 1))
-          .map(Math.sign)
+        const directions = visible.slice(1).flatMap((sample, index) => {
+          const delta = sample[metric] - visible[index]![metric]
+
+          return Math.abs(delta) > (invariant.tolerance ?? 1) ? [Math.sign(delta)] : []
+        })
 
         const reversals = directions.slice(1).filter((direction, index) => direction !== directions[index]).length
 
@@ -129,10 +129,11 @@ export function analyzeVisualObservations<RegionName extends string>(
     }
 
     if (labelStability.some((invariant) => includes(invariant.regions, name))) {
-      const labels = samples
-        .map((sample) => sample.label)
-        .filter((label) => label.length > 0)
-        .filter((label, index, all) => label !== all[index - 1])
+      const labels = samples.reduce<string[]>((labels, sample) => {
+        if (sample.label.length > 0 && sample.label !== labels.at(-1)) labels.push(sample.label)
+
+        return labels
+      }, [])
 
       if (labels.some((label, index) => labels.indexOf(label) !== index))
         issues.push(`${name} label reverted: ${labels.join(" -> ")}`)
