@@ -29,6 +29,8 @@ test("applies message latency after a list response gate is released", async () 
   const started = Promise.withResolvers<void>()
   let handler: ((route: Route) => Promise<void>) | undefined
 
+  // SAFETY: mockOpenCodeServer uses only addInitScript, on and route from this Page adapter.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions
   const page = {
     addInitScript: () => Promise.resolve(),
     on: () => page,
@@ -59,6 +61,8 @@ test("applies message latency after a list response gate is released", async () 
     },
   })
 
+  // SAFETY: The installed route handler reads request data and fulfills this Route adapter.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions
   const response = handler!({
     request: () => ({
       url: () => "http://127.0.0.1:4096/api/session/session/message",
@@ -87,6 +91,8 @@ test("routes requests through the HttpApi contract", async () => {
   const connected = Promise.withResolvers<{ integrationID: string; body: unknown }>()
   let handler: ((route: Route) => Promise<void>) | undefined
 
+  // SAFETY: mockOpenCodeServer uses only addInitScript, on and route from this Page adapter.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions
   const page = {
     addInitScript: () => Promise.resolve(),
     on: () => page,
@@ -108,6 +114,8 @@ test("routes requests through the HttpApi contract", async () => {
 
   const body = Buffer.from(JSON.stringify({ key: "secret" }))
   let status: number | undefined
+  // SAFETY: The installed route handler reads request data and fulfills this Route adapter.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions
   await handler!({
     request: () => ({
       url: () => "http://127.0.0.1:4096/api/integration/anthropic/connect/key",

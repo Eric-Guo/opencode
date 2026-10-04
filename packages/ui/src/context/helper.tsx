@@ -22,6 +22,7 @@ export function createSimpleContext<T, Props extends Record<string, any>>(
         // @ts-expect-error
         const ready = init.ready as Accessor<boolean> | boolean | undefined
 
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Context readiness may be a Solid accessor or a boolean; the generic init owns this contract.
         return ready === undefined || (typeof ready === "function" ? ready() : ready)
       })
 
