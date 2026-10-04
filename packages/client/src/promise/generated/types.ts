@@ -286,6 +286,17 @@ export type PermissionSource = { type: "tool"; messageID: string; id: string }
 
 export type PermissionSavedID = string
 
+export type FileSystemArchiveEntry = {
+  id: number
+  name: string
+  directory: boolean
+  size: number
+  compressedSize: number
+  encrypted: boolean
+  symlink: boolean
+  compressionMethod: number
+}
+
 export type CommandInfo = { name: string; description?: string }
 
 export type RpcOutput = { output?: any }
@@ -828,6 +839,10 @@ export type PermissionSavedInfo = {
   resource: string
   time: { created: number; updated: number }
 }
+
+export type FileSystemArchive =
+  | { status: "ready"; size: number; entries: Array<FileSystemArchiveEntry> }
+  | { status: "invalid" | "unsupported" | "limit" | "timeout"; size: number }
 
 export type Pty = {
   id: PtyID
@@ -4272,6 +4287,13 @@ export type PermissionReplyInput = {
 
 export type PermissionReplyOutput = void
 
+export type FileArchiveInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+
+export type FileArchiveOutput = { location: LocationPublicRef; data: FileSystemArchive }
+
 export type FileReadInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly path: string
@@ -4815,7 +4837,7 @@ export type AudioRecordingStopInput = { readonly recordingID: string }
 
 export type AudioRecordingStopOutput = globalThis.Uint8Array
 
-export type AudioRecordingReleaseInput = { readonly recordingID: { readonly recordingID: string }["recordingID"] }
+export type AudioRecordingReleaseInput = { readonly recordingID: string }
 
 export type AudioRecordingReleaseOutput = void
 
