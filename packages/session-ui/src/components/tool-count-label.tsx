@@ -33,6 +33,7 @@ export function AnimatedCountLabel(props: { count: number; plural: UiI18nPluralK
   const i18n = useI18n()
   const category = createMemo(() => pluralCategory(i18n.locale(), Math.round(props.count)))
 
+  // SAFETY: Legacy translation providers accept computed plural-form lookup keys; this fallback intentionally addresses that dictionary surface.
   const form = (category: ReturnType<typeof pluralCategory>) =>
     i18n.pluralForm?.(props.plural, category) ?? (i18n.t as (key: string) => string)(pluralKey(props.plural, category))
 
