@@ -58,6 +58,7 @@ describe("contrast icon-button tokens", () => {
 })
 
 function expectIconEmphasis(tokens: ResolvedV2Theme) {
+  // SAFETY: Generated primitive tokens resolve to hex colors after following their CSS variable references.
   const resolve = (value: string): HexColor =>
     value.startsWith("var(--") ? resolve(tokens[value.slice(6, -1)]) : (value as HexColor)
 

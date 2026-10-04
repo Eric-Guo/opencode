@@ -2,7 +2,11 @@ import { expect, test as base, type Browser, type Page, type TestInfo } from "@p
 import { startChromeTrace } from "./chrome-trace"
 
 type BenchmarkFixtures = {
+  // SAFETY: the shared benchmark writer serializes package-owned measurements and driver options without interpreting them.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type
   report: (metrics: Record<string, unknown>, context?: Record<string, unknown>) => void
+  // SAFETY: pending reports retain those opaque measurements until the JSON diagnostics writer emits them.
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type
   reportState: { payload?: { metrics: Record<string, unknown>; context: Record<string, unknown> } }
   benchmarkResult: void
   traceScope: "page" | "interaction"

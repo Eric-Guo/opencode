@@ -44,8 +44,10 @@ const parser = createMarkdownParser(async (code, language) => {
   const name = language in bundledLanguages ? language : "text"
 
   if (!instance.getLoadedLanguages().includes(name))
+    // SAFETY: name was checked against bundledLanguages before loading its registered grammar.
     await instance.loadLanguage(bundledLanguages[name as BundledLanguage])
 
+  // SAFETY: name is a registered bundled language or the explicitly selected text fallback.
   return instance
     .codeToHtml(code, { lang: name as BundledLanguage, theme: "OpenCode", tabindex: false })
     .replace("<code>", `<code class="language-${name}">`)
@@ -103,9 +105,11 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
     const language = request.language in bundledLanguages ? request.language : "text"
 
     if (!instance.getLoadedLanguages().includes(language))
+      // SAFETY: language was checked against bundledLanguages before loading its registered grammar.
       await instance.loadLanguage(bundledLanguages[language as BundledLanguage])
 
     if (request.complete) {
+      // SAFETY: language is a registered bundled language or the explicitly selected text fallback.
       const result = instance.codeToTokens(request.text, { lang: language as BundledLanguage, theme: "OpenCode" })
       streams.delete(request.key)
       post({

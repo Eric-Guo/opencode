@@ -15,8 +15,12 @@ const providerCatalogs = new WeakMap<
 >()
 
 export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): AppAgent[] {
-  if (input.every((agent) => !("request" in agent))) return input as AppAgent[]
+  if (input.every((agent) => !("request" in agent))) {
+    // SAFETY: this homogeneous legacy list is selected only after every entry lacks the V2 request field.
+    return input as AppAgent[]
+  }
 
+  // SAFETY: list responses are homogeneous; the legacy branch above leaves only the V2 agent response.
   return (input as AgentListOutput["data"]).map((agent) => ({
     name: agent.id,
     displayName: agent.name,
