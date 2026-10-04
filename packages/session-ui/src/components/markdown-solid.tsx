@@ -79,7 +79,7 @@ function parseNode(node: Node, key: string, words: boolean, animate: boolean, in
 
       if (/^\s+$/.test(text)) return [{ key: `${key}:${index}`, type: "text", text }]
 
-      return [{ key: `${key}:${index}`, type: "word", text, ...(animate ? { animate: true as const } : {}) }]
+      return [{ key: `${key}:${index}`, type: "word", text, animate: animate ? true as const : undefined }]
     })
   }
 
@@ -100,9 +100,7 @@ function parseNode(node: Node, key: string, words: boolean, animate: boolean, in
           inlineCode || (node.tagName === "CODE" && node.parentElement?.tagName !== "PRE"),
         ),
       ),
-      ...(words && animate && node.tagName === "CODE" && node.parentElement?.tagName !== "PRE"
-        ? { animate: true as const }
-        : {}),
+      animate: words && animate && node.tagName === "CODE" && node.parentElement?.tagName !== "PRE" ? true as const : undefined,
     },
   ]
 }
