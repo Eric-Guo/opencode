@@ -58,6 +58,7 @@ const katexExtension: MarkedExtension = {
 }
 
 function renderKatexToken(token: Tokens.Generic) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Marked invokes custom renderers with its generic token contract; math text is owned by the tokenizer above.
   return katex.renderToString(typeof token.text === "string" ? token.text : "", {
     displayMode: token.displayMode === true,
     throwOnError: false,

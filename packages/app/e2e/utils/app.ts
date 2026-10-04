@@ -120,12 +120,18 @@ function storageEntries(input: SeedInput): [string, string, boolean][] {
 
   return Object.entries(values).map(([key, value]) => [
     key,
+    // SAFETY: storage accepts raw strings and JSON values; strings must remain byte-for-byte while objects may merge.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof
     typeof value === "string" ? value : JSON.stringify(value),
+    // SAFETY: only JSON objects support the harness's shallow storage merge; scalars and arrays replace previous values.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof
     !!value && typeof value === "object" && !Array.isArray(value),
   ])
 }
 
 function tabEntry(tab: TabSeed) {
+  // SAFETY: TabSeed explicitly permits a bare session ID as well as structured session/draft entries.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof
   if (typeof tab === "string") return { type: "session", server: SERVER, sessionId: tab }
 
   if ("session" in tab) return { type: "session", server: tab.server ?? SERVER, sessionId: tab.session }

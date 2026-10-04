@@ -178,6 +178,7 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
 
   const result = yield* Effect.tryPromise(() => execFileAsync(binary, args, { windowsHide: true })).pipe(
     Effect.tapError((error) => {
+      // SAFETY: execFileAsync enriches its rejected Error with stdout/stderr, and it runs with UTF-8 encoding.
       const output = error as { stdout?: string; stderr?: string }
 
       return Effect.logError("v2 CLI command failed", {
