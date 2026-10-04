@@ -254,13 +254,16 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
             (failures.get(id) ?? 0) >= 5
           )
             paused.add(id)
-          yield* update(id, {
+
+          const changes: Partial<SshItem> = {
             stage: code === "version" ? "incompatible" : "failed",
             error: code,
             detail: failure.message,
             prompt: undefined,
-            ...(configs.has(id) ? { config: configs.get(id) } : {}),
-          })
+          }
+
+          if (configs.has(id)) Object.assign(changes, { config: configs.get(id) })
+          yield* update(id, changes)
         }),
       ),
       Effect.ensuring(
@@ -293,11 +296,14 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
   const disconnect = Effect.fn("Ssh.disconnect")(function* (id: string) {
     paused.add(id)
     const attempt = attempts.get(id)
-    yield* update(id, {
+
+    const changes: Partial<SshItem> = {
       stage: "disconnected",
       prompt: undefined,
-      ...(configs.has(id) ? { config: configs.get(id) } : {}),
-    })
+    }
+
+    if (configs.has(id)) Object.assign(changes, { config: configs.get(id) })
+    yield* update(id, changes)
 
     if (attempt) yield* Fiber.interrupt(attempt.fiber)
   })

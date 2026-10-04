@@ -503,7 +503,7 @@ for (const failed of [false, true]) {
         )
 
         frames.push({
-          ...(prompt ? { prompt: prompt.getBoundingClientRect().y } : {}),
+          prompt: prompt?.getBoundingClientRect().y,
           working: !!document.querySelector('[data-component="session-working"]'),
         })
         frame = requestAnimationFrame(sample)
