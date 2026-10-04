@@ -403,8 +403,8 @@ function timelineEvent<Type extends "session.text.started" | "session.text.delta
     type,
     data,
     location: { directory },
-    ...(durable ? { durable: { aggregateID: sessionID, seq: eventSequence, version: 1 } } : {}),
-  } as unknown as Extract<OpenCodeEvent, { type: Type }>
+    durable: durable ? { aggregateID: sessionID, seq: eventSequence, version: 1 } : undefined,
+  } as Extract<OpenCodeEvent, { type: Type }>
 }
 
 function historicalMarkdown(index: number) {
