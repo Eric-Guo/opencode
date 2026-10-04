@@ -49,6 +49,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
+
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   // Configuration changes stop the service. Reconnecting an event stream must only resolve its endpoint.
 
@@ -93,14 +94,17 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
     }),
   )
+
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   const url = new URL(service.url)
+
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
   yield* Effect.logInfo("v2 CLI background service ready", {
     OPENCODE_SERVER_PASSWORD: service.auth.password,
     version,
     ...endpoint(url.origin),
   })
+
   if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
 
   const ready = {
@@ -109,6 +113,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   } satisfies SidecarCredentials.Data
 
   SidecarCredentials.set(ready)
+
   return ready
 })
 
@@ -121,5 +126,6 @@ function registrationFile(path: Path.Path, isolated: boolean) {
 function endpoint(url: string | undefined) {
   if (!url || !URL.canParse(url)) return {}
   const parsed = new URL(url)
+
   return { url, hostname: parsed.hostname, port: parsed.port }
 }

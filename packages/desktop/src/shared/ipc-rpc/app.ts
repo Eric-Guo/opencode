@@ -13,6 +13,7 @@ export const AppReconnectService = Rpc.make("AppReconnectService", { success: Se
 export const AppGetCybrosCurrentUser = Rpc.make("AppGetCybrosCurrentUser", {
   success: Schema.Unknown,
 })
+
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
   success: Schema.Array(Schema.String),
 })
@@ -73,6 +74,7 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
 export const AppRelaunch = Rpc.make("AppRelaunch")
 
 export const AppQuit = Rpc.make("AppQuit")
+
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppGetCybrosCurrentUser,

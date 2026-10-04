@@ -134,11 +134,17 @@ export type ComposerStore = {
 }
 
 export type ComposerFilePart = FileAttachmentPart
+
 export type ComposerAgentPart = AgentPart
+
 export type ComposerSkillPart = SkillPart
+
 export type ComposerAttachment = ImageAttachmentPart | PathAttachmentPart
+
 export type ComposerPrompt = Prompt
+
 export type ComposerComment = ComposerStore["context"]["items"][number]
+
 export type ComposerPersistedState = ComposerStore
 
 export type ComposerHistoryEntry = {

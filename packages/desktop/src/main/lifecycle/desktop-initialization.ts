@@ -63,6 +63,7 @@ export const layer = Layer.effect(
     yield* Effect.promise(() => ensureSsoUsername())
     yield* prepareDesktop
     marks.init = Date.now()
+
     return Service.of({
       version: app.getVersion(),
     })
