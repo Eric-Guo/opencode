@@ -133,31 +133,36 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
-                  if (!config.password) yield* ServiceConfig.password(password)
-                  return yield* ServiceRegistration.register({
+                  const cleanup = yield* ServiceRegistration.register({
                     address,
                     password,
                     id: instanceID,
                     file: serviceOptions.file,
                     shutdown,
                   })
+                  if (!config.password) yield* ServiceConfig.password(password)
+                  return cleanup
                 }),
             },
         transform,
       ).pipe(
         Effect.catch((error) => {
-          if (serviceOptions === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
-          return recognizeIncumbent(serviceOptions, hostname, port).pipe(
+          const ownerBusy = error instanceof Error && error.name === "ProcessOwnerBusy"
+          if (serviceOptions === undefined || port === undefined || (!addressInUse(error) && !ownerBusy))
+            return Effect.fail(error)
+          return recognizeIncumbent(serviceOptions, ownerBusy ? undefined : serviceURL(hostname, port)).pipe(
             Effect.flatMap((found) =>
               found
                 ? Effect.void
-                : Effect.fail(
-                    new Error(
-                      `Managed service port ${port} on ${hostname} is already in use by another process. ` +
-                        "Configure another port with `opencode service set port <port>` and start the service again.",
-                      { cause: error },
+                : ownerBusy
+                  ? Effect.fail(error)
+                  : Effect.fail(
+                      new Error(
+                        `Managed service port ${port} on ${hostname} is already in use by another process. ` +
+                          "Configure another port with `opencode service set port <port>` and start the service again.",
+                        { cause: error },
+                      ),
                     ),
-                  ),
             ),
           )
         }),
@@ -175,8 +180,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   )
 })
 
-const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions, hostname: string, port: number) {
-  const found = yield* Service.incumbent({ ...options, url: serviceURL(hostname, port) }).pipe(
+const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions, url?: string) {
+  const found = yield* Service.incumbent({ ...options, url }).pipe(
     Effect.filterOrFail((value) => value !== undefined),
     Effect.retry(Schedule.spaced("100 millis")),
     Effect.timeoutOption("15 seconds"),

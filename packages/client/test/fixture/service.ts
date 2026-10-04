@@ -1,4 +1,5 @@
-import { appendFile, rename, writeFile } from "node:fs/promises"
+import { appendFile, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { provenance } from "../../src/service-provenance"
 
 const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
@@ -93,6 +94,7 @@ await writeFile(
     url: server.url.toString(),
     pid: process.pid,
     password: "private",
+    provenance: await provenance(),
   }),
   { mode: 0o600 },
 )
@@ -101,6 +103,10 @@ await rename(registration + ".tmp", registration)
 async function shutdown(signal?: NodeJS.Signals) {
   if (signal !== undefined) await writeFile(registration + ".signal", signal)
   server.stop(true)
+  const current = await readFile(registration, "utf8")
+    .then((text) => JSON.parse(text))
+    .catch(() => undefined)
+  if (current?.id === id) await rm(registration)
   process.exit()
 }
 process.on("SIGTERM", () => void shutdown("SIGTERM"))
