@@ -1,14 +1,6 @@
 import { encodeFilePath, getFilename } from "@opencode/util/path"
 import type { FileSelection } from "@/workspaces/files/model"
-import type {
-  AgentPart,
-  ContextItem,
-  FileAttachmentPart,
-  ImageAttachmentPart,
-  PathAttachmentPart,
-  Prompt,
-  SkillPart,
-} from "@/composer/state"
+import type { AgentPart, ContextItem, FileAttachmentPart, ImageAttachmentPart, PathAttachmentPart, Prompt, SkillPart } from "@/composer/state"
 import {
   formatAttachmentReference,
   formatCommentNote,

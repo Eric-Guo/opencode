@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { Button } from "@opencode/ui/button"
@@ -39,10 +40,10 @@ const taskDescription = (message: SessionMessageInfo, sessionID: string): string
   })
 
   if (tool?.type !== "tool") return
-  const input = typeof tool.state.input === "string" ? undefined : tool.state.input
+  const input = Predicate.isString(tool.state.input) ? undefined : tool.state.input
   const value = input?.description
 
-  if (typeof value === "string" && value) return value
+  if (Predicate.isString(value) && value) return value
 
   return undefined
 }
@@ -161,14 +162,14 @@ export function createTimelineController(input: { session: TimelineSessionSource
 
   const [pending, setPending] = createStore({ rename: false })
 
-  const errorMessage = (error: unknown) => {
-    if (error && typeof error === "object" && "data" in error) {
-      const data = error.data
+  const errorMessage = (cause: unknown) => {
+    if (Predicate.hasProperty(cause, "data")) {
+      const data = cause.data
 
-      if (data && typeof data === "object" && "message" in data && typeof data.message === "string") return data.message
+      if (Predicate.hasProperty(data, "message") && Predicate.isString(data.message)) return data.message
     }
 
-    if (error instanceof Error) return error.message
+    if (cause instanceof Error) return cause.message
 
     return language.t("common.requestFailed")
   }

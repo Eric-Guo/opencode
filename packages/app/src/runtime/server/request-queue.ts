@@ -40,7 +40,14 @@ export function createRequestQueue(input: {
   stallMs?: number
   headersTimeoutMs?: number
   setupHeadersTimeoutMs?: number
-  log?: (message: string, data: Record<string, unknown>) => void
+  log?: (
+    message: string,
+    data: {
+      limit: number
+      inflight: { method: string; url: string; ms: number }[]
+      queued: { method: string; url: string; ms: number }[]
+    },
+  ) => void
   now?: () => number
 }) {
   const limit = input.limit ?? requestQueueLimit

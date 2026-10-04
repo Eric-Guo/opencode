@@ -6,7 +6,7 @@ import type {
   SessionMessageUser,
   SessionStatus,
 } from "@opencode/client/promise"
-import { Option, Schema } from "effect"
+import { Option, Predicate, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
 import {
   currentContentDefaultOpen,
@@ -31,7 +31,9 @@ type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
 
 type PriorGroup = { index: number; row: GroupRow }
 
-const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+const textValue = Schema.is(Schema.String)
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json))
 
 export type TimelineProjectionInput = {
   sessionMessages: SessionMessageInfo[]
@@ -583,30 +585,25 @@ function indexUserContext(messages: SessionMessageInfo[]) {
     if (message.type === "user") {
       userID = message.id
       const metadata = message.metadata
-      const localAgent = typeof metadata?.agent === "string" ? metadata.agent : agent
+      const localAgent = textValue(metadata?.agent) ? metadata.agent : agent
       const localModel = metadata?.model
 
-      const localModelID =
-        localModel && typeof localModel === "object" && !Array.isArray(localModel)
-          ? typeof localModel.id === "string"
-            ? localModel.id
-            : typeof localModel.modelID === "string"
-              ? localModel.modelID
-              : undefined
-          : undefined
+      const localModelID = record(localModel)
+        ? textValue(localModel.id)
+          ? localModel.id
+          : textValue(localModel.modelID)
+            ? localModel.modelID
+            : undefined
+        : undefined
 
       result.set(message.id, {
         agent: localAgent,
         model:
-          localModel &&
-          typeof localModel === "object" &&
-          !Array.isArray(localModel) &&
-          localModelID &&
-          typeof localModel.providerID === "string"
+          record(localModel) && localModelID && textValue(localModel.providerID)
             ? {
                 id: localModelID,
                 providerID: localModel.providerID,
-                variant: typeof localModel.variant === "string" ? localModel.variant : undefined,
+                variant: textValue(localModel.variant) ? localModel.variant : undefined,
               }
             : model,
       })
@@ -884,7 +881,7 @@ export function unwrapErrorMessage(message: string) {
   const read = (value: string) => {
     const first = parse(value)
 
-    if (typeof first !== "string") return first
+    if (!textValue(first)) return first
 
     return parse(first.trim())
   }
@@ -903,31 +900,31 @@ export function unwrapErrorMessage(message: string) {
   const error = record(json.error) ? json.error : undefined
 
   if (error) {
-    const type = typeof error.type === "string" ? error.type : undefined
-    const detail = typeof error.message === "string" ? error.message : undefined
+    const type = textValue(error.type) ? error.type : undefined
+    const detail = textValue(error.message) ? error.message : undefined
 
     if (type && detail) return `${type}: ${detail}`
 
     if (detail) return detail
 
     if (type) return type
-    const code = typeof error.code === "string" ? error.code : undefined
+    const code = textValue(error.code) ? error.code : undefined
 
     if (code) return code
   }
 
-  const detail = typeof json.message === "string" ? json.message : undefined
+  const detail = textValue(json.message) ? json.message : undefined
 
   if (detail) return detail
-  const reason = typeof json.error === "string" ? json.error : undefined
+  const reason = textValue(json.error) ? json.error : undefined
 
   if (reason) return reason
 
   return message
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
+function record(value: Schema.Json | undefined): value is Schema.JsonObject {
+  return Predicate.isObject(value)
 }
 
 function isNotice(message: SessionMessageInfo): message is Notice {

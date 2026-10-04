@@ -7,7 +7,7 @@ import { createAnimatedPresence } from "@/runtime/animated-presence"
 export function ComposerDropzone(props: {
   active: boolean
   input?: { image?: boolean; pdf?: boolean }
-  identity?: () => unknown
+  identity?: () => string | undefined
 }) {
   const language = useLanguage()
   const [elements, setElements] = createStore<{ dropzone?: HTMLDivElement }>({})

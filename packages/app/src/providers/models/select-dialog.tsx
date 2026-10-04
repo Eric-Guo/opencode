@@ -24,7 +24,12 @@ import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
 import { SettingsList } from "@/settings/list"
-import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelIcon, ProviderModelSections } from "@/providers/models/provider-group"
+import {
+  CONSOLE_GROUP_KEY,
+  consoleModelGroup,
+  ProviderModelIcon,
+  ProviderModelSections,
+} from "@/providers/models/provider-group"
 import "@/settings/settings.css"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
@@ -66,10 +71,10 @@ const ModelList: Component<{
     onSelect: props.onSelect,
   })
 
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<{ search: string; active: string; collapsed: Record<string, boolean> }>({
     search: "",
     active: "",
-    collapsed: {} as Record<string, boolean>,
+    collapsed: {},
   })
 
   const models = createMemo(() => controller.models(store.search))
@@ -256,8 +261,7 @@ export function ModelSelectorPopover(props: {
 
     const connection = data.location.integration
       .list(location().ref)
-      ?.find((integration) => integration.id === "openai")
-      ?.connections[0]
+      ?.find((integration) => integration.id === "openai")?.connections[0]
 
     return connection?.type === "credential" && connection.method === "oauth"
   }

@@ -1,3 +1,4 @@
+
 import { expect, test, type Page } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
@@ -372,7 +373,7 @@ test("does not remount an edit diff when a sibling part arrives", async ({ page 
       return attachShadow.call(this, init)
     }
 
-    ;(window as Window & { __shadowRoots?: { reset(): void; count(): number } }).__shadowRoots = {
+    window.__shadowRoots = {
       reset: () => {
         count = 0
       },
@@ -429,28 +430,28 @@ test("does not remount an edit diff when a sibling part arrives", async ({ page 
     tool.evaluate((element) => {
       const nodes = [
         element,
-        element.querySelector('[data-component="file"][data-mode="diff"]'),
-        element.closest("[data-timeline-key]"),
-        element.closest("[data-timeline-row]"),
-      ] as (HTMLElement | null)[]
+        element.querySelector<HTMLElement>('[data-component="file"][data-mode="diff"]'),
+        element.closest<HTMLElement>("[data-timeline-key]"),
+        element.closest<HTMLElement>("[data-timeline-row]"),
+      ]
 
       return {
         markers: nodes.map((node) => node?.dataset.timelineProbe),
-        shadowRoots: (window as Window & { __shadowRoots?: { count(): number } }).__shadowRoots!.count(),
+        shadowRoots: window.__shadowRoots!.count(),
       }
     })
 
   await tool.evaluate((element) => {
     ;[
       element,
-      element.querySelector('[data-component="file"][data-mode="diff"]'),
-      element.closest("[data-timeline-key]"),
-      element.closest("[data-timeline-row]"),
+      element.querySelector<HTMLElement>('[data-component="file"][data-mode="diff"]'),
+      element.closest<HTMLElement>("[data-timeline-key]"),
+      element.closest<HTMLElement>("[data-timeline-row]"),
     ].forEach((node) => {
       if (!(node instanceof HTMLElement)) throw new Error("missing edit tool, diff, row, or frame")
       node.dataset.timelineProbe = "before"
     })
-    ;(window as Window & { __shadowRoots?: { reset(): void } }).__shadowRoots!.reset()
+    window.__shadowRoots!.reset()
   })
 
   await timeline.send(partUpdated(textPart("prt_sibling_text", "Streaming added a later assistant text part.")))
@@ -931,8 +932,9 @@ test.describe("background shortcut", () => {
       id: "evt_background_succeeded",
       created: Date.now(),
       type: "session.execution.succeeded",
+      durable: { aggregateID: backgroundID, seq: 1, version: 1 },
       data: { sessionID: backgroundID },
-    } as never)
+    })
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")
   })
@@ -1396,5 +1398,11 @@ function summaryDiff(index: number) {
     deletions: 1,
     status: "modified" as const,
     patch: `@@ -1 +1 @@\n-export const value = ${index}\n+export const value = ${index + 1}`,
+  }
+}
+
+declare global {
+  interface Window {
+    __shadowRoots?: { reset(): void; count(): number }
   }
 }

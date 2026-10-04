@@ -35,12 +35,12 @@ const diffEditComplexityLimit = 100_000
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
-  if (typeof diff.patch === "string") return fileDiffFromPatch(diff.file, diff.patch)
+  if (diff.patch !== undefined) return fileDiffFromPatch(diff.file, diff.patch)
 
   return fileDiffFromContent(
     diff.file,
-    typeof diff.before === "string" ? diff.before : "",
-    typeof diff.after === "string" ? diff.after : "",
+    diff.before ?? "",
+    diff.after ?? "",
   )
 }
 

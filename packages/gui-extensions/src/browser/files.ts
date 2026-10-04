@@ -35,12 +35,12 @@ export function createBrowserFiles(source: () => readonly string[]) {
       // setSavePath must run during Electron's synchronous will-download callback.
       mkdirSync(target, { recursive: true, mode: 0o700 })
 
-      const file = {
+      const file: NonNullable<ReturnType<typeof files.get>> = {
         id,
         name: name.slice(0, 2_048),
         mime,
         bytes: 0,
-        state: "pending" as "pending" | "completed" | "failed",
+        state: "pending",
         // A page receives this basename as the uploaded File.name, so spaces and non-ASCII stay;
         // only characters no supported filesystem accepts are replaced. Each file has its own
         // directory, so names never collide.
@@ -65,7 +65,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
         )
       await ready
       const file = this.add(name, mime, resources)
-      await writeFile(file.path, data, { mode: 0o600 }).catch((error: unknown) => {
+      await writeFile(file.path, data, { mode: 0o600 }).catch((error) => {
         file.state = "failed"
         throw new Error(
           "Cannot write the capture on the desktop. Ask the user to check desktop temporary-directory access and free space before retrying.",
@@ -107,7 +107,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
 
       if (
         (
-          await stat(file.path).catch((error: unknown) => {
+          await stat(file.path).catch((error) => {
             throw unavailableFile(error)
           })
         ).size > Browser.MAX_FILE_BYTES
@@ -116,7 +116,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
           "File exceeds the 5 MiB transfer limit. Choose a smaller completed file; repeating browser.files.get for this file will not help.",
         )
 
-      const data = await readFile(file.path).catch((error: unknown) => {
+      const data = await readFile(file.path).catch((error) => {
         throw unavailableFile(error)
       })
 
@@ -126,9 +126,9 @@ export function createBrowserFiles(source: () => readonly string[]) {
   }
 }
 
-function unavailableFile(error: unknown) {
+function unavailableFile(cause: unknown) {
   return new Error(
     "The retained file cannot be read on the desktop. Its temporary copy may have been removed. Use an already exported server-local path if available, or deliberately create a new capture.",
-    { cause: error },
+    { cause },
   )
 }

@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { expect, test, type Page } from "@playwright/test"
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { createServer, type ServerResponse } from "node:http"
@@ -127,14 +128,14 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
 
       const file = builds[state.version][path]
 
-      const types: Record<string, string> = {
+      const types = new Map(Object.entries({
         ".js": "text/javascript",
         ".html": "text/html",
         ".json": "application/json",
         ".wasm": "application/wasm",
-      }
+      }))
 
-      response.setHeader("content-type", types[extname(path)] ?? "application/octet-stream")
+      response.setHeader("content-type", types.get(extname(path)) ?? "application/octet-stream")
 
       if (file) return void response.end(file)
 
@@ -147,7 +148,7 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
     await once(server, "listening")
     const address = server.address()
 
-    if (!address || typeof address === "string") throw new Error("Expected a TCP address")
+    if (!address || Predicate.isString(address)) throw new Error("Expected a TCP address")
 
     try {
       await use({
@@ -414,7 +415,7 @@ test("the production build precaches every deployable file", async ({ page, cont
   await once(server, "listening")
   const address = server.address()
 
-  if (!address || typeof address === "string") throw new Error("Expected a TCP address")
+  if (!address || Predicate.isString(address)) throw new Error("Expected a TCP address")
   const url = `http://127.0.0.1:${address.port}`
 
   try {
