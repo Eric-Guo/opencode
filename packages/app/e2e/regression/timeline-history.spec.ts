@@ -552,12 +552,11 @@ function installVisibilityProbe() {
       .flatMap((part) => (part.dataset.timelinePartId ? [part.dataset.timelinePartId] : []))
   }
 
-  // SAFETY: arm populates parts with visible part IDs; settle supplies the optional final state.
-  const state = {
+  const state: HistoryVisibilityState = {
     armed: false,
     hidden: false,
-    parts: [] as string[],
-    final: undefined as ProbeFinal | undefined,
+    parts: Array<string>(),
+    final: undefined,
     settled: false,
     // Returns the parts that must stay visible.
     arm() {
@@ -587,4 +586,14 @@ function installVisibilityProbe() {
   }
 
   requestAnimationFrame(() => setTimeout(sample, 0))
+}
+
+type HistoryVisibilityState = {
+  armed: boolean
+  hidden: boolean
+  parts: string[]
+  final: ProbeFinal | undefined
+  settled: boolean
+  arm(): string[]
+  settle(final: ProbeFinal): void
 }
