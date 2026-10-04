@@ -184,6 +184,8 @@ import type {
   PermissionGetOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
+  FileArchiveInput,
+  FileArchiveOutput,
   FileListInput,
   FileListOutput,
   FileFindInput,
@@ -1209,6 +1211,13 @@ const adaptGroupPermission = (raw: RawClient["server.permission"]) => ({
   reply: EndpointPermissionReply(raw),
 })
 
+const EndpointFileArchive = (raw: RawClient["server.fs"]) => (input: FileArchiveInput) =>
+  preserveEffect<FileArchiveOutput>()(
+    raw["fs.archive"]({ query: { location: input["location"], path: input["path"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointFileList = (raw: RawClient["server.fs"]) => (input?: FileListInput) =>
   preserveEffect<FileListOutput>()(
     raw["fs.list"]({ query: { location: input?.["location"], path: input?.["path"] } }).pipe(
@@ -1223,7 +1232,11 @@ const EndpointFileFind = (raw: RawClient["server.fs"]) => (input: FileFindInput)
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupFile = (raw: RawClient["server.fs"]) => ({ list: EndpointFileList(raw), find: EndpointFileFind(raw) })
+const adaptGroupFile = (raw: RawClient["server.fs"]) => ({
+  archive: EndpointFileArchive(raw),
+  list: EndpointFileList(raw),
+  find: EndpointFileFind(raw),
+})
 
 const EndpointCommandList = (raw: RawClient["server.command"]) => (input?: CommandListInput) =>
   preserveEffect<CommandListOutput>()(
