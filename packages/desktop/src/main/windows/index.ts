@@ -282,6 +282,7 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
       void loadPrimary()
         .catch((error) => runFork(Effect.logError("renderer load failed", { error })))
         .finally(contentReady)
+
     return win
   }
 
