@@ -317,7 +317,7 @@ smoke(
 )
 
 smoke(
-  "isolates servers sharing a database and preserves terminals only through explicit restart handoff",
+  "isolates servers sharing a terminal root and preserves terminals only through explicit restart handoff",
   () =>
     Effect.gen(function* () {
       const fixture = yield* testDirectory()
@@ -355,7 +355,10 @@ smoke(
         ptyID: first.id,
       })
 
-      const independent = yield* ServerProcess.start<never, never>(options)
+      const independent = yield* ServerProcess.start<never, never>({
+        ...options,
+        database: { path: path.join(fixture.root, "independent.db") },
+      })
       const otherBase = HttpServer.formatAddress(independent.address)
       expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
       expect((yield* request(otherBase, "GET", `/api/experimental/session/${sessionID}/terminal/read`)).data).toBeNull()
