@@ -4,6 +4,7 @@ import type { Project as CurrentProject } from "@opencode/client/promise"
 import { unwrap } from "solid-js/store"
 import type { AppAgent } from "./types"
 import { isNativeAgentID } from "@/providers/models/agent"
+
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/workspaces/path-key"
 
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
@@ -15,6 +16,7 @@ const providerCatalogs = new WeakMap<
 
 export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): AppAgent[] {
   if (input.every((agent) => !("request" in agent))) return input as AppAgent[]
+
   return (input as AgentListOutput["data"]).map((agent) => ({
     name: agent.id,
     displayName: agent.name,
@@ -50,6 +52,7 @@ export function normalizeProviderList(
   const providers = unwrap(input)
   const models = unwrap(catalog)
   const cached = models && providerCatalogs.get(providers)?.get(models)
+
   if (cached) return cached
   const all = new Map<string, Provider>()
 
@@ -68,6 +71,7 @@ export function normalizeProviderList(
 
   for (const model of models ?? []) {
     const provider = all.get(model.providerID)
+
     if (!provider || model.status === "deprecated") continue
     const cost = model.cost.find((item) => item.tier === undefined) ?? model.cost[0]
     provider.models[model.id] = {
@@ -124,20 +128,24 @@ export function normalizeProviderList(
     default: Object.fromEntries(
       providers.flatMap((provider) => {
         const model = models?.find((item) => item.providerID === provider.id && item.status !== "deprecated")
+
         return model ? [[provider.id, model.id]] : []
       }),
     ),
   }
+
   if (models) {
     const cache = providerCatalogs.get(providers) ?? new WeakMap<ModelListOutput["data"], ProviderListResponse>()
     cache.set(models, result)
     providerCatalogs.set(providers, cache)
   }
+
   return result
 }
 
 export function normalizeProjectInfo(project: Project | CurrentProject): Project {
   const worktree = "canonical" in project ? project.canonical : project.worktree
+
   return {
     ...project,
     worktree,

@@ -31,6 +31,7 @@ import {
 } from "./windows"
 
 const services = Layer.mergeAll(DesktopFiles.layer, Extensions.layer)
+
 const handlers = Layer.mergeAll(
   appHandlers,
   storageHandlers,
@@ -40,6 +41,7 @@ const handlers = Layer.mergeAll(
   eventHandlers,
   extensionHandlers,
 )
+
 export const layer = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(
   Layer.provide(handlers),
   Layer.provideMerge(IpcServerProtocolLive),
@@ -54,9 +56,11 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const context = yield* Effect.context()
   const runFork = Effect.runForkWith(context)
   const runPromise = Effect.runPromiseWith(context)
+
   const menu = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
+
       if (win) sendMenuCommand(win, id)
     },
     installCli: () => runFork(showCliInstaller(desktopCli)),
@@ -73,6 +77,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
       if (input.type !== "keyDown" || input.key !== "Escape") return
       contents.send(DragCancelEvent)
     })
+
     const post = () => {
       if (contents.isDestroyed()) return
       const channel = new MessageChannelMain()
@@ -95,6 +100,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
       Object.keys(handlers).forEach((channel) => ipcMain.removeHandler(channel))
     }),
   )
+
   return {
     installMenu: () => createMenu(menu),
   }

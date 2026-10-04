@@ -8,12 +8,15 @@ import type { CustomMacSignOptions } from "app-builder-lib"
 import type { Configuration } from "electron-builder"
 
 const execFileAsync = promisify(execFile)
+
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
+
 const rootDir = path.resolve(packageDir, "../..")
 
 const thapeConfigDir = path.join(packageDir, "resources", "thape-config")
 
 const generatedDir = path.join(packageDir, "out", "generated")
+
 const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 const appFiles = [
@@ -96,10 +99,12 @@ const windowsArchitectureExclusions = (
         ]
       : []
 ).map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
+
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
 // "opencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
 // pins still resolve after the canonical app id changes back to ai.opencode.desktop.
 const legacyDesktopEntry = path.join(packageDir, "resources", "linux", "opencode-desktop.desktop")
+
 const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`
 
 const metainfoFpm = (appId: string) =>
@@ -107,6 +112,7 @@ const metainfoFpm = (appId: string) =>
 
 async function signWindows(configuration: { path: string }) {
   if (process.platform !== "win32") return
+
   if (process.env.GITHUB_ACTIONS !== "true") return
 
   await execFileAsync(
@@ -121,7 +127,9 @@ function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
     ...options,
     optionsForFile: (file) => {
       const defaults = options.optionsForFile?.(file)
+
       if (file !== path.join(options.app, "Contents/Resources/opencode-cli")) return defaults ?? {}
+
       // The Bun CLI loads bun-pty's native library; Electron and its helpers do not need this exception.
       return { ...defaults, entitlements: path.join(packageDir, "resources/entitlements.cli.plist") }
     },
@@ -130,8 +138,11 @@ function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
+
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+
   if (raw === "latest") return "prod"
+
   return "dev"
 })()
 
@@ -289,6 +300,7 @@ function getConfig() {
         rpm: { packageName: "sigma-agents", fpm: [metainfoFpm(appId)] },
       }
     }
+
     case "beta": {
       return {
         ...base,
@@ -300,6 +312,7 @@ function getConfig() {
         rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
       }
     }
+
     case "prod": {
       return {
         ...base,

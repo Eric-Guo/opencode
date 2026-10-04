@@ -29,17 +29,22 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const path = yield* Path.Path
+
     const resolve = yield* Effect.cached(
       make().pipe(Effect.provide(yield* Effect.context<FileSystem.FileSystem | Path.Path>()), Effect.orDie),
     )
+
     const install = Effect.gen(function* () {
       if (process.platform !== "darwin") return yield* Effect.fail(new Error("CLI installation requires macOS"))
       const cli = yield* resolve
+
       if (!cli.binary) return yield* Effect.fail(new Error("Bundled CLI executable is unavailable"))
       const home = app.getPath("home")
       yield* runInstaller(cli.binary, home)
+
       return path.join(home, ".opencode", "bin", "opencode")
     })
+
     return Service.of({ resolve, install })
   }),
 )
@@ -47,6 +52,7 @@ export const layer = Layer.effect(
 const make = Effect.fn("DesktopCli.resolve")(function* () {
   const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
   const version = process.env.OPENCODE_VERSION ?? "local"
+
   const cli = development
     ? {
         version,
@@ -77,9 +83,11 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
 const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isolated: boolean) {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve(app.getAppPath())
+
   const bundled = app.isPackaged
     ? path.join(process.resourcesPath, executableName())
     : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
+
   yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = parseCliVersion(yield* run(bundled, ["--version"]))
   yield* Effect.logInfo("v2 CLI executable verified", { version })
@@ -89,6 +97,7 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
     : isolated
       ? yield* installCli(bundled, version, version)
       : bundled
+
   return { version, binary, command: [binary] }
 })
 
@@ -102,8 +111,10 @@ export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (binary
     entries,
     Effect.fnUntraced(function* (entry) {
       const target = path.join(root, entry)
+
       if (target === current) return
       const stat = yield* fs.stat(target).pipe(Effect.orElseSucceed(() => undefined))
+
       if (stat?.type !== "Directory") return
       yield* fs
         .remove(target, { recursive: true, force: true })
@@ -145,25 +156,30 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
 
   if (yield* fs.exists(destination)) {
     yield* Effect.logInfo("v2 CLI staged executable reused", { path: destination, version })
+
     return destination
   }
 
   const temp = destination + `.${process.pid}.tmp`
   yield* fs.makeDirectory(path.dirname(destination), { recursive: true })
   yield* fs.copyFile(source, temp)
+
   if (process.platform !== "win32") yield* fs.chmod(temp, 0o755)
   yield* fs
     .rename(temp, destination)
     .pipe(Effect.catch((error) => fs.remove(temp, { force: true }).pipe(Effect.andThen(Effect.fail(error)))))
   yield* Effect.logInfo("v2 CLI executable staged", { source, path: destination, version })
+
   return destination
 })
 
 const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[]) {
   yield* Effect.logInfo("v2 CLI command started", { binary, args })
+
   const result = yield* Effect.tryPromise(() => execFileAsync(binary, args, { windowsHide: true })).pipe(
     Effect.tapError((error) => {
       const output = error as { stdout?: string; stderr?: string }
+
       return Effect.logError("v2 CLI command failed", {
         args,
         error: error instanceof Error ? error.message : String(error),
@@ -172,9 +188,11 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
       })
     }),
   )
+
   const stdout = result.stdout.trim()
   const stderr = result.stderr.trim()
   yield* Effect.logInfo("v2 CLI command completed", { args, stdout, stderr })
+
   return stdout
 })
 
@@ -186,6 +204,7 @@ const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: s
           env: { ...process.env, HOME: home },
           stdio: ["pipe", "ignore", "pipe"],
         })
+
         let stderr = ""
         child.stderr.on("data", (chunk) => (stderr += chunk))
         child.on("error", reject)

@@ -28,12 +28,15 @@ type GlobalStore = {
 function waitForPaint() {
   return new Promise<void>((resolve) => {
     let done = false
+
     const finish = () => {
       if (done) return
       done = true
       resolve()
     }
+
     const timer = setTimeout(finish, 50)
+
     if (typeof requestAnimationFrame !== "function") return
     requestAnimationFrame(() => {
       setTimeout(() => {
@@ -63,6 +66,7 @@ export const loadGlobalConfigQuery = (scope: ServerScope, api: ConfigApi) =>
 type ProjectApi = {
   readonly list: () => Promise<ProjectListOutput>
 }
+
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
 
 // Metadata only. Worktree inventories load per project when a view shows it (see workspaces/inventory).
@@ -107,6 +111,7 @@ export async function bootstrapGlobal(input: {
         ),
       ),
   ]
+
   await runAll(slow)
 }
 
@@ -147,10 +152,13 @@ export async function bootstrapDirectory(input: {
 }) {
   const loading = input.store.status !== "complete"
   const seededProject = projectID(input.directory, input.global.project)
+
   if (seededProject) input.setStore("project", seededProject)
+
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
     input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
+
   if (loading) input.setStore("status", "partial")
 
   const slow = [
@@ -164,6 +172,7 @@ export async function bootstrapDirectory(input: {
 
   await waitForPaint()
   const slowErrs = errors(await runAll(slow))
+
   if (slowErrs.length > 0) {
     console.error("Failed to finish bootstrap instance", slowErrs[0])
     const project = getFilename(input.directory)

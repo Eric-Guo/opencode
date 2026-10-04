@@ -31,6 +31,7 @@ export function allowRendererPermissions(contents: WebContents) {
 export function wireNavigationPolicy(contents: WebContents, openExternalURL: (url: string) => unknown) {
   contents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
+
     return { action: "deny" }
   })
   contents.on("will-navigate", (event, url) => {
@@ -54,9 +55,11 @@ export function wireRendererHeaders(contents: WebContents) {
       const frame = details.frame
       const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
       const authorization = renderer && SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
+
       if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
         upsertHeader(details.requestHeaders, "Authorization", authorization)
       }
+
       callback({ requestHeaders: details.requestHeaders })
     },
   )

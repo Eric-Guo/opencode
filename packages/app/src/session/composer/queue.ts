@@ -39,6 +39,7 @@ export function createSessionQueue(input: {
   const language = useLanguage()
   const [state, setState] = createStore<{ editing?: { id: string; stash: EditStash } }>({})
   const notify = () => showToast({ title: language.t("common.requestFailed") })
+
   const mutation = useMutation(() => ({
     mutationFn: async (
       change:
@@ -56,16 +57,21 @@ export function createSessionQueue(input: {
           },
     ) => {
       if (change.type === "reorder") return rewrite(change.inboxIDs)
+
       if (change.type === "undo") {
         await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
         const draft = input.draft.current()
+
         const prompt = promptLength(draft)
           ? appendPrompt(draft, change.prompt)
           : [...change.prompt, ...draft.filter(isAttachment)]
+
         input.draft.set(prompt, promptLength(prompt))
         input.restoreFocus(promptLength(prompt))
+
         return
       }
+
       const replacement = await editedPromptInput(
         input.sessionID,
         location().directory,
@@ -73,6 +79,7 @@ export function createSessionQueue(input: {
         change.prompt,
         change.text,
       )
+
       // Admit before cancelling so a failed replacement never discards the original.
       const admitted = await data.session.prompt({
         ...replacement,
@@ -80,8 +87,10 @@ export function createSessionQueue(input: {
         delivery: change.delivery,
         ...(change.delivery === "queue" ? { resume: false } : {}),
       })
+
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.original })
       cancelEdit()
+
       if (change.delivery === "queue")
         await rewrite(change.inboxIDs.map((id) => (id === change.original ? admitted.id : id)))
     },
@@ -94,8 +103,10 @@ export function createSessionQueue(input: {
       .list(input.sessionID)
       .filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue"),
   )
+
   const rows = createMemo(() => {
     const replacement = mutation.isPending ? mutation.variables : undefined
+
     return queuedPromptRows(
       queued(),
       replacement?.type === "edit" && replacement.delivery === "queue" ? replacement : undefined,
@@ -104,6 +115,7 @@ export function createSessionQueue(input: {
 
   createEffect(() => {
     const editing = state.editing
+
     if (!editing || mutation.isPending || queued().some((item) => item.id === editing.id)) return
     setState("editing", undefined)
   })
@@ -111,12 +123,15 @@ export function createSessionQueue(input: {
 
   const rewrite = async (inboxIDs: string[]) => {
     const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
+
     if (pending.some((item) => item.delivery === "queue" && item.type !== "user"))
       throw new Error("Queued control items block reordering")
     const current = pending.filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue")
     const ordered = inboxIDs.flatMap((id) => current.filter((item) => item.id === id))
+
     if (ordered.length !== current.length) throw new Error("Queued prompts changed before reordering")
     const changed = ordered.findIndex((item, index) => item.id !== current[index]?.id)
+
     if (changed < 0) return
 
     // Existing inbox APIs cannot reorder rows, so replace only the changed suffix.
@@ -137,45 +152,63 @@ export function createSessionQueue(input: {
         resume: false,
       })
     }
+
     for (const item of current.slice(changed)) {
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: item.id })
     }
   }
+
   const steer = (id: string) => {
     if (state.editing?.id === id) cancelEdit()
+
     return server.api.session.inbox
       .update({ sessionID: input.sessionID, inboxID: id, delivery: "steer" })
       .catch(() => notify())
   }
+
   const remove = (id: string) => {
     if (state.editing?.id === id) cancelEdit()
+
     return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
   }
+
   const undo = (id: string) => {
     if (mutation.isPending || state.editing) return
     const item = queued().find((entry) => entry.id === id)
+
     if (!item) return
+
     if (input.draft.mode.current() !== "normal") {
       showToast({ title: language.t("session.queue.undoShell") })
+
       return
     }
+
     const prompt = queuedPromptUndoDraft(item)
+
     if (!prompt) {
       showToast({ title: language.t("session.queue.undoUnavailable") })
+
       return
     }
+
     mutation.mutate({ type: "undo", item, prompt })
   }
+
   const reorder = (inboxIDs: string[]) => {
     if (mutation.isPending) return Promise.resolve()
+
     return mutation.mutateAsync({ type: "reorder", inboxIDs }).catch(() => undefined)
   }
 
   const edit = (id: string) => {
     if (mutation.isPending) return false
+
     if (state.editing?.id === id) return true
     const item = queued().find((entry) => entry.id === id)
+
     if (!item) return false
+
     if (state.editing) cancelEdit()
     const draft = input.draft.current()
     setState("editing", {
@@ -194,33 +227,42 @@ export function createSessionQueue(input: {
       text.length,
     )
     input.restoreFocus(text.length)
+
     return true
   }
+
   const cancelEdit = () => {
     const editing = state.editing
+
     if (!editing) return
     setState("editing", undefined)
     // Mode first, then prompt, then retry: mode and prompt writes both clear
     // the retry marker.
     input.draft.mode.set(editing.stash.mode)
     input.draft.set(editing.stash.prompt, editing.stash.cursor)
+
     if (editing.stash.retry) input.draft.retry.set(editing.stash.retry)
     input.restoreFocus(editing.stash.cursor)
   }
+
   const confirmEdit = (delivery: ComposerDelivery) => {
     const editing = state.editing
+
     if (!editing || mutation.isPending) return
     const prompt = clonePrompt(input.draft.current())
     const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
     const attachments = prompt.filter(isAttachment)
+
     if (!text.trim() && !attachments.length) return cancelEdit()
     const item = queued().find((entry) => entry.id === editing.id)
     const original = item ? queuedPromptAttachments(item) : []
+
     const pristine =
       item &&
       text.trim() === queuedPromptText(item) &&
       attachments.length === original.length &&
       attachments.every((attachment, index) => attachment.id === original[index].id)
+
     if (pristine && delivery === "queue") return cancelEdit()
     mutation.mutate({
       type: "edit",
@@ -233,9 +275,12 @@ export function createSessionQueue(input: {
       delivery,
     })
   }
+
   const editFirst = () => {
     const first = queued()[0]
+
     if (!first) return false
+
     return edit(first.id)
   }
 
@@ -244,7 +289,9 @@ export function createSessionQueue(input: {
     delivery: () => (input.working() ? input.behavior() : "steer"),
     alternate: () => {
       if (state.editing) return "steer"
+
       if (!input.working()) return undefined
+
       return input.behavior() === "queue" ? "steer" : "queue"
     },
     editing: () => state.editing?.id,
@@ -273,6 +320,7 @@ export type SessionQueueView = Pick<
 
 export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original: string; replacement: string }) {
   const replaced = replacement && items.some((item) => item.id === replacement.replacement)
+
   return items
     .filter((item) => !replaced || item.id !== replacement.original)
     .map((item) => ({
@@ -285,6 +333,7 @@ export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original
 
 export function queuedPromptText(item: QueuedPrompt) {
   const display = item.payload.metadata?.["displayText"]
+
   return typeof display === "string" && display.length > 0 ? display : item.payload.text
 }
 
@@ -328,6 +377,7 @@ function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
   )
     return
   const text = item.payload.text
+
   const references = [
     ...(item.payload.files ?? []).flatMap((file) =>
       file.mention
@@ -373,6 +423,7 @@ function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
         : [],
     ),
   ].sort((left, right) => left.start - right.start)
+
   if (
     references.some(
       (part, index) =>
@@ -380,8 +431,10 @@ function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
     )
   )
     return
+
   const parts: Prompt = references.flatMap((part, index) => {
     const start = references[index - 1]?.end ?? 0
+
     return [
       ...(part.start > start
         ? [{ type: "text" as const, content: text.slice(start, part.start), start, end: part.start }]
@@ -389,7 +442,9 @@ function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
       part,
     ]
   })
+
   const start = references.at(-1)?.end ?? 0
+
   return [
     ...parts,
     ...(text.length > start || !parts.length
@@ -422,16 +477,21 @@ async function editedPromptInput(
       .filter((part): part is ImageAttachmentPart => part.type === "image")
       .map(async (part) => ({ ...part, dataUrl: await blobDataUrl(part.blob, part.mime) })),
   )
+
   const request = buildPromptRequest({ prompt, context: [], images, text, sessionDirectory: directory })
   const payload = item?.payload
   const display = item ? queuedPromptText(item) : ""
   const notes = payload && display && payload.text.startsWith(display) ? payload.text.slice(display.length) : ""
+
   const mention = (value: { start: number; end: number; text: string } | undefined) => {
     if (!value) return undefined
     const start = text.indexOf(value.text)
+
     if (start < 0) return undefined
+
     return { text: value.text, start, end: start + value.text.length }
   }
+
   // Structured mentions degrade to plain text in the editor, so an original
   // agent or skill reference survives the edit as long as its mention text
   // still appears; newly typed structured mentions come from the request.
@@ -444,6 +504,7 @@ async function editedPromptInput(
     ) ?? []),
     ...request.agents,
   ]
+
   const skills = [
     ...(payload?.skills?.filter(
       (skill) =>
@@ -451,6 +512,7 @@ async function editedPromptInput(
     ) ?? []),
     ...request.skills,
   ]
+
   return {
     sessionID,
     text: request.text + notes,

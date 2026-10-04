@@ -37,6 +37,7 @@ export const appHandlers = AppRpcs.toLayer(
     const services = yield* Effect.context()
     const runFork = Effect.runForkWith(services)
     const runPromise = Effect.runPromiseWith(services)
+
     return AppRpcs.of({
       AppAwaitInitialization: (_args, context) =>
         Effect.gen(function* () {
@@ -68,12 +69,16 @@ export const appHandlers = AppRpcs.toLayer(
           if (!win || win.isDestroyed() || getPrimaryWebContents(win) !== contents) {
             throw new Error("Invalid native translation sender")
           }
+
           const bundle = parseDesktopNativeBundle(value)
+
           if (!bundle) throw new Error("Invalid native translation bundle")
+
           if (!setNativeTranslations(bundle)) return
           createMenu({
             trigger: (id) => {
               const win = getLastFocusedWindow()
+
               if (win) sendMenuCommand(win, id)
             },
             installCli: () => runFork(showCliInstaller(desktopCli)),

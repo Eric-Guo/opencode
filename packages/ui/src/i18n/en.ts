@@ -275,10 +275,15 @@ const source = {
 } satisfies Record<string, string>
 
 export type Key = keyof typeof source
+
 export type PluralCategory = "zero" | "one" | "two" | "few" | "many" | "other"
+
 export type PluralKey = {
   [Entry in Key]: Entry extends `${infer Base}.other` ? (`${Base}.one` extends Key ? Base : never) : never
 }[Key]
+
 export type PluralLookupKey = `${PluralKey}.${PluralCategory}`
+
 export type LocaleKey = Key | PluralLookupKey
+
 export const dict: typeof source & Record<string, string> = source

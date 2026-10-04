@@ -49,16 +49,20 @@ export {
 } from "./content"
 
 const themeReady = new WeakMap<BrowserWindow, () => void>()
+
 const displays = {
   all: () => screen.getAllDisplays().map((display) => display.bounds),
   primary: () => screen.getPrimaryDisplay().bounds,
   matching: (bounds: Electron.Rectangle) => screen.getDisplayMatching(bounds).bounds,
 }
+
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
 })
+
 const opened = new Set<(win: BrowserWindow) => void>()
+
 let relaunchHandler = () => {
   setAppQuitting()
   app.relaunch()
@@ -81,6 +85,7 @@ export {
 export function setRelaunchHandler(handler: () => void) {
   const previous = relaunchHandler
   relaunchHandler = handler
+
   return () => {
     if (relaunchHandler === handler) relaunchHandler = previous
   }
@@ -92,15 +97,20 @@ export function setAppQuitting(quitting = true) {
 
 export function getLastFocusedWindow() {
   const focused = BrowserWindow.getFocusedWindow()
+
   if (focused) return focused
   const win = registry.lastFocused()
+
   if (!win || win.isDestroyed()) return null
+
   return win
 }
 
 export function getWindowByID(id: string) {
   const win = registry.get(id)
+
   if (!win || win.isDestroyed()) return null
+
   return win
 }
 
@@ -112,6 +122,7 @@ export function getMainWindows() {
 /** Runs for each app window as it registers, before its renderer loads. */
 export function onMainWindow(listener: (win: BrowserWindow) => void) {
   opened.add(listener)
+
   return () => {
     opened.delete(listener)
   }
@@ -136,7 +147,9 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     const usable = early && !early.win.isDestroyed() ? early : undefined
     const ids = registry.persisted()
     const list = ids.length ? ids : [usable?.id ?? randomUUID()]
+
     if (usable && !list.includes(usable.id)) usable.win.destroy()
+
     return list.map((id) => create(id, usable?.id === id ? usable : undefined))
   }
 
@@ -144,6 +157,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     const stateFile = path.join(app.getPath("userData"), windowStateFile(id))
     const state = early?.state ?? resolveWindowState(readWindowState(stateFile), { width: 1280, height: 800 }, displays)
     const appearance = windowAppearance(path, paths)
+
     const win =
       early?.win ??
       new BrowserWindow({
@@ -233,15 +247,19 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     let contentReady = false
     let appliedTheme = false
     let revealed = !!early
+
     const focusForTests = () => {
       if (app.isPackaged || process.env.OPENCODE_TEST_ONBOARDING !== "1") return
+
       if (process.platform === "darwin") app.focus({ steal: true })
       win.focus()
     }
+
     if (early) {
       focusForTests()
       runFork(Effect.logInfo("main window visible", { window: id, shownAt: early.shownAt }))
     }
+
     const reveal = () => {
       if (!contentReady || !appliedTheme || revealed || win.isDestroyed()) return
       revealed = true
@@ -249,10 +267,12 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       focusForTests()
       runFork(Effect.logInfo("main window visible", { window: id }))
     }
+
     const ready = () => {
       contentReady = true
       reveal()
     }
+
     themeReady.set(win, () => {
       appliedTheme = true
       reveal()
@@ -266,6 +286,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       void loadPrimary()
         .catch((error) => runFork(Effect.logError("renderer load failed", { error })))
         .finally(ready)
+
     return win
   }
 

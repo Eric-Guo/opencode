@@ -21,6 +21,7 @@ export function createSessionRequestModel() {
   const settings = useSettings()
   createEffect(() => {
     const id = params.id
+
     if (!id || serverSDK.connection.status() !== "connected") return
     void Promise.all([
       data.shell.sync({ directory: sdk().directory }),
@@ -29,6 +30,7 @@ export function createSessionRequestModel() {
   })
   createEffect(() => {
     const id = params.id
+
     if (!id || serverSDK.connection.status() !== "connected") return
     void Promise.all(
       sessionTreeIDs(data.session.list(), id).map((sessionID) => data.session.form.sync(sessionID)),
@@ -38,44 +40,55 @@ export function createSessionRequestModel() {
   const formRequest = createMemo((): FormInfo | undefined => {
     return sessionFormRequest(data.session.list(), data.session.form.list, params.id)
   })
+
   const websearch = createWebSearchRequest({
     owner: () => params.id,
     connected: () => serverSDK.connection.status() === "connected",
     request: () => {
       const form = formRequest()
+
       return form?.metadata?.kind === "websearch.provider" ? form : undefined
     },
     providers: async (sessionID) => {
       const session = data.session.get(sessionID) ?? (await serverSDK.api.session.get({ sessionID }))
+
       const result = await serverSDK.api.websearch.providers({
         location: { directory: session.location.directory },
       })
+
       return result.data.map((provider) => ({ value: provider.id, label: provider.name }))
     },
     reply: (input) => data.session.form.reply(input),
     events: serverSDK.event,
   })
+
   const questionRequest = createMemo(() => {
     if (websearch.request()) return
     const form = formRequest()
+
     return form?.metadata?.kind === "question" ? form : undefined
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
     if (settings.permissions.autoApprove()) return undefined
+
     return sessionPermissionRequest(data.session.list(), data.session.permission.list, params.id)
   })
 
   const blocked = createMemo(() => {
     const id = params.id
+
     if (!id) return false
+
     return !!permissionRequest() || !!questionRequest() || !!websearch.request()
   })
 
   const primary = () => {
     const id = params.id
+
     return !!id && !data.session.get(id)?.parentID
   }
+
   const background = createSessionBackground({
     sessionID: () => (primary() ? params.id : undefined),
     messages: data.session.message.list,
@@ -83,9 +96,11 @@ export function createSessionRequestModel() {
     status: data.session.status,
     shells: () => data.shell.list({ directory: sdk().directory }),
   })
+
   const moveToBackground = async () => {
     if (!primary()) return
     const sessionID = params.id
+
     if (!sessionID) return
     await serverSDK.api.session.background({ sessionID }).catch((error) => {
       showToast({
@@ -101,13 +116,17 @@ export function createSessionRequestModel() {
 
   const permissionResponding = createMemo(() => {
     const perm = permissionRequest()
+
     if (!perm) return false
+
     return store.responding === perm.id
   })
 
   const decide = (response: "once" | "always" | "reject") => {
     const perm = permissionRequest()
+
     if (!perm) return
+
     if (store.responding === perm.id) return
 
     setStore("responding", perm.id)

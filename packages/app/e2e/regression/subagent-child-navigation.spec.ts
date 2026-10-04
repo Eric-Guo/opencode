@@ -8,17 +8,28 @@ import { expectSessionTitle } from "../utils/waits"
 import { mockWorkspace } from "../utils/workspace"
 
 const directory = "C:/OpenCode/SubagentNavigation"
+
 const projectID = "proj_subagentnavigation"
+
 const serverPort = new URL(SERVER).port
+
 const parentID = "ses_subagent_parent"
+
 const childID = "ses_subagent_child"
+
 const grandchildID = "ses_subagent_grandchild"
+
 const greatGrandchildID = "ses_subagent_great_grandchild"
+
 const parentTitle = "Parent session"
+
 const childTitle = "Subagent child session"
+
 const grandchildTitle = "Nested subagent session"
+
 const greatGrandchildTitle =
   "Deep research subagent session investigating a very long chain of agent registry failures and navigation breadcrumbs"
+
 // Child session pages derive their heading from the task part that spawned them.
 const taskDescription = "Inspect child navigation"
 
@@ -200,6 +211,7 @@ test("keeps the parent tab selected while a loaded child session resolves", asyn
   const parentTab = page.locator("[data-titlebar-tab-slot]", {
     has: page.locator('[data-slot="tab-title"]', { hasText: parentTitle }),
   })
+
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
   await Promise.all([
@@ -316,6 +328,7 @@ async function setup(page: Page, events?: () => OpenCodeEvent[], nestedDepth: 0 
       }),
   )
 }
+
 async function openChildFromParent(page: Page) {
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
@@ -331,6 +344,7 @@ async function openChildFromParent(page: Page) {
 function parentMessages(): SessionMessageInfo[] {
   const userID = "msg_user_0001"
   const assistantID = "msg_assistant_0001"
+
   return [
     {
       id: userID,
