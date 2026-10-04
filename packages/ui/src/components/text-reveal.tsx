@@ -5,7 +5,7 @@ const px = (value: number | string | undefined, fallback: number) => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This typed CSS prop accepts numeric units or an authored CSS string.
   if (typeof value === "number") return `${value}px`
 
-  if (typeof value === "string") return value
+  if (value !== undefined) return value
 
   return `${fallback}px`
 }
@@ -14,7 +14,7 @@ const ms = (value: number | string | undefined, fallback: number) => {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This typed CSS prop accepts numeric units or an authored CSS string.
   if (typeof value === "number") return `${value}ms`
 
-  if (typeof value === "string") return value
+  if (value !== undefined) return value
 
   return `${fallback}ms`
 }
@@ -38,9 +38,17 @@ export function TextReveal(props: {
   growOnly?: boolean
   truncate?: boolean
 }) {
-  const [state, setState] = createStore({
+  type RevealState = {
+    cur?: string
+    old?: string
+    width: string
+    ready: boolean
+    swapping: boolean
+  }
+
+  const [state, setState] = createStore<RevealState>({
     cur: props.text,
-    old: undefined as string | undefined,
+    old: undefined,
     width: "auto",
     ready: false,
     swapping: false,
@@ -77,7 +85,7 @@ export function TextReveal(props: {
       (next, prev) => {
         if (next === prev) return
 
-        if (typeof next === "string" && typeof prev === "string" && next.startsWith(prev)) {
+        if (next !== undefined && prev !== undefined && next.startsWith(prev)) {
           setState("cur", next)
           widen(win())
 
@@ -88,7 +96,7 @@ export function TextReveal(props: {
         setState("old", prev)
         setState("cur", next)
 
-        if (typeof requestAnimationFrame !== "function") {
+        if (typeof requestAnimationFrame === "undefined") {
           widen(Math.max(win(), wout()))
           rootRef?.offsetHeight
           setState("swapping", false)
@@ -96,7 +104,7 @@ export function TextReveal(props: {
           return
         }
 
-        if (frame !== undefined && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame)
+        if (frame !== undefined && typeof cancelAnimationFrame !== "undefined") cancelAnimationFrame(frame)
         frame = requestAnimationFrame(() => {
           widen(Math.max(win(), wout()))
           rootRef?.offsetHeight
@@ -111,7 +119,7 @@ export function TextReveal(props: {
     widen(win())
     const fonts = typeof document !== "undefined" ? document.fonts : undefined
 
-    if (typeof requestAnimationFrame !== "function") {
+    if (typeof requestAnimationFrame === "undefined") {
       setState("ready", true)
 
       return
@@ -130,7 +138,7 @@ export function TextReveal(props: {
   })
 
   onCleanup(() => {
-    if (frame === undefined || typeof cancelAnimationFrame !== "function") return
+    if (frame === undefined || typeof cancelAnimationFrame === "undefined") return
     cancelAnimationFrame(frame)
   })
 
