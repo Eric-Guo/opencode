@@ -10,7 +10,7 @@ import { createComposerEditor } from "@/composer/editor/interaction"
 import type { ComposerPersistedState } from "@/composer/types"
 import "@/index.css"
 
-const shape = new URLSearchParams(location.search).get("shape") ?? "text"
+const historyKind = new URLSearchParams(location.search).get("shape") ?? "text"
 
 const normal = Array.from({ length: 100 }, (_, index) => {
   const content =
@@ -21,14 +21,14 @@ const normal = Array.from({ length: 100 }, (_, index) => {
   return {
     prompt: [
       { type: "text", content, start: 0, end: content.length },
-      ...(shape !== "text" && index % 2 === 0
+      ...(historyKind !== "text" && index % 2 === 0
         ? [
             {
               type: "image",
               id: `attachment-${index}`,
               filename: `request-${index}.png`,
               mime: "image/png",
-              blob: { id: `screenshot-${shape === "repeated" ? index % 10 : index}` },
+              blob: { id: `screenshot-${historyKind === "repeated" ? index % 10 : index}` },
             },
           ]
         : []),
@@ -129,10 +129,10 @@ const platform: Platform = {
 const [state, setState] = createStore({ mount: 0, ready: false, result: "" })
 
 const workload = {
-  shape,
+  "shape": historyKind,
   normalEntries: normal.length,
   shellEntries: shell.length,
-  imageReferences: shape === "text" ? 0 : 50,
+  imageReferences: historyKind === "text" ? 0 : 50,
   uniqueImages: ids.length,
   storedImageBytes: screenshots.reduce((sum, item) => sum + item.blob.size, 0),
   documentBytes: [normal, shell].reduce(
@@ -193,7 +193,7 @@ render(
   () => (
     <PlatformProvider value={platform}>
       <main style={{ padding: "40px", width: "900px" }}>
-        <h1>Composer global history: {shape}</h1>
+        <h1>Composer global history: {historyKind}</h1>
         <button onClick={mount}>Mount empty composer</button>
         <output data-testid="history-ready">{state.ready ? "ready" : "idle"}</output>
         <pre data-testid="history-result">{state.result}</pre>
