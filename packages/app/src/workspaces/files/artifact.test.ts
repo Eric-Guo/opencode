@@ -29,6 +29,15 @@ describe("fileContentFromBytes", () => {
     expect(fileContentFromBytes("a.bin", new Uint8Array([1, 0, 2]))).toEqual({ type: "binary", content: "", size: 3 })
   })
 
+  test("keeps no ZIP bytes and identifies the metadata preview", () => {
+    expect(fileContentFromBytes("中文.ZIP", new Uint8Array([0x50, 0x4b, 0, 0]))).toEqual({
+      type: "binary",
+      content: "",
+      size: 4,
+      mimeType: "application/zip",
+    })
+  })
+
   test("encodes large buffers in chunks", () => {
     const bytes = new Uint8Array(70_000).fill(65)
     expect(bytesToBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"))
