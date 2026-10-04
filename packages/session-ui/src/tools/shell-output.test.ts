@@ -1,3 +1,4 @@
+import { Data } from "effect"
 
 import { describe, expect, test, vi } from "bun:test"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
@@ -30,6 +31,8 @@ async function flush() {
   for (let i = 0; i < 20; i++) await Promise.resolve()
 }
 
+class ShellNotFoundError extends Data.TaggedError("ShellNotFoundError")<{ id: string; message: string }> {}
+
 describe("followShellOutput", () => {
   test("stops polling a missing shell and never requests it again", async () => {
     vi.useFakeTimers()
@@ -40,7 +43,7 @@ describe("followShellOutput", () => {
       const load = (input: ShellOutputInput): Promise<ShellOutputOutput> => {
         cursors.push(input.cursor ?? 0)
 
-        return Promise.reject({ _tag: "ShellNotFoundError", id: input.id, message: "Shell command not found" })
+        return Promise.reject(new ShellNotFoundError({ id: input.id, message: "Shell command not found" }))
       }
 
       const follow = () =>
