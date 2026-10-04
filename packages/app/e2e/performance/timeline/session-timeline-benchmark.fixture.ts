@@ -76,7 +76,7 @@ export async function setupTimelineBenchmark(
     vcsDiff?: unknown[]
     turnDiffs?: unknown[]
     busy?: boolean
-    historyShape?: "mixed" | "tool-heavy"
+    historyKind?: "mixed" | "tool-heavy"
   },
 ) {
   const events: EventPayload[] = []
@@ -90,7 +90,7 @@ export async function setupTimelineBenchmark(
     ...Array.from({ length: options.historyTurns }, (_, index) => performanceTurn(index))
       .flat()
       .map((message) => {
-        if (options.historyShape !== "tool-heavy" || message.type !== "assistant") return message
+        if (options.historyKind !== "tool-heavy" || message.type !== "assistant") return message
 
         return {
           ...message,
