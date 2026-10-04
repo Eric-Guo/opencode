@@ -1,24 +1,22 @@
-import { ErrorBoundary, type ValidComponent } from "solid-js"
+import { ErrorBoundary, type Component } from "solid-js"
 import { Dynamic } from "solid-js/web"
 
-function fn(value: unknown): value is (...args: never[]) => unknown {
+function fn<Value, Props extends object>(value: Value): value is Value & Component<Props> {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Module export discovery selects callable Solid component exports.
   return typeof value === "function"
 }
 
-function pick(mod: Record<string, unknown>, name?: string) {
-  if (name && fn(mod[name])) return mod[name]
+function pick<Props extends object, Mod extends Record<string, unknown>>(mod: Mod, name?: string): Component<Props> {
+  const exports = new Map(
+    Object.entries(mod).flatMap(([key, value]) => (fn<unknown, Props>(value) ? [[key, value] as const] : [])),
+  )
 
-  if (fn(mod.default)) return mod.default
+  const preferred = [...exports.keys()].find((key) => key[0] && key[0] === key[0].toUpperCase())
 
-  const preferred = Object.keys(mod)
-    .filter((k) => k[0] && k[0] === k[0].toUpperCase())
-    .find((k) => fn(mod[k]))
+  const component =
+    exports.get(name ?? "") ?? exports.get("default") ?? exports.get(preferred ?? "") ?? exports.values().next().value
 
-  if (preferred) return mod[preferred]
-
-  const first = Object.keys(mod).find((k) => fn(mod[k]))
-
-  if (first) return mod[first]
+  if (component) return component
 
   return () => {
     return (
@@ -30,13 +28,13 @@ function pick(mod: Record<string, unknown>, name?: string) {
   }
 }
 
-export function create(input: {
+export function create<Props extends object, Mod extends Record<string, unknown>>(input: {
   title: string
-  mod: Record<string, unknown>
+  mod: Mod
   name?: string
-  args?: Record<string, unknown>
+  args?: Props
 }) {
-  const component = pick(input.mod, input.name) as unknown as ValidComponent
+  const component = pick<Props, Mod>(input.mod, input.name)
 
   return {
     meta: {
@@ -45,7 +43,7 @@ export function create(input: {
     },
     Basic: {
       args: input.args ?? {},
-      render: (args: Record<string, unknown>) => {
+      render: (args: Props) => {
         return (
           <ErrorBoundary
             fallback={(err) => {

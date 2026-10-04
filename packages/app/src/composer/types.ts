@@ -1,4 +1,5 @@
 import type { SessionMessage } from "@opencode/schema/session-message"
+import type { PromptHistoryComment } from "./schema"
 import type { Skill } from "@opencode/schema/skill"
 
 interface PartBase {
@@ -149,14 +150,14 @@ export type ComposerPersistedState = ComposerStore
 
 export type ComposerHistoryEntry = {
   prompt: ComposerPrompt
-  metadata?: unknown
+  metadata?: PromptHistoryComment[]
 }
 
 export type ComposerHistory = {
   entries: (mode: "normal" | "shell") => ComposerHistoryEntry[]
   add: (prompt: ComposerPrompt, mode: "normal" | "shell") => void
-  capture?: () => unknown
-  restore?: (metadata: unknown) => void
+  capture?: () => PromptHistoryComment[]
+  restore?: (metadata: PromptHistoryComment[] | undefined) => void
 }
 
 export type ComposerCapabilities = {

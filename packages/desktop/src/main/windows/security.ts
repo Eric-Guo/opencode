@@ -28,7 +28,7 @@ export function allowRendererPermissions(contents: WebContents) {
   })
 }
 
-export function wireNavigationPolicy(contents: WebContents, openExternalURL: (url: string) => unknown) {
+export function wireNavigationPolicy(contents: WebContents, openExternalURL: (url: string) => void) {
   contents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
 
