@@ -71,6 +71,7 @@ export function persistStore<T extends object>(input: {
   // Solid's setter overloads are too deep to spread generically; the wrapper only forwards.
   const apply = input.setStore as unknown as (...values: unknown[]) => void
 
+  // SAFETY: the wrapper preserves every setter overload because it forwards all arguments unchanged to the same setter.
   const setStore = ((...values: unknown[]) => {
     apply(...values)
     dirty = true
