@@ -65,7 +65,7 @@ export const api: ElectronAPI = {
   openBrowser: (url) => invoke("FilesOpenBrowser", { url }),
   openLocalFile: (url) => send("FilesOpenLocalFile", { url }),
   openPath: (path, app) =>
-    invoke("FilesOpenPath", { path, ...(app === undefined ? {} : { application: app }) }).then(
+    invoke("FilesOpenPath", { path, application: app }).then(
       (value) => value ?? undefined,
     ),
   revealPath: (path) => invoke("FilesRevealPath", { path }),

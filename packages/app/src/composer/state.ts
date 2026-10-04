@@ -46,13 +46,10 @@ export function isCommentItem(item: ContextItem | (ContextItem & { key: string }
 function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
-      batch(() =>
-        setStore({
-          prompt: clonePrompt(prompt),
-          ...(cursorPosition !== undefined ? { cursor: cursorPosition } : {}),
-          retry: undefined,
-        }),
-      )
+      const update: Partial<ComposerStore> = { prompt: clonePrompt(prompt), retry: undefined }
+
+      if (cursorPosition !== undefined) update.cursor = cursorPosition
+      batch(() => setStore(update))
     },
     reset() {
       batch(() => setStore({ prompt: clonePrompt(DEFAULT_PROMPT), cursor: 0, retry: undefined }))
@@ -61,14 +58,18 @@ function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
 }
 
 function composerTarget(serverScope: ServerScope, scope: PromptScope) {
-  return "draftID" in scope
-    ? Persist.prompt(Persist.draft(scope.draftID, "prompt"))
-    : Persist.prompt({
-        ...Persist.serverScoped(serverScope, scope.dir, scope.id, "prompt"),
-        ...(serverScope === ServerScope.local
-          ? { previousKey: `${scope.dir}/prompt${scope.id ? "/" + scope.id : ""}.v2` }
-          : {}),
-      })
+  if ("draftID" in scope) return Persist.prompt(Persist.draft(scope.draftID, "prompt"))
+
+  const target: ReturnType<typeof Persist.serverScoped> & { previousKey?: string } = Persist.serverScoped(
+    serverScope,
+    scope.dir,
+    scope.id,
+    "prompt",
+  )
+
+  if (serverScope === ServerScope.local) target.previousKey = `${scope.dir}/prompt${scope.id ? "/" + scope.id : ""}.v2`
+
+  return Persist.prompt(target)
 }
 
 function initialComposerStore(initial?: InitialPrompt): ComposerStore {

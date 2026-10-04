@@ -86,7 +86,7 @@ export function createSessionQueue(input: {
         ...replacement,
         id: change.replacement,
         delivery: change.delivery,
-        ...(change.delivery === "queue" ? { resume: false } : {}),
+        resume: change.delivery === "queue" ? false : undefined,
       })
 
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.original })
