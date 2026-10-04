@@ -585,9 +585,7 @@ async function sampleTabPaint(page: Page, sessionID: string) {
   return {
     async firstPaint() {
       await expect.poll(read).toBeDefined()
-      await expect
-        .poll(() => page.evaluate(() => window.__tabPaint!.settled))
-        .toBe(true)
+      await expect.poll(() => page.evaluate(() => window.__tabPaint!.settled)).toBe(true)
 
       return (await read())!
     },
