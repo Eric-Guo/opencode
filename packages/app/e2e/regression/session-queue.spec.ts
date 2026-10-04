@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { JsonValue, OpenCodeEvent, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { MockPrompt } from "../utils/mock-server"
 import { provider } from "../utils/app"
 import { openSession } from "../utils/workspace"
@@ -13,7 +13,7 @@ type InboxRow = {
   type: "user"
   payload: {
     text: string
-    metadata?: Record<string, JsonValue>
+    metadata?: MockPrompt["metadata"]
     files?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["files"]
     agents?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["agents"]
   }
