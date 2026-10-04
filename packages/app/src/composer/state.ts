@@ -198,10 +198,10 @@ export function createDraftComposerState(draftID: string, initial?: InitialPromp
 export type ComposerState = ReturnType<typeof createComposerState>
 
 export function createComposerReady(session: Accessor<ComposerState>) {
-  // SAFETY: defineProperty returns the same function, now carrying the promise getter defined here.
-  return Object.defineProperty(() => session().ready(), "promise", {
-    get: () => session().ready.promise,
-  }) as (() => boolean) & { readonly promise: Promise<unknown> | undefined }
+  const ready: (() => boolean) & { readonly promise?: Promise<unknown> } = () => session().ready()
+  Object.defineProperty(ready, "promise", { get: () => session().ready.promise })
+
+  return ready
 }
 
 export function createMemoryComposerState(initial?: InitialPrompt) {

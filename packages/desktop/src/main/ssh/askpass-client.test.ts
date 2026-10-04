@@ -21,7 +21,7 @@ test.each([
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()
 
-  if (!address || typeof address === "string") throw new Error("missing listener")
+  if (!address || !("port" in Object(address))) throw new Error("missing listener")
 
   try {
     const child = Bun.spawn([process.execPath, path.join(import.meta.dirname, "../index.ts"), "Enter passphrase:"], {
