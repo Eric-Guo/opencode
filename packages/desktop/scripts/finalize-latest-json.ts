@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { Schema } from "effect"
+
 import { $ } from "bun"
 import path from "node:path"
 import { parseArgs } from "node:util"
@@ -51,11 +53,9 @@ type Asset = {
   url: string
 }
 
-type Release = {
-  assets?: Asset[]
-}
-
-const assets = ((await rel.json()) as Release).assets ?? []
+const assets = Schema.decodeUnknownSync(Schema.Struct({
+  assets: Schema.optionalKey(Schema.Array(Schema.Struct({ name: Schema.String, url: Schema.String }))),
+}))(await rel.json()).assets ?? []
 
 const amap = new Map(assets.map((item) => [item.name, item]))
 

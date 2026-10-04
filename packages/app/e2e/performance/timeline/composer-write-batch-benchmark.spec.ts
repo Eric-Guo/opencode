@@ -1,3 +1,4 @@
+import { Match } from "effect"
 import { base64Encode } from "@opencode/util/encode"
 import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -40,7 +41,11 @@ const document = {
 
 type Probe = { active: boolean; encodes: number; bytes: number; inputs: number; keyups: number }
 
-type ProbeWindow = typeof window & { composerWriteBatch: Probe }
+declare global {
+  interface Window {
+    composerWriteBatch: Probe
+  }
+}
 
 benchmark.use({
   viewport: { width: 1440, height: 900 },
@@ -52,7 +57,7 @@ benchmark.use({
 
 for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-cleanup"] as const) {
   benchmark(`composer-write-batch: ${scenario}`, async ({ page, report }, testInfo) => {
-    const submitted: Record<string, unknown>[] = []
+    const submitted: Parameters<NonNullable<Parameters<typeof mockOpenCodeServer>[1]["onPrompt"]>>[0]["body"][] = []
     await mockOpenCodeServer(page, {
       directory: fixture.directory,
       project: fixture.project,
@@ -67,7 +72,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
 
         const probe: Probe = { active: false, encodes: 0, bytes: 0, inputs: 0, keyups: 0 }
 
-        ;(window as ProbeWindow).composerWriteBatch = probe
+        ;window.composerWriteBatch = probe
 
         // The draft adapter parses each schema-encoded composer document once before
         // its asynchronous blob walk. Count at this boundary, not at the IDB write
@@ -75,7 +80,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
         if (counts) {
           const parse = JSON.parse
           JSON.parse = (value, reviver) => {
-            if (probe.active && typeof value === "string" && value.startsWith('{"prompt":[')) {
+            if (probe.active && value.startsWith('{"prompt":[')) {
               probe.encodes++
               probe.bytes += value.length
             }
@@ -135,7 +140,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
           })
           const index = keys.result.findIndex((key) => String(key).endsWith(`session:${sessionID}:prompt`))
           // Parse after disabling the count so the observation is not part of it.
-          const probe = (window as ProbeWindow).composerWriteBatch
+          const probe = window.composerWriteBatch
           const active = probe.active
           probe.active = false
           const value = index < 0 ? undefined : JSON.parse(values.result[index])
@@ -155,7 +160,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
     await benchmarkDiagnostics(page).startTrace()
     const before = await cdp.send("Performance.getMetrics")
     await page.evaluate(() => {
-      ;(window as ProbeWindow).composerWriteBatch.active = true
+      ;window.composerWriteBatch.active = true
       performance.mark("composer-write-batch-start")
     })
     const start = performance.now()
@@ -167,14 +172,10 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
     if (scenario === "cursor-noop") await editor.press("ArrowRight")
 
     if (scenario === "submit-cleanup") await editor.press("Enter")
-    const expectedText = scenario === "typing" ? text + addition : scenario === "submit-cleanup" ? "" : text
+    const expectedText = Match.value(scenario).pipe(Match.when("typing", () => text + addition), Match.when("submit-cleanup", () => ""), Match.orElse(() => text))
 
     const expectedCursor =
-      scenario === "typing"
-        ? text.length + addition.length
-        : scenario === "submit-cleanup"
-          ? 0
-          : text.length - Number(scenario === "cursor-movement")
+      Match.value(scenario).pipe(Match.when("typing", () => text.length + addition.length), Match.when("submit-cleanup", () => 0), Match.orElse(() => text.length - Number(scenario === "cursor-movement")))
 
     await expect(editor).toHaveText(expectedText)
     await expect.poll(async () => (await stored())?.cursor).toBe(expectedCursor)
@@ -183,7 +184,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
 
     const probe = await page.evaluate(() => {
       performance.mark("composer-write-batch-end")
-      const probe = (window as ProbeWindow).composerWriteBatch
+      const probe = window.composerWriteBatch
       probe.active = false
 
       return probe

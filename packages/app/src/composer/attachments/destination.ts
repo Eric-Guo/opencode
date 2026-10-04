@@ -1,3 +1,4 @@
+import { Option, Schema } from "effect"
 import type { Accessor } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -40,7 +41,13 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
 // fetch cannot report upload progress and Chromium only streams request bodies over HTTP/2, so
 // the one request that needs both goes through XMLHttpRequest. The browser streams the File
 // from disk; nothing is buffered in the renderer.
-function write(url: URL, file: File, password: string | undefined, report: (loaded: number) => void, signal: AbortSignal) {
+function write(
+  url: URL,
+  file: File,
+  password: string | undefined,
+  report: (loaded: number) => void,
+  signal: AbortSignal,
+) {
   return new Promise<string>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open("POST", url)
@@ -51,8 +58,13 @@ function write(url: URL, file: File, password: string | undefined, report: (load
     xhr.upload.addEventListener("progress", (event) => report(event.loaded))
     xhr.addEventListener("load", () => {
       if (xhr.status !== 200) return reject(new Error(`Upload failed with status ${xhr.status}`))
-      // SAFETY: a 200 from `fs.write` is its declared success body, `Location.response(FileSystem.Write)`.
-      resolve((xhr.response as { data: { path: string } }).data.path)
+
+      const response = Schema.decodeUnknownOption(Schema.Struct({ data: Schema.Struct({ path: Schema.String }) }))(
+        xhr.response,
+      )
+
+      if (Option.isNone(response)) return reject(new Error("Upload failed"))
+      resolve(response.value.data.path)
     })
     xhr.addEventListener("error", () => reject(new Error("Upload failed")))
     xhr.addEventListener("abort", () => reject(new DOMException("Upload aborted", "AbortError")))
