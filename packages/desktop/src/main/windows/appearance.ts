@@ -91,10 +91,11 @@ export function setControlColor(win: BrowserWindow, color?: string) {
 
 export function updateTitlebar(win: BrowserWindow) {
   if (process.platform !== "win32") return
-  win.setTitleBarOverlay({
-    ...overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor()),
-    ...(controlColors.has(win) ? { symbolColor: controlColors.get(win)! } : {}),
-  })
+  const options = overlay(titlebarThemes.get(win), getPrimaryWebContents(win).getZoomFactor())
+  const color = controlColors.get(win)
+
+  if (color !== undefined) options.symbolColor = color
+  win.setTitleBarOverlay(options)
 }
 
 export function setPinchZoomEnabled(enabled: boolean) {
