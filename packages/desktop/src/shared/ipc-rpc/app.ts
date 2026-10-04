@@ -13,6 +13,7 @@ export const AppReconnectService = Rpc.make("AppReconnectService", { success: Se
 export const AppGetCybrosCurrentUser = Rpc.make("AppGetCybrosCurrentUser", {
   success: Schema.Unknown,
 })
+
 // The renderer listens for DeepLinksOpened before it reports ready, and acknowledges each delivery once handled.
 export const AppReadyDeepLinks = Rpc.make("AppReadyDeepLinks")
 
@@ -74,6 +75,7 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
 export const AppRelaunch = Rpc.make("AppRelaunch")
 
 export const AppQuit = Rpc.make("AppQuit")
+
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppGetCybrosCurrentUser,
