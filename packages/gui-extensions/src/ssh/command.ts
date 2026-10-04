@@ -1,4 +1,4 @@
-import { Effect, PlatformError, Schema, Stream } from "effect"
+import { Effect, PlatformError, Predicate, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { RemoteCli } from "./remote-cli"
 
@@ -23,19 +23,19 @@ export class SshFailure extends Schema.TaggedError<SshFailure>()("SshFailure", {
     return this.detail
   }
 
-  static from(this: void, error: unknown) {
-    if (error instanceof RemoteCli.Failure) return new SshFailure(error.code, error.detail)
+  static from(this: void, cause: unknown) {
+    if (cause instanceof RemoteCli.Failure) return new SshFailure(cause.code, cause.detail)
 
     if (
-      error instanceof PlatformError.PlatformError &&
-      error.reason._tag === "NotFound" &&
-      error.reason.method === "spawn"
+      cause instanceof PlatformError.PlatformError &&
+      Predicate.isTagged(cause.reason, "NotFound") &&
+      cause.reason.method === "spawn"
     )
-      return new SshFailure("ssh-missing", error.message)
+      return new SshFailure("ssh-missing", cause.message)
 
-    return error instanceof SshFailure
-      ? error
-      : new SshFailure("connection", error instanceof Error ? error.message : String(error))
+    return cause instanceof SshFailure
+      ? cause
+      : new SshFailure("connection", cause instanceof Error ? cause.message : String(cause))
   }
 }
 

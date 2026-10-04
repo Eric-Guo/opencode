@@ -47,7 +47,12 @@ export function withInitial<S extends Schema.ConstraintCodec<object, unknown>>(
 function recover(ast: SchemaAST.AST, value: unknown, initial: unknown): unknown {
   if (value === undefined) return initial
 
-  if (ast._tag === "Objects" && !ast.encoding && ast.indexSignatures.length === 0 && Predicate.isObject(value)) {
+  if (
+    Predicate.isTagged(ast, "Objects") &&
+    !ast.encoding &&
+    ast.indexSignatures.length === 0 &&
+    Predicate.isObject(value)
+  ) {
     return Object.fromEntries(
       ast.propertySignatures.flatMap((field) => {
         const defaults = Predicate.isObject(initial) ? initial[field.name] : undefined
