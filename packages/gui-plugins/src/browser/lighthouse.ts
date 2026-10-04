@@ -31,6 +31,7 @@ export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp
     if (!owner) return
 
     if (method === "Target.attachedToTarget") {
+      // SAFETY: Chromium supplies sessionId on Target.attachedToTarget events.
       const child = params as { sessionId: string }
       owner.emit("sessionattached", session(child.sessionId))
     }
@@ -52,6 +53,8 @@ export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp
     // Lighthouse's snapshot driver uses only url() and target().createCDPSession().
     // Adapt that narrow boundary to Electron instead of exposing a browser-wide
     // Puppeteer connection or emulating unsupported Browser/Target commands.
+    // SAFETY: Lighthouse's snapshot driver only uses the documented url and CDP-session subset implemented below.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions
     const page = {
       url: () => contents.getURL(),
       target: () => ({ createCDPSession: async () => root }),
