@@ -70,7 +70,7 @@ export function CommandPaletteView(props: {
 }) {
   const language = useLanguage()
   const tabs = useTabs()
-  const [store, setStore] = createStore({ query: "", active: undefined as string | undefined })
+  const [store, setStore] = createStore<{ query: string; active: string | undefined }>({ query: "", active: undefined })
 
   const search = createCommandPaletteSearch({ query: () => store.query, items: props.items, sources: props.sources })
   const visibleEntries = search.items

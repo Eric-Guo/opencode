@@ -6,6 +6,7 @@ import type { ServerSDK } from "@/runtime/server/client"
 import type { ComposerStateTarget } from "./submission-state"
 import type { createComposerSubmission } from "./submission-state"
 
+
 export type ComposerControls = {
   agents: {
     available: { name: string; displayName?: string; hidden?: boolean; mode: string }[]
@@ -56,15 +57,17 @@ export type ComposerSession = {
     clear: (messageID: string) => void
   }
   api: {
-    command: (input: Parameters<ServerSDK["api"]["session"]["command"]>[0]) => Promise<unknown>
-    shell: (input: Parameters<ServerSDK["api"]["session"]["shell"]>[0]) => Promise<unknown>
-    switchAgent: (input: Parameters<ServerSDK["api"]["session"]["switchAgent"]>[0]) => Promise<unknown>
-    switchModel: (input: Parameters<ServerSDK["api"]["session"]["switchModel"]>[0]) => Promise<unknown>
+    command: ServerSDK["api"]["session"]["command"]
+    shell: ServerSDK["api"]["session"]["shell"]
+    switchAgent: ServerSDK["api"]["session"]["switchAgent"]
+    switchModel: ServerSDK["api"]["session"]["switchModel"]
   }
   data: {
     location: { command: Pick<Data["location"]["command"], "list"> }
     session: {
-      prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => Promise<unknown>
+      prompt: (
+        input: Parameters<Data["session"]["prompt"]>[0],
+      ) => Promise<void | Awaited<ReturnType<Data["session"]["prompt"]>>>
       setStatus: Data["session"]["setStatus"]
     }
   }

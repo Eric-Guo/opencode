@@ -1,3 +1,8 @@
+// SAFETY: Main's RpcServer validates the method contracts. This trusted MessagePort adapter
+// erases heterogeneous payloads only while routing by request id or event tag; invoke/listen
+// restore the selected contract. Keep Effect out of the renderer startup graph.
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns,
+   anti-slop-effect/no-manual-tagged-construction, anti-slop-effect/no-manual-tag-comparison */
 import type { Effect } from "effect"
 import type { RpcMessage } from "effect/unstable/rpc"
 import type { DesktopRpcClient } from "../shared/ipc-rpc"

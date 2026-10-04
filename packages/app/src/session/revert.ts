@@ -19,7 +19,7 @@ export function createSessionRevert(input: {
   const location = useWorkspaceLocation()
   const language = useLanguage()
 
-  const request = async (action: () => Promise<unknown>) =>
+  const request = async <Value>(action: () => Promise<Value>) =>
     action()
       .then(() => true)
       .catch((error) => {

@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { SessionInfo } from "@opencode/client/promise"
 import { displayName } from "@opencode/ui/project-avatar"
 import { pathKey } from "@/workspaces/path-key"
@@ -131,14 +132,14 @@ export function resolveSessionDetailsProject<
   return withProjectAppearance(metadata, resolveProjectForSession(session, opened, stored))
 }
 
-export const errorMessage = (err: unknown, fallback: string) => {
-  if (err && typeof err === "object" && "data" in err) {
-    const data = (err as { data?: { message?: string } }).data
+export const errorMessage = (cause: unknown, fallback: string) => {
+  if (Predicate.hasProperty(cause, "data")) {
+    const data = cause.data
 
-    if (data?.message) return data.message
+    if (Predicate.hasProperty(data, "message") && Predicate.isString(data.message) && data.message) return data.message
   }
 
-  if (err instanceof Error) return err.message
+  if (cause instanceof Error) return cause.message
 
   return fallback
 }

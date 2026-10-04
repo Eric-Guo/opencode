@@ -1,4 +1,5 @@
-import { Option, Schema } from "effect"
+import { Option, Predicate, Schema, SchemaGetter } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import type { FileSelection } from "@/workspaces/files/model"
 import { durableNote, LegacyBrowserNote, NoteComment, type ContextItem } from "./schema"
 
@@ -24,22 +25,35 @@ export type PromptAttachmentReference = {
   path: string
 }
 
-function selection(selection: unknown) {
-  if (!selection || typeof selection !== "object") return undefined
-  const startLine = Number((selection as FileSelection).startLine)
-  const startChar = Number((selection as FileSelection).startChar)
-  const endLine = Number((selection as FileSelection).endLine)
-  const endChar = Number((selection as FileSelection).endChar)
+const selectionNumber = Schema.Unknown.pipe(
+  Schema.decodeTo(Schema.Finite, {
+    decode: SchemaGetter.transform(Number),
+    encode: SchemaGetter.transform((value) => value),
+  }),
+)
 
-  if (![startLine, startChar, endLine, endChar].every(Number.isFinite)) return undefined
+const fileSelection = Schema.Struct({
+  startLine: selectionNumber,
+  startChar: selectionNumber,
+  endLine: selectionNumber,
+  endChar: selectionNumber,
+})
 
-  return {
-    startLine,
-    startChar,
-    endLine,
-    endChar,
-  } satisfies FileSelection
-}
+const fileComment = Schema.Struct({
+  path: Schema.String,
+  comment: Schema.String,
+  selection: Persistence.optional(fileSelection),
+  preview: Persistence.optional(Schema.String),
+  origin: Persistence.optional(Schema.Literals(["review", "file"])),
+})
+
+const commentMetadata = Schema.Struct({ opencodeComment: fileComment })
+
+const presentation = Schema.Struct({
+  displayText: Schema.String,
+  comments: Schema.Array(Schema.Unknown),
+  attachments: Persistence.array(Schema.Struct({ name: Schema.String, mime: Schema.String, path: Schema.String })),
+})
 
 export function createCommentMetadata(input: PromptFileComment) {
   return {
@@ -55,68 +69,26 @@ export function createCommentMetadata(input: PromptFileComment) {
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This metadata reader owns decoding legacy and current server message payloads.
 export function readCommentMetadata(value: unknown) {
-  if (!value || typeof value !== "object") return
-  const meta = (value as { opencodeComment?: unknown }).opencodeComment
-
-  if (!meta || typeof meta !== "object") return
-  const path = (meta as { path?: unknown }).path
-  const comment = (meta as { comment?: unknown }).comment
-
-  if (typeof path !== "string" || typeof comment !== "string") return
-  const preview = (meta as { preview?: unknown }).preview
-  const origin = (meta as { origin?: unknown }).origin
-
-  return {
-    path,
-    selection: selection((meta as { selection?: unknown }).selection),
-    comment,
-    preview: typeof preview === "string" ? preview : undefined,
-    origin: origin === "review" || origin === "file" ? origin : undefined,
-  } satisfies PromptComment
+  return Option.getOrUndefined(Schema.decodeUnknownOption(commentMetadata)(value))?.opencodeComment
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This metadata reader owns decoding legacy and current server message payloads.
 export function readPromptPresentation(value: unknown) {
-  if (!value || typeof value !== "object") return
-  const displayText = (value as { displayText?: unknown }).displayText
-  const comments = (value as { comments?: unknown }).comments
+  const decoded = Schema.decodeUnknownOption(presentation)(value)
 
-  if (typeof displayText !== "string" || !Array.isArray(comments)) return
-  const attachments = (value as { attachments?: unknown }).attachments
+  if (Option.isNone(decoded)) return
 
   return {
-    displayText,
-    attachments: (Array.isArray(attachments) ? attachments : []).flatMap((item): PromptAttachmentReference[] => {
-      if (!item || typeof item !== "object") return []
-      const name = (item as { name?: unknown }).name
-      const mime = (item as { mime?: unknown }).mime
-      const path = (item as { path?: unknown }).path
+    displayText: decoded.value.displayText,
+    attachments: decoded.value.attachments,
+    comments: decoded.value.comments.flatMap((item): PromptComment[] => {
+      const type = Predicate.hasProperty(item, "type") ? item.type : undefined
 
-      if (typeof name !== "string" || typeof mime !== "string" || typeof path !== "string") return []
+      if (type === "note") return Option.toArray(decodeNoteComment(item))
 
-      return [{ name, mime, path }]
-    }),
-    comments: comments.flatMap((item): PromptComment[] => {
-      if (!item || typeof item !== "object") return []
+      if (type === "browser") return Option.toArray(decodeLegacyBrowserNote(item))
 
-      if ((item as { type?: unknown }).type === "note") return Option.toArray(decodeNoteComment(item))
-
-      if ((item as { type?: unknown }).type === "browser") return Option.toArray(decodeLegacyBrowserNote(item))
-      const path = (item as { path?: unknown }).path
-      const comment = (item as { comment?: unknown }).comment
-
-      if (typeof path !== "string" || typeof comment !== "string") return []
-      const preview = (item as { preview?: unknown }).preview
-      const origin = (item as { origin?: unknown }).origin
-
-      return [
-        {
-          path,
-          comment,
-          selection: selection((item as { selection?: unknown }).selection),
-          preview: typeof preview === "string" ? preview : undefined,
-          origin: origin === "review" || origin === "file" ? origin : undefined,
-        },
-      ]
+      return Option.toArray(Schema.decodeUnknownOption(fileComment)(item))
     }),
   }
 }

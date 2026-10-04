@@ -23,10 +23,9 @@ export function createSessionRequestModel() {
     const id = params.id
 
     if (!id || serverSDK.connection.status() !== "connected") return
-    void Promise.all([
-      data.shell.sync({ directory: sdk().directory }),
-      data.session.permission.sync(id),
-    ]).catch(() => undefined)
+    void Promise.all([data.shell.sync({ directory: sdk().directory }), data.session.permission.sync(id)]).catch(
+      () => undefined,
+    )
   })
   createEffect(() => {
     const id = params.id
@@ -110,8 +109,8 @@ export function createSessionRequestModel() {
     })
   }
 
-  const [store, setStore] = createStore({
-    responding: undefined as string | undefined,
+  const [store, setStore] = createStore<{ responding: string | undefined }>({
+    responding: undefined,
   })
 
   const permissionResponding = createMemo(() => {
@@ -132,7 +131,7 @@ export function createSessionRequestModel() {
     setStore("responding", perm.id)
     serverSDK.api.permission
       .reply({ sessionID: perm.sessionID, requestID: perm.id, decision: response })
-      .catch((err: unknown) => {
+      .catch((err) => {
         const description = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description })
       })

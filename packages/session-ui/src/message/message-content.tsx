@@ -592,9 +592,9 @@ export function AssistantTextContent(props: {
     const ms =
       props.turnDurationMs === null
         ? -1
-        : typeof props.turnDurationMs === "number"
+        : props.turnDurationMs !== undefined
           ? props.turnDurationMs
-          : typeof completed === "number"
+          : completed !== undefined
             ? completed - props.message.time.created
             : -1
 
@@ -637,7 +637,7 @@ export function AssistantTextContent(props: {
           <PacedMarkdown
             text={props.text}
             cacheKey={props.id}
-            streaming={typeof props.message.time.completed !== "number"}
+            streaming={props.message.time.completed === undefined}
           />
         </div>
         <Show when={props.showCopy}>

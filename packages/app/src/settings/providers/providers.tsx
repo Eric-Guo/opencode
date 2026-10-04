@@ -47,11 +47,16 @@ export const SettingsProviders: Component<{
   const integrations = useIntegrations(() => props.directory)
   const providerConnect = useProviderConnectController()
 
-  const [state, setState] = createStore({
-    disconnecting: {} as Record<string, "removing" | "removed" | "absent" | undefined>,
+  const [state, setState] = createStore<{
+    disconnecting: Record<string, "removing" | "removed" | "absent" | undefined>
+    consoleExpanded: boolean
+    connecting: boolean
+    credentialID: string | undefined
+  }>({
+    disconnecting: {},
     consoleExpanded: false,
     connecting: false,
-    credentialID: undefined as string | undefined,
+    credentialID: undefined,
   })
 
   const updateDisconnecting = (ids: string[], status: "removing" | "removed" | "absent" | undefined) =>
@@ -260,7 +265,7 @@ export const SettingsProviders: Component<{
           description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
         })
       })
-      .catch((err: unknown) => {
+      .catch((err) => {
         updateDisconnecting(ids, undefined)
         const message = err instanceof Error ? err.message : String(err)
         showToast({
@@ -282,8 +287,8 @@ export const SettingsProviders: Component<{
     ])
   }
 
-  const accountError = (error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
+  const accountError = (cause: unknown) => {
+    const message = cause instanceof Error ? cause.message : String(cause)
     showToast({ title: language.t("common.requestFailed"), description: message })
   }
 
@@ -429,9 +434,7 @@ export const SettingsProviders: Component<{
                             <ProviderModelIcon provider={item} class="settings-provider-icon shrink-0" />
 
                             <div class="settings-provider-main">
-                              <span class="settings-provider-name truncate">
-                                {item.name}
-                              </span>
+                              <span class="settings-provider-name truncate">{item.name}</span>
                               <Badge>{type(item)}</Badge>
                             </div>
                           </div>
@@ -556,9 +559,7 @@ export const SettingsProviders: Component<{
 
                     <div class="settings-provider-copy">
                       <div class="settings-provider-main">
-                        <span class="settings-provider-name">
-                          {item.name}
-                        </span>
+                        <span class="settings-provider-name">{item.name}</span>
                         <Show when={item.id === "opencode" || item.id === "opencode-go"}>
                           <Badge>{language.t("dialog.provider.tag.recommended")}</Badge>
                         </Show>
