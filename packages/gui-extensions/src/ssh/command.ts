@@ -197,7 +197,7 @@ export const runSsh = Effect.fn("Ssh.run")(function* (input: {
             ? "ignore"
             : {
                 stream: Stream.make(
-                  typeof input.stdin === "string" ? new TextEncoder().encode(input.stdin) : input.stdin,
+                  input.stdin instanceof Uint8Array ? input.stdin : new TextEncoder().encode(input.stdin),
                 ),
                 endOnDone: true,
               },

@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -205,7 +206,7 @@ export function TabNavItem(props: {
       ref={(el) => {
         tabRoot = el
 
-        if (typeof props.ref === "function") props.ref(el)
+        if (Predicate.isFunction(props.ref)) props.ref(el)
       }}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
@@ -413,7 +414,7 @@ export function DraftTabItem(props: {
   return (
     <div
       ref={(el) => {
-        if (typeof props.ref === "function") props.ref(el)
+        if (Predicate.isFunction(props.ref)) props.ref(el)
       }}
       data-titlebar-tab
       data-slot="titlebar-tab-item"

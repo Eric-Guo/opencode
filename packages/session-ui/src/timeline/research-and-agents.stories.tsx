@@ -1,4 +1,4 @@
-import type { JsonValue, SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
@@ -281,7 +281,7 @@ const RecoverFromToolFailures = {
   render: () => {
     const names = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
 
-    const input = (name: string): Record<string, JsonValue> => {
+    const input = (name: string) => {
       if (name === "shell") return { command: "exit 1" }
 
       if (name === "edit" || name === "write") return { path: "src/error.ts", content: "" }
@@ -406,5 +406,5 @@ const researchScenarios = {
 export const AgentResearch = {
   args: { scenario: "workflow" },
   argTypes: { scenario: { control: "select", options: Object.keys(researchScenarios) } },
-  render: (args: { scenario: string }) => researchScenarios[args.scenario as keyof typeof researchScenarios].render(),
+  render: (args: { scenario: string }) => Object.entries(researchScenarios).find(([key]) => key === args.scenario)?.[1].render(),
 }

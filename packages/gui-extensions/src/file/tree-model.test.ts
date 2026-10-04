@@ -30,7 +30,7 @@ describe("buildFileTreeV2Model", () => {
 
 describe("flattenLiveFileTreeV2", () => {
   test("flattens live children using original paths for nested lookups", () => {
-    const nodes: Record<string, FileNode[]> = {
+    const nodes = new Map(Object.entries({
       "": [
         { name: "src", path: "src", absolute: "/repo/src", type: "directory", ignored: false },
         { name: "README.md", path: "README.md", absolute: "/repo/README.md", type: "file", ignored: false },
@@ -40,11 +40,11 @@ describe("flattenLiveFileTreeV2", () => {
         { name: "lib", path: "src/lib", absolute: "/repo/src/lib", type: "directory", ignored: false },
       ],
       "src/lib": [{ name: "b.ts", path: "src/lib/b.ts", absolute: "/repo/src/lib/b.ts", type: "file", ignored: false }],
-    }
+    } satisfies Record<string, FileNode[]>))
 
     expect(
       flattenLiveFileTreeV2(
-        (path) => nodes[path] ?? [],
+        (path) => nodes.get(path) ?? [],
         (path) => path === "src",
       ).map((row) => [row.node.path, row.node.originalPath, row.level]),
     ).toEqual([

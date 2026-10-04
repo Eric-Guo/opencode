@@ -1,6 +1,7 @@
 import { Component, createMemo } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useData } from "@/runtime/server/current"
+import { useServer } from "@/runtime/server/current"
 import { useComposerState } from "@/composer/persistence"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
@@ -12,7 +13,7 @@ import { base64Encode } from "@opencode/util/encode"
 import { commentContextItem } from "@/composer/comment-note"
 import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServer } from "@/runtime/server/current"
+
 import { sessionHref } from "@/shell/routes/session"
 
 interface ForkableMessage {
@@ -84,7 +85,7 @@ export const DialogFork: Component = () => {
         target.context.replaceComments(extractPromptComments(message).map(commentContextItem))
         navigate(sessionHref(server.key, forked.id))
       })
-      .catch((err: unknown) => {
+      .catch((err) => {
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })

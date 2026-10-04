@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, SchemaGetter } from "effect"
+import { Predicate, Effect, Option, Schema, SchemaGetter } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 
 export const ServerKey = Schema.String.pipe(Schema.brand("ServerConnection.Key"))
@@ -19,7 +19,7 @@ export const ServerHttp = Persistence.struct({
 const StoredServer = Schema.Union([ServerHttp, ServerHttpBase, Schema.String]).pipe(
   Schema.decodeTo(ServerHttp, {
     decode: SchemaGetter.transform((value) => {
-      if (typeof value === "string") return { type: "http", http: { url: value } }
+      if (Predicate.isString(value)) return { type: "http", http: { url: value } }
 
       if ("http" in value) return value
 

@@ -60,7 +60,8 @@ Terminal.prototype.open = function (element) {
       probe.draws++
 
       if (hidden) probe.hiddenDraws++
-      draw.apply(this, args)
+      // SAFETY: This wrapper forwards drawImage's original argument tuple without changing its selected overload.
+      draw.apply(this, args as Parameters<typeof draw>)
     }
   }
 }
@@ -70,7 +71,7 @@ const write = Terminal.prototype.write
 Terminal.prototype.write = function (data, done) {
   probe.writes++
   probe.pending++
-  probe.bytes += typeof data === "string" ? new TextEncoder().encode(data).byteLength : data.byteLength
+  probe.bytes += data instanceof Uint8Array ? data.byteLength : new TextEncoder().encode(data).byteLength
 
   return write.call(this, data, () => {
     probe.pending--

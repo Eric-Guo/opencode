@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema, SchemaGetter } from "effect"
+import { Predicate, Effect, Schema, SchemaGetter } from "effect"
 import { Persistence } from "./schema"
 
 describe("persistence schemas", () => {
@@ -152,7 +152,7 @@ describe("persistence schemas", () => {
     const schema = Persistence.array(
       Schema.Union([current, Schema.String]).pipe(
         Schema.decodeTo(current, {
-          decode: SchemaGetter.transform((value) => (typeof value === "string" ? { name: value } : value)),
+          decode: SchemaGetter.transform((value) => (Predicate.isString(value) ? { name: value } : value)),
           encode: SchemaGetter.passthrough(),
         }),
       ),

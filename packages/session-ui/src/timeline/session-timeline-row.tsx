@@ -1,3 +1,4 @@
+import { Match, Predicate, Schema } from "effect"
 import type {
   SessionMessageAssistant,
   SessionMessageInfo,
@@ -33,6 +34,10 @@ import {
   type PartRef,
   type ReasoningMode,
 } from "./projection"
+
+const textValue = Schema.is(Schema.String)
+
+const filePath = Schema.is(Schema.Struct({ file: Schema.String }))
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 
@@ -77,7 +82,7 @@ export function createSessionTimelineRowRenderer(input: {
     // Track status changes before a group is first opened: a failed file change can
     // split an existing group without changing the projection's row identities.
     rows.forEach((row) => {
-      if (row._tag !== "AssistantPart" || row.group.type !== "context") return
+      if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "context") return
       row.group.refs.forEach((ref) => {
         const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
 
@@ -293,9 +298,7 @@ export function createSessionTimelineRowRenderer(input: {
         if (!Array.isArray(files)) return undefined
         const file = files[0]
 
-        return file && typeof file === "object" && "file" in file && typeof file.file === "string"
-          ? file.file
-          : undefined
+        return filePath(file) ? file.file : undefined
       })
 
       return (
@@ -404,7 +407,7 @@ export function createSessionTimelineRowRenderer(input: {
 
     if (message.type === "system") {
       const sources = Array.isArray(message.metadata?.instructionSources)
-        ? message.metadata.instructionSources.filter((item): item is string => typeof item === "string")
+        ? message.metadata.instructionSources.filter((item): item is string => textValue(item))
         : undefined
 
       if (message.metadata?.notice === "instructions" && sources?.length)
@@ -433,20 +436,20 @@ export function createSessionTimelineRowRenderer(input: {
 
     if (message.description === "Continuing after restart")
       return { label: i18n.t("ui.sessionTimeline.notice.restart") }
-    const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
-    const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
+    const source = textValue(message.metadata?.source) ? message.metadata.source : undefined
+    const state = textValue(message.metadata?.state) ? message.metadata.state : undefined
 
     if (source === "subagent" || source === "shell") {
-      const agent = typeof message.metadata?.agent === "string" ? message.metadata.agent : undefined
+      const agent = textValue(message.metadata?.agent) ? message.metadata.agent : undefined
       const actor = source === "shell" ? i18n.t("ui.tool.shell") : (agent ?? i18n.t("ui.tool.agent.default"))
 
       return {
         label: i18n.t(
-          state === "error"
-            ? "ui.sessionTimeline.notice.failed"
-            : state === "cancelled"
-              ? "ui.sessionTimeline.notice.cancelled"
-              : "ui.sessionTimeline.notice.finished",
+          Match.value(state).pipe(
+            Match.when("error", () => "ui.sessionTimeline.notice.failed" as const),
+            Match.when("cancelled", () => "ui.sessionTimeline.notice.cancelled" as const),
+            Match.orElse(() => "ui.sessionTimeline.notice.finished" as const),
+          ),
           { actor },
         ),
         data: message.description,
@@ -458,15 +461,15 @@ export function createSessionTimelineRowRenderer(input: {
 
   const Frame = (props: { row: FramedTimelineRow; children: JSX.Element }) => (
     <div
-      id={props.row._tag === "UserMessage" ? input.anchor?.(props.row.userMessageID) : undefined}
+      id={Predicate.isTagged(props.row, "UserMessage") ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
       data-timeline-row={props.row._tag}
-      data-timeline-spacing={props.row._tag === "AssistantPart" ? props.row.spacing : undefined}
+      data-timeline-spacing={Predicate.isTagged(props.row, "AssistantPart") ? props.row.spacing : undefined}
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-[1000px] md:mx-auto": input.centered?.(),
-        "pt-2": props.row._tag === "AssistantPart" && props.row.spacing === "tool",
-        "pt-4": props.row._tag === "AssistantPart" && props.row.spacing === "content",
+        "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
+        "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
       }}
     >
       <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>
@@ -526,7 +529,7 @@ export function createSessionTimelineRowRenderer(input: {
       if (value?.type !== "synthetic" || value.metadata?.source !== "subagent") return
       const id = value.metadata.childID
 
-      if (typeof id === "string" && id) return id
+      if (textValue(id) && id) return id
     })
 
     const href = createMemo(() => {
@@ -692,13 +695,13 @@ export function createSessionTimelineRowRenderer(input: {
   }
 
   const render = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => {
-    if (row()._tag === "TurnGap") return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
+    if (Predicate.isTagged(row(), "TurnGap")) return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
 
-    if (row()._tag === "UserMessage") {
+    if (Predicate.isTagged(row(), "UserMessage")) {
       const current = () => {
         const value = row()
 
-        if (value._tag !== "UserMessage") throw new Error("Expected a user-message timeline row")
+        if (!Predicate.isTagged(value, "UserMessage")) throw new Error("Expected a user-message timeline row")
 
         return value
       }
@@ -739,11 +742,11 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
-    if (row()._tag === "Shell") {
+    if (Predicate.isTagged(row(), "Shell")) {
       const current = () => {
         const value = row()
 
-        if (value._tag !== "Shell") throw new Error("Expected a shell timeline row")
+        if (!Predicate.isTagged(value, "Shell")) throw new Error("Expected a shell timeline row")
 
         return value
       }
@@ -755,11 +758,11 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
-    if (row()._tag === "Notice") {
+    if (Predicate.isTagged(row(), "Notice")) {
       const current = () => {
         const value = row()
 
-        if (value._tag !== "Notice") throw new Error("Expected a notice timeline row")
+        if (!Predicate.isTagged(value, "Notice")) throw new Error("Expected a notice timeline row")
 
         return value
       }
@@ -771,11 +774,11 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
-    if (row()._tag === "TurnDivider") {
+    if (Predicate.isTagged(row(), "TurnDivider")) {
       const current = () => {
         const value = row()
 
-        if (value._tag !== "TurnDivider") throw new Error("Expected a turn-divider timeline row")
+        if (!Predicate.isTagged(value, "TurnDivider")) throw new Error("Expected a turn-divider timeline row")
 
         return value
       }
@@ -793,11 +796,11 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
-    if (row()._tag === "AssistantPart") {
+    if (Predicate.isTagged(row(), "AssistantPart")) {
       const current = () => {
         const value = row()
 
-        if (value._tag !== "AssistantPart") throw new Error("Expected an assistant-part timeline row")
+        if (!Predicate.isTagged(value, "AssistantPart")) throw new Error("Expected an assistant-part timeline row")
 
         return value
       }
@@ -816,11 +819,11 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
-    if (row()._tag === "Thinking") {
+    if (Predicate.isTagged(row(), "Thinking")) {
       const current = () => {
         const value = row()
 
-        if (value._tag !== "Thinking") throw new Error("Expected a thinking timeline row")
+        if (!Predicate.isTagged(value, "Thinking")) throw new Error("Expected a thinking timeline row")
 
         return value
       }
@@ -862,11 +865,11 @@ export function createSessionTimelineRowRenderer(input: {
       )
     }
 
-    if (row()._tag === "Retry") {
+    if (Predicate.isTagged(row(), "Retry")) {
       const current = () => {
         const value = row()
 
-        if (value._tag !== "Retry") throw new Error("Expected a retry timeline row")
+        if (!Predicate.isTagged(value, "Retry")) throw new Error("Expected a retry timeline row")
 
         return value
       }
@@ -893,7 +896,7 @@ export function createSessionTimelineRowRenderer(input: {
     const current = () => {
       const value = row()
 
-      if (value._tag !== "Error") throw new Error("Expected an error timeline row")
+      if (!Predicate.isTagged(value, "Error")) throw new Error("Expected an error timeline row")
 
       return value
     }

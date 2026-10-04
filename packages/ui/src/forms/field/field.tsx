@@ -88,13 +88,13 @@ function FieldRoot(props: ParentProps<FieldProps>) {
 
     if (!root) return
 
-    const control = root.querySelector(CONTROL_SELECTOR) as HTMLInputElement | HTMLTextAreaElement | null
+    const control = root.querySelector<HTMLInputElement | HTMLTextAreaElement>(CONTROL_SELECTOR)
 
     if (!control) return
 
-    const shell = control.closest(
+    const shell = control.closest<HTMLElement>(
       "[data-component='text-input-v2'], [data-component='textarea-v2'], [data-component='inline-input']",
-    ) as HTMLElement | null
+    )
 
     control.id = controlId
     control.setAttribute("aria-labelledby", labelId)

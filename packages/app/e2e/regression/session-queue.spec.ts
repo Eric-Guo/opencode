@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { JsonValue, OpenCodeEvent, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { MockPrompt } from "../utils/mock-server"
 import { provider } from "../utils/app"
 import { openSession } from "../utils/workspace"
 
@@ -12,7 +13,7 @@ type InboxRow = {
   type: "user"
   payload: {
     text: string
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, JsonValue>
     files?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["files"]
     agents?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["agents"]
   }
@@ -30,7 +31,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
   }))
 
   const events: OpenCodeEvent[] = []
-  const prompts: Record<string, unknown>[] = []
+  const prompts: MockPrompt[] = []
   const changes: { inboxID: string; action: "cancel" | "steer" | "queue" }[] = []
   const log: string[] = []
   let sequence = 0
@@ -58,22 +59,22 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
     messages,
     emit,
     events: () => events.splice(0),
-    onPrompt: (input: { sessionID: string; body: Record<string, unknown> }) => {
+    onPrompt: (input: { sessionID: string; body: MockPrompt }) => {
       prompts.push(input.body)
       log.push(`prompt:${String(input.body.delivery ?? "steer")}`)
 
       const row: InboxRow = {
-        id: typeof input.body.id === "string" ? input.body.id : `inb_mock_${sequence}`,
+        id: input.body.id ?? `inb_mock_${sequence}`,
         sessionID: input.sessionID,
         time: { created: Date.now() },
         type: "user",
         payload: {
-          text: typeof input.body.text === "string" ? input.body.text : "",
-          ...(input.body.metadata === undefined ? {} : { metadata: input.body.metadata as Record<string, unknown> }),
+          text: input.body.text,
         },
         delivery: input.body.delivery === "queue" ? "queue" : "steer",
       }
 
+      if (input.body.metadata !== undefined) row.payload.metadata = input.body.metadata
       rows.push(row)
       emit("session.inbox.enqueued", {
         sessionID: input.sessionID,
