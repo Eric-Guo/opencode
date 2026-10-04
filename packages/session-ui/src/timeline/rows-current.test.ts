@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
@@ -299,7 +300,7 @@ describe("current session timeline rows", () => {
         reasoningMode,
       })
 
-      expect(result.rows.some((row) => row._tag === "Thinking")).toBe(reasoningMode !== "hidden" && profile.thinking)
+      expect(result.rows.some((row) => Predicate.isTagged(row, "Thinking"))).toBe(reasoningMode !== "hidden" && profile.thinking)
     })
   })
 
@@ -373,7 +374,7 @@ describe("current session timeline rows", () => {
 
       expect(
         Timeline.constructSessionMessageRows(messages, true, { type: "busy" }).rows.some(
-          (row) => row._tag === "Thinking",
+          (row) => Predicate.isTagged(row, "Thinking"),
         ),
       ).toBe(false)
     })
@@ -421,7 +422,7 @@ describe("current session timeline rows", () => {
     )
 
     const result = Timeline.constructSessionMessageRows(document.messages, true, document.status)
-    expect(result.rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))).toEqual([
+    expect(result.rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : []))).toEqual([
       "part",
       "part",
     ])
@@ -651,7 +652,7 @@ describe("current session timeline rows", () => {
     ] satisfies SessionMessageInfo[]
 
     const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" })
-    const groups = result.rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group] : []))
+    const groups = result.rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []))
 
     expect(groups).toEqual([
       {
@@ -705,7 +706,7 @@ describe("current session timeline rows", () => {
     ] satisfies SessionMessageInfo[]
 
     const groups = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.flatMap((row) =>
-      row._tag === "AssistantPart" ? [row.group] : [],
+      Predicate.isTagged(row, "AssistantPart") ? [row.group] : [],
     )
 
     expect(groups).toEqual([
@@ -838,7 +839,7 @@ describe("current session timeline rows", () => {
     ] satisfies SessionMessageInfo[]
 
     const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, false, true)
-    const groups = result.rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group] : []))
+    const groups = result.rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []))
 
     expect(groups).toEqual([
       {
@@ -909,7 +910,7 @@ describe("current session timeline rows", () => {
     ] satisfies SessionMessageInfo[]
 
     const groups = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.flatMap((row) =>
-      row._tag === "AssistantPart" ? [row.group] : [],
+      Predicate.isTagged(row, "AssistantPart") ? [row.group] : [],
     )
 
     expect(groups.map((group) => group.type)).toEqual(["context", "part", "context"])
@@ -958,7 +959,7 @@ describe("current session timeline rows", () => {
 
     const rows = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, shell, edit).rows
 
-    expect(rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))).toEqual([...types])
+    expect(rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : []))).toEqual([...types])
   })
 
   test("merges adjacent separate reads into one read row split by other parts", () => {
@@ -986,7 +987,7 @@ describe("current session timeline rows", () => {
 
     expect(
       rows.flatMap((row) =>
-        row._tag !== "AssistantPart"
+        !Predicate.isTagged(row, "AssistantPart")
           ? []
           : [
               [
@@ -1037,7 +1038,7 @@ describe("current session timeline rows", () => {
         previousRows,
       })
 
-      const groups = result.rows.filter((row) => row._tag === "AssistantPart")
+      const groups = result.rows.filter((row) => Predicate.isTagged(row, "AssistantPart"))
       expect(groups).toHaveLength(1)
       expect(groups[0].group).toMatchObject({
         type: "context",
@@ -1048,7 +1049,7 @@ describe("current session timeline rows", () => {
       })
       expect(TimelineRow.key(groups[0])).toBe(TimelineRow.key(initial.rows[1]))
 
-      if (index > 0) expect(groups[0]).toBe(previousRows.find((row) => row._tag === "AssistantPart")!)
+      if (index > 0) expect(groups[0]).toBe(previousRows.find((row) => Predicate.isTagged(row, "AssistantPart"))!)
 
       return result.rows
     }, initial.rows)
@@ -1076,7 +1077,7 @@ describe("current session timeline rows", () => {
       profile.expanded ?? false,
     ).rows
 
-    expect(rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))).toEqual([...profile.types])
+    expect(rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : []))).toEqual([...profile.types])
   })
 
   test("keeps active and background work standalone when no group precedes them", () => {
@@ -1126,7 +1127,7 @@ describe("current session timeline rows", () => {
 
     expect(
       Timeline.constructSessionMessageRows(source, false, { type: "busy" }).rows.flatMap((row) =>
-        row._tag === "AssistantPart" ? [row.group.type] : [],
+        Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : [],
       ),
     ).toEqual(["part", "part", "context"])
   })
@@ -1182,7 +1183,7 @@ describe("current session timeline rows", () => {
     ]
 
     const groups = Timeline.constructSessionMessageRows(source, false, { type: "idle" }).rows.flatMap((row) =>
-      row._tag === "AssistantPart" ? [row.group] : [],
+      Predicate.isTagged(row, "AssistantPart") ? [row.group] : [],
     )
 
     expect(groups).toEqual([
@@ -1198,7 +1199,7 @@ describe("current session timeline rows", () => {
     ])
     expect(
       Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, true).rows.flatMap((row) =>
-        row._tag === "AssistantPart" ? [row.group.type] : [],
+        Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : [],
       ),
     ).toEqual(["context", "part"])
   })

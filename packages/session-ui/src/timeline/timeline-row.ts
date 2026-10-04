@@ -1,4 +1,4 @@
-import { Data, Equal } from "effect"
+import { Data, Equal, Match } from "effect"
 
 export type PartRef = {
   messageID: string
@@ -77,33 +77,20 @@ export namespace TimelineRow {
     | Error
     | Retry
 
-  export const key = (row: TimelineRow): string => {
-    switch (row._tag) {
-      case "TurnGap":
-        return `turn-gap:${row.userMessageID}`
-      case "UserMessage":
-        return `user-message:${row.userMessageID}`
-      case "Shell":
-        return `shell:${row.messageID}`
-      case "Notice":
-        return `notice:${row.messageID}`
-      case "TurnDivider":
-        return `turn-divider:${row.userMessageID}`
-      // Keyed by part identity alone: a page boundary can truncate the leading turn,
-      // and its rows regroup under the real user message once older history loads.
-      // The group key already carries the owning message and part IDs.
-      case "AssistantPart":
-        return `assistant-part:${row.group.type}:${row.group.key}`
-      case "Thinking":
-        return `thinking:${row.userMessageID}`
-      case "Error":
-        return `error:${row.userMessageID}`
-      case "Retry":
-        return `retry:${row.userMessageID}`
-    }
-
-    return row
-  }
+  export const key = Match.type<TimelineRow>().pipe(
+    Match.tagsExhaustive({
+      TurnGap: (row) => `turn-gap:${row.userMessageID}`,
+      UserMessage: (row) => `user-message:${row.userMessageID}`,
+      Shell: (row) => `shell:${row.messageID}`,
+      Notice: (row) => `notice:${row.messageID}`,
+      TurnDivider: (row) => `turn-divider:${row.userMessageID}`,
+      // Part identity keeps the key stable when a page boundary truncates its leading user message.
+      AssistantPart: (row) => `assistant-part:${row.group.type}:${row.group.key}`,
+      Thinking: (row) => `thinking:${row.userMessageID}`,
+      Error: (row) => `error:${row.userMessageID}`,
+      Retry: (row) => `retry:${row.userMessageID}`,
+    }),
+  )
 
   export function equals(a: TimelineRow, b: TimelineRow) {
     return Equal.equals(a, b)
