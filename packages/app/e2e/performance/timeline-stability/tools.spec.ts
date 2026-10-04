@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import { expect, test } from "@playwright/test"
 import {
@@ -92,9 +93,9 @@ test.describe("timeline tool state stability", () => {
       )
     }
 
-    for (const [index, id] of ["skill", "webfetch", "custom", "subagent", "websearch"].entries()) {
-      const key = id as (typeof ids)[number]
-      const metadata = key === "subagent" ? { sessionID: childID } : key === "websearch" ? { provider: "exa" } : {}
+    for (const [index, id] of (["skill", "webfetch", "custom", "subagent", "websearch"] as const).entries()) {
+      const key = id
+      const metadata = Match.value(key).pipe(Match.when("subagent", () => ({sessionID: childID})), Match.when("websearch", () => ({provider: "exa"})), Match.orElse(() => ({})))
       const output = key === "websearch" ? "Result https://example.com/result" : "Completed"
       await timeline.send(
         partUpdated(toolPart(`prt_state_${key}`, names[key], "completed", inputs[key], { metadata, output })),
