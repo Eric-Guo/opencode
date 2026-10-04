@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { Protocol } from "devtools-protocol"
 import type { Cdp } from "./cdp"
@@ -44,14 +45,16 @@ export function createDiagnostics(cdp: Cdp) {
     timestampMs: number,
     source?: Browser.ConsoleEntry["source"],
   ) => {
-    messages.push({
+    const entry: Browser.ConsoleEntry = {
       id: `${scope}:${++sequence}`,
       timestampMs,
       level,
       text: text.slice(0, 2_000),
       textTruncated: text.length > 2_000,
-      ...(source ? { source } : {}),
-    })
+    }
+
+    if (source) Object.assign(entry, { source })
+    messages.push(entry)
 
     if (messages.length > 500) {
       messages.shift()
@@ -71,7 +74,7 @@ export function createDiagnostics(cdp: Cdp) {
             : "info",
       event.args
         .map((arg) =>
-          typeof arg.value === "string"
+          Predicate.isString(arg.value)
             ? arg.value
             : arg.value !== undefined
               ? JSON.stringify(arg.value)

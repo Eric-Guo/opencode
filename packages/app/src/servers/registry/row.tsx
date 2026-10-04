@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
 import { Spinner } from "@opencode/ui/spinner"
@@ -47,7 +48,7 @@ export function ServerRow(props: ServerRowProps) {
   })
 
   onMount(() => {
-    if (typeof ResizeObserver !== "function") return
+    if (!Predicate.isFunction(ResizeObserver)) return
     createResizeObserver([nameRef, versionRef], check)
     check()
   })
