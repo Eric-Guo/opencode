@@ -1048,7 +1048,7 @@ test.describe("compaction", () => {
     test(`ends running compactions as ${names.join(", then ")}`, async ({ page }) => {
       const timeline = await setupTimeline(page, {
         sessionMessages: [user, completed],
-        ...(names[0] === "interrupted" ? { sessionStatus: { [sessionID]: { type: "busy" as const } } } : {}),
+        sessionStatus: names[0] === "interrupted" ? { [sessionID]: { type: "busy" } } : undefined,
       })
 
       const compactions = page.locator('[data-component="session-compaction-message"]')

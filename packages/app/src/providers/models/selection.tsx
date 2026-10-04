@@ -227,10 +227,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (previous.agent === item.name) return
           const prev = scope()
 
-          const choices = {
-            ...prev?.choices,
-            ...(previous.agent ? { [previous.agent]: { model: previous.model, variant: previous.variant } } : {}),
-          }
+          const choices = { ...prev?.choices }
+
+          if (previous.agent) choices[previous.agent] = { model: previous.model, variant: previous.variant }
 
           setStore("current", item.name)
 
