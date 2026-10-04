@@ -383,4 +383,4 @@ export const dict = {
   "ui.question.singleHint": "Bir cavab seçin",
   "ui.question.classic.multiHint": "Uyğun gələn bütün cavabları seçin",
   "ui.question.custom.answerPlaceholder": "Öz cavabınızı yazın…",
-}
+} satisfies Record<string, string>

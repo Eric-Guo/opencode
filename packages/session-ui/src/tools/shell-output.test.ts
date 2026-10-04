@@ -1,3 +1,4 @@
+
 import { describe, expect, test, vi } from "bun:test"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
 import { createShellFollower, followShellOutput } from "./shell-output"
