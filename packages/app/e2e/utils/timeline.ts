@@ -1,4 +1,14 @@
-import type { JsonValue, OpenCodeEvent, SessionInfo, SessionMessageAssistant, SessionMessageInfo, SessionMessageUser, SessionStatus, SessionStructuredError } from "@opencode/client/promise"
+import type {
+  JsonValue,
+  OpenCodeEvent,
+  SessionInfo,
+  SessionMessageAssistant,
+  SessionMessageAssistantTool,
+  SessionMessageInfo,
+  SessionMessageUser,
+  SessionStatus,
+  SessionStructuredError,
+} from "@opencode/client/promise"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
@@ -613,12 +623,12 @@ export function stepStarted(message: SessionMessageAssistant) {
 
 export function userMessage(
   parts?: PartSeed<"user">[],
-  input: { id?: string; summary?: unknown; created?: number } = {},
+  input: { id?: string; summary?: JsonValue; created?: number } = {},
 ): SessionMessageUser {
   const id = input.id ?? userID
   const seeds = parts ?? [userText("Build the timeline stability matrix.", { id: `prt_${id}_text` })]
 
-  return {
+  const message: SessionMessageUser = {
     id,
     type: "user",
     time: { created: input.created ?? 1700000000000 },
@@ -626,36 +636,41 @@ export function userMessage(
     files: seeds.flatMap((part) => {
       if (part.type !== "file") return []
 
-      const mention = part.source?.text
-        ? { text: part.source.text.value, start: part.source.text.start, end: part.source.text.end }
-        : undefined
+      const attachment: NonNullable<SessionMessageUser["files"]>[number] = {
+        data: part.url.match(/^data:[^,]*;base64,(.*)$/)?.[1] ?? "",
+        mime: part.mime,
+        source: part.url.startsWith("data:") ? { type: "inline" } : { type: "uri", uri: part.source?.path ?? part.url },
+      }
 
-      return [
-        {
-          data: part.url.match(/^data:[^,]*;base64,(.*)$/)?.[1] ?? "",
-          mime: part.mime,
-          source: part.url.startsWith("data:")
-            ? ({ type: "inline" } as const)
-            : ({ type: "uri", uri: part.source?.path ?? part.url } as const),
-          ...(part.filename ? { name: part.filename } : {}),
-          ...(mention ? { mention } : {}),
-        },
-      ]
+      if (part.filename) attachment.name = part.filename
+
+      if (part.source?.text)
+        attachment.mention = {
+          text: part.source.text.value,
+          start: part.source.text.start,
+          end: part.source.text.end,
+        }
+
+      return [attachment]
     }),
     agents: seeds.flatMap((part) => {
       if (part.type !== "agent") return []
+      const attachment: NonNullable<SessionMessageUser["agents"]>[number] = { name: part.name }
 
-      return [
-        {
-          name: part.name,
-          ...(part.source
-            ? { mention: { text: part.source.value, start: part.source.start, end: part.source.end } }
-            : {}),
-        },
-      ]
+      if (part.source)
+        attachment.mention = {
+          text: part.source.value,
+          start: part.source.start,
+          end: part.source.end,
+        }
+
+      return [attachment]
     }),
-    ...(input.summary === undefined ? {} : { metadata: { summary: input.summary as JsonValue } }),
   }
+
+  if (input.summary !== undefined) message.metadata = { summary: input.summary }
+
+  return message
 }
 
 export function assistantMessage(
@@ -850,27 +865,28 @@ function messageContent(
       type: "reasoning",
       text: part.text,
       state: jsonRecord(part.metadata),
-      time: part.time
-        ? { created: part.time.start, ...(part.time.end === undefined ? {} : { completed: part.time.end }) }
-        : undefined,
+      time: part.time ? { created: part.time.start, completed: part.time.end } : undefined,
     }
   const state = part.state
   const time = "time" in state ? state.time : undefined
   const completed = state.status === "completed" || state.status === "error" ? state.time.end : undefined
 
-  const base = {
-    type: "tool" as const,
+  const base: Omit<SessionMessageAssistantTool, "state"> = {
+    type: "tool",
     id: part.id,
     name: part.name,
-    time: {
-      created: time?.start ?? 1700000001000,
-      ...(time?.start === undefined ? {} : { ran: time.start }),
-      ...(completed === undefined ? {} : { completed }),
-    },
-    ...(part.executed === undefined ? {} : { executed: part.executed }),
-    ...(part.providerState ? { providerState: jsonRecord(part.providerState) } : {}),
-    ...(part.providerResultState ? { providerResultState: jsonRecord(part.providerResultState) } : {}),
+    time: { created: time?.start ?? 1700000001000 },
   }
+
+  if (time?.start !== undefined) base.time.ran = time.start
+
+  if (completed !== undefined) base.time.completed = completed
+
+  if (part.executed !== undefined) base.executed = part.executed
+
+  if (part.providerState) base.providerState = jsonRecord(part.providerState)
+
+  if (part.providerResultState) base.providerResultState = jsonRecord(part.providerResultState)
 
   if (state.status === "streaming") return { ...base, state: { status: "streaming", input: state.raw } }
 
@@ -882,7 +898,7 @@ function messageContent(
         input: jsonRecord(state.input),
         metadata: jsonRecord({
           ...state.metadata,
-          ...(state.output === undefined ? {} : { output: state.output }),
+          output: state.output,
         }),
       },
     }
@@ -956,7 +972,7 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
   if (part.state.status === "running") {
     const metadata = {
       ...part.state.metadata,
-      ...(part.state.output === undefined ? {} : { output: part.state.output }),
+      output: part.state.output,
     }
 
     if (previous === "running" || Object.keys(metadata).length)
