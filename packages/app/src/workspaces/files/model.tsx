@@ -5,6 +5,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
 import { getDirectory, getFilename } from "@opencode/util/path"
+import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionAttachment } from "@/runtime/extension/host-apis"
@@ -177,6 +178,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const pending = inflight.get(key)
 
       if (pending) return pending
+
+      // ZIP previews fetch bounded directory metadata in the viewer, never the archive bytes.
+      if (artifactKind(file) === "archive") {
+        setLoaded(file, { type: "binary", content: "", mimeType: artifactMime(file) })
+        touchFileContent(file, 0)
+        evictContent(new Set([file]))
+
+        return Promise.resolve()
+      }
 
       setLoading(file)
 

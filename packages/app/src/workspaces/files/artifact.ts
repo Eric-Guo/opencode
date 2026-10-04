@@ -26,6 +26,8 @@ export function fileContentFromBytes(path: string, bytes: Uint8Array): FileConte
   const kind = artifactKind(path)
   const mimeType = artifactMime(path)
 
+  if (kind === "archive") return { type: "binary", content: "", size: bytes.length, mimeType }
+
   if (binaryKinds.has(kind)) {
     if (bytes.length > MAX_MEDIA_BYTES) return { type: "binary", content: "", size: bytes.length }
 
