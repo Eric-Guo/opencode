@@ -1,6 +1,6 @@
 import type { CDPSession, Page } from "@playwright/test"
 import { benchmark, expect } from "../benchmark"
-import { mockOpenCodeServer } from "../../utils/mock-server"
+import { mockOpenCodeServer, type MockStreamWindow } from "../../utils/mock-server"
 import { APP_READY_TIMEOUT } from "../../utils/waits"
 import { SERVER } from "../../utils/app"
 import { fixture as stress } from "../../utils/session-fixture"
@@ -148,7 +148,8 @@ benchmark.describe("performance: home session index", () => {
 
         const pushed = await page.evaluate(
           ({ id, title, event, server }) => {
-            const host = window
+            // SAFETY: mockOpenCodeServer installs the per-origin stream on this page's window.
+            const host = window as MockStreamWindow
             const stream = host.__mockServerStreams?.[server]
 
             if (!host.__homeIndexProbe || !stream) throw new Error("Missing Home index probe")
