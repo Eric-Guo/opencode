@@ -165,7 +165,7 @@ function exportDebugLogsEffect(fs: FileSystem.FileSystem, path: Path.Path) {
         ...(yield* collect(fs, path, app.getPath("crashDumps"), "crashpad")),
       ]
 
-      const truncated = files.filter((file) => file.offset > 0).map((file) => file.name)
+      const truncated = files.flatMap((file) => file.offset > 0 ? [file.name] : [])
       yield* writeZip(fs, output, [
         { name: "manifest.json", data: Buffer.from(JSON.stringify({ ...manifest(path), truncated }, null, 2)) },
         ...files,
