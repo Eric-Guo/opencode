@@ -24,7 +24,7 @@ export const register = Effect.fnUntraced(function* (options: {
   yield* fs.makeDirectory(path.dirname(options.file), { recursive: true })
   const directory = yield* fs.realPath(path.dirname(options.file))
   yield* DatabaseProcessOwner.lease(
-    path.join(directory, path.basename(options.file) + ".owner.sqlite"),
+    path.join(directory, path.basename(options.file) + ".owner"),
     "Another managed service owns this registration",
   )
   const previous = yield* fs.readFileString(options.file).pipe(
