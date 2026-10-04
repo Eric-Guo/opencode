@@ -60,6 +60,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const context = yield* Effect.context()
   const runFork = Effect.runForkWith(context)
   const runPromise = Effect.runPromiseWith(context)
+
   const menu = {
     commandWindow: getLastFocusedWindow,
     installCli: yield* createCliInstaller(desktopCli),
@@ -123,6 +124,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
       Object.keys(handlers).forEach((channel) => ipcMain.removeHandler(channel))
     }),
   )
+
   return {
     installMenu: () => createMenu(menu),
   }
