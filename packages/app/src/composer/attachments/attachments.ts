@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -17,14 +18,14 @@ type PromptTarget = {
 export type ComposerAttachmentConfig = {
   picker?: (
     options: { defaultPath?: string; multiple?: boolean; accept?: string[] },
-    onFile: (file: File) => Promise<unknown>,
+    onFile: (file: File) => Promise<void>,
   ) => Promise<void>
   directory: () => string
   destination: () => AttachmentDestination
   isDialogActive: () => boolean
   duplicate: () => void
-  onError: (error: unknown) => void
-  onUploadError: (error: unknown) => void
+  onError: (cause: unknown) => void
+  onUploadError: (cause: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
   onDragCancel?: (callback: () => void) => () => void
@@ -64,7 +65,8 @@ export function createComposerAttachments(
     const mime = await attachmentMime(file)
     const destination = input.destination()
 
-    if (native(mime, destination.input) && file.size <= MAX_INLINE_BYTES) return addInline(file, mime, target, clipboard)
+    if (native(mime, destination.input) && file.size <= MAX_INLINE_BYTES)
+      return addInline(file, mime, target, clipboard)
     const sourcePath = input.getPathForFile?.(file) || undefined
 
     if (destination.local && sourcePath) return addPath(target, { filename: file.name, mime, path: sourcePath })
@@ -73,7 +75,12 @@ export function createComposerAttachments(
     return true
   }
 
-  const addInline = async (file: File, mime: string, target: NonNullable<ReturnType<typeof capture>>, clipboard: boolean) => {
+  const addInline = async (
+    file: File,
+    mime: string,
+    target: NonNullable<ReturnType<typeof capture>>,
+    clipboard: boolean,
+  ) => {
     const blob = input.store ? await input.store(file) : await createBlobReference(file)
     const sourcePath = input.getPathForFile?.(file) || undefined
 
@@ -130,7 +137,7 @@ export function createComposerAttachments(
       .track({ id, filename: file.name, mime, size: file.size }, (report, signal) =>
         destination.upload(file, report, signal),
       )
-      .catch((error: unknown) => {
+      .catch((error) => {
         input.onUploadError(error)
 
         return undefined
@@ -195,7 +202,7 @@ export function createComposerAttachments(
       return
     }
 
-    if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
+    if (Predicate.isFunction(document.execCommand) && document.execCommand("insertText", false, text)) return
     put()
   }
 
@@ -245,7 +252,10 @@ export function createComposerAttachments(
     /** Uploads still in flight for this composer; sending waits for them. */
     pending: () => uploads.items().filter((item) => pending.ids.includes(item.id)),
     cancel(id: string) {
-      uploads.items().find((item) => item.id === id)?.cancel()
+      uploads
+        .items()
+        .find((item) => item.id === id)
+        ?.cancel()
     },
     pick(fallback: () => void, done: () => void) {
       if (!input.picker) {
@@ -255,7 +265,9 @@ export function createComposerAttachments(
       }
 
       void input
-        .picker({ defaultPath: input.directory(), multiple: true }, (file) => add(file))
+        .picker({ defaultPath: input.directory(), multiple: true }, async (file) => {
+          await add(file)
+        })
         .then(done)
         .catch(input.onError)
     },

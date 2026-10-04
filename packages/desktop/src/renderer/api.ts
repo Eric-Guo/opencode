@@ -12,10 +12,7 @@ type Mutable<Value> =
 // cannot alias shared state.
 const mutable = <Value>(value: Value) => value as Mutable<Value>
 
-// SAFETY: IPC bytes arrive in a structured-cloned Uint8Array over an ordinary ArrayBuffer, never a
-// SharedArrayBuffer, so slicing its buffer yields an ArrayBuffer.
-const toArrayBuffer = (value: Uint8Array) =>
-  value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
+const toArrayBuffer = (value: Uint8Array) => new Uint8Array(value).buffer
 
 // One renderer-side copy: the bridge clones on every crossing, so consumption is tracked here.
 const seeded = window.electron.storageSnapshot.then((snapshot) => new Map(Object.entries(snapshot)))
