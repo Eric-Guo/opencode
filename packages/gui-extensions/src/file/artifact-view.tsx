@@ -10,9 +10,10 @@ import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/mark
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createKeyed, useExtension, type FileContent, type MountedSession } from "../sdk"
-import { blobUrlFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
+import { blobUrlFromContent, contentBytes, formatBytes, parseDelimited, resolveArtifactPath } from "./artifact"
 import { current, useShared } from "./context"
 import { workspaceFileUrl } from "./path"
+import ArchiveView from "./archive-view"
 
 type ArtifactMode = "preview" | "source"
 
@@ -113,18 +114,23 @@ export default function ArtifactView(props: {
 
   return (
     <>
-      <ArtifactToolbar
-        mode={state().mode}
-        onModeChange={previewable() ? (mode) => change({ mode }) : undefined}
-        meta={meta()}
-        actions={
-          <Show when={kind() === "html"}>
-            <OpenInBrowserButton session={props.session} path={props.path} />
-          </Show>
-        }
-      />
+      <Show when={kind() !== "archive"}>
+        <ArtifactToolbar
+          mode={state().mode}
+          onModeChange={previewable() ? (mode) => change({ mode }) : undefined}
+          meta={meta()}
+          actions={
+            <Show when={kind() === "html"}>
+              <OpenInBrowserButton session={props.session} path={props.path} />
+            </Show>
+          }
+        />
+      </Show>
       <Show when={!previewable() || state().mode === "preview"} fallback={props.source}>
         <Switch>
+          <Match when={kind() === "archive"}>
+            <ArchiveView session={props.session} path={props.path} content={props.content} />
+          </Match>
           <Match when={kind() === "image" || kind() === "svg"}>
             <ArtifactImage path={props.path} content={props.content} {...media} />
           </Match>
@@ -149,20 +155,6 @@ export default function ArtifactView(props: {
       </Show>
     </>
   )
-}
-
-function formatBytes(locale: string, bytes: number) {
-  const units = ["byte", "kilobyte", "megabyte", "gigabyte"] as const
-  const index = Math.min(units.length - 1, bytes > 0 ? Math.floor(Math.log10(bytes) / 3) : 0)
-  const value = bytes / 1000 ** index
-
-  return new Intl.NumberFormat(locale, {
-    style: "unit",
-    unit: units[index],
-    // "short" bytes render as the singular "byte"; the long form pluralizes correctly.
-    unitDisplay: index === 0 ? "long" : "short",
-    maximumFractionDigits: value >= 100 || index === 0 ? 0 : 1,
-  }).format(value)
 }
 
 function formatDuration(seconds: number) {
