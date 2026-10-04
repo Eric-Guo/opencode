@@ -177,6 +177,10 @@ async function resolveSuspension(page: Page) {
   return page.evaluate(() => window.timelineSuspense.snapshot())
 }
 
-function diagnostic(value: unknown) {
+function diagnostic(value: {
+  before: Awaited<ReturnType<typeof prepare>>
+  pending: Awaited<ReturnType<typeof prepare>>
+  after: Awaited<ReturnType<typeof resolveSuspension>>
+}) {
   return JSON.stringify(value, null, 2)
 }

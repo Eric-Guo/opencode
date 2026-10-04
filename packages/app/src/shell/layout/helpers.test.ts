@@ -15,8 +15,7 @@ const session = (input: Partial<SessionInfo> & Pick<SessionInfo, "id"> & { direc
     time: { created: 0, updated: 0, archived: undefined },
     ...input,
     location: { directory: input.directory },
-    directory: undefined,
-  }) as SessionInfo
+  }) satisfies SessionInfo
 
 type Project = {
   id: string
