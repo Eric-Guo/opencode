@@ -119,6 +119,7 @@ export function createHomeProjectsController(home: HomeController) {
 
               const api = home.server.context(conn).sdk.api.session
 
+              // SAFETY: SessionTransfer.Data decoded this complete export and its encoder produces the import API payload.
               const imported = await api.import({
                 ...Schema.encodeSync(SessionTransfer.Data)(data),
                 location: { directory: project.worktree },
