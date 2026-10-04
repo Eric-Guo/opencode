@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -19,12 +20,14 @@ export function ExtensionServerCover(props: ParentProps) {
   const covered = createMemo(() => {
     const current = route()
 
-    const key =
-      current.type === "session"
-        ? current.server
-        : current.type === "draft"
-          ? tabs.store.find((tab) => tab.type === "draft" && tab.draftID === current.draftID)?.server
-          : undefined
+    const key = Match.value(current).pipe(
+      Match.when({ type: "session" }, (route) => route.server),
+      Match.when(
+        { type: "draft" },
+        (route) => tabs.store.find((tab) => tab.type === "draft" && tab.draftID === route.draftID)?.server,
+      ),
+      Match.orElse(() => undefined),
+    )
 
     if (!key) return
     const source = servers.entry(key)
