@@ -245,4 +245,4 @@ export const dict = {
   "ui.tool.browser": "Trình duyệt",
   "ui.common.fileCount.one": "{{count}} tệp",
   "ui.common.fileCount.other": "{{count}} tệp",
-}
+} satisfies Record<string, string>

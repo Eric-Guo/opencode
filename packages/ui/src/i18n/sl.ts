@@ -273,4 +273,4 @@ export const dict = {
   "ui.messagePart.context.updates": "Posodobitve",
   "ui.promptInput.cancelUpload": "Prekliči nalaganje",
   "ui.promptInput.uploading": "{{percent}}%",
-}
+} satisfies Record<string, string>

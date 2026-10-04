@@ -1,32 +1,29 @@
-export function errorDescriptionKey(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "localServerStartup" in error &&
-    error.localServerStartup === true
-  ) {
-    return "error.page.description.localServerStartup" as const
-  }
+import { Predicate } from "effect"
 
-  return "error.page.description" as const
+export function errorDescriptionKey(cause: unknown) {
+  return Predicate.hasProperty(cause, "localServerStartup") && cause.localServerStartup === true
+    ? ("error.page.description.localServerStartup" as const)
+    : ("error.page.description" as const)
 }
 
-export function errorStatus(error: unknown) {
+export function errorStatus(cause: unknown) {
   const seen = new Set<object>()
 
-  const visit = (value: unknown): number | undefined => {
-    if (typeof value !== "object" || value === null || seen.has(value)) return
-    seen.add(value)
-    const item = value as Record<string, unknown>
+  const visit = (cause: unknown): number | undefined => {
+    if (!Predicate.isObjectOrArray(cause) || seen.has(cause)) return
+    seen.add(cause)
 
     for (const key of ["status", "statusCode"] as const) {
-      const status = item[key]
+      const status = Predicate.hasProperty(cause, key) ? cause[key] : undefined
 
-      if (typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599) return status
+      if (Predicate.isNumber(status) && Number.isInteger(status) && status >= 100 && status <= 599) return status
     }
 
-    return visit(item.cause) ?? visit(item.data)
+    return (
+      visit(Predicate.hasProperty(cause, "cause") ? cause.cause : undefined) ??
+      visit(Predicate.hasProperty(cause, "data") ? cause.data : undefined)
+    )
   }
 
-  return visit(error)
+  return visit(cause)
 }
