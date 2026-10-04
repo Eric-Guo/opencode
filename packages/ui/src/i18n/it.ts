@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.common.fileCount.one": "{{count}} file",
   "ui.common.fileCount.other": "{{count}} file",
   "ui.common.fileCount.many": "{{count}} file",
@@ -266,4 +266,4 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Aggiornamenti",
   "ui.promptInput.cancelUpload": "Annulla caricamento",
   "ui.promptInput.uploading": "{{percent}}%",
-}
+} satisfies Record<string, string>

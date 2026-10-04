@@ -132,7 +132,7 @@ const localeMatchers: Array<{ locale: Locale; match: (language: string) => boole
 ]
 
 function detectLocale(): Locale {
-  if (typeof navigator !== "object") return "en"
+  if (typeof navigator === "undefined") return "en"
 
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
 
@@ -155,7 +155,7 @@ export const languageSchema = Persistence.struct({
 })
 
 function readStoredLocale() {
-  if (typeof localStorage !== "object") return
+  if (typeof localStorage === "undefined") return
 
   try {
     const raw = localStorage.getItem("opencode.global.dat:language")
@@ -194,7 +194,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
     const locale = createMemo(() => store.locale)
     const intl = createMemo(() => INTL[locale()])
-    const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
+    const [layout, setLayout] = createStore<{ direction: Direction | undefined }>({ direction: undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))
 
     const layoutLocale = createMemo(() => {
@@ -253,7 +253,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
     createEffect(() => {
-      if (typeof document !== "object") return
+      if (typeof document === "undefined") return
       const value = locale()
       document.documentElement.lang = intl()
       document.documentElement.dir = direction()

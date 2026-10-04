@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { type Accessor, createMemo } from "solid-js"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -37,7 +38,8 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     () =>
       new Map(
         available().map(
-          (model) => [modelKey({ providerID: model.provider.id, modelID: model.id }), Date.parse(model.release_date)] as const,
+          (model) =>
+            [modelKey({ providerID: model.provider.id, modelID: model.id }), Date.parse(model.release_date)] as const,
         ),
       ),
   )
@@ -161,7 +163,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
   name: "Models",
   gate: false,
-  init: (props: { directory?: string | Accessor<string | undefined> } = {}) => {
-    return createModelsController(() => (typeof props.directory === "function" ? props.directory() : props.directory))
+  init: (props: { directory?: string | Accessor<string | undefined> }) => {
+    return createModelsController(() => (Predicate.isFunction(props.directory) ? props.directory() : props.directory))
   },
 })

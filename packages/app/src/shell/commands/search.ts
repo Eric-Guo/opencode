@@ -23,7 +23,7 @@ export function createCommandPaletteSearch(props: {
         return { query, items: await load(query, current.signal).catch(() => []) }
       },
       // Remote searches must not suspend the dialog's local results on first render.
-      { initialValue: { query: "", items: [] as CommandPaletteEntry[] } },
+      { initialValue: { query: "", items: new Array<CommandPaletteEntry>() } },
     )
 
     return result

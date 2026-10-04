@@ -90,7 +90,7 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
         ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
-      style={typeof split.style === "object" ? split.style : undefined}
+      style={split.style}
     >
       <div
         data-slot="project-avatar-surface"

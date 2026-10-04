@@ -577,7 +577,10 @@ export function createComposerEditor(input: {
 
 export type ComposerEditorModel = ReturnType<typeof createComposerEditor>
 
-export function shouldHandlePasteAsAttachment(clipboard: DataTransfer | null, readClipboardImage: boolean) {
+export function shouldHandlePasteAsAttachment(
+  clipboard: { items: ArrayLike<{ kind: string }>; types: readonly string[] } | null,
+  readClipboardImage: boolean,
+) {
   if (Array.from(clipboard?.items ?? []).some((item) => item.kind === "file")) return true
 
   if (Array.from(clipboard?.types ?? []).some((type) => type.startsWith("text/"))) return false

@@ -252,7 +252,7 @@ function regions<RegionName extends string, Type extends VisualInvariant<RegionN
 ) {
   return invariants.flatMap((invariant) =>
     invariant.type === type && "regions" in invariant && invariant.regions !== "all" ? [...invariant.regions] : [],
-  ) as RegionName[]
+  )
 }
 
 function includes<RegionName extends string>(regions: readonly RegionName[] | "all", name: RegionName) {

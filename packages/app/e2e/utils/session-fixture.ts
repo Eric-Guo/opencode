@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test"
 import type { JsonValue, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+
 import { base64Encode } from "@opencode/util/encode"
 import { createTwoFilesPatch } from "diff"
 import { SERVER, pageMessagesFrom } from "./app"
@@ -51,9 +52,9 @@ type MessagePart =
       name: string
       state: {
         status: "completed"
-        input: Record<string, unknown>
+        input: Record<string, JsonValue>
         content: [{ type: "text"; text: string }]
-        metadata: Record<string, unknown>
+        metadata: Record<string, JsonValue>
       }
       time: { created: number; ran: number; completed: number }
     }
@@ -77,7 +78,12 @@ function id(prefix: string, value: number) {
   return `${prefix}_smoke_${String(value).padStart(4, "0")}`
 }
 
-function userMessage(_sessionID: string, index: number, textLength: number, diffs: unknown[] = []): SessionMessageInfo {
+function userMessage(
+  _sessionID: string,
+  index: number,
+  textLength: number,
+  diffs: JsonValue[] = [],
+): SessionMessageInfo {
   const messageID = id("msg_user", index)
 
   return {
@@ -85,7 +91,7 @@ function userMessage(_sessionID: string, index: number, textLength: number, diff
     type: "user",
     time: { created: 1700000000000 + index * 10_000 },
     text: lorem(index, textLength),
-    metadata: diffs.length ? { diffs: diffs as JsonValue } : undefined,
+    metadata: diffs.length ? { diffs: diffs } : undefined,
   }
 }
 
@@ -129,9 +135,9 @@ function messageContent(part: MessagePart): SessionMessageAssistant["content"][n
     time: part.time,
     state: {
       status: "completed",
-      input: part.state.input as Record<string, JsonValue>,
+      input: part.state.input,
       content: part.state.content,
-      metadata: part.state.metadata as Record<string, JsonValue>,
+      metadata: part.state.metadata,
     },
   }
 }
@@ -164,9 +170,9 @@ function toolPart(
   index: number,
   partIndex: number,
   tool: string,
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue>,
   outputLength = 160,
-  metadataOverride?: Record<string, unknown>,
+  metadataOverride?: Record<string, JsonValue>,
 ): MessagePart {
   const metadata =
     metadataOverride ??

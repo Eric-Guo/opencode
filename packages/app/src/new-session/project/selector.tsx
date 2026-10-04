@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import {
   createEffect,
   createSignal,
@@ -532,7 +533,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
           return
         }
 
-        if (typeof local.onKeyDown === "function") local.onKeyDown(event)
+        if (Predicate.isFunction(local.onKeyDown)) local.onKeyDown(event)
       }}
     >
       <Show

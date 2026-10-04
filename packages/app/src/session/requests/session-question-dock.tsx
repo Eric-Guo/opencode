@@ -18,7 +18,7 @@ import { useCommand } from "@/shell/commands/command"
 
 const cache = new Map<string, { tab: number; answers: string[][]; custom: string[]; customOn: boolean[] }>()
 
-const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 type QuestionField = FormStringField | FormMultiselectField
 
@@ -93,9 +93,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const [store, setStore] = createStore({
     tab: cached?.tab ?? 0,
-    answers: cached?.answers ?? ([] as string[][]),
-    custom: cached?.custom ?? ([] as string[]),
-    customOn: cached?.customOn ?? ([] as boolean[]),
+    answers: cached?.answers ?? new Array<string[]>(),
+    custom: cached?.custom ?? new Array<string>(),
+    customOn: cached?.customOn ?? new Array<boolean>(),
     editing: false,
     focus: 0,
     minimized: false,
@@ -255,8 +255,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     })
   })
 
-  const fail = (err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err)
+  const fail = (cause: unknown) => {
+    const message = cause instanceof Error ? cause.message : String(cause)
     showToast({ title: language.t("common.requestFailed"), description: message })
   }
 
@@ -274,7 +274,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => serverSDK.api.session.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
+    mutationFn: () =>
+      serverSDK.api.session.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },

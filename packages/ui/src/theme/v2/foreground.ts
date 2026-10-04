@@ -9,7 +9,10 @@ const greyRef = (step: number): V2ColorValue => `var(--v2-grey-${step})`
 function greyHex(primitives: Record<string, V2ColorValue>, step: number) {
   const hex = primitives[`v2-grey-${step}`]
 
-  if (typeof hex === "string" && hex.startsWith("#")) return hex as HexColor
+  if (!hex?.startsWith("#")) return
+
+  // SAFETY: startsWith establishes the HexColor template prefix on this typed CSS color.
+  return hex as HexColor
 }
 
 function resolveGreyRef(value: V2ColorValue, primitives: Record<string, V2ColorValue>) {
@@ -40,7 +43,7 @@ export function mapV2Foreground(
   isDark: boolean,
   primitives: Record<string, V2ColorValue>,
   overrides: Record<string, ColorValue> = {},
-): Record<string, V2ColorValue> {
+) {
   const tint = hexToOklch(ink)
 
   const body = shift(ink, {
