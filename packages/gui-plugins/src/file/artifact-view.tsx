@@ -30,6 +30,7 @@ import {
   blobUrlFromContent,
   bytesFromContent,
   contentBytes,
+  formatBytes,
   parseDelimited,
   resolveArtifactPath,
   splitFrontmatter,
@@ -63,6 +64,7 @@ import {
   type ImageStageGestureEvent,
   type VideoOverlayEvent,
 } from "./artifact-view-machine"
+import ArchiveView from "./archive-view"
 
 /** Results name the content they came from, so one from a file since reread changes nothing. */
 type MediaProps = {
@@ -168,16 +170,18 @@ export default function ArtifactView(props: {
 
   return (
     <div data-slot="artifact-view" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <ArtifactToolbar
-        session={props.session}
-        screen={props.screen}
-        path={props.path}
-        text={fixedMode() === "preview" ? undefined : props.content.content}
-        mode={mode()}
-        onModeChange={fixedMode() ? undefined : (mode) => dispatchViewer({ type: "mode.changed", mode })}
-        meta={meta()}
-        html={kind() === "html"}
-      />
+      <Show when={kind() !== "archive"}>
+        <ArtifactToolbar
+          session={props.session}
+          screen={props.screen}
+          path={props.path}
+          text={fixedMode() === "preview" ? undefined : props.content.content}
+          mode={mode()}
+          onModeChange={fixedMode() ? undefined : (mode) => dispatchViewer({ type: "mode.changed", mode })}
+          meta={meta()}
+          html={kind() === "html"}
+        />
+      </Show>
       <Show when={mode() === "preview"} fallback={props.source}>
         <Switch
           fallback={
@@ -188,6 +192,9 @@ export default function ArtifactView(props: {
             />
           }
         >
+          <Match when={kind() === "archive"}>
+            <ArchiveView session={props.session} path={props.path} content={props.content} />
+          </Match>
           <Match when={kind() === "image" || kind() === "svg"}>
             <ArtifactImage path={props.path} content={props.content} {...media} />
           </Match>
@@ -222,20 +229,6 @@ export default function ArtifactView(props: {
       </Show>
     </div>
   )
-}
-
-function formatBytes(locale: string, bytes: number) {
-  const units = ["byte", "kilobyte", "megabyte", "gigabyte"] as const
-  const index = Math.min(units.length - 1, bytes > 0 ? Math.floor(Math.log10(bytes) / 3) : 0)
-  const value = bytes / 1000 ** index
-
-  return new Intl.NumberFormat(locale, {
-    style: "unit",
-    unit: units[index],
-    // "short" bytes render as the singular "byte"; the long form pluralizes correctly.
-    unitDisplay: index === 0 ? "long" : "short",
-    maximumFractionDigits: value >= 100 || index === 0 ? 0 : 1,
-  }).format(value)
 }
 
 function formatDuration(seconds: number) {
