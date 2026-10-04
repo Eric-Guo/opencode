@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentListOutput, ModelListOutput, Project, ProviderListOutput } from "@opencode/client/promise"
 import { directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
 
 describe("normalizeAgentList", () => {
@@ -16,7 +15,7 @@ describe("normalizeAgentList", () => {
         system: "Build software",
         permissions: [{ action: "read", resource: "*", effect: "allow" }],
       },
-    ] as AgentListOutput["data"])
+    ])
 
     expect(result).toEqual([
       {
@@ -49,7 +48,7 @@ describe("normalizeAgentList", () => {
         request: { settings: {}, headers: {}, body: {} },
         permissions: [],
       },
-    ] as AgentListOutput["data"])
+    ])
 
     expect(result[0]).toMatchObject({ name: "XiaoTian", displayName: "小天", native: false })
   })
@@ -58,7 +57,7 @@ describe("normalizeAgentList", () => {
 describe("normalizeProviderList", () => {
   test("groups current models into the app provider catalog", () => {
     const result = normalizeProviderList(
-      [{ id: "openai", name: "OpenAI", package: "@ai-sdk/openai" }] as ProviderListOutput["data"],
+      [{ id: "openai", name: "OpenAI", package: "@ai-sdk/openai", activation: "auto" }],
       [
         {
           id: "gpt-5",
@@ -86,7 +85,7 @@ describe("normalizeProviderList", () => {
           enabled: true,
           limit: { context: 1, output: 1 },
         },
-      ] as ModelListOutput["data"],
+      ],
     )
 
     expect(result.connected).toEqual(["openai"])
@@ -105,9 +104,9 @@ describe("normalizeProviderList", () => {
 describe("normalizeProjectInfo", () => {
   test("keeps the project VCS backend", () => {
     const project = { id: "prj", canonical: "/repo", time: { created: 1, updated: 1, active: 1 }, sandboxes: [] }
-    expect(normalizeProjectInfo({ ...project, vcs: "git" } as Project).vcs).toBe("git")
-    expect(normalizeProjectInfo({ ...project, vcs: "hg" } as Project).vcs).toBe("hg")
-    expect(normalizeProjectInfo(project as Project).vcs).toBeUndefined()
+    expect(normalizeProjectInfo({ ...project, vcs: "git" }).vcs).toBe("git")
+    expect(normalizeProjectInfo({ ...project, vcs: "hg" }).vcs).toBe("hg")
+    expect(normalizeProjectInfo(project).vcs).toBeUndefined()
   })
 })
 

@@ -20,7 +20,7 @@ type Authorization = IntegrationOauthConnectOutput["data"]
 
 type CommandAttempt = IntegrationCommandConnectOutput["data"]
 
-type Polling = {
+type AuthorizationPolling = {
   generation: number
   timer?: ReturnType<typeof setTimeout>
   disposed: boolean
@@ -139,7 +139,7 @@ export function createProviderConnectionController(options: {
     statusFailed: false,
   })
 
-  const polling: Polling = {
+  const polling: AuthorizationPolling = {
     generation: 0,
     disposed: false,
   }

@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { ConfigEntry } from "@opencode/client/promise"
 
 type ConfiguredServer = { name: string; disabled: boolean; extensions: readonly string[] }
@@ -9,7 +10,7 @@ export function configuredLanguageServers(entries: readonly ConfigEntry[]) {
       const config = entry.info.lsp
 
       // A boolean replaces the object form, so earlier named entries no longer apply.
-      if (typeof config === "boolean") return { disabled: !config, servers: new Map<string, ConfiguredServer>() }
+      if (Predicate.isBoolean(config)) return { disabled: !config, servers: new Map<string, ConfiguredServer>() }
       Object.entries(config).forEach(([name, server]) => {
         const previous = state.servers.get(name)
         state.servers.set(name, {
