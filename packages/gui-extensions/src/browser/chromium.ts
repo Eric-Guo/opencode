@@ -74,7 +74,7 @@ const pickedHighlight = { ...inspectHighlight, showInfo: false, showStyles: fals
 
 // Chromium rejects mode "none" without a config. A rejected call leaves the picker armed, and the
 // next hideHighlight would put its hover tool back.
-const inspectOff = { mode: "none", highlightConfig: inspectHighlight }
+const inspectOff = { mode: "none", highlightConfig: inspectHighlight } satisfies Protocol.Overlay.SetInspectModeRequest
 
 // Chromium's zoom presets, so a step lands where it would in the system browser.
 const zoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
@@ -816,7 +816,7 @@ export function createBrowserPage(
           if (html5) await waitFor(() => data !== undefined, signal, 2_000)
 
           if (data) {
-            for (const type of ["dragEnter", "dragOver", "drop"])
+            for (const type of ["dragEnter", "dragOver", "drop"] as const)
               await cdp.send("Input.dispatchDragEvent", { type, ...to, data })
           }
         } finally {
@@ -995,7 +995,7 @@ export function createBrowserPage(
         if (action.type === "files.drop") {
           const position = await point(element)
 
-          for (const type of ["dragEnter", "dragOver", "drop"])
+          for (const type of ["dragEnter", "dragOver", "drop"] as const)
             await cdp.send("Input.dispatchDragEvent", {
               type,
               ...position,
@@ -1281,7 +1281,7 @@ export function createBrowserPage(
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
   }
 
-  async function click(element: Element, button = "left", count = 1, modifiers: readonly string[] = []) {
+  async function click(element: Element, button: Protocol.Input.MouseButton = "left", count = 1, modifiers: readonly string[] = []) {
     const position = await point(element)
     const flags = modifiers.reduce((mask, key) => mask | ({ Alt: 1, Control: 2, Meta: 4, Shift: 8 }[key] ?? 0), 0)
     await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...position, modifiers: flags })
