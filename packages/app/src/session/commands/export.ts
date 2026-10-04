@@ -1,3 +1,4 @@
+import type { Schema } from "effect"
 import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
@@ -9,7 +10,7 @@ export type SessionExportData = {
 
 export async function fetchSessionExport(input: {
   sessionID: string
-  api: Pick<ServerApi, "session" | "message">
+  api: { session: Pick<ServerApi["session"], "get">; message: Pick<ServerApi["message"], "list"> }
 }): Promise<SessionExportData> {
   const [info, first] = await Promise.all([
     input.api.session.get({ sessionID: input.sessionID }),
@@ -45,7 +46,7 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
   return `${clean || session.id}.json`
 }
 
-export function downloadSessionExport(filename: string, data: unknown) {
+export function downloadSessionExport(filename: string, data: SessionExportData | Schema.Json) {
   const json = JSON.stringify(data, null, 2)
   const blob = new Blob([json], { type: "application/json" })
   const url = URL.createObjectURL(blob)
@@ -60,7 +61,7 @@ export function downloadSessionExport(filename: string, data: unknown) {
 
 export async function saveSessionExport(
   filename: string,
-  data: unknown,
+  data: SessionExportData | Schema.Json,
   platform: Pick<Platform, "saveFile">,
 ) {
   if (!platform.saveFile) {
