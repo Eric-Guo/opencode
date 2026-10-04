@@ -356,7 +356,11 @@ function frame(
   changing: VisualStabilityTrace["samples"][number]["regions"][string],
   following?: VisualStabilityTrace["samples"][number]["regions"][string],
 ) {
-  return { at, regions: { changing, ...(following ? { following } : {}) } }
+  const regions = { changing }
+
+  if (following) Object.assign(regions, { following })
+
+  return { at, regions }
 }
 
 function region(input: Partial<VisualStabilityTrace["samples"][number]["regions"][string]> = {}) {
