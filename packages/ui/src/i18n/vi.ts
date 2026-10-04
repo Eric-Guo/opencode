@@ -384,4 +384,4 @@ export const dict = {
   "ui.question.singleHint": "Chọn một câu trả lời",
   "ui.question.classic.multiHint": "Chọn tất cả các câu trả lời phù hợp",
   "ui.question.custom.answerPlaceholder": "Nhập câu trả lời của riêng bạn…",
-}
+} satisfies Record<string, string>

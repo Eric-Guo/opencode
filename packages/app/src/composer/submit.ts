@@ -107,8 +107,7 @@ type ComposerSubmitInput = {
   notify: {
     missingSelection: () => void
     unqueueable: () => void
-    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a rejected send is opaque; the notifier formats it
-    failed: (kind: "shell" | "command" | "prompt", error: unknown) => void
+    failed: (kind: "shell" | "command" | "prompt", cause: unknown) => void
   }
   comments: {
     capture: () => PromptHistoryComment[]
@@ -1061,15 +1060,15 @@ function failSubmission(
   session: ComposerSession,
   kind: "shell" | "command" | "prompt",
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a rejected send is opaque; the notifier formats it
-  error: unknown,
+  cause: unknown,
   restore: (cancelled: boolean) => boolean,
   messageID?: string,
 ) {
   if (messageID && session.admitted(messageID)) return true
-  restore(error === CANCELLED)
+  restore(cause === CANCELLED)
 
   // A cancelled send is what the person asked for, not a failure to report.
-  if (error !== CANCELLED) input.notify.failed(kind, error)
+  if (cause !== CANCELLED) input.notify.failed(kind, cause)
 
   return false
 }

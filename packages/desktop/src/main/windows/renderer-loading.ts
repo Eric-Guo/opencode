@@ -1,5 +1,5 @@
 /** Defer initial loads until the extension has identified its primary renderer. */
-export function createRendererLoader<T>(failed: (error: unknown) => void) {
+export function createRendererLoader<T>(failed: (cause: unknown) => void) {
   const pending = new Map<T, () => Promise<void>>()
   let ready = false
 

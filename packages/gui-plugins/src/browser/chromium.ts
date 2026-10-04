@@ -176,7 +176,7 @@ const pickedHighlight = { ...inspectHighlight, showInfo: false, showStyles: fals
 
 // Chromium rejects mode "none" without a config. A rejected call leaves the picker armed, and the
 // next hideHighlight would put its hover tool back.
-const inspectOff = { mode: "none", highlightConfig: inspectHighlight }
+const inspectOff = { mode: "none", highlightConfig: inspectHighlight } satisfies Protocol.Overlay.SetInspectModeRequest
 
 // Chromium's zoom presets, so a step lands where it would in the system browser.
 const zoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
