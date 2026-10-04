@@ -22,11 +22,11 @@ declare global {
 benchmark.use({ traceScope: "interaction" })
 
 for (const scenario of [
-  { historyTurns: 40, historyShape: "mixed" },
-  { historyTurns: 320, historyShape: "mixed" },
-  { historyTurns: 320, historyShape: "tool-heavy" },
+  { historyTurns: 40, historyKind: "mixed" },
+  { historyTurns: 320, historyKind: "mixed" },
+  { historyTurns: 320, historyKind: "tool-heavy" },
 ] as const) {
-  benchmark(`text projection ${scenario.historyTurns} ${scenario.historyShape}`, async ({ page, report }) => {
+  benchmark(`text projection ${scenario.historyTurns} ${scenario.historyKind}`, async ({ page, report }) => {
     benchmark.setTimeout(120_000)
     const responses = new Set<ServerResponse>()
 
@@ -186,7 +186,7 @@ for (const scenario of [
 
       if (process.env.PROJECTION_SCREENSHOT)
         await page.screenshot({
-          path: `${process.env.PROJECTION_SCREENSHOT}-${scenario.historyTurns}-${scenario.historyShape}.png`,
+          path: `${process.env.PROJECTION_SCREENSHOT}-${scenario.historyTurns}-${scenario.historyKind}.png`,
         })
     } finally {
       clearInterval(timer)
