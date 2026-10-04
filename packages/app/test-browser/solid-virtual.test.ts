@@ -227,9 +227,12 @@ test("snapshots materialize only measured rows and restore their current geometr
   virtualizer.getMeasurements = () =>
     new Proxy(measurements, {
       get(target, key, receiver) {
+        // SAFETY: Proxy keys are strings or symbols; only numeric array-index strings represent measurement reads.
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof
         if (typeof key === "string" && /^\d+$/.test(key)) reads.push(Number(key))
 
-        // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
+        // SAFETY: this measurement-read spy must forward getters with their original receiver, including symbolic keys.
+        // oxlint-disable-next-line no-restricted-globals, anti-slop/no-reflect-get
         return Reflect.get(target, key, receiver)
       },
     })
