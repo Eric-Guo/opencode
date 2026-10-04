@@ -1,3 +1,4 @@
+
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { authTokenFromCredentials } from "./api"
@@ -38,13 +39,13 @@ function cacheKey(server: ServerConnection.HttpBase) {
 }
 
 function timeoutSignal(timeoutMs: number) {
-  const timeout = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout
+  const timeout = AbortSignal.timeout
 
   if (timeout) {
     try {
       return {
         signal: timeout.call(AbortSignal, timeoutMs),
-        clear: undefined as (() => void) | undefined,
+        clear: undefined,
       }
     } catch {}
   }
@@ -77,18 +78,18 @@ function wait(ms: number, signal?: AbortSignal) {
   })
 }
 
-function retryable(error: unknown, signal?: AbortSignal) {
+function retryable(cause: unknown, signal?: AbortSignal) {
   if (signal?.aborted) return false
 
-  if (error instanceof ClientError) return error.reason === "Transport"
+  if (cause instanceof ClientError) return cause.reason === "Transport"
 
-  if (!(error instanceof Error)) return false
+  if (!(cause instanceof Error)) return false
 
-  if (error.name === "AbortError" || error.name === "TimeoutError") return false
+  if (cause.name === "AbortError" || cause.name === "TimeoutError") return false
 
-  if (error instanceof TypeError) return true
+  if (cause instanceof TypeError) return true
 
-  return /network|fetch|econnreset|econnrefused|enotfound|timedout/i.test(error.message)
+  return /network|fetch|econnreset|econnrefused|enotfound|timedout/i.test(cause.message)
 }
 
 export async function checkServerHealth(
@@ -107,8 +108,8 @@ export async function checkServerHealth(
       }
     : undefined
 
-  const next = (count: number, error: unknown) => {
-    if (count >= retryCount || !retryable(error, signal)) return Promise.resolve({ healthy: false } as const)
+  const next = (count: number, cause: unknown) => {
+    if (count >= retryCount || !retryable(cause, signal)) return Promise.resolve({ healthy: false } as const)
 
     return wait(retryDelayMs * (count + 1), signal)
       .then(() => attempt(count + 1))

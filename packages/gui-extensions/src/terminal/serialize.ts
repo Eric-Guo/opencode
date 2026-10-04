@@ -13,6 +13,7 @@
  * ```
  */
 
+import { Predicate } from "effect"
 import type { ITerminalAddon, ITerminalCore, IBufferRange } from "ghostty-web"
 
 // ============================================================================
@@ -56,44 +57,25 @@ interface IBufferCell {
   isDim(): boolean
 }
 
-type TerminalBuffers = {
-  active?: IBuffer
-  normal?: IBuffer
-  alternate?: IBuffer
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null
-}
 
 const isBuffer = (value: unknown): value is IBuffer => {
-  if (!isRecord(value)) return false
+  if (!Predicate.isObject(value)) return false
 
-  if (typeof value.length !== "number") return false
-
-  if (typeof value.cursorX !== "number") return false
-
-  if (typeof value.cursorY !== "number") return false
-
-  if (typeof value.baseY !== "number") return false
-
-  if (typeof value.viewportY !== "number") return false
-
-  if (typeof value.getLine !== "function") return false
-
-  if (typeof value.getNullCell !== "function") return false
-
-  return true
+  return "length" in value && Predicate.isNumber(value.length)
+    && "cursorX" in value && Predicate.isNumber(value.cursorX)
+    && "cursorY" in value && Predicate.isNumber(value.cursorY)
+    && "baseY" in value && Predicate.isNumber(value.baseY)
+    && "viewportY" in value && Predicate.isNumber(value.viewportY)
+    && "getLine" in value && Predicate.isFunction(value.getLine)
+    && "getNullCell" in value && Predicate.isFunction(value.getNullCell)
 }
 
-const getTerminalBuffers = (value: ITerminalCore): TerminalBuffers | undefined => {
-  if (!isRecord(value)) return
+const getTerminalBuffers = (value: ITerminalCore) => {
+  if (!("buffer" in value) || !Predicate.isObject(value.buffer)) return
   const raw = value.buffer
-
-  if (!isRecord(raw)) return
-  const active = isBuffer(raw.active) ? raw.active : undefined
-  const normal = isBuffer(raw.normal) ? raw.normal : undefined
-  const alternate = isBuffer(raw.alternate) ? raw.alternate : undefined
+  const active = "active" in raw && isBuffer(raw.active) ? raw.active : undefined
+  const normal = "normal" in raw && isBuffer(raw.normal) ? raw.normal : undefined
+  const alternate = "alternate" in raw && isBuffer(raw.alternate) ? raw.alternate : undefined
 
   if (!active && !normal) return
 
@@ -101,10 +83,10 @@ const getTerminalBuffers = (value: ITerminalCore): TerminalBuffers | undefined =
 }
 
 const getTerminalMode = (value: ITerminalCore, mode: number) => {
-  if (!isRecord(value)) return false
+  if (!("wasmTerm" in value) || !Predicate.isObject(value.wasmTerm)) return false
   const terminal = value.wasmTerm
 
-  if (!isRecord(terminal) || typeof terminal.getMode !== "function") return false
+  if (!("getMode" in terminal) || !Predicate.isFunction(terminal.getMode)) return false
 
   return terminal.getMode(mode) === true
 }
