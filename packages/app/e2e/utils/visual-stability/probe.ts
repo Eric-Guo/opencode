@@ -235,7 +235,11 @@ export async function stopVisualProbe<RegionName extends string = string>(
       return { markers: probe.markers, samples: probe.samples }
     })
     .then(
+      // SAFETY: the browser only records keys from startVisualProbe's Regions; callers carry those keys as RegionName.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions
       async (trace) => ({ ...trace, frames: await stopCapture(page) }) as unknown as VisualProbeResult<RegionName>,
+      // SAFETY: browser evaluation can reject arbitrary thrown values, which cleanup forwards without interpreting.
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters
       async (error: unknown) => {
         await stopCapture(page)
         throw error
