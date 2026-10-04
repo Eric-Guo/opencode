@@ -15,6 +15,7 @@ test("summarizes each scenario and saves complete records in the configured outp
 
     const cases = Array.from(
       { length: 23 },
+      // SAFETY: The reporter reads only TestCase.id and TestCase.title from these cases.
       (_, index) => ({ id: String(index), title: index < 20 ? "cold" : "warm" }) as TestCase,
     )
 
@@ -32,10 +33,12 @@ test("summarizes each scenario and saves complete records in the configured outp
       })
     })
 
+    // SAFETY: onBegin reads only the first project outputDir and suite.allTests.
     reporter.onBegin({ projects: [{ outputDir: output }] } as FullConfig, { allTests: () => cases } as Suite)
     cases.forEach((item, index) => {
       const bytes = Buffer.from(`BENCHMARK ${records[index]}\r\n`)
       const split = bytes.indexOf(Buffer.from("\u03b1")) + 1
+      // SAFETY: onTestEnd reads only the result status and stdout chunks supplied by this fixture.
       reporter.onTestEnd(item, {
         status: "passed",
         stdout:
@@ -91,11 +94,14 @@ test("reports failures, missing records, and invalid metrics without discarding 
 
     const cases = Array.from(
       { length: entries.length + 2 },
+      // SAFETY: The reporter reads only TestCase.id and TestCase.title from these cases.
       (_, index) => ({ id: String(index), title: index <= entries.length ? "cold" : "empty" }) as TestCase,
     )
 
+    // SAFETY: onBegin reads only the first project outputDir and suite.allTests.
     reporter.onBegin({ projects: [{ outputDir: output }] } as FullConfig, { allTests: () => cases } as Suite)
     entries.forEach((entry, index) => {
+      // SAFETY: onTestEnd reads only the result status and stdout chunks supplied by this fixture.
       reporter.onTestEnd(cases[index], {
         status: entry.status,
         stdout: entry.raw === undefined ? [] : [`BENCHMARK ${entry.raw}\n`],

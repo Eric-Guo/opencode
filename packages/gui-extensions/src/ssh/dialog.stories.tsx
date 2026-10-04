@@ -27,6 +27,8 @@ function Fixture(props: {
   initial?: "connecting" | "password" | "confirmation" | "failure" | "required"
   responseDelay?: number
 }) {
+  // SAFETY: The fixture mutates optional item/before/timer fields through its story actions.
+  // oxlint-disable-next-line anti-slop/no-known-value-widening
   const state: { item?: SshItem; before?: SshItem; step: number; timer?: ReturnType<typeof setTimeout> } = {
     step: 0,
     item:

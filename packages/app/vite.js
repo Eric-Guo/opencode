@@ -15,6 +15,8 @@ const tailwindGenerate = tailwind.find((plugin) => plugin.name === "@tailwindcss
 const tailwindHotUpdate = tailwindGenerate?.hotUpdate
 
 // Tailwind 4.3.3 expects a server that Vite's bundled dev hook does not provide.
+// SAFETY: Vite hooks support callback and object forms; this pinned Tailwind adapter wraps only its callback hook.
+// oxlint-disable-next-line anti-slop/no-runtime-typeof
 if (tailwindGenerate && typeof tailwindHotUpdate === "function") {
   tailwindGenerate.hotUpdate = function (context) {
     if (!context.server) return
