@@ -230,15 +230,17 @@ function lineCommentDraftElement(view: Accessor<DraftProps>) {
 }
 
 export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
-  const [state, setState] = createStore({
+  type CommentState = { draft: string; editing: T | null }
+
+  const [state, setState] = createStore<CommentState>({
     draft: "",
-    editing: null as T | null,
+    editing: null,
   })
 
   const draft = () => state.draft
   const setDraft = (value: string) => setState("draft", value)
   const editing = () => state.editing
-  const setEditing = (value: T | null) => setState("editing", typeof value === "function" ? () => value : value)
+  const setEditing = (value: T | null) => setState("editing", () => value)
 
   const toRange = (range: SelectedLineRange | null) => (range ? cloneSelectedLineRange(range) : null)
 

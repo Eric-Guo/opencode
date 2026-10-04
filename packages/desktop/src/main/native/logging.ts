@@ -2,7 +2,7 @@ export * as DesktopLogging from "./logging"
 
 import log from "electron-log/main.js"
 import { app, crashReporter, netLog, shell } from "electron"
-import { Context, Effect, FileSystem, Layer, Logger, Option, Path, References, Stream } from "effect"
+import { Context, Effect, FileSystem, Layer, Logger, Option, Path, Predicate, References, Stream } from "effect"
 import { homedir } from "node:os"
 import { VERSION } from "../constants"
 import { marks } from "../lifecycle/marks"
@@ -67,7 +67,7 @@ const nativeLogger = Logger.make((options) => {
   try {
     if (!run) return
     const entry = Logger.formatStructured.log(options)
-    const scope = typeof entry.annotations.scope === "string" ? entry.annotations.scope : "main"
+    const scope = Predicate.isString(entry.annotations.scope) ? entry.annotations.scope : "main"
     const annotations = Object.fromEntries(Object.entries(entry.annotations).filter(([key]) => key !== "scope"))
 
     const context = {
@@ -333,8 +333,8 @@ function initConsoleTransport() {
   }
 }
 
-function isBrokenPipe(err: unknown) {
-  return typeof err === "object" && err !== null && "code" in err && err.code === "EPIPE"
+function isBrokenPipe(cause: unknown) {
+  return Predicate.isObject(cause) && "code" in cause && cause.code === "EPIPE"
 }
 
 export function scoped(name: string, effect: Effect.Effect<void>) {

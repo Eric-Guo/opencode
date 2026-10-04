@@ -1,3 +1,4 @@
+
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { ChangeKind } from "./contract"
 
@@ -11,7 +12,7 @@ export function normalizePath(value: string) {
 }
 
 export function filterRenderableDiff(value: FileDiffInfo): value is RenderDiff {
-  return typeof value.file === "string"
+  return true
 }
 
 export function reviewDiffNeedsLoad(diff: RenderDiff) {

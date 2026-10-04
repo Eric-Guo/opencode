@@ -60,9 +60,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const i18n = useI18n()
   let inputRef: HTMLInputElement | HTMLTextAreaElement | undefined
 
-  const [store, setStore] = createStore({
+  type ListState = { mouseActive: boolean; scrollRef?: HTMLDivElement; internalFilter: string }
+
+  const [store, setStore] = createStore<ListState>({
     mouseActive: false,
-    scrollRef: undefined as HTMLDivElement | undefined,
+    scrollRef: undefined,
     internalFilter: "",
   })
 
@@ -94,7 +96,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput, refetch } = useFilteredList<T>(props)
 
-  const searchProps = () => (typeof props.search === "object" ? props.search : {})
+  const searchProps = () => (props.search && props.search !== true ? props.search : {})
   const searchAction = () => searchProps().action
   const addProps = () => props.add
   const showAdd = () => !!addProps()
@@ -237,9 +239,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   }
 
   function GroupHeader(groupProps: { group: { category: string; items: T[] } }): JSX.Element {
-    const [state, setState] = createStore({
+    type HeaderState = { stuck: boolean; header?: HTMLDivElement }
+
+    const [state, setState] = createStore<HeaderState>({
       stuck: false,
-      header: undefined as HTMLDivElement | undefined,
+      header: undefined,
     })
 
     createEffect(() => {

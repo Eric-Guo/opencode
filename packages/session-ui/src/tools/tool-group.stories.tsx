@@ -168,7 +168,9 @@ export const StickyHeader = {
   args: { height: 720 },
   argTypes: { height: { control: { type: "range", min: 320, max: 1200, step: 20 } } },
   render: (args: { height: number }) => {
-    const [state, setState] = createStore({ open: true, files: {} as Record<string, boolean> })
+    type GroupState = { open: boolean; files: Record<string, boolean> }
+
+    const [state, setState] = createStore<GroupState>({ open: true, files: {} })
 
     return (
       <section

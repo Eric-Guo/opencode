@@ -18,9 +18,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   const threshold = () => options.bottomThreshold ?? 10
 
-  const [store, setStore] = createStore({
-    contentRef: undefined as HTMLElement | undefined,
-    scrollRef: undefined as HTMLElement | undefined,
+  type ScrollState = { contentRef?: HTMLElement; scrollRef?: HTMLElement; userScrolled: boolean }
+
+  const [store, setStore] = createStore<ScrollState>({
+    contentRef: undefined,
+    scrollRef: undefined,
     userScrolled: false,
   })
 

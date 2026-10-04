@@ -60,7 +60,8 @@ export const DialogSelectMcp: Component = () => {
             const status = () => mcpStatus()?.status
 
             const statusLabel = () => {
-              const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
+              const current = status()
+              const key = current && current !== "pending" ? statusLabels[current] : undefined
 
               if (!key) return
 

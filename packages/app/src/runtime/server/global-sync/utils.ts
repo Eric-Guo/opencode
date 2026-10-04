@@ -1,6 +1,8 @@
+import { Predicate } from "effect"
 import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@opencode/client/promise"
-import type { Agent, Project, Provider, ProviderListResponse } from "@/runtime/server/types"
 import type { Project as CurrentProject } from "@opencode/client/promise"
+import type { Agent, Project, Provider, ProviderListResponse } from "@/runtime/server/types"
+
 import { unwrap } from "solid-js/store"
 import type { AppAgent } from "./types"
 import { isNativeAgentID } from "@/providers/models/agent"
@@ -29,9 +31,10 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ap
     description: agent.description,
     mode: agent.mode,
     hidden: agent.hidden,
-    temperature:
-      typeof agent.request.settings.temperature === "number" ? agent.request.settings.temperature : undefined,
-    topP: typeof agent.request.settings.topP === "number" ? agent.request.settings.topP : undefined,
+    temperature: Predicate.isNumber(agent.request.settings.temperature)
+      ? agent.request.settings.temperature
+      : undefined,
+    topP: Predicate.isNumber(agent.request.settings.topP) ? agent.request.settings.topP : undefined,
     color: agent.color,
     permission: agent.permissions.map((rule) => ({
       permission: rule.action,

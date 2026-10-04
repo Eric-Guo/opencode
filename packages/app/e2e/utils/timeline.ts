@@ -1,18 +1,9 @@
-import type {
-  JsonValue,
-  OpenCodeEvent,
-  SessionInfo,
-  SessionMessageAssistant,
-  SessionMessageInfo,
-  SessionMessageUser,
-  SessionStatus,
-  SessionStructuredError,
-} from "@opencode/client/promise"
+import type { JsonValue, OpenCodeEvent, SessionInfo, SessionMessageAssistant, SessionMessageInfo, SessionMessageUser, SessionStatus, SessionStructuredError } from "@opencode/client/promise"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { expect, test, type Page, type TestInfo } from "@playwright/test"
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import { SERVER, seed, sessionHref } from "./app"
 import { mockOpenCodeServer, type MockServerConfig } from "./mock-server"
 import { installSseTransport } from "./sse-transport"
@@ -64,7 +55,7 @@ type ReasoningSeed = {
   type: "reasoning"
   text: string
   time?: { start: number; end?: number }
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, JsonValue | undefined>
   messageID?: string
 }
 
@@ -74,31 +65,31 @@ type ToolSeed = {
   name: string
   messageID?: string
   executed?: boolean
-  providerState?: Record<string, unknown>
-  providerResultState?: Record<string, unknown>
+  providerState?: Record<string, JsonValue | undefined>
+  providerResultState?: Record<string, JsonValue | undefined>
   state:
-    | { status: "streaming"; input: Record<string, unknown>; raw: string }
+    | { status: "streaming"; input: Record<string, JsonValue | undefined>; raw: string }
     | {
         status: "running"
-        input: Record<string, unknown>
+        input: Record<string, JsonValue | undefined>
         output?: string
         title?: string
-        metadata: Record<string, unknown>
+        metadata: Record<string, JsonValue | undefined>
         time: { start: number }
       }
     | {
         status: "completed"
-        input: Record<string, unknown>
+        input: Record<string, JsonValue | undefined>
         output: string
         title: string
-        metadata: Record<string, unknown>
+        metadata: Record<string, JsonValue | undefined>
         time: { start: number; end: number }
       }
     | {
         status: "error"
-        input: Record<string, unknown>
+        input: Record<string, JsonValue | undefined>
         error: string
-        metadata: Record<string, unknown>
+        metadata: Record<string, JsonValue | undefined>
         time: { start: number; end: number }
       }
 }
@@ -146,10 +137,10 @@ export type PartSeed<Owner extends "user" | "assistant"> = Owner extends "user"
 type ToolOptions<State extends ToolStatus> = State extends "streaming"
   ? { output?: never; title?: never; metadata?: never; error?: never }
   : State extends "running"
-    ? { title?: string; metadata?: Record<string, unknown>; output?: string; error?: never }
+    ? { title?: string; metadata?: Record<string, JsonValue | undefined>; output?: string; error?: never }
     : State extends "error"
-      ? { error?: string; metadata?: Record<string, unknown>; output?: never; title?: never }
-      : { output?: string; title?: string; metadata?: Record<string, unknown>; error?: never }
+      ? { error?: string; metadata?: Record<string, JsonValue | undefined>; output?: never; title?: never }
+      : { output?: string; title?: string; metadata?: Record<string, JsonValue | undefined>; error?: never }
 
 type PartRef = { messageID: string; type: "text" | "reasoning" | "tool"; ordinal?: number }
 
@@ -339,9 +330,9 @@ function timelineEvents(input: TimelineEvent) {
 
 function describeEvent(event: OpenCodeEvent) {
   if (event.type.startsWith("session.tool.")) {
-    const data = event.data as { id?: string }
+    const id = "id" in event.data ? event.data.id : undefined
 
-    return [event.type, data.id].filter(Boolean).join(":")
+    return [event.type, id].filter(Boolean).join(":")
   }
 
   return event.type
@@ -385,14 +376,13 @@ export function toolCalled(data: Extract<OpenCodeEvent, { type: "session.tool.ca
 // SAFETY: this exported validation boundary intentionally accepts malformed fixture events for schema rejection.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function validateTimelineEvent(input: unknown): OpenCodeEvent {
-  if (!input || typeof input !== "object") throw new Error("Timeline event must be an object")
+  const header = Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(input)
+  const definition = EventManifest.ServerDefinitions.find((definition) => definition.type === header.type)
 
-  if (!("type" in input) || typeof input.type !== "string") throw new Error("Timeline event requires a type")
-  const definition = EventManifest.ServerDefinitions.find((definition) => definition.type === input.type)
+  if (!definition) throw new Error(`Unknown timeline event: ${header.type}`)
 
-  if (!definition) throw new Error(`Unknown timeline event: ${input.type}`)
-
-  return Schema.decodeUnknownSync(definition)(input) as OpenCodeEvent
+  // SAFETY: the manifest codec validates and re-encodes the public event used to generate OpenCodeEvent.
+  return Schema.encodeSync(definition)(Schema.decodeUnknownSync(definition)(input)) as OpenCodeEvent
 }
 
 export function validateTimelineMessages(input: readonly TimelineMessage[]): TimelineMessage[] {
@@ -414,7 +404,8 @@ export function validateTimelineMessages(input: readonly TimelineMessage[]): Tim
     if (message.type === "user") parentID = message.id
 
     if (message.type === "assistant") {
-      const expected = typeof message.metadata?.parentID === "string" ? message.metadata.parentID : parentID
+      const metadata = Schema.decodeUnknownOption(Schema.Struct({ parentID: Schema.String }))(message.metadata)
+      const expected = Option.getOrUndefined(metadata)?.parentID ?? parentID
 
       if (!expected || expected !== parentID)
         throw new Error(`Timeline assistant ${message.id} must reference a parent user in the fixture`)
@@ -677,27 +668,33 @@ export function assistantMessage(
     created?: number
   } = {},
 ): SessionMessageAssistant {
-  if (input.error && (typeof input.error.type !== "string" || typeof input.error.message !== "string"))
-    throw new Error("Invalid assistant error")
+  if (input.error) Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String, message: Schema.String }))(input.error)
   const id = input.id ?? assistantID
   const created = input.created ?? 1700000001000
   const ordinals = { text: 0, reasoning: 0 }
   const content = parts.map((part) => messageContent(part, id, ordinals))
   scenario().nextOrdinals.set(id, ordinals)
 
-  return {
+  const message: SessionMessageAssistant = {
     id,
     type: "assistant",
     metadata: { parentID: input.parentID ?? userID },
-    time: { created, ...(input.completed === false ? {} : { completed: created + 1_000 }) },
+    time: { created },
     model: { id: model.modelID, providerID: model.providerID, variant: model.variant },
     agent: "build",
     content,
     cost: 0.01,
     tokens,
-    ...(input.completed === false ? {} : { finish: "stop" as const }),
-    ...(input.error ? { error: input.error } : {}),
   }
+
+  if (input.completed !== false) {
+    message.time.completed = created + 1_000
+    message.finish = "stop"
+  }
+
+  if (input.error) message.error = input.error
+
+  return message
 }
 
 export function userText(text: string, input: Partial<Omit<TextSeed, "type" | "text">> = {}): TextSeed {
@@ -720,35 +717,35 @@ export function toolPart(
   id: string,
   tool: string,
   state: "streaming",
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue | undefined>,
   options?: ToolOptions<"streaming">,
 ): ToolSeed
 export function toolPart(
   id: string,
   tool: string,
   state: "running",
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue | undefined>,
   options?: ToolOptions<"running">,
 ): ToolSeed
 export function toolPart(
   id: string,
   tool: string,
   state: "completed",
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue | undefined>,
   options?: ToolOptions<"completed">,
 ): ToolSeed
 export function toolPart(
   id: string,
   tool: string,
   state: "error",
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue | undefined>,
   options?: ToolOptions<"error">,
 ): ToolSeed
 export function toolPart(
   id: string,
   tool: string,
   state: ToolStatus,
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue | undefined>,
   options: ToolOptions<ToolStatus> = {},
 ): ToolSeed {
   const base = { id, type: "tool" as const, name: tool }
@@ -761,7 +758,7 @@ export function toolPart(
       state: {
         status: state,
         input,
-        ...(options.output === undefined ? {} : { output: options.output }),
+        output: options.output,
         title: options.title,
         metadata: options.metadata ?? {},
         time: { start: 1700000001000 },
@@ -949,7 +946,7 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
         sessionID,
         assistantMessageID: messageID,
         id: part.id,
-        input: part.state.input,
+        input: jsonRecord(part.state.input),
         executed: part.executed ?? true,
         state: jsonRecord(part.providerState),
       }),
@@ -1050,10 +1047,11 @@ function makeEvent<Type extends OpenCodeEvent["type"]>(
         }
       : base
 
-  return Schema.decodeUnknownSync(definition)(input) as unknown as OpenCodeEvent
+  // SAFETY: the manifest codec validates and re-encodes the public event used to generate OpenCodeEvent.
+  return Schema.encodeSync(definition)(Schema.decodeUnknownSync(definition)(input)) as OpenCodeEvent
 }
 
-function jsonRecord(value: Record<string, unknown> | undefined): Record<string, JsonValue> {
+function jsonRecord(value: Record<string, JsonValue | undefined> | undefined): Record<string, JsonValue> {
   if (!value) return {}
 
   return Object.fromEntries(
@@ -1065,7 +1063,9 @@ function jsonRecord(value: Record<string, unknown> | undefined): Record<string, 
   )
 }
 
-function jsonValue(value: unknown): JsonValue | undefined {
+// SAFETY: The fixture sanitizer walks the JSON union to preserve object omission, array nulls, and non-finite number normalization.
+/* oxlint-disable anti-slop/no-runtime-typeof */
+function jsonValue(value: JsonValue | undefined): JsonValue | undefined {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value
 
   if (typeof value === "number") return Number.isFinite(value) ? value : null
@@ -1074,7 +1074,7 @@ function jsonValue(value: unknown): JsonValue | undefined {
 
   if (!value || typeof value !== "object") return
 
-  return jsonRecord(value as Record<string, unknown>)
+  return jsonRecord(value)
 }
 /* oxlint-enable anti-slop/no-runtime-typeof */
 
