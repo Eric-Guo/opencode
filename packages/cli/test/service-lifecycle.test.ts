@@ -129,7 +129,7 @@ serviceTest(
 )
 
 serviceTest(
-  "a damaged registration and then a crash each end with one replacement server",
+  "a damaged registration requires verified cleanup before replacement, while a crash recovers automatically",
   async () => {
     await using home = await serviceHome()
     await ensure(home)
@@ -137,10 +137,16 @@ serviceTest(
 
     // The original server keeps the port until its registration self-check notices the damage.
     await fs.writeFile(home.registration, "{")
+    await expect(cli(home, "service", "start")).rejects.toThrow("Invalid service registration")
+    expect(await Bun.file(home.registration).text()).toBe("{")
+    await exited(original.pid)
+    await expect(ensure(home)).rejects.toThrow("Invalid service registration")
+
+    // An operator can remove the damaged record only after verifying that its original owner has exited.
+    await fs.rm(home.registration)
     await cli(home, "service", "start")
     const replacement = await settled(home)
     expect(replacement.pid).not.toBe(original.pid)
-    await exited(original.pid)
 
     process.kill(replacement.pid, "SIGKILL")
     await exited(replacement.pid)
