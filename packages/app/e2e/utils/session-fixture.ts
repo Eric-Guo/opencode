@@ -124,9 +124,7 @@ function messageContent(part: MessagePart): SessionMessageAssistant["content"][n
     return {
       type: "reasoning",
       text: part.text ?? "",
-      time: part.time
-        ? { created: part.time.start, ...(part.time.end === undefined ? {} : { completed: part.time.end }) }
-        : undefined,
+      time: part.time ? { created: part.time.start, completed: part.time.end } : undefined,
     }
 
   return {
