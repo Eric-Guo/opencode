@@ -1,4 +1,5 @@
 import { app } from "electron"
+import { isBoolean } from "effect/Predicate"
 import { Effect, FileSystem, Option, Path } from "effect"
 import { scoped } from "../native/logging"
 import { hasExistingAppState } from "../storage/install-state"
@@ -10,7 +11,7 @@ export const initializeFirstLaunchOnboarding = Effect.fn("Onboarding.initialize"
   const store = getStore()
   const current = store.get(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY)
 
-  if (typeof current === "boolean") return current
+  if (isBoolean(current)) return current
 
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path

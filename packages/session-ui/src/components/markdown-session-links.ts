@@ -33,8 +33,9 @@ export function markSessionLinks(root: HTMLElement, title: SessionTitle) {
   const nodes: Text[] = []
 
   while (walker.nextNode()) {
-    // SAFETY: SHOW_TEXT restricts this walk to Text nodes.
-    const node = walker.currentNode as Text
+    const node = walker.currentNode
+
+    if (!(node instanceof Text)) continue
 
     if (node.parentElement?.closest("a, button, code, pre, [data-session-reference]")) continue
 

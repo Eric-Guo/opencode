@@ -1,20 +1,23 @@
 import { describe, expect, test } from "bun:test"
-import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
+import type { FormInfo, PermissionRequest } from "@opencode/client/promise"
+import { sessionInfo } from "@/test/fixtures"
 import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 
 // SAFETY: the request tree reads only a session's id and parentID.
 const session = (input: { id: string; parentID?: string }) =>
-  ({
+  sessionInfo({
     id: input.id,
     parentID: input.parentID,
-  }) as SessionInfo
+  })
 
 // SAFETY: the request tree reads only a permission's id and sessionID.
 const permission = (id: string, sessionID: string) =>
   ({
     id,
     sessionID,
-  }) as PermissionRequest
+    action: "read",
+    resources: ["*"],
+  }) satisfies PermissionRequest
 
 // SAFETY: the request tree reads only a form's id, sessionID, and metadata kind.
 const question = (id: string, sessionID: string) =>
@@ -24,7 +27,7 @@ const question = (id: string, sessionID: string) =>
     title: "Questions",
     metadata: { kind: "question" },
     fields: [{ key: "q0", type: "string" }],
-  }) as FormInfo
+  }) satisfies FormInfo
 
 describe("sessionTreeIDs", () => {
   test("returns only the current session and its descendants", () => {

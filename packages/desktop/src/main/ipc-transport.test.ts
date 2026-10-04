@@ -1,3 +1,7 @@
+// SAFETY: These cases send raw RPC frames, including malformed values, to the real RpcServer.
+// The Electron doubles implement only the transport members exercised by IpcPortHandoff.
+/* oxlint-disable anti-slop-effect/no-manual-tagged-construction, anti-slop-effect/no-manual-tag-comparison,
+   anti-slop/no-unknown-parameters, anti-slop/no-chained-type-assertions */
 import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import { MessageChannel } from "node:worker_threads"
