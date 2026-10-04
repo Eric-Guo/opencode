@@ -5,7 +5,7 @@ import type { Cdp } from "./cdp"
 
 export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp, resources: readonly string[]) {
   const { snapshot, generateReport } = await import("lighthouse")
-  const info = (await contents.debugger.sendCommand("Target.getTargetInfo")) as { targetInfo: { targetId: string } }
+  const info = await cdp.send("Target.getTargetInfo")
   const sessions = new Map<string, ReturnType<typeof session>>()
 
   function session(id: string) {
@@ -13,7 +13,8 @@ export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp
 
     const value = Object.assign(emitter, {
       id: () => id,
-      send: (method: string, params?: object) => cdp.send(method as Parameters<Cdp["send"]>[0], params, id),
+      // SAFETY: Lighthouse's snapshot driver sends CDP method names; this adapter forwards them to Chromium.
+      send: (method: string, params?: Parameters<Cdp["send"]>[1]) => cdp.send(method as Parameters<Cdp["send"]>[0], params, id),
       detach: async () => {
         sessions.delete(id)
         await contents.debugger.sendCommand("Target.detachFromTarget", { sessionId: id })
@@ -25,7 +26,7 @@ export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp
     return value
   }
 
-  const event = (_event: Electron.Event, method: string, params: unknown, sessionID?: string) => {
+  const event = (_event: Electron.Event, method: string, params: Parameters<Parameters<Cdp["on"]>[1]>[0], sessionID?: string) => {
     const owner = sessionID ? sessions.get(sessionID) : undefined
 
     if (!owner) return
@@ -43,10 +44,10 @@ export async function audit(contents: WebContents, files: BrowserFiles, cdp: Cdp
   contents.debugger.on("message", event)
 
   try {
-    const attached = (await contents.debugger.sendCommand("Target.attachToTarget", {
+    const attached = await cdp.send("Target.attachToTarget", {
       targetId: info.targetInfo.targetId,
       flatten: true,
-    })) as { sessionId: string }
+    })
 
     const root = session(attached.sessionId)
 

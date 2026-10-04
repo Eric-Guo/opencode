@@ -16,8 +16,8 @@ function createFixture(initial: Record<string, Session> = {}) {
   const [cache, setCache] = createSignal(initial)
   const deferred = new Map<string, PromiseWithResolvers<unknown>>()
   const resolves: string[] = []
-  const messages = { syncs: [] as string[], ...Promise.withResolvers<unknown>() }
-  const pending = { syncs: [] as string[] }
+  const messages = { syncs: Array<string>(), ...Promise.withResolvers<unknown>() }
+  const pending = { syncs: Array<string>() }
 
   return {
     resolves,
@@ -52,7 +52,7 @@ function createFixture(initial: Record<string, Session> = {}) {
       deferred.get(id)?.resolve(undefined)
       deferred.delete(id)
     },
-    fail(id: string, error: unknown) {
+    fail(id: string, error: Error) {
       deferred.get(id)?.reject(error)
       // The real store does not cache failures: the inflight request entry is
       // dropped on rejection so the next resolve retries.

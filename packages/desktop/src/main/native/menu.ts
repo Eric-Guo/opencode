@@ -1,5 +1,6 @@
 import { BrowserWindow, Menu } from "electron"
 import type { MenuItemConstructorOptions } from "electron"
+
 import {
   DESKTOP_MENU_HISTORY_LIMIT,
   DESKTOP_MENU,
@@ -185,5 +186,5 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
 }
 
 function nativeRole(role: DesktopMenuRole) {
-  return role as NonNullable<MenuItemConstructorOptions["role"]>
+  return role
 }

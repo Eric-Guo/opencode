@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "সেশন পরিবর্তন",
   "ui.sessionReview.title.git": "Git পরিবর্তন",
   "ui.sessionReview.title.branch": "শাখা পরিবর্তন",
@@ -255,4 +255,4 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "আপডেট",
   "ui.promptInput.cancelUpload": "আপলোড বাতিল করুন",
   "ui.promptInput.uploading": "{{percent}}%",
-}
+} satisfies Record<string, string>

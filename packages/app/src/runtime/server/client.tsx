@@ -121,12 +121,17 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   }
 }
 
-export function createServerTransport(input: { http: ServerConnection.HttpBase; fetch?: typeof globalThis.fetch }): {
+type ServerTransport = {
   update(http: ServerConnection.HttpBase): ServerApi
   readonly url: string
   readonly api: ServerApi
   readonly pty: ReturnType<typeof createPtyClient>
-} {
+}
+
+export function createServerTransport(input: {
+  http: ServerConnection.HttpBase
+  fetch?: typeof globalThis.fetch
+}): ServerTransport {
   const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
   const state = { http: input.http }
   // Queries and feature controllers retain API groups and methods across reconnects. Keep their

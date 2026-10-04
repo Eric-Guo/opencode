@@ -135,9 +135,9 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
         : {
             oldFile: {
               ...local.before,
-              contents: typeof local.before.contents === "string" ? local.before.contents : "",
+              contents: local.before.contents,
             },
-            newFile: { ...local.after, contents: typeof local.after.contents === "string" ? local.after.contents : "" },
+            newFile: { ...local.after, contents: local.after.contents },
             lineAnnotations: annotations,
             fileContainer: fileDiffRef,
             containerWrapper: container,
@@ -200,5 +200,5 @@ export type FileSSRProps<T = {}> = FileProps<T>
 export function FileSSR<T>(props: FileSSRProps<T>) {
   if (props.mode !== "diff" || !props.preloadedDiff) return File(props)
 
-  return DiffSSRViewer(props as SSRDiffFileProps<T>)
+  return DiffSSRViewer({ ...props, preloadedDiff: props.preloadedDiff })
 }

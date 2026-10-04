@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { describe, expect, test } from "bun:test"
 import { createDraftStore, draftTextChunk, draftTextThreshold, resolveBlobUrl } from "./drafts"
 
@@ -17,9 +18,9 @@ function memoryDriver() {
       set: async (key: string, value: string, strict: boolean) => {
         const ids = new Set<string>()
         JSON.parse(value, (_key, item) => {
-          if (item?.blob && typeof item.blob.id === "string") ids.add(item.blob.id)
+          if (item?.blob && Predicate.isString(item.blob.id)) ids.add(item.blob.id)
 
-          if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => ids.add(String(id)))
+          if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: string) => ids.add(id))
 
           return item
         })

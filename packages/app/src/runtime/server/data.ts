@@ -22,7 +22,7 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
 }
 
 export function createSessionMutations(remove: (sessionID: string) => Promise<void>) {
-  const [store, setStore] = createStore({ session: [] as SessionMutation[] })
+  const [store, setStore] = createStore<{ session: SessionMutation[] }>({ session: [] })
 
   const clear = (id: string) => {
     setStore("session", (current) => current.filter((mutation) => mutation.id !== id))

@@ -169,7 +169,7 @@ async function installSessionSwitchProbe(
 
 async function waitForStableSessionSwitch(page: Page) {
   await page.waitForFunction(() => {
-    const samples = (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe?.samples
+    const samples = (window).__sessionSwitchProbe?.samples
 
     if (!samples) return false
 
@@ -193,9 +193,9 @@ async function waitForStableSessionSwitch(page: Page) {
 
 async function collectSessionSwitchResult(page: Page) {
   const samples = await page.evaluate(() => {
-    const probe = (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe!
+    const probe = (window).__sessionSwitchProbe!
     probe.stop()
-    delete (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe
+    delete (window).__sessionSwitchProbe
 
     return probe.samples
   })
@@ -236,8 +236,8 @@ export async function measureSessionSwitch(
     return await collectSessionSwitchResult(page)
   } finally {
     await page.evaluate(() => {
-      ;(window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe?.stop()
-      delete (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe
+      ;(window).__sessionSwitchProbe?.stop()
+      delete (window).__sessionSwitchProbe
     })
   }
 }
@@ -289,4 +289,10 @@ export async function waitForStableTimeline(page: Page, lastID: string) {
       { timeout: 30_000, intervals: [0] },
     )
     .toBe(true)
+}
+
+declare global {
+  interface Window {
+    __sessionSwitchProbe?: SessionSwitchProbe
+  }
 }

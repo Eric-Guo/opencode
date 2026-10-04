@@ -64,7 +64,7 @@ function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolea
   return isDark ? scale.toReversed() : scale
 }
 
-function assignHueRamp(prefix: string, scale: HexColor[]): Record<string, V2ColorValue> {
+function assignHueRamp(prefix: string, scale: HexColor[]): ResolvedV2Theme {
   const tokens: Record<string, V2ColorValue> = {}
 
   for (let i = 0; i < V2_STEPS.length; i++) {
@@ -115,7 +115,7 @@ function readPalette(variant: ThemeVariant): PaletteInput {
 }
 
 /** Build v2 primitive ramps (100 = lightest). Alpha ramps are static in `v2/styles/colors.css`. */
-export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Record<string, V2ColorValue> {
+export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): ResolvedV2Theme {
   const colors = readPalette(variant)
   const grey = generateV2NeutralScale(colors.neutral, colors.ink, isDark)
   const blue = generateV2HueScale(colors.interactive, isDark)
@@ -149,7 +149,7 @@ export function resolveThemeVariantV2(variant: ThemeVariant, isDark: boolean): R
   return mergeV2Tokens(primitives, semantics, foreground, variant.v2Overrides ?? {})
 }
 
-export function resolveThemeV2(theme: DesktopTheme): { light: ResolvedV2Theme; dark: ResolvedV2Theme } {
+export function resolveThemeV2(theme: DesktopTheme) {
   return {
     light: resolveThemeVariantV2(theme.light, false),
     dark: resolveThemeVariantV2(theme.dark, true),

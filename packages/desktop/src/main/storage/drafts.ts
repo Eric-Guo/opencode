@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { eq, sql } from "drizzle-orm"
+import { eq, sql, type SQL } from "drizzle-orm"
 import type { Database } from "./database"
 import { blobs, document } from "./schema"
 import { createWriteBehind } from "./write-behind"
@@ -16,7 +16,7 @@ export const blobGrace = 15 * 60_000
 
 // Every blob id a document references: image parts `{ blob: { id } }` and text chunk lists
 // `{ blob: { kind: "text", ids: [...] } }`. SQLite walks the JSON; nothing parses drafts in JS.
-const referenced = (value: unknown) => sql`
+const referenced = (value: string | SQL) => sql`
   SELECT json_extract(node.value, '$.id') AS id
   FROM json_tree(${value}) AS node
   WHERE node.key = 'blob' AND node.type = 'object' AND json_type(node.value, '$.id') = 'text'
@@ -28,7 +28,7 @@ const referenced = (value: unknown) => sql`
 
 export function createDraftStore(
   db: Database,
-  input: { collectDelay?: number; onError?: (error: unknown) => void } = {},
+  input: { collectDelay?: number; onError?: (cause: unknown) => void } = {},
 ) {
   // Orphans left by an earlier session are collected once the window is up rather than before it:
   // the scan walks every stored document, and the usual grace keeps anything a renderer has

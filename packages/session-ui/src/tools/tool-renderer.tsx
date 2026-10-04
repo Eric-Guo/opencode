@@ -18,6 +18,8 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { Predicate, Schema } from "effect"
+import { value, when, orElse } from "effect/Match"
 import stripAnsi from "strip-ansi"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Dynamic } from "solid-js/web"
@@ -50,6 +52,8 @@ import {
   currentToolError,
   currentToolGroupedRead,
   currentToolInput,
+  type ToolInput,
+  type ToolMetadata,
   currentToolMetadata,
   currentToolOutput,
   executeToolFailed,
@@ -95,39 +99,32 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
 interface Diagnostic {
   range: {
     start: { line: number; character: number }
-    end: { line: number; character: number }
   }
   message: string
   severity?: number
 }
 
-type QuestionInfo = { question: string }
+const textValue = Schema.is(Schema.String)
 
-type QuestionAnswer = string[]
+const numberValue = Schema.is(Schema.Number)
 
-function record(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value)
-}
+const record = Predicate.isObject
 
-function questionInfo(value: unknown): value is QuestionInfo {
-  return record(value) && typeof value.question === "string"
-}
+const questionInfo = Schema.is(Schema.Struct({ question: Schema.String }))
 
-function questionAnswer(value: unknown): value is QuestionAnswer {
-  return Array.isArray(value) && value.every((answer) => typeof answer === "string")
-}
+const questionAnswer = Schema.is(Schema.Array(Schema.String))
 
-function isDiagnostic(value: unknown): value is Diagnostic {
-  if (!value || typeof value !== "object") return false
+const isDiagnostic = Schema.is(
+  Schema.Struct({
+    range: Schema.Struct({
+      start: Schema.Struct({ line: Schema.Number, character: Schema.Number }),
+    }),
+    message: Schema.String,
+    severity: Schema.optional(Schema.Number),
+  }),
+)
 
-  if (!("message" in value) || typeof value.message !== "string") return false
-
-  if (!("range" in value) || !value.range || typeof value.range !== "object") return false
-
-  return "start" in value.range && !!value.range.start && typeof value.range.start === "object"
-}
-
-function getDiagnostics(diagnosticsByFile: unknown, filePath: string | undefined): Diagnostic[] {
+function getDiagnostics(diagnosticsByFile: Schema.Json | undefined, filePath: string | undefined): Diagnostic[] {
   if (!record(diagnosticsByFile) || !filePath) return []
   const diagnostics = diagnosticsByFile[filePath]
 
@@ -200,40 +197,48 @@ function agentTitle(i18n: UiI18n, type?: string) {
   return i18n.t("ui.tool.agent", { type })
 }
 
-const agentTones: Record<string, string> = {
-  ask: "var(--icon-agent-ask-base)",
-  build: "var(--icon-agent-build-base)",
-  docs: "var(--icon-agent-docs-base)",
-  plan: "var(--icon-agent-plan-base)",
-}
+const agentTones = new Map<string, string>(
+  Object.entries({
+    ask: "var(--icon-agent-ask-base)",
+    build: "var(--icon-agent-build-base)",
+    docs: "var(--icon-agent-docs-base)",
+    plan: "var(--icon-agent-plan-base)",
+  }),
+)
 
-const v2AgentTones: Record<string, string> = {
-  build: "var(--v2-agent-build-solid)",
-  explore: "var(--v2-agent-explore-solid)",
-  plan: "var(--v2-agent-plan-solid)",
-  review: "var(--v2-agent-review-solid)",
-  writer: "var(--v2-agent-writer-solid)",
-}
+const v2AgentTones = new Map<string, string>(
+  Object.entries({
+    build: "var(--v2-agent-build-solid)",
+    explore: "var(--v2-agent-explore-solid)",
+    plan: "var(--v2-agent-plan-solid)",
+    review: "var(--v2-agent-review-solid)",
+    writer: "var(--v2-agent-writer-solid)",
+  }),
+)
 
-const agentThemeColors: Record<string, string> = {
-  primary: "var(--text-interactive-base)",
-  secondary: "var(--text-base)",
-  accent: "var(--icon-info-base)",
-  success: "var(--icon-success-base)",
-  warning: "var(--icon-warning-base)",
-  error: "var(--icon-critical-base)",
-  info: "var(--icon-info-base)",
-}
+const agentThemeColors = new Map<string, string>(
+  Object.entries({
+    primary: "var(--text-interactive-base)",
+    secondary: "var(--text-base)",
+    accent: "var(--icon-info-base)",
+    success: "var(--icon-success-base)",
+    warning: "var(--icon-warning-base)",
+    error: "var(--icon-critical-base)",
+    info: "var(--icon-info-base)",
+  }),
+)
 
-const v2AgentThemeColors: Record<string, string> = {
-  primary: "var(--v2-text-text-accent)",
-  secondary: "var(--v2-text-text-muted)",
-  accent: "var(--v2-icon-icon-accent)",
-  success: "var(--v2-state-fg-success)",
-  warning: "var(--v2-state-fg-warning)",
-  error: "var(--v2-state-fg-danger)",
-  info: "var(--v2-state-fg-info)",
-}
+const v2AgentThemeColors = new Map<string, string>(
+  Object.entries({
+    primary: "var(--v2-text-text-accent)",
+    secondary: "var(--v2-text-text-muted)",
+    accent: "var(--v2-icon-icon-accent)",
+    success: "var(--v2-state-fg-success)",
+    warning: "var(--v2-state-fg-warning)",
+    error: "var(--v2-state-fg-danger)",
+    info: "var(--v2-state-fg-info)",
+  }),
+)
 
 const agentPalette = [
   "var(--icon-agent-ask-base)",
@@ -258,15 +263,12 @@ function tone(name: string) {
   return agentPalette[hash % agentPalette.length]
 }
 
-function taskAgent(
-  raw: unknown,
-  list?: readonly { name: string; color?: string }[],
-): { name?: string; color?: string; v2Color?: string } {
-  if (typeof raw !== "string" || !raw) return {}
+function taskAgent(raw: Schema.Json | undefined, list?: readonly { name: string; color?: string }[]) {
+  if (!textValue(raw) || !raw) return {}
   const key = raw.toLowerCase()
   const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
-  const v2Tone = item?.color ? undefined : v2AgentTones[key]
-  const color = agentColor(item?.color, agentThemeColors) ?? agentTones[key] ?? tone(key)
+  const v2Tone = item?.color ? undefined : v2AgentTones.get(key)
+  const color = agentColor(item?.color, agentThemeColors) ?? agentTones.get(key) ?? tone(key)
   const v2Color = agentColor(item?.color, v2AgentThemeColors) ?? v2Tone ?? color
 
   return {
@@ -276,15 +278,15 @@ function taskAgent(
   }
 }
 
-function agentColor(value: string | undefined, themeColors: Record<string, string>) {
+function agentColor(value: string | undefined, themeColors: Map<string, string>) {
   if (!value) return undefined
 
-  return themeColors[value] ?? value
+  return themeColors.get(value) ?? value
 }
 
-function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI18n>) {
+function webSearchProviderLabel(provider: Schema.Json | undefined, i18n: ReturnType<typeof useI18n>) {
   const name =
-    typeof provider !== "string" || !provider
+    !textValue(provider) || !provider
       ? undefined
       : provider === "tinyfish"
         ? "TinyFish"
@@ -299,34 +301,30 @@ function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI1
   return i18n.t("ui.tool.websearch")
 }
 
-function readToolPath(input: Record<string, unknown>) {
-  if (typeof input.path === "string") return input.path
+function readToolPath(input: ToolInput) {
+  if (textValue(input.path)) return input.path
 
   return undefined
 }
 
-function readArgs(input: Record<string, unknown>) {
+function readArgs(input: ToolInput) {
   return [
-    ...(typeof input.offset === "number" ? [`offset=${input.offset}`] : []),
-    ...(typeof input.limit === "number" ? [`limit=${input.limit}`] : []),
+    ...(numberValue(input.offset) ? [`offset=${input.offset}`] : []),
+    ...(numberValue(input.limit) ? [`limit=${input.limit}`] : []),
   ]
 }
 
-function skillToolName(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
-  if (typeof metadata?.name === "string") return metadata.name
+function skillToolName(input: ToolInput, metadata?: ToolMetadata) {
+  if (textValue(metadata?.name)) return metadata.name
 
-  if (typeof input.id === "string") return input.id
+  if (textValue(input.id)) return input.id
 
-  if (typeof input.name === "string") return input.name
+  if (textValue(input.name)) return input.name
 
   return undefined
 }
 
-export function getToolInfo(
-  tool: string,
-  input: Record<string, unknown> = {},
-  metadata: Record<string, unknown> | undefined = {},
-): ToolInfo {
+export function getToolInfo(tool: string, input: ToolInput = {}, metadata: ToolMetadata | undefined = {}): ToolInfo {
   const i18n = useI18n()
 
   switch (tool) {
@@ -344,19 +342,19 @@ export function getToolInfo(
       return {
         icon: "bullet-list",
         title: i18n.t("ui.tool.list"),
-        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
+        subtitle: textValue(input.path) ? getFilename(input.path) : undefined,
       }
     case "glob":
       return {
         icon: "magnifying-glass-menu",
         title: i18n.t("ui.tool.glob"),
-        subtitle: typeof input.pattern === "string" ? input.pattern : undefined,
+        subtitle: textValue(input.pattern) ? input.pattern : undefined,
       }
     case "grep":
       return {
         icon: "magnifying-glass-menu",
         title: i18n.t("ui.tool.grep"),
-        subtitle: typeof input.pattern === "string" ? input.pattern : undefined,
+        subtitle: textValue(input.pattern) ? input.pattern : undefined,
       }
     case "browser":
       return {
@@ -367,22 +365,22 @@ export function getToolInfo(
       return {
         icon: "window-cursor",
         title: i18n.t("ui.tool.webfetch"),
-        subtitle: typeof input.url === "string" ? input.url : undefined,
+        subtitle: textValue(input.url) ? input.url : undefined,
       }
     case "websearch":
       return {
         icon: "window-cursor",
         title: webSearchProviderLabel(metadata?.provider, i18n),
-        subtitle: typeof input.query === "string" ? input.query : undefined,
+        subtitle: textValue(input.query) ? input.query : undefined,
       }
     case "subagent": {
       const raw = input.agent
-      const type = typeof raw === "string" && raw ? raw[0].toUpperCase() + raw.slice(1) : undefined
+      const type = textValue(raw) && raw ? raw[0].toUpperCase() + raw.slice(1) : undefined
 
       return {
         icon: "task",
         title: agentTitle(i18n, type),
-        subtitle: typeof input.description === "string" ? input.description : undefined,
+        subtitle: textValue(input.description) ? input.description : undefined,
       }
     }
 
@@ -390,25 +388,25 @@ export function getToolInfo(
       return {
         icon: "console",
         title: i18n.t("ui.tool.shell"),
-        subtitle: typeof input.command === "string" ? input.command : undefined,
+        subtitle: textValue(input.command) ? input.command : undefined,
       }
     case "execute":
       return {
         icon: "console",
         title: i18n.t("ui.tool.execute"),
-        subtitle: typeof input.code === "string" ? input.code : undefined,
+        subtitle: textValue(input.code) ? input.code : undefined,
       }
     case "edit":
       return {
         icon: "code-lines",
         title: i18n.t("ui.messagePart.title.edit"),
-        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
+        subtitle: textValue(input.path) ? getFilename(input.path) : undefined,
       }
     case "write":
       return {
         icon: "code-lines",
         title: i18n.t("ui.messagePart.title.write"),
-        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
+        subtitle: textValue(input.path) ? getFilename(input.path) : undefined,
       }
     case "patch":
       return {
@@ -462,13 +460,9 @@ function sessionLink(id: string | undefined, href?: (id: string) => string | und
   return href?.(id)
 }
 
-function taskSession(
-  input: Record<string, unknown>,
-  parentID: string | undefined,
-  sessions: SessionSummary[] | undefined,
-) {
+function taskSession(input: ToolInput, parentID: string | undefined, sessions: SessionSummary[] | undefined) {
   if (!parentID) return undefined
-  const description = typeof input.description === "string" ? input.description : ""
+  const description = textValue(input.description) ? input.description : ""
 
   return (sessions ?? [])
     .filter((session) => session.parentID === parentID && !session.time?.archived)
@@ -1032,7 +1026,7 @@ export function CurrentFileToolGroup(props: {
   onFileOpenChange?: (path: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
-  const files = createMemo((previous: { key: string; toolID: string; value: unknown }[]) => {
+  const files = createMemo((previous: { key: string; toolID: string; value: Schema.Json }[]) => {
     const next = props.tools.flatMap((tool) => {
       const files = currentToolMetadata(tool).files
 
@@ -1040,9 +1034,9 @@ export function CurrentFileToolGroup(props: {
         return files.map((value, index) => ({ key: `${tool.id}:${index}`, toolID: tool.id, value }))
       const input = currentToolInput(tool)
 
-      if (typeof input.path !== "string") return []
+      if (!textValue(input.path)) return []
 
-      if (tool.name === "edit" && typeof input.oldString === "string" && typeof input.newString === "string") {
+      if (tool.name === "edit" && textValue(input.oldString) && textValue(input.newString)) {
         const changes = diffLines(input.oldString, input.newString)
 
         const additions = changes
@@ -1070,7 +1064,7 @@ export function CurrentFileToolGroup(props: {
         ]
       }
 
-      if (tool.name !== "write" || typeof input.content !== "string" || !input.content) return []
+      if (tool.name !== "write" || !textValue(input.content) || !input.content) return []
 
       return [
         {
@@ -1092,14 +1086,14 @@ export function CurrentFileToolGroup(props: {
     const owners = new Set(props.tools.map((tool) => tool.id))
 
     const result = [
-      ...previous
-        .filter((entry) => owners.has(entry.toolID))
-        .map((entry) => {
-          if (!updates.has(entry.key)) return entry
-          const value = updates.get(entry.key)
+      ...previous.flatMap((entry) => {
+        if (!owners.has(entry.toolID)) return []
 
-          return samePatchFile(value, entry.value) ? entry : { ...entry, value }
-        }),
+        if (!updates.has(entry.key)) return [entry]
+        const value = updates.get(entry.key)
+
+        return [samePatchFile(value, entry.value) ? entry : { ...entry, value }]
+      }),
       ...next.filter((entry) => !existing.has(entry.key)),
     ]
 
@@ -1160,7 +1154,7 @@ function isFileChangeTool(tool: SessionMessageAssistantTool) {
   return tool.state.status !== "error" && (tool.name === "edit" || tool.name === "write" || tool.name === "patch")
 }
 
-function samePatchFile(a: unknown, b: unknown) {
+function samePatchFile(a: Schema.Json | undefined, b: Schema.Json | undefined) {
   if (a === b) return true
 
   if (!record(a) || !record(b)) return false
@@ -1177,13 +1171,18 @@ function samePatchFile(a: unknown, b: unknown) {
 function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: ReturnType<typeof useI18n>) {
   const input = currentToolInput(tool)
   const metadata = currentToolMetadata(tool)
-  const path = typeof input.path === "string" ? input.path : "/"
-  const pattern = typeof input.pattern === "string" ? input.pattern : undefined
-  const include = typeof input.include === "string" ? input.include : undefined
-  const count = tool.name === "glob" ? metadata.count : tool.name === "grep" ? metadata.matches : undefined
+  const path = textValue(input.path) ? input.path : "/"
+  const pattern = textValue(input.pattern) ? input.pattern : undefined
+  const include = textValue(input.include) ? input.include : undefined
+
+  const count = value(tool.name).pipe(
+    when("glob", () => metadata.count),
+    when("grep", () => metadata.matches),
+    orElse(() => undefined),
+  )
 
   const matches =
-    typeof count === "number" && Number.isFinite(count) && count !== 0
+    numberValue(count) && Number.isFinite(count) && count !== 0
       ? i18n.plural("ui.messagePart.context.match", count)
       : undefined
 
@@ -1207,8 +1206,8 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
 }
 
 export interface ToolProps {
-  input: Record<string, unknown>
-  metadata: Record<string, unknown>
+  input: ToolInput
+  metadata: ToolMetadata
   tool: string
   sessionID?: string
   output?: string
@@ -1443,7 +1442,7 @@ export function ToolDisplay(
     if (props.tool !== "subagent") return undefined
     const value = props.metadata.sessionID
 
-    if (typeof value === "string" && value) return value
+    if (textValue(value) && value) return value
 
     return undefined
   })
@@ -1454,7 +1453,7 @@ export function ToolDisplay(
     if (props.tool !== "subagent") return undefined
     const value = props.input.description
 
-    if (typeof value === "string" && value) return value
+    if (textValue(value) && value) return value
 
     return taskId()
   })
@@ -1517,7 +1516,7 @@ export function ToolDisplay(
 // Each branch must stay in sync with its tool trigger's subtitle expression so
 // failed rows read like their non-error counterparts ("Shell sleep 30").
 function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
-  const text = (value: unknown) => (typeof value === "string" && value ? value : undefined)
+  const text = (value: Schema.Json | undefined) => (textValue(value) && value ? value : undefined)
 
   if (props.tool === "shell") return text(props.input.command) ?? text(props.metadata.command)
 
@@ -1564,7 +1563,7 @@ function toolDisplayError(props: ToolProps & { error?: string }, fallback: strin
 
   if (!executeToolFailed(props.metadata)) return undefined
 
-  if (typeof props.output === "string" && props.output) return props.output
+  if (textValue(props.output) && props.output) return props.output
 
   return fallback
 }
@@ -1582,7 +1581,7 @@ ToolRegistry.register({
 
       if (!value || !Array.isArray(value)) return []
 
-      return value.filter((p): p is string => typeof p === "string")
+      return value.filter((p): p is string => textValue(p))
     })
 
     const paths = createMemo(() =>
@@ -1680,7 +1679,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.list"),
-          subtitle: displayDirectory(typeof props.input.path === "string" ? props.input.path : "/"),
+          subtitle: displayDirectory(textValue(props.input.path) ? props.input.path : "/"),
         }}
       >
         <Show when={props.output}>
@@ -1711,8 +1710,8 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.glob"),
-          subtitle: displayDirectory(typeof props.input.path === "string" ? props.input.path : "/"),
-          args: typeof props.input.pattern === "string" ? ["pattern=" + props.input.pattern] : [],
+          subtitle: displayDirectory(textValue(props.input.path) ? props.input.path : "/"),
+          args: textValue(props.input.pattern) ? ["pattern=" + props.input.pattern] : [],
         }}
       >
         <Show when={props.output}>
@@ -1737,9 +1736,9 @@ ToolRegistry.register({
     const i18n = useI18n()
     const args: string[] = []
 
-    if (typeof props.input.pattern === "string") args.push("pattern=" + props.input.pattern)
+    if (textValue(props.input.pattern)) args.push("pattern=" + props.input.pattern)
 
-    if (typeof props.input.include === "string") args.push("include=" + props.input.include)
+    if (textValue(props.input.include)) args.push("include=" + props.input.include)
 
     return (
       <BasicTool
@@ -1748,7 +1747,7 @@ ToolRegistry.register({
         hasContent={!!props.output}
         trigger={{
           title: i18n.t("ui.tool.grep"),
-          subtitle: displayDirectory(typeof props.input.path === "string" ? props.input.path : "/"),
+          subtitle: displayDirectory(textValue(props.input.path) ? props.input.path : "/"),
           args,
         }}
       >
@@ -1772,7 +1771,7 @@ ToolRegistry.register({
   name: "audio_transcriptions",
   render(props) {
     const i18n = useI18n()
-    const file = createMemo(() => (typeof props.input.file === "string" ? `file=${props.input.file}` : undefined))
+    const file = createMemo(() => (textValue(props.input.file) ? `file=${props.input.file}` : undefined))
 
     return (
       <BasicTool
@@ -1809,7 +1808,7 @@ ToolRegistry.register({
     const url = createMemo(() => {
       const value = props.input.url
 
-      if (typeof value !== "string") return ""
+      if (!textValue(value)) return ""
 
       return value
     })
@@ -1854,7 +1853,7 @@ ToolRegistry.register({
     const query = createMemo(() => {
       const value = props.input.query
 
-      if (typeof value !== "string") return ""
+      if (!textValue(value)) return ""
 
       return value
     })
@@ -1887,7 +1886,7 @@ ToolRegistry.register({
     const childSessionId = createMemo(() => {
       const value = props.metadata.sessionID
 
-      if (typeof value === "string" && value) return value
+      if (textValue(value) && value) return value
 
       return taskSession(props.input, data.sessionID, data.store.session)
     })
@@ -1903,9 +1902,7 @@ ToolRegistry.register({
 
     const subtitle = createMemo(() => {
       const value =
-        typeof props.input.description === "string" && props.input.description
-          ? props.input.description
-          : childSessionId()
+        textValue(props.input.description) && props.input.description ? props.input.description : childSessionId()
 
       if (!value) return value
 
@@ -2064,7 +2061,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const pending = () => props.status === "streaming" || props.status === "running"
-    const code = createMemo(() => (typeof props.input.code === "string" ? props.input.code : ""))
+    const code = createMemo(() => (textValue(props.input.code) ? props.input.code : ""))
     const output = () => stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
     const sawPending = pending()
 
@@ -2108,14 +2105,14 @@ ToolRegistry.register({
     const pending = () =>
       streaming() ||
       props.status === "running" ||
-      (typeof props.metadata.shellID === "string" && data.shellRunning?.(props.metadata.shellID) === true)
+      (textValue(props.metadata.shellID) && data.shellRunning?.(props.metadata.shellID) === true)
 
     const sawStreaming = streaming()
 
     const command = () => {
-      if (typeof props.input.command === "string") return props.input.command
+      if (textValue(props.input.command)) return props.input.command
 
-      if (typeof props.metadata.command === "string") return props.metadata.command
+      if (textValue(props.metadata.command)) return props.metadata.command
 
       return ""
     }
@@ -2135,14 +2132,15 @@ ToolRegistry.register({
         const id = props.metadata.shellID
         const load = data.shellOutput
 
-        if (typeof id !== "string" || !load) return
+        if (!textValue(id) || !load) return
         onCleanup(followShellOutput({ id, directory: data.directory, running: pending(), load, onOutput: setStreamed }))
       })
 
       const output = createMemo(() =>
-        stripAnsi(
-          saved() ?? ((typeof props.metadata.shellID === "string" && streamed()) || props.output || ""),
-        ).replace(/\r\n?/g, "\n"),
+        stripAnsi(saved() ?? ((textValue(props.metadata.shellID) && streamed()) || props.output || "")).replace(
+          /\r\n?/g,
+          "\n",
+        ),
       )
 
       return (
@@ -2240,7 +2238,7 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const fileComponent = useFileComponent()
-    const inputPath = () => (typeof props.input.path === "string" ? props.input.path : "")
+    const inputPath = () => (textValue(props.input.path) ? props.input.path : "")
 
     const diff = createMemo(() => {
       const files = props.metadata.files
@@ -2255,7 +2253,7 @@ ToolRegistry.register({
     const path = createMemo(() => {
       const value = diff()
 
-      return typeof value?.file === "string" ? value.file : inputPath()
+      return value?.file ?? inputPath()
     })
 
     const pending = () => props.status === "streaming" || props.status === "running"
@@ -2267,8 +2265,8 @@ ToolRegistry.register({
         if (!source) return undefined
 
         return {
-          file: typeof source.file === "string" ? source.file : inputPath(),
-          patch: typeof source.patch === "string" ? source.patch : undefined,
+          file: source.file,
+          patch: source.patch,
         }
       },
       undefined,
@@ -2291,11 +2289,11 @@ ToolRegistry.register({
       return {
         before: {
           name: path(),
-          contents: typeof props.input.oldString === "string" ? props.input.oldString : "",
+          contents: textValue(props.input.oldString) ? props.input.oldString : "",
         },
         after: {
           name: path(),
-          contents: typeof props.input.newString === "string" ? props.input.newString : "",
+          contents: textValue(props.input.newString) ? props.input.newString : "",
         },
       }
     })
@@ -2339,8 +2337,8 @@ ToolRegistry.register({
   name: "write",
   render(props) {
     const fileComponent = useFileComponent()
-    const path = createMemo(() => (typeof props.input.path === "string" ? props.input.path : ""))
-    const content = createMemo(() => (typeof props.input.content === "string" ? props.input.content : ""))
+    const path = createMemo(() => (textValue(props.input.path) ? props.input.path : ""))
+    const content = createMemo(() => (textValue(props.input.content) ? props.input.content : ""))
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, path()))
 
     return (
