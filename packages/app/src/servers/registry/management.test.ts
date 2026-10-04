@@ -25,7 +25,8 @@ describe("createServerHealthPreview", () => {
     })
 
     await preview.preview({ ...values("server.example.com"), password }, () => {})
-    expect(requests).toEqual([{ url: "http://server.example.com", ...(password ? { password } : {}) }])
+    const expected = password ? { url: "http://server.example.com", password } : { url: "http://server.example.com" }
+    expect(requests).toEqual([expected])
   })
 
   test("ignores an older response that resolves after the latest response", async () => {
