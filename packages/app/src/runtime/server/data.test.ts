@@ -3,17 +3,11 @@ import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "@opencode/client/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInfo } from "@opencode/client/promise"
 import { mergeRecentSessions } from "@/shell/titlebar/recent-sessions-model"
+import { sessionInfo } from "@/test/fixtures"
 import { createDesktopData, createSessionMutations, createSessionRecency, createSessionRefresh } from "./data"
 import { mergeRootSessionIndex } from "./session-index"
 
-const session: SessionInfo = {
-  id: "ses_test",
-  projectID: "project",
-  cost: 0,
-  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-  time: { created: 0, updated: 0 },
-  location: { directory: "/project" },
-}
+const session = sessionInfo({ id: "ses_test", location: { directory: "/project" } })
 
 type EventData = {
   [key: string]: string | number | boolean | null | EventData | readonly EventData[]

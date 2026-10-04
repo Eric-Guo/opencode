@@ -362,7 +362,7 @@ export function blend(color: HexColor, background: HexColor, alpha: number): Hex
   )
 }
 
-export function withAlpha(color: HexColor, alpha: number): string {
+export function withAlpha(color: HexColor, alpha: number): `rgba(${string})` {
   const { r, g, b } = hexToRgb(color)
 
   return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`
