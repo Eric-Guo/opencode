@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import { isObject } from "effect/Predicate"
 import type { BrowserWindow, Rectangle } from "electron"
 
 // Remembers a window's bounds and maximized / fullscreen flags across launches in the same JSON
@@ -116,7 +117,7 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
 }
 
 function isState(value: unknown): value is WindowState {
-  return typeof value === "object" && value !== null
+  return isObject(value)
 }
 
 function hasBounds(state: WindowState): state is WindowState & Required<Pick<WindowState, "x" | "y">> {

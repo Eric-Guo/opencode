@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { createEffect, createMemo, on } from "solid-js"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -23,7 +24,8 @@ export function useConfiguredModel() {
 
     if (!model) return
 
-    if (typeof model !== "string") return { providerID: model.providerID, modelID: model.model, variant: model.variant }
+    if (!Predicate.isString(model))
+      return { providerID: model.providerID, modelID: model.model, variant: model.variant }
     const [providerID, ...parts] = model.split("/")
 
     return { providerID, modelID: parts.join("/"), variant: undefined }
