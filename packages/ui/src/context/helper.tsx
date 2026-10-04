@@ -1,9 +1,9 @@
-import { createContext, createMemo, Show, useContext, type ParentProps, type Accessor } from "solid-js"
+import { createContext, createMemo, Show, useContext, type ParentProps } from "solid-js"
 
-export function createSimpleContext<T, Props extends Record<string, any>>(
+export function createSimpleContext<T, Props extends object>(
   input: {
     name: string
-    init: ((input: Props) => T) | (() => T)
+    init: (input: Props) => T
   } & (T extends { ready: unknown } ? { gate: boolean } : { gate?: boolean }),
 ) {
   const ctx = createContext<T>()
@@ -20,8 +20,9 @@ export function createSimpleContext<T, Props extends Record<string, any>>(
 
       // Access init.ready inside the memo to make it reactive for getter properties
       const isReady = createMemo(() => {
-        // SAFETY: contexts whose value has `ready` must pass `gate`, and their `ready` is a boolean or its accessor.
-        const ready = (init as { ready?: Accessor<boolean> | boolean }).ready
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Generic contexts also accept primitive values, which have no readiness gate.
+        if ((typeof init !== "object" && typeof init !== "function") || !init || !("ready" in init)) return true
+        const ready = init.ready
 
         return ready === undefined || (ready instanceof Function ? ready() : ready)
       })

@@ -1,3 +1,4 @@
+import { Schema } from "effect"
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { cp, mkdir } from "node:fs/promises"
 import { resolve, join, dirname } from "node:path"
@@ -83,26 +84,14 @@ export function desktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) 
   }
 }
 
-function isManifest(value: unknown): value is Manifest {
-  if (!value || typeof value !== "object") return false
-  const record = value as Record<string, unknown>
+const ManifestSchema = Schema.Struct({
+  apiVersion: Schema.Literal(1),
+  main: Schema.String,
+  renderer: Schema.String,
+  preload: Schema.String,
+  preloads: Schema.Record(Schema.String, Schema.String),
+  assets: Schema.Record(Schema.String, Schema.String),
+  builds: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+})
 
-  return (
-    record.apiVersion === 1 &&
-    typeof record.main === "string" &&
-    typeof record.renderer === "string" &&
-    typeof record.preload === "string" &&
-    isPaths(record.preloads) &&
-    isPaths(record.assets) &&
-    (record.builds === undefined || isPaths(record.builds))
-  )
-}
-
-function isPaths(value: unknown): value is Record<string, string> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.values(value).every((path) => typeof path === "string")
-  )
-}
+const isManifest = Schema.is(ManifestSchema)

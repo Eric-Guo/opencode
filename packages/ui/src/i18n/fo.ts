@@ -385,4 +385,4 @@ export const dict = {
   "ui.question.singleHint": "Vel eitt svar",
   "ui.question.classic.multiHint": "Vel øll svar, sum hóska",
   "ui.question.custom.answerPlaceholder": "Skriva títt egna svar…",
-}
+} satisfies Record<string, string>

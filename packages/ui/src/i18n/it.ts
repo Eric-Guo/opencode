@@ -422,4 +422,4 @@ export const dict = {
   "ui.tool.execute.calls.many": "{{count}} chiamate",
   "ui.tool.execute.lines.many": "{{count}} righe",
   "ui.sources.count.many": "{{count}} fonti",
-}
+} satisfies Record<string, string>
