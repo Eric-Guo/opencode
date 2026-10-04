@@ -244,16 +244,16 @@ test.describe("timeline history", () => {
     })
   }
 
-  for (const shape of ["assistant-only", "mixed"] as const) {
-    test(`renders the ${shape} tail before parent hydration and preserves it afterward`, async ({ page }) => {
-      const session = { ...fixture.sessions[0]!, id: `ses_hydration_${shape}` }
+  for (const historyKind of ["assistant-only", "mixed"] as const) {
+    test(`renders the ${historyKind} tail before parent hydration and preserves it afterward`, async ({ page }) => {
+      const session = { ...fixture.sessions[0]!, id: `ses_hydration_${historyKind}` }
 
       // Compact's initial 40 and the next 20 begin with an assistant; page three supplies its parent.
       const messages = Array.from({ length: 61 }, (_, index): SessionMessageInfo => {
         const id = `msg_hydration_${index}`
         const time = { created: 1700000000000 + index * 1_000 }
 
-        if (index === 0 || (shape === "mixed" && index === 59))
+        if (index === 0 || (historyKind === "mixed" && index === 59))
           return { id, type: "user", time, text: `Prompt ${index}` }
 
         return {
@@ -324,7 +324,7 @@ test.describe("timeline history", () => {
         await expectReadyTail()
         await expect(orphan).toHaveAttribute("data-message-id", "msg_hydration_21")
 
-        if (shape === "mixed")
+        if (historyKind === "mixed")
           await expect(
             page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_hydration_59"]'),
           ).toBeInViewport()

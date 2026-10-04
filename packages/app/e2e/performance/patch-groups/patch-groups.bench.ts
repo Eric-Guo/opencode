@@ -7,16 +7,16 @@ for (const scenario of ["complete", "partial", "chained", "multi", "direct"]) {
     await page.evaluate(() => document.fonts.ready)
     expect(await page.evaluate(() => document.fonts.check('13px "Inter"'))).toBe(true)
 
-    const shape = await page.evaluate(() => {
-      const { grouping, ...shape } = window.patchBenchmark
+    const workload = await page.evaluate(() => {
+      const { grouping, ...workload } = window.patchBenchmark
       performance.clearMarks()
 
-      return shape
+      return workload
     })
 
     const mount = async () => {
       await page.getByRole("button", { name: "Mount tools", exact: true }).click()
-      await expect(page.locator('[data-slot="apply-patch-filename"]')).toHaveCount(shape.files)
+      await expect(page.locator('[data-slot="apply-patch-filename"]')).toHaveCount(workload.files)
       await expect(page.locator('[data-component="file"]')).toHaveCount(0)
 
       return Number(await page.getByTestId("mount-ms").textContent())
@@ -60,10 +60,10 @@ for (const scenario of ["complete", "partial", "chained", "multi", "direct"]) {
       expanded: window.patchBenchmark.grouping(true),
     }))
 
-    expect(grouping.collapsed.groups).toBe(shape.files)
+    expect(grouping.collapsed.groups).toBe(workload.files)
     report(
       { cold, warm, expansion, grouping, counters, warmCounters },
-      { scenario, ...shape, scope: "production tool components" },
+      { scenario, ...workload, scope: "production tool components" },
     )
 
     if (process.env.PATCH_SCREENSHOTS === "1") {
