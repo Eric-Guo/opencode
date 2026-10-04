@@ -130,12 +130,11 @@ async function sign(url: string, key: string) {
   const name = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? key)
   const asset = amap.get(name)
 
-  const res = await fetch(asset?.url ?? url, {
-    headers: {
-      Authorization: `token ${token}`,
-      ...(asset ? { Accept: "application/octet-stream" } : {}),
-    },
-  })
+  const headers = { Authorization: `token ${token}` }
+
+  if (asset) Object.assign(headers, { Accept: "application/octet-stream" })
+
+  const res = await fetch(asset?.url ?? url, { headers })
 
   if (!res.ok) {
     throw new Error(`Failed to fetch file ${name}: ${res.status} ${res.statusText} (${asset?.url ?? url})`)

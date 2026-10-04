@@ -91,15 +91,16 @@ for (const input of [
     await root.getByRole("button", { name: "Reconnect ready rows", exact: true }).click()
     await expect(content).toHaveCSS("visibility", "visible")
     await expect(root).toHaveAttribute("data-first-reveal", /.+/)
-    expect(await root.evaluate((element) => JSON.parse(element.dataset.firstReveal!))).toMatchObject({
+    const reveal = await root.evaluate((element) => JSON.parse(element.dataset.firstReveal!))
+    expect(reveal).toMatchObject({
       rows: input.count === 1 ? [0] : [0, 1, 2, 3],
       pendingMarkdown: 0,
       clipped: [],
       viewportHeight: 180,
-      ...(input.name === "offset-only" ? { scrollTop: 0 } : {}),
     })
 
     if (input.name === "offset-only") {
+      expect(reveal).toMatchObject({ scrollTop: 0 })
       // This repair must not depend on another native scroll or resize delivery.
       await expect(root).toHaveAttribute("data-scrolls", "0")
       await expect(root).toHaveAttribute("data-viewport-resizes", resizes!)
