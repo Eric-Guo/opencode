@@ -27,19 +27,23 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
   const openDirectoryPickerDialog: Extract<Platform, { platform: "desktop" }>["openDirectoryPickerDialog"] = async (
     options,
   ) => {
-    return api.openDirectoryPicker({
-      multiple: options?.multiple ?? false,
-      ...(options?.title === undefined ? {} : { title: options.title }),
-    })
+    const picker = { multiple: options?.multiple ?? false }
+
+    if (options?.title !== undefined) Object.assign(picker, { title: options.title })
+
+    return api.openDirectoryPicker(picker)
   }
 
   const openAttachmentPickerDialog: NonNullable<Platform["openAttachmentPickerDialog"]> = async (options, onFile) => {
-    const result = await api.openFilePicker({
-      multiple: options?.multiple ?? false,
-      ...(options?.title === undefined ? {} : { title: options.title }),
-      ...(options?.defaultPath === undefined ? {} : { defaultPath: options.defaultPath }),
-      ...(options?.extensions === undefined ? {} : { extensions: options.extensions }),
-    })
+    const picker = { multiple: options?.multiple ?? false }
+
+    if (options?.title !== undefined) Object.assign(picker, { title: options.title })
+
+    if (options?.defaultPath !== undefined) Object.assign(picker, { defaultPath: options.defaultPath })
+
+    if (options?.extensions !== undefined) Object.assign(picker, { extensions: options.extensions })
+
+    const result = await api.openFilePicker(picker)
 
     if (!result) return
 
@@ -58,14 +62,15 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
     openDirectoryPickerDialog,
     openAttachmentPickerDialog,
     getPathForFile: (file: File) => attachmentPaths.get(file) ?? api.getPathForFile(file),
-    saveFile: (options: { title?: string; defaultPath?: string }, content: string) =>
-      api.saveFile(
-        {
-          ...(options.title === undefined ? {} : { title: options.title }),
-          ...(options.defaultPath === undefined ? {} : { defaultPath: options.defaultPath }),
-        },
-        content,
-      ),
+    saveFile: (options: { title?: string; defaultPath?: string }, content: string) => {
+      const picker = {}
+
+      if (options.title !== undefined) Object.assign(picker, { title: options.title })
+
+      if (options.defaultPath !== undefined) Object.assign(picker, { defaultPath: options.defaultPath })
+
+      return api.saveFile(picker, content)
+    },
     openExternal: (url: string) => api.openExternal(url),
     openBrowser: (url: string) => api.openBrowser(url),
     openLocalFile: (url: string) => api.openLocalFile(url),
