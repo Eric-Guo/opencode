@@ -1,3 +1,4 @@
+import { Data } from "effect"
 
 import { describe, expect, test } from "bun:test"
 import type { ServerConnection } from "@/runtime/server/registry"
@@ -50,14 +51,19 @@ describe("checkServerHealth", () => {
   test("reports rejected credentials without retrying", async () => {
     let calls = 0
 
-    const fetch = fakeFetch(async () => {
-      calls++
+    const fetch = Object.assign(
+      async () => {
+        calls++
 
-      return new Response(`{"_tag":"UnauthorizedError","message":"Authentication required"}`, {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      })
-    })
+        return Response.json(
+          Data.taggedEnum<{ _tag: "UnauthorizedError"; message: string }>().UnauthorizedError({
+            message: "Authentication required",
+          }),
+          { status: 401 },
+        )
+      },
+      { preconnect() {} },
+    )
 
     expect(await checkServerHealth(server, fetch)).toEqual({ type: "unauthorized" })
     expect(calls).toBe(1)
