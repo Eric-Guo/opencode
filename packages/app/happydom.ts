@@ -7,6 +7,7 @@ const originalGetContext = HTMLCanvasElement.prototype.getContext
 // @ts-expect-error - we're overriding with a simplified mock
 HTMLCanvasElement.prototype.getContext = function (contextType: string, _options?: unknown) {
   if (contextType === "2d") {
+    // SAFETY: this isolated test canvas supplies the drawing methods our renderer exercises; layout comes from Happy DOM.
     return {
       canvas: this,
       fillStyle: "#000000",
@@ -73,5 +74,6 @@ HTMLCanvasElement.prototype.getContext = function (contextType: string, _options
     } as unknown as CanvasRenderingContext2D
   }
 
+  // SAFETY: forwarding preserves the caller's getContext overload; "2d" only selects TypeScript's callable signature.
   return originalGetContext.call(this, contextType as "2d", _options)
 }
