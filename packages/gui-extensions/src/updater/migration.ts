@@ -13,6 +13,8 @@ export function requiresStableMacInstaller(platform: string, channel: string) {
   return platform === "darwin" && channel === "beta"
 }
 
+// SAFETY: This migration entry point validates the downloaded artifact with Artifact before accessing it.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters
 export function stableMacDownload(input: unknown, arch: string) {
   if (arch !== "arm64" && arch !== "x64") return undefined
   const artifact = Option.getOrUndefined(decode(input))

@@ -284,7 +284,8 @@ fixture(
     await expect
       .poll(() =>
         replacement.evaluate(() => {
-          const registration = (self as unknown as { registration: ServiceWorkerRegistration }).registration
+          // SAFETY: This callback runs in a ServiceWorkerGlobalScope, whose registration is provided by the browser.
+          const registration = (self as typeof self & { registration: ServiceWorkerRegistration }).registration
 
           return { waiting: !!registration.waiting, active: registration.active?.state }
         }),

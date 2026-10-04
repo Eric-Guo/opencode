@@ -45,6 +45,8 @@ describe("showToast", () => {
     const [tick, setTick] = createSignal(0)
     let reads = 0
 
+    // SAFETY: Solid renders accessor children lazily; this fixture observes that runtime-supported icon form.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions
     const icon = (() => {
       reads++
       tick()
