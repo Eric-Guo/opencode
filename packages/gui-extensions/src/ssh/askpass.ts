@@ -1,5 +1,5 @@
 import { NodeSocketServer } from "@effect/platform-node"
-import { Deferred, Effect, Fiber, Schema, Semaphore } from "effect"
+import { Deferred, Effect, Fiber, Schema, Semaphore, Predicate } from "effect"
 import { randomUUID } from "node:crypto"
 import { SshFailure } from "./command"
 
@@ -17,7 +17,7 @@ export const createAskpass = Effect.fn("Ssh.askpass")(function* (input: {
   const prompts = yield* Semaphore.make(1)
   const server = yield* NodeSocketServer.make({ host: "127.0.0.1", port: 0 }).pipe(Effect.mapError(SshFailure.from))
 
-  if (server.address._tag !== "TcpAddress") return yield* Effect.fail(new SshFailure("connection"))
+  if (!Predicate.isTagged(server.address, "TcpAddress")) return yield* Effect.fail(new SshFailure("connection"))
 
   const serving = yield* server
     .run((socket) =>

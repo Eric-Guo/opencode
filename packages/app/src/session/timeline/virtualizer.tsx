@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 
 import {
   createVirtualizer,
@@ -147,7 +148,7 @@ export function createTimelineVirtualizer(input: Input) {
             .findLastIndex(
               (row) =>
                 !(
-                  row._tag === "AssistantPart" &&
+                  Predicate.isTagged(row, "AssistantPart") &&
                   row.group.type === "context" &&
                   row.group.refs.length <= 64 &&
                   !toolOpen[`context:${row.group.key}`]
@@ -420,7 +421,8 @@ export function createTimelineVirtualizer(input: Input) {
 
       const partIndex = partID
         ? rows().findIndex(
-            (row) => row._tag === "AssistantPart" && row.group.type === "part" && row.group.ref.partID === partID,
+            (row) =>
+              Predicate.isTagged(row, "AssistantPart") && row.group.type === "part" && row.group.ref.partID === partID,
           )
         : -1
 
@@ -693,14 +695,19 @@ export function createTimelineVirtualizer(input: Input) {
             width: "100%",
             height: `${item().size}px`,
             overflow: "clip",
-            "overflow-clip-margin": row()._tag === "TurnGap" ? undefined : "0.5px",
+            "overflow-clip-margin": Predicate.isTagged(row(), "TurnGap") ? undefined : "0.5px",
           }}
         >
           <div
             ref={(value) => {
               element = value
 
-              if (row()._tag !== "UserMessage" || !addedKeys.has(rowProps.rowKey) || !input.pinned() || coldPending)
+              if (
+                !Predicate.isTagged(row(), "UserMessage") ||
+                !addedKeys.has(rowProps.rowKey) ||
+                !input.pinned() ||
+                coldPending
+              )
                 return
               // The optimistic row can paint before ResizeObserver corrects the tail estimates.
               // Measure the mounted tail and pin it in this render's microtask instead.

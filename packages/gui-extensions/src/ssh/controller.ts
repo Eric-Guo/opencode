@@ -1,5 +1,20 @@
 import { NodeSocketServer } from "@effect/platform-node"
-import { Cause, Clock, Deferred, Effect, Exit, Fiber, FileSystem, Path, PubSub, Ref, Schedule, Scope, Stream } from "effect"
+import {
+  Cause,
+  Clock,
+  Predicate,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Path,
+  PubSub,
+  Ref,
+  Schedule,
+  Scope,
+  Stream,
+} from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { SshConfig, SshHttp, SshItem, SshStart, SshState } from "./contract"
@@ -371,7 +386,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
 const freePort = Effect.gen(function* () {
   const server = yield* NodeSocketServer.make({ host: "127.0.0.1", port: 0 })
 
-  if (server.address._tag !== "TcpAddress") return yield* Effect.fail(new SshFailure("connection"))
+  if (!Predicate.isTagged(server.address, "TcpAddress")) return yield* Effect.fail(new SshFailure("connection"))
 
   return server.address.port
 }).pipe(Effect.scoped)

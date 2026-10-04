@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import { expect, test, type Page } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
@@ -610,12 +611,17 @@ test.describe("Working", () => {
 
       const id = `prt_working_${name}`
 
-      const input =
-        name === "shell"
-          ? { command: "printf ready" }
-          : name === "patch"
-            ? { patchText: "*** Begin Patch\n*** Add File: src/working.ts\n+export const ready = true\n*** End Patch" }
-            : { agent: "general", description: "Inspect working indicator", prompt: "Inspect the timeline." }
+      const input = Match.value(name).pipe(
+        Match.when("shell", () => ({ command: "printf ready" })),
+        Match.when("patch", () => ({
+          patchText: "*** Begin Patch\n*** Add File: src/working.ts\n+export const ready = true\n*** End Patch",
+        })),
+        Match.orElse(() => ({
+          agent: "general",
+          description: "Inspect working indicator",
+          prompt: "Inspect the timeline.",
+        })),
+      )
 
       await timeline.send(partUpdated(toolPart(id, name, "streaming", input)))
       const tool = page.locator(`[data-timeline-part-id="${id}"]`)
@@ -629,7 +635,11 @@ test.describe("Working", () => {
 
       await timeline.send(partUpdated(toolPart(id, name, "running", input, { metadata })))
       await expect(tool).toContainText(
-        name === "shell" ? "printf ready" : name === "patch" ? "working.ts" : "Inspect working indicator",
+        Match.value(name).pipe(
+          Match.when("shell", () => "printf ready"),
+          Match.when("patch", () => "working.ts"),
+          Match.orElse(() => "Inspect working indicator"),
+        ),
       )
       await expect(working).toHaveCount(0)
 
@@ -773,11 +783,15 @@ test.describe("background shortcut", () => {
                 "prt_grouped_active",
                 name,
                 "running",
-                name === "shell"
-                  ? { command: "sleep 10" }
-                  : name === "subagent"
-                    ? { agent: "general", description: "Inspect the timeline", prompt: "Inspect it." }
-                    : { filePath: "src/working.ts" },
+                Match.value(name).pipe(
+                  Match.when("shell", () => ({ command: "sleep 10" })),
+                  Match.when("subagent", () => ({
+                    agent: "general",
+                    description: "Inspect the timeline",
+                    prompt: "Inspect it.",
+                  })),
+                  Match.orElse(() => ({ filePath: "src/working.ts" })),
+                ),
               ),
             ],
             { completed: false },
@@ -1380,12 +1394,11 @@ function patchFile(file: string, status: "added" | "modified" | "deleted") {
   return {
     file,
     status,
-    patch:
-      status === "added"
-        ? "@@ -0,0 +1 @@\n+export const after = true"
-        : status === "deleted"
-          ? "@@ -1 +0,0 @@\n-export const before = true"
-          : "@@ -1 +1 @@\n-export const before = true\n+export const after = true",
+    patch: Match.value(status).pipe(
+      Match.when("added", () => "@@ -0,0 +1 @@\n+export const after = true"),
+      Match.when("deleted", () => "@@ -1 +0,0 @@\n-export const before = true"),
+      Match.orElse(() => "@@ -1 +1 @@\n-export const before = true\n+export const after = true"),
+    ),
     additions: status === "deleted" ? 0 : 1,
     deletions: status === "added" ? 0 : 1,
   }

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { parseTarget, quote, runSsh, sshArgs, SshFailure } from "./command"
 import { RemoteCli } from "./remote-cli"
@@ -50,7 +50,7 @@ export function parseRegistration(output: string) {
   )) {
     const result = Schema.decodeUnknownOption(Registration)(match[1])
 
-    if (result._tag === "Some" && result.value.url === status) return result.value
+    if (Option.isSome(result) && result.value.url === status) return result.value
   }
 
   return undefined
