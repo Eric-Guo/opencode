@@ -17,7 +17,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     messageID: string | undefined
     pendingMessage: string | undefined
     scroll: { overflow: boolean; jump: boolean }
-    follow: { sessionKey: string; pinned: boolean }
+    follow: { sessionKey: ReturnType<typeof session.identity.sessionKey>; pinned: boolean }
     refs: {
       scroller: HTMLDivElement | undefined
       content: HTMLDivElement | undefined
