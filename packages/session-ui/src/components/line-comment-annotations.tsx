@@ -45,13 +45,13 @@ export type LineCommentStateProps<T> = {
   hoverSelected?: (range: SelectedLineRange) => void
 }
 
-export type LineCommentShape = {
+export type LineCommentData = {
   id: string
   selection: SelectedLineRange
   comment: string
 }
 
-type LineCommentControllerProps<T extends LineCommentShape> = {
+type LineCommentControllerProps<T extends LineCommentData> = {
   comments: Accessor<T[]>
   draftKey: Accessor<string>
   label: string
@@ -68,7 +68,7 @@ type LineCommentControllerProps<T extends LineCommentShape> = {
   clearSelectionOnSelectionEndNull?: boolean
 }
 
-type LineCommentControllerWithSideProps<T extends LineCommentShape> = LineCommentControllerProps<T> & {
+type LineCommentControllerWithSideProps<T extends LineCommentData> = LineCommentControllerProps<T> & {
   getSide: (range: SelectedLineRange) => "additions" | "deletions"
 }
 
@@ -340,7 +340,7 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
   }
 }
 
-export function createLineCommentController<T extends LineCommentShape>(
+export function createLineCommentController<T extends LineCommentData>(
   props: LineCommentControllerWithSideProps<T>,
 ): {
   note: ReturnType<typeof createLineCommentState<string>>
@@ -352,7 +352,7 @@ export function createLineCommentController<T extends LineCommentShape>(
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
 }
-export function createLineCommentController<T extends LineCommentShape>(
+export function createLineCommentController<T extends LineCommentData>(
   props: LineCommentControllerProps<T>,
 ): {
   note: ReturnType<typeof createLineCommentState<string>>
@@ -364,7 +364,7 @@ export function createLineCommentController<T extends LineCommentShape>(
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
 }
-export function createLineCommentController<T extends LineCommentShape>(
+export function createLineCommentController<T extends LineCommentData>(
   props: LineCommentControllerProps<T> | LineCommentControllerWithSideProps<T>,
 ) {
   const i18n = useI18n()
