@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { For, Show, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -18,7 +19,7 @@ import { SettingsList } from "@/settings/list"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { SettingsSearchField } from "@/settings/search-field"
 
-const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const PALETTE_ID = "command.palette"
 
@@ -141,10 +142,8 @@ function signatures(config: string | undefined) {
   return sigs
 }
 
-function keybinds(value: unknown): KeybindMap {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
-
-  return value as KeybindMap
+function keybinds(value: KeybindMap): KeybindMap {
+  return value
 }
 
 function listFor(command: Pick<CommandContext, "catalog" | "options">, map: KeybindMap, palette: string) {
@@ -166,7 +165,7 @@ function listFor(command: Pick<CommandContext, "catalog" | "options">, map: Keyb
   }
 
   for (const [id, value] of Object.entries(map)) {
-    if (typeof value !== "string") continue
+    if (!Predicate.isString(value)) continue
 
     if (out.has(id)) continue
     out.set(id, { title: id, group: groupFor(id) })
@@ -237,7 +236,7 @@ export function createKeybindSettingsController(
   input: {
     command: Pick<CommandContext, "catalog" | "options" | "keybinds">
     settings: {
-      current: { keybinds: unknown }
+      current: { keybinds: KeybindMap }
       keybinds: Pick<SettingsContext["keybinds"], "get" | "set" | "resetAll">
     }
     target?: Document
@@ -245,7 +244,7 @@ export function createKeybindSettingsController(
   },
   language: Pick<LanguageContext, "locale" | "t"> = useLanguage(),
 ) {
-  const [store, setStore] = createStore({ active: null as string | null })
+  const [store, setStore] = createStore<{ active: string | null }>({ active: null })
   const overrides = createMemo(() => keybinds(input.settings.current.keybinds))
 
   const list = createMemo(() => {
@@ -262,7 +261,7 @@ export function createKeybindSettingsController(
 
     const custom = input.settings.keybinds.get(id)
 
-    if (typeof custom === "string") return custom
+    if (Predicate.isString(custom)) return custom
 
     const live = input.command.options.find((item) => item.id === id)
 
@@ -368,7 +367,7 @@ export function createKeybindSettingsController(
     stop()
   }
 
-  const target = input.target ?? (typeof document === "object" ? document : undefined)
+  const target = input.target ?? (typeof document !== "undefined" ? document : undefined)
 
   if (target) makeEventListener(target, "keydown", handle, { capture: true })
 
@@ -389,7 +388,7 @@ export function createKeybindSettingsController(
       toggle,
     },
     settings: {
-      hasOverrides: () => Object.values(overrides()).some((value) => typeof value === "string"),
+      hasOverrides: () => Object.values(overrides()).some((value) => Predicate.isString(value)),
       reset: () => {
         stop()
         input.settings.keybinds.resetAll()

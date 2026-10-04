@@ -134,9 +134,7 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
   await page.waitForFunction(
     (finalIndex) =>
       (
-        window as Window & {
-          __timelineStreamBenchmark?: { applied: { index: number }[] }
-        }
+        window
       ).__timelineStreamBenchmark?.applied.some((value) => value.index === finalIndex),
     deltaCount,
     { timeout: completionTimeoutMs },
@@ -255,7 +253,7 @@ async function installReviewPaneProbe(page: Page, input: { file: string }) {
       })
     }
 
-    ;(window as Window & { __reviewPaneProbe?: ReviewPaneProbe }).__reviewPaneProbe = {
+    ;(window).__reviewPaneProbe = {
       samples,
       start: () => {
         started = performance.now()
@@ -271,13 +269,13 @@ async function installReviewPaneProbe(page: Page, input: { file: string }) {
 
 async function startReviewPaneProbe(page: Page) {
   await page.evaluate(() => {
-    ;(window as Window & { __reviewPaneProbe?: ReviewPaneProbe }).__reviewPaneProbe!.start()
+    ;(window).__reviewPaneProbe!.start()
   })
 }
 
 async function collectReviewPaneProbe(page: Page) {
   await page.waitForFunction((streak) => {
-    const samples = (window as Window & { __reviewPaneProbe?: ReviewPaneProbe }).__reviewPaneProbe?.samples
+    const samples = (window).__reviewPaneProbe?.samples
 
     if (!samples) return false
 
@@ -289,7 +287,7 @@ async function collectReviewPaneProbe(page: Page) {
   }, reviewReadyStreak)
 
   const samples = await page.evaluate(() => {
-    const probe = (window as Window & { __reviewPaneProbe?: ReviewPaneProbe }).__reviewPaneProbe!
+    const probe = (window).__reviewPaneProbe!
     probe.stop()
 
     return probe.samples
@@ -315,5 +313,11 @@ function summarizeReviewPaneSamples(samples: ReviewPaneSample[]) {
     maxDiffViewers: Math.max(0, ...samples.map((sample) => sample.diffViewers)),
     maxDiffLines: Math.max(0, ...samples.map((sample) => sample.diffLines)),
     maxCodeBlocks: Math.max(0, ...samples.map((sample) => sample.codeBlocks)),
+  }
+}
+
+declare global {
+  interface Window {
+    __reviewPaneProbe?: ReviewPaneProbe
   }
 }

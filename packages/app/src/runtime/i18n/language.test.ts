@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { describe, expect, test } from "bun:test"
 import { localizedListParts, richTemplateParts } from "./language"
 
@@ -10,6 +11,6 @@ describe("rich translations", () => {
 
   test("keeps list elements intact while localizing punctuation", () => {
     const items = [{ id: 1 }, { id: 2 }, { id: 3 }]
-    expect(localizedListParts("en", items).filter((part) => typeof part !== "string")).toEqual(items)
+    expect(localizedListParts("en", items).filter((part) => !Predicate.isString(part))).toEqual(items)
   })
 })

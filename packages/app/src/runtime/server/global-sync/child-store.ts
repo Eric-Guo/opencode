@@ -16,10 +16,27 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQuery } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../sync"
 import { directoryKey, type DirectoryKey } from "./utils"
+import { normalizeAgentList, normalizeProviderList } from "./utils"
 import type { ServerScope } from "@/runtime/server/scope"
 import type { Data } from "@opencode/client/solid"
-import { normalizeAgentList, normalizeProviderList } from "./utils"
+
 import { IconState, ProjectState, VcsState } from "../persistence"
+
+type ChildStoreData = {
+  location: {
+    info: Data["location"]["info"]
+    agent: Pick<Data["location"]["agent"], "list">
+    command: Pick<Data["location"]["command"], "list">
+    reference: Pick<Data["location"]["reference"], "list">
+    provider: Pick<Data["location"]["provider"], "list">
+    model: Pick<Data["location"]["model"], "list">
+    mcp: {
+      server: Pick<Data["location"]["mcp"]["server"], "list">
+      resource: Pick<Data["location"]["mcp"]["resource"], "list">
+    }
+    vcs: Pick<Data["location"]["vcs"], "info">
+  }
+}
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -32,8 +49,8 @@ export function createChildStoreManager(input: {
   onMcp: (directory: string, setStore: SetStoreFunction<State>) => void
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
-  queryOptions: QueryOptionsApi
-  data: Data
+  queryOptions: Pick<QueryOptionsApi, "lsp">
+  data: ChildStoreData
   global: {
     path: Path
   }
@@ -92,7 +109,7 @@ export function createChildStoreManager(input: {
     if (!current) return
 
     if (current === input.owner) return
-    const key = current as object
+    const key = current
     const set = ownerPins.get(key)
 
     if (set?.has(directory)) return
