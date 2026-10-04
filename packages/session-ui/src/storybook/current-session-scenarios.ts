@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import type { JsonValue, SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
 import type { SessionDocument } from "../document"
@@ -10,26 +11,43 @@ export function storyTool(
   input: Record<string, JsonValue>,
   options: { metadata?: Record<string, JsonValue>; output?: string; error?: string; raw?: string } = {},
 ): SessionMessageAssistantTool {
-  const state =
-    status === "streaming"
-      ? { status, input: options.raw ?? JSON.stringify(input) }
-      : status === "running"
-        ? { status, input, metadata: { ...options.metadata, ...(options.output ? { output: options.output } : {}) } }
-        : status === "error"
-          ? {
-              status,
-              input,
-              error: { type: "ToolExecutionError", message: options.error ?? `${name} failed visibly` },
-              metadata: options.metadata,
-            }
-          : {
-              status,
-              input,
-              content: [{ type: "text" as const, text: options.output ?? "Complete" }] as [
-                { type: "text"; text: string },
-              ],
-              metadata: options.metadata,
-            }
+  const state = Match.value(status).pipe(
+    Match.when(
+      "streaming",
+      (status) =>
+        ({ status, input: options.raw ?? JSON.stringify(input) }) satisfies SessionMessageAssistantTool["state"],
+    ),
+    Match.when(
+      "running",
+      (status) =>
+        ({
+          status,
+          input,
+          metadata: options.output ? { ...options.metadata, output: options.output } : { ...options.metadata },
+        }) satisfies SessionMessageAssistantTool["state"],
+    ),
+    Match.when(
+      "error",
+      (status) =>
+        ({
+          status,
+          input,
+          error: { type: "ToolExecutionError", message: options.error ?? `${name} failed visibly` },
+          metadata: options.metadata,
+        }) satisfies SessionMessageAssistantTool["state"],
+    ),
+    Match.when(
+      "completed",
+      (status) =>
+        ({
+          status,
+          input,
+          content: [{ type: "text", text: options.output ?? "Complete" }],
+          metadata: options.metadata,
+        }) satisfies SessionMessageAssistantTool["state"],
+    ),
+    Match.exhaustive,
+  )
 
   return {
     type: "tool",
@@ -38,8 +56,8 @@ export function storyTool(
     state,
     time: {
       created: STORY_TIME,
-      ...(status === "streaming" ? {} : { ran: STORY_TIME + 100 }),
-      ...(status === "completed" || status === "error" ? { completed: STORY_TIME + 200 } : {}),
+      ran: status === "streaming" ? undefined : STORY_TIME + 100,
+      completed: status === "completed" || status === "error" ? STORY_TIME + 200 : undefined,
     },
   }
 }
@@ -55,7 +73,7 @@ export function storyDocument(content: SessionMessageAssistant["content"], busy 
         agent: "build",
         model: STORY_MODEL,
         content,
-        time: { created: STORY_TIME, ...(busy ? {} : { completed: STORY_TIME + 300 }) },
+        time: { created: STORY_TIME, completed: busy ? undefined : STORY_TIME + 300 },
       },
     ],
     status: { type: busy ? "busy" : "idle" },

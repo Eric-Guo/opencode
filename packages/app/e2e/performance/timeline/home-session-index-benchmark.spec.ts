@@ -91,7 +91,8 @@ benchmark.describe("performance: home session index", () => {
           heapUsedMB: metrics.JSHeapUsedSize / 1_048_576,
           heapTotalMB: metrics.JSHeapTotalSize / 1_048_576,
           nodes: metrics.Nodes,
-          ...(retained ? { retainedHeapMB: retained.usedSize / 1_048_576, retainedNodes: retained.nodes } : {}),
+          retainedHeapMB: retained ? retained.usedSize / 1_048_576 : undefined,
+          retainedNodes: retained?.nodes,
         },
         {
           sessions: count,
