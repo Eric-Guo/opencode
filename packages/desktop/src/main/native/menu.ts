@@ -1,6 +1,7 @@
 import { BrowserWindow, Menu } from "electron"
 import type { MenuItemConstructorOptions } from "electron"
 
+
 import {
   DESKTOP_MENU_HISTORY_LIMIT,
   DESKTOP_MENU,
@@ -122,7 +123,7 @@ function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Dep
   )
 
   return {
-    ...(menu.role ? { role: nativeRole(menu.role) } : {}),
+    role: menu.role ? nativeRole(menu.role) : undefined,
     label: nativeT(menu.labelKey),
     submenu: [
       ...items.map((item) => {
