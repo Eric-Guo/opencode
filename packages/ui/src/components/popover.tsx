@@ -215,9 +215,7 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
         as={local.triggerAs ?? "div"}
         data-slot="popover-trigger"
         data-owns-escape={selectPopoverOpen(popover()) ? "" : undefined}
-        // SAFETY: `triggerProps` are `ComponentProps<T>` for `triggerAs`, the component Kobalte renders; Kobalte's
-        // polymorphic props cannot follow the generic `T`.
-        {...(local.triggerProps as any)}
+        {...local.triggerProps}
       >
         {local.trigger}
       </Trigger>
