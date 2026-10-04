@@ -1,10 +1,8 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
 import { createRoot, getOwner } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { State } from "./types"
-import type { QueryOptionsApi } from "../sync"
+import { loadLspQuery } from "../sync"
 import { ServerScope } from "@/runtime/server/scope"
-import type { Data } from "@opencode/client/solid"
 import type { persisted } from "@/runtime/persistence/storage"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
@@ -26,35 +24,18 @@ const data = {
     command: { list: () => undefined },
     reference: { list: () => undefined },
     provider: { list: () => undefined },
-    model: { list: () => undefined, default: () => undefined },
+    model: { list: () => undefined },
     mcp: {
       server: { list: () => undefined },
       resource: { list: () => undefined },
     },
     vcs: { info: () => undefined },
   },
-} as unknown as Data
+} satisfies Parameters<typeof createChildStoreManager>[0]["data"]
 
 const queryOptionsApi = {
-  globalConfig: () => ({ queryKey: ["globalConfig"], queryFn: async () => ({}) }),
-  projects: () => ({ queryKey: ["projects"], queryFn: async () => [] }),
-  path: (directory: string | null) => ({
-    queryKey: [directory, "path"],
-    queryFn: async () => ({
-      state: "",
-      config: "",
-      worktree: "",
-      directory: directory ?? "",
-      home: "",
-    }),
-  }),
-  agents: (directory: string) => ({ queryKey: [directory, "agents"], queryFn: async () => [] }),
-  mcp: (directory: string) => ({ queryKey: [directory, "mcp"], queryFn: async () => ({}) }),
-  mcpResources: (directory: string) => ({ queryKey: [directory, "mcpResources"], queryFn: async () => ({}) }),
-  lsp: (directory: string) => ({ queryKey: [directory, "lsp"], queryFn: async () => [] }),
-  references: (directory: string) => ({ queryKey: [directory, "references"], queryFn: async () => [] }),
-  sessions: (directory: string) => ({ queryKey: [directory, "loadSessions"] as const }),
-} as unknown as QueryOptionsApi
+  lsp: (directory) => loadLspQuery(ServerScope.local, directory),
+} satisfies Parameters<typeof createChildStoreManager>[0]["queryOptions"]
 
 function setup(input: { connected?: () => boolean } = {}) {
   const bootstraps: string[] = []
@@ -123,11 +104,11 @@ describe("createChildStoreManager", () => {
 
     try {
       Array.from({ length: 30 }, (_, index) => `/pinned-${index}`).forEach((directory) => {
-        manager.children[directory] = createStore({} as State)
+        manager.child(directory, { bootstrap: false })
         manager.pin(directory)
       })
 
-      manager.children["/active"] = createStore({} as State)
+      manager.child("/active", { bootstrap: false })
       manager.mark("/active")
 
       expect(manager.children["/active"]).toBeDefined()

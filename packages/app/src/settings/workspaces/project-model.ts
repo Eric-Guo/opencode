@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { getFilename } from "@opencode/util/path"
 import type { ProjectUpdateInput } from "@opencode/client/promise"
 import { createMemo } from "solid-js"
@@ -51,7 +52,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
         serverCtx().sync.project.meta(props.project.worktree, patch)
       })
       .then(complete)
-      .catch((error: unknown) => {
+      .catch((error) => {
         showToast({
           variant: "error",
           title: language.t("common.requestFailed"),
@@ -94,7 +95,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     reader.onload = (event) => {
       const result = event.target?.result
 
-      if (typeof result !== "string") return
+      if (!Predicate.isString(result)) return
       setStore("iconOverride", result)
       setStore("iconHover", false)
       saveIcon(store.color, result)

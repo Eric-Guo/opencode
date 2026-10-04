@@ -6,7 +6,7 @@ import { createComposerEditor } from "@/composer/editor/interaction"
 
 test("the editor disables send and keyboard submission until the project has a work package", () => {
   createRoot((dispose) => {
-    const [selection, setSelection] = createStore({ workPackageID: undefined as number | undefined })
+    const [selection, setSelection] = createStore<{ workPackageID: number | undefined }>({ workPackageID: undefined })
     const calls: (boolean | undefined)[] = []
 
     const editor = createComposerEditor({

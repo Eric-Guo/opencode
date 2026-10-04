@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeSessionGroup } from "./sessions/controller"
@@ -12,8 +13,8 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
   const [thumbTrack, setThumbTrack] = createSignal<HTMLDivElement>()
   const [hoverTarget, setHoverTarget] = createSignal<HTMLElement>()
 
-  const [state, setState] = createStore({
-    titleOpacity: {} as Partial<Record<HomeSessionGroup["id"], number>>,
+  const [state, setState] = createStore<{ titleOpacity: Partial<Record<HomeSessionGroup["id"], number>> }>({
+    titleOpacity: {},
   })
 
   const headerRefs = new Map<HomeSessionGroup["id"], HTMLDivElement>()
@@ -68,7 +69,7 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
       .map((group) => headerRefs.get(group.id))
       .find((element) => element !== undefined)
 
-    if (header && typeof getComputedStyle === "function") {
+    if (header && Predicate.isFunction(getComputedStyle)) {
       const top = Number.parseFloat(getComputedStyle(header).top)
 
       if (Number.isFinite(top)) stickyTop = top

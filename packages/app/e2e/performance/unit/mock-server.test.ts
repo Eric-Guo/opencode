@@ -6,7 +6,7 @@ test("serves an empty config document list for composer defaults", async () => {
   const server = createMockServerHandler({
     provider: {},
     directory: "C:/OpenCode",
-    project: {},
+    project: { id: "project" },
     sessions: [],
     pageMessages: () => ({ items: [] }),
   })
@@ -44,7 +44,7 @@ test("applies message latency after a list response gate is released", async () 
   await mockOpenCodeServer(page, {
     provider: {},
     directory: "C:/OpenCode",
-    project: {},
+    project: { id: "project" },
     sessions: [{ id: "session" }],
     messageDelay: 25,
     beforeMessagesResponse: () => {
@@ -106,7 +106,7 @@ test("routes requests through the HttpApi contract", async () => {
   await mockOpenCodeServer(page, {
     provider: {},
     directory: "C:/OpenCode",
-    project: {},
+    project: { id: "project" },
     sessions: [],
     pageMessages: () => ({ items: [] }),
     onConnectKey: connected.resolve,

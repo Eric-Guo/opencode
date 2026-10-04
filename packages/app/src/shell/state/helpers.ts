@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { Accessor } from "solid-js"
 
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
@@ -8,7 +9,7 @@ export function ensureSessionKey(key: string, touch: (key: string) => void, seed
 }
 
 export function createSessionKeyReader(sessionKey: string | Accessor<string>, ensure: (key: string) => void) {
-  const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
+  const key = Predicate.isFunction(sessionKey) ? sessionKey : () => sessionKey
 
   return () => {
     const value = key()

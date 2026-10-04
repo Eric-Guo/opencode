@@ -3,6 +3,7 @@ import { createEffect, createMemo, Match, on, onCleanup, Show, Switch, untrack, 
 import { createStore } from "solid-js/store"
 import { useI18n } from "@opencode/ui/context/i18n"
 import {
+  type MediaValue,
   dataUrlFromMediaValue,
   hasMediaValue,
   isBinaryContent,
@@ -14,9 +15,9 @@ import {
 export type FileMediaOptions = {
   mode?: "auto" | "off"
   path?: string
-  current?: unknown
-  before?: unknown
-  after?: unknown
+  current?: MediaValue
+  before?: MediaValue
+  after?: MediaValue
   deleted?: boolean
   readFile?: (path: string) => Promise<PresentationFileContent | undefined>
   onLoad?: () => void

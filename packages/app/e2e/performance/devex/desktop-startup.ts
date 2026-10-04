@@ -332,11 +332,6 @@ async function waitForHome(page: Page, mark: (name: Milestone) => void) {
   mark("homeReady")
 }
 
-type ThemeWindow = Window & {
-  __OPENCODE_THEME_STATES__?: string[]
-  __OPENCODE_THEME_OBSERVER__?: MutationObserver
-}
-
 async function startThemeObservation(page: Page) {
   await page.addInitScript(installThemeObservation)
   await page.evaluate(installThemeObservation)
@@ -344,8 +339,7 @@ async function startThemeObservation(page: Page) {
 
 async function requireStableTheme(page: Page) {
   const states = await page.evaluate(() => {
-    // SAFETY: only `installThemeObservation` writes these optional globals, in the declared shapes.
-    const target = window as ThemeWindow
+    const target = window
     target.__OPENCODE_THEME_OBSERVER__?.disconnect()
 
     return target.__OPENCODE_THEME_STATES__ ?? []
@@ -355,8 +349,7 @@ async function requireStableTheme(page: Page) {
 }
 
 function installThemeObservation() {
-  // SAFETY: this function is the only writer of these optional globals, in the declared shapes.
-  const target = window as ThemeWindow
+  const target = window
 
   const observeRoot = () => {
     const root = document.documentElement
@@ -589,4 +582,16 @@ function elapsed(started: number) {
 
 function round(value: number) {
   return Math.round(value * 100) / 100
+}
+
+declare global {
+  interface Window {
+    __OPENCODE_THEME_STATES__?: string[]
+  }
+}
+
+declare global {
+  interface Window {
+    __OPENCODE_THEME_OBSERVER__?: MutationObserver
+  }
 }

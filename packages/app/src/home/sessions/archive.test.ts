@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
 import { SESSION_TABS_REMOVED_EVENT, readSessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { archiveHomeSession } from "./archive"
-import type { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection } from "@/runtime/server/registry"
 
-const remote = "remote" as ServerConnection.Key
+const remote = ServerConnection.Key.make("remote")
 
 test("archiving a Home session removes its open titlebar tab", async () => {
   let detail: ReturnType<typeof readSessionTabsRemovedDetail>

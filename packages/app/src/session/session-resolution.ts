@@ -1,14 +1,15 @@
+import type { Data } from "@opencode/client/solid"
 import { createMemo, createRenderEffect, createSignal, on, onCleanup } from "solid-js"
 import { sessionNotFoundError } from "@/runtime/server/errors"
 
 type SessionStore<T> = {
   get: (id: string) => T | undefined
-  sync: (id: string, options?: { children?: boolean }) => Promise<unknown>
+  sync: Data["session"]["sync"]
   message: {
-    sync: (id: string) => Promise<unknown>
+    sync: Data["session"]["message"]["sync"]
   }
   pending: {
-    sync: (id: string) => Promise<unknown>
+    sync: Data["session"]["pending"]["sync"]
   }
 }
 

@@ -49,7 +49,9 @@ export const UnifiedDark = {
 }
 
 function InteractiveCommentsStory() {
-  const [state, setState] = createStore({ comments: [] as SessionReviewComment[] })
+  type ReviewState = { comments: SessionReviewComment[] }
+
+  const [state, setState] = createStore<ReviewState>({ comments: [] })
   const file = "src/review.ts"
 
   const diffs = [
