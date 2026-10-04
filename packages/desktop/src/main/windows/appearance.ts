@@ -13,6 +13,7 @@ import { getPrimaryWebContents } from "./content"
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 
 const controlColors = new WeakMap<BrowserWindow, string>()
+
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
 
 const maxZoomLevel = 10
