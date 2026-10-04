@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection } from "@/runtime/server/registry"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "./session-events"
 
 const details: { name: string; event: Event; expected: ReturnType<typeof readSessionTabsRemovedDetail> }[] = [
@@ -14,7 +14,11 @@ const details: { name: string; event: Event; expected: ReturnType<typeof readSes
     event: new CustomEvent(SESSION_TABS_REMOVED_EVENT, {
       detail: { server: "remote", directory: "/tmp/project", sessionIDs: ["ses_1", "ses_2", 1] },
     }),
-    expected: { server: "remote" as ServerConnection.Key, directory: "/tmp/project", sessionIDs: ["ses_1", "ses_2"] },
+    expected: {
+      server: ServerConnection.Key.make("remote"),
+      directory: "/tmp/project",
+      sessionIDs: ["ses_1", "ses_2"],
+    },
   },
 ]
 

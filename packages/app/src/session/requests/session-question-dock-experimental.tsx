@@ -31,7 +31,7 @@ import {
   type QuestionLoopState,
 } from "./question-switch-machine"
 
-const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const group = "Timeline"
 

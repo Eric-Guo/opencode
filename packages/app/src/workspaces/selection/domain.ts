@@ -425,8 +425,10 @@ export function shortenPickerRecentPath(path: string, home: string) {
   return display
 }
 
+type FilePickerSDK = { api: { file: Pick<ServerSDK["api"]["file"], "find" | "list"> } }
+
 export async function listPickerDirectory(
-  sdk: ServerSDK,
+  sdk: FilePickerSDK,
   location: { directory: string; workspace?: string },
   directory: string,
   signal?: AbortSignal,
@@ -441,7 +443,7 @@ export async function listPickerDirectory(
 }
 
 export function createDirectorySearch(args: {
-  sdk: ServerSDK
+  sdk: FilePickerSDK
   location: () => { directory: string; workspace?: string } | undefined
   base: () => string | undefined
   home: () => string

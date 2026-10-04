@@ -105,7 +105,9 @@ export function createNewSessionComposerAdapter(props: {
     start(selection, submission, message) {
       const currentDirectory = location().directory
 
-      const projectDirectory = data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
+      const projectDirectory =
+        data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
+
       const projectID = data.location.info({ directory: currentDirectory })?.project.id
       const refreshProject = !projectID || !data.project.get(projectID)
 
