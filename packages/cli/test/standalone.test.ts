@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { isolatedEnv } from "./fixture/environment"
@@ -30,6 +31,12 @@ test("standalone server exits when its owner is killed", async () => {
     await owner.exited
 
     expect(await waitForExit(pid)).toBe(true)
+    expect(
+      await fs.stat(path.join(root.path, "opencode.db.owner")).then(
+        () => true,
+        () => false,
+      ),
+    ).toBe(false)
   } finally {
     owner.kill("SIGKILL")
     await owner.exited
