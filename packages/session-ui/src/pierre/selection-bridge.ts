@@ -87,8 +87,11 @@ export function restoreShadowTextSelection(root: ShadowRoot | undefined, range: 
   if (!root || !range) return
 
   requestAnimationFrame(() => {
-    const selection =
-      (root as unknown as { getSelection?: () => Selection | null }).getSelection?.() ?? window.getSelection()
+    type SelectionRoot = ShadowRoot & { getSelection?: () => Selection | null }
+
+    // SAFETY: Chromium exposes optional getSelection on ShadowRoot; absence falls back to the window selection.
+    const shadowRoot = root as SelectionRoot
+    const selection = shadowRoot.getSelection?.() ?? window.getSelection()
 
     if (!selection) return
 

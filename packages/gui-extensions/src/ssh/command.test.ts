@@ -4,7 +4,11 @@ import { parseTarget, quote, sshArgs, tunnelArgs, commandFailureDetail, SshFailu
 
 describe("SSH connection commands", () => {
   test("classifies a missing SSH executable from the platform error", () => {
+    // SAFETY: The test exercises the platform error wire payload, including its NotFound discriminant.
+    // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction
     const error = PlatformError.systemError({
+      // SAFETY: This is the literal platform-error reason supplied to the real error constructor.
+      // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction
       _tag: "NotFound",
       module: "ChildProcessSpawner",
       method: "spawn",
