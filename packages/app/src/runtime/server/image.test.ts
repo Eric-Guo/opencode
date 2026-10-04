@@ -1,3 +1,4 @@
+import { Data } from "effect"
 
 import { describe, expect, test } from "bun:test"
 import { createApiForServer } from "./api"
@@ -105,9 +106,15 @@ describe("readLocalImage", () => {
   })
 
   test.each([
-    [400, { _tag: "RequestError", message: "Cannot read image" }],
-    [401, { _tag: "RequestError", message: "Cannot read image" }],
-    [404, { _tag: "FileNotFoundError", path: "image.png", message: "File not found: image.png" }],
+    [400, Data.taggedEnum<{ _tag: "RequestError"; message: string }>().RequestError({ message: "Cannot read image" })],
+    [401, Data.taggedEnum<{ _tag: "RequestError"; message: string }>().RequestError({ message: "Cannot read image" })],
+    [
+      404,
+      Data.taggedEnum<{ _tag: "FileNotFoundError"; path: string; message: string }>().FileNotFoundError({
+        path: "image.png",
+        message: "File not found: image.png",
+      }),
+    ],
   ])("propagates declared API errors (%s)", async (status, error) => {
     const { api } = setup(() => Response.json(error, { status }))
     await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject(error)
