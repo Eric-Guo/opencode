@@ -77,7 +77,7 @@ export function receivesPluginPort(contents: { isDestroyed(): boolean; mainFrame
   return !contents.isDestroyed() && isRendererUrl(contents.mainFrame.url)
 }
 
-export function wireNavigationPolicy(contents: WebContents, openExternalURL: (url: string) => unknown) {
+export function wireNavigationPolicy(contents: WebContents, openExternalURL: (url: string) => void) {
   contents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
 

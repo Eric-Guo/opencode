@@ -1,3 +1,4 @@
+import { Option, Schema } from "effect"
 import type { Accessor } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -39,7 +40,12 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
         { signal },
       )
 
-      return written.data.path
+      const response = Schema.decodeUnknownOption(Schema.Struct({ data: Schema.Struct({ path: Schema.String }) }))(
+        written,
+      )
+
+      if (Option.isNone(response)) throw new Error("Upload failed")
+      return response.value.data.path
     },
   })
 }

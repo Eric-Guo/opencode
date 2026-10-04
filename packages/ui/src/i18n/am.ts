@@ -381,4 +381,4 @@ export const dict = {
   "ui.question.singleHint": "አንድ መልስ ይምረጡ",
   "ui.question.classic.multiHint": "የሚመለከቱትን ሁሉንም መልሶች ይምረጡ",
   "ui.question.custom.answerPlaceholder": "የራስዎን መልስ ይተይቡ…",
-}
+} satisfies Record<string, string>
