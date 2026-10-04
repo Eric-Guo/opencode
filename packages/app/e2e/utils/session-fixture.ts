@@ -1,3 +1,4 @@
+import { Match } from "effect"
 import type { Page } from "@playwright/test"
 import type { JsonValue, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 
@@ -222,18 +223,23 @@ function fileDiff(file: string, seed: number) {
   const lines = seed % 12 === 0 ? 300 : seed % 8 === 0 ? 2 : 38
   const before = code(seed, lines, seed % 10 === 0 ? 280 : 32)
 
-  const after =
-    lines === 2
-      ? before.replace("value1", "updatedValue1")
-      : lines === 300
-        ? code(seed + 1, lines, seed % 10 === 0 ? 280 : 32)
-        : before.replace("value4", "updatedValue4").replace("value20", "updatedValue20")
+  const after = Match.value(lines).pipe(
+    Match.when(2, () => before.replace("value1", "updatedValue1")),
+    Match.when(300, () => code(seed + 1, lines, seed % 10 === 0 ? 280 : 32)),
+    Match.orElse(() => before.replace("value4", "updatedValue4").replace("value20", "updatedValue20")),
+  )
+
+  const changes = Match.value(lines).pipe(
+    Match.when(300, () => 300),
+    Match.when(2, () => 1),
+    Match.orElse(() => 2),
+  )
 
   return {
     file,
     status: "modified" as const,
-    additions: lines === 300 ? 300 : lines === 2 ? 1 : 2,
-    deletions: lines === 300 ? 300 : lines === 2 ? 1 : 2,
+    additions: changes,
+    deletions: changes,
     patch: createTwoFilesPatch(`a/${file}`, `b/${file}`, before, after),
   }
 }
