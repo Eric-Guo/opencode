@@ -215,13 +215,11 @@ function suggestionSelected(
           : replaceTrigger(current, "/", `${item.label} `),
     })
   } else {
-    commands.push({
-      type: "mention.add",
-      item,
-      ...(item.kind === "skill" && item.label.startsWith("/")
-        ? { range: { start: 0, end: state.popover.type === "command-menu" ? 0 : current.length } }
-        : {}),
-    })
+    const command: Extract<ComposerInteractionCommand, { type: "mention.add" }> = { type: "mention.add", item }
+
+    if (item.kind === "skill" && item.label.startsWith("/"))
+      command.range = { start: 0, end: state.popover.type === "command-menu" ? 0 : current.length }
+    commands.push(command)
   }
 
   commands.push({ type: "focus.editor" })
