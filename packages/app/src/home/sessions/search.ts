@@ -16,11 +16,17 @@ export function createHomeSessionSearchController(home: HomeController, sessions
   const command = useCommand()
   const language = useLanguage()
 
-  const [state, setState] = createStore({
+  const [state, setState] = createStore<{
+    value: string
+    focused: boolean
+    highlighted: string
+    exact: HomeSessionRecord | undefined
+    lookingUp: boolean
+  }>({
     value: "",
     focused: false,
     highlighted: "",
-    exact: undefined as HomeSessionRecord | undefined,
+    exact: undefined,
     lookingUp: false,
   })
 

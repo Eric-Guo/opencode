@@ -26,7 +26,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
       createRoot((dispose) => {
         let visits = 0
 
-        const [state, setState] = createStore({
+        const [state, setState] = createStore<{ messages: SessionMessageInfo[] }>({
           messages: [
             {
               id: "old",
@@ -41,7 +41,7 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
             assistant("old-answer", [{ type: "text", text: "History remains visible." }]),
             { id: "user", type: "user", text: "question", time: { created: 1 } },
             assistant("answer", [{ type: "text", text: "" }]),
-          ] as SessionMessageInfo[],
+          ],
         })
 
         const projection = factory({
@@ -87,7 +87,14 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
 
     test("matches full construction through grouping, notices, history and preference transitions", () => {
       createRoot((dispose) => {
-        const [state, setState] = createStore({
+        const [state, setState] = createStore<{
+          messages: SessionMessageInfo[]
+          status: SessionStatus
+          reasoning: ReasoningMode
+          shell: boolean
+          edit: boolean
+          pending: Set<string>
+        }>({
           messages: [
             assistant("answer", [
               { type: "reasoning", text: "Inspect the source", time: { created: 1 } },
@@ -114,9 +121,9 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
                 time: { created: 1 },
               },
             ]),
-          ] as SessionMessageInfo[],
-          status: { type: "busy" } as SessionStatus,
-          reasoning: "compact" as ReasoningMode,
+          ],
+          status: { type: "busy" },
+          reasoning: "compact",
           shell: false,
           edit: false,
           pending: new Set<string>(),

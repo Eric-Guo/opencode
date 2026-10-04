@@ -8,11 +8,11 @@ import { type ServerHealth } from "@/runtime/server/health"
 import { showToast } from "@/shell/notifications/toast"
 import { useExtensionServers } from "@/runtime/extension/servers"
 
-function showRequestError(language: ReturnType<typeof useLanguage>, err: unknown) {
+function showRequestError(language: ReturnType<typeof useLanguage>, cause: unknown) {
   showToast({
     variant: "error",
     title: language.t("common.requestFailed"),
-    description: err instanceof Error ? err.message : String(err),
+    description: cause instanceof Error ? cause.message : String(cause),
   })
 }
 

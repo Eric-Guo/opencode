@@ -237,21 +237,24 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return items[activeSuggestion()] ?? items[0]
   }
 
-  const keyActions: Partial<Record<string, () => void>> = {
-    ArrowDown: () => moveSuggestion(1),
-    ArrowUp: () => moveSuggestion(-1),
-    Enter: () => {
-      const suggestion = activeSuggestionValue()
+  const keyActions = new Map<string, () => void>([
+    ["ArrowDown", () => moveSuggestion(1)],
+    ["ArrowUp", () => moveSuggestion(-1)],
+    [
+      "Enter",
+      () => {
+        const suggestion = activeSuggestionValue()
 
-      if (suggestion) chooseSuggestion(suggestion)
+        if (suggestion) chooseSuggestion(suggestion)
 
-      if (!suggestion) void navigate(input())
-    },
-    Tab: complete,
-  }
+        if (!suggestion) void navigate(input())
+      },
+    ],
+    ["Tab", complete],
+  ])
 
   function handleInputKey(event: KeyboardEvent) {
-    const action = keyActions[event.key]
+    const action = keyActions.get(event.key)
 
     if (!action) return
 
@@ -270,7 +273,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   onMount(() => {
     const closeSuggestions = (event: PointerEvent) => {
-      if (pathArea?.contains(event.target as Node)) return
+      if (event.target instanceof Node && pathArea?.contains(event.target)) return
       setSuggestionsOpen(false)
       setActiveSuggestion(-1)
     }

@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { FullConfig, FullResult, Reporter, Suite, TestCase, TestResult } from "@playwright/test/reporter"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -21,7 +22,7 @@ export default class TabSwitchReporter implements Reporter {
     this.results.push({
       test,
       status: result.status,
-      records: Buffer.concat(result.stdout.map((chunk) => (typeof chunk === "string" ? Buffer.from(chunk) : chunk)))
+      records: Buffer.concat(result.stdout.map((chunk) => (chunk instanceof Uint8Array ? chunk : Buffer.from(chunk))))
         .toString("utf8")
         .split(/\r?\n/)
         .filter((line) => line.startsWith("BENCHMARK "))
@@ -69,9 +70,9 @@ export default class TabSwitchReporter implements Reporter {
         }))
         .filter(
           (metrics): metrics is { firstCorrectObservedMs: number; stableObservedMs: number } =>
-            typeof metrics.firstCorrectObservedMs === "number" &&
+            Predicate.isNumber(metrics.firstCorrectObservedMs) &&
             Number.isFinite(metrics.firstCorrectObservedMs) &&
-            typeof metrics.stableObservedMs === "number" &&
+            Predicate.isNumber(metrics.stableObservedMs) &&
             Number.isFinite(metrics.stableObservedMs),
         )
 

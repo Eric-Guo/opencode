@@ -31,10 +31,7 @@ type Probe = {
   titles: Record<string, number>
 }
 
-type ProbeWindow = Window & {
-  __homeIndexProbe?: Probe
-  __mockServerStreams?: Record<string, { push: (payloads: unknown[]) => void }>
-}
+
 
 // Interaction-scoped tracing keeps the page-lifetime Chrome trace off unless a
 // scenario starts one; service workers stay out of the renderer measurement.
@@ -150,7 +147,7 @@ benchmark.describe("performance: home session index", () => {
 
         const pushed = await page.evaluate(
           ({ id, title, event, server }) => {
-            const host = window as ProbeWindow
+            const host = window
             const stream = host.__mockServerStreams?.[server]
 
             if (!host.__homeIndexProbe || !stream) throw new Error("Missing Home index probe")
@@ -165,7 +162,8 @@ benchmark.describe("performance: home session index", () => {
             event: {
               id: `evt_home_update_${index}`,
               created: Date.now(),
-              type: "session.execution.succeeded",
+              type: "session.execution.succeeded" as const,
+              durable: { aggregateID: target.id, seq: index, version: 1 as const },
               data: { sessionID: target.id },
             },
             server: SERVER,
@@ -174,7 +172,7 @@ benchmark.describe("performance: home session index", () => {
 
         await expect(titleLocator).toHaveText(title)
 
-        const seen = await page.evaluate(({ title }) => (window as ProbeWindow).__homeIndexProbe?.titles[title], {
+        const seen = await page.evaluate(({ title }) => (window).__homeIndexProbe?.titles[title], {
           title,
         })
 
@@ -241,7 +239,7 @@ async function setup(page: Page, fixture: HomeIndexFixture) {
   )
   await page.addInitScript(
     ({ expected }) => {
-      const host = window as ProbeWindow
+      const host = window
       const probe: Probe = { expected, pending: {}, titles: {} }
       host.__homeIndexProbe = probe
 
@@ -306,7 +304,7 @@ async function setup(page: Page, fixture: HomeIndexFixture) {
 
 async function readProbe(page: Page) {
   const probe = await page.evaluate(() => {
-    const host = window as ProbeWindow
+    const host = window
 
     if (!host.__homeIndexProbe) throw new Error("Missing Home index probe")
 
@@ -332,7 +330,7 @@ async function readProbe(page: Page) {
 async function performanceMetrics(cdp: CDPSession) {
   const result = await cdp.send("Performance.getMetrics")
 
-  return Object.fromEntries(result.metrics.map((metric) => [metric.name, metric.value])) as Record<string, number>
+  return Object.fromEntries(result.metrics.map((metric) => [metric.name, metric.value]))
 }
 
 async function retainedHeap(cdp: CDPSession) {
@@ -349,4 +347,10 @@ function median(sorted: number[]) {
   const middle = Math.floor(sorted.length / 2)
 
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
+}
+
+declare global {
+  interface Window {
+    __homeIndexProbe?: Probe
+  }
 }

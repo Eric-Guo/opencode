@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { createEffect, on, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
@@ -229,10 +230,7 @@ export function createComposerEditor(input: {
       if (!action || state.popover.type !== "command-menu") result.commands.forEach(execute)
 
       if (action && event.item.kind === "command" && state.popover.type !== "command-menu") {
-        draft.setPrompt(
-          draft.state.prompt.filter(isAttachment),
-          0,
-        )
+        draft.setPrompt(draft.state.prompt.filter(isAttachment), 0)
       }
     }
 
@@ -520,7 +518,7 @@ export function createComposerEditor(input: {
         : normalized
 
       if (
-        typeof document.execCommand === "function" &&
+        Predicate.isFunction(document.execCommand) &&
         document.execCommand(multiline ? "insertHTML" : "insertText", false, value)
       )
         return
@@ -576,7 +574,10 @@ export function createComposerEditor(input: {
 
 export type ComposerEditorModel = ReturnType<typeof createComposerEditor>
 
-export function shouldHandlePasteAsAttachment(clipboard: DataTransfer | null, readClipboardImage: boolean) {
+export function shouldHandlePasteAsAttachment(
+  clipboard: { items: ArrayLike<{ kind: string }>; types: readonly string[] } | null,
+  readClipboardImage: boolean,
+) {
   if (Array.from(clipboard?.items ?? []).some((item) => item.kind === "file")) return true
 
   if (Array.from(clipboard?.types ?? []).some((type) => type.startsWith("text/"))) return false

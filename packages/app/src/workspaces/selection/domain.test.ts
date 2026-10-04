@@ -21,11 +21,44 @@ import {
   pickerAbsoluteInput,
 } from "./domain"
 
-type Sdk = Parameters<typeof listPickerDirectory>[0]
+type FileAPI = Parameters<typeof listPickerDirectory>[0]["api"]["file"]
+
+type FileResult = Awaited<ReturnType<FileAPI["list"]>>
 
 // The picker only reads `api.file.find` and `api.file.list`.
-const sdk = (file: { find?: (input: never) => Promise<unknown>; list?: (input: never) => Promise<unknown> }) =>
-  ({ api: { file } }) as unknown as Sdk
+const sdk = (file: {
+  find?: (
+    input: Parameters<FileAPI["find"]>[0],
+  ) => Promise<Omit<FileResult, "location"> & Partial<Pick<FileResult, "location">>>
+  list?: (
+    input: NonNullable<Parameters<FileAPI["list"]>[0]>,
+  ) => Promise<Omit<FileResult, "location"> & Partial<Pick<FileResult, "location">>>
+}) => ({
+  api: {
+    file: {
+      find: async (input: Parameters<FileAPI["find"]>[0]) => {
+        if (!file.find) throw new Error("Unexpected directory search")
+        const result = await file.find(input)
+
+        return {
+          location: input.location?.directory ? { directory: input.location.directory } : { directory: "/repo" },
+          ...result,
+        }
+      },
+      list: async (input: Parameters<FileAPI["list"]>[0]) => {
+        if (!file.list) throw new Error("Unexpected directory listing")
+
+        if (!input) throw new Error("Directory listing requires its request")
+        const result = await file.list(input)
+
+        return {
+          location: input.location?.directory ? { directory: input.location.directory } : { directory: "/repo" },
+          ...result,
+        }
+      },
+    },
+  },
+})
 
 test("maps server directory entries into Pierre paths", () => {
   expect(
@@ -161,7 +194,7 @@ test("lists absolute parents and preloads siblings through a stable workspace", 
   const location = { directory: "/repo/current", workspace: "workspace_1" }
 
   const api = sdk({
-    list: async (input: { path?: string }) => {
+    list: async (input) => {
       calls.push(input)
 
       return {
@@ -277,10 +310,13 @@ test("maps server-native drive and share paths without rebasing the location", a
   const calls: unknown[] = []
 
   const api = sdk({
-    list: async (input: { location: { directory: string }; path: string }) => {
+    list: async (input) => {
       calls.push(input)
 
-      return { location: input.location, data: [{ path: "../sibling/", type: "directory" }] }
+      return {
+        location: { directory: input.location?.directory ?? "/repo" },
+        data: [{ path: "../sibling/", type: "directory" }],
+      }
     },
   })
 
@@ -305,8 +341,8 @@ const projects = Array.from({ length: 60 }, (_, index) => ({ path: `project-${in
 const fallbacks: {
   name: string
   query: string
-  find: () => Promise<unknown>
-  list: () => Promise<unknown>
+  find: () => Promise<Omit<FileResult, "location"> & Partial<Pick<FileResult, "location">>>
+  list: () => Promise<Omit<FileResult, "location"> & Partial<Pick<FileResult, "location">>>
   expected: string[]
   listed: string[]
 }[] = [

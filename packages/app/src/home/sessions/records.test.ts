@@ -1,19 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
+import { sessionInfo } from "@/test/fixtures"
 import type { LocalProject } from "@/shell/state/layout"
 import { buildHomeSessionRecords, homeSessionLocation } from "./records"
 
 const session = (id: string, directory: string, projectID: string) =>
-  ({
+  sessionInfo({
     id,
     projectID,
     title: id,
     location: { directory },
     time: { created: 1, updated: 1 },
-  }) as SessionInfo
+  })
 
 describe("buildHomeSessionRecords", () => {
-  const opened = { id: "project-a", worktree: "/repo/a", expanded: true } as LocalProject
+  const opened = { id: "project-a", worktree: "/repo/a", expanded: true } satisfies LocalProject
   const sessions = [session("a", "/repo/a", "project-a"), session("b", "/repo/b", "project-b")]
 
   test("includes sessions outside added projects when unfiltered", () => {
@@ -49,7 +49,7 @@ describe("buildHomeSessionRecords", () => {
   })
 
   test("prefers the added project whose directory matches over a sibling entry with the same ID", () => {
-    const nested = { id: "project-a", worktree: "/repo/a/packages/app", expanded: true } as LocalProject
+    const nested = { id: "project-a", worktree: "/repo/a/packages/app", expanded: true } satisfies LocalProject
 
     const records = buildHomeSessionRecords({
       sessions: () => [session("n", "/repo/a/packages/app", "project-a")],

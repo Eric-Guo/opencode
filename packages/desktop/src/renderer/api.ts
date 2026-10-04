@@ -11,8 +11,7 @@ type Mutable<Value> =
 // SAFETY: IPC produces an owned structured clone; removing readonly changes its type, not shared main-process state.
 const mutable = <Value>(value: Value) => value as Mutable<Value>
 
-const toArrayBuffer = (value: Uint8Array) =>
-  value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
+const toArrayBuffer = (value: Uint8Array) => new Uint8Array(value).buffer
 
 // One renderer-side copy: the bridge clones on every crossing, so consumption is tracked here.
 const seeded = window.electron.storageSnapshot.then((snapshot) => new Map(Object.entries(snapshot)))

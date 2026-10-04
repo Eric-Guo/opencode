@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
 import type { LocationGetOutput, LocationRef } from "@opencode/client/promise"
 import { retry } from "@opencode/util/retry"
@@ -21,8 +22,8 @@ const context = createSimpleContext({
 
     const ref = createMemo(
       () => ({
-        directory: typeof props.directory === "function" ? props.directory() : props.directory,
-        workspaceID: typeof props.workspaceID === "function" ? props.workspaceID() : props.workspaceID,
+        directory: Predicate.isFunction(props.directory) ? props.directory() : props.directory,
+        workspaceID: Predicate.isFunction(props.workspaceID) ? props.workspaceID() : props.workspaceID,
       }),
       undefined,
       {

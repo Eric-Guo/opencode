@@ -52,12 +52,7 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
                 </div>
               )}
             </Show>
-            <Button
-              variant="neutral"
-              size="normal"
-              icon="xmark-small"
-              onClick={closeSession}
-            >
+            <Button variant="neutral" size="normal" icon="xmark-small" onClick={closeSession}>
               {language.t("session.error.notFound.closeTab")}
             </Button>
           </div>
@@ -67,8 +62,8 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
   )
 }
 
-function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
+function isCurrentSessionNotFoundError(cause: unknown, sessionID: string | undefined) {
   if (!sessionID) return false
 
-  return isSessionNotFoundError(error, sessionID) || isLocalSessionNotFoundError(error, sessionID)
+  return isSessionNotFoundError(cause, sessionID) || isLocalSessionNotFoundError(cause, sessionID)
 }
