@@ -1,3 +1,4 @@
+import { Schema } from "effect"
 import { Service } from "@opencode/client/service"
 import { chromium, expect, type Browser, type Page, type TestInfo } from "@playwright/test"
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
@@ -319,10 +320,7 @@ async function waitForHome(page: Page, mark: (name: Milestone) => void) {
   mark("homeReady")
 }
 
-type ThemeWindow = Window & {
-  __OPENCODE_THEME_STATES__?: string[]
-  __OPENCODE_THEME_OBSERVER__?: MutationObserver
-}
+
 
 async function startThemeObservation(page: Page) {
   await page.addInitScript(installThemeObservation)
@@ -331,7 +329,7 @@ async function startThemeObservation(page: Page) {
 
 async function requireStableTheme(page: Page) {
   const states = await page.evaluate(() => {
-    const target = window as ThemeWindow
+    const target = window
     target.__OPENCODE_THEME_OBSERVER__?.disconnect()
 
     return target.__OPENCODE_THEME_STATES__ ?? []
@@ -341,7 +339,7 @@ async function requireStableTheme(page: Page) {
 }
 
 function installThemeObservation() {
-  const target = window as ThemeWindow
+  const target = window
 
   const observeRoot = () => {
     const root = document.documentElement
@@ -389,7 +387,7 @@ async function observeOutput(stream: NodeJS.ReadableStream, record: (line: strin
   let pending = ""
 
   for await (const chunk of stream) {
-    const text = typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })
+    const text = chunk instanceof Uint8Array ? decoder.decode(chunk, { stream: true }) : chunk
     output.push(text)
     pending += text
     const lines = pending.split(/\r?\n/)
@@ -422,20 +420,7 @@ async function readService(profile: Awaited<ReturnType<typeof createColdProfile>
   return value
 }
 
-function isServiceInfo(value: unknown): value is ServiceInfo {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "id" in value &&
-    typeof value.id === "string" &&
-    "version" in value &&
-    typeof value.version === "string" &&
-    "url" in value &&
-    typeof value.url === "string" &&
-    "pid" in value &&
-    typeof value.pid === "number"
-  )
-}
+const isServiceInfo = Schema.is(Schema.Struct({ id: Schema.String, version: Schema.String, url: Schema.String, pid: Schema.Number }))
 
 function requireMilestones(observed: Partial<Record<Milestone, number>>) {
   const get = (name: Milestone) => {
@@ -590,4 +575,16 @@ function elapsed(started: number) {
 
 function round(value: number) {
   return Math.round(value * 100) / 100
+}
+
+declare global {
+  interface Window {
+    __OPENCODE_THEME_STATES__?: string[]
+  }
+}
+
+declare global {
+  interface Window {
+    __OPENCODE_THEME_OBSERVER__?: MutationObserver
+  }
 }

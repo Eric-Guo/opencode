@@ -31,7 +31,7 @@ type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
 
 type PriorGroup = { index: number; row: GroupRow }
 
-const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json))
 
 const decodeString = Schema.decodeUnknownOption(Schema.String)
 

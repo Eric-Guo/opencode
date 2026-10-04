@@ -50,7 +50,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   const name = createMemo(() => {
     if (split.title) return split.title
 
-    const map: Record<string, string> = {
+    const map = new Map<string, string>(Object.entries({
       read: "ui.tool.read",
       list: "ui.tool.list",
       glob: "ui.tool.glob",
@@ -62,9 +62,9 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       execute: "ui.tool.execute",
       patch: "ui.tool.patch",
       question: "ui.tool.questions",
-    }
+    }))
 
-    const key = map[split.tool]
+    const key = map.get(split.tool)
 
     if (!key) return split.tool
 

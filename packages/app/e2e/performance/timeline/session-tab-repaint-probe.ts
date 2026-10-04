@@ -185,7 +185,7 @@ export async function installCachedRepaintProbe(
       },
       { capture: true, once: true },
     )
-    ;(window as Window & { __cachedFlash?: CachedRepaintTrace }).__cachedFlash = state
+    ;(window).__cachedFlash = state
   }, input)
 }
 
@@ -197,7 +197,7 @@ export function layoutShiftSample(entry: Pick<PerformanceEntry, "startTime"> & {
 
 export async function waitForCachedRepaintWindow(page: Page, durationMs: number) {
   await page.waitForFunction((durationMs) => {
-    const state = (window as Window & { __cachedFlash?: CachedRepaintTrace }).__cachedFlash
+    const state = (window).__cachedFlash
 
     return !!state?.running && performance.now() - state.startedAtPerformanceMs >= durationMs
   }, durationMs)
@@ -205,7 +205,7 @@ export async function waitForCachedRepaintWindow(page: Page, durationMs: number)
 
 export async function collectCachedRepaintTrace(page: Page) {
   return page.evaluate(() => {
-    const state = (window as Window & { __cachedFlash?: CachedRepaintTrace }).__cachedFlash!
+    const state = (window).__cachedFlash!
     state.stop()
 
     return state
@@ -284,5 +284,11 @@ export function compressCachedRepaintTrace(trace: CachedRepaintTrace) {
     samples,
     mutations: trace.mutations,
     shifts: trace.shifts,
+  }
+}
+
+declare global {
+  interface Window {
+    __cachedFlash?: CachedRepaintTrace
   }
 }
