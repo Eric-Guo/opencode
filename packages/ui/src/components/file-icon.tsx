@@ -544,9 +544,15 @@ const ICON_MAPS: IconMaps = {
 const toOpenVariant = (icon: IconName): IconName => {
   if (!icon.startsWith("Folder")) return icon
 
-  if (icon.endsWith("_light")) return icon.replace("_light", "Open_light") as IconName
+  if (icon.endsWith("_light")) {
+    // SAFETY: Folder sprite names include the corresponding Open_light variant.
+    return icon.replace("_light", "Open_light") as IconName
+  }
 
-  if (!icon.endsWith("Open")) return (icon + "Open") as IconName
+  if (!icon.endsWith("Open")) {
+    // SAFETY: Every closed Folder icon has the matching Open sprite name.
+    return (icon + "Open") as IconName
+  }
 
   return icon
 }
