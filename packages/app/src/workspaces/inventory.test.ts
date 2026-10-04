@@ -1,3 +1,4 @@
+import { ServerConnection } from "@/runtime/server/registry"
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
 import type { WorktreeDirectory } from "@opencode/client/promise"
@@ -89,7 +90,7 @@ describe("createWorktreeInventory", () => {
   })
 
   test("keys are partitioned by server and use opaque project IDs", () => {
-    const remote = "https://remote.example" as typeof ServerScope.local
+    const remote = ServerScope.fromServerKey(ServerConnection.Key.make("https://remote.example"))
     expect(worktreeInventoryKey(ServerScope.local, "project")).not.toEqual(
       worktreeInventoryKey(ServerScope.local, "project/"),
     )
