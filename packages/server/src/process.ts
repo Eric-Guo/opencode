@@ -3,6 +3,7 @@ export * as ServerProcess from "./process"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { DatabaseProcessOwner } from "@opencode/core/database/process-owner"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
@@ -50,8 +51,27 @@ export const start = Effect.fn("ServerProcess.start")(function* <E = never, R = 
   lifecycle?: Lifecycle<E, R>,
   transform?: Transform,
 ) {
+  const scope = yield* Scope.fork(yield* Scope.Scope)
+  return yield* startScoped(options, lifecycle, transform).pipe(
+    Effect.provideService(Scope.Scope, scope),
+    Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+  )
+})
+
+const startScoped = Effect.fnUntraced(function* <E = never, R = never>(
+  options: ServerOptions,
+  lifecycle?: Lifecycle<E, R>,
+  transform?: Transform,
+) {
   const password = options.password
   if (!password) return yield* Effect.fail(new Error("Missing server password"))
+  // Acquire first so the lease outlives registration, request draining, execution cleanup, and database close.
+  const database = {
+    ...options.database,
+    path: yield* DatabaseProcessOwner.acquire(options.database?.path).pipe(
+      Effect.provideService(Global.Service, Global.make()),
+    ),
+  }
   const hostname = options.hostname ?? "127.0.0.1"
   const port = Option.fromNullishOr(options.port)
   const shutdown = yield* Latch.make()
@@ -97,6 +117,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E = never, R = 
       createRoutes(
         {
           ...options,
+          database,
           password,
         },
         urls,

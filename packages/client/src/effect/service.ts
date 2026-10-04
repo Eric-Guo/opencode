@@ -11,6 +11,7 @@ import {
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
+import { checkDomain, ownerAlive, provenance, sameProvenance } from "../service-provenance.js"
 
 export * from "../service.js"
 /** Contents of the local service registration file. */
@@ -37,10 +38,16 @@ export const discover = Effect.fn("service.discover")(function* (options: Discov
 
 /** Recognize an authenticated compatible service bound to an expected URL, including while it starts or fails. */
 export const incumbent = Effect.fn("service.incumbent")(function* (
-  options: DiscoverOptions & { readonly url: string },
+  options: DiscoverOptions & { readonly url?: string },
 ) {
   const info = yield* read(options.file)
-  const found = info === undefined ? undefined : yield* probe({ ...info, url: options.url })
+  if (info !== undefined) yield* Effect.tryPromise({ try: () => checkDomain(info), catch: (cause) => cause })
+  if (
+    info !== undefined &&
+    (yield* Effect.tryPromise({ try: () => ownerAlive(info), catch: (cause) => cause })) === false
+  )
+    return undefined
+  const found = info === undefined ? undefined : yield* probe({ ...info, url: options.url ?? info.url })
   if (found === undefined) return undefined
   if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
@@ -119,7 +126,10 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       }).pipe(Effect.ignore)
       lastSpawn = 0
       return Option.none<LocalService>()
-    } else if (lastSpawn === 0 && info !== undefined) lastSpawn = Date.now()
+    } else if (info !== undefined) {
+      yield* Effect.tryPromise({ try: () => checkDomain(info), catch: (cause) => cause })
+      if (lastSpawn === 0) lastSpawn = Date.now()
+    }
 
     const finished = [...contenders].filter(contenderFinished)
     const failure = finished.map(contenderFailure).find((error): error is Error => error !== undefined)
@@ -152,14 +162,19 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
   const info = yield* read(options.file)
+  if (info !== undefined) yield* Effect.tryPromise({ try: () => checkDomain(info), catch: (cause) => cause })
+  if (
+    info !== undefined &&
+    (yield* Effect.tryPromise({ try: () => ownerAlive(info), catch: (cause) => cause })) === false
+  ) {
+    return yield* terminate(info, options, defaultEnsureTiming)
+  }
   // Terminal handoff is best-effort; it must never keep the old service running.
   yield* Effect.tryPromise(() =>
     options.pty === "handoff" && info !== undefined
       ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
       : PtyHandoff.clear(options.file ?? fallback()),
-  ).pipe(
-    Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)),
-  )
+  ).pipe(Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)))
   if (info !== undefined) yield* terminate(info, options, defaultEnsureTiming)
 })
 
@@ -181,6 +196,16 @@ export const Info = Schema.Struct({
   url: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   password: Schema.optional(Schema.String),
+  provenance: Schema.optional(
+    Schema.Struct({
+      platform: Schema.Literal("linux"),
+      host: Schema.optional(Schema.String),
+      boot: Schema.String,
+      pidNamespace: Schema.String,
+      netNamespace: Schema.String,
+      started: Schema.String,
+    }),
+  ),
 })
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
@@ -191,13 +216,19 @@ const decodeInfo = Schema.decodeUnknownOption(
   }),
 )
 
-// A missing or corrupt file means no valid info; callers treat both
-// the same (the registering server self-evicts, clients rediscover).
+// Only a missing file means there is no owner. Corrupt/unreadable ownership must not authorize replacement.
 const read = Effect.fnUntraced(function* (file?: string) {
   const fs = yield* FileSystem.FileSystem
-  const text = yield* fs.readFileString(file ?? fallback()).pipe(Effect.option)
-  if (Option.isNone(text)) return undefined
-  return yield* decode(text.value).pipe(Effect.option, Effect.map(Option.getOrUndefined))
+  const text = yield* fs.readFileString(file ?? fallback()).pipe(
+    Effect.catchIf(
+      (error) => error.reason._tag === "NotFound",
+      () => Effect.succeed(undefined),
+    ),
+  )
+  if (text === undefined) return undefined
+  return yield* decode(text).pipe(
+    Effect.mapError((cause) => new Error("Invalid service registration; cannot safely replace its owner", { cause })),
+  )
 })
 
 type LocalService = {
@@ -270,6 +301,9 @@ const probeResult = Effect.fnUntraced(function* (info: Info, timeout = defaultEn
 const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {
   const info = yield* read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
+  yield* Effect.tryPromise({ try: () => checkDomain(info), catch: (cause) => cause })
+  if ((yield* Effect.tryPromise({ try: () => ownerAlive(info), catch: (cause) => cause })) === false)
+    return { info, service: undefined, timedOut: false }
   return { info, ...(yield* probeResult(info, timeout)) }
 })
 
@@ -278,37 +312,66 @@ const registered = Effect.fnUntraced(function* (file?: string, timeout?: number)
 const poll = (timing: EnsureTiming) =>
   Schedule.max([Schedule.spaced(timing.stopPollInterval), Schedule.recurs(timing.stopPollAttempts)])
 
-const signal = (pid: number, name: NodeJS.Signals) =>
-  Effect.try({ try: () => process.kill(pid, name), catch: (cause) => cause }).pipe(Effect.ignore)
+const signal = Effect.fnUntraced(function* (info: Info, name: NodeJS.Signals) {
+  if ((yield* Effect.tryPromise({ try: () => ownerAlive(info), catch: (cause) => cause })) === false) return
+  yield* Effect.try({ try: () => process.kill(info.pid, name), catch: (cause) => cause }).pipe(
+    Effect.catchIf(
+      (error) => typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH",
+      () => Effect.void,
+    ),
+  )
+})
 
-const stopped = Effect.fnUntraced(function* (pid: number) {
-  const running = yield* Effect.try({ try: () => process.kill(pid, 0), catch: () => false }).pipe(
-    Effect.orElseSucceed(() => false),
+const stopped = Effect.fnUntraced(function* (info: Info) {
+  const alive = yield* Effect.tryPromise({ try: () => ownerAlive(info), catch: (cause) => cause })
+  if (alive === false) return true
+  const running = yield* Effect.try({ try: () => process.kill(info.pid, 0), catch: (cause) => cause }).pipe(
+    Effect.catchIf(
+      (error) => typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH",
+      () => Effect.succeed(false),
+    ),
   )
   if (!running) return true
-  return yield* Effect.fail(new Error(`Server process ${pid} is still running`))
+  return yield* Effect.fail(new Error(`Server process ${info.pid} is still running`))
 })
 
 function same(left: Info, right: Info) {
-  return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
+  return (
+    left.id === right.id &&
+    left.version === right.version &&
+    left.url === right.url &&
+    left.pid === right.pid &&
+    sameProvenance(left, right)
+  )
 }
 
 const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
   if (current === undefined || !same(current, info)) return
-  yield* signal(info.pid, "SIGTERM")
-  const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
+  yield* Effect.tryPromise({ try: () => checkDomain(info), catch: (cause) => cause })
+  if ((yield* Effect.tryPromise({ try: () => ownerAlive(info), catch: (cause) => cause })) === false) {
+    return
+  }
+  yield* signal(info, "SIGTERM")
+  const done = yield* stopped(info).pipe(Effect.retry(poll(timing)), Effect.option)
   if (Option.isNone(done)) {
     const latest = yield* read(options.file)
     if (latest === undefined || !same(latest, info)) return
-    yield* signal(info.pid, "SIGKILL")
-    yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
+    yield* signal(info, "SIGKILL")
+    yield* stopped(info).pipe(Effect.retry(poll(timing)))
   }
-  const latest = yield* read(options.file)
-  if (latest === undefined || !same(latest, info)) return
-  const fs = yield* FileSystem.FileSystem
-  yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
+  // Only the server removes registration while holding its publication lease.
+  // A killed owner's stale record is retired by the successor under that same lease.
 })
 
 /** Effect-based local service lifecycle operations. */
-export const Service = { discover, incumbent, ensure, stop, headers, Info }
+export const Service = {
+  discover,
+  incumbent,
+  ensure,
+  stop,
+  headers,
+  Info,
+  provenance: Effect.tryPromise({ try: provenance, catch: (cause) => cause }),
+  ownerAlive: (info: Info) => Effect.tryPromise({ try: () => ownerAlive(info), catch: (cause) => cause }),
+}
