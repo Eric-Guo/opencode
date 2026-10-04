@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
 import { createMemo, createSignal } from "solid-js"
@@ -99,7 +100,11 @@ export const LiveUserCommand = {
             setMessage((value) => ({
               ...value,
               status: args.outcome === "nonzero" ? "exited" : args.outcome,
-              exit: args.outcome === "nonzero" ? 1 : args.outcome === "exited" ? 0 : undefined,
+              exit: Match.value(args.outcome).pipe(
+                Match.when("nonzero", () => 1),
+                Match.when("exited", () => 0),
+                Match.orElse(() => undefined),
+              ),
               output: { output, cursor: output.length, size: output.length, truncated: false },
               time: { created: 1, completed: 2 },
             }))
