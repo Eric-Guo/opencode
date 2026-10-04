@@ -113,6 +113,7 @@ const vcsLayer = Layer.succeed(
 const fileSystemLayer = Layer.succeed(
   FileSystem.Service,
   FileSystem.Service.of({
+    archive: () => unavailable("FileSystem.archive"),
     read: () => unavailable("FileSystem.read"),
     list: () => unavailable("FileSystem.list"),
     find: () => unavailable("FileSystem.find"),

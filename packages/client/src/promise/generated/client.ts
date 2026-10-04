@@ -188,6 +188,8 @@ import type {
   PermissionGetOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
+  FileArchiveInput,
+  FileArchiveOutput,
   FileReadInput,
   FileReadOutput,
   FileListInput,
@@ -1729,6 +1731,18 @@ export function make(options: ClientOptions) {
         ),
     },
     file: {
+      archive: (input: FileArchiveInput, requestOptions?: RequestOptions) =>
+        request<FileArchiveOutput>(
+          {
+            method: "GET",
+            path: `/api/fs/archive`,
+            query: { location: input["location"], path: input["path"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
       read: (input: FileReadInput, requestOptions?: RequestOptions) =>
         request<FileReadOutput>(
           {
