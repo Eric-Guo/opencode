@@ -5,7 +5,10 @@ GlobalRegistrator.register()
 const originalGetContext = HTMLCanvasElement.prototype.getContext
 
 // @ts-expect-error - we're overriding with a simplified mock
-HTMLCanvasElement.prototype.getContext = function (contextType: string, _options?: unknown) {
+HTMLCanvasElement.prototype.getContext = function (
+  contextType: string,
+  _options?: CanvasRenderingContext2DSettings | WebGLContextAttributes | ImageBitmapRenderingContextSettings,
+) {
   if (contextType === "2d") {
     // SAFETY: this isolated test canvas supplies the drawing methods our renderer exercises; layout comes from Happy DOM.
     return {
@@ -71,7 +74,7 @@ HTMLCanvasElement.prototype.getContext = function (contextType: string, _options
         width: 0,
         height: 0,
       }),
-    } as unknown as CanvasRenderingContext2D
+    } as CanvasRenderingContext2D
   }
 
   // SAFETY: forwarding preserves the caller's getContext overload; "2d" only selects TypeScript's callable signature.

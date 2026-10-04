@@ -1,18 +1,26 @@
-import { Effect, Layer, Logger, References } from "effect"
+import { Effect, Layer, Logger, Predicate, References } from "effect"
+
+import type { Log } from "../sdk/main"
 
 /** Services for running the updater's effects: every log goes to the desktop log file, debug included. */
 export function logContext(
-  log: (level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void,
+  log: Log["write"],
 ) {
+  const levels = new Map<string, Parameters<Log["write"]>[0]>([
+    ["Trace", "debug"], ["Debug", "debug"], ["Info", "info"],
+    ["Warn", "warn"], ["Error", "error"], ["Fatal", "error"],
+  ])
+
   const logger = Logger.make((options) => {
     const entry = Logger.formatStructured.log(options)
     const [message, ...details] = Array.isArray(options.message) ? options.message : [options.message]
-    const detail = details.length === 1 && isRecord(details[0]) ? details[0] : details.length ? { details } : {}
-    log(LEVELS[options.logLevel] ?? "info", typeof message === "string" ? message : String(message), {
-      ...detail,
-      ...(Object.keys(entry.annotations).length === 0 ? {} : { annotations: entry.annotations }),
-      ...(entry.cause === undefined ? {} : { cause: entry.cause }),
-    })
+    const detail = details.length === 1 && Predicate.isObject(details[0]) && !Array.isArray(details[0]) ? details[0] : details.length ? { details } : {}
+    const data: NonNullable<Parameters<Log["write"]>[2]> = { ...detail }
+
+    if (Object.keys(entry.annotations).length) Object.assign(data, { annotations: entry.annotations })
+
+    if (entry.cause !== undefined) Object.assign(data, { cause: entry.cause })
+    log(levels.get(options.logLevel) ?? "info", String(message), data)
   })
 
   return Effect.runSync(
@@ -25,17 +33,4 @@ export function logContext(
       ),
     ),
   )
-}
-
-const LEVELS: Partial<Record<string, "debug" | "info" | "warn" | "error">> = {
-  Trace: "debug",
-  Debug: "debug",
-  Info: "info",
-  Warn: "warn",
-  Error: "error",
-  Fatal: "error",
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

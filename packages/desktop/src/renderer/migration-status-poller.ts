@@ -11,7 +11,7 @@ export function createMigrationStatusPoller(input: {
   connected: () => boolean
   status: (signal: AbortSignal) => Promise<ExperimentalMigrationV1StatusOutput>
   onStatus: (status: ExperimentalMigrationV1StatusOutput) => void
-  onError: (error: unknown) => void
+  onError: (cause: unknown) => void
   onCleanup: () => void
 }) {
   createEffect(() => {
