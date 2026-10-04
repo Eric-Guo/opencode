@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
-import type { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection } from "@/runtime/server/registry"
 import type { Tab } from "@/shell/tabs/tabs"
 import { openNotificationSession } from "./notification"
 
 test("opens notification sessions through the tab router", () => {
-  const server = "local\nhttp://localhost:4096" as ServerConnection.Key
+  const server = ServerConnection.Key.make("local\nhttp://localhost:4096")
   const tab = { type: "session" as const, server, sessionId: "session-1" }
   const calls: string[] = []
 

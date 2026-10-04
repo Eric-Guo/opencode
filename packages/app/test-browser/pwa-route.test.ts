@@ -30,9 +30,15 @@ test("detects iOS home-screen apps when the standalone media query does not matc
   } finally {
     if (descriptor) Object.defineProperty(navigator, "standalone", descriptor)
 
-    if (!descriptor) delete (navigator as Navigator & { standalone?: boolean }).standalone
+    if (!descriptor) delete navigator.standalone
   }
 })
+
+declare global {
+  interface Navigator {
+    standalone?: boolean
+  }
+}
 
 test("restores the last PWA route including query and hash without adding history", () => {
   window.history.replaceState({ retained: true }, "", "http://localhost/")

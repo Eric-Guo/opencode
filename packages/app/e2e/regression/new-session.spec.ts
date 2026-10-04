@@ -1076,7 +1076,7 @@ test("executes a selected slash command after creating its worktree", async ({ p
         inboxID: "msg_workspace_review",
         item: { type: "user", payload: { text: expanded }, delivery: "steer" },
       },
-    } as OpenCodeEvent,
+    },
   ])
   await expect(pending.shimmer).toHaveCount(0)
   await expect(page.locator('[data-slot="user-message-text"]')).toHaveText(expanded)
@@ -1369,7 +1369,7 @@ for (const row of [
         type: "worktree.updated",
         data: { projectID: "proj_workspaceaccent" },
       },
-    ] as OpenCodeEvent[])
+    ])
     expect((await refreshed).ok()).toBe(true)
     await expect(page).toHaveURL(url)
     await expect(view.editor).toHaveText("Inspect this fixture workspace.")
@@ -1383,7 +1383,7 @@ for (const row of [
         durable: { aggregateID: "ses_workspace_accent", seq: 1, version: 1 },
         data: { sessionID: "ses_workspace_accent" },
       },
-    ] as OpenCodeEvent[])
+    ])
     await view.editor.fill("")
     const stop = composer.getByRole("button", { name: "Stop", exact: true })
     await expect(stop).toBeEnabled()
@@ -1391,8 +1391,7 @@ for (const row of [
   })
 }
 
-function renamed(sessionID: string) {
-  // SAFETY: the fixture event matches the generated OpenCodeEvent shape for its type.
+function renamed(sessionID: string): OpenCodeEvent {
   return {
     id: "evt_generated_title",
     type: "session.renamed",
@@ -1400,7 +1399,7 @@ function renamed(sessionID: string) {
     location: { directory: workspace },
     durable: { aggregateID: sessionID, seq: 1, version: 1 },
     data: { sessionID, title: "Generated session title" },
-  } as OpenCodeEvent
+  }
 }
 
 async function draftFollowUp(page: Page) {

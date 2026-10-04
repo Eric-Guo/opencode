@@ -5,7 +5,7 @@ GlobalRegistrator.register()
 const originalGetContext = HTMLCanvasElement.prototype.getContext
 
 // @ts-expect-error - we're overriding with a simplified mock
-HTMLCanvasElement.prototype.getContext = function (contextType: string, _options?: unknown) {
+HTMLCanvasElement.prototype.getContext = function (contextType: string, _options?: Parameters<typeof originalGetContext>[1]) {
   if (contextType === "2d") {
     // SAFETY: The test canvas shim implements the operations exercised by the terminal; other context ids are forwarded unchanged to Happy DOM.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions
