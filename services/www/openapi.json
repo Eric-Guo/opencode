@@ -8737,6 +8737,114 @@
         }
       }
     },
+    "/api/fs/archive": {
+      "get": {
+        "tags": ["filesystem"],
+        "operationId": "fs.archive",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FileSystem.Archive"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "FileNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read only ZIP/ZIP64 central-directory metadata relative to the location. No member contents are read or verified. Limits: 5000 entries, 1024-byte names, 64 levels, 10000 tree nodes, 4 MiB per read, 12 MiB total reads, and 5 seconds. Encrypted members and arbitrary compression methods can be listed; split archives and unreadable directories are unsupported.",
+        "summary": "Preview ZIP directory"
+      }
+    },
     "/api/fs/read/*": {
       "get": {
         "tags": ["filesystem"],
@@ -15946,6 +16054,81 @@
           }
         },
         "required": ["_tag", "path", "message"],
+        "additionalProperties": false
+      },
+      "FileSystem.Archive": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["ready"]
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FileSystem.ArchiveEntry"
+                }
+              }
+            },
+            "required": ["status", "size", "entries"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["invalid", "unsupported", "limit", "timeout"]
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["status", "size"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "FileSystem.ArchiveEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "boolean"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "compressedSize": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "symlink": {
+            "type": "boolean"
+          },
+          "compressionMethod": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["id", "name", "directory", "size", "compressedSize", "encrypted", "symlink", "compressionMethod"],
         "additionalProperties": false
       },
       "FileSystem.Entry": {
