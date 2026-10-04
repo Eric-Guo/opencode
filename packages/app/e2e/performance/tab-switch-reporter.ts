@@ -52,6 +52,7 @@ export default class TabSwitchReporter implements Reporter {
       const records = results.flatMap((entry) =>
         entry.records.map((raw) => {
           try {
+            // SAFETY: Benchmark stdout is emitted by the owned reporter fixture; raw metrics stay unknown until the finite-number check below.
             return { status: entry.status, record: JSON.parse(raw) as BenchmarkRecord | null }
           } catch {
             return { status: entry.status, record: { status: "invalid JSON", metrics: null } }

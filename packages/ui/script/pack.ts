@@ -7,6 +7,7 @@ import path from "node:path"
 export async function pack() {
   const original = await Bun.file("package.json").text()
 
+  // SAFETY: This repository-owned package manifest has name/version strings and the authored export map below.
   const pkg = JSON.parse(original) as {
     name: string
     version: string
@@ -18,6 +19,7 @@ export async function pack() {
   await $`bun run build`
   pkg.exports = Object.fromEntries(
     Object.entries(pkg.exports).map(([key, value]) => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Package exports are a typed union of paths and conditional export entries.
       if (typeof value !== "string" || (!value.endsWith(".ts") && !value.endsWith(".tsx"))) return [key, value]
 
       return [

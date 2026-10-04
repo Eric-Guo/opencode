@@ -464,6 +464,7 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
     const weak = tokens["text-weak"]
 
     if (weak.startsWith("#")) {
+      // SAFETY: The startsWith check above establishes the HexColor template prefix.
       tokens["text-weaker"] = shift(weak as HexColor, { l: isDark ? -0.12 : 0.12, c: 0.75 })
     } else {
       tokens["text-weaker"] = weak
@@ -557,6 +558,7 @@ function generateNeutralAlphaScale(neutralScale: HexColor[], isDark: boolean): H
 function getHex(value: ColorValue | undefined): HexColor | undefined {
   if (!value?.startsWith("#")) return
 
+  // SAFETY: The prefix check above narrows the typed CSS color to its hex variant.
   return value as HexColor
 }
 
