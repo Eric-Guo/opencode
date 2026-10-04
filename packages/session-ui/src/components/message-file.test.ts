@@ -3,15 +3,12 @@ import type { PromptFileAttachment } from "@opencode/client/promise"
 import { attached, typeLabel } from "./message-file"
 
 function file(source: PromptFileAttachment["source"], mention = false): PromptFileAttachment {
-  const item: PromptFileAttachment = {
+  return {
     data: "",
     mime: "text/plain",
     source,
+    mention: mention ? { text: "@README.md", start: 0, end: 10 } : undefined,
   }
-
-  if (mention) item.mention = { text: "@README.md", start: 0, end: 10 }
-
-  return item
 }
 
 describe("message-file", () => {
