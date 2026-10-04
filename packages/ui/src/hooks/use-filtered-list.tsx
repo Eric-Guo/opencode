@@ -43,10 +43,18 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
           const filterable = skipFilter ? x.filter((item) => !skipFilter(item)) : x
           const skipped = skipFilter ? x.filter(skipFilter) : []
 
-          const filtered =
-            !props.filterKeys && Array.isArray(filterable) && filterable.every((e) => typeof e === "string")
-              ? (fuzzysort.go(needle, filterable).map((x) => x.target) as T[])
-              : fuzzysort.go(needle, filterable, { keys: props.filterKeys! }).map((x) => x.obj)
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Generic items accept primitive strings as well as keyed records; choose the matching fuzzysort API.
+          const strings = !props.filterKeys && filterable.every((item) => typeof item === "string")
+
+          const filtered = strings
+            ? fuzzysort
+                .go(
+                  needle,
+                  filterable.map((item) => ({ item, text: String(item) })),
+                  { key: "text" },
+                )
+                .map((result) => result.obj.item)
+            : fuzzysort.go(needle, filterable, { keys: props.filterKeys! }).map((x) => x.obj)
 
           return skipped.length ? [...filtered, ...skipped] : filtered
         },

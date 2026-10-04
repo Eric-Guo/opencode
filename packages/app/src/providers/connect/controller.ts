@@ -16,7 +16,7 @@ export type ProviderConnectMethod = Extract<IntegrationMethod, { type: "key" | "
 
 type Authorization = IntegrationOauthConnectOutput["data"]
 
-type Polling = {
+type AuthorizationPolling = {
   generation: number
   timer?: ReturnType<typeof setTimeout>
   disposed: boolean
@@ -138,7 +138,7 @@ export function createProviderConnectionController(options: {
     statusFailed: false,
   })
 
-  const polling: Polling = {
+  const polling: AuthorizationPolling = {
     generation: 0,
     disposed: false,
   }

@@ -1,3 +1,5 @@
+import { Option, Schema } from "effect"
+
 export const DESKTOP_NATIVE_LOCALES = [
   "en",
   "zh",
@@ -331,30 +333,21 @@ export function createDesktopNativeBundle(
   }
 }
 
+const nativeBundle = Schema.Struct({
+  locale: Schema.Literals(DESKTOP_NATIVE_LOCALES),
+  messages: Schema.Record(Schema.Literals(DESKTOP_NATIVE_KEYS), Schema.String),
+})
+
+// SAFETY: this IPC boundary validates the entire native translation payload before handing it to the desktop shell.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The native IPC reader owns validation of the externally supplied bundle.
 export function parseDesktopNativeBundle(value: unknown): DesktopNativeBundle | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const decoded = Schema.decodeUnknownOption(nativeBundle, { onExcessProperty: "error" })(value)
 
-  try {
-    if (new TextEncoder().encode(JSON.stringify(value)).byteLength > DESKTOP_NATIVE_MAX_PAYLOAD_BYTES) return undefined
-  } catch {
-    return undefined
-  }
+  if (Option.isNone(decoded)) return
 
-  const bundle = value as { locale?: unknown; messages?: unknown }
+  if (new TextEncoder().encode(JSON.stringify(decoded.value)).byteLength > DESKTOP_NATIVE_MAX_PAYLOAD_BYTES) return
 
-  if (!DESKTOP_NATIVE_LOCALES.some((locale) => locale === bundle.locale)) return undefined
-
-  if (!bundle.messages || typeof bundle.messages !== "object" || Array.isArray(bundle.messages)) return undefined
-  const messages = bundle.messages as Record<string, unknown>
-  const keys = Object.keys(messages)
-
-  if (keys.length !== DESKTOP_NATIVE_KEYS.length) return undefined
-
-  if (!DESKTOP_NATIVE_KEYS.every((key) => typeof messages[key] === "string")) return undefined
-
-  if (!keys.every((key) => key in DESKTOP_NATIVE_ENGLISH)) return undefined
-
-  return bundle as DesktopNativeBundle
+  return decoded.value
 }
 
 export function formatDesktopNativeMessage(message: string, params?: Record<string, string | number>) {

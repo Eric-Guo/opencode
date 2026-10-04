@@ -1,5 +1,7 @@
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs"
 import type { SessionMessageInfo } from "@opencode/client/promise"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Schema } from "effect"
 import { base64Encode } from "@opencode/util/encode"
 import { timelineCategories, timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -11,19 +13,37 @@ import { startChromeTrace } from "../chrome-trace"
 
 const file = process.env.LAGGY_SESSION_FILE
 
-const session = file
-  ? (JSON.parse(readFileSync(file, "utf8")) as {
-      info: {
-        id: string
-        projectID: string
-        title: string
-        model?: { id: string; providerID: string }
-        location: { directory: string }
-        time: { created: number; updated: number }
-      }
-      messages: SessionMessageInfo[]
-    })
+const SessionExport = Schema.Struct({
+  info: Schema.StructWithRest(
+    Schema.Struct({
+      id: Schema.String,
+      projectID: Schema.String,
+      title: Schema.String,
+      model: Schema.optional(
+        Schema.StructWithRest(Schema.Struct({ id: Schema.String, providerID: Schema.String }), [
+          Schema.Record(Schema.String, Schema.Unknown),
+        ]),
+      ),
+      location: Schema.StructWithRest(Schema.Struct({ directory: Schema.String }), [
+        Schema.Record(Schema.String, Schema.Unknown),
+      ]),
+      time: Schema.StructWithRest(Schema.Struct({ created: Schema.Number, updated: Schema.Number }), [
+        Schema.Record(Schema.String, Schema.Unknown),
+      ]),
+    }),
+    [Schema.Record(Schema.String, Schema.Unknown)],
+  ),
+  messages: Schema.Array(SessionMessage.Info),
+})
+
+const exported = file
+  ? Schema.encodeSync(SessionExport)(
+      Schema.decodeUnknownSync(Schema.fromJsonString(SessionExport))(readFileSync(file, "utf8")),
+    )
   : undefined
+
+// SAFETY: SessionMessageInfo is generated from the validated message codec above; its wire arrays are mutable JSON values.
+const session = exported && { ...exported, messages: exported.messages as SessionMessageInfo[] }
 
 const sourceID = "ses_laggy_benchmark_source"
 

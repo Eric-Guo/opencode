@@ -321,7 +321,7 @@ story("settles an abandoned parse and permits immediate cache-key reuse", async 
     const raw = "```typescript\nconst abandoned = true\n```"
 
     const pending = renderCachedMarkdown({ raw, src: raw }, "released", controller.signal).catch(
-      (error: Error) => error instanceof MarkdownWorkerDisposedError,
+      (cause: unknown) => cause instanceof MarkdownWorkerDisposedError,
     )
 
     controller.abort()
@@ -350,7 +350,7 @@ for (const owned of [true, false]) {
           const raw = "```typescript\nconst shared = true\n```"
 
           const pending = renderCachedMarkdown({ raw, src: raw }, "shared-lifetime", first.signal).catch(
-            (error: Error) => error instanceof MarkdownWorkerDisposedError,
+            (cause: unknown) => cause instanceof MarkdownWorkerDisposedError,
           )
 
           let complete = false
@@ -396,7 +396,7 @@ story("does not admit an already disposed Markdown consumer", async ({ page }) =
 
     const rejected = await renderCachedMarkdown({ raw, src: raw }, "already-disposed", controller.signal).then(
       () => false,
-      (error: Error) => error instanceof MarkdownWorkerDisposedError,
+      (cause: unknown) => cause instanceof MarkdownWorkerDisposedError,
     )
 
     return { rejected, empty: getCachedMarkdown("already-disposed") === undefined }
@@ -416,7 +416,7 @@ story("releases a timeline preload without cancelling a mounted shared consumer"
 
     const preload = preloadMarkdown(raw, "timeline-preload", controller.signal).then(
       () => false,
-      (error: Error) => error instanceof MarkdownWorkerDisposedError,
+      (cause: unknown) => cause instanceof MarkdownWorkerDisposedError,
     )
 
     const mounted = renderCachedMarkdown({ raw, src: raw }, "timeline-preload:0:full")

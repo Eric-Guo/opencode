@@ -18,7 +18,7 @@ describe("renderer response headers", () => {
   })
 
   test("fills CORS headers for servers that send none, naming authorization explicitly", () => {
-    const headers: Record<string, string[]> = { "content-type": ["application/json"] }
+    const headers: Parameters<typeof addRendererHeaders>[0] = { "content-type": ["application/json"] }
     addRendererHeaders(headers, { document: false })
     expect(headers["Access-Control-Allow-Origin"]).toEqual(["*"])
     expect(headers["Access-Control-Allow-Headers"]).toEqual(["*, authorization"])
