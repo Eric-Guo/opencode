@@ -61,9 +61,12 @@ export function createNewSessionWorkspaceController(input: {
   const settings = useSettings()
   const tabs = useTabs()
 
-  const [state, setState] = createStore({
+  const [state, setState] = createStore<{
+    search: string
+    existing: { projectID: string; directory: string } | undefined
+  }>({
     search: "",
-    existing: undefined as { projectID: string; directory: string } | undefined,
+    existing: undefined,
   })
 
   const searchBranches = debounce((search: string) => setState("search", search.trim()), 100)
@@ -186,8 +189,8 @@ export function createNewSessionWorkspaceController(input: {
   const [branches] = createResource(
     () => (visible() ? { directory: projectRoot(), search: state.search } : undefined),
     ({ directory, search }) =>
-      serverSDK.api.vcs
-        .branch.list({ location: { directory }, search, limit: 50 })
+      serverSDK.api.vcs.branch
+        .list({ location: { directory }, search, limit: 50 })
         .then((response) => ({ directory, search, data: response.data }))
         .catch(() => ({ directory, search, data: [] })),
   )

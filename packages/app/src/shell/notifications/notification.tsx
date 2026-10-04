@@ -1,5 +1,5 @@
 import { createStore, reconcile } from "solid-js/store"
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import { SessionError } from "@opencode/schema/session-error"
 import { batch, createEffect, onCleanup } from "solid-js"
 import type { ServerSDK } from "@/runtime/server/client"
@@ -123,8 +123,8 @@ function buildNotificationIndex(list: Notification[]) {
 }
 
 export function createServerNotificationState(input: {
-  sdk: ServerSDK
-  data: Data
+  sdk: { scope: ServerSDK["scope"]; event: Pick<ServerSDK["event"], "listen"> }
+  data: { session: Pick<Data["session"], "get" | "sync"> }
   key: ServerConnection.Key
   coordinator: ReturnType<typeof createNotificationCoordinator>
 }) {
@@ -294,7 +294,7 @@ export function createServerNotificationState(input: {
 
       const description =
         session?.title ??
-        (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
+        (Predicate.isString(error) ? error : language.t("notification.session.error.fallbackDescription"))
 
       if (hasOpenTab && settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
@@ -312,7 +312,12 @@ export function createServerNotificationState(input: {
     const time = Date.now()
 
     if (event.type === "session.execution.failed") {
-      handleSessionError(event.data.sessionID, Schema.decodeUnknownSync(SessionError.Error)(event.data.error), event.id, time)
+      handleSessionError(
+        event.data.sessionID,
+        Schema.decodeUnknownSync(SessionError.Error)(event.data.error),
+        event.id,
+        time,
+      )
 
       return
     }
