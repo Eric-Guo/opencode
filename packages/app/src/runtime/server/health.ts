@@ -1,3 +1,4 @@
+import { Match } from "effect"
 
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -174,7 +175,7 @@ export function createServerHealth(
   enabled: Accessor<boolean>,
   check: (http: ServerConnection.HttpBase) => Promise<ServerHealth>,
 ) {
-  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
+  const [status, setStatus] = createStore<Record<ServerConnection.Key, ServerHealth | undefined>>({})
   const endpoints = new Map<ServerConnection.Key, string>()
 
   createEffect(() => {
@@ -200,11 +201,11 @@ export function createServerHealth(
         setStatus(
           conn.key,
           reconcile(
-            conn.stage === "failed"
-              ? { healthy: false }
-              : conn.stage === "incompatible"
-                ? { healthy: false, incompatible: true }
-                : undefined,
+            Match.value(conn.stage).pipe(
+              Match.when("failed", () => ({ healthy: false })),
+              Match.when("incompatible", () => ({ healthy: false, incompatible: true })),
+              Match.orElse(() => undefined),
+            ),
           ),
         )
         continue
@@ -230,12 +231,11 @@ export function createServerHealth(
       await Promise.all(
         list.map(async (conn) => {
           if (conn.stage && conn.stage !== "ready") {
-            results[conn.key] =
-              conn.stage === "failed"
-                ? { healthy: false }
-                : conn.stage === "incompatible"
-                  ? { healthy: false, incompatible: true }
-                  : undefined
+            results[conn.key] = Match.value(conn.stage).pipe(
+              Match.when("failed", () => ({ healthy: false })),
+              Match.when("incompatible", () => ({ healthy: false, incompatible: true })),
+              Match.orElse(() => undefined),
+            )
 
             return
           }

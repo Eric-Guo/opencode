@@ -1,3 +1,4 @@
+import { Option } from "effect"
 import { TextWriter, Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js"
 
 import { ExtensionError } from "./error"
@@ -43,7 +44,7 @@ async function read(reader: ZipReader<Uint8Array>) {
   if (!metadata?.getData || metadata.uncompressedSize > 65_536) throw new ExtensionError("invalidManifest")
   const decoded = decodeManifest(await metadata.getData(new TextWriter()))
 
-  if (decoded._tag === "None") throw new ExtensionError("invalidManifest")
+  if (Option.isNone(decoded)) throw new ExtensionError("invalidManifest")
   const manifest = decoded.value
   const entrypoints = [manifest.renderer, manifest.main, manifest.style].filter((path) => path !== undefined)
   entrypoints.forEach(archivePath)
