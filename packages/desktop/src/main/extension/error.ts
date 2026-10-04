@@ -10,8 +10,8 @@ export class ExtensionError extends Error {
   }
 }
 
-export function extensionFailure(error: unknown): ExtensionFailure {
-  if (error instanceof ExtensionError) return { code: error.code, message: error.message }
+export function extensionFailure(cause: unknown): ExtensionFailure {
+  if (cause instanceof ExtensionError) return { code: cause.code, message: cause.message }
 
-  return { code: "failed", message: error instanceof Error ? error.message : String(error) }
+  return { code: "failed", message: cause instanceof Error ? cause.message : String(cause) }
 }
