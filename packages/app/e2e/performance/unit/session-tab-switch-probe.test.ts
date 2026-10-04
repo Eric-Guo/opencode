@@ -5,6 +5,8 @@ import { measureSessionSwitch } from "../timeline/session-tab-switch-probe"
 function testPage(waitFailure?: Error) {
   const stops: unknown[] = []
 
+  // SAFETY: These failure paths call only evaluate and waitForFunction; neither callback runs in this adapter.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions
   const page = {
     evaluate: async (_callback: unknown, input?: unknown) => {
       if (input) return
