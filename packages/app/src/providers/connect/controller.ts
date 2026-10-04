@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type {
   FormAnswer,
   IntegrationInfo,
@@ -14,6 +15,13 @@ import { createStore, produce } from "solid-js/store"
 export type ProviderConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 
 type Authorization = IntegrationOauthConnectOutput["data"]
+
+type AuthorizationPolling = {
+  generation: number
+  timer?: ReturnType<typeof setTimeout>
+  disposed: boolean
+  attempt?: Authorization
+}
 
 // OpenCode Go and OpenCode Zen both bill through the OpenCode Console, so the
 // Console sign-in is the connection method for both providers.
@@ -35,7 +43,7 @@ export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
       if (actual === undefined) return false
 
       const equal = Array.isArray(actual)
-        ? typeof condition.value === "string" && actual.includes(condition.value)
+        ? Predicate.isString(condition.value) && actual.includes(condition.value)
         : actual === condition.value
 
       return condition.op === "eq" ? equal : !equal
@@ -43,7 +51,9 @@ export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
 
     if (!active) return answer
 
-    return { ...answer, [field.key]: field.default }
+    answer[field.key] = field.default
+
+    return answer
   }, {})
 }
 
@@ -74,9 +84,9 @@ export function createProviderConnectionController(options: {
 
   // Not createResource: the dialog is owned by whichever page opened it, so reading a pending
   // resource here would suspend that page's <Suspense> and blank the screen behind the dialog.
-  const [integration, setIntegration] = createStore({
+  const [integration, setIntegration] = createStore<{ loading: boolean; latest: IntegrationInfo | undefined }>({
     loading: true,
-    latest: undefined as IntegrationInfo | undefined,
+    latest: undefined,
   })
 
   createEffect(
@@ -108,14 +118,24 @@ export function createProviderConnectionController(options: {
     return [{ type: "key", label: language.t("provider.connect.method.apiKey") }]
   })
 
-  const [store, setStore] = createStore({
-    methodIndex: undefined as number | undefined,
-    authorization: undefined as Authorization | undefined,
-    formAnswer: undefined as FormAnswer | undefined,
+  const [store, setStore] = createStore<{
+    methodIndex: number | undefined
+    authorization: Authorization | undefined
+    formAnswer: FormAnswer | undefined
+    state: "pending" | "waiting" | "refreshing" | "ready" | "error" | "form" | undefined
+    error: string | undefined
+    auto: boolean
+    connected: boolean
+    browserFailed: boolean
+    statusFailed: boolean
+  }>({
+    methodIndex: undefined,
+    authorization: undefined,
+    formAnswer: undefined,
     // Nothing is in flight until a method is selected; `busy()` reads this, so a truthy initial
     // value would keep multi-method providers on the spinner instead of the method list.
-    state: undefined as "pending" | "waiting" | "refreshing" | "ready" | "error" | "form" | undefined,
-    error: undefined as string | undefined,
+    state: undefined,
+    error: undefined,
     auto: false,
     // The credential is stored; a retry only needs to reload the catalogs.
     connected: false,
@@ -124,12 +144,12 @@ export function createProviderConnectionController(options: {
     statusFailed: false,
   })
 
-  const polling = {
+  const polling: AuthorizationPolling = {
     generation: 0,
-    timer: undefined as ReturnType<typeof setTimeout> | undefined,
+    timer: undefined,
     disposed: false,
     // An attempt the server still considers open; cancelled when the dialog goes away.
-    attempt: undefined as Authorization | undefined,
+    attempt: undefined,
   }
 
   const currentMethod = createMemo(() =>
@@ -206,7 +226,7 @@ export function createProviderConnectionController(options: {
     )
   }
 
-  const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
+  const errorMessage = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause))
 
   const cancelAttempt = () => {
     const attempt = polling.attempt
@@ -372,7 +392,7 @@ export function createProviderConnectionController(options: {
       .connect({
         integrationID: options.provider(),
         methodID: selected.id,
-        ...(Object.keys(merged).length ? { answer: merged } : {}),
+        answer: Object.keys(merged).length ? merged : undefined,
         location: location(),
       })
       .then((response) => {
@@ -448,7 +468,7 @@ export function createProviderConnectionController(options: {
       integrationID: options.keyProvider?.() ?? options.provider(),
       location: location(),
       key,
-      ...(store.formAnswer ? { answer: store.formAnswer } : {}),
+      answer: store.formAnswer,
     })
     await finish()
   }

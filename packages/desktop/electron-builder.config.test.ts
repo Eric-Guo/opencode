@@ -1,3 +1,4 @@
+import { isString, isObject } from "effect/Predicate"
 import { expect, test } from "bun:test"
 import { statSync } from "node:fs"
 import { cp, mkdtemp, rm } from "node:fs/promises"
@@ -21,7 +22,7 @@ async function load(channel: string) {
   process.env.OPENCODE_CHANNEL = channel
 
   try {
-    return (await import(`./electron-builder.config.ts?${channel}`)).default as Configuration
+    return (await import(`./electron-builder.config.ts?${channel}`)).default
   } finally {
     delete process.env.OPENCODE_CHANNEL
 
@@ -33,7 +34,7 @@ function trimFilter(dir: string, config: Configuration) {
   return new FileMatcher(dir, "", (value: string) => value, [
     "**/*",
     ...(Array.isArray(config.files) ? config.files : []).filter(
-      (value): value is string => typeof value === "string" && value.startsWith("!"),
+      (value): value is string => isString(value) && value.startsWith("!"),
     ),
   ]).createFilter()
 }
@@ -170,7 +171,7 @@ test.each(channels)("bundles the CLI only in development ($channel)", async ({ c
 
 test("excludes non-Windows native dependencies from Windows builds", async () => {
   const module = await import("./electron-builder.config.ts?windows-native-dependencies")
-  const config = module.default as Configuration
+  const config = module.default
 
   expect(config.win?.files).toEqual(
     expect.arrayContaining([
@@ -196,9 +197,9 @@ test("excludes non-Windows native dependencies from Windows builds", async () =>
 test("bundled config excludes repository instructions and retains runtime files", async () => {
   const config = await load("dev")
   const resources = Array.isArray(config.extraResources) ? config.extraResources : []
-  const entry = resources.find((item) => typeof item === "object" && item.from === "resources/thape-config")
+  const entry = resources.find((item) => isObject(item) && item.from === "resources/thape-config")
 
-  if (!entry || typeof entry === "string") throw new Error("Missing config packaging entry")
+  if (!entry || isString(entry)) throw new Error("Missing config packaging entry")
   const filter = new FileMatcher(import.meta.dirname, "", (value: string) => value, entry.filter).createFilter()
   const include = (name: string) => filter(path.join(import.meta.dirname, name), statSync(import.meta.filename))
   expect(include("AGENTS.md")).toBe(false)

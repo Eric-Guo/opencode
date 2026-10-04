@@ -100,7 +100,7 @@ async function code(text: string, language: string | undefined, key: string, com
     )
       console.error("Markdown highlighting worker failed", error)
 
-    return { language: language ?? "text", generation: 0, stable: [], unstable: [[text, ""] as MarkdownToken] }
+    return { language: language ?? "text", generation: 0, stable: [], unstable: [[text, ""] satisfies MarkdownToken] }
   }
 }
 
@@ -831,7 +831,7 @@ function pendingBlocks(
       complete: !!block.complete,
       stable: [],
       generation: 0,
-      unstable: [[block.src, ""] as MarkdownToken],
+      unstable: [[block.src, ""] satisfies MarkdownToken],
     }
   })
 }

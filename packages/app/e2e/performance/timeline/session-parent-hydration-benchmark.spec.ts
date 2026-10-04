@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import type { Page } from "@playwright/test"
 import { expectSessionTitle } from "../../utils/waits"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -15,7 +15,9 @@ if (mode !== "natural" && mode !== "candidate") throw new Error(`Unknown parent 
 
 const userID = "msg_parent_hydration_user"
 
-const userSeed = fixture.messages[fixture.targetID][0] as SessionMessageUser
+const userSeed = fixture.messages[fixture.targetID][0]
+
+if (userSeed.type !== "user") throw new Error("Missing user fixture")
 
 const user = {
   ...userSeed,
@@ -23,7 +25,9 @@ const user = {
   time: { created: 1700001000000 },
 } satisfies SessionMessageInfo
 
-const assistantSeed = fixture.messages[fixture.targetID][3] as SessionMessageAssistant
+const assistantSeed = fixture.messages[fixture.targetID][3]
+
+if (assistantSeed.type !== "assistant") throw new Error("Missing assistant fixture")
 
 const assistants = Array.from({ length: 14 }, (_, index) => {
   const messageID = `msg_parent_hydration_${String(index).padStart(2, "0")}`
@@ -57,7 +61,7 @@ const lastPartID =
 
 benchmark("hydrates an orphaned latest turn after a cold session click", async ({ browser, report }, testInfo) => {
   benchmark.setTimeout(180_000)
-  const results = [] as Awaited<ReturnType<typeof trial>>[]
+  const results = Array<Awaited<ReturnType<typeof trial>>>()
 
   for (let run = 0; run < 5; run++) {
     results.push(

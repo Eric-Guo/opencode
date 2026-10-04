@@ -1,3 +1,5 @@
+import { Schema } from "effect"
+import type { ToolInput } from "../message/current-tool-state"
 import {
   createEffect,
   createMemo,
@@ -28,12 +30,16 @@ export type TriggerTitle = {
   action?: JSX.Element
 }
 
-const isTriggerTitle = (val: unknown): val is TriggerTitle => {
-  if (typeof val !== "object" || val === null) return false
+const triggerTitleValue = Schema.is(Schema.Struct({ title: Schema.String }))
 
+const scalarArgument = Schema.is(Schema.Union([Schema.String, Schema.Number, Schema.Boolean]))
+
+const textArgument = Schema.is(Schema.String)
+
+const isTriggerTitle = (val: BasicToolProps["trigger"]): val is TriggerTitle => {
   if (typeof Node !== "undefined" && val instanceof Node) return false
 
-  return "title" in val && typeof val.title === "string"
+  return triggerTitleValue(val)
 }
 
 export interface BasicToolProps {
@@ -125,6 +131,12 @@ export function BasicTool(props: BasicToolProps) {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- BasicTool triggers explicitly accept a render callback or display content.
     return typeof value === "function" ? value(open) : value
   })
+
+  const triggerNode = () => {
+    const content = triggerContent()
+
+    return isTriggerTitle(content) ? undefined : content
+  }
 
   const triggerTitle = createMemo(() => {
     const value = triggerContent()
@@ -287,7 +299,7 @@ export function BasicTool(props: BasicToolProps) {
                 </div>
               )}
             </Match>
-            <Match when={true}>{triggerContent() as JSX.Element}</Match>
+            <Match when={true}>{triggerNode()}</Match>
           </Switch>
         </div>
       </div>
@@ -372,36 +384,27 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-function label(input: Record<string, unknown> | undefined) {
+function label(input: ToolInput | undefined) {
   const keys = ["description", "query", "url", "path", "pattern", "name"]
 
-  return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
+  return keys.map((key) => input?.[key]).find((value): value is string => textArgument(value) && value.length > 0)
 }
 
-function args(input: Record<string, unknown> | undefined) {
+function args(input: ToolInput | undefined) {
   if (!input) return []
   const skip = new Set(["description", "query", "url", "path", "pattern", "name"])
 
   return Object.entries(input)
     .filter(([key]) => !skip.has(key))
     .flatMap(([key, value]) => {
-      if (typeof value === "string") return [`${key}=${value}`]
-
-      if (typeof value === "number") return [`${key}=${value}`]
-
-      if (typeof value === "boolean") return [`${key}=${value}`]
+      if (scalarArgument(value)) return [`${key}=${value}`]
 
       return []
     })
     .slice(0, 3)
 }
 
-export function GenericTool(props: {
-  tool: string
-  status?: string
-  hideDetails?: boolean
-  input?: Record<string, unknown>
-}) {
+export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean; input?: ToolInput }) {
   const i18n = useI18n()
 
   return (
