@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentListOutput, ModelListOutput, Project, ProviderListOutput } from "@opencode/client/promise"
+import type { AgentListOutput, ModelListOutput, ProviderListOutput, Project } from "@opencode/client/promise"
 import { directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
 
 describe("normalizeAgentList", () => {
@@ -51,7 +51,7 @@ describe("normalizeAgentList", () => {
         request: { settings: {}, headers: {}, body: {} },
         permissions: [],
       },
-    ] as AgentListOutput["data"])
+    ])
 
     expect(result[0]).toMatchObject({ name: "XiaoTian", displayName: "小天", native: false })
   })

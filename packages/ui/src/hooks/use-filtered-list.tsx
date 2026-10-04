@@ -51,9 +51,14 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- plain string lists have no keys to search by
     const strings = !props.filterKeys && filterable.every((e) => typeof e === "string")
 
-    // SAFETY: when `strings` holds, every element is a string, so the matched targets are the items.
     const filtered = strings
-      ? (fuzzysort.go(needle, filterable as string[]).map((x) => x.target) as T[])
+      ? fuzzysort
+          .go(
+            needle,
+            filterable.map((item) => ({ item, text: String(item) })),
+            { key: "text" },
+          )
+          .map((result) => result.obj.item)
       : fuzzysort.go(needle, filterable, { keys: props.filterKeys! }).map((x) => x.obj)
 
     return skipped.length ? [...filtered, ...skipped] : filtered

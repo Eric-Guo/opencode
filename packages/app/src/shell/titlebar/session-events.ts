@@ -1,3 +1,5 @@
+import { Option, Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import { ServerConnection } from "@/runtime/server/registry"
 
 export const SESSION_TABS_REMOVED_EVENT = "opencode:session-tabs-removed"
@@ -15,27 +17,13 @@ export function notifySessionTabsRemoved(input: SessionTabsRemovedDetail) {
 export function readSessionTabsRemovedDetail(event: Event): SessionTabsRemovedDetail | undefined {
   if (!(event instanceof CustomEvent)) return undefined
 
-  const detail: unknown = event.detail
-
-  if (!detail || typeof detail !== "object") return undefined
-
-  if (!("directory" in detail)) return undefined
-
-  if (!("sessionIDs" in detail)) return undefined
-
-  if (!("server" in detail) || typeof detail.server !== "string") return undefined
-
-  if (typeof detail.directory !== "string") return undefined
-
-  if (!Array.isArray(detail.sessionIDs)) return undefined
-
-  const sessionIDs = detail.sessionIDs.filter((id): id is string => typeof id === "string")
-
-  if (sessionIDs.length === 0) return undefined
-
-  return {
-    server: ServerConnection.Key.make(detail.server),
-    directory: detail.directory,
-    sessionIDs,
-  }
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(
+      Schema.Struct({
+        server: ServerConnection.Key,
+        directory: Schema.String,
+        sessionIDs: Persistence.array(Schema.String).check(Schema.isMinLength(1)),
+      }),
+    )(event.detail),
+  )
 }

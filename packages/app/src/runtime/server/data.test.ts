@@ -1,15 +1,8 @@
 import { expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
+import { sessionInfo } from "@/test/fixtures"
 import { createSessionMutations } from "./data"
 
-const session: SessionInfo = {
-  id: "ses_test",
-  projectID: "project",
-  cost: 0,
-  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-  time: { created: 0, updated: 0 },
-  location: { directory: "/project" },
-}
+const session = sessionInfo({ id: "ses_test" })
 
 test("keeps a removed session hidden after its deletion event, for lists cached before it", async () => {
   const release = Promise.withResolvers<void>()

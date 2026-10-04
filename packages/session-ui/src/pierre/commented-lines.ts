@@ -43,7 +43,7 @@ export function markCommentedDiffLines(root: ShadowRoot, ranges: SelectedLineRan
   )
 
   for (const range of ranges) {
-    const start = diffRowIndex(root, split, range.start, range.side as CommentSide | undefined)
+    const start = diffRowIndex(root, split, range.start, range.side)
 
     if (start === undefined) continue
 
@@ -52,7 +52,7 @@ export function markCommentedDiffLines(root: ShadowRoot, ranges: SelectedLineRan
 
       if (same) return start
 
-      return diffRowIndex(root, split, range.end, (range.endSide ?? range.side) as CommentSide | undefined)
+      return diffRowIndex(root, split, range.end, range.endSide ?? range.side)
     })()
 
     if (end === undefined) continue
