@@ -4,13 +4,16 @@ import { approxBytes } from "./content-cache"
 
 describe("fileContentFromBytes", () => {
   test("keeps media bytes with a mime type, including videos past 25 MiB", () => {
-    const png = new Uint8Array([137, 80, 78, 71])
-    expect(fileContentFromBytes("a.png", png)).toEqual({
+    const png = new Uint8Array(70_000).fill(65)
+    const image = fileContentFromBytes("a.png", png)
+
+    expect(image).toEqual({
       type: "binary",
       content: "",
       bytes: png,
       mimeType: "image/png",
     })
+    expect(image.bytes).toBe(png)
 
     const video = new Uint8Array(40 * 1024 * 1024)
     const content = fileContentFromBytes("arcade-update-draft.mp4", video)
@@ -43,5 +46,14 @@ describe("fileContentFromBytes", () => {
 
   test("marks unknown binaries without keeping bytes", () => {
     expect(fileContentFromBytes("a.bin", new Uint8Array([1, 0, 2]))).toEqual({ type: "binary", content: "", size: 3 })
+  })
+
+  test("keeps no ZIP bytes and identifies the metadata preview", () => {
+    expect(fileContentFromBytes("中文.ZIP", new Uint8Array([0x50, 0x4b, 0, 0]))).toEqual({
+      type: "binary",
+      content: "",
+      size: 4,
+      mimeType: "application/zip",
+    })
   })
 })
