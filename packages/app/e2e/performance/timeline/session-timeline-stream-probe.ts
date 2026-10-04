@@ -169,9 +169,9 @@ export async function installTimelineStreamProbe(
       const recordLongTasks = (entries: PerformanceEntry[]) => {
         if (!state.running) return
         state.longTasks.push(
-          ...entries
-            .filter((entry) => entry.startTime >= state.started && entry.startTime <= state.ended)
-            .map((entry) => entry.duration),
+          ...entries.flatMap((entry) =>
+            entry.startTime >= state.started && entry.startTime <= state.ended ? [entry.duration] : [],
+          ),
         )
       }
 
@@ -181,15 +181,14 @@ export async function installTimelineStreamProbe(
       const recordLayoutShifts = (entries: PerformanceEntry[]) => {
         if (!state.running) return
         state.layoutShifts.push(
-          ...entries
-            .map((entry) => {
+          ...entries.flatMap((entry) => {
+              // SAFETY: This callback only receives entries from the layout-shift observer registered below.
               const shift = entry as LayoutShiftEntry
 
-              if (shift.startTime < state.started || shift.hadRecentInput) return
+              if (shift.startTime < state.started || shift.hadRecentInput) return []
 
-              return shift.value
-            })
-            .filter((value): value is number => value !== undefined),
+              return [shift.value]
+            }),
         )
       }
 
@@ -339,9 +338,11 @@ export async function installTimelineStreamProbe(
           const viewport = root.getBoundingClientRect()
 
           if (profileVisual) {
-            const visibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
-              .map((element) => ({ element, rect: element.getBoundingClientRect() }))
-              .filter((item) => item.rect.bottom > viewport.top && item.rect.top < viewport.bottom)
+            const visibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].flatMap((element) => {
+                const rect = element.getBoundingClientRect()
+
+                return rect.bottom > viewport.top && rect.top < viewport.bottom ? [{ element, rect }] : []
+              })
               .sort((a, b) => a.rect.top - b.rect.top)
 
             state.visibleRows = new Set(visibleRows.map((item) => item.element))
@@ -498,7 +499,7 @@ export async function collectTimelineStreamMetrics(
   options: { textPartID: string; finalIndex: number; navigations: string[] },
 ) {
   return page.evaluate(({ textPartID, finalIndex, navigations }) => {
-    const state = (window as Window & { __timelineStreamBenchmark?: TimelineProbeState }).__timelineStreamBenchmark
+    const state = (window).__timelineStreamBenchmark
 
     if (!state) throw new Error(`missing streaming benchmark state after navigation: ${JSON.stringify(navigations)}`)
     state.ended = performance.now()
@@ -582,9 +583,11 @@ export async function collectTimelineStreamMetrics(
           maxDistancePx: Math.max(0, ...state.geometry.map((sample) => sample.distance)),
           finalDistancePx: state.geometry.at(-1)?.distance ?? 0,
           final: state.geometry.at(-1),
-          distanceTransitionsPx: state.geometry
-            .map((sample) => Math.round(sample.distance))
-            .filter((value, index, values) => index === 0 || value !== values[index - 1]),
+          distanceTransitionsPx: state.geometry.flatMap((sample, index) => {
+            const distance = Math.round(sample.distance)
+
+            return index === 0 || distance !== Math.round(state.geometry[index - 1]!.distance) ? [distance] : []
+          }),
           bottomDriftTransitions: state.geometry.slice(1).filter((value, index) => {
             const previous = state.geometry[index]?.distance ?? 0
 
