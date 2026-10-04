@@ -246,13 +246,15 @@ const phaseOrder = [
 
 const phases = Object.fromEntries(
   builds.map((build) => {
-    const own = samples.filter((s) => s.build === build.label && !s.profiled && !s.traced)
+    const own = samples.flatMap((s) => s.build === build.label && !s.profiled && !s.traced ? [s] : [])
     const out: Record<string, number> = {}
 
     for (const [name, from, to] of phaseOrder) {
-      const deltas = own
-        .map((s) => (s.msSinceSpawn[to] ?? NaN) - (s.msSinceSpawn[from] ?? NaN))
-        .filter(Number.isFinite)
+      const deltas = own.flatMap((s) => {
+        const delta = (s.msSinceSpawn[to] ?? NaN) - (s.msSinceSpawn[from] ?? NaN)
+
+        return Number.isFinite(delta) ? [delta] : []
+      })
         .sort((a, b) => a - b)
 
       if (deltas.length) out[name] = deltas[Math.floor(deltas.length / 2)]
@@ -818,15 +820,18 @@ async function windowRaiser(): Promise<{ raise: (pid: number) => void; screen: (
     screen: async () => {
       await exited
 
-      const samples = lines
-        .filter((line) => line.startsWith("screen "))
-        .map((line) => line.split(" ").slice(1).map(Number) as [number, number])
+      const samples = lines.flatMap((line) => {
+        if (!line.startsWith("screen ")) return []
+        const values = line.split(" ").slice(1).map(Number)
+
+        return [[values[0], values[1]] as const]
+      })
 
       if (process.env.BENCH_DEBUG) console.log(lines.filter((line) => line.startsWith("raised")).join(" "), `${samples.length} screen samples`)
       const first = samples[0]?.[1]
       const last = samples.at(-1)?.[1]
       const differs = (a: number, b: number) => Math.abs(a - b) > 16 * 16 * 12
-      const changed = samples.filter(([, sum]) => differs(sum, first)).map(([t]) => t)
+      const changed = samples.flatMap(([t, sum]) => differs(sum, first) ? [t] : [])
       // The last sample that still differed from the final content, i.e. when the window stopped changing.
       const settledIndex = samples.findLastIndex(([, sum]) => last !== undefined && differs(sum, last))
 
@@ -867,7 +872,7 @@ async function processTree(root: number) {
 }
 
 function summarize(list: Sample[]) {
-  const values = (s: Sample): Record<string, number | undefined> => ({
+  const values = (s: Sample) => ({
     ...s.msSinceSpawn,
     rendererTaskMs: s.rendererCpu.taskMs,
     rendererScriptMs: s.rendererCpu.scriptMs,
@@ -877,7 +882,11 @@ function summarize(list: Sample[]) {
   const out: Record<string, { median: number; min: number; max: number }> = {}
 
   for (const key of keys) {
-    const sorted = list.map((s) => values(s)[key]).filter((v): v is number => Number.isFinite(v)).sort((a, b) => a - b)
+    const sorted = list.flatMap((s) => {
+      const value = values(s)[key]
+
+      return Number.isFinite(value) ? [value] : []
+    }).sort((a, b) => a - b)
 
     if (!sorted.length) continue
     out[key] = { median: sorted[Math.floor(sorted.length / 2)], min: sorted[0], max: sorted[sorted.length - 1] }

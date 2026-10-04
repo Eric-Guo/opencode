@@ -33,7 +33,6 @@ function readTokens(mode: "light" | "dark") {
   return Object.fromEntries(
     [...block.matchAll(/--(v2-[\w-]+):\s*([^;]+);/g)]
       // Fonts and the fixed avatar foreground remain global CSS rather than theme overrides.
-      .filter(([, key]) => key !== "v2-avatar-fg" && key !== "v2-font-family-sans")
-      .map(([, key, value]) => [key, value!.replace(/\s+/g, " ").trim()]),
+      .flatMap(([, key, value]) => key !== "v2-avatar-fg" && key !== "v2-font-family-sans" ? [[key, value!.replace(/\s+/g, " ").trim()]] : []),
   )
 }

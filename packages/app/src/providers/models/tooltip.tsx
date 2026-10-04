@@ -94,7 +94,7 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
     if (props.model.capabilities) {
       const input = props.model.capabilities.input
       const order: Array<InputKey> = ["text", "image", "audio", "video", "pdf"]
-      const entries = order.filter((key) => input[key]).map((key) => inputLabel(key))
+      const entries = order.flatMap((key) => (input[key] ? [inputLabel(key)] : []))
 
       return entries.length ? entries.join(", ") : undefined
     }
