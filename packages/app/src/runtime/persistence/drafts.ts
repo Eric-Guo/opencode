@@ -34,6 +34,8 @@ type Driver = {
 export type DraftStore = AsyncStorage & {
   putBlob(blob: Blob): Promise<BlobReference>
   /** Persist an already-encoded document without re-parsing its serialized form. */
+  // SAFETY: callers pass their persistence codec's encoded JSON document; the draft layer only replaces blob references.
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This generic persistence boundary accepts the codec's encoded output.
   setDocument(key: string, document: unknown): Promise<void>
 }
 
