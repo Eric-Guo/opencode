@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { onCleanup, onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createBlobReference } from "@/runtime/persistence/drafts"
@@ -18,16 +19,14 @@ type PromptTarget = {
 export type ComposerAttachmentConfig = {
   picker?: (
     options: { defaultPath?: string; multiple?: boolean; accept?: string[] },
-    onFile: (file: File) => Promise<boolean>,
+    onFile: (file: File) => Promise<void>,
   ) => Promise<void>
   directory: () => string
   destination: () => AttachmentDestination
   isDialogActive: () => boolean
   duplicate: () => void
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a failed attachment is opaque; the host formats it
-  onError: (error: unknown) => void
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a failed upload is opaque; the host formats it
-  onUploadError: (error: unknown) => void
+  onError: (cause: unknown) => void
+  onUploadError: (cause: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
   onDragCancel?: (callback: () => void) => () => void
@@ -68,7 +67,8 @@ export function createComposerAttachments(
     const mime = await attachmentMime(file)
     const destination = input.destination()
 
-    if (native(mime, destination.input) && file.size <= MAX_INLINE_BYTES) return addInline(file, mime, target, clipboard)
+    if (native(mime, destination.input) && file.size <= MAX_INLINE_BYTES)
+      return addInline(file, mime, target, clipboard)
     const sourcePath = input.getPathForFile?.(file) || undefined
 
     if (destination.local && sourcePath) return addPath(target, { filename: file.name, mime, path: sourcePath })
@@ -77,7 +77,12 @@ export function createComposerAttachments(
     return true
   }
 
-  const addInline = async (file: File, mime: string, target: NonNullable<ReturnType<typeof capture>>, clipboard: boolean) => {
+  const addInline = async (
+    file: File,
+    mime: string,
+    target: NonNullable<ReturnType<typeof capture>>,
+    clipboard: boolean,
+  ) => {
     const blob = input.store ? await input.store(file) : await createBlobReference(file)
     const sourcePath = input.getPathForFile?.(file) || undefined
 
@@ -203,8 +208,7 @@ export function createComposerAttachments(
       return
     }
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a deprecated browser API that some environments lack
-    if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
+    if (Predicate.isFunction(document.execCommand) && document.execCommand("insertText", false, text)) return
     put()
   }
 
@@ -260,7 +264,9 @@ export function createComposerAttachments(
       }
 
       void input
-        .picker({ defaultPath: input.directory(), multiple: true }, (file) => add(file))
+        .picker({ defaultPath: input.directory(), multiple: true }, async (file) => {
+          await add(file)
+        })
         .then(done)
         .catch(input.onError)
     },

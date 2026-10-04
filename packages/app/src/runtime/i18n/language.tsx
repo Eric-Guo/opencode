@@ -141,8 +141,7 @@ const localeMatchers: Array<{ locale: Locale; match: (language: string) => boole
 ]
 
 function detectLocale(): Locale {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
-  if (typeof navigator !== "object") return "en"
+  if (typeof navigator === "undefined") return "en"
 
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
 
@@ -165,8 +164,7 @@ export const languageSchema = Persistence.struct({
 })
 
 function readStoredLocale() {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
-  if (typeof localStorage !== "object") return
+  if (typeof localStorage === "undefined") return
 
   try {
     const raw = localStorage.getItem("opencode.global.dat:language")
@@ -262,8 +260,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const locale = createMemo(() => selectLocale(machine()))
     const dictionary = createMemo(() => selectDictionary(machine()))
     const intl = createMemo(() => INTL[locale()])
-    // SAFETY: widens the initial `undefined` so a direction can be stored later.
-    const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
+    const [layout, setLayout] = createStore<{ direction: Direction | undefined }>({ direction: undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))
 
     const layoutLocale = createMemo(() => {
@@ -342,8 +339,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
     createEffect(() => {
-      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a browser global
-      if (typeof document !== "object") return
+      if (typeof document === "undefined") return
       const value = locale()
       document.documentElement.lang = intl()
       document.documentElement.dir = direction()
