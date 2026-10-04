@@ -219,6 +219,7 @@ async function measureReviewPaneLoad(page: Page, input: { expectedFile: string; 
     const startedAt = probe.startedAt!
     const final = probe.samples.at(-1)!
 
+    // SAFETY: Resource Timing entries come from the resource entry type requested below.
     const resources = performance
       .getEntriesByType("resource")
       .filter(
