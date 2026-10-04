@@ -7,6 +7,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
 import { getDirectory, getFilename } from "@opencode/util/path"
+import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
@@ -226,6 +227,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     // body; the full read that follows reports the server's error. The API's request queue bounds the download's wait
     // for a response, and its body may take as long as it needs.
     const read = (file: string, request: { path: string; location: { directory: string } }, signal: AbortSignal) => {
+      // ZIP previews fetch bounded directory metadata in the viewer, never the archive bytes.
+      if (artifactKind(file) === "archive")
+        return Promise.resolve<FileContent>({ type: "binary", content: "", mimeType: artifactMime(file) })
+
       const download = () =>
         serverSDK.api.file.read(request, { signal }).then((data) => fileContentFromBytes(file, data))
 
