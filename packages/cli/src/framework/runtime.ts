@@ -67,12 +67,14 @@ export function handlers<const Root extends Spec.Any>(root: Root, handlers: Hand
   function add(node: Spec.Any, value: RuntimeHandlers) {
     if (typeof value === "function") {
       result.push({ spec: node.spec, load: value as () => Promise<{ default: RuntimeHandler }> })
-      for (const alias of node.aliases) result.push({ spec: alias.spec, load: value as () => Promise<{ default: RuntimeHandler }> })
+      for (const alias of node.aliases)
+        result.push({ spec: alias.spec, load: value as () => Promise<{ default: RuntimeHandler }> })
       return
     }
     if (value.$) {
       result.push({ spec: node.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
-      for (const alias of node.aliases) result.push({ spec: alias.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
+      for (const alias of node.aliases)
+        result.push({ spec: alias.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
     }
     for (const [name, child] of Object.entries(node.commands)) add(child, value[name] as RuntimeHandlers)
   }
@@ -81,21 +83,31 @@ export function handlers<const Root extends Spec.Any>(root: Root, handlers: Hand
   return result
 }
 
-export function run(commands: Spec.Any, handlers: ReadonlyArray<LazyHandler>, options: { readonly version: string }) {
-  return Command.run(provide(commands, handlers).pipe(Command.withGlobalFlags([PrintLogs])), options) as Effect.Effect<
-    void,
-    unknown,
-    Command.Environment
-  >
+export function run(
+  commands: Spec.Any,
+  handlers: ReadonlyArray<LazyHandler>,
+  options: {
+    readonly version: string
+    readonly before?: (node: Spec.Any, input: unknown) => Effect.Effect<void, unknown>
+  },
+) {
+  return Command.run(provide(commands, handlers, options.before).pipe(Command.withGlobalFlags([PrintLogs])), {
+    version: options.version,
+  }) as Effect.Effect<void, unknown, Command.Environment>
 }
 
-function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): ProvidedCommand {
+function provide(
+  node: Spec.Any,
+  handlers: ReadonlyArray<LazyHandler>,
+  before?: (node: Spec.Any, input: unknown) => Effect.Effect<void, unknown>,
+): ProvidedCommand {
   const handler = handlers.find((handler) => handler.spec === node.spec)
   const spec = handler
     ? node.spec.pipe(
         Command.withHandler((input) =>
           Effect.gen(function* () {
             if (yield* PrintLogs) process.env.OPENCODE_PRINT_LOGS = "1"
+            if (before) yield* before(node, input)
             const module = yield* Effect.promise(handler.load)
             return yield* module.default(input)
           }),
@@ -106,8 +118,8 @@ function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): Provided
   const children = Object.values(node.commands)
   return spec.pipe(
     Command.withSubcommands([
-      ...children.map((child) => provide(child, handlers)),
-      ...children.flatMap((child) => child.aliases.map((alias) => provide(alias, handlers))),
+      ...children.map((child) => provide(child, handlers, before)),
+      ...children.flatMap((child) => child.aliases.map((alias) => provide(alias, handlers, before))),
     ]),
   ) as ProvidedCommand
 }
