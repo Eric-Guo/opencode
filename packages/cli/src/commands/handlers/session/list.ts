@@ -10,6 +10,35 @@ import { errorMessage } from "../../../util/error"
 const handler = Effect.fn("cli.session.list")(function* (
   input: Runtime.Input<typeof Commands.commands.session.commands.list>,
 ) {
+  const sharing = Option.getOrUndefined(input.workspaceSharing)
+  if (sharing !== undefined) {
+    if (Option.isSome(input.server) || input.standalone)
+      throw new Error("--workspace-sharing cannot be combined with --server or --standalone")
+    const { FileSharing } = yield* Effect.promise(() => import("../../../services/workspace-sharing/owner"))
+    const client = yield* Effect.tryPromise(() => FileSharing.connect(sharing))
+    const reply = yield* Effect.tryPromise(() =>
+      client.request({ op: "sessions", directory: process.cwd(), limit: Option.getOrElse(input.maxCount, () => 100) }),
+    )
+    if (reply.error) throw new Error(reply.error)
+    const sessions = reply.sessions as SessionInfo[]
+    process.stdout.write(
+      (input.format === "json"
+        ? JSON.stringify(
+            sessions.map((session) => ({
+              id: session.id,
+              title: session.title,
+              updated: session.time.updated,
+              created: session.time.created,
+              projectId: session.projectID,
+              directory: session.location.directory,
+            })),
+            null,
+            2,
+          )
+        : formatList(sessions)) + EOL,
+    )
+    return
+  }
   const server = yield* ServerConnection.resolve({
     server: Option.getOrUndefined(input.server),
     standalone: input.standalone,
