@@ -209,6 +209,7 @@ function successfulGrep(inboxID: string): V2Event[] {
 // live events the prompt admission triggers, keyed by the generated message ID.
 async function run(input: {
   turn: (inboxID: string) => V2Event[]
+  messageID?: string
   pendingForms?: FormInfo[]
   attached?: boolean
   format?: "default" | "json"
@@ -279,6 +280,7 @@ async function run(input: {
   await runNonInteractivePrompt({
     client: sdk,
     sessionID: "ses_1",
+    messageID: input.messageID,
     location,
     message: "hello",
     files: [],
@@ -336,6 +338,14 @@ const subagentJob: ExperimentalJobListOutput[number] = {
 }
 
 describe("runNonInteractivePrompt", () => {
+  test("preserves an explicit prompt identity for workspace task admission", async () => {
+    const sdk = await run({ messageID: "msg_workspace_stable", turn: (id) => [prompted(id), settled()] })
+    expect(sdk.session.prompt).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "msg_workspace_stable" }),
+      expect.anything(),
+    )
+  })
+
   test("keeps formatted tool output and compact tool metadata in JSON", async () => {
     const output = await capture({ format: "json", turn: successfulGrep })
     const events = output.stdout
