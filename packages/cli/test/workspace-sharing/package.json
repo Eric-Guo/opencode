@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo -p tsconfig.json",
+    "test": "bun test transport.test.ts"
+  }
+}
