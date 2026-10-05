@@ -1,5 +1,17 @@
 import { afterEach, expect, test } from "bun:test"
-import { chmod, link, mkdtemp, readFile, readdir, rm, stat, symlink, unlink, writeFile } from "node:fs/promises"
+import {
+  chmod,
+  link,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { connect, initialize, startWorker } from "../../src/services/workspace-sharing/transport"
@@ -13,7 +25,7 @@ afterEach(async () => {
 })
 
 async function fixture(concurrency = 2) {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-sharing-test-"))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "opencode-sharing-test-")))
   roots.push(root)
   await initialize(root)
   const worker = await startWorker(root, { concurrency, pollMs: 5 })
@@ -109,7 +121,7 @@ test("partial writes are ignored; malformed and traversal input cannot become ex
 
 test("symlinks and broad permissions are rejected for roots and request files", async () => {
   const { root, client } = await fixture()
-  const parent = await mkdtemp(path.join(tmpdir(), "opencode-sharing-links-"))
+  const parent = await realpath(await mkdtemp(path.join(tmpdir(), "opencode-sharing-links-")))
   roots.push(parent)
   await symlink(root, path.join(parent, "alias"))
   await expect(connect(path.join(parent, "alias"))).rejects.toThrow("symlink")
@@ -184,7 +196,7 @@ test("task capacity is bounded without deleting history", async () => {
 })
 
 test("concurrent worker starts elect one owner", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-sharing-election-"))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "opencode-sharing-election-")))
   roots.push(root)
   const attempts = await Promise.allSettled([startWorker(root), startWorker(root)])
   const elected = attempts.filter((item) => item.status === "fulfilled")
@@ -219,7 +231,7 @@ test("clean restart preserves history but refuses stale clients and late envelop
 })
 
 test("crashed worker leaves owner intact and cannot be replaced automatically", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-sharing-crash-"))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "opencode-sharing-crash-")))
   roots.push(root)
   const proc = Bun.spawn(
     [
@@ -256,7 +268,7 @@ test("crashed worker leaves owner intact and cannot be replaced automatically", 
 })
 
 test("experimental CLI rejects conflicting connection modes before creating service state", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-sharing-cli-"))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "opencode-sharing-cli-")))
   roots.push(root)
   const proc = Bun.spawn(
     [process.execPath, "../../script/workspace-sharing.ts", "--workspace-sharing", root, "--standalone", "serve"],
@@ -269,7 +281,7 @@ test("experimental CLI rejects conflicting connection modes before creating serv
 })
 
 test("SQLite sidecar symlinks are rejected before database opening", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-sharing-sidecar-"))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "opencode-sharing-sidecar-")))
   roots.push(root)
   await initialize(root)
   const outside = path.join(root, "untouched.txt")
