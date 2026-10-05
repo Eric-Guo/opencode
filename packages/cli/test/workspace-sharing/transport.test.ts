@@ -272,7 +272,12 @@ test("experimental CLI rejects conflicting connection modes before creating serv
   roots.push(root)
   const proc = Bun.spawn(
     [process.execPath, "../../script/workspace-sharing.ts", "--workspace-sharing", root, "--standalone", "serve"],
-    { cwd: import.meta.dir, env: { HOME: root, PATH: "/usr/bin:/bin" }, stdout: "pipe", stderr: "pipe" },
+    {
+      cwd: import.meta.dir,
+      env: { HOME: root, PATH: "/usr/bin:/bin", BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   )
   const error = await new Response(proc.stderr).text()
   expect(await proc.exited).toBe(1)
