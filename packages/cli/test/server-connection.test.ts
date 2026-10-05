@@ -1,4 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { Service } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
@@ -36,6 +37,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
         version: OPENCODE_VERSION,
         url: server.url.toString(),
         pid: process.pid,
+        provenance: await Effect.runPromise(Service.provenance),
       }),
     )
     const resolved = await runPromise(ServerConnection.resolve())
