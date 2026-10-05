@@ -157,3 +157,36 @@ test("unknown execution outcomes block further admission instead of oversubscrib
   expect((await terminal(client, "unknown-one")).state).toBe("indeterminate")
   expect((await client.request({ op: "run", input }, "do-not-run")).error).toBe("settlement unavailable")
 })
+
+test("oversized history returns a bounded error without stopping the owner", async () => {
+  const { root, client } = await fixture({ sessions: async () => [{ title: "x".repeat(70_000) }] })
+  expect((await client.request({ op: "sessions", directory: root, limit: 100 })).error).toContain("size limit")
+  expect((await client.request({ op: "ping" })).error).toBeUndefined()
+})
+
+test("restarting an owner does not clear an unresolved execution blocker", async () => {
+  const { root, input, client, owner, lease } = await fixture({
+    run: async () => ({ state: "indeterminate", exitCode: 1, stdout: "", stderr: "" }),
+  })
+  await client.request({ op: "run", input }, "unknown-before-restart")
+  await terminal(client, "unknown-before-restart")
+  await owner.stop()
+  await lease.release()
+  const nextLease = await FileSharing.acquire(path.join(root, "spool"), root)
+  const nextOwner = await FileSharing.start(
+    nextLease,
+    {
+      run: async () => {
+        throw new Error("must not dispatch")
+      },
+      sessions: async () => [],
+    },
+    { pollMs: 5 },
+  )
+  cleanups.push(async () => {
+    await nextOwner.stop()
+    await nextLease.release()
+  })
+  const next = await FileSharing.connect(path.join(root, "spool"), { pollMs: 5 })
+  expect((await next.request({ op: "run", input }, "new-after-unknown")).error).toContain("remains blocked")
+})
