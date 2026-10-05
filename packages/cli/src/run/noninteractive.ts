@@ -20,6 +20,7 @@ import { UI } from "./ui"
 type Input = {
   client: OpenCodeClient
   sessionID: string
+  messageID?: string
   location: LocationRef
   message: string
   files: { uri: string; name: string }[]
@@ -68,7 +69,7 @@ export async function runNonInteractivePrompt(input: Input) {
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
   if ((await stream.next()).done) throw new Error("Event stream disconnected before prompt admission")
 
-  const messageID = SessionMessage.ID.create()
+  const messageID = input.messageID ? SessionMessage.ID.make(input.messageID) : SessionMessage.ID.create()
   const render = renderer(input)
   const state = {
     phase: "running" as "running" | "settled" | "cancelling",
