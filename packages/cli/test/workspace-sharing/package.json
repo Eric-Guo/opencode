@@ -3,6 +3,6 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsgo -p tsconfig.json",
-    "test": "bun test transport.test.ts"
+    "test": "bun test . ../run/noninteractive.test.ts"
   }
 }
