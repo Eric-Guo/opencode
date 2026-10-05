@@ -21,7 +21,13 @@ export function cliAdapter(endpoint: Endpoint, executable = selfCommand()): Adap
         { project: location.project.id, parentID: null, order: "desc", limit },
         request(),
       )
-      return [...page.data]
+      return page.data.map((session) => ({
+        id: session.id,
+        title: session.title,
+        time: { created: session.time.created, updated: session.time.updated },
+        projectID: session.projectID,
+        location: { directory: session.location.directory },
+      }))
     },
     async run(task, signal): Promise<Result> {
       if (signal.aborted) return { state: "cancelled", exitCode: 130, stdout: "", stderr: "" }
@@ -83,23 +89,27 @@ export function cliAdapter(endpoint: Endpoint, executable = selfCommand()): Adap
         },
         stdio: ["pipe", "pipe", "pipe"],
       })
-      const output = { stdout: "", stderr: "", overflow: false }
+      const output = { stdout: "", stderr: "", overflow: false, sizes: { stdout: 0, stderr: 0 } }
       const timers = { kill: undefined as ReturnType<typeof setTimeout> | undefined }
       const cancel = () => {
         child.kill("SIGINT")
         void interrupt(task).catch(() => {})
         timers.kill ??= setTimeout(() => child.kill("SIGKILL"), 10_000)
       }
-      const collect = (kind: "stdout" | "stderr", bytes: Buffer) => {
-        if (Buffer.byteLength(output[kind]) + bytes.length > outputLimit) {
+      const collect = (kind: "stdout" | "stderr", text: string) => {
+        const size = Buffer.byteLength(JSON.stringify(text)) - 2
+        if (output.sizes[kind] + size > outputLimit) {
           output.overflow = true
           cancel()
           return
         }
-        output[kind] += bytes.toString("utf8")
+        output.sizes[kind] += size
+        output[kind] += text
       }
-      child.stdout.on("data", (bytes: Buffer) => collect("stdout", bytes))
-      child.stderr.on("data", (bytes: Buffer) => collect("stderr", bytes))
+      child.stdout.setEncoding("utf8")
+      child.stderr.setEncoding("utf8")
+      child.stdout.on("data", (text: string) => collect("stdout", text))
+      child.stderr.on("data", (text: string) => collect("stderr", text))
       signal.addEventListener("abort", cancel, { once: true })
       if (signal.aborted) cancel()
       child.stdin.on("error", () => {})
