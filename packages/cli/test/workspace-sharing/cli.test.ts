@@ -20,7 +20,17 @@ test("real CLI keeps the service DB unique and reuses run with stable IDs", asyn
       const body = await request.text()
       received.push(body)
       const chunks = [
-        { choices: [{ delta: { role: "assistant", content: "fake integration hello" }, finish_reason: null }] },
+        {
+          choices: [
+            {
+              delta: {
+                role: "assistant",
+                content: body.includes("unicode:check") ? "你好".repeat(12_000) : "fake integration hello",
+              },
+              finish_reason: null,
+            },
+          ],
+        },
         { choices: [{ delta: {}, finish_reason: "stop" }] },
         { choices: [], usage: { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 } },
       ]
@@ -142,6 +152,23 @@ test("real CLI keeps the service DB unique and reuses run with stable IDs", asyn
     const legacy = await invoke(["run", "--server", url!, "--format", "json"], "legacy hello")
     expect(legacy.code, legacy.error).toBe(0)
     expect(legacy.stdout).toContain("fake integration hello")
+    const unicode = await invoke(
+      [
+        "run",
+        "--workspace-sharing",
+        spool,
+        "--request-id",
+        "unicode-task",
+        "--title",
+        "unicode-task",
+        "--format",
+        "json",
+      ],
+      "unicode:check",
+    )
+    expect(unicode.code, unicode.error).toBe(0)
+    expect(unicode.stdout).toContain("你好".repeat(12_000))
+    expect(unicode.stdout).not.toContain("\uFFFD")
     const empty = await invoke(["serve", "--workspace-sharing", ""])
     expect(empty.code).not.toBe(0)
     expect(empty.error).toContain("nonempty absolute directory")
