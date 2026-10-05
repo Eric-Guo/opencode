@@ -68,7 +68,7 @@ Task directories must be inside the owner's canonical project directory.
   envelopes, so a long wait does not accumulate permanent requests. Prompt text
   is capped at 16 KiB; stdout and stderr captures are separately bounded.
 - Unknown Session settlement produces `indeterminate`, never blind replay, and
-  blocks new dispatch/admission. Inspect the Session history before deciding
+  blocks new dispatch/admission, including after a clean owner restart. Inspect the Session history before deciding
   what to do next. There is no automatic administrative reset for such a spool.
 - The directory is a same-UID trust boundary: directories 0700 and files 0600,
   canonical paths, no final-component symlinks/FIFOs or unexpected hardlinks. It
@@ -119,6 +119,14 @@ It uses no real account credentials or paid model.
 The original transport checks additionally cover fake task concurrency, precise
 cancellation, partial publication, request conflicts, private modes, symlinks,
 SQLite sidecars, clean restart, and SIGKILL without automatic takeover.
+
+## Manual fake acceptance host
+
+`script/workspace-sharing-fixture.ts` is a test-only foreground host that accepts
+a fresh absolute fixture directory. It launches the real CLI with a loopback
+fake provider and isolated HOME/XDG/database. This helper deliberately stops
+after ten minutes and announces that timeout; it is not a production service
+launcher. Normal `opencode serve --workspace-sharing` has no such test timer.
 
 ## Historical prototype evidence
 
