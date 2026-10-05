@@ -1,96 +1,128 @@
-# Workspace sharing: fake-only CLI prototype
+# Experimental workspace-sharing CLI
 
-This is an experimental file task transport, based on commit
-`d84cecc5bdad08a16600c8cdf113b68c095cec79`. It is not wired into the production
-`opencode` command, does not use provider credentials, and does not execute real
-models, tools, shell commands, or existing OpenCode sessions.
+This branch adds an explicit shared-filesystem connection mode. Ordinary run,
+managed service, standalone, and explicit server connections remain the default
+paths unless `--workspace-sharing` is selected. No production database migration,
+credential copy, default configuration change, or automatic daemon installation
+is included. The fake-only prototype is retained separately in `transport.ts`
+and `script/workspace-sharing.ts` for transport regression tests.
 
-## What exists
+## CLI usage
 
-- `src/services/workspace-sharing/transport.ts`: one file-queue owner, one SQLite
-  database, immutable request IDs, task query/result/cancel and simple session
-  labels. A task only waits for a bounded delay and returns `fake:<text>`.
-- `script/workspace-sharing.ts`: explicit experimental `--workspace-sharing`
-  entrypoint. Conflicting `--server` or `--standalone` options are rejected.
-- `test/workspace-sharing/transport.test.ts`: transport, lifecycle, bounds and
-  filesystem boundary regression tests.
-
-Only the worker opens SQLite. Clients publish requests and read replies; they
-never open the database, interpret foreign PIDs, or discover loopback endpoints.
-Worker ownership is an atomic directory creation, without PID/TTL takeover.
-Normal shutdown closes SQLite before releasing its own marker. A crash leaves
-its marker, and subsequent starts refuse to take over. There is no crash-recovery
-or force-unlock command.
-
-Requests are staged, fsynced and hard-linked into place without overwriting an
-existing request. Replies are staged, fsynced and atomically renamed. Duplicate
-publication briefly has two links; an identical retry waits briefly for the
-publisher to remove its staging link. A publisher crash in this interval leaves
-an unreadable request for inspection, not permission to execute or recover it.
-Malformed files and partially written staging files are not executed.
-
-The owner stores admission and each request's receipt in one SQLite transaction.
-Repeating a request ID returns its original receipt; conflicting reuse fails.
-In particular, a repeated submit receipt can still say `queued` after completion.
-Use a new query/result request ID to get current task state. A timeout means
-service unavailable or outcome unknown: retry the same mutation ID, never create
-a new mutation to guess what happened. This is not an exactly-once guarantee for
-future model/tool execution.
-
-## Scope and bounds
-
-- Linux + Bun 1.4.2, ordinary local shared filesystem semantics.
-- Same-user private directory trust boundary: directories 0700, files 0600,
-  owned by the current UID. Root paths must be absolute, normalized and contain
-  no symlinks. Reads reject final-component symlinks, FIFOs, unexpected hardlinks,
-  oversized files and broad permissions; SQLite sidecar symlinks are rejected.
-- This is not protection from an adversarial process with the same UID. Such a
-  process can forge or replace files. There is no separate identity or auth
-  protocol. Never put untrusted third-party input into this channel as authority
-  to execute a real task, and never use it to evade a permission/reviewer denial.
-- Concurrency is 1 or 2, default 2. There are at most 128 admitted tasks, 4096
-  request files through the client, 4096 UTF-16 text units per fake task, 64 KiB
-  per wire envelope, and 60 seconds per task. No automatic garbage collection.
-- Worker lifetime is explicit and bounded by the experimental CLI (at most ten
-  minutes). No automatic daemon start, reconnect, takeover or queued-work replay.
-- Cancellation targets only a task ID in the owner's task table. It does not
-  signal a PID supplied by a client. Client exit does not cancel worker tasks.
-- Session labels and this toy task database are not the production OpenCode
-  session/event schema. Actual `run`, `--session`, `--continue`, streaming output,
-  tool permissions, provider calls and real history are not integrated.
-
-## Run focused checks
-
-From `packages/cli/test/workspace-sharing`:
+Start one foreground owner from the project directory. Use a private, canonical
+absolute path for the sharing directory, separate from the OpenCode data folder:
 
 ```sh
-bun test transport.test.ts
+opencode serve --workspace-sharing /absolute/private/spool
+```
+
+The service keeps its normal configuration and provider credentials in its own
+process. Its HTTP endpoint is owner-local loopback with an ephemeral credential;
+file clients never receive that credential or open the service database. Keep
+this owner terminal/task alive. In other execs sharing the filesystem:
+
+```sh
+opencode run --workspace-sharing /absolute/private/spool --request-id task-one 'hello'
+opencode run --workspace-sharing /absolute/private/spool --detach --request-id task-two 'another task'
+opencode task status task-two --workspace-sharing /absolute/private/spool
+opencode task result task-two --workspace-sharing /absolute/private/spool
+opencode task cancel task-two --workspace-sharing /absolute/private/spool
+opencode session list --workspace-sharing /absolute/private/spool --format json
+```
+
+Run prints its task and Session IDs on stderr. Normal mode waits for a terminal
+result; `--detach` returns the admission record immediately. Output is delivered
+after completion, not as a live stream. Exiting a file client does not cancel its
+owned task. Cancellation is an explicit task operation and targets only its
+bound, newly created Session. History uses the existing service's session API,
+including sessions created outside the file queue.
+
+This initial opt-in path supports text prompts, model/agent/title/thinking and
+explicit `--auto`. It does not imply auto-approval. It rejects `--server` and
+`--standalone` combinations and does not yet accept `--continue`, `--session`,
+`--fork`, file attachments, or caller-supplied message IDs. Each task gets a fresh
+Session to avoid ambiguous output and cancellation from shared-session writers.
+Task directories must be inside the owner's canonical project directory.
+
+## Ownership, retries and limits
+
+- One owner is elected with atomic directory creation. PID absence, namespace
+  differences, age and timeouts never grant takeover permission. Normal shutdown
+  settles owned clients and closes the service before releasing the file owner.
+  A crash leaves the marker for explicit investigation; there is no force-unlock
+  or automatic recovery command.
+- Formal tasks, receipts and captured output use private atomic JSON files.
+  Only the existing service opens its SQLite database. The retained fake-only
+  prototype has its own toy SQLite and is not imported by the production path.
+- Task ID, Session ID, prompt/message ID and normalized request hash are durable
+  before child dispatch. Mutating request IDs are immutable: retry exactly the
+  same payload and ID. A repeated admission receipt may still say `queued`; use
+  status/result for current state. A timeout is an unknown outcome, not authority
+  to invent a new ID or rerun the task.
+- One isolated CLI client subprocess per task reuses normal `run`, with an
+  explicit owner-local server and bound IDs. No shell command or executable is
+  accepted from the spool. Provider credentials and environment dumps are not
+  transported.
+- Concurrency is two. At most 128 task records and 4096 retained mutation requests
+  are admitted in a sharing directory. Read-only polling removes its consumed
+  envelopes, so a long wait does not accumulate permanent requests. Prompt text
+  is capped at 16 KiB; stdout and stderr captures are separately bounded.
+- Unknown Session settlement produces `indeterminate`, never blind replay, and
+  blocks new dispatch/admission. Inspect the Session history before deciding
+  what to do next. There is no automatic administrative reset for such a spool.
+- The directory is a same-UID trust boundary: directories 0700 and files 0600,
+  canonical paths, no final-component symlinks/FIFOs or unexpected hardlinks. It
+  does not isolate malicious processes with the same UID and is not an auth
+  protocol for third parties. Never use it to evade a denied permission/action.
+- Atomic staging is fsynced before publication. An identical retry briefly waits
+  for a publication staging hardlink to disappear. A publisher crash in that
+  window leaves the request unreadable for investigation; it does not authorize
+  cleanup or execution.
+- Namespace metadata is diagnostic only; non-Linux platforms report unavailable
+  namespace IDs rather than using PID guesses to decide ownership.
+
+## Authentication and compatibility
+
+SSO initialization is selected after actual CLI parsing. Only parsed file-client
+run, task and session-list commands with an explicit sharing directory skip it.
+Ordinary commands and sharing serve still initialize SSO before loading their
+handlers. Prompt text, including text after `--`, cannot select the exemption.
+Help/version and parser errors now avoid an unnecessary SSO initialization.
+
+The sharing owner module is loaded lazily only for explicit sharing serve.
+Normal service discovery, standalone leases, endpoint auth, and public Protocol
+or generated-client surfaces are unchanged. `run --message-id` is an internal
+identity hook used by the owner; ordinary run still creates a fresh message ID.
+
+## Local checks
+
+Use the repository-pinned Bun and installed workspace development dependencies.
+From `packages/cli/test/workspace-sharing`, with HOME and XDG directories isolated:
+
+```sh
+bun test . ../run/noninteractive.test.ts ../server-connection.test.ts
 bun typecheck
 ```
 
-The local bunfig intentionally avoids the CLI package's unrelated TUI preload.
-Focused typechecking needs the existing CLI development dependencies. Runtime and
-transport tests themselves use Bun/Node built-ins and install no new dependency.
-
-For manual experiments, use a fresh, private directory and isolated HOME/XDG.
-Keep the owner in a foreground terminal:
+From `packages/cli`, run the full affected-package check:
 
 ```sh
-bun ../../script/workspace-sharing.ts --workspace-sharing /absolute/private/spool serve --lifetime-ms 60000
+bun typecheck
 ```
 
-In another exec/terminal using the same filesystem:
+From the repository root, the canonical aggregate check remains `bun run check`.
+The integration test uses a loopback fake OpenAI-compatible endpoint and a fresh
+real service/database. It exercises the actual CLI, duplicate admission, result
+query, service history, mixed-mode rejection and ordinary explicit-server run.
+It uses no real account credentials or paid model.
 
-```sh
-bun ../../script/workspace-sharing.ts --workspace-sharing /absolute/private/spool submit --id example-one --text hello --duration-ms 1000
-bun ../../script/workspace-sharing.ts --workspace-sharing /absolute/private/spool result --task example-one
-bun ../../script/workspace-sharing.ts --workspace-sharing /absolute/private/spool sessions
-```
+The original transport checks additionally cover fake task concurrency, precise
+cancellation, partial publication, request conflicts, private modes, symlinks,
+SQLite sidecars, clean restart, and SIGKILL without automatic takeover.
 
-These examples assume the same test-directory working directory as the focused
-checks. Do not point the prototype at a real OpenCode data directory.
+## Historical prototype evidence
 
-## Verified experiments, 2026-10-05
+### Cross-exec prototype, 2026-10-05
 
 The user started a fresh foreground worker with the one-line test launcher.
 Its PID/net namespaces were `4026532200 / 4026531833`; independent client execs
@@ -117,38 +149,7 @@ namespaces, but this environment still needs a genuinely persistent owner
 terminal/task. `nohup` or `setsid` is not a demonstrated solution to that lifecycle
 requirement.
 
-Full repository `bun run check` is blocked because oxlint is not installed in this
-checkout's reusable dependency set. The CLI-wide typecheck is also blocked by
-missing workspace/development dependency links and declarations. Focused
-prototype typechecking and tests passed; these are not a full repository pass.
-
-## Smallest next production step
-
-1. Add an explicit run-handler branch before `ServerConnection.resolve` and
-   reject incompatible connection options. Do not represent a directory as an
-   HTTP endpoint or weaken existing foreign-domain ownership guards.
-2. Keep one real service/database in the persistent owner's namespace. A narrow
-   owner-side adapter can run separate existing CLI client subprocesses against
-   that service's owner-local explicit server URL. Capture each client's output
-   separately; send structured argv and prompt stdin, no arbitrary commands,
-   inherited environment dump or credentials in the spool.
-3. Start with distinct new Sessions per task and concurrency two. Tie durable
-   task ID, Session ID and prompt/message ID before real admission. On ambiguous
-   failure, mark indeterminate instead of retrying with a new prompt ID.
-4. Map cancellation to the owned task's Session and preserve existing permission
-   rejections. Sharing mode must not imply `--auto`. Existing `--session` and
-   `--continue` need deliberate same-Session admission/isolation rules.
-5. Expose history through the single service's real session APIs. Add the small
-   bounded result/stream mechanism required by run; do not proxy the whole HTTP
-   API or add a general remote execution platform.
-
-Direct concurrent reuse of `runNonInteractive` is currently unsafe: it changes
-process cwd, and `runNonInteractivePrompt` uses global stdout/exitCode/SIGINT. An
-in-process adapter first needs injected output, cancellation and result reporting.
-`resolveSessionTarget` and the existing subscription-before-admission/wait logic
-are reusable, but current run code creates a fresh message ID per invocation, so
-blind replay can duplicate real work.
-
-No production CLI registration, public Protocol/HttpApi change, generated client
-change, database migration, production-runtime modification, deployment,
-wrapper/auth modification or real model call is part of this prototype.
+At the initial prototype checkpoint, aggregate checks were blocked by missing
+local development dependencies; only focused checks were available then. The
+subsequent integration checkpoint also passed the affected CLI package typecheck.
+Consult the commit validation notes for aggregate-check limitations.

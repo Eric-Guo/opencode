@@ -2,7 +2,7 @@ import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { Effect, Option, Stream } from "effect"
 import { EOL } from "node:os"
-import { Commands } from "../../commands"
+import { Commands, Server, Standalone } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { ServerConnection } from "../../../services/server-connection"
 import { errorMessage } from "../../../util/error"
@@ -10,6 +10,38 @@ import { errorMessage } from "../../../util/error"
 const handler = Effect.fn("cli.session.list")(function* (
   input: Runtime.Input<typeof Commands.commands.session.commands.list>,
 ) {
+  const sharing = Option.getOrUndefined(input.workspaceSharing)
+  if (sharing !== undefined) {
+    const server = yield* Effect.serviceOption(Server).pipe(Effect.map(Option.flatten))
+    const standalone = yield* Effect.serviceOption(Standalone)
+
+    if (Option.isSome(server) || Option.getOrElse(standalone, () => false))
+      throw new Error("--workspace-sharing cannot be combined with --server or --standalone")
+    const { FileSharing } = yield* Effect.promise(() => import("../../../services/workspace-sharing/owner"))
+    const client = yield* Effect.tryPromise(() => FileSharing.connect(sharing))
+    const reply = yield* Effect.tryPromise(() =>
+      client.request({ op: "sessions", directory: process.cwd(), limit: Option.getOrElse(input.maxCount, () => 100) }),
+    )
+    if (reply.error) throw new Error(reply.error)
+    const sessions = reply.sessions as SessionInfo[]
+    process.stdout.write(
+      (input.format === "json"
+        ? JSON.stringify(
+            sessions.map((session) => ({
+              id: session.id,
+              title: session.title,
+              updated: session.time.updated,
+              created: session.time.created,
+              projectId: session.projectID,
+              directory: session.location.directory,
+            })),
+            null,
+            2,
+          )
+        : formatList(sessions)) + EOL,
+    )
+    return
+  }
   const server = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
   const location = yield* Effect.tryPromise({
