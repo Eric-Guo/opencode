@@ -23,6 +23,13 @@ const ServerParams = {
   ),
 }
 
+const WorkspaceSharing = {
+  workspaceSharing: Flag.string("workspace-sharing").pipe(
+    Flag.withDescription("Use the private shared-filesystem owner at this absolute directory"),
+    Flag.optional,
+  ),
+}
+
 const PermissionParams = {
   auto: Flag.boolean("auto").pipe(
     Flag.withDescription("Auto-approve permissions that are not explicitly denied"),
@@ -134,7 +141,9 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               "log",
               "repos",
             ]).pipe(
-              Argument.withDescription("Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos"),
+              Argument.withDescription(
+                "Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos",
+              ),
               Argument.optional,
             ),
           },
@@ -388,6 +397,16 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "Run OpenCode with a message",
       params: {
         ...ServerParams,
+        ...WorkspaceSharing,
+        requestID: Flag.string("request-id").pipe(
+          Flag.withDescription("Stable workspace task ID for retrying the same request"),
+          Flag.optional,
+        ),
+        detach: Flag.boolean("detach").pipe(
+          Flag.withDescription("Return after workspace task admission"),
+          Flag.withDefault(false),
+        ),
+        messageID: Flag.string("message-id").pipe(Flag.optional, Flag.withHidden),
         message: Argument.string("message").pipe(
           Argument.withDescription("Message to send"),
           Argument.variadic({ min: 0 }),
@@ -433,6 +452,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           description: "List top-level sessions in the current project, newest first",
           params: {
             ...ServerParams,
+            ...WorkspaceSharing,
             maxCount: Flag.integer("max-count").pipe(
               Flag.withAlias("n"),
               Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
@@ -545,9 +565,18 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
       },
     }),
+    Spec.make("task", {
+      description: "Inspect or cancel a workspace-sharing task",
+      params: {
+        ...WorkspaceSharing,
+        operation: Argument.choice("operation", ["status", "result", "cancel"]),
+        taskID: Argument.string("taskID"),
+      },
+    }),
     Spec.make("serve", {
       description: "Start the v2 API and web server",
       params: {
+        ...WorkspaceSharing,
         hostname: Flag.string("hostname").pipe(Flag.optional),
         port: Flag.integer("port").pipe(Flag.optional),
         cors: Flag.string("cors").pipe(

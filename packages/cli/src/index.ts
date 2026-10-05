@@ -19,6 +19,7 @@ import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ensureSsoUsername } from "@opencode/core/thape-sso"
 import { configDirectory } from "./config-directory"
+import { isWorkspaceClient } from "./services/workspace-sharing/selection"
 
 if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
   const { askpass } = await import("./ssh-askpass")
@@ -80,6 +81,7 @@ const Handlers = Runtime.handlers(Commands, {
     unset: () => import("./commands/handlers/service/unset"),
   },
   serve: () => import("./commands/handlers/serve"),
+  task: () => import("./commands/handlers/task"),
 })
 
 Effect.gen(function* () {
@@ -100,14 +102,19 @@ Effect.gen(function* () {
       process.off("unhandledRejection", unhandledRejection)
     }),
   )
-  yield* Effect.promise(() => ensureSsoUsername())
   yield* Effect.logInfo("cli starting", {
     version: Installation.version,
     channel: Installation.channel,
     local: Installation.local,
     args: process.argv.slice(2),
   })
-  return yield* Runtime.run(Commands, Handlers, { version: Installation.version })
+  return yield* Runtime.run(Commands, Handlers, {
+    version: Installation.version,
+    before: (node, input) => {
+      // The CLI has parsed command and flags here; prompt text cannot opt out of SSO.
+      return isWorkspaceClient(node, input) ? Effect.void : Effect.promise(() => ensureSsoUsername())
+    },
+  })
 }).pipe(
   Effect.catchCause((cause) =>
     Effect.logError("cli process failed", {
