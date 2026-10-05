@@ -17,6 +17,7 @@ import { errorMessage } from "../util/error"
 export type RunCommandInput = {
   server: ServerConnection.Resolved
   message: string[]
+  messageID?: string
   continue?: boolean
   session?: string
   fork?: boolean
@@ -129,6 +130,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
   await runNonInteractivePrompt({
     client,
     sessionID: target.session.id,
+    messageID: input.messageID,
     location: target.location,
     message: [prepared.message, ...prepared.files.flatMap((file) => ("text" in file ? [file.text] : []))].join("\n\n"),
     files: prepared.files.flatMap((file) => ("attachment" in file ? [file.attachment] : [])),
