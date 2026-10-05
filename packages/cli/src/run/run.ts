@@ -15,6 +15,7 @@ import { errorMessage } from "../util/error"
 export type RunCommandInput = {
   server: ServerConnection.Resolved
   message: string[]
+  messageID?: string
   continue?: boolean
   session?: string
   fork?: boolean
@@ -137,6 +138,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
   await runNonInteractivePrompt({
     client,
     sessionID: target.session.id,
+    messageID: input.messageID,
     location: target.location,
     message: prepared.message,
     files: prepared.files,
@@ -159,7 +161,7 @@ export function mergeInput(message: string | undefined, piped: string | undefine
   return message + "\n" + piped
 }
 
-function formatMessage(message: string[]) {
+export function formatMessage(message: string[]) {
   const value = message.map((part) => (part.includes(" ") ? `"${part.replace(/"/g, '\\"')}"` : part)).join(" ")
   return value || undefined
 }
