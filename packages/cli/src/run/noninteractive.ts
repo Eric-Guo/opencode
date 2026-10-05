@@ -27,6 +27,7 @@ type File = {
 type Input = {
   client: OpenCodeClient
   sessionID: string
+  messageID?: string
   location: LocationRef
   message: string
   files: File[]
@@ -79,7 +80,7 @@ export async function runNonInteractivePrompt(input: Input) {
   const connected = await stream.next()
   if (connected.done) throw new Error("Event stream disconnected before prompt admission")
 
-  const messageID = SessionMessage.ID.create()
+  const messageID = input.messageID ? SessionMessage.ID.make(input.messageID) : SessionMessage.ID.create()
   const starts = new Map<string, StartedPart>()
   const tools = new Map<string, ToolState>()
   const renderedText = new Map<string, string>()
