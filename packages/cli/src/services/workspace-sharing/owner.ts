@@ -257,6 +257,9 @@ export async function start(lease: Lease, adapter: Adapter, options: { pollMs?: 
         updated: Date.now(),
       }))
   }
+  if ([...tasks.values()].some((task) => task.state === "indeterminate"))
+    state.blocked = "An earlier execution outcome is unknown; new task admission remains blocked"
+
   const execute = async (task: RunTask) => {
     const controller = new AbortController()
     await update(task.id, (previous) => ({
@@ -374,7 +377,16 @@ export async function start(lease: Lease, adapter: Adapter, options: { pollMs?: 
             error: error instanceof Error ? error.message : String(error),
           }),
         )
-        await publish(path.join(lease.root, "replies"), name, reply, true)
+        const bounded =
+          Buffer.byteLength(JSON.stringify(reply)) <= 65_536
+            ? reply
+            : {
+                id: reply.id,
+                ownerID: reply.ownerID,
+                hash: reply.hash,
+                error: "Reply exceeds the transport size limit; request fewer sessions with --max-count",
+              }
+        await publish(path.join(lease.root, "replies"), name, bounded, true)
         seen.add(name)
       }
       if (state.stopping) break
