@@ -1,8 +1,9 @@
 import { Database } from "bun:sqlite"
 import { createHash, randomUUID } from "node:crypto"
-import { constants } from "node:fs"
-import { link, lstat, mkdir, open, readdir, readlink, realpath, rename, rm, unlink } from "node:fs/promises"
+import { lstat, mkdir, open, readdir, readlink, rm } from "node:fs/promises"
 import path from "node:path"
+import { directory, id, initialize, privateRead, publish, rootDirectory } from "./files"
+export { initialize } from "./files"
 
 // Experimental same-UID transport. Only the fixed fake executor is admitted.
 // Namespace/PID metadata never grants permission to reclaim an owner.
@@ -36,14 +37,7 @@ export type Reply = {
 
 type Envelope = { version: 1; id: string; ownerId: string; command: Command }
 type Owner = { id: string; pid: number; startedAt: number; pidNamespace: string; netNamespace: string }
-const uid = process.getuid?.()
 const maxBytes = 65_536
-const identifier = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/
-
-function id(value: unknown): string {
-  if (typeof value !== "string" || !identifier.test(value)) throw new Error("Invalid identifier")
-  return value
-}
 
 function parseCommand(input: unknown): Command {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid command")
@@ -77,90 +71,6 @@ function parseCommand(input: unknown): Command {
 
 function digest(command: Command) {
   return createHash("sha256").update(JSON.stringify(command)).digest("hex")
-}
-
-async function directory(file: string) {
-  const stat = await lstat(file)
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("Expected directory, not symlink")
-  if (uid === undefined || stat.uid !== uid || (stat.mode & 0o077) !== 0)
-    throw new Error("Expected private same-user directory (0700)")
-}
-
-async function rootDirectory(root: string) {
-  if (!path.isAbsolute(root) || path.resolve(root) !== root)
-    throw new Error("Use an absolute normalized sharing directory")
-  if ((await realpath(root)) !== root) throw new Error("Sharing path must not contain a symlink")
-  await directory(root)
-}
-
-async function privateRead(file: string, limit = maxBytes, retryPublication = false, attempt = 0): Promise<string> {
-  // O_NONBLOCK lets fstat reject a planted FIFO without hanging at open.
-  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ELOOP") throw new Error("Expected private regular file, not symlink")
-      throw error
-    },
-  )
-  try {
-    const stat = await handle.stat()
-    // An identical retry can arrive between atomic link publication and staging-link removal.
-    if (stat.nlink === 2 && retryPublication && attempt < 20) {
-      await handle.close()
-      await Bun.sleep(5)
-      return privateRead(file, limit, true, attempt + 1)
-    }
-    if (!stat.isFile() || stat.uid !== uid || (stat.mode & 0o077) !== 0 || stat.nlink !== 1 || stat.size > limit)
-      throw new Error("Expected bounded private regular file (0600), without hardlinks")
-    return await handle.readFile("utf8")
-  } finally {
-    await handle.close()
-  }
-}
-
-async function syncDirectory(root: string) {
-  const handle = await open(root, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW)
-  try {
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-}
-
-async function publish(root: string, name: string, value: unknown, replace = false) {
-  await directory(root)
-  const serialized = JSON.stringify(value)
-  if (Buffer.byteLength(serialized) > maxBytes) throw new Error("Workspace sharing envelope exceeds 64 KiB")
-  const temporary = path.join(root, `.${randomUUID()}.tmp`)
-  const destination = path.join(root, name)
-  const handle = await open(temporary, "wx", 0o600)
-  try {
-    await handle.writeFile(serialized)
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-  try {
-    if (replace) await rename(temporary, destination)
-    if (!replace) await link(temporary, destination)
-  } finally {
-    await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") throw error
-    })
-  }
-  await syncDirectory(root)
-}
-
-export async function initialize(root: string) {
-  await mkdir(root, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "EEXIST") throw error
-  })
-  await rootDirectory(root)
-  for (const name of ["requests", "replies"]) {
-    await mkdir(path.join(root, name), { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "EEXIST") throw error
-    })
-    await directory(path.join(root, name))
-  }
 }
 
 async function readOwner(root: string): Promise<Owner> {
@@ -237,8 +147,8 @@ export async function startWorker(root: string, options: { concurrency?: number;
     id: randomUUID(),
     pid: process.pid,
     startedAt: Date.now(),
-    pidNamespace: await readlink("/proc/self/ns/pid"),
-    netNamespace: await readlink("/proc/self/ns/net"),
+    pidNamespace: process.platform === "linux" ? await readlink("/proc/self/ns/pid") : "unavailable",
+    netNamespace: process.platform === "linux" ? await readlink("/proc/self/ns/net") : "unavailable",
   }
   await publish(lock, "owner.json", owner)
   const dbPath = path.join(root, "tasks.sqlite")
