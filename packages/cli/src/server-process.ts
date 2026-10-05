@@ -24,6 +24,7 @@ export type Mode = "default" | "service" | "stdio"
 
 export type Options = {
   readonly mode: Mode
+  readonly workspaceSharing?: string
   readonly hostname?: string
   readonly port?: number
   readonly cors?: readonly string[]
@@ -60,10 +61,23 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const foreground = options.mode === "default"
+      const sharing =
+        options.workspaceSharing !== undefined
+          ? yield* Effect.gen(function* () {
+              const { FileSharing } = yield* Effect.promise(() => import("./services/workspace-sharing/owner"))
+              return yield* Effect.acquireRelease(
+                Effect.tryPromise(() => FileSharing.acquire(options.workspaceSharing!, process.cwd())),
+                (lease) => Effect.promise(() => lease.release()),
+              )
+            })
+          : undefined
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
-      const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
+      const port =
+        options.port ??
+        config.port ??
+        (sharing ? 0 : options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
       const findIncumbent =
         serviceOptions !== undefined && port !== undefined
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
@@ -200,7 +214,18 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       }
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
-      if (foreground && !environmentPassword) console.log(`server password ${password}`)
+      if (foreground && !environmentPassword && !sharing) console.log(`server password ${password}`)
+      if (sharing) {
+        const { FileSharing } = yield* Effect.promise(() => import("./services/workspace-sharing/owner"))
+        const { cliAdapter } = yield* Effect.promise(() => import("./services/workspace-sharing/executor"))
+        yield* Effect.acquireRelease(
+          Effect.tryPromise(() =>
+            FileSharing.start(sharing, cliAdapter({ url, auth: { type: "basic", username: "opencode", password } })),
+          ),
+          (worker) => Effect.promise(() => worker.stop()),
+        )
+        console.log(`workspace sharing ready at ${sharing.root}`)
+      }
       return yield* options.mode === "service"
         ? server.shutdown
         : options.mode === "stdio"
