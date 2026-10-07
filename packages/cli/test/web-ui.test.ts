@@ -33,6 +33,7 @@ describe("web UI", () => {
           port: 0,
           password: "secret",
           database: { path: ":memory:" },
+          models: { fetch: false },
           config: { content: JSON.stringify({ username: "测试用户", clerk_code: "12345" }) },
         },
         undefined,
