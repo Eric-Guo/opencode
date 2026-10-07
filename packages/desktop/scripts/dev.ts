@@ -1,6 +1,7 @@
 import { $ } from "bun"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { nodeExecArgv } from "../../cli/src/node/target"
 import { prepareDevElectron } from "./dev-electron"
 import { prepareDevExtension } from "./dev-extension"
 import { downloadCliToResources, windowsify } from "./utils"
@@ -13,7 +14,6 @@ async function main() {
   process.env.OPENCODE_CHANNEL = "local"
   process.env.OPENCODE_VERSION = `2.0.0-local-${Date.now()}`
   process.env.OPENCODE_DISABLE_CHANNEL_DB = "0"
-  process.env.OPENCODE_DESKTOP_BUN = process.execPath
   const options = selectOptions()
 
   if (options.server.type === "build") process.env.OPENCODE_DESKTOP_SERVER_CHANNEL = "local"
@@ -54,11 +54,16 @@ function selectOptions(): DevOptions {
 async function prepareServer(source: ServerSource) {
   if (source.type === "download")
     return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
-  await $`bun run --cwd ${join(import.meta.dirname, "../../app")} build`.env({
-    ...process.env,
-    VITE_OPENCODE_SERVER_MODE: "origin",
-  })
+  process.env.OPENCODE_DESKTOP_NODE = (
+    await $`${process.env.NODE_BIN ?? "node"} ${nodeExecArgv} -p process.execPath`.text()
+  ).trim()
+  await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} --bundle-only --skip-install`.env(
+    process.env,
+  )
   process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
+  await $`${process.env.OPENCODE_DESKTOP_NODE} ${nodeExecArgv} ${join(process.env.OPENCODE_DESKTOP_CLI_DEV, "dist-node/opencode.mjs")} --version`.env(
+    process.env,
+  )
 
   if (process.platform !== "win32") return
   process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD = join(import.meta.dirname, "../../cli/script/build.ts")
