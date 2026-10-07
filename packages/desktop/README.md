@@ -9,6 +9,10 @@ bun install
 bun dev
 ```
 
+Development builds the CLI's Node bundle from source and runs the isolated background service with Node.
+Install Node 26.8.2 or newer; set `NODE_BIN` to select a specific Node executable. Bun runs the build scripts.
+The CLI bundle is rebuilt on each `bun run dev` invocation, while the desktop renderer keeps hot reload.
+
 The host defaults to the base desktop. To start the SigmaAgents tab shell, run this from `packages/desktop`:
 
 ```bash
@@ -52,7 +56,7 @@ Set `RUST_TARGET` when building the sidecar for a different architecture, and pa
 flags to `electron-builder` when packaging. The sidecar and its assets are included under `out/main` in the app archive.
 A separate CLI distribution is not required.
 
-`bun dev` builds the embedded sidecar from source and starts the development renderer with the dev app identity.
+`bun dev` builds the Node CLI from source and starts the development renderer with the dev app identity.
 
 ## Startup benchmark
 
