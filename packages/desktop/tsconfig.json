@@ -15,6 +15,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "emitDeclarationOnly": false,
+    "rootDir": "..",
     "outDir": "node_modules/.ts-dist",
     "types": ["vite/client", "node", "electron"],
     "paths": {
