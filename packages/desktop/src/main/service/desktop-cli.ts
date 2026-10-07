@@ -8,6 +8,7 @@ import installer from "../../../../../install?raw"
 import { cliInstallPath } from "../cli-install"
 import { DesktopPaths } from "../paths"
 import { parseCliVersion } from "./cli-version"
+import { nodeExecArgv } from "../../../../cli/src/node/target"
 
 const execFileAsync = promisify(execFile)
 
@@ -50,21 +51,17 @@ export const layer = Layer.effect(
 )
 
 const make = Effect.fn("DesktopCli.resolve")(function* () {
+  const path = yield* Path.Path
   const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
   const version = process.env.OPENCODE_VERSION ?? "local"
 
   const cli = development
     ? {
         version,
-        // Bun's transpiler cache key includes the define table, and the dev version changes on every
-        // run. Reading it from the inherited environment keeps the define fixed and the cache warm.
         command: [
-          process.env.OPENCODE_DESKTOP_BUN ?? "bun",
-          "run",
-          "--cwd",
-          development,
-          "--define=OPENCODE_VERSION=process.env.OPENCODE_VERSION",
-          "src/index.ts",
+          process.env.OPENCODE_DESKTOP_NODE ?? "node",
+          ...nodeExecArgv,
+          path.join(development, "dist-node/opencode.mjs"),
         ],
         binary: undefined,
       }
