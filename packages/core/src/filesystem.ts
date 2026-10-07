@@ -157,14 +157,7 @@ const baseLayer = Layer.effect(
     return Service.of({
       find: search.find,
       archive: Effect.fn("FileSystem.archive")(function* (input) {
-        const target = yield* resolve(input.path).pipe(
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.fail(new NotFoundError({ path: input.path })),
-            (_, error) => Effect.die(error),
-          ),
-        )
+        const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(
           Effect.catchReason(
             "PlatformError",
