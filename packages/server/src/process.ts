@@ -53,7 +53,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E = never, R = 
   remoteURLs?: () => ReadonlyArray<string>,
 ) {
   const scope = yield* Scope.fork(yield* Scope.Scope)
-  return yield* startScoped(options, lifecycle, transform).pipe(
+  return yield* startScoped(options, lifecycle, transform, remoteURLs).pipe(
     Effect.provideService(Scope.Scope, scope),
     Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
   )
@@ -63,6 +63,7 @@ const startScoped = Effect.fnUntraced(function* <E = never, R = never>(
   options: ServerOptions,
   lifecycle?: Lifecycle<E, R>,
   transform?: Transform,
+  remoteURLs?: () => ReadonlyArray<string>,
 ) {
   const password = options.password
   if (!password) return yield* Effect.fail(new Error("Missing server password"))
