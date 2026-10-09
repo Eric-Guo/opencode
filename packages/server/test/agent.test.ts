@@ -16,6 +16,7 @@ it.live("waits for plugin initialization before listing agents", () =>
           password: "secret",
           app: { version: "test-version" },
           database: { path: ":memory:" },
+          models: { fetch: false },
           config: { directory: tmp.path },
           fs: { filewatcher: false },
         })
