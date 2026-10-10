@@ -32,7 +32,13 @@ const workerDeps = ["@shikijs/stream", "marked", "marked-shiki", "remend"]
 
 // The Office previews load their wasm and fonts through `new URL(..., import.meta.url)`, which a pre-bundle would move
 // away from the files.
-const officeDeps = ["@betteroffice/docx", "@betteroffice/fonts", "@betteroffice/pptx", "@betteroffice/xlsx"]
+const officeDeps = [
+  "@betteroffice/docx",
+  "@betteroffice/fonts",
+  "@betteroffice/fonts-cjk",
+  "@betteroffice/pptx",
+  "@betteroffice/xlsx",
+]
 
 // The build emits the Office engines' wasm and worker files for every `new URL(..., import.meta.url)` it sees, even in
 // code that tree shaking drops. A file that no other emitted file names never loads, so it is left out of the build.
@@ -97,10 +103,6 @@ export default [
         resolve: {
           alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
-            // The font package imports its 33 MB Chinese, Japanese and Korean add-on on demand; the app does not ship it.
-            "@betteroffice/fonts-cjk": fileURLToPath(
-              new URL("../gui-extensions/src/microsoft-office/fonts-cjk.ts", import.meta.url),
-            ),
           },
         },
         define: {
