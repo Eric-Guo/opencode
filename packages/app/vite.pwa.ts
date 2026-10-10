@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { VitePWA } from "vite-plugin-pwa"
 
-// The Office previews' engines and fonts (about 52 MB) load only when an Office file opens, so they stay out of the
-// precache. The app's own fonts stay in it: `assets/Inter.ttf` has no hyphenated name, and OpenMono is WOFF2.
+// Office engines and non-CJK fonts load on demand. CJK faces stay in the precache for offline use.
+// The app also precaches its own fonts, including assets/Inter.ttf and the OpenMono WOFF2 files.
 const officeAsset =
   /(?:^|\/)(?:(?:docx_\w+|ooxml_opc|pptx_wasm|xlsx_wasm)_bg-[\w-]+\.wasm|residentEngineWorker-[\w-]+\.js|(?:Carlito|Caladea|LiberationSans|LiberationSerif|LiberationMono|NotoSansArabic|NotoNaskhArabic|NotoSansHebrew|Gelasio|ComicRelief|Inter|Roboto|SourceSans3|DMSans|DMSerifDisplay|OpenSans|Montserrat|Poppins|Oswald|Heebo)-[\w-]+\.ttf)$/
 
