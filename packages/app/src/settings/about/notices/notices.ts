@@ -9,7 +9,7 @@ import { crates, crateTexts } from "./crates"
 export const notices = [
   {
     name: "BetterOffice",
-    detail: "@betteroffice/docx, @betteroffice/xlsx, @betteroffice/pptx, @betteroffice/fonts",
+    detail: "@betteroffice/docx, @betteroffice/xlsx, @betteroffice/pptx, @betteroffice/fonts, @betteroffice/fonts-cjk",
     detailKey: undefined,
     url: "https://github.com/openooxml/betteroffice",
     license: "Apache License 2.0",
