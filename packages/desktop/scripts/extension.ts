@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { existsSync, readFileSync, statSync } from "node:fs"
-import { cp, mkdir } from "node:fs/promises"
-import { resolve, join, dirname } from "node:path"
+import { cp, mkdir, readdir, readFile } from "node:fs/promises"
+import { resolve, join, dirname, relative } from "node:path"
 import type { Plugin } from "vite"
 
 type Manifest = {
@@ -69,8 +69,32 @@ export function desktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) 
         response.end(readFileSync(asset.path))
       })
     },
-    async writeBundle() {
-      await copyAssets()
+    async writeBundle(options) {
+      const output = resolve(options.dir ?? "out/renderer")
+
+      // Shared content-hashed assets can overlap, but must never replace a different host asset.
+      for (const asset of assets) {
+        const files = asset.directory
+          ? (await readdir(asset.path, { recursive: true, withFileTypes: true }))
+              .filter((entry) => entry.isFile())
+              .map((entry) => join(entry.parentPath, entry.name))
+          : [asset.path]
+
+        await Promise.all(
+          files.map(async (source) => {
+            const name = join(asset.name, asset.directory ? relative(asset.path, source) : "")
+            const destination = resolve(output, name)
+
+            if (!existsSync(destination)) return
+
+            const [original, incoming] = await Promise.all([readFile(destination), readFile(source)])
+
+            if (!original.equals(incoming)) throw new Error(`Conflicting desktop extension asset: ${name}`)
+          }),
+        )
+      }
+
+      await copyAssets(output)
     },
   }
 
