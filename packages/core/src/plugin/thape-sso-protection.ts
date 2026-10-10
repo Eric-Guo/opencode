@@ -11,6 +11,14 @@ export const REDACTED = "[REDACTED]"
 export const Plugin = define({
   id: ID,
   effect: Effect.fn("ThapeSsoProtection.Plugin")(function* (ctx: PluginContext) {
+    yield* ctx.model.transform((models) => {
+      // SSO supplies the OpenCode key to users with Zen/Go access; VIPAI still uses its own key for requests.
+      if (process.env.OPENCODE_API_KEY?.trim()) return
+
+      models.remove("vipai", "gpt-6-astra")
+      models.remove("vipai", "gpt-6.1-sol")
+    })
+
     yield* ctx.tool
       .hook("execute.before", (event) =>
         Effect.sync(() => {
