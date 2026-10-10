@@ -568,6 +568,7 @@
       "dependencies": {
         "@betteroffice/docx": "0.4.3",
         "@betteroffice/fonts": "0.4.0",
+        "@betteroffice/fonts-cjk": "0.4.0",
         "@betteroffice/pptx": "0.2.0",
         "@betteroffice/xlsx": "0.3.0",
         "@dnd-kit/abstract": "0.5.0",
@@ -676,6 +677,11 @@
       "name": "@opencode/plm-meeting",
       "version": "2.0.23",
       "dependencies": {
+        "@betteroffice/docx": "0.4.3",
+        "@betteroffice/fonts": "0.4.0",
+        "@betteroffice/fonts-cjk": "0.4.0",
+        "@betteroffice/pptx": "0.2.0",
+        "@betteroffice/xlsx": "0.3.0",
         "@dnd-kit/abstract": "0.5.0",
         "@dnd-kit/dom": "0.5.0",
         "@dnd-kit/solid": "0.5.0",
@@ -686,6 +692,7 @@
         "@opencode/ui": "workspace:*",
         "@opencode/util": "workspace:*",
         "@solid-primitives/event-listener": "catalog:",
+        "@solid-primitives/resize-observer": "catalog:",
         "@tanstack/solid-virtual": "catalog:",
         "dompurify": "catalog:",
         "effect": "catalog:",
@@ -1725,6 +1732,8 @@
     "@betteroffice/docx": ["@betteroffice/docx@0.4.3", "", { "peerDependencies": { "@betteroffice/fonts": "^0" }, "optionalPeers": ["@betteroffice/fonts"] }, "sha512-CEErXJH3iCsi2a61gTNkAofLCzSTcktLmp710gGhMwbBfOqwQ2yI7dRFBV3ElGa9JxkS03IfejvLX0sAvlTrUQ=="],
 
     "@betteroffice/fonts": ["@betteroffice/fonts@0.4.0", "", { "peerDependencies": { "@betteroffice/fonts-cjk": "^0" }, "optionalPeers": ["@betteroffice/fonts-cjk"] }, "sha512-x1BVwYDAgY5R6TWI4t9NLguSiAEbH5GItN2ZlpBIFoRXTIJgjBsXd6sUxPGpexXOyY6KdhRjG8XvHjyAYxEGCw=="],
+
+    "@betteroffice/fonts-cjk": ["@betteroffice/fonts-cjk@0.4.0", "", {}, "sha512-gLLqoIdVA02H5GQs+TpGrHWzxYEbpxj8a1Kzkf3cGQUea+cCpzoCuO38sV0zSDmBbub3gRldzf0N5fPpKCsS5g=="],
 
     "@betteroffice/pptx": ["@betteroffice/pptx@0.2.0", "", {}, "sha512-pNPQ58tlA+pVibERbLdQNskvP7a0GIMf4jhkCU/gPp8043Ichf6gB3PSb4ra9sfqoIaWqOaZKCWyptovA2+Q0A=="],
 
