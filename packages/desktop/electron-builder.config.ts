@@ -26,7 +26,8 @@ const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 const appFiles = [
   "out/**/*",
   "resources/**/*",
-  "!out/**/assets/wasm-*.js.map",
+  // Keep source maps in the build output for diagnostics, outside the shipped application.
+  "!out/**/*.map",
   "!resources/opencode-cli*",
   "!resources/thape-config/**",
   "!resources/icons/**",
@@ -140,18 +141,24 @@ const APP_IDS = {
 const getBase = (appId: string): Configuration => {
   const target = getCurrentCli()
 
-  const windowsArchitectureExclusions = Match.value(target.rustTarget).pipe(
-    Match.when("x86_64-pc-windows-msvc", () => [
-      "@ff-labs/fff-bin-win32-arm64", "@lydell/node-pty-win32-arm64",
-      "@parcel/watcher-win32-arm64", "@yuuang/ffi-rs-win32-arm64-msvc",
-    ]),
-    Match.when("aarch64-pc-windows-msvc", () => [
-      "@ff-labs/fff-bin-win32-x64", "@lydell/node-pty-win32-x64",
-      "@msgpackr-extract/msgpackr-extract-win32-x64", "@parcel/watcher-win32-x64",
-      "@yuuang/ffi-rs-win32-x64-msvc",
-    ]),
-    Match.orElse(() => []),
-  ).map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
+  const windowsArchitectureExclusions = Match.value(target.rustTarget)
+    .pipe(
+      Match.when("x86_64-pc-windows-msvc", () => [
+        "@ff-labs/fff-bin-win32-arm64",
+        "@lydell/node-pty-win32-arm64",
+        "@parcel/watcher-win32-arm64",
+        "@yuuang/ffi-rs-win32-arm64-msvc",
+      ]),
+      Match.when("aarch64-pc-windows-msvc", () => [
+        "@ff-labs/fff-bin-win32-x64",
+        "@lydell/node-pty-win32-x64",
+        "@msgpackr-extract/msgpackr-extract-win32-x64",
+        "@parcel/watcher-win32-x64",
+        "@yuuang/ffi-rs-win32-x64-msvc",
+      ]),
+      Match.orElse(() => []),
+    )
+    .map((packageName) => `!**/node_modules/${packageName}{,/**/*}`)
 
   const channel = resolveChannel()
   const iconChannel = channel === "dev" ? "prod" : channel
@@ -219,6 +226,7 @@ const getBase = (appId: string): Configuration => {
           "!tmp/**",
           "!opencode-thape.sublime-workspace",
           "!node_modules/**/*.d.ts",
+          "!node_modules/**/*.{js,cjs,mjs,css,ts,cts,mts}.map",
           "!node_modules/effect/src/**",
           "!node_modules/zod/src/**",
           "!node_modules/@opencode/plugin/node_modules/zod/src/**",
@@ -227,7 +235,14 @@ const getBase = (appId: string): Configuration => {
       {
         from: "resources/thape-config/node_modules",
         to: "thape-config/node_modules",
-        filter: ["**/*", "!**/*.d.ts", "!effect/src/**", "!zod/src/**", "!@opencode/plugin/node_modules/zod/src/**"],
+        filter: [
+          "**/*",
+          "!**/*.d.ts",
+          "!**/*.{js,cjs,mjs,css,ts,cts,mts}.map",
+          "!effect/src/**",
+          "!zod/src/**",
+          "!@opencode/plugin/node_modules/zod/src/**",
+        ],
       },
       {
         from: "out/generated/app-update.yml",
