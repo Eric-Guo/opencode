@@ -13085,7 +13085,7 @@
             "name": "agentID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Agent.ID"
             },
             "required": true
           },
@@ -13206,7 +13206,7 @@
             "name": "agentID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Agent.ID"
             },
             "required": true
           },
@@ -14240,8 +14240,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -19504,7 +19503,7 @@
             "enum": ["connection-fallback"]
           },
           "integrationID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.ID"
           },
           "previous": {
             "$ref": "#/components/schemas/Connection.Info"
