@@ -34,7 +34,23 @@ bundle the assets as an application. The resulting app will be in `dist/`.
 bun run build && bun run package
 ```
 
-The desktop prebuild prepares the embedded server sidecar and desktop assets. Optional renderer bundles such as 7777 are built by their distribution extension.
+The desktop prebuild first runs every project/script pair in the selected extension's `desktop-extension.json`
+`builds` map, in order, on every invocation. For `desktop-tab`, this rebuilds 7777 and plm-meeting together through
+`plm-meeting`'s `build:shared` before preparing the embedded server sidecar and compiling Electron. Missing or stale
+shared output needs no separate build command. A failed renderer build stops the desktop build. With no extension
+selected, or `OPENCODE_DESKTOP_EXTENSION=none`, the base desktop skips these extension builds.
+
+With the extension exported in your shell, the Windows x64 build steps remain:
+
+```bash
+export OPENCODE_DESKTOP_EXTENSION="<repo-root>/packages/desktop-tab"
+cd "<repo-root>/packages/desktop"
+RUST_TARGET=x86_64-pc-windows-msvc bun run build && \
+RUST_TARGET=x86_64-pc-windows-msvc bun run package:win -- --x64 --publish never
+```
+
+See [Adding another Sigma agent](../desktop-tab/README.md#adding-another-sigma-agent) for shared build registration,
+tab configuration, and release checks. Keep new bundled agent assets in the common `assets/` directory.
 
 See [EXTENSIONS.md](./EXTENSIONS.md) for the optional desktop extension API and the separate `packages/desktop-tab` checkout's [README](../desktop-tab/README.md) for renderer prerequisites. To build and package the SigmaAgents tab shell for macOS, run these commands from `packages/desktop`, keeping the extension setting on both commands:
 
