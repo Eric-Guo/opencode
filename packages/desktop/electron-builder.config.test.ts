@@ -161,6 +161,42 @@ test("trims external dependencies without excluding runtime files", () => {
   }
 })
 
+test.each(channels)("excludes source maps while retaining runnable assets ($channel)", async ({ channel }) => {
+  const config = await load(channel)
+
+  for (const files of [config.files, config.win?.files]) {
+    const filter = trimFilter(import.meta.dirname, { files })
+
+    for (const directory of ["out/main", "out/renderer/assets", "out/renderer/sigma-agents/assets"]) {
+      for (const name of ["index.js", "worker.js", "style.css", "office.wasm", "NotoSansSC.otf"]) {
+        expect(filter(path.join(import.meta.dirname, directory, name), statSync(import.meta.filename))).toBe(true)
+        expect(filter(path.join(import.meta.dirname, directory, `${name}.map`), statSync(import.meta.filename))).toBe(
+          false,
+        )
+      }
+    }
+  }
+
+  const resources = Array.isArray(config.extraResources) ? config.extraResources : []
+
+  for (const source of ["resources/thape-config", "resources/thape-config/node_modules"]) {
+    const entry = resources.find((item) => isObject(item) && item.from === source)
+
+    if (!entry || isString(entry)) throw new Error(`Missing packaging entry: ${source}`)
+
+    const filter = new FileMatcher(import.meta.dirname, "", (value: string) => value, entry.filter).createFilter()
+    const prefix = source.endsWith("node_modules") ? "" : "node_modules/"
+
+    for (const extension of ["js", "cjs", "mjs", "css", "ts", "cts", "mts"]) {
+      const file = path.join(import.meta.dirname, prefix, "dependency/dist", `index.${extension}`)
+      expect(filter(file, statSync(import.meta.filename))).toBe(true)
+      expect(filter(`${file}.map`, statSync(import.meta.filename))).toBe(false)
+    }
+
+    expect(filter(path.join(import.meta.dirname, "plugins/index.ts"), statSync(import.meta.filename))).toBe(true)
+  }
+})
+
 test("the trimmed Zip.js package can still export compressed logs", async () => {
   const config = load("dev")
   const dir = await mkdtemp(path.join(os.tmpdir(), "opencode-zip-package-"))
