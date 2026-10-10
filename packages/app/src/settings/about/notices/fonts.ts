@@ -103,5 +103,15 @@ export const fonts = {
       url: "https://github.com/notofonts/hebrew",
       copyright: ["Copyright 2022 The Noto Project Authors (https://github.com/notofonts/hebrew)"],
     },
+    {
+      name: "Noto Sans SC, Noto Sans TC, Noto Sans JP, Noto Sans KR",
+      url: "https://github.com/notofonts/noto-cjk",
+      copyright: ["Copyright 2014-2021 Adobe (https://adobe.com/), with Reserved Font Name 'Source'."],
+    },
+    {
+      name: "Noto Serif SC",
+      url: "https://github.com/notofonts/noto-cjk",
+      copyright: ["Copyright 2017-2024 Adobe (https://adobe.com/), with Reserved Font Name 'Source'."],
+    },
   ],
 }
