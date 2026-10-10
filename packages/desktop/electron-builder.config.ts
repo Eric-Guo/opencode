@@ -24,7 +24,8 @@ const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 const appFiles = [
   "out/**/*",
   "resources/**/*",
-  "!out/**/assets/wasm-*.js.map",
+  // Keep source maps in the build output for diagnostics, outside the shipped application.
+  "!out/**/*.map",
   "!resources/opencode-cli*",
   "!resources/thape-config/**",
   "!resources/icons/**",
@@ -207,6 +208,7 @@ const getBase = (appId: string): Configuration => ({
         "!tmp/**",
         "!opencode-thape.sublime-workspace",
         "!node_modules/**/*.d.ts",
+        "!node_modules/**/*.{js,cjs,mjs,css,ts,cts,mts}.map",
         "!node_modules/effect/src/**",
         "!node_modules/zod/src/**",
         "!node_modules/@opencode/plugin/node_modules/zod/src/**",
@@ -218,6 +220,7 @@ const getBase = (appId: string): Configuration => ({
       filter: [
         "**/*",
         "!**/*.d.ts",
+        "!**/*.{js,cjs,mjs,css,ts,cts,mts}.map",
         "!effect/src/**",
         "!zod/src/**",
         "!@opencode/plugin/node_modules/zod/src/**",
