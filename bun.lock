@@ -568,6 +568,7 @@
       "dependencies": {
         "@betteroffice/docx": "0.4.3",
         "@betteroffice/fonts": "0.4.0",
+        "@betteroffice/fonts-cjk": "0.4.0",
         "@betteroffice/pptx": "0.2.0",
         "@betteroffice/xlsx": "0.3.0",
         "@dnd-kit/abstract": "0.5.0",
@@ -1305,6 +1306,8 @@
   },
   "packages": {
     "@actions/artifact": ["@actions/artifact@5.0.1", "", { "dependencies": { "@actions/core": "^2.0.0", "@actions/github": "^6.0.1", "@actions/http-client": "^3.0.0", "@azure/storage-blob": "^12.29.1", "@octokit/core": "^5.2.1", "@octokit/plugin-request-log": "^1.0.4", "@octokit/plugin-retry": "^3.0.9", "@octokit/request": "^8.4.1", "@octokit/request-error": "^5.1.1", "@protobuf-ts/plugin": "^2.2.3-alpha.1", "archiver": "^7.0.1", "jwt-decode": "^3.1.2", "unzip-stream": "^0.3.1" } }, "sha512-dHJ5rHduhCKUikKTT9eXeWoUvfKia3IjR1sO/VTAV3DVAL4yMTRnl2iO5mcfiBjySHLwPNezwENAVskKYU5ymw=="],
+
+    "@betteroffice/fonts-cjk": ["@betteroffice/fonts-cjk@0.4.0", "", {}, "sha512-gLLqoIdVA02H5GQs+TpGrHWzxYEbpxj8a1Kzkf3cGQUea+cCpzoCuO38sV0zSDmBbub3gRldzf0N5fPpKCsS5g=="],
 
     "@actions/core": ["@actions/core@2.0.3", "", { "dependencies": { "@actions/exec": "^2.0.0", "@actions/http-client": "^3.0.2" } }, "sha512-Od9Thc3T1mQJYddvVPM4QGiLUewdh+3txmDYHHxoNdkqysR1MbCT+rFOtNUxYAz+7+6RIsqipVahY2GJqGPyxA=="],
 
