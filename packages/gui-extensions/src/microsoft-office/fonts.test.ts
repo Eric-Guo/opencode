@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { loadFace, presentationFace, wordFonts } from "./fonts"
+import { loadFace, presentationFace, scriptFace, wordFonts } from "./fonts"
 
-// East Asian families the font package maps to its CJK add-on, which the app does not ship: by name, by alias, and as
-// weight variants that resolve through their base family.
+// East Asian family names, aliases and weight variants must keep CJK glyph coverage.
 const eastAsian = [
   "Microsoft YaHei",
   "DengXian",
@@ -18,16 +17,26 @@ describe("presentationFace", () => {
   test("draws East Asian families with a face the app ships", async () => {
     const faces = eastAsian.map((family) => presentationFace(family, false, false))
 
-    expect(faces.map((face) => face.script)).toEqual(eastAsian.map(() => undefined))
+    expect(faces.map((face) => face.script)).toEqual([
+      "cjk-sc",
+      "cjk-sc",
+      "cjk-sc",
+      "cjk-sc",
+      "cjk-sc",
+      "cjk-jp",
+      "cjk-kr",
+      "cjk-jp",
+    ])
 
     const bytes = await Promise.all(faces.map(loadFace))
 
     expect(bytes.every((buffer) => buffer.byteLength > 0)).toBe(true)
   })
 
-  test("keeps a serif East Asian family serif when only its weight variant is named", () => {
-    expect(presentationFace("Yu Mincho Light", false, false).family).toBe("Liberation Serif")
-    expect(presentationFace("Yu Gothic Light", false, false).family).toBe("Carlito")
+  test("keeps East Asian weight variants on CJK faces", () => {
+    expect(presentationFace("Yu Mincho Light", false, false).script).toBe("cjk-jp")
+    expect(presentationFace("Yu Gothic Light", false, false).script).toBe("cjk-jp")
+    expect(presentationFace("宋体", false, false).family).toBe("Noto Serif SC")
   })
 
   test("still resolves Latin families to their metric-compatible faces", () => {
@@ -38,15 +47,24 @@ describe("presentationFace", () => {
 })
 
 describe("wordFonts", () => {
-  test("offers no metric-compatible face for an East Asian family, so Word's fallback measures it", () => {
+  test("loads Chinese family aliases and script fallbacks instead of Latin-only substitutes", async () => {
     const fonts = wordFonts()
+    const chinese = ["Microsoft YaHei", "DengXian", "等线", "宋体"]
+    const bytes = await Promise.all(chinese.map((family) => fonts.resolve(family, false, false)?.()))
 
-    expect(eastAsian.map((family) => fonts.resolve(family, false, false))).toEqual(eastAsian.map(() => undefined))
-    expect(eastAsian.map((family) => fonts.resolveFamily?.(family, false, false))).toEqual(
-      eastAsian.map(() => undefined),
-    )
-    expect(fonts.resolveScriptFallback?.("cjk-sc", false, false)).toBeUndefined()
+    expect(bytes.every((buffer) => buffer && buffer.byteLength > 0)).toBe(true)
+    expect(await fonts.resolveScriptFallback?.("cjk-sc", false, false)?.()).toEqual(bytes[0])
   })
+
+  test.each(["cjk-sc", "cjk-tc", "cjk-jp", "cjk-kr"] as const)(
+    "loads the %s fallback even for bold italic text",
+    async (script) => {
+      const face = scriptFace(script, true, true)
+
+      expect(face?.script).toBe(script)
+      expect(await wordFonts().resolveScriptFallback?.(script, true, true)?.()).toBeInstanceOf(ArrayBuffer)
+    },
+  )
 
   test("loads a last-resort face for every East Asian weight variant", async () => {
     const fonts = wordFonts()
