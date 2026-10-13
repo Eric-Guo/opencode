@@ -11,6 +11,9 @@ import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { SkillTool } from "@opencode/core/tool/plugin/skill"
+import { FigmaSkillPlugin } from "@opencode/core/plugin/figma-skill"
+import { BuiltinSkill } from "@opencode/core/skill/builtin"
+import { host } from "./plugin/host"
 import { Tool } from "@opencode/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { Image } from "@opencode/core/image"
@@ -66,6 +69,145 @@ describe("SkillTool", () => {
       ),
     ),
   )
+
+  it.effect("loads bundled references and scripts from memory with paging and skill authorization", () => {
+    const assertions: Permission.AssertInput[] = []
+
+    return Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const tools = yield* Tool.Service
+      const managed = yield* ManagedPolicy.Service
+
+      yield* FigmaSkillPlugin.Plugin.effect(
+        host({
+          skill: {
+            list: () => Effect.die("unused skill.list"),
+            transform: skills.transform,
+            reload: skills.reload,
+          },
+        }),
+      )
+
+      const main = yield* executeTool(tools, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-builtin-main", name: "skill", input: { id: "figma-use" } },
+      })
+      expect(main).toMatchObject({ status: "completed" })
+      expect(main.content).toEqual([expect.objectContaining({ text: expect.stringContaining("in memory") })])
+
+      yield* Effect.forEach(
+        [
+          { id: "figma-use", file: "references/plugin-api-standalone.d.ts" },
+          { id: "figma-generate-library", file: "scripts/inspectFileStructure.js" },
+          { id: "figma-use", file: "../NOTICE.md" },
+        ],
+        (input) =>
+          Effect.gen(function* () {
+            const resource = path.resolve(BuiltinSkill.root, input.id, input.file)
+            const result = yield* executeTool(tools, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: `call-builtin-${input.file}`,
+                name: "skill",
+                input: { ...input, limit: 3 },
+              },
+            })
+            expect(result).toMatchObject({ status: "completed" })
+            expect(result.content).toEqual([
+              expect.objectContaining({
+                text: expect.stringContaining(
+                  BuiltinSkill.read(resource)!.toString("utf8").split("\n").slice(0, 3).join("\n"),
+                ),
+              }),
+            ])
+            expect(result.content).toEqual([expect.objectContaining({ text: expect.stringContaining("offset=4") })])
+          }),
+      )
+
+      const next = yield* executeTool(tools, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-builtin-next",
+          name: "skill",
+          input: { id: "figma-use", file: "references/plugin-api-standalone.d.ts", offset: 4, limit: 3 },
+        },
+      })
+      expect(next).toMatchObject({ status: "completed" })
+      expect(next.content).toEqual([
+        expect.objectContaining({
+          text: expect.stringContaining(
+            BuiltinSkill.read(path.join(BuiltinSkill.root, "figma-use/references/plugin-api-standalone.d.ts"))!
+              .toString("utf8")
+              .split("\n")
+              .slice(3, 6)
+              .join("\n"),
+          ),
+        }),
+      ])
+      expect(assertions.map((input) => input.resources)).toEqual([
+        ["figma-use"],
+        ["figma-use"],
+        ["figma-generate-library"],
+        ["figma-use"],
+        ["figma-use"],
+      ])
+
+      yield* Effect.forEach(["references/missing.md", "../figma-shaders/SKILL.md", "../../../../etc/passwd"], (file) =>
+        Effect.gen(function* () {
+          expect(
+            yield* executeTool(tools, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: `call-builtin-invalid-${file}`,
+                name: "skill",
+                input: { id: "figma-use", file },
+              },
+            }),
+          ).toMatchObject({ status: "error" })
+        }),
+      )
+
+      yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:figma-use", effect: "deny" }] })
+      yield* registerIntegrationPolicy({ skill: skills })
+      const authorized = assertions.length
+
+      expect(
+        yield* executeTool(tools, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-builtin-denied",
+            name: "skill",
+            input: { id: "figma-use", file: "references/plugin-api-standalone.d.ts" },
+          },
+        }),
+      ).toMatchObject({ status: "error" })
+      expect(assertions).toHaveLength(authorized)
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, Config.node, ManagedPolicy.node]), [
+          Config.node.replace(Config.testLayer()),
+          Permission.node.replace(
+            permissionLayer({
+              assert: (input) =>
+                Effect.sync(() => {
+                  assertions.push(input)
+                }),
+            }),
+          ),
+          Image.node.replace(imagePassthrough),
+        ]),
+      ),
+    )
+  })
 
   it.live("lists available skills, authorizes the selected ID, and loads model-facing content", () =>
     Effect.acquireRelease(

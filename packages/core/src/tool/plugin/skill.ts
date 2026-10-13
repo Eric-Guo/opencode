@@ -6,11 +6,22 @@ import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Skill } from "../../skill.js"
 import { Permission } from "../../permission.js"
+import { ReadToolFileSystem } from "../read-filesystem.js"
 
 export const name = "skill"
 
 export const Input = Schema.Struct({
   id: Skill.ID.annotate({ description: "The ID of an available skill or a skill explicitly referenced by the user" }),
+  file: Schema.optionalKey(Schema.String).annotate({
+    description:
+      "For a bundled skill, load a reference or script using its path relative to the skill's resource directory",
+  }),
+  offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
+    description: "For a bundled resource, the line to start reading from (1-based)",
+  }),
+  limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
+    description: "For a bundled resource, the maximum number of lines to read (defaults to and capped at 2000)",
+  }),
 })
 
 export const Output = Schema.Struct({
@@ -22,6 +33,7 @@ export const description = [
   "Load a specialized skill's instructions and resources into the current conversation when the task at hand matches its description.",
   "",
   "The skill ID must match an available skill or a skill explicitly referenced by the user.",
+  "For bundled skills, set file to load a reference or script from memory; omit file to load the main instructions.",
 ].join("\n")
 
 export const toModelOutput = Skill.toModelOutput
@@ -56,7 +68,10 @@ export const Plugin = {
                   agent: context.agent,
                   source: { type: "tool", messageID: context.messageID, id: context.id },
                 })
-                return { name: skill.name, ...(yield* Skill.prepare(fs, skill)) }
+                return {
+                  name: skill.name,
+                  ...(yield* Skill.prepare(fs, skill, input.file, { offset: input.offset, limit: input.limit })),
+                }
               }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
             }).pipe(
               Effect.map((output) => ({

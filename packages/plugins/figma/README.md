@@ -53,7 +53,7 @@ bun run sync:skills
 
 This fetches upstream `main`, discovers every skill directory containing `SKILL.md`, copies all of them with their supporting files, removes previously bundled skills that no longer exist upstream, and records the resolved commit and skill IDs. No skill names are filtered or hardcoded in the sync script. To use a particular branch, tag, or commit, pass it as an argument. To reproduce the current bundle, pass the revision in `skills-source.json`.
 
-Sync also regenerates `packages/core/src/plugin/figma-skill/skills-bundle.json`, a byte-preserving bundle embedded in releases. Core extracts the complete tree, including references, scripts, and attribution, into a content-versioned cache directory before registering the built-in skills. Skill paths point to those real files in both Bun and Node releases.
+Sync also regenerates `packages/core/src/plugin/figma-skill/skills-bundle.json`, a byte-preserving bundle embedded in releases. Core registers the built-in skills directly from memory without extracting files. References, scripts, and attribution remain available through the `skill` tool's optional `file` argument in both Bun and Node releases. Bundled resource directories are virtual; filesystem tools cannot open them.
 
 To regenerate the bundle from the checked-in files without fetching upstream, run `bun run bundle:skills`.
 

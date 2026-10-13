@@ -161,17 +161,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
     }
   }
 
-  if (first.bytes.length >= first.info.size) {
-    const result = textPage(first.bytes, true, page)
-    if (result === undefined) return yield* Effect.die("Read page did not settle for a complete first chunk")
-    return yield* makeTextPage(
-      input,
-      resource,
-      result,
-      first.bytes.subarray(0, result.consumed).includes(0),
-      lineCount(textLeaf(first.bytes).summary.lines, first.bytes.at(-1)),
-    )
-  }
+  if (first.bytes.length >= first.info.size) return yield* readText(input, resource, first.bytes, page)
 
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
@@ -222,6 +212,19 @@ export const read = Effect.fn("ReadTool.read")(function* (
     lines += leaf.summary.lines
   }
 })
+
+export const readText = (input: AbsolutePath, resource: string, bytes: Uint8Array, page: PageInput = {}) => {
+  const result = textPage(bytes, true, page)
+  if (result === undefined) return Effect.die("Read page did not settle for complete content")
+
+  return makeTextPage(
+    input,
+    resource,
+    result,
+    bytes.subarray(0, result.consumed).includes(0),
+    lineCount(textLeaf(bytes).summary.lines, bytes.at(-1)),
+  )
+}
 
 const readFile = (
   files: Files,

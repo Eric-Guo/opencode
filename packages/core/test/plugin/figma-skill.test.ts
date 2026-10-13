@@ -7,11 +7,10 @@ import { Agent } from "@opencode/core/agent"
 import { FigmaSkillPlugin } from "@opencode/core/plugin/figma-skill"
 import { Skill } from "@opencode/core/skill"
 import { SkillInstructions } from "@opencode/core/skill/instructions"
-import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { FigmaSkillBundle } from "@opencode/core/plugin/figma-skill/bundle"
-import { tmpdir, tmpdirScoped } from "../fixture/tmpdir"
+import { BuiltinSkill } from "@opencode/core/skill/builtin"
+import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { readInitial } from "../lib/instructions"
 import { host } from "./host"
@@ -22,15 +21,10 @@ const source = fileURLToPath(new URL("../../../plugins/figma/skills/", import.me
 describe("built-in Figma skills", () => {
   it.effect("advertises all skills to build and plan without registering MCP and preserves overrides", () =>
     Effect.gen(function* () {
-      const directory = yield* tmpdirScoped()
       const registry = yield* Skill.Service
       const instructions = yield* SkillInstructions.Service
       const fs = yield* FSUtil.Service
-      const skills = yield* Effect.promise(() => FigmaSkillBundle.materialize(path.join(directory.path, "override")))
-      const override = { ...skills[0], description: "User override" }
-
-      yield* registry.transform((editor) => editor.add(override))
-      yield* FigmaSkillPlugin.Plugin.effect(
+      const register = FigmaSkillPlugin.Plugin.effect(
         host({
           skill: {
             list: () => Effect.die("unused skill.list"),
@@ -38,7 +32,14 @@ describe("built-in Figma skills", () => {
             reload: registry.reload,
           },
         }),
-      ).pipe(Effect.provideService(Global.Service, Global.make({ cache: directory.path })))
+      )
+
+      yield* register
+      const skills = yield* registry.list()
+      const override = { ...skills[0], description: "User override" }
+
+      yield* registry.transform((editor) => editor.add(override))
+      yield* register
 
       expect(yield* registry.list()).toHaveLength(14)
       expect(yield* registry.get(override.id)).toEqual(override)
@@ -56,34 +57,38 @@ describe("built-in Figma skills", () => {
       expect(skill).toBeDefined()
       const prepared = yield* Skill.prepare(fs, skill!)
       expect(prepared.output).toContain("references/")
-      expect(prepared.directory).toBe(
-        path.join(directory.path, "skills", "figma", FigmaSkillBundle.revision, "figma-use-figjam"),
-      )
+      expect(prepared.directory).toBe(path.join(BuiltinSkill.root, "figma-use-figjam"))
     }),
   )
 
   test.each(["bun", "node"] as const)(
-    "%s release restores every vendored file byte-for-byte",
+    "%s release reads every vendored file byte-for-byte from memory without extracting files",
     async (target) => {
       await using directory = await tmpdir()
       const entrypoint = path.join(directory.path, "entry.ts")
       await Bun.write(
         entrypoint,
-        `import { FigmaSkillBundle } from ${JSON.stringify(fileURLToPath(import.meta.resolve("@opencode/core/plugin/figma-skill/bundle")))}
-const skills = await FigmaSkillBundle.materialize(process.argv[2])
-console.log(JSON.stringify(skills.map((skill) => ({ id: skill.id, path: skill.path }))))
+        `import { BuiltinSkill } from ${JSON.stringify(fileURLToPath(import.meta.resolve("@opencode/core/skill/builtin")))}
+import path from "node:path"
+console.log(JSON.stringify(BuiltinSkill.paths.map((file) => ({
+  path: path.relative(BuiltinSkill.root, file).split(path.sep).join("/"),
+  content: BuiltinSkill.read(file).toString("base64"),
+}))))
 `,
       )
       const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: source, onlyFiles: true }))).toSorted()
-      const outfile = path.join(directory.path, target === "bun" ? "figma-test" : "figma-test.js")
+      const outfile = path.join(
+        directory.path,
+        target === "bun" ? (process.platform === "win32" ? "figma-test.exe" : "figma-test") : "figma-test.js",
+      )
       const result = await Bun.build({
         entrypoints: [entrypoint],
         target,
         ...(target === "bun" ? { compile: { outfile } } : { outdir: directory.path, naming: "figma-test.js" }),
       })
       expect(result.success).toBe(true)
-      const extracted = path.join(directory.path, "extracted", "skills")
-      const child = Bun.spawn(target === "bun" ? [outfile, extracted] : ["node", outfile, extracted], {
+      const before = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: directory.path, dot: true }))
+      const child = Bun.spawn(target === "bun" ? [outfile] : ["node", outfile], {
         cwd: directory.path,
         stdout: "pipe",
         stderr: "pipe",
@@ -92,17 +97,16 @@ console.log(JSON.stringify(skills.map((skill) => ({ id: skill.id, path: skill.pa
       const error = await new Response(child.stderr).text()
       expect(error).toBe("")
       expect(await child.exited).toBe(0)
-      expect(JSON.parse(output)).toHaveLength(14)
-      expect(
-        (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: extracted, onlyFiles: true }))).toSorted(),
-      ).toEqual(files)
-
-      await Promise.all(
-        files.map(async (file) => {
-          expect(await Bun.file(path.join(extracted, file)).bytes()).toEqual(
-            await Bun.file(path.join(source, file)).bytes(),
-          )
-        }),
+      expect((await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: directory.path, dot: true }))).toSorted()).toEqual(
+        before.toSorted(),
+      )
+      expect(JSON.parse(output)).toEqual(
+        await Promise.all(
+          files.map(async (file) => ({
+            path: file.replaceAll("\\", "/"),
+            content: Buffer.from(await Bun.file(path.join(source, file)).arrayBuffer()).toString("base64"),
+          })),
+        ),
       )
     },
     60_000,

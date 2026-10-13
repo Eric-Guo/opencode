@@ -3,11 +3,14 @@ export * as Skill from "./skill.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
-import { Context, Effect, Layer, Types } from "effect"
+import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
 import { Permission } from "./permission.js"
 import { State } from "./state.js"
+import { BuiltinSkill } from "./skill/builtin.js"
+import { ReadToolFileSystem } from "./tool/read-filesystem.js"
+import { AbsolutePath } from "./schema.js"
 
 export const DirectorySource = Skill.DirectorySource
 export type DirectorySource = Skill.DirectorySource
@@ -35,35 +38,92 @@ export const available = (skills: ReadonlyArray<Info>, permissions: Permission.R
 
 export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
   const directory = path.dirname(skill.path)
+  const builtin = BuiltinSkill.resources(skill.path) !== undefined
   return [
     `<skill_content name="${skill.name}">`,
     `# Skill: ${skill.name}`,
     "",
     skill.content.trim(),
     "",
-    `Base directory for this skill: ${directory}`,
-    "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+    ...(builtin
+      ? [
+          `Bundled resource directory for this skill (in memory): ${directory}`,
+          `Load references and scripts with the skill tool using id="${skill.id}" and file="<relative path>".`,
+          "These resources are not filesystem paths; do not use read or shell to open them.",
+          "For links to another skill, use that skill's ID and a path relative to its resource directory.",
+          "Script resources are snippets to pass to Figma's MCP tools.",
+        ]
+      : [
+          `Base directory for this skill: ${directory}`,
+          "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+        ]),
     "Note: file list is sampled.",
     "",
     "<skill_files>",
-    ...files.map((file) => `<file>${file}</file>`),
+    ...files.map((file) => `<file>${builtin ? path.relative(directory, file) : file}</file>`),
     "</skill_files>",
     "</skill_content>",
   ].join("\n")
 }
 
-export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interface, skill: Info) {
+export class ResourceNotFoundError extends Schema.TaggedError<ResourceNotFoundError>()("Skill.ResourceNotFoundError", {
+  skill: ID,
+  file: Schema.String,
+}) {
+  override get message() {
+    return `Bundled resource not found for skill ${this.skill}: ${this.file}`
+  }
+}
+
+export const prepare = Effect.fn("Skill.prepare")(function* (
+  fs: FSUtil.Interface,
+  skill: Info,
+  file?: string,
+  page: ReadToolFileSystem.PageInput = {},
+) {
   const directory = path.dirname(skill.path)
+  const bundled = BuiltinSkill.resources(skill.path)
+  if (file !== undefined) {
+    const resource = path.resolve(directory, file)
+    if (!bundled?.includes(resource)) return yield* new ResourceNotFoundError({ skill: skill.id, file })
+
+    const content = yield* ReadToolFileSystem.readText(
+      AbsolutePath.make(resource),
+      resource,
+      BuiltinSkill.read(resource)!,
+      page,
+    )
+
+    return {
+      directory,
+      output: [
+        `<skill_resource name="${skill.name}" file="${path.relative(directory, resource)}" offset="${content.offset}">`,
+        content.content,
+        "</skill_resource>",
+        ...(content.next === undefined
+          ? []
+          : [
+              `More content is available. Call skill with id="${skill.id}", file="${path.relative(directory, resource)}", and offset=${content.next}.`,
+            ]),
+      ].join("\n"),
+    }
+  }
+
   const files =
-    path.basename(skill.path) === "SKILL.md"
-      ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
-          .filter((file) => path.basename(file) !== "SKILL.md")
-          .toSorted()
-          .slice(0, 10)
-      : []
+    bundled ??
+    (path.basename(skill.path) === "SKILL.md"
+      ? yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true })
+      : [])
+
   return {
     directory,
-    output: toModelOutput(skill, files),
+    output: toModelOutput(
+      skill,
+      files
+        .filter((file) => path.basename(file) !== "SKILL.md")
+        .toSorted()
+        .slice(0, 10),
+    ),
   }
 })
 
