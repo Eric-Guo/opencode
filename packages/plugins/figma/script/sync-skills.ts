@@ -6,6 +6,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import source from "../skills-source.json"
+import { bundleSkills } from "./bundle-skills.js"
 
 if (Bun.argv.includes("--help")) {
   console.log("Usage: bun run sync:skills [branch, tag, or commit]\nDefaults to main. Syncs all official Figma skills.")
@@ -55,6 +56,7 @@ try {
     path.join(root, "skills-source.json"),
     `${JSON.stringify({ ...source, revision, skills }, null, 2)}\n`,
   )
+  await bundleSkills()
   console.log(`Synced ${skills.length} Figma skills at ${revision}. Review the source changes before committing.`)
 } finally {
   await rm(directory, { recursive: true, force: true })

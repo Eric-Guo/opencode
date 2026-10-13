@@ -1,6 +1,6 @@
 # Figma
 
-An opt-in OpenCode plugin that registers Figma's remote MCP server and official Figma skills. It uses OpenCode's existing OAuth/DCR flow and credential storage, without a shared client secret.
+OpenCode includes Figma's official skills by default for build and plan agents. This opt-in plugin registers Figma's remote MCP server and preserves the same skills. It uses OpenCode's existing OAuth/DCR flow and credential storage, without a shared client secret.
 
 ## Install
 
@@ -23,7 +23,7 @@ For local development, add the directory to `plugins` in the project's `opencode
 }
 ```
 
-The plugin is not activated merely by being present in the repository. Installing it adds it to the user's configuration.
+The MCP plugin is not activated merely by being present in the repository. Installing it adds it to the user's configuration. Built-in skills do not require installation or MCP authentication; using Figma tools still requires configuring and connecting the MCP server.
 
 ## Sign in and test
 
@@ -53,7 +53,11 @@ bun run sync:skills
 
 This fetches upstream `main`, discovers every skill directory containing `SKILL.md`, copies all of them with their supporting files, removes previously bundled skills that no longer exist upstream, and records the resolved commit and skill IDs. No skill names are filtered or hardcoded in the sync script. To use a particular branch, tag, or commit, pass it as an argument. To reproduce the current bundle, pass the revision in `skills-source.json`.
 
-Review and commit `skills/` and `skills-source.json` together. Sync replaces local edits within bundled skill directories, so keep the upstream files unchanged and review updates before releasing them.
+Sync also regenerates `packages/core/src/plugin/figma-skill/skills-bundle.json`, a byte-preserving bundle embedded in releases. Core extracts the complete tree, including references, scripts, and attribution, into a content-versioned cache directory before registering the built-in skills. Skill paths point to those real files in both Bun and Node releases.
+
+To regenerate the bundle from the checked-in files without fetching upstream, run `bun run bundle:skills`.
+
+Review and commit `skills/`, `skills-source.json`, and `packages/core/src/plugin/figma-skill/skills-bundle.json` together. Sync replaces local edits within bundled skill directories, so keep the upstream files unchanged and review updates before releasing them.
 
 Sync never runs automatically during installation, plugin startup, typechecking, or CI. The plugin loads only the checked-in files. Supporting Figma scripts are guidance assets; the plugin does not execute them.
 

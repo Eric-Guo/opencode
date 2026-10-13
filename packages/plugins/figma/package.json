@@ -24,7 +24,8 @@
   ],
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "sync:skills": "bun run script/sync-skills.ts"
+    "sync:skills": "bun run script/sync-skills.ts",
+    "bundle:skills": "bun run script/bundle-skills.ts"
   },
   "dependencies": {
     "gray-matter": "4.0.3"
