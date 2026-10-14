@@ -85,7 +85,9 @@ server API and plugin API have breaking changes. Converting to native V2 config
 is optional. When asked to migrate, inspect the full config, preserve behavior
 and unrelated settings, and for plugins also follow the
 [plugins guide](https://opencode.ai/docs/build/plugins). If non-API V1
-functionality fails in V2, use the `report` skill to file a compatibility bug.
+functionality fails in V2, follow the issue-reporting guidance in the full
+[troubleshooting guide](https://opencode.ai/docs/troubleshooting) and file a
+compatibility issue.
 
 ## [Plugins](https://opencode.ai/docs/build/plugins)
 
