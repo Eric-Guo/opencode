@@ -152,8 +152,9 @@ requests conversion, inspect the complete configuration, preserve behavior and
 unrelated settings, and apply only the relevant migrations from the guide. For
 plugin migrations, fetch and follow both the migration guide and the full
 [plugins guide](https://opencode.ai/v2/docs/build/plugins). If non-API V1
-functionality fails in V2, use the `report` skill to file it as a compatibility
-bug.
+functionality fails in V2, follow the issue-reporting guidance in the full
+[troubleshooting guide](https://opencode.ai/v2/docs/troubleshooting) and file a
+compatibility issue.
 
 ## [Plugins](https://opencode.ai/v2/docs/build/plugins)
 
