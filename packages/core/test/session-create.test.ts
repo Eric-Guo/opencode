@@ -1184,6 +1184,58 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("ignores an agent switch when the selected agent is unchanged", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const agent = Agent.ID.make("build")
+      const created = yield* session.create({ location, agent })
+
+      yield* session.switchAgent({ sessionID: created.id, agent })
+      yield* session.switchAgent({ sessionID: created.id, agent })
+
+      const database = yield* Database.Service
+
+      expect(
+        yield* database.db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, created.id))
+          .all()
+          .pipe(Effect.orDie),
+      ).toHaveLength(1)
+      expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toEqual([])
+      expect(yield* session.get(created.id)).toEqual(created)
+    }),
+  )
+
+  it.effect("records initial agent selection and real switches without repeated selections", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const created = yield* session.create({ location })
+
+      yield* Effect.forEach(["build", "build", "plan", "plan", "build", "build"], (agent) =>
+        session.switchAgent({ sessionID: created.id, agent: Agent.ID.make(agent) }),
+      )
+
+      const database = yield* Database.Service
+
+      expect(
+        yield* database.db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, created.id))
+          .all()
+          .pipe(Effect.orDie),
+      ).toHaveLength(4)
+      expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
+        { type: "agent-switched", agent: "build" },
+        { type: "agent-switched", agent: "plan", previous: "build" },
+        { type: "agent-switched", agent: "build", previous: "plan" },
+      ])
+      expect(yield* session.get(created.id)).toMatchObject({ agent: "build" })
+    }),
+  )
+
   it.effect("switches the selected model through the durable Session event", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
