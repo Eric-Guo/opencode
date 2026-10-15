@@ -63,6 +63,7 @@ import { IdentityPlugin } from "@opencode/core/plugin/identity"
 import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
+import { ConfigMarkdown } from "@opencode/core/config/markdown"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
@@ -486,6 +487,7 @@ const layer = Layer.unwrap(
         SessionStore.node,
         SessionInbox.node,
         Agent.node,
+        Location.node,
         Model.node,
         Tool.node,
         PluginHooks.node,
@@ -1836,6 +1838,67 @@ describe("SessionRunnerLLM", () => {
       fakeIdentity,
       "Initial context",
     ])
+  })
+
+  scenario("resolves agent Markdown project variables for each request without changing the template", function* (s) {
+    const agents = yield* Agent.Service
+    const location = yield* Location.Service
+    const template = ConfigMarkdown.parse(
+      "---\nmode: primary\n---\nUser current project ID is {project:project_id} and project name: {project:project_name}; work package: {project:work_package_id}; unknown: {project:name}.",
+    ).content.trim()
+    yield* agents.transform((editor) => {
+      editor.update(Agent.ID.make("build"), (agent) => {
+        agent.system = template
+      })
+    })
+    yield* s.db
+      .insert(ProjectTable)
+      .values({
+        id: Project.ID.make("other"),
+        worktree: AbsolutePath.make("/other"),
+        sandboxes: [],
+        project_id: 999,
+        project_name: "Other project",
+        work_package_id: 888,
+      })
+      .run()
+      .pipe(Effect.orDie)
+    yield* s.admit("Tell me the current project")
+    yield* s.llm.push(TestLLM.text("Done", "text-project-missing"))
+    yield* s.resume
+
+    expect(s.requests.at(-1)?.system[0]?.text).toBe(
+      "User current project ID is  and project name: ; work package: ; unknown: {project:name}.",
+    )
+
+    yield* s.db
+      .update(ProjectTable)
+      .set({ project_id: 42, project_name: "设计 $&", work_package_id: 123 })
+      .where(eq(ProjectTable.id, location.project.id))
+      .run()
+      .pipe(Effect.orDie)
+    yield* s.admit("Tell me the selected project")
+    yield* s.llm.push(TestLLM.text("Done", "text-project-selected"))
+    yield* s.resume
+
+    expect(s.requests.at(-1)?.system[0]?.text).toBe(
+      "User current project ID is 42 and project name: 设计 $&; work package: 123; unknown: {project:name}.",
+    )
+
+    yield* s.db
+      .update(ProjectTable)
+      .set({ project_id: 43, project_name: "Next project", work_package_id: null })
+      .where(eq(ProjectTable.id, location.project.id))
+      .run()
+      .pipe(Effect.orDie)
+    yield* s.admit("Tell me the new project")
+    yield* s.llm.push(TestLLM.text("Done", "text-project-changed"))
+    yield* s.resume
+
+    expect(s.requests.at(-1)?.system[0]?.text).toBe(
+      "User current project ID is 43 and project name: Next project; work package: ; unknown: {project:name}.",
+    )
+    expect((yield* agents.get(Agent.ID.make("build")))?.system).toBe(template)
   })
 
   scenario("uses the configured default agent system for omitted-agent sessions", function* (s) {
