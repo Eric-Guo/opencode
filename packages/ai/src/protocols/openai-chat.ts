@@ -1,5 +1,6 @@
 import { Effect, Option, Schema } from "effect"
 import { Tool } from "@opencode/schema/tool"
+import { Media } from "../media.js"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
@@ -153,12 +154,17 @@ const OpenAIChatTextContent = Schema.Struct({
 })
 type OpenAIChatTextContent = Schema.Schema.Type<typeof OpenAIChatTextContent>
 
+const OpenAIChatImageContent = Schema.Struct({
+  type: Schema.Literal("image_url"),
+  image_url: Schema.Struct({ url: Schema.String }),
+})
+
+const OpenAIChatAssistantContent = Schema.Union([OpenAIChatTextContent, OpenAIChatImageContent])
+type OpenAIChatAssistantContent = Schema.Schema.Type<typeof OpenAIChatAssistantContent>
+
 const OpenAIChatUserContent = Schema.Union([
   OpenAIChatTextContent,
-  Schema.Struct({
-    type: Schema.Literal("image_url"),
-    image_url: Schema.Struct({ url: Schema.String }),
-  }),
+  OpenAIChatImageContent,
   Schema.Struct({
     type: Schema.Literal("video_url"),
     video_url: Schema.Struct({ url: Schema.String }),
@@ -182,7 +188,7 @@ export const OpenAIChatMessage = Schema.Union([
   Schema.StructWithRest(
     Schema.Struct({
       role: Schema.Literal("assistant"),
-      content: Schema.NullOr(Schema.Union([Schema.String, Schema.Array(OpenAIChatTextContent)])),
+      content: Schema.NullOr(Schema.Union([Schema.String, Schema.Array(OpenAIChatAssistantContent)])),
       tool_calls: optionalArray(Schema.Union([OpenAIChatAssistantToolCall, OpenAIChatAssistantCustomToolCall])),
       reasoning_content: Schema.optional(Schema.String),
       reasoning: Schema.optional(Schema.String),
@@ -302,6 +308,7 @@ export const OpenAIChatDelta = Schema.StructWithRest(
     reasoning: optionalNull(Schema.String),
     reasoning_text: optionalNull(Schema.String),
     reasoning_details: optionalNull(Schema.Unknown),
+    images: optionalNull(Schema.Array(OpenAIChatImageContent)),
     tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -527,18 +534,39 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   requireReasoning: boolean,
   options: MessageLoweringOptions,
 ) {
-  const content: OpenAIChatTextContent[] = []
+  const content: OpenAIChatAssistantContent[] = []
   const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
-      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
+    if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call", "media"]))
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", [
+        "text",
+        "reasoning",
+        "tool-call",
+        "media",
+      ])
     if (part.type === "text") {
       content.push({ type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) })
       continue
     }
     if (part.type === "reasoning") {
       reasoning.push(part)
+      continue
+    }
+    if (part.type === "media") {
+      if (part.media.kind !== "image")
+        return yield* ProviderShared.invalidRequest(
+          `OpenAI Chat assistant does not support media type ${part.media.mediaType}`,
+        )
+
+      content.push({
+        type: "image_url",
+        image_url: {
+          url:
+            ProviderShared.mediaUrl(part.media) ??
+            (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).dataUrl,
+        },
+      })
       continue
     }
     if (part.type === "tool-call") {
@@ -575,9 +603,9 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   const result = {
     role: "assistant" as const,
     content: (() => {
-      if (content.some((part) => part.cache_control !== undefined)) return content
+      if (content.some((part) => part.type !== "text" || part.cache_control !== undefined)) return content
       if (content.length === 0 && toolCalls.length > 0) return null
-      return content.map((part) => part.text).join("")
+      return content.map((part) => (part.type === "text" ? part.text : "")).join("")
     })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     ...(details !== undefined ? { reasoning_details: details } : {}),
@@ -1138,6 +1166,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       : state.finishReason
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
+    const images = delta?.images ?? []
     let tools = state.tools
     let pendingTools = state.pendingTools
     let customCalls = state.customCalls
@@ -1149,13 +1178,14 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const reasoning = reasoningDelta(delta, state.reasoningField)
     if (
       state.finishReason !== undefined &&
-      toolDeltas.some(
-        (tool) =>
-          Boolean(tool.id) ||
-          Boolean(tool.function?.name) ||
-          Boolean(tool.function?.arguments) ||
-          Boolean(tool.custom?.input),
-      )
+      (images.length > 0 ||
+        toolDeltas.some(
+          (tool) =>
+            Boolean(tool.id) ||
+            Boolean(tool.function?.name) ||
+            Boolean(tool.function?.arguments) ||
+            Boolean(tool.custom?.input),
+        ))
     )
       return yield* ProviderShared.eventError(
         ADAPTER,
@@ -1178,7 +1208,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     else if (
       reasoningDetailsObserved &&
       !lifecycle.reasoning.has("reasoning-0") &&
-      (Boolean(delta?.content) || Boolean(delta?.refusal) || toolDeltas.length > 0)
+      (Boolean(delta?.content) || Boolean(delta?.refusal) || toolDeltas.length > 0 || images.length > 0)
     )
       lifecycle = Lifecycle.reasoningStart(lifecycle, events, "reasoning-0", deltaMetadata)
     const reasoningEmitted = state.reasoningEmitted || lifecycle.reasoning.has("reasoning-0")
@@ -1189,6 +1219,19 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
 
     if (delta?.refusal) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.refusal)
+
+    // OpenRouter sends generated images beside text in `delta.images`.
+    if (images.length > 0) {
+      lifecycle = Lifecycle.stepStart(lifecycle, events)
+      events.push(
+        ...images.map((image) =>
+          LLMEvent.media({
+            media:
+              Media.parseDataUrl(image.image_url.url) ?? Media.url(image.image_url.url, { mediaType: "image/jpeg" }),
+          }),
+        ),
+      )
+    }
 
     // Compatible providers may omit indexes. Prefer durable identity, then use
     // batch position for parallel deltas or the latest call for sparse chunks.
