@@ -35,6 +35,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
+import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
@@ -111,6 +112,7 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
       Agent.node,
+      Location.node,
       PluginHooks.node,
       SessionTitle.node,
     ]),
@@ -227,6 +229,35 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(renamed?.title).toBe("Generated Title")
     expect(renamed?.tokens).toEqual({ input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } })
     expect(renamed?.cost).toBeCloseTo(0.0000233)
+  }),
+)
+
+it.effect("resolves saved project variables in the title agent system", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_project")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Summarize this project")
+
+    const agents = yield* Agent.Service
+    const database = yield* Database.Service
+    const location = yield* Location.Service
+    yield* agents.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.system = "Title for {project:project_name} ({project:project_id})"
+      })
+    })
+    yield* database.db
+      .update(ProjectTable)
+      .set({ project_id: 42, project_name: "Selected project" })
+      .where(eq(ProjectTable.id, location.project.id))
+      .run()
+      .pipe(Effect.orDie)
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["Title for Selected project (42)"])
   }),
 )
 
