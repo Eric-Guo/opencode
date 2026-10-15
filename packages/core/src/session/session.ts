@@ -91,6 +91,8 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { agent: Agent.ID },
   ) {
     const session = yield* get(sessionID)
+    if (session.agent === input.agent) return
+
     yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: input.agent, previous: session.agent })
   })
   const switchModel = Effect.fn("Session.switchModel")(function* (
