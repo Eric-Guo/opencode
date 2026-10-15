@@ -17,6 +17,7 @@ import { FileWrite } from "../file-write.js"
 import { Flag } from "../flag.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
+import { InstructionVariable } from "../instruction-variable.js"
 import { Instructions } from "../instructions/index.js"
 import { AgentInstructions } from "../instructions/agent.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
@@ -120,6 +121,14 @@ const layer = Layer.effect(
       request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
     ) => models.resolve(session, model.available, request)
 
+    const resolveAgentSystem = Effect.fnUntraced(function* (agent: Agent.Info) {
+      if (!agent.system?.includes("{project:")) return agent
+
+      // Resolve a copy per selection so project changes never get baked into agent state.
+      const substitute = yield* InstructionVariable.load(db, location.project.id)
+      return { ...agent, system: substitute(agent.system) }
+    })
+
     const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {
       const agent = yield* agents.get(Agent.ID.make("title"))
       if (!agent) return
@@ -154,7 +163,7 @@ const layer = Layer.effect(
         ).pipe(Effect.orElseSucceed(() => undefined)))
       const selected = preferred ?? primary
       if (!selected) return
-      return { agent, primary, selected }
+      return { agent: yield* resolveAgentSystem(agent), primary, selected }
     })
 
     const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
@@ -209,7 +218,7 @@ const layer = Layer.effect(
       )
       return {
         session,
-        agent: { ...agent, info: agent.info },
+        agent: { ...agent, info: yield* resolveAgentSystem(agent.info) },
         // Ordered from most to least shared across sessions so the baseline stays a reusable
         // prompt-cache prefix: user-level catalog and guidance, then project instructions, then
         // the date and environment, which vary by day and directory.
