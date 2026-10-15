@@ -117,6 +117,7 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
       Agent.node,
+      Location.node,
       PluginHooks.node,
       SessionTitle.node,
     ]),
@@ -280,6 +281,40 @@ for (const timing of ["start", "end"] as const)
       expect((yield* store.get(sessionID))?.title).toBe("Read-only performance investigation")
     }),
   )
+
+it.effect("resolves saved project variables in the title agent system", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_project")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Summarize this project")
+
+    const agents = yield* Agent.Service
+    const database = yield* Database.Service
+    const location = yield* Location.Service
+    yield* agents.transform((editor) => {
+      editor.update(Agent.ID.make("title"), (agent) => {
+        agent.system = "Title for {project:project_name} ({project:project_id})"
+      })
+    })
+    yield* database.db
+      .insert(ProjectTable)
+      .values({
+        id: location.project.id,
+        worktree: location.project.directory,
+        sandboxes: [],
+        project_id: 42,
+        project_name: "Selected project",
+      })
+      .run()
+      .pipe(Effect.orDie)
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests[0]?.system.map((part) => part.text)).toEqual(["Title for Selected project (42)"])
+  }),
+)
 
 it.effect("runs title hooks instead of context hooks", () =>
   Effect.gen(function* () {
