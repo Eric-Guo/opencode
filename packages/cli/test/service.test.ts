@@ -3,6 +3,7 @@ import { validateRoutes } from "@opentunnel/client/effect"
 import { Service, type Info } from "@opencode/client/effect/service"
 import { ensure } from "@opencode/client/service"
 import { Global } from "@opencode/util/global"
+import { Config } from "@opencode/schema/config"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
 import { Deferred, Effect, FileSystem, Schedule, Schema } from "effect"
@@ -244,10 +245,19 @@ test("managed service loads configured environment", async () => {
     url.searchParams.set("location[directory]", root)
     const response = await fetch(url, { headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) } })
     expect(response.status).toBe(200)
-    expect((await response.json())[0].info.mcp.servers.env.environment).toEqual({
-      configured: "configured",
-      empty: "",
-      inherited: "inherited",
+    const entries = Schema.decodeUnknownSync(Schema.Array(Config.Entry))(await response.json())
+    const document = entries.find(
+      (entry): entry is Config.Document =>
+        entry.type === "document" && entry.path === path.join(root, "config", "opencode.json"),
+    )
+
+    expect(document?.info.mcp?.servers?.env).toMatchObject({
+      type: "local",
+      environment: {
+        configured: "configured",
+        empty: "",
+        inherited: "inherited",
+      },
     })
   } finally {
     owner.kill("SIGTERM")

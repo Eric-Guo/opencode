@@ -655,7 +655,7 @@
     },
     "packages/plugins/figma": {
       "name": "@opencode/plugin-figma",
-      "version": "2.0.32",
+      "version": "2.0.30",
       "dependencies": {
         "gray-matter": "4.0.3",
       },
