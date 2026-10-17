@@ -1,5 +1,5 @@
 import { net, protocol } from "electron"
-import type { WebContents } from "electron"
+import type { Protocol, WebContents } from "electron"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
@@ -91,10 +91,10 @@ export function cancelRendererAssetsServed() {
   dispatch({ type: "cancelled" })
 }
 
-export function registerRendererProtocol(rendererRoot: string) {
-  if (protocol.isProtocolHandled(rendererProtocol)) return
+export function registerRendererProtocol(rendererRoot: string, target: Protocol = protocol) {
+  if (target.isProtocolHandled(rendererProtocol)) return
 
-  protocol.handle(rendererProtocol, async (request) => {
+  target.handle(rendererProtocol, async (request) => {
     if (isProtocolBurstSettled(burst.state)) return serve(request, rendererRoot)
     dispatch({ type: "request.started" })
 
