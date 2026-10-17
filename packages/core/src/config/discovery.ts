@@ -13,6 +13,7 @@ export const names = ["opencode.json", "opencode.jsonc"]
 
 /** Eligible sources in priority order, including paths that may appear later. */
 export interface Sources {
+  readonly defaults?: AbsolutePath
   readonly system?: { readonly path: AbsolutePath; readonly present: boolean }
   /** macOS MDM managed preferences plist (`ai.opencode.managed`), when one is deployed. */
   readonly preferences?: AbsolutePath
@@ -68,7 +69,13 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   })()
   const globalDirectory = AbsolutePath.make(global.config)
   const user = options?.user ? AbsolutePath.make(yield* fs.resolve(path.resolve(options.user))) : undefined
-  const configDirectories = [globalDirectory, ...(system ? [system] : []), ...(user ? [user] : [])]
+  const defaults = options?.defaults ? AbsolutePath.make(yield* fs.resolve(path.resolve(options.defaults))) : undefined
+  const configDirectories = [
+    globalDirectory,
+    ...(system ? [system] : []),
+    ...(user ? [user] : []),
+    ...(defaults ? [defaults] : []),
+  ]
   const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
   const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
   const globalRoots = yield* Effect.forEach(
@@ -119,6 +126,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
       : undefined
 
   return {
+    defaults: globalEnabled ? defaults : undefined,
     system: globalEnabled && system ? { path: system, present: yield* fs.isDir(system) } : undefined,
     preferences,
     user: globalEnabled && user !== globalRoots[0] ? user : undefined,

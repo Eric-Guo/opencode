@@ -25,6 +25,7 @@ import {
 import { loadWebContents, registerRendererOrigin, registerRendererProtocol, setProtocolReporter } from "./protocol"
 import { createWindowRegistry } from "./registry"
 import { createRendererLoader } from "./renderer-loading"
+import { createPanel } from "./panel"
 // SAFETY: This imperative factory takes explicit dependencies; it is not an Effect contextual service.
 // oxlint-disable-next-line anti-slop-effect/no-service-constructor-imports
 import { makeWindowRecovery } from "./recovery"
@@ -213,6 +214,19 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
         return view
       },
+      createPanel(options) {
+        const view = createPanel(win, {
+          rendererRoot: paths.rendererRoot,
+          preloadRoot: paths.preloadRoot,
+          preload: options.preload,
+          backgroundColor: appearance.backgroundColor,
+          openExternal,
+        })
+
+        loads.add(view.webContents, () => loadWebContents(view.webContents, options.html, { devURL: false }))
+
+        return view
+      },
       trackContents: (contents) => trackWebContents(win, contents),
       load: loadWebContents,
       openExternal,
@@ -314,4 +328,3 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
   return { create, restore }
 })
-
