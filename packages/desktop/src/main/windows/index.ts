@@ -28,6 +28,7 @@ import { loadWebContents, registerRendererOrigin, registerRendererProtocol, setP
 import { createWindowRegistry } from "./registry"
 import { windowRecovery } from "./recovery"
 import { createRendererLoader } from "./renderer-loading"
+import { createPanel } from "./panel"
 import { createRevealDriver } from "./reveal-machine"
 import { restoreEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
@@ -217,6 +218,19 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
         wire(view.webContents, options.id)
         view.setBackgroundColor(appearance.backgroundColor)
         loads.add(view.webContents, () => loadWebContents(view.webContents, options.html, options))
+
+        return view
+      },
+      createPanel(options) {
+        const view = createPanel(win, {
+          rendererRoot: paths.rendererRoot,
+          preloadRoot: paths.preloadRoot,
+          preload: options.preload,
+          backgroundColor: appearance.backgroundColor,
+          openExternal,
+        })
+
+        loads.add(view.webContents, () => loadWebContents(view.webContents, options.html, { devURL: false }))
 
         return view
       },
