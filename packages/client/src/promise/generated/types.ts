@@ -6229,7 +6229,24 @@ export type ConfigGetOutput = Array<ConfigEntry>
 
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
-export type ConfigUpdateInput = { readonly shell: { readonly shell: string | null }["shell"] }
+export type ConfigUpdateInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly target?: "global" | "user" | undefined
+  }["location"]
+  readonly target?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly target?: "global" | "user" | undefined
+  }["target"]
+  readonly shell?: {
+    readonly shell?: string | null | undefined
+    readonly websearch?: false | { readonly provider: "random" | string } | null | undefined
+  }["shell"]
+  readonly websearch?: {
+    readonly shell?: string | null | undefined
+    readonly websearch?: false | { readonly provider: "random" | string } | null | undefined
+  }["websearch"]
+}
 
 export type ConfigUpdateOutput = void
 
