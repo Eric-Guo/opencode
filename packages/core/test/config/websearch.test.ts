@@ -7,13 +7,55 @@ import { PluginHost } from "@opencode/core/plugin/host"
 import { WebSearch } from "@opencode/core/websearch"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigWebSearch } from "@opencode/schema/config/websearch"
-import { Effect } from "effect"
+import { Context, Effect, Layer } from "effect"
+import path from "node:path"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { emptyWellknownNode } from "../fixture/config-nodes"
+import { tmpdir } from "../fixture/tmpdir"
+import { Global } from "@opencode/util/global"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
 describe("ConfigWebSearchPlugin.Plugin", () => {
+  it.live("uses the saved user provider for the next query and reloads it from disk", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("websearch-preference-")))
+      const user = path.join(tmp.path, "user")
+      const defaults = path.join(tmp.path, "distribution")
+      yield* Effect.promise(() =>
+        Bun.write(path.join(defaults, "opencode.jsonc"), JSON.stringify({ websearch: { provider: "searchkimi" } })),
+      )
+      const options = { user, defaults, project: false, system: false }
+      const load = () =>
+        Layer.build(Config.layer(options)).pipe(
+          Effect.provide(
+            Layer.merge(Global.layerWith({ config: user, home: tmp.path }), AppNodeBuilder.build(emptyWellknownNode)),
+          ),
+        )
+      const services = yield* load()
+      const config = Context.get(services, Config.Service)
+      const websearch = yield* WebSearch.Service
+      const plugins = yield* Plugin.Service
+      yield* websearch.transform((editor) => {
+        editor.add({ id: WebSearch.ID.make("searchkimi"), name: "Kimi fixture", execute: () => Effect.succeed([]) })
+        editor.add({ id: WebSearch.ID.make("exa"), name: "Exa fixture", execute: () => Effect.succeed([]) })
+      })
+      yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins)).pipe(Effect.provide(services))
+      expect((yield* websearch.query({ query: "fixture before saving" })).providerID).toBe(
+        WebSearch.ID.make("searchkimi"),
+      )
+      if (!config.update) return yield* Effect.die("Config.update is unavailable")
+      yield* config.update({ websearch: new ConfigWebSearch.Info({ provider: WebSearch.ID.make("exa") }) }, "user")
+      expect((yield* websearch.query({ query: "fixture after saving" })).providerID).toBe(WebSearch.ID.make("exa"))
+      const reopened = yield* load()
+      const restored = Context.get(reopened, Config.Service)
+      expect(Config.latest(yield* restored.entries(), "websearch")).toEqual({
+        provider: WebSearch.ID.make("exa"),
+      })
+    }),
+  )
   it.live("reloads changed default selection", () =>
     Effect.gen(function* () {
       const websearch = yield* WebSearch.Service

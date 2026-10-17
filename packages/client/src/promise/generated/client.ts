@@ -1633,12 +1633,13 @@ export function make(options: ClientOptions) {
           ),
       },
       config: {
-        update: (input: ExperimentalConfigUpdateInput, requestOptions?: RequestOptions) =>
+        update: (input?: ExperimentalConfigUpdateInput, requestOptions?: RequestOptions) =>
           request<ExperimentalConfigUpdateOutput>(
             {
               method: "PATCH",
               path: `/api/experimental/config`,
-              body: { shell: input["shell"] },
+              query: { location: input?.["location"], target: input?.["target"] },
+              body: { shell: input?.["shell"], websearch: input?.["websearch"] },
               successStatus: 204,
               declaredStatuses: [400, 401, 404],
               empty: true,
