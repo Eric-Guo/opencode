@@ -3,6 +3,7 @@ import { ShellSelect } from "@opencode/core/shell/select"
 import { ssoHideAgents } from "@opencode/core/thape-sso"
 import { GlobalConfig } from "@opencode/protocol/groups/config"
 import { Info } from "@opencode/schema/config"
+import { InvalidRequestError } from "@opencode/protocol/errors"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
@@ -15,7 +16,9 @@ export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handler
       Effect.fn(function* (ctx) {
         const config = yield* Config.Service
         if (!config.update) return yield* Effect.die(new Error("Config updates are unavailable"))
-        return yield* config.update(ctx.payload).pipe(Effect.orDie)
+        return yield* config
+          .update(ctx.payload, ctx.query.target)
+          .pipe(Effect.mapError(() => new InvalidRequestError({ message: "Could not update configuration" })))
       }),
     )
     .handle(
