@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
 import { Arbitrary, Effect, Fiber, Layer, Logger, Schedule, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
+import { WebSearch } from "@opencode/schema/websearch"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigModel } from "@opencode/schema/config/model"
@@ -92,6 +93,86 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.live("keeps distribution resources below user, project, and managed settings", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const defaults = path.join(tmp.path, "distribution")
+      const user = path.join(tmp.path, "user")
+      const project = path.join(tmp.path, "project")
+      const system = path.join(tmp.path, "managed")
+      yield* Effect.promise(async () => {
+        await Promise.all(
+          [defaults, user, project, system].map((directory) => fs.mkdir(directory, { recursive: true })),
+        )
+        await Bun.write(
+          path.join(defaults, "opencode.jsonc"),
+          JSON.stringify({
+            shell: "default-shell",
+            model: "test/default",
+            username: "default-user",
+            websearch: { provider: "searchkimi" },
+            default_agent: "distribution-agent",
+          }),
+        )
+        await Bun.write(
+          path.join(user, "opencode.jsonc"),
+          JSON.stringify({ model: "test/user", username: "user", websearch: { provider: "exa" } }),
+        )
+      })
+      yield* Effect.gen(function* () {
+        const config = yield* Config.Service
+        const entries = yield* config.entries()
+        expect(Config.latest(entries, "model")).toEqual(selection("test/user"))
+        expect(Config.latest(entries, "username")).toBe("user")
+        expect(Config.latest(entries, "shell")).toBe("default-shell")
+        expect(Config.latest(entries, "default_agent")).toBe("distribution-agent")
+        expect(Config.latest(entries, "websearch")).toEqual({ provider: WebSearch.ID.make("exa") })
+        expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
+          AbsolutePath.make(defaults),
+          AbsolutePath.make(user),
+        ])
+      }).pipe(
+        Effect.provide(
+          testLayer(project, user, project, undefined, Watcher.testLayer, emptyCredentialNode, emptyWellknownNode, {
+            defaults,
+          }),
+        ),
+      )
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(project, "opencode.jsonc"),
+          JSON.stringify({ websearch: { provider: "tavily" }, model: "test/project" }),
+        ),
+      )
+      yield* Effect.gen(function* () {
+        const config = yield* Config.Service
+        expect(Config.latest(yield* config.entries(), "websearch")).toEqual({ provider: WebSearch.ID.make("tavily") })
+        expect(Config.latest(yield* config.entries(), "model")).toEqual(selection("test/project"))
+      }).pipe(
+        Effect.provide(
+          testLayer(project, user, project, undefined, Watcher.testLayer, emptyCredentialNode, emptyWellknownNode, {
+            defaults,
+          }),
+        ),
+      )
+      yield* Effect.promise(() =>
+        Bun.write(path.join(system, "opencode.jsonc"), JSON.stringify({ websearch: false, model: "test/managed" })),
+      )
+      yield* Effect.gen(function* () {
+        const config = yield* Config.Service
+        expect(Config.latest(yield* config.entries(), "websearch")).toBe(false)
+        expect(Config.latest(yield* config.entries(), "model")).toEqual(selection("test/managed"))
+      }).pipe(
+        Effect.provide(
+          testLayer(project, user, project, undefined, Watcher.testLayer, emptyCredentialNode, emptyWellknownNode, {
+            defaults,
+            system,
+          }),
+        ),
+      )
+    }),
+  )
+
   it.live("deduplicates standard user config that resolves to the selected global directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
@@ -456,7 +537,8 @@ describe("Config", () => {
     Effect.sync(() => {
       expect(Config.latest([], "username")).toBe(process.env.THAPE_SSO_USER_NAME?.trim() || os.userInfo().username)
       expect(Config.latest([], "clerk_code")).toBe(process.env.THAPE_SSO_CLERK_CODE?.trim() || undefined)
-    }))
+    }),
+  )
 
   it.live("loads explicit file and content overrides in priority order", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
