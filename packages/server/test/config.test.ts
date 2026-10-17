@@ -9,6 +9,106 @@ import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
 import { AbsolutePath } from "@opencode/schema/schema"
+import { WebSearch } from "@opencode/schema/websearch"
+
+it.live("saves user search selection through config.update and returns fresh ordered sources", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("config-search-")))
+    const user = path.join(tmp.path, "user")
+    const defaults = path.join(tmp.path, "distribution")
+    const project = path.join(tmp.path, "project")
+    const custom = path.join(tmp.path, "custom")
+    const file = Bun.file(path.join(user, "opencode.jsonc"))
+    yield* Effect.promise(async () => {
+      await Bun.write(file, '{\n // keep my settings\n "shell": "user-shell",\n "websearch": false,\n}\n')
+      await Bun.write(path.join(defaults, "opencode.jsonc"), JSON.stringify({ websearch: { provider: "searchkimi" } }))
+      await Bun.write(path.join(project, "opencode.jsonc"), JSON.stringify({ websearch: { provider: "parallel" } }))
+      await Bun.write(path.join(custom, "opencode.jsonc"), JSON.stringify({ websearch: { provider: "tavily" } }))
+    })
+    const server = yield* startServer(user, user, defaults)
+    const update = new URL("/api/experimental/config", server.base)
+    update.searchParams.set("location[directory]", user)
+    update.searchParams.set("target", "user")
+    const response = yield* Effect.promise(() =>
+      fetch(update, {
+        method: "PATCH",
+        headers: { ...server.headers, "content-type": "application/json" },
+        body: JSON.stringify({ websearch: { provider: "exa" } }),
+      }),
+    )
+    expect(response.status).toBe(204)
+    const text = yield* Effect.promise(() => file.text())
+    expect(text).toContain("// keep my settings")
+    expect(text).toContain('"shell": "user-shell"')
+    expect(text).toContain('"provider": "exa"')
+    yield* Effect.promise(() =>
+      Bun.write(file, text.replace('"provider": "exa"', '// keep provider comment\n    "provider": "searchkimi"')),
+    )
+    const resaved = yield* Effect.promise(() =>
+      fetch(update, {
+        method: "PATCH",
+        headers: { ...server.headers, "content-type": "application/json" },
+        body: JSON.stringify({ websearch: { provider: "exa" } }),
+      }),
+    )
+    expect(resaved.status).toBe(204)
+    expect(yield* Effect.promise(() => file.text())).toContain("// keep provider comment")
+
+    const read = Effect.fnUntraced(function* (base: string, directory: string) {
+      const url = new URL("/api/config", base)
+      url.searchParams.set("location[directory]", directory)
+      const result = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      expect(result.status).toBe(200)
+      return yield* Effect.promise(() => result.json()).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Config.Entry))),
+      )
+    })
+    const entries = yield* read(server.base, user)
+    expect(
+      entries.flatMap((entry) =>
+        entry.type === "document" && entry.info.websearch ? [entry.info.websearch.provider] : [],
+      ),
+    ).toEqual([WebSearch.ID.make("searchkimi"), WebSearch.ID.make("exa")])
+    const overridden = yield* read(server.base, project)
+    expect(
+      overridden.findLast((entry) => entry.type === "document" && entry.info.websearch !== undefined),
+    ).toMatchObject({
+      path: path.join(project, "opencode.jsonc"),
+      info: { websearch: { provider: "parallel" } },
+    })
+    const restarted = yield* startServer(user, user, defaults)
+    expect(
+      (yield* read(restarted.base, user)).findLast(
+        (entry) => entry.type === "document" && entry.info.websearch !== undefined,
+      ),
+    ).toMatchObject({
+      path: path.join(user, "opencode.jsonc"),
+      info: { websearch: { provider: "exa" } },
+    })
+    const explicit = yield* startServer(custom, user, defaults)
+    expect(
+      (yield* read(explicit.base, user)).findLast(
+        (entry) => entry.type === "document" && entry.info.websearch !== undefined,
+      ),
+    ).toMatchObject({
+      path: path.join(custom, "opencode.jsonc"),
+      info: { websearch: { provider: "tavily" } },
+    })
+    expect(yield* Effect.promise(() => Bun.file(path.join(defaults, "opencode.jsonc")).json())).toEqual({
+      websearch: { provider: "searchkimi" },
+    })
+    yield* Effect.promise(() => Bun.write(file, "{broken"))
+    const malformed = yield* Effect.promise(() =>
+      fetch(update, {
+        method: "PATCH",
+        headers: { ...server.headers, "content-type": "application/json" },
+        body: JSON.stringify({ websearch: { provider: "exa" } }),
+      }),
+    )
+    expect(malformed.status).toBe(400)
+    expect(yield* Effect.promise(() => file.text())).toBe("{broken")
+  }),
+)
 
 it.live("loads standard user, selected global, and project skills and writes to the selected directory", () =>
   Effect.gen(function* () {
