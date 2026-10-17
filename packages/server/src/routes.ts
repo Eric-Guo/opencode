@@ -184,6 +184,7 @@ function makeRoutes(
     Config.node.replace(
       Config.configured({
         user: options.config?.user,
+        defaults: options.config?.defaults,
         project: options.config?.project,
         claude: options.config?.claude,
         file: options.config?.file,
