@@ -1711,9 +1711,12 @@ const EndpointConfigGet = (raw: RawClient["server.config"]) => (input?: ConfigGe
 const EndpointConfigShells = (raw: RawClient["server.config"]) => () =>
   preserveEffect<ConfigShellsOutput>()(raw["config.shells"]({}).pipe(Effect.mapError(mapClientError)))
 
-const EndpointConfigUpdate = (raw: RawClient["server.config"]) => (input: ConfigUpdateInput) =>
+const EndpointConfigUpdate = (raw: RawClient["server.config"]) => (input?: ConfigUpdateInput) =>
   preserveEffect<ConfigUpdateOutput>()(
-    raw["config.update"]({ payload: { shell: input["shell"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["config.update"]({
+      query: { location: input?.["location"], target: input?.["target"] },
+      payload: { shell: input?.["shell"], websearch: input?.["websearch"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointConfigGlobal = (raw: RawClient["server.config"]) => () =>
