@@ -116,8 +116,12 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   experimental: ConfigExperimental.Info.pipe(optional),
 }) {}
 
+export const UpdateTarget = Schema.Literals(["global", "user"])
+export type UpdateTarget = typeof UpdateTarget.Type
+
 export const Patch = Schema.Struct({
-  shell: Schema.NullOr(Schema.String),
+  shell: Schema.optional(Schema.NullOr(Schema.String)),
+  websearch: Schema.optional(Schema.NullOr(ConfigWebSearch.Selection)),
 }).annotate({ identifier: "Config.Patch" })
 export interface Patch extends Schema.Schema.Type<typeof Patch> {}
 
