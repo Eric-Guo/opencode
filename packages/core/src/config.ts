@@ -6,7 +6,7 @@ import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { applyEdits, modify, type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, FiberMap, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
-import { Directory, Document, Info, type Patch, type Entry, Event } from "@opencode/schema/config"
+import { Directory, Document, Info, type Patch, type UpdateTarget, type Entry, Event } from "@opencode/schema/config"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
 import { Watcher } from "./filesystem/watcher.js"
@@ -45,15 +45,17 @@ export interface Interface {
    * source files they parse and rebuild their own state.
    */
   readonly changes: () => Stream.Stream<Watcher.Update>
-  /** Updates supported global config fields while preserving unrelated JSONC content. */
-  readonly update?: (patch: Patch) => Effect.Effect<void, FSUtil.Error>
+  /** Patches supported fields in the selected global document, or the standard user JSONC when target=user. */
+  readonly update?: (patch: Patch, target?: UpdateTarget) => Effect.Effect<void, FSUtil.Error>
 }
 
 export const Options = Schema.Struct({
+  /** Distribution resources load below user configuration without changing custom global directory precedence. */
+  defaults: Schema.optional(Schema.String),
   // Standard user configuration still loads when the host selects a custom directory.
   user: Schema.optional(Schema.String),
   project: Schema.optional(Schema.Boolean),
-  // false skips system, user, and global config dirs, ~/.claude, and ~/.agents;
+  // false skips defaults, system, user, and global config dirs, ~/.claude, and ~/.agents;
   // wellknown, file, and content entries still load.
   global: Schema.optional(Schema.Boolean),
   system: Schema.optional(Schema.Union([Schema.Boolean, Schema.String])),
@@ -102,6 +104,7 @@ export const layer = (options?: Options) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
+      const context = yield* Effect.context<FSUtil.Service | Global.Service | Location.Service>()
       const fs = yield* FSUtil.Service
       const location = yield* Location.Service
       const watcher = yield* Watcher.Service
@@ -276,8 +279,8 @@ export const layer = (options?: Options) =>
             ? new Document({ ...entry, info: new Info({ ...entry.info, policies: undefined }) })
             : entry,
         )
-        // Standard user configuration follows wellknown defaults. The selected global
-        // directory, explicit files, and project configuration can override it.
+        // Wellknown and distribution defaults precede standard user configuration.
+        // Custom global directories, explicit files, and project configuration retain their precedence.
         const globalSupplementary = sources.global ? yield* loadDirectory(sources.global).pipe(Effect.orDie) : []
         const projectSupplementary = yield* Effect.forEach(
           sources.project.filter((root) => root.present),
@@ -289,6 +292,7 @@ export const layer = (options?: Options) =>
         return [
           ...managedPolicies,
           ...(yield* loadWellknown().pipe(Effect.orDie)),
+          ...(sources.defaults ? yield* loadDirectory(sources.defaults).pipe(Effect.orDie) : []),
           ...(sources.user ? yield* loadDirectory(sources.user).pipe(Effect.orDie) : []),
           ...globalSupplementary,
           ...explicit,
@@ -389,24 +393,52 @@ export const layer = (options?: Options) =>
       yield* reloadLock.withPermit(reconcile(initial))
 
       const update = Effect.fn("Config.update")(
-        function* (patch: Patch) {
-          const directory = initial.global ?? AbsolutePath.make(globalService.config)
+        function* (patch: Patch, target: UpdateTarget = "global") {
+          const directory =
+            target === "user"
+              ? (initial.user ?? AbsolutePath.make(globalService.config))
+              : (initial.global ?? AbsolutePath.make(globalService.config))
           const candidates = ConfigDiscovery.names.map((name) => path.join(directory, name))
           const filepath =
-            (yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "opencode.jsonc")
-          const text = (yield* fs.readFileStringSafe(filepath)) ?? "{}\n"
+            target === "user"
+              ? path.join(directory, "opencode.jsonc")
+              : ((yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "opencode.jsonc"))
+          const text = yield* fs
+            .readFileString(filepath)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("{}\n")))
           const updated = yield* Effect.try({
-            try: () =>
-              applyEdits(
+            try: () => {
+              const errors: ParseError[] = []
+              const input: unknown = parse(text, errors, { allowTrailingComma: true })
+              if (errors.length || typeof input !== "object" || input === null || Array.isArray(input))
+                throw new Error("Invalid user configuration")
+              const fields = [
+                ...(patch.shell === undefined ? [] : [{ path: ["shell"], value: patch.shell ?? undefined }]),
+                ...(patch.websearch === undefined
+                  ? []
+                  : [
+                      patch.websearch === null ||
+                      patch.websearch === false ||
+                      ("websearch" in input && input.websearch === false)
+                        ? { path: ["websearch"], value: patch.websearch ?? undefined }
+                        : { path: ["websearch", "provider"], value: patch.websearch.provider },
+                    ]),
+              ]
+              return fields.reduce(
+                (result, field) =>
+                  applyEdits(
+                    result,
+                    modify(result, field.path, field.value, {
+                      formattingOptions: { tabSize: 2, insertSpaces: true },
+                    }),
+                  ),
                 text,
-                modify(text, ["shell"], patch.shell ?? undefined, {
-                  formattingOptions: { tabSize: 2, insertSpaces: true },
-                }),
-              ),
+              )
+            },
             catch: (cause) => new FSUtil.FileSystemError({ method: "config.update", cause }),
           })
           yield* fs.writeWithDirs(filepath, updated.endsWith("\n") ? updated : `${updated}\n`)
-          yield* requestReload
+          yield* reload().pipe(Effect.provide(context))
         },
         (effect) => updateLock.withPermit(effect),
       )
