@@ -111,6 +111,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       resolve: { alias: { "#desktop-preload-extension": extension?.preload ?? resolve("src/preload/extension.ts") } },
       build: {
         minify: command === "build",
+        // Electron's sandbox cannot require sibling chunks or external third-party dependencies.
+        isolatedEntries: true,
+        externalizeDeps: false,
         rolldownOptions: {
           input: {
             index: "src/preload/index.ts",
