@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { EventRpcs } from "../../shared/ipc-rpc"
+import { EventRpcs } from "../../shared/ipc-rpc/events"
 import { ipcEventStream } from "../ipc-events"
 import { IpcPortHandoff } from "../ipc-transport"
 import { sender } from "./context"
