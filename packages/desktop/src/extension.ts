@@ -16,6 +16,8 @@ export type DesktopWindowHost = {
   preloadRoot: string
   storage: DesktopExtensionStore
   createRenderer(options: { id: string; html: string; devURL?: string | false; devHtml?: string }): WebContentsView
+  /** Isolated bundled shell UI: narrow preload, no desktop RPC or service credential injection. */
+  createPanel?(options: { id: string; html: string; preload: string }): WebContentsView
   trackContents(contents: WebContents): void
   load(contents: WebContents, html: string): Promise<void>
   openExternal(url: string): void
