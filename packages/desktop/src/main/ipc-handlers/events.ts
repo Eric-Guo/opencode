@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { EventRpcs } from "../../shared/ipc-rpc"
+import { EventRpcs } from "../../shared/ipc-rpc/events"
 import { IpcPortHandoff } from "../ipc-transport"
 
 export const eventHandlers = EventRpcs.toLayer(
