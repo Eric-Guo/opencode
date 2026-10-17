@@ -4946,7 +4946,12 @@ export type ConfigShellsOutput = Array<ConfigShellOption>
 
 export type ConfigGlobalOutput = GlobalConfig
 
-export type ExperimentalConfigUpdateInput = { readonly shell: string | null }
+export type ExperimentalConfigUpdateInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly target?: "global" | "user" | undefined
+  readonly shell?: string | null | undefined
+  readonly websearch?: false | { readonly provider: "random" | string } | null | undefined
+}
 
 export type ExperimentalConfigUpdateOutput = void
 
