@@ -12,6 +12,7 @@ export function isolatedEnv(root: string, overrides: Record<string, string | und
     HOME: root,
     OPENCODE_CLI_CONFIG_CONTENT: undefined,
     OPENCODE_CONFIG_CONTENT: "{}",
+    OPENCODE_CONFIG_DEFAULTS_DIR: undefined,
     OPENCODE_CONFIG_DIR: path.join(root, "config"),
     OPENCODE_DB: path.join(root, "opencode.db"),
     OPENCODE_DISABLE_FILEWATCHER: "true",

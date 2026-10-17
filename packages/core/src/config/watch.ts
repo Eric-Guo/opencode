@@ -18,6 +18,7 @@ export const inputs = Effect.fnUntraced(function* (sources: ConfigDiscovery.Sour
     concurrency: "unbounded",
   })
   const roots = [
+    ...(sources.defaults ? [sources.defaults] : []),
     ...(sources.user ? [sources.user] : []),
     ...(sources.system ? [sources.system.path] : []),
     ...(sources.global ? [sources.global] : []),
@@ -51,12 +52,14 @@ export const plan = Effect.fn("ConfigWatch.plan")(function* (sources: ConfigDisc
     userEntry = parent
   }
   const directories = [
+    ...(sources.defaults ? [sources.defaults] : []),
     ...(sources.system?.present ? [sources.system.path] : []),
     ...(sources.user && userPresent ? [sources.user] : []),
     ...(sources.global ? [sources.global] : []),
     ...sources.project.filter((root) => root.present).map((root) => root.path),
   ]
   const files = [
+    ...(sources.defaults ? [sources.defaults] : []),
     ...(sources.system ? [sources.system.path] : []),
     ...(userEntry ? [userEntry] : []),
     ...sources.direct,
