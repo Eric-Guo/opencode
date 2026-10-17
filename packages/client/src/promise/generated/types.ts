@@ -4204,14 +4204,8 @@ export type PermissionReplyInput = {
 export type PermissionReplyOutput = void
 
 export type FileArchiveInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined } | undefined
-    readonly path: string
-  }["location"]
-  readonly path: {
-    readonly location?: { readonly directory?: string | undefined } | undefined
-    readonly path: string
-  }["path"]
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
 }
 
 export type FileArchiveOutput = { location: LocationPublicRef; data: FileSystemArchive }
@@ -4646,7 +4640,12 @@ export type ConfigGetOutput = Array<ConfigEntry>
 
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
-export type ConfigUpdateInput = { readonly shell: string | null }
+export type ConfigUpdateInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly target?: "global" | "user" | undefined
+  readonly shell?: string | null | undefined
+  readonly websearch?: false | { readonly provider: "random" | string } | null | undefined
+}
 
 export type ConfigUpdateOutput = void
 
@@ -4654,19 +4653,16 @@ export type ConfigGlobalOutput = GlobalConfig
 
 export type AudioRecordingStartOutput = AudioStatus
 
-export type AudioRecordingStopInput = { readonly recordingID: { readonly recordingID: string }["recordingID"] }
+export type AudioRecordingStopInput = { readonly recordingID: string }
 
 export type AudioRecordingStopOutput = globalThis.Uint8Array
 
-export type AudioRecordingReleaseInput = { readonly recordingID: { readonly recordingID: string }["recordingID"] }
+export type AudioRecordingReleaseInput = { readonly recordingID: string }
 
 export type AudioRecordingReleaseOutput = void
 
 export type AudioRecordingStatusOutput = AudioStatus
 
-export type AudioTranscriptionsInput = {
-  readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly payload: globalThis.Uint8Array
-}
+export type AudioTranscriptionsInput = { readonly sessionID: string; readonly payload: globalThis.Uint8Array }
 
 export type AudioTranscriptionsOutput = { data: SessionMessageAssistant }["data"]
