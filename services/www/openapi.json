@@ -14221,7 +14221,52 @@
       "patch": {
         "tags": ["config"],
         "operationId": "experimental.config.update",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["global", "user"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
         "security": [],
         "responses": {
           "204": {
@@ -14258,7 +14303,7 @@
             }
           }
         },
-        "description": "Patch supported fields in the highest-precedence global configuration document.",
+        "description": "Patch supported fields while preserving JSONC. Defaults to the highest-precedence global document; target=user writes the standard user opencode.jsonc. Returns after configuration has reloaded.",
         "summary": "Update global configuration",
         "requestBody": {
           "content": {
@@ -16064,7 +16109,39 @@
           "shell": {
             "anyOf": [
               {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "websearch": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "boolean",
+                        "enum": [false]
+                      },
+                      {
+                        "$ref": "#/components/schemas/ConfigWebSearch.InfoEncoded"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               {
                 "type": "null"
@@ -16072,7 +16149,6 @@
             ]
           }
         },
-        "required": ["shell"],
         "additionalProperties": false
       },
       "Config.Plugin.EntryEncoded": {
