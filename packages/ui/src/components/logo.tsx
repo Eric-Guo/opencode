@@ -133,6 +133,7 @@ export const Logo = (props: { class?: string }) => {
         <text
           x="0"
           y="30"
+          direction="ltr"
           {...{ "font-family": "var(--font-family-sans)" }}
           {...{ "font-size": "28" }}
           {...{ "font-weight": "600" }}
