@@ -52,7 +52,8 @@
     "picocolors": "1.1.1",
     "solid-js": "catalog:",
     "web-tree-sitter": "0.25.10",
-    "ws": "8.21.0"
+    "ws": "8.21.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@mixtint/audio-recorder-node": "1.1.0",
