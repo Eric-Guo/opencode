@@ -1,0 +1,152 @@
+# Requires a Linux Docker runner; no Docker-in-Docker service or privileged mode is needed.
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  # Keep this version aligned with the @playwright/test catalog entry in package.json.
+  PLAYWRIGHT_VERSION: "1.60.0"
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  BUN_INSTALL_CACHE_DIR: "$CI_PROJECT_DIR/.cache/bun"
+  HUSKY: "0"
+  GITHUB_ACTIONS: "false"
+  TURBO_TELEMETRY_DISABLED: "1"
+  RAYON_NUM_THREADS: "2"
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    # Replace duplicate branch-push pipelines with the merge request pipeline.
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: "$CI_COMMIT_BRANCH"
+    - if: "$CI_COMMIT_TAG"
+
+stages:
+  - check
+  - test
+  - build
+
+default:
+  image: "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble"
+  interruptible: true
+  cache:
+    key:
+      prefix: linux-bun
+      files:
+        - bun.lock
+        - package.json
+    paths:
+      - .cache/bun/
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends build-essential python3-setuptools ripgrep unzip
+    - npm install --global "$(node -p 'require("./package.json").packageManager')"
+    - test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+    - |
+      node -e '
+        const expected = require("./package.json").workspaces.catalog["@playwright/test"];
+        if (expected !== process.env.PLAYWRIGHT_VERSION)
+          throw new Error(`Set PLAYWRIGHT_VERSION in .gitlab-ci.yml to ${expected}`);
+      '
+    - git config --global user.email "bot@opencode.ai"
+    - git config --global user.name "opencode"
+    - bun install --frozen-lockfile
+
+.ci:
+  # All jobs participate in the pipeline types allowed by workflow, including merge requests.
+  rules:
+    - when: on_success
+  # Reports from earlier stages are not inputs to later jobs.
+  dependencies: []
+
+check:
+  extends: .ci
+  stage: check
+  timeout: 20 minutes
+  variables:
+    # lint:changed needs the MR diff base even when it predates the shallow checkout.
+    GIT_DEPTH: "0"
+  script:
+    - bun run check
+    - |
+      if [ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]; then
+        bun run lint:changed "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+      fi
+    - bun run test:lint-rules
+    - bun run test:effect-simplification-rules
+    - bun run lint:effect-patterns
+    - bun run lint:effect-simplifications
+    - bun run --cwd packages/app typecheck:e2e
+    - bun run --cwd packages/client check:generated
+    - bun run --cwd services/www check:generated
+
+unit:
+  extends: .ci
+  stage: test
+  timeout: 30 minutes
+  script:
+    # Permission-denial tests need an ordinary user; the Playwright image starts as root.
+    - chown -R pwuser:pwuser "$CI_PROJECT_DIR"
+    - runuser -u pwuser -- git config --global user.email "bot@opencode.ai"
+    - runuser -u pwuser -- git config --global user.name "opencode"
+    # Turbo invokes each package's test command; the root bun test command is deliberately disabled.
+    - runuser -u pwuser -- bun turbo test --concurrency=2
+
+packages:
+  extends: .ci
+  stage: test
+  timeout: 20 minutes
+  script:
+    - bun run --cwd packages/codemode script/publish.ts --dry-run
+    - bun turbo verify:package --filter=@opencode/sdk
+
+.browser:
+  extends: .ci
+  stage: test
+  timeout: 20 minutes
+  variables:
+    PLAYWRIGHT_JUNIT_OUTPUT_FILE: "$CI_PROJECT_DIR/reports/playwright.xml"
+    PLAYWRIGHT_HTML_OUTPUT_DIR: "$CI_PROJECT_DIR/reports/html"
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit: reports/*.xml
+    paths:
+      - reports/
+      - packages/app/e2e/test-results/
+      - packages/app/component-tests/test-results/
+      - packages/session-ui/component-tests/test-results/
+
+app-e2e:
+  extends: .browser
+  parallel: 2
+  script:
+    # Both Playwright projects run, including the touch-scroll project.
+    - bun run --cwd packages/app test:e2e:built --shard="$CI_NODE_INDEX/$CI_NODE_TOTAL" --reporter=line,html,junit
+    # Reuse shard 2's production build without replacing its test report.
+    - |
+      if [ "$CI_NODE_INDEX" = "2" ]; then
+        cd packages/app
+        PLAYWRIGHT_JUNIT_OUTPUT_FILE="$CI_PROJECT_DIR/reports/service-worker.xml" \
+          bunx playwright test --config e2e/service-worker/playwright.config.ts --reporter=line,junit
+      fi
+
+components:
+  extends: .browser
+  parallel:
+    matrix:
+      - PACKAGE: [app, session-ui]
+  script:
+    - bun run --cwd "packages/$PACKAGE" test:components --reporter=line,html,junit
+
+build:
+  extends: .ci
+  stage: build
+  timeout: 30 minutes
+  script:
+    - bun turbo build --concurrency=2 --filter='@opencode/cli^...' --filter='@opencode/app^...'
+    - cd packages/cli
+    - bun run script/build.ts --single --skip-install
+    - bun run script/service-smoke.ts
+    # build-node.ts downloads and verifies its pinned Node 26 SEA runtime.
+    - bun run script/build-node.ts --single --skip-install --outdir=dist/node
+    - bun run script/service-smoke.ts --node
