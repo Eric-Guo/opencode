@@ -1820,8 +1820,8 @@ function pauseExitAnimations(locator: Locator) {
   return locator.evaluateHandle((element) => {
     const animations: Animation[] = []
 
-    const pause = (event: AnimationEvent) => {
-      if (event.target !== element || event.animationName !== "exit") return
+    const pause = (event: Event) => {
+      if (!(event instanceof AnimationEvent) || event.target !== element || event.animationName !== "exit") return
 
       animations.push(...element.getAnimations())
       animations.forEach((animation) => animation.pause())
