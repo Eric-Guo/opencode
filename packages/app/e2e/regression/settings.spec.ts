@@ -517,6 +517,7 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   const row = settings.locator(".settings-workspaces-row").filter({ has: page.getByLabel(empty, { exact: true }) })
   await expect(row).toContainText("Loading messages")
   await settings.getByRole("button", { name: "More options", exact: true }).click()
+  await expect(page.getByRole("menu")).toBeVisible()
   await expect(page.getByRole("menuitem", { name: "Delete worktrees without sessions", exact: true })).toHaveCount(0)
   await page.keyboard.press("Escape")
   sessions.release()
