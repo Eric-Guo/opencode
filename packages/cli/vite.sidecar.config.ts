@@ -32,7 +32,7 @@ export function sidecarConfig(input: NodeBuildInput): UserConfig {
       minify: true,
       rollupOptions: {
         external: [/^@opencode-ai\/simulation(?:\/|$)/],
-        output: output("sidecar.mjs", nodePrelude(input)),
+        output: output("sidecar.mjs", nodePrelude({ ...input, sharedPluginRuntime: false })),
       },
     },
   })
