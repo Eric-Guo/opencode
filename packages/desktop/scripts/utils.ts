@@ -130,7 +130,8 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
   if (!dest) await rm(cli.os === "win32" ? "resources/opencode-cli" : "resources/opencode-cli.exe", { force: true })
 
   try {
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} ${`--target=${cli.target}`} --skip-install --outdir=${directory}`.env(
+    // The CLI builder installs target-specific optional dependencies needed for cross-builds.
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} ${`--target=${cli.target}`} --outdir=${directory}`.env(
       {
         ...process.env,
         OPENCODE_CHANNEL: resolveChannel(),
@@ -172,7 +173,7 @@ async function prepareCli(dest: string) {
     await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
   }
 
-  if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
+  if (process.platform === "darwin" && getCurrentCli().os === "darwin") await $`codesign --force --sign - ${dest}`
 }
 
 export function windowsify(path: string) {
