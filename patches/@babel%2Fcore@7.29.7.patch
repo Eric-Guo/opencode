@@ -1,0 +1,24 @@
+diff --git a/lib/errors/rewrite-stack-trace.js b/lib/errors/rewrite-stack-trace.js
+index 68896d38347a23fc36654cd75a5b41f41455c1ed..b3e4d99e8aad5961ea9218e4d7eb0c3e39205f67 100644
+--- a/lib/errors/rewrite-stack-trace.js
++++ b/lib/errors/rewrite-stack-trace.js
+@@ -9,6 +9,7 @@ exports.expectedError = expectedError;
+ exports.injectVirtualStackFrame = injectVirtualStackFrame;
+ var _Object$getOwnPropert;
+ const ErrorToString = Function.call.bind(Error.prototype.toString);
++const { isNativeError } = require("node:util").types;
+ const SUPPORTED = !!Error.captureStackTrace && ((_Object$getOwnPropert = Object.getOwnPropertyDescriptor(Error, "stackTraceLimit")) == null ? void 0 : _Object$getOwnPropert.writable) === true;
+ const START_HIDING = "startHiding - secret - don't use this - v1";
+ const STOP_HIDING = "stopHiding - secret - don't use this - v1";
+@@ -86,7 +87,10 @@ function setupPrepareStackTrace() {
+         newTrace.push(trace[i]);
+       }
+     }
+-    return prepareStackTrace(err, newTrace);
++    // Bun's native formatter rejects the Error-like targets accepted by captureStackTrace.
++    return process.versions.bun && !isNativeError(err)
++      ? defaultPrepareStackTrace(err, newTrace)
++      : prepareStackTrace(err, newTrace);
+   };
+ }
+ function defaultPrepareStackTrace(err, trace) {
