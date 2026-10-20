@@ -52,7 +52,8 @@ export function createSessionComposerController(input: {
       requestAnimationFrame(() => {
         if (visible === undefined) target.focus()
         else focusField(target, visible)
-        setCursorPosition(target, cursor)
+        // Typing may have advanced the cursor since the queued prompt was restored.
+        setCursorPosition(target, adapter.state.cursor() ?? cursor)
       })
     },
   })
