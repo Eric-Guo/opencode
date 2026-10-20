@@ -393,7 +393,6 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
                       status: "completed" as const,
                       reason: "manual" as const,
                       summary: "Current state",
-                      recent: "",
                       time: { created: 3 },
                     },
                   ]
