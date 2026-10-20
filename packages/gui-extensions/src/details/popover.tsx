@@ -91,8 +91,9 @@ function DetailsPopover(props: ParentProps<{ active: boolean; open: boolean; onO
 
   return (
     <Popover open={props.open} placement="bottom-end" gutter={8} overflowPadding={16} onOpenChange={props.onOpenChange}>
-      {/* Match the button's vertical bounds; the 8px gutter plus 4px content padding gives a 12px card gap. */}
-      <Popover.Anchor class="pointer-events-none absolute end-3 top-2.5 h-7 w-0" aria-hidden="true" />
+      {/* Match the button's vertical bounds; the 8px gutter plus 4px content padding gives a 12px card gap.
+          A nonzero width lets Floating UI observe the anchor moving as the session column resizes. */}
+      <Popover.Anchor class="pointer-events-none absolute end-3 top-2.5 h-7 w-px" aria-hidden="true" />
       <Tooltip
         placement="bottom"
         value={
