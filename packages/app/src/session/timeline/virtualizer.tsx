@@ -873,7 +873,8 @@ export function createTimelineVirtualizer(input: Input) {
             width: "var(--panel-hold-width, 100%)",
             height: `${item().size}px`,
             overflow: "clip",
-            "overflow-clip-margin": Predicate.isTagged(row(), "TurnGap") ? undefined : "0.5px",
+            // A half-CSS-pixel margin can still clip antialiased borders at fractional display scales.
+            "overflow-clip-margin": Predicate.isTagged(row(), "TurnGap") ? undefined : "1px",
           }}
         >
           <div
