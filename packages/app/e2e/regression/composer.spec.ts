@@ -350,8 +350,10 @@ for (const [width, direction] of [
     await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
     const suffix = "\nExisting trailing content".repeat(100)
     await input.fill("Before " + suffix)
-    await input.press("ControlOrMeta+Home")
-    await input.press("ArrowRight")
+    await input.evaluate((element) => {
+      const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode()!
+      window.getSelection()!.collapse(text, 1)
+    })
     const text = "Pasted line /tmp/example.ts 123 \u0645\u0631\u062d\u0628\u0627\n".repeat(100) + "End of paste"
     await page.evaluate((text) => navigator.clipboard.writeText(text), text)
     await page.keyboard.press("ControlOrMeta+V")
