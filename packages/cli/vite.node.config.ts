@@ -4,10 +4,32 @@ import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
 import { Installation } from "@opencode/core/installation"
 import solid from "vite-plugin-solid"
+import { discoverPluginRuntimeSpecifiers } from "@opencode/plugin/runtime-modules"
 import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "./src/node/target"
 import { verifySimulationGraph } from "./script/verify-artifact"
 
 const dir = import.meta.dirname
+
+const runtimeModules = discoverPluginRuntimeSpecifiers(dir, ["effect", "zod"])
+
+export function pluginRuntimePlugin(): Plugin {
+  return {
+    name: "opencode:plugin-runtime",
+    buildStart() {
+      // Plugin imports must reach the same chunks as the server, preserving
+      // module identities without evaluating every public entry at startup.
+      Array.from(runtimeModules.values()).forEach((id, index) => {
+        this.emitFile({
+          type: "chunk",
+          id,
+          // effect/Schema and effect/schema collide on case-insensitive filesystems.
+          fileName: `runtime/${index}.mjs`,
+          preserveSignature: "strict",
+        })
+      })
+    },
+  }
+}
 
 export function rawTextPlugin(): Plugin {
   return {
@@ -206,7 +228,7 @@ import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLsta
 import { tmpdir as __ocTmpdir } from "node:os"
 import __ocPath from "node:path"
 import { getAssetKeys as __ocAssetKeys, getRawAsset as __ocRawAsset, isSea as __ocIsSea } from "node:sea"
-import { fileURLToPath as __ocFileURLToPath } from "node:url"
+import __ocUrlModule, { fileURLToPath as __ocFileURLToPath } from "node:url"
 const __filename = import.meta.filename
 const __dirname = import.meta.dirname
 const require = __cjs_mod__.createRequire(import.meta.url)
@@ -226,10 +248,19 @@ const __ocPluginSources = ${JSON.stringify({
     "opencode:plugin-v2-effect-plugin": effectPluginModule,
     "opencode:plugin-v2-effect-tool": effectToolModule,
   })}
+const __ocRuntimeModules = ${JSON.stringify(
+    input.sharedPluginRuntime === false
+      ? {}
+      : Object.fromEntries([...runtimeModules.keys()].map((specifier, index) => [specifier, `runtime/${index}.mjs`])),
+  )}
 __cjs_mod__.registerHooks({
   resolve(__ocSpecifier, __ocContext, __ocNextResolve) {
     const __ocUrl = __ocPluginModules[__ocSpecifier]
-    return __ocUrl ? { url: __ocUrl, shortCircuit: true } : __ocNextResolve(__ocSpecifier, __ocContext)
+    if (__ocUrl) return { url: __ocUrl, shortCircuit: true }
+    const __ocRuntime = __ocRuntimeModules[__ocSpecifier]
+    return __ocRuntime
+      ? { url: __ocUrlModule.pathToFileURL(__ocPath.join(__ocAssetRoot, "cli", __ocRuntime)).href, shortCircuit: true }
+      : __ocNextResolve(__ocSpecifier, __ocContext)
   },
   load(__ocUrl, __ocContext, __ocNextLoad) {
     const __ocSource = __ocPluginSources[__ocUrl]
@@ -299,12 +330,14 @@ export type NodeBuildInput = {
   readonly highlights?: string
   readonly assetHash: string
   readonly target: NodeTarget
+  readonly sharedPluginRuntime?: boolean
 }
 
 export function mainConfig(input: NodeBuildInput): UserConfig {
   return defineConfig({
     root: dir,
     plugins: [
+      pluginRuntimePlugin(),
       payloadAssetsPlugin(),
       rawTextPlugin(),
       runtimeRequirePlugin(),
