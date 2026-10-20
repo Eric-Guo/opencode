@@ -511,10 +511,18 @@ test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
   }
   const view = await openQueue(page, mock)
   // With no display text, the editor shows the note itself, so the edit owns it as text.
-  await view.rows.getByText(note, { exact: true }).click()
-  await expect(view.input).toHaveText(note)
-  await view.input.press("End")
-  await view.input.pressSequentially(", please")
+  await view.rows.getByText(note, { exact: true }).evaluate((button) => {
+    if (!(button instanceof HTMLElement)) throw new Error("Queue edit button is unavailable")
+    button.click()
+    const editor = document.querySelector<HTMLElement>('[data-component="composer-editor"]')!
+    editor.focus()
+    window.getSelection()!.selectAllChildren(editor)
+    window.getSelection()!.collapseToEnd()
+    // Type before the queued focus restoration runs, then continue through native keyboard input.
+    document.execCommand("insertText", false, ",")
+  })
+  await expect(view.input).toHaveText(`${note},`)
+  await view.input.pressSequentially(" please")
   await expect(view.input).toHaveText(`${note}, please`)
   await view.input.press("Enter")
 
