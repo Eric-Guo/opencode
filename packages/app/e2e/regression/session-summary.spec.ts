@@ -315,6 +315,15 @@ for (const direction of ["ltr", "rtl"] as const) {
     await page.getByRole("button", { name: "Toggle review", exact: true }).click()
     await trigger.click()
     await expectAlignedWithHeader(page, direction)
+    // A review pane can finish changing the column width after the popover has opened.
+    const headerWidth = (await page.locator("[data-session-title]").boundingBox())!.width
+    await page.locator('[data-slot="session-chat-panel"]').evaluate((element) => {
+      element.style.width = `${element.clientWidth - 80}px`
+    })
+    await expect
+      .poll(async () => headerWidth - (await page.locator("[data-session-title]").boundingBox())!.width)
+      .toBeGreaterThan(70)
+    await expectAlignedWithHeader(page, direction)
     expect(warnings).toEqual([])
   })
 }
