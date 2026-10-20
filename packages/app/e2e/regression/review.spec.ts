@@ -597,7 +597,6 @@ test("context hides zero cost for Go and free models but keeps paid-model cost",
                       status: "completed" as const,
                       reason: "manual" as const,
                       summary: "Current state",
-                      recent: "",
                       time: { created: 3 },
                     },
                   ]
