@@ -14,12 +14,14 @@ for (const theme of ["light", "dark"]) {
       await expect(logo.locator("g[mask]")).toHaveCount(0)
       await expect(shimmer).toHaveCSS("color", "rgb(255, 255, 255)")
       await expect(shimmer).toHaveCSS("mix-blend-mode", "screen")
-      await expect(base.locator("path").nth(1)).toHaveAttribute("fill", "var(--icon-base)")
-      await expect(base.locator("path").nth(9)).toHaveCSS(
+      await expect(base.locator("tspan")).toHaveText(["天华", "Σ", "Agents"])
+      await expect(base.getByText("Agents", { exact: true })).toHaveAttribute("fill", "var(--icon-base)")
+      await expect(base.getByText("Σ", { exact: true })).toHaveCSS(
         "fill",
-        await base.locator("path").nth(1).evaluate((element) => getComputedStyle(element).fill),
+        await base.getByText("Agents", { exact: true }).evaluate((element) => getComputedStyle(element).fill),
       )
-      await expect(base.locator('path[fill="var(--icon-weak-base)"]')).toHaveCount(8)
+      await expect(base.getByText("天华", { exact: true })).toHaveAttribute("fill", "var(--icon-weak-base)")
+      await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
       await logo.evaluate((element) => {
         element.getAnimations({ subtree: true }).forEach((animation) => {
