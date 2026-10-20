@@ -249,7 +249,14 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
     if (event.type === "worktree.updated") {
       void worktrees.list(event.data.projectID)
-      void bootstrap.refetch()
+      // VCS can change after projects load but before the initial bootstrap finishes.
+      // Refetching the bootstrap query would join that older request and miss the change.
+      void bootstrapGlobal({
+        serverAPI: serverSDK.api,
+        scope: serverSDK.scope,
+        setGlobalStore,
+        queryClient,
+      })
 
       return
     }
