@@ -310,151 +310,164 @@ for (const outline of [
   { name: "shell outline at 1.5x", kind: "shell", deviceScaleFactor: 1.5 },
   { name: "patch card", kind: "patch", deviceScaleFactor: undefined },
 ] as const) {
-  test(`keeps the ${outline.name} inside a fractionally short virtual row`, async ({ page }) => {
-    const partID = outline.kind === "shell" ? "prt_shell_outline" : "prt_patch_outline"
-    const secondUserID = "msg_outline_second_user"
+  test.describe(outline.name, () => {
+    test.use({ deviceScaleFactor: outline.deviceScaleFactor ?? 1 })
 
-    const tool =
-      outline.kind === "shell"
-        ? shell(partID, "completed", "shell output")
-        : toolPart(
-            partID,
-            "patch",
-            "completed",
-            { patchText: "Update src/outline.ts" },
-            {
-              metadata: {
-                files: [
-                  {
-                    file: "src/outline.ts",
-                    status: "modified",
-                    patch:
-                      "diff --git a/src/outline.ts b/src/outline.ts\n--- a/src/outline.ts\n+++ b/src/outline.ts\n@@ -1 +1 @@\n-const outline = false\n+const outline = true\n",
-                    additions: 1,
-                    deletions: 1,
-                  },
-                ],
-              },
-            },
-          )
+    test(`keeps the ${outline.name} inside a fractionally short virtual row`, async ({ page }) => {
+      const partID = outline.kind === "shell" ? "prt_shell_outline" : "prt_patch_outline"
+      const secondUserID = "msg_outline_second_user"
 
-    // A second turn adds the fixed turn gap, which must not get the paint-rounding margin.
-    await setupTimeline(page, {
-      messages: [
-        userMessage(undefined, {
-          summary: {
-            diffs: [
-              {
-                file: "src/summary.ts",
-                additions: 1,
-                deletions: 1,
-                status: "modified",
-                patch: "@@ -1 +1 @@\n-export const value = 1\n+export const value = 2",
-              },
-            ],
-          },
-        }),
-        assistantMessage([tool]),
-        userMessage(undefined, { id: secondUserID, created: 1700000010000 }),
-        assistantMessage([], { id: "msg_outline_second_assistant", parentID: secondUserID, created: 1700000011000 }),
-      ],
-      settings:
+      const tool =
         outline.kind === "shell"
-          ? { shellToolPartsExpanded: true }
-          : { timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } } },
-      reducedMotion: true,
-      deviceScaleFactor: outline.deviceScaleFactor,
-    })
-    await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
+          ? shell(partID, "completed", "shell output")
+          : toolPart(
+              partID,
+              "patch",
+              "completed",
+              { patchText: "Update src/outline.ts" },
+              {
+                metadata: {
+                  files: [
+                    {
+                      file: "src/outline.ts",
+                      status: "modified",
+                      patch:
+                        "diff --git a/src/outline.ts b/src/outline.ts\n--- a/src/outline.ts\n+++ b/src/outline.ts\n@@ -1 +1 @@\n-const outline = false\n+const outline = true\n",
+                      additions: 1,
+                      deletions: 1,
+                    },
+                  ],
+                },
+              },
+            )
 
-    const rows = await page.locator("[data-timeline-key]").evaluateAll((elements) =>
-      elements.map((element) => ({
-        tag: element.querySelector<HTMLElement>("[data-timeline-row]")?.dataset.timelineRow,
-        clipMargin: getComputedStyle(element).overflowClipMargin,
-      })),
-    )
+      // A second turn adds the fixed turn gap, which must not get the paint-rounding margin.
+      await setupTimeline(page, {
+        messages: [
+          userMessage(undefined, {
+            summary: {
+              diffs: [
+                {
+                  file: "src/summary.ts",
+                  additions: 1,
+                  deletions: 1,
+                  status: "modified",
+                  patch: "@@ -1 +1 @@\n-export const value = 1\n+export const value = 2",
+                },
+              ],
+            },
+          }),
+          assistantMessage([tool]),
+          userMessage(undefined, { id: secondUserID, created: 1700000010000 }),
+          assistantMessage([], { id: "msg_outline_second_assistant", parentID: secondUserID, created: 1700000011000 }),
+        ],
+        settings:
+          outline.kind === "shell"
+            ? { shellToolPartsExpanded: true }
+            : {
+                timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+              },
+        reducedMotion: true,
+      })
+      await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
 
-    expect(rows.filter((row) => row.tag !== "TurnGap").every((row) => row.clipMargin === "0.5px")).toBe(true)
-    expect(rows.filter((row) => row.tag === "TurnGap")).toEqual([{ tag: "TurnGap", clipMargin: "0px" }])
+      const rows = await page.locator("[data-timeline-key]").evaluateAll((elements) =>
+        elements.map((element) => ({
+          tag: element.querySelector<HTMLElement>("[data-timeline-row]")?.dataset.timelineRow,
+          clipMargin: getComputedStyle(element).overflowClipMargin,
+        })),
+      )
 
-    const part = page.locator(`[data-timeline-part-id="${partID}"]`)
-    const row = page.locator("[data-timeline-key]", { has: part })
+      expect(rows.filter((row) => row.tag !== "TurnGap").every((row) => row.clipMargin === "1px")).toBe(true)
+      expect(rows.filter((row) => row.tag === "TurnGap")).toEqual([{ tag: "TurnGap", clipMargin: "0px" }])
 
-    if (outline.kind === "patch") {
-      const card = part.locator('[data-component="accordion"][data-scope="apply-patch"]')
-      await expect(card.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+      const part = page.locator(`[data-timeline-part-id="${partID}"]`)
+      const row = page.locator("[data-timeline-key]", { has: part })
+
+      if (outline.kind === "patch") {
+        const card = part.locator('[data-component="accordion"][data-scope="apply-patch"]')
+        await expect(card.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+        const unclipped = await captureCardEdges(page, card)
+
+        const geometry = await row.evaluate((element) => {
+          const card = element.querySelector<HTMLElement>('[data-component="accordion"][data-scope="apply-patch"]')
+
+          if (!card) throw new Error("Patch card is unavailable")
+          const cardRect = card.getBoundingClientRect()
+          element.style.height = `${cardRect.bottom - element.getBoundingClientRect().top - 0.49}px`
+          const clipMargin = getComputedStyle(element).overflowClipMargin
+          const bottom = element.getBoundingClientRect().bottom
+
+          return {
+            overflow: card.getBoundingClientRect().bottom - bottom,
+            paintOverflow: card.getBoundingClientRect().bottom - bottom - Number.parseFloat(clipMargin),
+            cardWidth: cardRect.width,
+            cardHeight: cardRect.height,
+          }
+        })
+
+        expect(geometry.overflow).toBeCloseTo(0.49, 1)
+        expect(geometry.paintOverflow).toBeLessThanOrEqual(0)
+        const edges = await captureCardEdges(page, card)
+        expect(edges.box.width).toBeCloseTo(geometry.cardWidth, 2)
+        expect(edges.box.height).toBeCloseTo(geometry.cardHeight, 2)
+        expect(edges.luminance.top).toBeLessThan(245)
+        expect(edges.luminance.bottom).toBeLessThan(245)
+        // Compare the same edge: top and bottom can have different subpixel coverage.
+        expect(edges.luminance).toEqual(unclipped.luminance)
+
+        return
+      }
+
+      const bash = part.locator('[data-component="bash-output"]')
+      await expect(bash).toBeVisible()
+      await waitForVisualSettle(page, [`[data-timeline-part-id="${partID}"] [data-component="bash-output"]`])
+
+      await row.evaluate((element) => {
+        const output = element.querySelector<HTMLElement>('[data-component="bash-output"]')!
+        element.style.transform = "translateY(0.25px)"
+        output.style.setProperty("--v2-border-border-base", "rgb(255, 0, 255)")
+        output.style.setProperty("background", "rgb(0, 0, 0)", "important")
+      })
+      const unclipped = await captureCardEdges(page, bash)
 
       const geometry = await row.evaluate((element) => {
-        const card = element.querySelector<HTMLElement>('[data-component="accordion"][data-scope="apply-patch"]')
+        const output = element.querySelector<HTMLElement>('[data-component="bash-output"]')
 
-        if (!card) throw new Error("Patch card is unavailable")
-        const cardRect = card.getBoundingClientRect()
-        element.style.height = `${cardRect.bottom - element.getBoundingClientRect().top - 0.49}px`
-        const clipMargin = getComputedStyle(element).overflowClipMargin
-        const bottom = element.getBoundingClientRect().bottom
+        if (!output) throw new Error("Shell output is unavailable")
+        const outputRect = output.getBoundingClientRect()
+        // Match a rounded-down measurement at a fractional device-pixel phase.
+        element.style.height = `${outputRect.bottom - element.getBoundingClientRect().top - 0.49}px`
+        const style = getComputedStyle(output)
 
         return {
-          overflow: card.getBoundingClientRect().bottom - bottom,
-          paintOverflow: card.getBoundingClientRect().bottom - bottom - Number.parseFloat(clipMargin),
-          cardWidth: cardRect.width,
-          cardHeight: cardRect.height,
+          outputWidth: outputRect.width,
+          outputHeight: outputRect.height,
+          borderColor: style.borderTopColor,
+          boxShadow: style.boxShadow,
         }
       })
 
-      expect(geometry.overflow).toBeCloseTo(0.49, 1)
-      expect(geometry.paintOverflow).toBeLessThanOrEqual(0)
-      const edges = await captureCardEdges(page, card)
-      expect(edges.box.width).toBeCloseTo(geometry.cardWidth, 2)
-      expect(edges.box.height).toBeCloseTo(geometry.cardHeight, 2)
-      expect(edges.luminance.top).toBeLessThan(245)
-      expect(edges.luminance.bottom).toBeLessThan(245)
-      expect(Math.abs(edges.luminance.bottom - edges.luminance.top)).toBeLessThan(10)
-
-      return
-    }
-
-    const bash = part.locator('[data-component="bash-output"]')
-    await expect(bash).toBeVisible()
-    await waitForVisualSettle(page, [`[data-timeline-part-id="${partID}"] [data-component="bash-output"]`])
-
-    const geometry = await row.evaluate((element) => {
-      const output = element.querySelector<HTMLElement>('[data-component="bash-output"]')
-
-      if (!output) throw new Error("Shell output is unavailable")
-      const outputRect = output.getBoundingClientRect()
-      // Match a rounded-down measurement at a fractional device-pixel phase.
-      element.style.height = `${outputRect.bottom - element.getBoundingClientRect().top - 0.49}px`
-      element.style.transform = "translateY(0.25px)"
-      output.style.setProperty("--v2-border-border-base", "rgb(255, 0, 255)")
-      output.style.setProperty("background", "rgb(0, 0, 0)", "important")
-      const style = getComputedStyle(output)
-
-      return {
-        outputWidth: outputRect.width,
-        outputHeight: outputRect.height,
-        borderColor: style.borderTopColor,
-        boxShadow: style.boxShadow,
-      }
+      await expect
+        .poll(() =>
+          row.evaluate(
+            (element) =>
+              element.querySelector<HTMLElement>('[data-component="bash-output"]')!.getBoundingClientRect().bottom -
+              element.getBoundingClientRect().bottom,
+          ),
+        )
+        .toBeCloseTo(0.49, 1)
+      expect(await page.evaluate(() => devicePixelRatio)).toBe(outline.deviceScaleFactor)
+      const edges = await captureCardEdges(page, bash)
+      expect(edges.box.width).toBeCloseTo(geometry.outputWidth, 2)
+      expect(edges.box.height).toBeCloseTo(geometry.outputHeight, 2)
+      expect(geometry.borderColor).toBe("rgb(255, 0, 255)")
+      expect(geometry.boxShadow).toBe("none")
+      expect(edges.magenta.top).toBeGreaterThan(0.75)
+      expect(edges.luminance.bottom).toBe(unclipped.luminance.bottom)
+      expect(edges.magenta).toEqual(unclipped.magenta)
+      expect(edges.magenta.vertical).toBeGreaterThanOrEqual(2)
     })
-
-    await expect
-      .poll(() =>
-        row.evaluate(
-          (element) =>
-            element.querySelector<HTMLElement>('[data-component="bash-output"]')!.getBoundingClientRect().bottom -
-            element.getBoundingClientRect().bottom,
-        ),
-      )
-      .toBeCloseTo(0.49, 1)
-    expect(await page.evaluate(() => devicePixelRatio)).toBe(outline.deviceScaleFactor)
-    const edges = await captureCardEdges(page, bash)
-    expect(edges.box.width).toBeCloseTo(geometry.outputWidth, 2)
-    expect(edges.box.height).toBeCloseTo(geometry.outputHeight, 2)
-    expect(geometry.borderColor).toBe("rgb(255, 0, 255)")
-    expect(geometry.boxShadow).toBe("none")
-    expect(edges.magenta.top).toBeGreaterThan(0.75)
-    expect(edges.magenta.bottom).toBeGreaterThan(0.75)
-    expect(edges.magenta.vertical).toBeGreaterThanOrEqual(2)
   })
 }
 
