@@ -741,17 +741,26 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             const bounds = (await heading.getByText("Heading text", { exact: true }).boundingBox())!
             const point = { x: bounds.x + 25, y: bounds.y + bounds.height / 2 }
             const target = await page.evaluateHandle((point) => document.elementFromPoint(point.x, point.y), point)
-            await devtools.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] })
+            await devtools.send("Input.dispatchTouchEvent", {
+              type: "touchStart",
+              touchPoints: [point],
+              timestamp: restingTimestamp(),
+            })
             await devtools.send("Input.dispatchTouchEvent", {
               type: "touchMove",
               touchPoints: [{ x: point.x, y: point.y + 60 }],
+              timestamp: restingTimestamp(),
             })
             await expect(timeline.locator('[data-orientation="vertical"][data-visible="true"]')).toHaveCount(1)
             await fixture.send(partDelta("prt_target_heading", "\n\nMore content."))
             await expect(heading).toContainText("More content.")
             await expect(heading.locator("p")).toHaveCount(2)
             await expect.poll(() => target.evaluate((element) => element?.isConnected)).toBe(false)
-            await devtools.send("Input.dispatchTouchEvent", { type: release, touchPoints: [] })
+            await devtools.send("Input.dispatchTouchEvent", {
+              type: release,
+              touchPoints: [],
+              timestamp: Date.now() / 1000,
+            })
             await target.dispose()
             await expect(hidden).toHaveCount(1)
           }
