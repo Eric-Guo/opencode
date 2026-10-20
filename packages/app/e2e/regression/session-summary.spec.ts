@@ -198,6 +198,9 @@ test("the details follow the routed session when it moves to another worktree", 
       data: { sessionID: fixture.targetID, location: { directory: `${root}/other` }, projectID: fixture.project.id },
     },
   ])
+  await expect(
+    page.locator('[data-type="location-switched"]').getByText(`${root}/other`, { exact: true }),
+  ).toBeVisible()
   await trigger.click()
   await expect(location("other")).toBeVisible()
   await expect(location("feature")).toHaveCount(0)
