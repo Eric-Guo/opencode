@@ -857,7 +857,11 @@ test("the title and folded message stay stable through worktree creation", async
   const readMore = pending.message.getByRole("button", { name: "Read more", expanded: false })
   await expect(readMore).toBeVisible()
   await draftFollowUp(page)
-  await editor(page).evaluate((element) => getSelection()!.collapse(element, 0))
+  await editor(page).evaluate((element) => {
+    const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode()!
+    window.getSelection()!.collapse(text, 1)
+  })
+  await editor(page).press("ArrowLeft")
   const title = page.locator("[data-session-title]").getByRole("heading", { level: 1 })
   const before = await title.boundingBox()
   const messageBefore = await pending.message.boundingBox()
