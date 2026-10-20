@@ -121,7 +121,9 @@ function DetailsPopover(props: DetailsProps) {
       open={open()}
       onOpenChange={(next) => dispatch(next ? { type: "opened", via: clickVia } : { type: "closed" })}
     >
-      <Popover.Anchor class="pointer-events-none absolute end-3 top-2.5 h-7 w-0" aria-hidden="true" />
+      {/* Match the button's vertical bounds; the 8px gutter plus 4px content padding gives a 12px card gap.
+          A nonzero width lets Floating UI observe the anchor moving as the session column resizes. */}
+      <Popover.Anchor class="pointer-events-none absolute end-3 top-2.5 h-7 w-px" aria-hidden="true" />
       <Tooltip
         placement="bottom"
         value={
