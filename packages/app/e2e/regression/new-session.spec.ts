@@ -179,7 +179,11 @@ test("the title and message stay stable through worktree creation", async ({ pag
   const mock = await openWorktreeDraft(page, pendingDraft)
   const pending = await submitPending(page, mock)
   await draftFollowUp(page)
-  await editor(page).press("ControlOrMeta+Home")
+  await editor(page).evaluate((element) => {
+    const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode()!
+    window.getSelection()!.collapse(text, 1)
+  })
+  await editor(page).press("ArrowLeft")
   const title = page.locator("[data-session-title]").getByRole("heading", { level: 1 })
   const before = await title.boundingBox()
   const messageBefore = await pending.message.boundingBox()
