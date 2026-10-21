@@ -186,7 +186,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         true,
         page,
       )
-      if (tail === undefined) return yield* Effect.die("Read page did not settle for a complete file")
+      if (tail === undefined) return yield* Effect.die(new Error("Read page did not settle for a complete file"))
       return yield* makeTextPage(
         input,
         resource,
@@ -255,7 +255,7 @@ const completePage = Effect.fnUntraced(function* (
     true,
     page.offset !== undefined && page.offset < 0 ? { ...page, offset: Math.max(1, total + page.offset + 1) } : page,
   )
-  if (result === undefined) return yield* Effect.die("Read page did not settle for a complete file")
+  if (result === undefined) return yield* Effect.die(new Error("Read page did not settle for a complete file"))
   return yield* makeTextPage(input, resource, result, bytes.subarray(0, result.consumed).includes(0))
 })
 
