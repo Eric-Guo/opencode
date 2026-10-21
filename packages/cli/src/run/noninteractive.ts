@@ -8,12 +8,16 @@ import {
   type ModelRef,
   type OpenCodeClient,
   type PermissionRequest,
+  type SessionMessageAssistantFile,
   type SessionMessageAssistantTool,
   type SessionMessageIdle,
   type SessionMessageInfo,
 } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Global } from "@opencode/util/global"
 import { EOL } from "node:os"
+import { mkdir, writeFile } from "node:fs/promises"
+import path from "node:path"
 import { toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
 import { UI } from "./ui"
 
@@ -367,6 +371,24 @@ function renderer(input: Input) {
     return true
   }
 
+  const writeGeneratedFile = async (file: SessionMessageAssistantFile, messageID: string, timestamp: number) => {
+    const id = key("file", messageID, file.id)
+    if (printed.has(id)) return
+
+    printed.set(id, "")
+    const part = { ...file, sessionID: input.sessionID, messageID }
+    if (emit("file", timestamp, { part })) return
+    if (!file.url.startsWith("data:")) {
+      process.stdout.write(file.url + EOL)
+      return
+    }
+
+    const filename = path.join(Global.Path.data, "generated", input.sessionID, path.basename(file.filename ?? file.id))
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, Buffer.from(file.url.slice(file.url.indexOf(",") + 1), "base64"))
+    process.stdout.write(filename + EOL)
+  }
+
   const block = (line: string) => {
     UI.empty()
     UI.println(line)
@@ -505,6 +527,9 @@ function renderer(input: Input) {
         step("step-finish", time, partID(event.id), data.assistantMessageID, rest)
         return
       }
+      if (event.type === "session.file.generated")
+        return writeGeneratedFile(event.data.file, event.data.assistantMessageID, time)
+
       if (event.type === "session.text.started" || event.type === "session.reasoning.started") {
         const kind = event.type === "session.text.started" ? "text" : "reasoning"
         starts.set(key(kind, event.data.assistantMessageID, event.data.ordinal), {
@@ -604,7 +629,10 @@ function renderer(input: Input) {
           step("step-start", message.time.created, id("step-start"), message.id, { snapshot: message.snapshot?.start })
         const ordinals = { text: 0, reasoning: 0 }
         for (const item of message.content) {
-          if (item.type === "file") continue
+          if (item.type === "file") {
+            await writeGeneratedFile(item, message.id, timestamp)
+            continue
+          }
 
           if (item.type === "tool") {
             if (item.state.status === "streaming" || item.state.status === "running") continue
