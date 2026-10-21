@@ -10,7 +10,6 @@ import {
   StreamableHTTPClientTransport,
   UnauthorizedError,
   UnsupportedProtocolVersionError,
-  type CallToolResult as SdkCallToolResult,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
@@ -26,6 +25,7 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
+import type { CallToolResult as SdkCallToolResult } from "@modelcontextprotocol/client"
 import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
