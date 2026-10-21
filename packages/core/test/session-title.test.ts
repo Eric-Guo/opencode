@@ -94,7 +94,10 @@ const models = Layer.mock(SessionRunnerModel.Service)({
     selections.push(session.model)
     return Effect.succeed(
       SessionRunnerModel.resolved(session.model?.id === "title-small" ? smallModel : model, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        capabilities:
+          session.model?.id !== "title-small" && selectedPrimary
+            ? selectedPrimary.capabilities
+            : { tools: true, input: ["text", "image"], output: ["text"] },
         cost,
         limit: { context: 200_000, output: 32_000 },
         variant: session.model?.variant,
@@ -337,6 +340,28 @@ it.effect("uses a small model from the primary provider", () =>
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
   }),
 )
+
+for (const fallback of [false, true]) {
+  it.effect(`does not generate an image for a session title${fallback ? " when the small model fails" : ""}`, () =>
+    Effect.gen(function* () {
+      selectedPrimary = Model.Info.make({
+        ...Model.Info.default(Provider.ID.make("test"), Model.ID.make("title-model")),
+        capabilities: { tools: false, input: ["text", "image"], output: ["image"] },
+      })
+      selectedSmall = fallback ? small : undefined
+      titleStream = () => Stream.make(LLMEvent.providerError({ message: "Small model unavailable" }))
+      yield* enableTitleAgent
+      const sessionID = Session.ID.make(`ses_title_image_${fallback}`)
+      yield* insertSession(sessionID)
+      yield* prompt(sessionID, "Draw a koi pond")
+
+      const title = yield* SessionTitle.Service
+      yield* title.generate(sessionID)
+
+      expect(requests.map((request) => String(request.model.id))).toEqual(fallback ? ["title-small"] : [])
+    }),
+  )
+}
 
 it.effect("falls back to the primary model when the small model fails", () =>
   Effect.gen(function* () {
