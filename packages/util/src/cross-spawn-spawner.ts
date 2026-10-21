@@ -24,7 +24,7 @@ import {
   ProcessId,
   type ChildProcessHandle,
 } from "effect/process/ChildProcessSpawner"
-import * as NodeChildProcess from "node:child_process"
+import NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
