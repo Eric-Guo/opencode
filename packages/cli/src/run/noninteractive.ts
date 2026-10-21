@@ -3,13 +3,16 @@ import type {
   JsonValue,
   LocationRef,
   OpenCodeClient,
+  SessionMessageAssistantFile,
   SessionMessageAssistantTool,
   SessionMessageInfo,
   ToolContent,
 } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Global } from "@opencode/util/global"
 import { EOL } from "node:os"
-import { readFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import path from "node:path"
 import { nonEmptyToolContent, toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
 import { UI } from "./ui"
 
@@ -86,6 +89,7 @@ export async function runNonInteractivePrompt(input: Input) {
   const renderedText = new Map<string, string>()
   const renderedReasoning = new Map<string, string>()
   const renderedTools = new Set<string>()
+  const renderedFiles = new Set<string>()
   let submitted = false
   let promoted = false
   let emittedError = false
@@ -137,6 +141,24 @@ export async function runNonInteractivePrompt(input: Input) {
       UI.println(value.label)
       UI.empty()
     }
+  }
+
+  const writeGeneratedFile = async (file: SessionMessageAssistantFile, messageID: string, timestamp: number) => {
+    const key = `${messageID}\u0000${file.id}`
+    if (renderedFiles.has(key)) return
+    renderedFiles.add(key)
+    flushStep()
+    const part = { ...file, sessionID: input.sessionID, messageID }
+    if (emit("file", timestamp, { part })) return
+    if (!file.url.startsWith("data:")) {
+      process.stdout.write(file.url + EOL)
+      return
+    }
+
+    const filename = path.join(Global.Path.data, "generated", input.sessionID, path.basename(file.filename ?? file.id))
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, Buffer.from(file.url.slice(file.url.indexOf(",") + 1), "base64"))
+    process.stdout.write(filename + EOL)
   }
 
   // Subagents run in child sessions; their asks and questions belong to this run too. Other
@@ -286,6 +308,11 @@ export async function runNonInteractivePrompt(input: Input) {
           UI.println(`> ${event.data.agent} · ${event.data.model.id}`)
           UI.empty()
         }
+        continue
+      }
+
+      if (event.type === "session.file.generated") {
+        await writeGeneratedFile(event.data.file, event.data.assistantMessageID, time)
         continue
       }
 
@@ -612,7 +639,10 @@ export async function runNonInteractivePrompt(input: Input) {
           writeReasoning(part, timestamp)
           continue
         }
-        if (item.type === "file") continue
+        if (item.type === "file") {
+          await writeGeneratedFile(item, message.id, timestamp)
+          continue
+        }
 
         const key = toolKey(message.id, item.id)
         if (renderedTools.has(key) || item.state.status === "streaming" || item.state.status === "running") continue
