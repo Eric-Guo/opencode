@@ -280,6 +280,9 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
+      // Bun can emit EPIPE during stdin destruction after the sink has finished and removed its error listener.
+      // Keep a listener for the stream's lifetime; active sinks still receive and map the same errors.
+      proc.stdin?.on("error", () => {})
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
