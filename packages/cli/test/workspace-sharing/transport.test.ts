@@ -63,6 +63,18 @@ test("identical retries and concurrent duplicate requests execute once; conflict
   expect((await terminal(client, "same-id"))?.starts).toBe(1)
 })
 
+test("replies with matching identities still validate nested task data", async () => {
+  const { root, client } = await fixture()
+  const input = { op: "submit" as const, text: "once", durationMs: 0 }
+  const reply = await client.request(input, "invalid-reply")
+  await writeFile(
+    path.join(root, "replies", "invalid-reply.json"),
+    JSON.stringify({ ...reply, task: { ...reply.task, starts: "invalid" } }),
+  )
+
+  await expect(client.request(input, "invalid-reply")).rejects.toThrow("starts")
+})
+
 test("bounded concurrency is two and a disconnected submitter does not own the task", async () => {
   const { root, client } = await fixture()
   await Promise.all(
