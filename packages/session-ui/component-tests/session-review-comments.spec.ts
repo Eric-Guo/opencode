@@ -41,6 +41,8 @@ story("shows a comment button when a diff line is hovered", async ({ mount }) =>
   const line = review.getByText("export const first = 1", { exact: true })
   const comment = review.getByRole("button", { name: "Comment", exact: true, includeHidden: true })
   await expect(comment).toHaveCount(1)
+  // Highlighting replaces the initial text node and discards a hover sent before it finishes.
+  await expect(line.getByText("export", { exact: true })).toBeVisible()
   await line.hover()
   await expect(comment).toBeVisible()
   await expect(comment).toHaveCSS("pointer-events", "auto")
