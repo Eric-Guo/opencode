@@ -430,6 +430,69 @@ describe("runNonInteractivePrompt", () => {
     expect(seen.filter((event) => event.type === "step_finish")).toHaveLength(1)
   })
 
+  test.each([
+    { streamed: true, format: "json" as const },
+    { streamed: false, format: "json" as const },
+    { streamed: true, format: "default" as const },
+    { streamed: false, format: "default" as const },
+  ])("renders generated files once ($format, streamed=$streamed)", async ({ streamed, format }) => {
+    const file = {
+      type: "file" as const,
+      id: "generated-image",
+      mime: "image/png",
+      filename: "pond.png",
+      url: "https://images.test/pond.png",
+    }
+    const output = await capture({
+      format,
+      turn: (messageID) => [
+        prompted(messageID),
+        ...(streamed
+          ? [
+              {
+                id: "evt_image",
+                created: 2,
+                type: "session.file.generated" as const,
+                durable: { aggregateID: "ses_1", seq: 2, version: 1 as const },
+                data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", file },
+              },
+            ]
+          : []),
+        settled(),
+      ],
+      messages: (messageID) => [
+        {
+          id: "msg_assistant",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "vipai", id: "gpt-image-2" },
+          content: [file],
+          finish: "stop",
+          time: { created: 2, completed: 3 },
+        },
+        { id: messageID, type: "user", text: "Draw a koi pond", time: { created: 1 } },
+      ],
+    })
+
+    if (format === "default") {
+      expect(output.stdout.trim()).toBe(file.url)
+      return
+    }
+
+    expect(
+      output.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line))
+        .filter((event) => event.type === "file"),
+    ).toEqual([
+      expect.objectContaining({
+        type: "file",
+        part: { ...file, sessionID: "ses_1", messageID: "msg_assistant" },
+      }),
+    ])
+  })
+
   test("reports an observed execution failure before prompt promotion", async () => {
     const output = await capture({
       format: "json",
