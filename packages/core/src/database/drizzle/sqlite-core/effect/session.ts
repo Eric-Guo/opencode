@@ -1,6 +1,5 @@
 /* oxlint-disable */
-import * as Cause from "effect/Cause"
-import * as Effect from "effect/Effect"
+import { Cause, Effect } from "effect"
 import type { SqlError } from "effect/sql/SqlError"
 import type { EffectCacheShape } from "drizzle-orm/cache/core/cache-effect"
 import { NoopCache, strategyFor } from "drizzle-orm/cache/core/cache"
