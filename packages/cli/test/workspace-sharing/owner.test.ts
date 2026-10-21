@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdtemp, readdir, realpath, rm } from "node:fs/promises"
+import { mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { FileSharing, type Adapter, type RunTask } from "../../src/services/workspace-sharing/owner"
@@ -79,6 +79,40 @@ test("same request retry never reruns, and changed payload conflicts", async () 
   await expect(client.request({ op: "run", input: { ...input, message: "different" } }, "same-task")).rejects.toThrow(
     "conflict",
   )
+})
+
+test("replies validate persisted run inputs before returning a task", async () => {
+  const { lease, client, input } = await fixture()
+  const reply = await client.request({ op: "run", input }, "invalid-reply")
+  await writeFile(
+    path.join(lease.root, "replies", "invalid-reply.json"),
+    JSON.stringify({ ...reply, task: { ...reply.task, input: { ...input, auto: "yes" } } }),
+  )
+
+  await expect(client.request({ op: "run", input }, "invalid-reply")).rejects.toThrow("auto")
+})
+
+test("restart rejects malformed persisted tasks without dispatching them", async () => {
+  const { lease, client, input, owner } = await fixture()
+  await client.request({ op: "run", input }, "invalid-task")
+  const task = await terminal(client, "invalid-task")
+  await owner.stop()
+  await writeFile(
+    path.join(lease.root, "tasks", "invalid-task.json"),
+    JSON.stringify({ ...task, input: { ...input, auto: "yes" } }),
+  )
+
+  await expect(
+    FileSharing.start(lease, {
+      run: async () => {
+        throw new Error("must not dispatch")
+      },
+      sessions: async () => [],
+    }).then((next) => {
+      cleanups.push(() => next.stop())
+      return next
+    }),
+  ).rejects.toThrow("auto")
 })
 
 test("two active tasks bound concurrency and cancellation remains task-specific", async () => {
