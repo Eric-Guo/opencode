@@ -2,36 +2,39 @@ export * as FileSharing from "./owner"
 
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Schema } from "effect"
 import { createHash, randomUUID } from "node:crypto"
 import { lstat, mkdir, readdir, readlink, realpath, rm, unlink } from "node:fs/promises"
 import path from "node:path"
 import { directory, id, initialize, privateRead, publish, rootDirectory } from "./files"
 
-export type RunInput = {
-  directory: string
-  message: string
-  format: "default" | "json"
-  auto: boolean
-  model?: string
-  agent?: string
-  title?: string
-  thinking?: boolean
-}
-export type RunTask = {
-  version: 1
-  id: string
-  ownerID: string
-  hash: string
-  sessionID: string
-  messageID: string
-  input: RunInput
-  state: "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled" | "indeterminate"
-  created: number
-  updated: number
-  starts: number
-  exitCode?: number
-  reason?: string
-}
+const RunInput = Schema.Struct({
+  directory: Schema.String,
+  message: Schema.String,
+  format: Schema.Literals(["default", "json"]),
+  auto: Schema.Boolean,
+  model: Schema.optional(Schema.String),
+  agent: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  thinking: Schema.optional(Schema.Boolean),
+})
+export type RunInput = typeof RunInput.Type
+const RunTask = Schema.Struct({
+  version: Schema.Literal(1),
+  id: Schema.String,
+  ownerID: Schema.String,
+  hash: Schema.String,
+  sessionID: Schema.String,
+  messageID: Schema.String,
+  input: RunInput,
+  state: Schema.Literals(["queued", "running", "cancelling", "completed", "failed", "cancelled", "indeterminate"]),
+  created: Schema.Number,
+  updated: Schema.Number,
+  starts: Schema.Number,
+  exitCode: Schema.optional(Schema.Number),
+  reason: Schema.optional(Schema.String),
+})
+export type RunTask = typeof RunTask.Type
 export type Result = {
   state: "completed" | "failed" | "cancelled" | "indeterminate"
   exitCode: number
@@ -48,19 +51,36 @@ export type Command =
   | { op: "status" | "result" | "cancel"; taskID: string }
   | { op: "sessions"; directory: string; limit: number }
   | { op: "ping" }
-export type Reply = {
-  id: string
-  ownerID: string
-  hash: string
-  task?: RunTask
-  sessions?: unknown[]
-  active?: number
-  maxActive?: number
-  error?: string
-}
-type Owner = { id: string; pid: number; pidNamespace: string; netNamespace: string; workspace: string; created: number }
+const Reply = Schema.Struct({
+  id: Schema.String,
+  ownerID: Schema.String,
+  hash: Schema.String,
+  task: Schema.optional(RunTask),
+  sessions: Schema.optional(Schema.Array(Schema.Unknown)),
+  active: Schema.optional(Schema.Number),
+  maxActive: Schema.optional(Schema.Number),
+  error: Schema.optional(Schema.String),
+})
+export type Reply = typeof Reply.Type
+const Owner = Schema.Struct({
+  id: Schema.String,
+  pid: Schema.Number,
+  pidNamespace: Schema.String,
+  netNamespace: Schema.String,
+  workspace: Schema.String,
+  created: Schema.Number,
+})
+type Owner = typeof Owner.Type
 export type Lease = { root: string; owner: Owner; release(): Promise<void> }
 type Envelope = { version: 1; id: string; ownerID: string; command: Command }
+const decodeOwner = Schema.decodeUnknownSync(Schema.fromJsonString(Owner))
+const decodeReply = Schema.decodeUnknownSync(Schema.fromJsonString(Reply))
+const decodeTask = Schema.decodeUnknownSync(Schema.fromJsonString(RunTask))
+const decodeEnvelope = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({ version: Schema.Literal(1), id: Schema.String, ownerID: Schema.String, command: Schema.Unknown }),
+  ),
+)
 const outputLimit = 1024 * 1024
 const terminalStates = new Set<RunTask["state"]>(["completed", "failed", "cancelled", "indeterminate"])
 
@@ -118,7 +138,7 @@ function hash(value: Command) {
 
 async function owner(root: string): Promise<Owner> {
   await directory(path.join(root, "worker.lock"))
-  const value = JSON.parse(await privateRead(path.join(root, "worker.lock", "owner.json"))) as Owner
+  const value = decodeOwner(await privateRead(path.join(root, "worker.lock", "owner.json")))
   id(value.id)
   return value
 }
@@ -202,7 +222,7 @@ export async function connect(root: string, options: { timeoutMs?: number; pollM
           },
         )
         if (raw) {
-          const reply = JSON.parse(raw) as Reply
+          const reply = decodeReply(raw)
           if (reply.id !== requestID || reply.ownerID !== identity.id || reply.hash !== digest)
             throw new Error("Reply identity conflict")
           if (parsed.op !== "run" && parsed.op !== "cancel") {
@@ -246,8 +266,8 @@ export async function start(lease: Lease, adapter: Adapter, options: { pollMs?: 
   }
   for (const name of await readdir(path.join(lease.root, "tasks"))) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}\.json$/.test(name)) continue
-    const task = JSON.parse(await privateRead(path.join(lease.root, "tasks", name))) as RunTask
-    if (`${id(task.id)}.json` !== name || task.version !== 1) throw new Error("Invalid persisted task")
+    const task = decodeTask(await privateRead(path.join(lease.root, "tasks", name)))
+    if (`${id(task.id)}.json` !== name) throw new Error("Invalid persisted task")
     tasks.set(task.id, task)
     if (!terminalStates.has(task.state))
       await update(task.id, (previous) => ({
@@ -362,8 +382,8 @@ export async function start(lease: Lease, adapter: Adapter, options: { pollMs?: 
         if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}\.json$/.test(name) || seen.has(name)) continue
         const envelope = await privateRead(path.join(lease.root, "requests", name))
           .then((raw) => {
-            const value = JSON.parse(raw) as Envelope
-            if (value.version !== 1 || `${id(value.id)}.json` !== name) throw new Error("Invalid request")
+            const value = decodeEnvelope(raw)
+            if (`${id(value.id)}.json` !== name) throw new Error("Invalid request")
             id(value.ownerID)
             return { ...value, command: command(value.command) }
           })
