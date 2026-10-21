@@ -233,7 +233,7 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
           : []),
       ],
       connected: state.authorized ? ["opencode", "opencode-go"] : ["opencode"],
-      default: { build: "opencode/big-pickle" },
+      default: { providerID: model.providerID, modelID: model.id },
     }),
     integrations: () => [
       {
