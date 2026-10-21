@@ -58,7 +58,7 @@ export const ImageAspectRatio = Media.AspectRatio
 /** Size tier: `1K` is about as many pixels as 1024×1024 at the requested aspect, `2K` as 2048×2048. */
 export type ImageResolution = OpenString<"1K" | "2K" | "4K">
 
-const ImageRequestSchema = Schema.Struct({
+export const ImageRequestSchema = Schema.Struct({
   model: ImageModelSchema,
   prompt: Schema.String,
   images: Schema.optional(Schema.Array(Media.AssetSchema)),
