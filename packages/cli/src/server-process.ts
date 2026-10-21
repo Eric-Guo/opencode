@@ -193,7 +193,13 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               yield* Effect.sleep("100 millis")
               if (Date.now() >= deadline) break
               // Failed binds close their scope; a successful bind may take longer than this window to boot.
-              const server = yield* launch.pipe(Effect.catchIf(addressInUse, () => Effect.void))
+              // Another startup contender can briefly hold the database lease between failed binds.
+              const server = yield* launch.pipe(
+                Effect.catchIf(
+                  (error) => addressInUse(error) || (error instanceof Error && error.name === "ProcessOwnerBusy"),
+                  () => Effect.void,
+                ),
+              )
               if (server !== undefined) return server
             }
             return yield* Effect.fail(
