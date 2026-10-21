@@ -15,7 +15,6 @@ import {
   UnauthorizedError,
   UnsupportedProtocolVersionError,
   type CallToolRequestOptions,
-  type CallToolResult as SdkCallToolResult,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
@@ -29,6 +28,7 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
+import type { CallToolResult as SdkCallToolResult } from "@modelcontextprotocol/client"
 import {
   Cause,
   Clock,
