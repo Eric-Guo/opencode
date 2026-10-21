@@ -51,6 +51,8 @@ default:
     - bun install --frozen-lockfile
 
 .ci:
+  # Allow dependency installation and job scripts to share a one-hour budget.
+  timeout: 3600 seconds
   # All jobs participate in the pipeline types allowed by workflow, including merge requests.
   rules:
     - when: on_success
@@ -60,7 +62,6 @@ default:
 check:
   extends: .ci
   stage: check
-  timeout: 20 minutes
   variables:
     # lint:changed needs the MR diff base even when it predates the shallow checkout.
     GIT_DEPTH: "0"
@@ -81,7 +82,6 @@ check:
 unit:
   extends: .ci
   stage: test
-  timeout: 30 minutes
   script:
     # Permission-denial tests need an ordinary user; the Playwright image starts as root.
     - chown -R pwuser:pwuser "$CI_PROJECT_DIR"
@@ -93,7 +93,6 @@ unit:
 packages:
   extends: .ci
   stage: test
-  timeout: 20 minutes
   script:
     - bun run --cwd packages/codemode script/publish.ts --dry-run
     - bun turbo verify:package --filter=@opencode/sdk
@@ -101,7 +100,6 @@ packages:
 .browser:
   extends: .ci
   stage: test
-  timeout: 20 minutes
   variables:
     PLAYWRIGHT_JUNIT_OUTPUT_FILE: "$CI_PROJECT_DIR/reports/playwright.xml"
     PLAYWRIGHT_HTML_OUTPUT_DIR: "$CI_PROJECT_DIR/reports/html"
@@ -141,7 +139,6 @@ components:
 build:
   extends: .ci
   stage: build
-  timeout: 30 minutes
   script:
     - bun turbo build --concurrency=2 --filter='@opencode/cli^...' --filter='@opencode/app^...'
     - cd packages/cli
