@@ -1,7 +1,4 @@
-// Deep imports: the @effect/platform-node barrel eagerly pulls in undici,
-// ioredis, and node:sqlite, which runtimes such as workerd cannot load.
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
-import * as NodePath from "@effect/platform-node/NodePath"
+import { NodeFileSystem, NodePath } from "./node-platform.js"
 import { FileSystem, Path } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
 import { makeGlobalNode } from "./app-node.js"

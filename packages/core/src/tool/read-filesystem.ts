@@ -163,7 +163,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
 
   if (first.bytes.length >= first.info.size) {
     const result = textPage(first.bytes, true, page)
-    if (result === undefined) return yield* Effect.die("Read page did not settle for a complete first chunk")
+    if (result === undefined) return yield* Effect.die(new Error("Read page did not settle for a complete first chunk"))
     return yield* makeTextPage(
       input,
       resource,
