@@ -103,7 +103,14 @@ test.skipIf(process.platform !== "linux")(
   },
 )
 
-test.skipIf(process.platform !== "linux" || !Bun.which("unshare"))(
+// Container seccomp policies can deny unshare even when the executable is installed.
+const canUnshare =
+  process.platform === "linux" &&
+  Boolean(Bun.which("unshare")) &&
+  Bun.spawnSync(["unshare", "-Urnpf", "--mount-proc", "--kill-child", "true"], { stdout: "ignore", stderr: "ignore" })
+    .exitCode === 0
+
+test.skipIf(!canUnshare)(
   "foreign PID/network ownership stays blocked even after SIGKILL",
   async () => {
     const root = await mkdtemp(join(tmpdir(), "opencode-database-owner-namespace-"))
