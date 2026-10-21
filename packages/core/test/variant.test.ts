@@ -508,12 +508,12 @@ test("spells GitLab Duo variants for gitlab-ai-provider routes", () => {
   expect(resolve(gitlab("duo-workflow-opus-5-5"), [{ type: "effort" }])).toEqual([])
 })
 
-test("spells reasoning variants for every bundled native package", () => {
+test("omits reasoning variants only for the bundled image generation package", () => {
   const supports: Variant.Support[] = [{ type: "toggle" }, { type: "effort" }, { type: "budget_tokens" }]
   const missing = Array.from(Provider.builtinPackages).filter(
     (packageName) => Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
   )
-  expect(missing).toEqual([])
+  expect(missing).toEqual(["@opencode/ai/providers/openai/images"])
 })
 
 test("spells Mantle variants for the API each model is routed through", () => {
