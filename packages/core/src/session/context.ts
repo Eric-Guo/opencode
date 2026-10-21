@@ -137,9 +137,10 @@ const layer = Layer.effect(
           },
           { kind: "title", agent: agent.id },
         ).pipe(Effect.orElseSucceed(() => undefined)))
-      const selected = preferred ?? primary
+      const fallback = primary && Model.supportsText(primary) ? primary : undefined
+      const selected = preferred && Model.supportsText(preferred) ? preferred : fallback
       if (!selected) return
-      return { agent: yield* resolveAgentSystem(agent), primary, selected }
+      return { agent: yield* resolveAgentSystem(agent), primary: fallback, selected }
     })
 
     const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
