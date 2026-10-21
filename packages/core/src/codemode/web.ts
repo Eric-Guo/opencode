@@ -2,6 +2,7 @@ export * as CodeModeWeb from "./web.js"
 
 import { Extension } from "@opencode/codemode"
 import { isRecord } from "@opencode/ai/utils/record"
+import { Schema } from "effect"
 
 const TIMEOUT_MS = 30_000
 
@@ -35,7 +36,7 @@ const fetch = async (input: string | URL, init: Init = {}) => {
       entries: () => Object.entries(headers),
     },
     text: async () => text(),
-    json: async () => JSON.parse(text()) as unknown,
+    json: async () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(text()),
     bytes: async () => bytes,
   }
 }
