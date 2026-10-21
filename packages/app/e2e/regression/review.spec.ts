@@ -755,6 +755,9 @@ test("image files load into the review panel and keep it painted while loading",
   await page.getByRole("button", { name: "Toggle review" }).click()
   await expect(page.locator('#review-panel [data-component="session-review-v2"]')).toBeVisible()
 
+  // Finish opening the panel before measuring frames during the image selection.
+  await page.getByRole("button", { name: /preview\.png/ }).click({ trial: true })
+
   // Records every painted frame from before the click until after the image read completes.
   await page.evaluate(() => {
     const probe: ImageProbe = { problems: [], frames: 0, running: true }
