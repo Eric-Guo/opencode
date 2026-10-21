@@ -1,8 +1,5 @@
 /* oxlint-disable */
-import * as Context from "effect/Context"
-import * as Effect from "effect/Effect"
-import * as Exit from "effect/Exit"
-import * as Scope from "effect/Scope"
+import { Context, Effect, Exit, Scope } from "effect"
 import type { SqlClient } from "effect/sql/SqlClient"
 import type { SqlError } from "effect/sql/SqlError"
 import type { EffectCacheShape } from "drizzle-orm/cache/core/cache-effect"
