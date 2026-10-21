@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite"
+import { Schema } from "effect"
 import { createHash, randomUUID } from "node:crypto"
 import { lstat, mkdir, open, readdir, readlink, rm } from "node:fs/promises"
 import path from "node:path"
@@ -12,31 +13,47 @@ export type Command =
   | { op: "submit"; text: string; durationMs: number; sessionId?: string }
   | { op: "query" | "result" | "cancel"; taskId: string }
 
-export type Task = {
-  id: string
-  sessionId: string
-  text: string
-  durationMs: number
-  state: "queued" | "running" | "completed" | "cancelled"
-  result: string | null
-  starts: number
-}
+const Task = Schema.Struct({
+  id: Schema.String,
+  sessionId: Schema.String,
+  text: Schema.String,
+  durationMs: Schema.Number,
+  state: Schema.Literals(["queued", "running", "completed", "cancelled"]),
+  result: Schema.NullOr(Schema.String),
+  starts: Schema.Number,
+})
+export type Task = typeof Task.Type
 
-export type Reply = {
-  id: string
-  ownerId: string
-  hash: string
-  task?: Task
-  sessions?: string[]
-  error?: string
-  active?: number
-  maxActive?: number
-  pidNamespace?: string
-  netNamespace?: string
-}
+const Reply = Schema.Struct({
+  id: Schema.String,
+  ownerId: Schema.String,
+  hash: Schema.String,
+  task: Schema.optional(Task).pipe(Schema.mutableKey),
+  sessions: Schema.optional(Schema.Array(Schema.String)).pipe(Schema.mutableKey),
+  error: Schema.optional(Schema.String).pipe(Schema.mutableKey),
+  active: Schema.optional(Schema.Number),
+  maxActive: Schema.optional(Schema.Number),
+  pidNamespace: Schema.optional(Schema.String),
+  netNamespace: Schema.optional(Schema.String),
+})
+export type Reply = typeof Reply.Type
 
 type Envelope = { version: 1; id: string; ownerId: string; command: Command }
-type Owner = { id: string; pid: number; startedAt: number; pidNamespace: string; netNamespace: string }
+const Owner = Schema.Struct({
+  id: Schema.String,
+  pid: Schema.Number,
+  startedAt: Schema.Number,
+  pidNamespace: Schema.String,
+  netNamespace: Schema.String,
+})
+type Owner = typeof Owner.Type
+const decodeOwner = Schema.decodeUnknownSync(Schema.fromJsonString(Owner))
+const decodeReply = Schema.decodeUnknownSync(Schema.fromJsonString(Reply))
+const decodeEnvelope = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({ version: Schema.Literal(1), id: Schema.String, ownerId: Schema.String, command: Schema.Unknown }),
+  ),
+)
 const maxBytes = 65_536
 
 function parseCommand(input: unknown): Command {
@@ -75,7 +92,7 @@ function digest(command: Command) {
 
 async function readOwner(root: string): Promise<Owner> {
   await directory(path.join(root, "worker.lock"))
-  const value = JSON.parse(await privateRead(path.join(root, "worker.lock", "owner.json"))) as Owner
+  const value = decodeOwner(await privateRead(path.join(root, "worker.lock", "owner.json")))
   id(value.id)
   return value
 }
@@ -120,7 +137,7 @@ export async function connect(root: string, options: { timeoutMs?: number; pollM
           },
         )
         if (raw) {
-          const reply = JSON.parse(raw) as Reply
+          const reply = decodeReply(raw)
           if (reply.id !== requestId || reply.ownerId !== owner.id || reply.hash !== hash)
             throw new Error("Reply identity conflict")
           return reply
@@ -200,7 +217,7 @@ export async function startWorker(root: string, options: { concurrency?: number;
       .query<{ hash: string; reply: string }, [string]>("SELECT hash, reply FROM requests WHERE id = ?")
       .get(envelope.id)
     if (previous)
-      return previous.hash === hash ? (JSON.parse(previous.reply) as Reply) : { ...reply, error: "request_id_conflict" }
+      return previous.hash === hash ? decodeReply(previous.reply) : { ...reply, error: "request_id_conflict" }
     const command = envelope.command
     if (command.op === "ping")
       Object.assign(reply, {
@@ -251,8 +268,8 @@ export async function startWorker(root: string, options: { concurrency?: number;
         if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}\.json$/.test(name) || seen.has(name)) continue
         const envelope = await privateRead(path.join(root, "requests", name))
           .then((raw) => {
-            const value = JSON.parse(raw) as Envelope
-            if (value.version !== 1 || `${id(value.id)}.json` !== name) throw new Error("Invalid envelope")
+            const value = decodeEnvelope(raw)
+            if (`${id(value.id)}.json` !== name) throw new Error("Invalid envelope")
             id(value.ownerId)
             return { version: 1 as const, id: value.id, ownerId: value.ownerId, command: parseCommand(value.command) }
           })
