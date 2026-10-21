@@ -6,7 +6,7 @@ import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Schema } from "effect"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -39,6 +39,27 @@ test("execute rejects filesystem fetches", async () => {
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+test("fetch JSON accepts arbitrary JSON values and rejects malformed text", async () => {
+  const tool = createCodeMode(new Map())
+  const result = await Effect.runPromise(
+    tool.execute(
+      {
+        code: 'return await (await fetch("data:application/json,%7B%22values%22%3A%5Bnull%2Ctrue%2C42%5D%7D")).json()',
+      },
+      context,
+    ),
+  )
+
+  expect(result.output.error).toBeUndefined()
+  expect(JSON.parse(result.output.output)).toEqual({ values: [null, true, 42] })
+
+  const invalid = await Effect.runPromise(
+    tool.execute({ code: 'return await (await fetch("data:application/json,invalid")).json()' }, context),
+  )
+
+  expect(invalid.output.error).toBe(true)
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
@@ -101,6 +122,28 @@ test("declared outputs cannot bypass validation and raw outputs stay JSON-compat
   expect((await Effect.runPromiseExit(execute(invalid, {}, context))).toString()).toContain(
     "Tool returned a non-JSON value",
   )
+})
+
+test("undeclared output remains an Error defect rather than a model-facing failure", async () => {
+  const exit = await Effect.runPromiseExit(
+    execute(
+      {
+        name: "undeclared",
+        description: "Unexpected output",
+        input: Schema.Struct({}),
+        execute: () => Effect.succeed({ output: "unexpected" }),
+      },
+      {},
+      context,
+    ),
+  )
+
+  if (exit._tag !== "Failure") throw new Error("Expected a defect")
+  expect(exit.cause.reasons).toHaveLength(1)
+  const reason = exit.cause.reasons[0]
+  if (!Cause.isDieReason(reason)) throw new Error("Expected a defect, not a typed failure")
+  expect(reason.defect).toBeInstanceOf(Error)
+  expect(reason.defect).toMatchObject({ message: "Tool result declared output without an output schema" })
 })
 
 test("foreign typed failures settle as Tool.Error at the untrusted boundary", async () => {

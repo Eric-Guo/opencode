@@ -1,6 +1,6 @@
 import { isArrayNonEmpty } from "effect/Array"
-import * as NodeSink from "@effect/platform-node/NodeSink"
-import * as NodeStream from "@effect/platform-node/NodeStream"
+import { fromWritable } from "@effect/platform-node/NodeSink"
+import { fromReadable } from "@effect/platform-node/NodeStream"
 import { Deferred, Effect, Exit, FileSystem, Layer, Path, PlatformError, Predicate, Sink, Stream } from "effect"
 import type { Scope } from "effect"
 import { ChildProcess } from "effect/process"
@@ -12,7 +12,7 @@ import {
   ProcessId,
   type ChildProcessHandle,
 } from "effect/process/ChildProcessSpawner"
-import * as NodeChildProcess from "node:child_process"
+import NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
@@ -186,7 +186,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
         case "input": {
           let sink: Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError> = Sink.drain
           if (node && "write" in node) {
-            sink = NodeSink.fromWritable({
+            sink = fromWritable({
               evaluate: () => node,
               onError: (err) => toPlatformError(`fromWritable(fd${x.fd})`, toError(err), command),
               endOnDone: true,
@@ -202,7 +202,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
             const tap = new PassThrough()
             node.on("error", (err) => tap.destroy(toError(err)))
             node.pipe(tap)
-            stream = NodeStream.fromReadable({
+            stream = fromReadable({
               evaluate: () => tap,
               onError: (err) => toPlatformError(`fromReadable(fd${x.fd})`, toError(err), command),
             })
@@ -228,7 +228,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     Effect.suspend(() => {
       let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
       if (Predicate.isNotNull(proc.stdin)) {
-        sink = NodeSink.fromWritable({
+        sink = fromWritable({
           evaluate: () => proc.stdin!,
           onError: (err) => toPlatformError("fromWritable(stdin)", toError(err), command),
           endOnDone: cfg.endOnDone,
@@ -252,7 +252,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       const buffer = new PassThrough()
       readable.on("error", (cause) => buffer.destroy(toError(cause)))
       readable.pipe(buffer)
-      return NodeStream.fromReadable({
+      return fromReadable({
         evaluate: () => buffer,
         onError: (cause) => toPlatformError(`fromReadable(${name})`, toError(cause), command),
       }).pipe(
