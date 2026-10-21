@@ -1,6 +1,6 @@
 export * as ThapeSsoProtection from "./thape-sso-protection"
 
-import { define, type Context as PluginContext } from "@opencode/plugin/effect/plugin"
+import { define, type Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
 import { isApiKeyEnvName } from "../thape-sso"
@@ -10,7 +10,7 @@ export const REDACTED = "[REDACTED]"
 
 export const Plugin = define({
   id: ID,
-  effect: Effect.fn("ThapeSsoProtection.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("ThapeSsoProtection.Plugin")(function* (ctx: Context) {
     yield* ctx.model.transform((models) => {
       // SSO supplies the OpenCode key to users with Zen/Go access; VIPAI still uses its own key for requests.
       if (process.env.OPENCODE_API_KEY?.trim()) return
