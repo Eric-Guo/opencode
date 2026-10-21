@@ -57,7 +57,12 @@ const Settings = {
 }
 
 const OpenAIImageResponse = Schema.Struct({
-  data: Schema.Array(Schema.Struct({ b64_json: Schema.String })),
+  data: Schema.Array(
+    Schema.Struct({
+      b64_json: Schema.optional(Schema.NullOr(Schema.String)),
+      url: Schema.optional(Schema.NullOr(Schema.String)),
+    }),
+  ),
   ...Settings,
   usage: Schema.optional(Usage),
 })
@@ -232,7 +237,7 @@ const onDocument = Effect.fnUntraced(function* (frame: Exclude<Frame, string>) {
   const format = decoded.output_format
   const mediaType = format === undefined ? undefined : `image/${format}`
   const images = yield* Effect.forEach(decoded.data, (item, index) =>
-    MediaInput.decodedAsset(invalid, `${route.name} result ${index}`, item.b64_json, mediaType, {
+    MediaInput.imageOutput(invalid, `${route.name} result ${index}`, item, mediaType, {
       info: info(format, decoded.size),
     }),
   )
