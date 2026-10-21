@@ -2,7 +2,7 @@ export * as CodeModeFetch from "./fetch.js"
 
 import { Extension } from "@opencode/codemode"
 import { isRecord } from "@opencode/util/record"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Permission } from "../permission.js"
 import { CodeModeExecution } from "./execution.js"
 
@@ -124,7 +124,7 @@ const read = async (result: { response: Response; url: string; redirects: number
       entries: () => Object.entries(headers),
     },
     text: async () => text(),
-    json: async () => JSON.parse(text()) as unknown,
+    json: async () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(text()),
     bytes: async () => bytes,
   }
 }
