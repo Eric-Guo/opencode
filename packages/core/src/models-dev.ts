@@ -93,15 +93,26 @@ function nativePackage(provider: SourceProvider, model?: SourceModel) {
   )
 }
 
-const sources = new WeakMap<Snapshot, SourceProvider>()
+type CatalogSource = { data: { text: string } | { value: Record<string, SourceProvider> } }
+
+// Share the original JSON with cache validation; decode only when source() is used.
+const sources = new WeakMap<Snapshot, { catalog: CatalogSource; key: string }>()
 
 export function source(snapshot: Snapshot) {
-  return sources.get(snapshot)
+  const entry = sources.get(snapshot)
+  if (!entry) return
+
+  if ("text" in entry.catalog.data) {
+    entry.catalog.data = { value: JSON.parse(entry.catalog.data.text) as Record<string, SourceProvider> }
+  }
+
+  return entry.catalog.data.value[entry.key]
 }
 
-function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
+function normalize(input: Record<string, SourceProvider>, text = JSON.stringify(input)): readonly Snapshot[] {
+  const catalog: CatalogSource = { data: { text } }
   const providers: Snapshot[] = []
-  for (const item of Object.values(input)) {
+  for (const [key, item] of Object.entries(input)) {
     const providerID = Provider.ID.make(item.id)
     const packageName = nativePackage(item)
     const info = {
@@ -133,7 +144,7 @@ function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
       }
     }
     const snapshot = { info, models, environment: [...item.env] }
-    sources.set(snapshot, item)
+    sources.set(snapshot, { catalog, key })
     providers.push(snapshot)
   }
   return providers
@@ -283,7 +294,7 @@ const Cache = Schema.Struct({
   // Digest of the raw body, persisted so refresh() can skip republishing a
   // byte-identical catalog. Optional for entries written before it existed.
   digest: Schema.optional(Schema.String),
-  body: CatalogJson,
+  body: Schema.String,
 })
 const defaultSource = "https://models.opencode.ai"
 
@@ -298,11 +309,14 @@ const bundledSnapshot = Effect.suspend(() =>
   bundledCache
     ? Effect.succeed(bundledCache)
     : Effect.try(load).pipe(
-        Effect.flatMap(decodeCatalog),
-        Effect.map((catalog) => {
-          bundledCache = normalize(catalog)
-          return bundledCache
-        }),
+        Effect.flatMap((text) =>
+          decodeCatalog(text).pipe(
+            Effect.map((catalog) => {
+              bundledCache = normalize(catalog, text)
+              return bundledCache
+            }),
+          ),
+        ),
       ),
 )
 
@@ -339,16 +353,23 @@ export const layer = (options?: Options) =>
       const key = cacheKey(source)
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
+      let validatedBody: string | undefined
 
       const loadFromCache = Effect.fnUntraced(function* () {
         const value = yield* kv.get(key)
         const cached = Schema.decodeUnknownOption(Cache)(value)
-        if (Option.isSome(cached))
-          return {
-            catalog: cached.value.body as Record<string, SourceProvider>,
-            updatedAt: cached.value.updatedAt,
-            digest: cached.value.digest,
+        if (Option.isSome(cached)) {
+          // Compare the actual JSON so corrupted data cannot reuse valid metadata. The same
+          // text backs source(), avoiding both a second parsed catalog and repeated hashing.
+          if (cached.value.body === validatedBody) return { ...cached.value, body: validatedBody, catalog: undefined }
+
+          const catalog = Schema.decodeUnknownOption(CatalogJson)(cached.value.body)
+          if (Option.isSome(catalog)) {
+            validatedBody = cached.value.body
+            return { ...cached.value, catalog: catalog.value as Record<string, SourceProvider> }
           }
+        }
+
         if (value !== undefined) yield* kv.remove(key)
       })
 
@@ -383,31 +404,32 @@ export const layer = (options?: Options) =>
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
           ),
         )
+        validatedBody = text
       })
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const text = yield* fetchApi()
         const catalog = yield* decodeCatalog(text)
         yield* writeCache(text)
-        return catalog
+        return { catalog, body: text }
       })
 
       const populate = Effect.gen(function* () {
         const fromFile = yield* loadFromFile
         if (fromFile) return normalize(fromFile)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return normalize(cached.catalog)
+        if (cached) return normalize(cached.catalog ?? (yield* decodeCatalog(cached.body)), cached.body)
         const bundled = yield* loadSnapshot
         if (bundled) return bundled
         if (!fetch) return []
-        const catalog = yield* lock.withPermit(
+        const loaded = yield* lock.withPermit(
           Effect.gen(function* () {
             const stored = options?.file ? undefined : yield* loadFromCache()
-            if (stored) return stored.catalog
+            if (stored) return { catalog: stored.catalog ?? (yield* decodeCatalog(stored.body)), body: stored.body }
             return yield* fetchAndWrite()
           }),
         )
-        return normalize(catalog)
+        return normalize(loaded.catalog, loaded.body)
       }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
       const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)

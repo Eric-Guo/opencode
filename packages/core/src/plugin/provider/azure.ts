@@ -384,7 +384,7 @@ export function make(
           )
             continue
           const resourceName = resourceFor(item.provider)
-          for (const model of models.list(item.provider.id)) {
+          for (const model of models.read.list(item.provider.id)) {
             models.update(item.provider.id, model.id, (draft) => {
               if (resourceName && typeof draft.settings?.baseURL === "string")
                 draft.settings.baseURL = expandResourceName(
@@ -397,7 +397,7 @@ export function make(
         if (!loaded.deployments) return
         // Narrowing here rather than in the provider catalog keeps every catalog model available as the base
         // of a model the user configures explicitly; those are applied after this transform.
-        const catalog = models.list(Provider.ID.azure)
+        const catalog = models.read.list(Provider.ID.azure)
         const deployed = deployedModels(loaded.deployments, catalog)
         for (const model of catalog) {
           if (!deployed.has(model.id)) models.remove(Provider.ID.azure, model.id)
@@ -505,14 +505,14 @@ function resourceQuery(resource: string) {
 // A deployment's ID is its name, while limits, costs, and routes come from the catalog model it deploys. Azure compares
 // names without case and may return another case, so IDs are lowercase like the catalog's.
 // https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules
-function deployedModels(deployments: readonly Deployment[], catalog: readonly Model.MutableInfo[]) {
+function deployedModels(deployments: readonly Deployment[], catalog: readonly Model.Info[]) {
   const models = new Map(catalog.map((model) => [model.id.toLowerCase(), model]))
   return new Map(
     deployments.flatMap((deployment) => {
       const model = catalogModel(models, deployment)
       if (!model) return []
       const id = Model.ID.make(deployment.name.toLowerCase())
-      const info: Model.MutableInfo = {
+      const info: Model.Info = {
         ...structuredClone(model),
         id,
         modelID: Model.ID.make(deployment.name),
