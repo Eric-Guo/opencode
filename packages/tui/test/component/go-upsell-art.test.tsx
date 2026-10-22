@@ -14,7 +14,7 @@ const colors = {
   logoBase: RGBA.fromHex("#9a9a9a"),
 }
 
-test("the art ticks at 30 fps only while drawn and animating, and leaves nothing ticking after repeated opens", async () => {
+test.each([false, true])("the art ticks at 30 fps only while drawn and animating (rgb: %s)", async (rgb) => {
   const [open, setOpen] = createSignal(true)
   const [visible, setVisible] = createSignal(true)
   const [animate, setAnimate] = createSignal(true)
@@ -52,13 +52,13 @@ test("the art ticks at 30 fps only while drawn and animating, and leaves nothing
   const setCell = spyOn(OptimizedBuffer.prototype, "setCell")
 
   try {
-    setRendererCapabilities(app.renderer, { rgb: false })
+    setRendererCapabilities(app.renderer, { rgb })
     await app.renderOnce()
     expect([art!.animationFps, tickers()]).toEqual([30, 1])
     // Each frame is one direct write into the art's own buffer, never a draw call per cell.
     expect(draws).toHaveBeenCalledTimes(1)
     expect(setCell).not.toHaveBeenCalled()
-    expect(app.captureCharFrame()).toContain("█▀▀▀ █▀▀█")
+    expect(app.captureCharFrame()).toContain(rgb ? "▀ ▀▀ ▀  ▀" : "█▀▀▀ █▀▀█")
     await run(1000)
     const pictures = new Set<string>()
     let drawn = 0
