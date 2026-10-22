@@ -10,6 +10,7 @@ import { DesktopLogging, scoped } from "../native/logging"
 import { sendMenuCommand } from "../native/menu"
 import { onNativeTranslations } from "../native/translations"
 import { DesktopStorage } from "../storage"
+import { DesktopProxy } from "../network"
 import { safeWebContentsOrigin } from "../windows/state"
 import { getLastFocusedWindow, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
@@ -254,10 +255,13 @@ const runtime = Layer.effect(
 
 // Storage opens after the entry module has set userData and before the renderer loads, so window
 // teardown can clear a window's persisted state and every renderer request finds it ready.
+const storage = DesktopStorage.layer.pipe(Layer.provide(DesktopLogging.layer))
+
 const platform = Layer.mergeAll(
   DesktopLogging.layer,
   Shutdown.layer,
-  DesktopStorage.layer.pipe(Layer.provide(DesktopLogging.layer)),
+  storage,
+  DesktopProxy.layer.pipe(Layer.provide(storage)),
 )
 
 export const layer = Layer.unwrap(
