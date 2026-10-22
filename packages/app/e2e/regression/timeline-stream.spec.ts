@@ -1581,7 +1581,7 @@ test("changes timeline presets and saves custom thinking details", async ({ page
   })
   const part = page.locator(`[data-timeline-part-id="${assistantID}:reasoning:0"]`)
   const settings = page.getByTestId("settings-screen")
-  await page.keyboard.press("Control+,")
+  await page.keyboard.press("ControlOrMeta+,")
   const slider = settings.getByRole("slider", { name: "Timeline detail", exact: true })
   await expect(slider).toBeEnabled()
   await slider.press("Home")
