@@ -266,6 +266,53 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  isolated.effect("reads shared candidates without copying and preserves mutable editor access", () =>
+    Effect.gen(function* () {
+      const fixture = richSnapshot()
+      const first = yield* owner
+      yield* ModelsDevPlugin.effect(first.host).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({ get: () => Effect.succeed(fixture.snapshot), refresh: () => Effect.void }),
+        ),
+        Effect.provideContext(first.context),
+      )
+      yield* activate(first.providers)
+      const scope = yield* Scope.make()
+      yield* first.host.model
+        .transform((editor) => {
+          const shared = required(editor.read.get(fixture.providerID, fixture.modelID))
+          expect(shared).toBe(fixture.snapshot[0].models[0])
+          expect(editor.read.list(fixture.providerID)[0]).toBe(shared)
+          expect(editor.read.list()[0]).toBe(shared)
+          expect(editor.read.list("missing")).toEqual([])
+          expect(editor.read.get(fixture.providerID, "missing")).toBeUndefined()
+
+          const draft = required(editor.get(fixture.providerID, fixture.modelID))
+          expect(draft).not.toBe(shared)
+          draft.limit.context = 17
+          draft.enabled = false
+          expect(editor.read.get(fixture.providerID, fixture.modelID)).toBe(draft)
+          expect(editor.read.list(fixture.providerID)[0]?.limit.context).toBe(17)
+          expect(editor.read.list(fixture.providerID)[0]?.enabled).toBe(false)
+
+          const listed = required(editor.list(fixture.providerID)[0])
+          expect(listed).toBe(draft)
+          listed.capabilities.input.push("image")
+        })
+        .pipe(Scope.provide(scope))
+      expect(required(yield* first.models.get(fixture.providerID, fixture.modelID)).capabilities.input).toEqual([
+        "text",
+        "image",
+      ])
+      expect(fixture.snapshot[0].models[0].limit.context).toBe(1_050_000)
+      expect(fixture.snapshot[0].models[0].capabilities.input).toEqual(["text"])
+
+      yield* Scope.close(scope, Exit.void)
+      expect(required(yield* first.models.get(fixture.providerID, fixture.modelID)).limit.context).toBe(1_050_000)
+    }),
+  )
+
   isolated.effect("replaces its snapshot reference on refresh without touching the sibling Location", () =>
     Effect.gen(function* () {
       const initial = richSnapshot("Acme")
