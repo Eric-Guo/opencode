@@ -1,15 +1,87 @@
 import http from "node:http"
-import type { Session } from "electron"
+import type { ProxyConfig, Session } from "electron"
+import type { DesktopProxySettings } from "../extension"
 
 const LOOPBACK_BYPASS = ["127.0.0.1", "localhost", "::1"]
 
 type NodeHttpWithEnvProxy = typeof http & {
-  setGlobalProxyFromEnv?: () => void
+  setGlobalProxyFromEnv?: (env: Record<string, string | undefined>) => () => void
 }
 
 export type ElectronProxyConfig = {
   proxyRules: string
   proxyBypassRules: string
+}
+
+export function getProxyEnvironment(settings: DesktopProxySettings, env: Record<string, string | undefined>) {
+  const bypass = settings.mode === "manual" ? settings.bypass : readEnv(env, "no_proxy")
+
+  const noProxy = [
+    ...new Set([
+      ...(settings.mode === "direct" ? "*" : (bypass ?? ""))
+        .split(/[;,]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+      ...LOOPBACK_BYPASS,
+      "[::1]",
+    ]),
+  ].join(",")
+
+  return Object.fromEntries(
+    ["http_proxy", "https_proxy", "all_proxy", "ws_proxy", "wss_proxy", "no_proxy"].flatMap((key) => {
+      const value =
+        key === "no_proxy"
+          ? noProxy
+          : settings.mode === "manual"
+            ? settings.url
+            : settings.mode === "direct"
+              ? ""
+              : (readEnv(env, key) ?? "")
+
+      return [
+        [key, value],
+        [key.toUpperCase(), value],
+      ]
+    }),
+  )
+}
+
+export function getSessionProxyConfig(
+  settings: DesktopProxySettings,
+  env: Record<string, string | undefined>,
+): ProxyConfig {
+  if (settings.mode === "direct") return { mode: "direct" }
+  const config = getElectronProxyConfig(env)
+
+  if (!config) return { mode: "system" }
+
+  return {
+    mode: "fixed_servers",
+    ...config,
+    proxyRules: settings.mode === "manual" ? settings.url : config.proxyRules,
+  }
+}
+
+export function createSessionProxy(config: ProxyConfig) {
+  const pending = new WeakMap<Session, Promise<void>>()
+
+  return (session: Session) => {
+    const previous = pending.get(session)
+
+    if (previous) return previous
+
+    const ready = session
+      .setProxy(config)
+      .then(() => session.forceReloadProxyConfig())
+      .catch((error) => {
+        pending.delete(session)
+        throw error
+      })
+
+    pending.set(session, ready)
+
+    return ready
+  }
 }
 
 function readEnv(env: Record<string, string | undefined>, key: string) {
@@ -92,40 +164,11 @@ export function getElectronProxyConfig(
   }
 }
 
-export function configureProxyCommandLine(
-  commandLine: { appendSwitch: (switchName: string, value?: string) => void },
-  env: Record<string, string | undefined> = process.env,
-) {
-  const config = getElectronProxyConfig(env)
+export function configureNodeProxyFromEnv(env: Record<string, string | undefined> = process.env) {
+  // SAFETY: The shipped Node/Electron runtime exposes this newer API ahead of @types/node.
+  const configure = (http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv
 
-  if (!config) return null
+  if (!configure) throw new Error("The Node runtime does not support environment proxies")
 
-  commandLine.appendSwitch("proxy-server", config.proxyRules)
-  commandLine.appendSwitch("proxy-bypass-list", config.proxyBypassRules)
-
-  return config
-}
-
-export async function configureSessionProxy(session: Session, env: Record<string, string | undefined> = process.env) {
-  const config = getElectronProxyConfig(env)
-
-  if (!config) return null
-
-  await session.setProxy({
-    mode: "fixed_servers",
-    proxyRules: config.proxyRules,
-    proxyBypassRules: config.proxyBypassRules,
-  })
-  await session.forceReloadProxyConfig()
-
-  return config
-}
-
-export function configureNodeProxyFromEnv(onError?: (cause: unknown) => void) {
-  try {
-    // SAFETY: This probes Node's optional newer environment-proxy API; unsupported versions skip the call.
-    (http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv?.()
-  } catch (error) {
-    onError?.(error)
-  }
+  return configure(env)
 }
