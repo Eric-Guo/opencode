@@ -114,7 +114,7 @@ test("an open session's terminal follows its WSL server to the endpoint it resta
   await page.keyboard.press("Control+Backquote")
   await expect.poll(() => servers[REMOTE_SERVER]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_before1"])
 
-  await page.keyboard.press("Control+,")
+  await page.keyboard.press("ControlOrMeta+,")
   const settings = page.getByTestId("settings-screen")
   await settings.getByRole("tab", { name: "Ubuntu", exact: true }).click()
   const connection = settings.locator('[data-component="settings-server-connection"]')
@@ -172,7 +172,7 @@ test("WSL session and draft tabs outlive the extension going away until the serv
   await tabs.nth(0).click()
   await expectSessionTitle(page, wsl.title)
 
-  await page.keyboard.press("Control+,")
+  await page.keyboard.press("ControlOrMeta+,")
   const settings = page.getByTestId("settings-screen")
   await settings.getByRole("tab", { name: "Ubuntu", exact: true }).click()
   const connection = settings.locator('[data-component="settings-server-connection"]')

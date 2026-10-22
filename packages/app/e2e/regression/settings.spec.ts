@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, WorktreeDirectory } from "@opencode/client/promise"
-import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
+import { isMac, NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSettings, type WorkspaceInput } from "../utils/workspace"
 
@@ -62,7 +62,7 @@ test("settings has its own route and returns through app history", async ({ page
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
   await expect(page).toHaveURL("/")
   await expect(home).toHaveAttribute("aria-pressed", "true")
-  await page.keyboard.press("Control+]")
+  await page.keyboard.press("ControlOrMeta+]")
   await expect(page).toHaveURL("/settings")
   await expect(home).toHaveAttribute("aria-pressed", "false")
   await home.click()
@@ -70,7 +70,7 @@ test("settings has its own route and returns through app history", async ({ page
   await expect(settings).toBeHidden()
 })
 
-test("Ctrl+, opens settings as soon as the app loads", async ({ page }) => {
+test("The settings shortcut opens settings as soon as the app loads", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Settings demo",
     directory,
@@ -79,7 +79,7 @@ test("Ctrl+, opens settings as soon as the app loads", async ({ page }) => {
     seed: { tabs: [] },
   })
   await page.goto("/")
-  await page.keyboard.press("Control+,")
+  await page.keyboard.press("ControlOrMeta+,")
   await expect(page.getByTestId("settings-screen")).toBeVisible()
   await expect(page).toHaveURL("/settings")
 })
@@ -390,7 +390,7 @@ test("the new session shortcut waits for a shortcut recording, then leaves setti
   await binding.click()
   await expect(binding).toHaveText("Press keys")
   await page.keyboard.press("Control+t")
-  await expect(binding).toHaveText("Ctrl+T")
+  await expect(binding).toHaveText((await isMac(page)) ? "⌃T" : "Ctrl+T")
   await expect(page).toHaveURL("/settings?tab=shortcuts")
   await expect(page.locator("[data-titlebar-tab]")).toHaveCount(0)
 
