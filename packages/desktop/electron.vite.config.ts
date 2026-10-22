@@ -144,13 +144,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
           command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
         ),
       },
-      plugins: [
-        { ...pickerPlugin(), transformIndexHtml: undefined },
-        appPlugin,
-        initialChunk,
-        extension?.assetsPlugin,
-        sentry,
-      ],
+      plugins: [pickerPlugin(), appPlugin, initialChunk, extension?.assetsPlugin, sentry],
       publicDir: "../../../app/public",
       root: "src/renderer",
       build: {

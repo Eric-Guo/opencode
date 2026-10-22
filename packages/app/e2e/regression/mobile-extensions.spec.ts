@@ -193,7 +193,7 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
   page.off("request", recordWrite)
   expect(writes).toEqual([])
 
-  await page.keyboard.press("Control+,")
+  await page.keyboard.press("ControlOrMeta+,")
   const settings = page.getByTestId("settings-screen")
   const wrap = settings.getByRole("switch", { name: "Wrap lines", exact: true })
   const wrapControl = settings.locator('[data-action="settings-mobile-diff-wrap"] [data-slot="switch-control"]')
@@ -223,7 +223,7 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
   await navigation.getByRole("tab", { name: "Session", exact: true }).click()
   await navigation.getByRole("tab", { name: "Changes", exact: true }).click()
   await expect(modified.locator("[data-diff]")).toHaveAttribute("data-overflow", "scroll")
-  await page.keyboard.press("Control+,")
+  await page.keyboard.press("ControlOrMeta+,")
   await expect(wrap).not.toBeChecked()
   await wrapControl.click()
   await expect(wrap).toBeChecked()

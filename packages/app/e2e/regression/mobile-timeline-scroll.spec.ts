@@ -1,4 +1,5 @@
 import { devices, expect, test, type Page } from "@playwright/test"
+import { isMac } from "../utils/app"
 import {
   assistantMessage,
   partDelta,
@@ -268,9 +269,9 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
               element.removeEventListener("scrollend", settled)
             })
           })
-          await nested.press("Control+End")
+          await nested.press((await isMac(page)) ? "Meta+ArrowDown" : "Control+End")
           await expect(nested).toHaveAttribute("data-end-settled")
-          await nested.press("Control+Home")
+          await nested.press((await isMac(page)) ? "Meta+ArrowUp" : "Control+Home")
           await expect(nested).toHaveJSProperty("scrollTop", 0)
           expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(position, 0)
         }
@@ -508,7 +509,8 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         if (handoff.key.startsWith("Control+"))
           await scroller.evaluate((element) => {
             document.addEventListener("keydown", function observe(event) {
-              if (!event.ctrlKey || !["Home", "End"].includes(event.key)) return
+              if (!(event.ctrlKey || event.metaKey) || !["Home", "End", "ArrowUp", "ArrowDown"].includes(event.key))
+                return
               element.dataset.nativeScrollPrevented = String(event.defaultPrevented)
               document.removeEventListener("keydown", observe)
             })
@@ -577,7 +579,8 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
 
         if (handoff.key === "latest") await latest.click()
 
-        if (handoff.key !== "latest" && !usesScrollbar) await scroller.press(handoff.key)
+        if (handoff.key !== "latest" && !usesScrollbar)
+          await scroller.press(handoff.key === "Control+Home" && (await isMac(page)) ? "Meta+ArrowUp" : handoff.key)
 
         if (handoff.key.startsWith("Control+"))
           await expect(scroller).toHaveAttribute("data-native-scroll-prevented", "false")
