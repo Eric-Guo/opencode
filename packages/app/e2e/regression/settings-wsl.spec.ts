@@ -137,7 +137,7 @@ test("WSL session and draft tabs outlive the plugin going away until the server 
   await tabs.nth(0).click()
   await expectSessionTitle(page, wsl.title)
 
-  await page.keyboard.press("Control+,")
+  await page.keyboard.press("ControlOrMeta+,")
   const settings = page.getByTestId("settings-screen")
   await settings.getByRole("tab", { name: "Servers", exact: true }).click()
   const connection = settings.getByRole("region", { name: "Ubuntu", exact: true })
