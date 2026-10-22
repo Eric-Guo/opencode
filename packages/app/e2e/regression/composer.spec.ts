@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, T0, expectPath, provider, sessionHref } from "../utils/app"
+import { isMac, NO_PROVIDER, T0, expectPath, provider, sessionHref } from "../utils/app"
 import { openDraft, openSession } from "../utils/workspace"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
@@ -315,8 +315,9 @@ test("keeps a 25000-line crash report editable in a new session", async ({ page 
   await page.mouse.up()
   await expect(scroll.locator(".scroll-view__viewport")).toHaveJSProperty("scrollTop", 0)
   await expect(input).toBeFocused()
-  await page.keyboard.press("ControlOrMeta+Home")
-  await page.keyboard.press("ControlOrMeta+End")
+  const mac = await isMac(page)
+  await page.keyboard.press(mac ? "Meta+ArrowUp" : "Control+Home")
+  await page.keyboard.press(mac ? "Meta+ArrowDown" : "Control+End")
   await expectCaretVisible(input)
 })
 
