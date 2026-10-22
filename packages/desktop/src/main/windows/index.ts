@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { app, BrowserWindow, screen, WebContentsView } from "electron"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
+import { saveImageAs } from "../files/image"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
 import { DesktopStorage } from "../storage"
@@ -229,6 +230,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       },
       trackContents: (contents) => trackWebContents(win, contents),
       load: loadWebContents,
+      saveImageAs,
       openExternal,
       command: (id) => emitIpcEvent(getPrimaryWebContents(win), new MenuCommandTriggered({ id })),
       setControlColor: (color) => {
