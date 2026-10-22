@@ -10,6 +10,11 @@ export const REMOTE_SERVER = "http://127.0.0.1:4097"
 
 export const T0 = 1700000000000
 
+// A Windows user-agent fixture still uses native macOS keyboard behavior on a Mac host.
+export function isMac(page: Page) {
+  return page.evaluate(() => /(Mac|iPod|iPhone|iPad)/.test(navigator.platform))
+}
+
 export function sessionHref(sessionID: string, server = SERVER) {
   return `/server/${base64Encode(server)}/session/${sessionID}`
 }
