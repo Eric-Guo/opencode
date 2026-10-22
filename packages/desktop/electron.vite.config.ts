@@ -129,12 +129,7 @@ export default defineConfig(({ command }) => {
           command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
         ),
       },
-      plugins: [
-        { ...pickerPlugin(), transformIndexHtml: undefined },
-        appPlugin,
-        initialChunk,
-        extension?.assetsPlugin,
-      ],
+      plugins: [pickerPlugin(), appPlugin, initialChunk, extension?.assetsPlugin],
       publicDir: "../../../app/public",
       root: "src/renderer",
       build: {
