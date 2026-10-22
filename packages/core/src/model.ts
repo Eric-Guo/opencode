@@ -69,6 +69,11 @@ export interface Editor {
   /** Includes disabled candidates so later transforms can re-enable them. */
   readonly list: (providerID?: Provider.ID) => readonly MutableInfo[]
   readonly get: (providerID: Provider.ID, modelID: ID) => MutableInfo | undefined
+  /** Reads current candidates without making mutable copies. Use update() to edit them. */
+  readonly read: {
+    readonly list: (providerID?: Provider.ID) => readonly Info[]
+    readonly get: (providerID: Provider.ID, modelID: ID) => Info | undefined
+  }
   readonly update: (providerID: Provider.ID, modelID: ID, update: (model: MutableInfo) => void) => void
   readonly remove: (providerID: Provider.ID, modelID: ID) => void
   readonly default: {
@@ -142,6 +147,13 @@ const layer = Layer.effect(
             )
           },
           get: draft,
+          read: {
+            list: (providerID) =>
+              providerID === undefined
+                ? Array.from(data.models.values()).flatMap((models) => Array.from(models.values()))
+                : Array.from(data.models.get(providerID)?.values() ?? []),
+            get: (providerID, modelID) => data.models.get(providerID)?.get(modelID),
+          },
           update: (providerID, modelID, update) => {
             // Model edits cannot create/enable a provider or bypass its availability decision.
             const models = writable(providerID)

@@ -9,7 +9,7 @@ export const DatabricksPlugin = define({
       editor.method.update({ integrationID: "databricks", method: { type: "env", names: ["DATABRICKS_TOKEN"] } })
     })
     yield* ctx.model.transform((models) => {
-      for (const item of models.list("databricks")) {
+      for (const item of models.read.list("databricks")) {
         // Databricks caches Claude only through explicit `cache_control` breakpoints.
         if (!(item.modelID ?? item.id).includes("claude")) continue
         models.update(item.providerID, item.id, (model) => {
