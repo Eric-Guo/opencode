@@ -247,7 +247,7 @@ export const GithubCopilotPlugin = define({
       }
     })
     yield* ctx.model.transform((models) => {
-      if (models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"))) {
+      if (models.read.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"))) {
         models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"), (model) => {
           // This chat-only alias conflicts with the Copilot GPT-5 Responses route,
           // so hide it only for Copilot rather than for every provider catalog.
