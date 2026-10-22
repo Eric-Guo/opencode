@@ -275,7 +275,7 @@ export const OpenAIPlugin = define({
       })
     })
     yield* ctx.model.transform((models) => {
-      for (const model of models.list(Provider.ID.openai)) {
+      for (const model of models.read.list(Provider.ID.openai)) {
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
         models.update(model.providerID, model.id, (draft) => {
