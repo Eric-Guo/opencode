@@ -300,6 +300,7 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.dialog.chooseFolder": "Choose a folder",
   "desktop.dialog.chooseFile": "Choose a file",
   "desktop.dialog.saveFile": "Save file",
+  "desktop.dialog.saveImageFailed": "Failed to save image",
   "desktop.dialog.files": "Files",
   "desktop.onboarding.defaultProject": "Default Project",
 
