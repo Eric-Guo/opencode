@@ -20,6 +20,8 @@ export type DesktopWindowHost = {
   createPanel?(options: { id: string; html: string; preload: string }): WebContentsView
   trackContents(contents: WebContents): void
   load(contents: WebContents, html: string): Promise<void>
+  /** Save an image with the host's native dialog and inline-image file writer. */
+  saveImageAs?(contents: WebContents, url: string): Promise<void>
   openExternal(url: string): void
   command(id: string): void
   setControlColor(color?: string): void
