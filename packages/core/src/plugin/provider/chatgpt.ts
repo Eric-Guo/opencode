@@ -308,7 +308,7 @@ export const ChatGPTPlugin = define({
       })
     })
     yield* ctx.model.transform((models) => {
-      for (const model of models.list(providerID)) {
+      for (const model of models.read.list(providerID)) {
         models.update(model.providerID, model.id, (draft) => {
           if (!chatgpt) return
           draft.compatibility = { ...draft.compatibility, supportsEffortUpdates: false }
