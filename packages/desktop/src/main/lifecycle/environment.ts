@@ -8,6 +8,7 @@ import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../w
 import { scoped } from "../native/logging"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
 import extension from "#desktop-main-extension"
+import { saveImageAs } from "../files/image"
 
 // electron-context-menu attaches to every existing and future window, so it can load once the first
 // window is up instead of holding up startup with its dependency tree.
@@ -18,12 +19,10 @@ export const installContextMenu = Effect.gen(function* () {
     showLookUpSelection: false,
     showSearchWithGoogle: false,
     append: (defaultActions, parameters, browserWindow) => {
-      // data: image downloads can emit will-download with null WebContents, which crashes electron-dl.
-      // Electron's native download path already opens the Save As dialog.
       defaultActions.saveImageAs().click = () => {
         const contents = "webContents" in browserWindow ? browserWindow.webContents : browserWindow
 
-        contents.downloadURL(parameters.srcURL)
+        return saveImageAs(contents, parameters.srcURL)
       }
 
       return [
