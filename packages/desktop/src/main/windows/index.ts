@@ -6,6 +6,7 @@ import { saveImageAs } from "../files/image"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
 import { DesktopStorage } from "../storage"
+import { DesktopProxy } from "../network"
 import { getStore } from "../storage/store"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import { windowDataFile } from "../../shared/ipc-transport"
@@ -142,6 +143,7 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve(app.getAppPath())
   const storage = yield* DesktopStorage.Service
+  const proxy = yield* DesktopProxy.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* windowRecovery
 
@@ -212,7 +214,10 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
 
         wire(view.webContents, options.id)
         view.setBackgroundColor(appearance.backgroundColor)
-        loads.add(view.webContents, () => loadWebContents(view.webContents, options.html, options))
+        loads.add(view.webContents, async () => {
+          await proxy.prepare(view.webContents.session)
+          await loadWebContents(view.webContents, options.html, options)
+        })
 
         return view
       },
@@ -225,12 +230,19 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
           openExternal,
         })
 
-        loads.add(view.webContents, () => loadWebContents(view.webContents, options.html, { devURL: false }))
+        loads.add(view.webContents, async () => {
+          await proxy.prepare(view.webContents.session)
+          await loadWebContents(view.webContents, options.html, { devURL: false })
+        })
 
         return view
       },
       trackContents: (contents) => trackWebContents(win, contents),
-      load: loadWebContents,
+      prepareNetwork: (contents) => proxy.prepare(contents.session),
+      load: async (contents, html) => {
+        await proxy.prepare(contents.session)
+        await loadWebContents(contents, html)
+      },
       saveImageAs,
       openExternal,
       command: (id) => emitIpcEvent(getPrimaryWebContents(win), new MenuCommandTriggered({ id })),

@@ -7,6 +7,8 @@ import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages } from "./cli-stages"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
+import { DesktopProxy } from "../network"
+import { ensureProxyService } from "./proxy"
 
 export * as BackgroundService from "./background-service"
 
@@ -21,7 +23,10 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
+    const context = yield* Effect.context<
+      FileSystem.FileSystem | Path.Path | DesktopCli.Service | DesktopProxy.Service
+    >()
+
     const path = yield* Path.Path
     const client = yield* Effect.promise(() => import("@opencode/client/service"))
     const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
@@ -46,6 +51,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   yield* Effect.logInfo("starting v2 background service")
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
+  const proxy = yield* DesktopProxy.Service
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
@@ -69,7 +75,9 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     yield* Effect.logInfo("v2 CLI command started", { command })
 
     const configured = yield* Effect.tryPromise(async () => {
-      const result = await promisify(execFile)(file, command.slice(1))
+      const result = await promisify(execFile)(file, command.slice(1), {
+        env: { ...process.env, ...proxy.environment() },
+      })
 
       return { stdout: result.stdout.trim(), stderr: result.stderr.trim() }
     })
@@ -77,26 +85,28 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     yield* Effect.logInfo("v2 CLI command completed", { command, ...configured })
   }
 
-  const client = yield* Effect.promise(() => import("@opencode/client/service"))
-
   const service = yield* Effect.tryPromise(() =>
-    client.Service.ensure({
-      file: registrationFile(path, isolated),
-      version,
-      // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
-      // services could boot against the same database.
-      command: [
-        ...cli.command,
-        "serve",
-        "--service",
-        ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
-      ],
-      onStart: (reason, previousVersion) =>
-        runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
-    }),
+    ensureProxyService(
+      proxy,
+      {
+        file: registrationFile(path, isolated),
+        version,
+        env: proxy.environment(),
+        // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
+        // services could boot against the same database.
+        command: [
+          ...cli.command,
+          "serve",
+          "--service",
+          ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
+        ],
+        onStart: (reason, previousVersion) =>
+          runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
+      },
+      mode,
+    ),
   )
 
-  if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   const url = new URL(service.url)
 
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
