@@ -8,6 +8,7 @@ import {
   T0,
   draftHref,
   expectPath,
+  isMac,
   holdRoute,
   pageMessagesFrom,
   project,
@@ -447,7 +448,7 @@ test("keyboard navigation and numbered shortcuts follow the visible tab order an
   await expect(page.locator("[data-titlebar-tab-slot]:visible")).toHaveCount(2)
   await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(c.id)}"])`)).toBeVisible()
 
-  await page.keyboard.press("Control+Alt+ArrowRight")
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowRight")
 
   await expectPath(page, sessionHref(c.id))
 
@@ -712,8 +713,9 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"))
   const home = sidebar.locator('[data-action="vertical-tabs-home"]')
   const hint = home.locator('span[aria-hidden="true"]')
-  await expect(hint).toHaveText("Ctrl+Alt+H")
-  await expect(hint.getByText("Ctrl+Alt+H", { exact: true })).toHaveCSS("direction", "ltr")
+  const shortcut = (await isMac(page)) ? "⌃⌥H" : "Ctrl+Alt+H"
+  await expect(hint).toHaveText(shortcut)
+  await expect(hint.getByText(shortcut, { exact: true })).toHaveCSS("direction", "ltr")
   await expect(hint).toBeHidden()
   await home.focus()
   await expect(hint).toBeVisible()
