@@ -7,6 +7,7 @@ import { DeepLinksOpened } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
+import { DesktopProxy } from "../network"
 import { safeWebContentsURL } from "../windows/state"
 import { marks } from "./marks"
 import {
@@ -196,10 +197,13 @@ const runtime = Layer.effect(
 
 // Storage opens after the entry module has set userData and before the renderer loads, so window
 // teardown can clear a window's persisted state and every renderer request finds it ready.
+const storage = DesktopStorage.layer.pipe(Layer.provide(DesktopLogging.layer))
+
 const platform = Layer.mergeAll(
   DesktopLogging.layer,
   Shutdown.layer,
-  DesktopStorage.layer.pipe(Layer.provide(DesktopLogging.layer)),
+  storage,
+  DesktopProxy.layer.pipe(Layer.provide(storage)),
 )
 
 export const layer = Layer.unwrap(

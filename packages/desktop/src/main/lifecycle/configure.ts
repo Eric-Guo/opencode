@@ -22,7 +22,6 @@ export function configureApplication() {
 
   app.setName(APP_NAME)
   app.setAppUserModelId(APP_ID)
-  app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
 
