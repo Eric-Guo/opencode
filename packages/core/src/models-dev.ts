@@ -146,10 +146,20 @@ export type Snapshot = {
   readonly environment: readonly string[]
 }
 
-const providerSources = new WeakMap<Snapshot, SourceProvider>()
+type CatalogSource = { data: { text: string } | { value: Record<string, unknown> } }
+
+// Share the original JSON with cache validation; decode only when source() is used.
+const providerSources = new WeakMap<Snapshot, { catalog: CatalogSource; key: string }>()
 
 export function source(snapshot: Snapshot) {
-  return providerSources.get(snapshot)
+  const entry = providerSources.get(snapshot)
+  if (!entry) return
+
+  if ("text" in entry.catalog.data) {
+    entry.catalog.data = { value: Schema.decodeUnknownSync(CatalogJson)(entry.catalog.data.text) }
+  }
+
+  return entry.catalog.data.value[entry.key]
 }
 
 type Route = {
@@ -177,10 +187,11 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:watsonx-ai-provider",
 ])
 
-const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>) {
+const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>, text = JSON.stringify(catalog)) {
+  const original: CatalogSource = { data: { text } }
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
-  const snapshots = Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
+  const snapshots = Object.entries(isV1(catalog) ? toV2(catalog) : catalog).flatMap(([key, value]) => {
     const item = Option.getOrUndefined(decodeProvider(value))
     if (!item) return []
     const providerID = Provider.ID.make(item.id)
@@ -227,7 +238,7 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>)
       ]
     })
     const snapshot = { info, models, environment: [...item.env] }
-    providerSources.set(snapshot, item)
+    providerSources.set(snapshot, { catalog: original, key })
     return [snapshot]
   })
   if (failed.length > 0)
@@ -493,7 +504,7 @@ const Cache = Schema.Struct({
   // Digest of the raw body, persisted so refresh() can skip republishing a
   // byte-identical catalog. Optional for entries written before it existed.
   digest: Schema.optional(Schema.String),
-  body: CatalogJson,
+  body: Schema.String,
 })
 const CacheMeta = Schema.Struct({
   updatedAt: Schema.Number,
@@ -504,8 +515,9 @@ const defaultSource = "https://models.opencode.ai"
 
 // The experimental v2 API, limited to the model types opencode keeps.
 export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}`
+export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.map((catalog) => normalize(catalog, text)))
 
-export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.flatMap(normalize))
+export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, text)))
 
 // Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
@@ -562,19 +574,23 @@ export const layer = (options?: Options) =>
       const metaKey = `${key}:meta`
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
-      // The v1 catalog was cached under unversioned keys; free that multi-MB row.
-      yield* kv.remove(key.replace("models-dev:v2:", "models-dev:"))
-      yield* kv.remove(`${key.replace("models-dev:v2:", "models-dev:")}:meta`)
+      let validatedBody: string | undefined
 
       const loadFromCache = Effect.fnUntraced(function* () {
         const value = yield* kv.get(key)
         const cached = Schema.decodeUnknownOption(Cache)(value)
-        if (Option.isSome(cached))
-          return {
-            catalog: cached.value.body,
-            updatedAt: cached.value.updatedAt,
-            digest: cached.value.digest,
+        if (Option.isSome(cached)) {
+          // Compare the actual JSON so corrupted data cannot reuse valid metadata. The same
+          // text backs source(), avoiding both a second parsed catalog and repeated hashing.
+          if (cached.value.body === validatedBody) return { ...cached.value, body: validatedBody, catalog: undefined }
+
+          const catalog = Schema.decodeUnknownOption(CatalogJson)(cached.value.body)
+          if (Option.isSome(catalog)) {
+            validatedBody = cached.value.body
+            return { ...cached.value, catalog: catalog.value }
           }
+        }
+
         if (value === undefined) return
         yield* kv.remove(key)
         yield* kv.remove(metaKey)
@@ -631,31 +647,32 @@ export const layer = (options?: Options) =>
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
           ),
         )
+        validatedBody = text
       })
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const response = yield* fetchApi()
         const catalog = yield* decodeCatalog(response.text)
         yield* writeCache(response.text, response.etag)
-        return catalog
+        return { catalog, body: response.text }
       })
 
       const populate = Effect.gen(function* () {
         const fromFile = yield* loadFromFile
         if (fromFile) return yield* normalize(fromFile)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return yield* normalize(cached.catalog)
+        if (cached) return yield* normalize(cached.catalog ?? (yield* decodeCatalog(cached.body)), cached.body)
         const bundled = yield* loadSnapshot
         if (bundled) return bundled
         if (!fetch) return []
-        const catalog = yield* lock.withPermit(
+        const loaded = yield* lock.withPermit(
           Effect.gen(function* () {
             const stored = options?.file ? undefined : yield* loadFromCache()
-            if (stored) return stored.catalog
+            if (stored) return { catalog: stored.catalog ?? (yield* decodeCatalog(stored.body)), body: stored.body }
             return yield* fetchAndWrite()
           }),
         )
-        return yield* normalize(catalog)
+        return yield* normalize(loaded.catalog, loaded.body)
       }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
       const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
@@ -667,7 +684,7 @@ export const layer = (options?: Options) =>
           .withPermit(
             Effect.gen(function* () {
               const stored = Option.getOrUndefined(
-                Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
+                Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* loadFromCache())),
               )
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
               const response = yield* fetchApi(force ? undefined : stored?.etag).pipe(
