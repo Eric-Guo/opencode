@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test"
 /** @jsxImportSource @opentui/solid */
 import { OptimizedBuffer, RGBA } from "@opentui/core"
+import { ManualClock } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal, Show } from "solid-js"
 import "../../src/component/go-upsell-art"
@@ -13,6 +14,7 @@ const colors = {
 }
 
 test("the art stops every frame when hidden, closed, or still, and leaves nothing live after repeated opens", async () => {
+  const clock = new ManualClock()
   const [open, setOpen] = createSignal(true)
   const [visible, setVisible] = createSignal(true)
   const [animate, setAnimate] = createSignal(true)
@@ -32,7 +34,7 @@ test("the art stops every frame when hidden, closed, or still, and leaves nothin
         </Show>
       </box>
     ),
-    { width: 60, height: 20 },
+    { width: 60, height: 20, clock },
   )
   const draws = spyOn(OptimizedBuffer.prototype, "withBuffers")
   const setCell = spyOn(OptimizedBuffer.prototype, "setCell")
@@ -77,7 +79,7 @@ test("the art stops every frame when hidden, closed, or still, and leaves nothin
     expect(app.renderer.liveRequestCount).toBe(0)
     expect(app.renderer.isRunning).toBe(false)
     const frames = app.renderer.frameId
-    await Bun.sleep(120)
+    clock.advance(120)
     expect(app.renderer.frameId).toBe(frames)
   } finally {
     draws.mockRestore()
