@@ -16,14 +16,24 @@ export const installContextMenu = Effect.gen(function* () {
     showSaveImageAs: true,
     showLookUpSelection: false,
     showSearchWithGoogle: false,
-    append: (_defaultActions, _parameters, browserWindow) => [
-      {
-        label: "Debug",
-        click: () => {
-          if (browserWindow && "webContents" in browserWindow) browserWindow.webContents.openDevTools()
+    append: (defaultActions, parameters, browserWindow) => {
+      // data: image downloads can emit will-download with null WebContents, which crashes electron-dl.
+      // Electron's native download path already opens the Save As dialog.
+      defaultActions.saveImageAs().click = () => {
+        const contents = "webContents" in browserWindow ? browserWindow.webContents : browserWindow
+
+        contents.downloadURL(parameters.srcURL)
+      }
+
+      return [
+        {
+          label: "Debug",
+          click: () => {
+            if (browserWindow && "webContents" in browserWindow) browserWindow.webContents.openDevTools()
+          },
         },
-      },
-    ],
+      ]
+    },
   })
 })
 
