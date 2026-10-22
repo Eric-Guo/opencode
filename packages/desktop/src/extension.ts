@@ -10,6 +10,22 @@ export type DesktopExtensionStore = {
   clear(name: string): void
 }
 
+export type DesktopProxySettings = { mode: "default" | "direct" } | { mode: "manual"; url: string; bypass: string }
+
+export type DesktopProxyStatus = {
+  settings: DesktopProxySettings
+  restartRequired: boolean
+}
+
+export type DesktopProxyResult = { ok: true; value: DesktopProxyStatus } | { ok: false; error: "invalid" | "storage" }
+
+export type DesktopProxyHost = {
+  get(): Promise<DesktopProxyStatus>
+  /** The host validates the settings renderer's untrusted payload. */
+  set(settings: unknown): Promise<DesktopProxyResult>
+  restart(): void
+}
+
 export type DesktopWindowHost = {
   window: BrowserWindow
   id: string
@@ -19,6 +35,8 @@ export type DesktopWindowHost = {
   /** Isolated bundled shell UI: narrow preload, no desktop RPC or service credential injection. */
   createPanel?(options: { id: string; html: string; preload: string }): WebContentsView
   trackContents(contents: WebContents): void
+  /** Apply the launch's network settings before navigating an external view. */
+  prepareNetwork?(contents: WebContents): Promise<void>
   load(contents: WebContents, html: string): Promise<void>
   /** Save an image with the host's native dialog and inline-image file writer. */
   saveImageAs?(
@@ -54,6 +72,7 @@ export type DesktopExtension = {
   createWindow?(host: DesktopWindowHost): DesktopWindowExtension
   ipc?(host: {
     connection(): Promise<{ url: string; password: string | null }>
+    proxy?: DesktopProxyHost
   }): Record<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>
 }
 
