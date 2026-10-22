@@ -6,7 +6,7 @@ import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Database } from "../database/database.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
-import type { SessionSchema } from "./schema.js"
+import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionBlob } from "./blob.js"
@@ -102,8 +102,8 @@ export const decodeMessageRowSync = (row: MessageRow) => decodeSync(rowInput(row
 
 const decodeError = (row: MessageRow) => () =>
   new MessageDecodeError({
-    sessionID: row.session_id,
-    messageID: row.id,
+    sessionID: SessionSchema.ID.make(row.session_id),
+    messageID: SessionMessage.ID.make(row.id),
   })
 
 export const decodeMessageRow = (row: MessageRow) =>
