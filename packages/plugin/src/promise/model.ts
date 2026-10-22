@@ -8,6 +8,11 @@ export interface ModelEditor {
   /** Candidates from available providers, including models disabled by earlier transforms. */
   list(providerID?: string): readonly Types.DeepMutable<Model.Info>[]
   get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+  /** Reads current candidates without making mutable copies. Use update() to edit them. */
+  readonly read: {
+    list(providerID?: string): readonly Model.Info[]
+    get(providerID: string, modelID: string): Model.Info | undefined
+  }
   /** Edits raw model overrides; cannot create an unavailable provider. */
   update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
   remove(providerID: string, modelID: string): void
