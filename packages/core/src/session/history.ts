@@ -6,7 +6,7 @@ import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Database } from "../database/database.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
-import type { SessionSchema } from "./schema.js"
+import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionRecentText } from "./recent-text.js"
@@ -101,8 +101,8 @@ export const decodeMessageRow = (row: MessageRow) =>
     Effect.mapError(
       () =>
         new MessageDecodeError({
-          sessionID: row.session_id,
-          messageID: row.id,
+          sessionID: SessionSchema.ID.make(row.session_id),
+          messageID: SessionMessage.ID.make(row.id),
         }),
     ),
   )
