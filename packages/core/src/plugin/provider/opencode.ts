@@ -490,7 +490,7 @@ export const OpencodePlugin = define<
           (item.provider.settings?.apiKey && item.provider.settings.apiKey !== "public"),
       )
       if (hasKey) return
-      for (const model of models.list(item.provider.id)) {
+      for (const model of models.read.list(item.provider.id)) {
         if (!model.cost.some((cost) => cost.input > 0)) continue
         models.update(item.provider.id, model.id, (draft) => {
           draft.enabled = false

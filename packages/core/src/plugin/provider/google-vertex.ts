@@ -201,7 +201,7 @@ export const GoogleVertexPlugin = define({
         const settings = settingsFor(item.provider)
         const project = resolveProject(settings)
         const location = resolveLocation(settings) ?? "global"
-        for (const model of models.list(item.provider.id)) {
+        for (const model of models.read.list(item.provider.id)) {
           if (typeof model.settings?.baseURL !== "string") continue
           const baseURL = replaceVertexVars(model.settings.baseURL, project, location)
           models.update(item.provider.id, model.id, (draft) => {

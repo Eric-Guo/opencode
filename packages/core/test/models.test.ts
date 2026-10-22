@@ -232,6 +232,11 @@ describe("ModelsDev Service", () => {
         ModelsDev.Service.use((s) => s.get()),
       )
       expect(result).toEqual(fixtureSnapshot)
+      const source = ModelsDev.source(result[0])
+      expect(source).toEqual(fixture.acme)
+      expect(ModelsDev.source(result[0])).toBe(source)
+      expect(ModelsDev.source(fixtureSnapshot[0])).toBeUndefined()
+
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
@@ -448,6 +453,32 @@ describe("ModelsDev Service", () => {
       )
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
+    }),
+  )
+
+  it.live("refresh(false) repairs a corrupted body even when its validated metadata is unchanged", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const updatedAt = Date.now()
+      const body = JSON.stringify(fixture)
+      writeCacheText(cache, body, updatedAt)
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          expect(yield* svc.get()).toEqual(fixtureSnapshot)
+          yield* svc.refresh(false)
+          expect((yield* Ref.get(state)).calls).toEqual([])
+
+          cache.values.set(cacheKey, { updatedAt, digest: bodyDigest(body), body: "{" })
+          yield* svc.refresh(false)
+          expect(yield* svc.get()).toEqual(fixture2Snapshot)
+        }),
+      )
+      expect((yield* Ref.get(state)).calls.length).toBe(1)
+      expect(cache.values.get(cacheKey)).toMatchObject({ body: JSON.stringify(fixture2) })
     }),
   )
 
