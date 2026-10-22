@@ -21,7 +21,7 @@ export const installContextMenu = Effect.gen(function* () {
       defaultActions.saveImageAs().click = () => {
         const contents = "webContents" in browserWindow ? browserWindow.webContents : browserWindow
 
-        return saveImageAs(contents, parameters.srcURL)
+        return saveImageAs(contents, parameters.srcURL, parameters)
       }
 
       return [
