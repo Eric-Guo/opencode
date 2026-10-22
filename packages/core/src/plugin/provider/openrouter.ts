@@ -17,7 +17,7 @@ export const OpenRouterPlugin = define({
       for (const item of models.provider.list()) {
         if (item.provider.package !== "@opencode/ai/providers/openrouter") continue
         for (const modelID of [Model.ID.make("gpt-5-chat-latest"), Model.ID.make("openai/gpt-5-chat")]) {
-          if (!models.get(item.provider.id, modelID)) continue
+          if (!models.read.get(item.provider.id, modelID)) continue
           models.update(item.provider.id, modelID, (model) => {
             // These are OpenRouter-specific OpenAI chat aliases that do not work
             // on the generic path. Keep custom providers with matching IDs untouched.
