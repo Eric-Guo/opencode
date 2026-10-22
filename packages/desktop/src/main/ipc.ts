@@ -27,6 +27,7 @@ import { setStorageSnapshotObserver } from "./storage/snapshot"
 import { isRendererUrl } from "./windows/scheme"
 import { receivesPluginPort } from "./windows/security"
 import { BackgroundService } from "./service/background-service"
+import { DesktopProxy } from "./network"
 import extension from "#desktop-main-extension"
 import {
   getNavigationHistory,
@@ -61,6 +62,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const lifecycle = yield* ApplicationLifecycle.Service
   const desktopCli = yield* DesktopCli.Service
   const background = yield* BackgroundService.Service
+  const proxy = yield* DesktopProxy.Service
   const context = yield* Effect.context()
   const runFork = Effect.runForkWith(context)
   const runPromise = Effect.runPromiseWith(context)
@@ -132,7 +134,17 @@ export const registerIpcHandlers = Effect.gen(function* () {
   }
 
   const unsubscribe = subscribeWebContents(wire)
-  const handlers = extension.ipc?.({ connection: () => runPromise(background.connection) }) ?? {}
+
+  const handlers =
+    extension.ipc?.({
+      connection: () => runPromise(background.connection),
+      proxy: {
+        get: async () => proxy.get(),
+        set: async (input) => proxy.set(input),
+        restart: lifecycle.relaunch,
+      },
+    }) ?? {}
+
   Object.entries(handlers).forEach(([channel, handle]) => ipcMain.handle(channel, handle))
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
