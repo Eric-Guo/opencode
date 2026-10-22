@@ -1,7 +1,7 @@
 // SAFETY: These type-only, versioned plugin hooks intentionally carry plugin-owned payloads.
 // Each plugin validates its own input and result; the host cannot prescribe a schema for them.
 /* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type */
-import type { BrowserWindow, IpcMainInvokeEvent, WebContents, WebContentsView, View } from "electron"
+import type { BrowserWindow, ContextMenuParams, IpcMainInvokeEvent, WebContents, WebContentsView, View } from "electron"
 
 /** Versioned, type-only contract. Extensions must not import desktop internals. */
 export type DesktopExtensionStore = {
@@ -21,7 +21,11 @@ export type DesktopWindowHost = {
   trackContents(contents: WebContents): void
   load(contents: WebContents, html: string): Promise<void>
   /** Save an image with the host's native dialog and inline-image file writer. */
-  saveImageAs?(contents: WebContents, url: string): Promise<void>
+  saveImageAs?(
+    contents: WebContents,
+    url: string,
+    context?: Pick<ContextMenuParams, "x" | "y" | "frame">,
+  ): Promise<void>
   openExternal(url: string): void
   command(id: string): void
   setControlColor(color?: string): void
