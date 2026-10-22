@@ -1,5 +1,4 @@
 import { access, unlink } from "node:fs/promises"
-import http from "node:http"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app, shell } from "electron"
 import { Effect, Path } from "effect"
@@ -59,7 +58,6 @@ export const installContextMenu = Effect.gen(function* () {
 
 export const prepareApplicationEnvironment = Effect.gen(function* () {
   yield* loadSystemCertificates
-  yield* loadProxyEnvironment
 })
 
 export const preferApplicationEnvironment = Effect.gen(function* () {
@@ -140,32 +138,9 @@ const removeCollidingDevShortcut = Effect.gen(function* () {
   )
 })
 
-export const loadProxyEnvironment = Effect.gen(function* () {
-  yield* Effect.try(() => {
-    ensureLoopbackNoProxy()
-    // SAFETY: Electron 41.2 ships a Node with http.setGlobalProxyFromEnv, which the current @types/node lacks.
-    const proxyAwareHttp = http as typeof http & { setGlobalProxyFromEnv(): void }
-    proxyAwareHttp.setGlobalProxyFromEnv()
-  }).pipe(Effect.catch((error) => Effect.logWarning("failed to load proxy environment", { error })))
-})
-
 const loadSystemCertificates = Effect.try({
   try: () => {
     setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
   },
   catch: (error) => error,
 }).pipe(Effect.catch((error) => Effect.logWarning("failed to load system certificates", { error })))
-
-// Bun reads lowercase `no_proxy` alone whenever it is set, so both spellings get the same merged list.
-function ensureLoopbackNoProxy() {
-  const noProxy = [
-    ...new Set(
-      [process.env.NO_PROXY, process.env.no_proxy, "127.0.0.1,localhost,::1"].flatMap((value) =>
-        (value ?? "").split(",").flatMap((entry) => entry.trim() || []),
-      ),
-    ),
-  ].join(",")
-
-  process.env.NO_PROXY = noProxy
-  process.env.no_proxy = noProxy
-}
