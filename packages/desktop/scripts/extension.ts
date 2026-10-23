@@ -12,6 +12,7 @@ type Manifest = {
   preloads: Record<string, string>
   assets: Record<string, string>
   builds?: Record<string, string>
+  rendererConfig?: string
 }
 
 export function readDesktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) {
@@ -101,6 +102,7 @@ export function desktopExtension(root = process.env.OPENCODE_DESKTOP_EXTENSION) 
   return {
     main: file(manifest.main),
     renderer: file(manifest.renderer),
+    rendererConfig: manifest.rendererConfig ? file(manifest.rendererConfig) : undefined,
     preload: file(manifest.preload),
     preloads: Object.fromEntries(Object.entries(manifest.preloads).map(([name, path]) => [name, file(path)])),
     assetsPlugin,
@@ -116,6 +118,7 @@ const ManifestSchema = Schema.Struct({
   preloads: Schema.Record(Schema.String, Schema.String),
   assets: Schema.Record(Schema.String, Schema.String),
   builds: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  rendererConfig: Schema.optionalKey(Schema.String),
 })
 
 const isManifest = Schema.is(ManifestSchema)
