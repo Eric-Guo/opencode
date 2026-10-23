@@ -18,7 +18,7 @@ import { verifyArtifact } from "./verify-artifact"
 import { NativeArch } from "../../../script/native-arch"
 import { collectFiles } from "./files"
 
-const NODE_VERSION = "26.8.2"
+const NODE_VERSION = "26.12.1"
 const dir = path.resolve(import.meta.dirname, "..")
 const outdir = path.resolve(
   dir,
