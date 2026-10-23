@@ -1,12 +1,10 @@
-import { defineConfig } from "electron-vite"
-import type { Plugin } from "vite"
+import { defineConfig, type RendererViteConfig } from "electron-vite"
+import { loadConfigFromFile, mergeConfig, type ConfigEnv, type Plugin } from "vite"
 import { BetaNotes } from "./script/beta-notes"
 import { desktopExtension } from "./scripts/extension"
 import { resolve } from "node:path"
 import { pickerPlugin } from "./script/picker"
 import { nodePtyPackage } from "./script/utils"
-
-const extension = desktopExtension()
 
 function resolveChannel() {
   const raw = process.env.OPENCODE_CHANNEL
@@ -38,7 +36,8 @@ const initialChunk: Plugin = {
   },
 }
 
-export default defineConfig(async ({ command }) => {
+export async function createDesktopConfig({ command, mode }: ConfigEnv, root = process.env.OPENCODE_DESKTOP_EXTENSION) {
+  const extension = desktopExtension(root)
   const channel = resolveChannel()
   const nodePtyPkg = nodePtyPackage()
 
@@ -50,6 +49,12 @@ export default defineConfig(async ({ command }) => {
       : command === "serve"
         ? BetaNotes.embed()
         : undefined
+
+  const renderer = extension?.rendererConfig
+    ? await loadConfigFromFile({ command, mode }, extension.rendererConfig)
+    : undefined
+
+  if (extension?.rendererConfig && !renderer) throw new Error("Failed to load desktop extension renderer config")
 
   return {
     main: {
@@ -124,40 +129,48 @@ export default defineConfig(async ({ command }) => {
         },
       },
     },
-    renderer: {
-      resolve: {
-        dedupe: ["solid-js"],
-        alias: { "#desktop-renderer-extension": extension?.renderer ?? resolve("src/renderer/extension.ts") },
-      },
-      experimental: {
-        bundledDev: true,
-      },
-      define: {
-        "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
-        "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
-        "import.meta.env.OPENCODE_COMMIT": betaNotes ? JSON.stringify(betaNotes.sha) : "undefined",
-        "import.meta.env.OPENCODE_BETA_NOTES": betaNotes ? JSON.stringify(JSON.stringify(betaNotes)) : "undefined",
-        "import.meta.env.OPENCODE_TEST_ONBOARDING": JSON.stringify(
-          command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
-        ),
-      },
-      plugins: [pickerPlugin(), appPlugin, initialChunk, extension?.assetsPlugin],
-      publicDir: "../../../app/public",
-      root: "src/renderer",
-      build: {
-        minify: command === "build",
-        sourcemap: true,
-        rolldownOptions: {
-          input: {
-            main: "src/renderer/index.html",
-          },
-          output: {
-            codeSplitting: {
-              groups: [{ name: (id) => (initialGraph.has(id) ? "app" : null), priority: 10 }],
+    renderer: mergeConfig(
+      {
+        resolve: {
+          dedupe: ["solid-js"],
+          alias: { "#desktop-renderer-extension": extension?.renderer ?? resolve("src/renderer/extension.ts") },
+        },
+        experimental: {
+          bundledDev: true,
+        },
+        define: {
+          "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
+          "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+          "import.meta.env.OPENCODE_COMMIT": betaNotes ? JSON.stringify(betaNotes.sha) : "undefined",
+          "import.meta.env.OPENCODE_BETA_NOTES": betaNotes ? JSON.stringify(JSON.stringify(betaNotes)) : "undefined",
+          "import.meta.env.OPENCODE_TEST_ONBOARDING": JSON.stringify(
+            command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
+          ),
+        },
+        // Additional entries need automatic splitting; one initial chunk would pull every agent into desktop startup.
+        plugins: [pickerPlugin(), appPlugin, !renderer && initialChunk, extension?.assetsPlugin],
+        publicDir: "../../../app/public",
+        root: "src/renderer",
+        build: {
+          minify: command === "build",
+          sourcemap: true,
+          rolldownOptions: {
+            input: {
+              main: "src/renderer/index.html",
             },
+            output: renderer
+              ? undefined
+              : {
+                  codeSplitting: {
+                    groups: [{ name: (id) => (initialGraph.has(id) ? "app" : null), priority: 10 }],
+                  },
+                },
           },
         },
-      },
-    },
+      } satisfies RendererViteConfig,
+      renderer?.config ?? {},
+    ),
   }
-})
+}
+
+export default defineConfig(createDesktopConfig)
