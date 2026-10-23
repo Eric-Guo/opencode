@@ -10,7 +10,7 @@ bun dev
 ```
 
 Development builds the CLI's Node bundle from source and runs the isolated background service with Node.
-Install Node 26.8.2 or newer; set `NODE_BIN` to select a specific Node executable. Bun runs the build scripts.
+Install Node 26.12.1 or newer; set `NODE_BIN` to select a specific Node executable. Bun runs the build scripts.
 The CLI bundle is rebuilt on each `bun run dev` invocation, while the desktop renderer keeps hot reload.
 
 The host defaults to the base desktop. To start the SigmaAgents tab shell, run this from `packages/desktop`:
