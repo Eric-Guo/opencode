@@ -91,8 +91,8 @@ const StreamEvent = Schema.Union([
 const decodeEvent = route.decodeFrame(StreamEvent)
 const decodeDocument = Schema.decodeUnknownEffect(Schema.fromJsonString(OpenAIImageResponse))
 
-/** `generate` reads the whole JSON response as one frame. */
-type Frame = string | { readonly document: string }
+/** `generate` keeps the requested format for URL responses whose bytes are not available to sniff. */
+type Frame = string | { readonly document: string; readonly requested: string | undefined }
 
 // ---------------------------------------------------------------------------
 // 4. Parser state
@@ -185,6 +185,13 @@ const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (request: Me
 // 6. Stream parsing
 // ---------------------------------------------------------------------------
 
+const requestedFormat = (body: MediaProtocol.Body) => {
+  if (body.type === "binary") return undefined
+  const value = body.type === "json" ? body.value.output_format : body.value.get("output_format")
+
+  return typeof value === "string" ? value : undefined
+}
+
 const usage = (value: Schema.Schema.Type<typeof Usage> | undefined, provider: ProviderID): MediaUsage | undefined =>
   value === undefined
     ? undefined
@@ -237,9 +244,13 @@ const onDocument = Effect.fnUntraced(function* (frame: Exclude<Frame, string>) {
   const format = decoded.output_format
   const mediaType = format === undefined ? undefined : `image/${format}`
   const images = yield* Effect.forEach(decoded.data, (item, index) =>
-    MediaInput.imageOutput(invalid, `${route.name} result ${index}`, item, mediaType, {
-      info: info(format, decoded.size),
-    }),
+    MediaInput.imageOutput(
+      invalid,
+      `${route.name} result ${index}`,
+      item,
+      item.b64_json ? mediaType : (mediaType ?? `image/${frame.requested ?? "png"}`),
+      { info: info(format, decoded.size) },
+    ),
   )
   if (images.length === 0) return yield* invalid(`${route.name} returned no images`)
   const state: State = {
@@ -283,7 +294,9 @@ export const protocol = MediaProtocol.stream<Request, ImageEvent, Frame, State>(
   frames: (bytes, context) =>
     context.request.mode === "stream"
       ? Framing.sse.frame(bytes)
-      : Framing.document.frame(bytes).pipe(Stream.map((document) => ({ document }))),
+      : Framing.document
+          .frame(bytes)
+          .pipe(Stream.map((document) => ({ document, requested: requestedFormat(context.body) }))),
   initial: () => ({ completed: 0 }),
   step,
   finish,

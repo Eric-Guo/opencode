@@ -14,7 +14,11 @@ const image = model("gpt-image-2", {
   body: { size: "1024x1024", n: 1 },
 })
 
-for (const output of [{ url: "https://images.test/result.png" }, { b64_json: "AQID" }]) {
+for (const fixture of [
+  { output: { url: "https://images.test/result.png" }, format: undefined, mime: "image/png" },
+  { output: { url: "https://images.test/result.jpg" }, format: "jpeg", mime: "image/jpeg" },
+  { output: { b64_json: "iVBORw0KGgo=" }, format: "jpeg", mime: "image/png" },
+]) {
   testEffect(
     dynamicResponse((input) => {
       expect(input.request.url).toBe("https://images.test/v1/images/generations")
@@ -27,34 +31,45 @@ for (const output of [{ url: "https://images.test/result.png" }, { b64_json: "AQ
         size: "1024x1024",
         n: 1,
         quality: "high",
+        ...(fixture.format === undefined ? {} : { output_format: fixture.format }),
       })
 
       return Effect.succeed(
-        json(input, { data: [output], usage: { input_tokens: 4, output_tokens: 8, total_tokens: 12 } }),
+        json(input, { data: [fixture.output], usage: { input_tokens: 4, output_tokens: 8, total_tokens: 12 } }),
       )
     }),
-  ).effect(`generates session image output from ${"url" in output ? "URL" : "base64"} responses`, () =>
-    Effect.gen(function* () {
-      const events = yield* LLM.stream({
-        model: image,
-        system: "Agent instructions must not become the image prompt",
-        messages: [Message.user("Earlier request"), Message.assistant("Earlier reply"), Message.user("A koi pond")],
-        generation: { maxTokens: 100, temperature: 0.2 },
-        providerOptions: { quality: "high" },
-        http: { headers: { "x-request": "yes" } },
-      }).pipe(Stream.runCollect)
+  ).effect(
+    `generates ${fixture.mime} session output from ${"url" in fixture.output ? "URL" : "base64"} responses`,
+    () =>
+      Effect.gen(function* () {
+        const events = yield* LLM.stream({
+          model: image,
+          system: "Agent instructions must not become the image prompt",
+          messages: [Message.user("Earlier request"), Message.assistant("Earlier reply"), Message.user("A koi pond")],
+          generation: { maxTokens: 100, temperature: 0.2 },
+          providerOptions: { quality: "high", output_format: fixture.format },
+          http: { headers: { "x-request": "yes" } },
+        }).pipe(Stream.runCollect)
 
-      expect(events.map((event) => event.type)).toEqual(["media", "step-finish", "finish"])
-      const media = events.find(LLMEvent.is.media)?.media
-      expect(media?.mediaType).toBe("image/png")
-      expect(media?.source).toMatchObject(
-        "url" in output
-          ? { type: "url", url: output.url }
-          : { type: "bytes", data: Uint8Array.from([1, 2, 3]), mediaType: "image/png" },
-      )
-      expect(events.find(LLMEvent.is.stepFinish)?.usage).toMatchObject({ inputTokens: 4, outputTokens: 8, totalTokens: 12 })
-      expect(events.find(LLMEvent.is.finish)?.reason.normalized).toBe("stop")
-    }),
+        expect(events.map((event) => event.type)).toEqual(["media", "step-finish", "finish"])
+        const media = events.find(LLMEvent.is.media)?.media
+        expect(media?.mediaType).toBe(fixture.mime)
+        expect(media?.source).toMatchObject(
+          "url" in fixture.output
+            ? { type: "url", url: fixture.output.url, mediaType: fixture.mime }
+            : {
+                type: "bytes",
+                data: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+                mediaType: fixture.mime,
+              },
+        )
+        expect(events.find(LLMEvent.is.stepFinish)?.usage).toMatchObject({
+          inputTokens: 4,
+          outputTokens: 8,
+          totalTokens: 12,
+        })
+        expect(events.find(LLMEvent.is.finish)?.reason.normalized).toBe("stop")
+      }),
   )
 }
 
