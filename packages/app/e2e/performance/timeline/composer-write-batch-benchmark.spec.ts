@@ -68,7 +68,11 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
     })
     await page.addInitScript(
       ({ key, value, counts }) => {
-        localStorage.setItem(key, JSON.stringify(value))
+        // Seed once so the final reload restores the saved draft instead of the fixture.
+        if (!sessionStorage.getItem(key)) {
+          localStorage.setItem(key, JSON.stringify(value))
+          sessionStorage.setItem(key, "seeded")
+        }
 
         const probe: Probe = { active: false, encodes: 0, bytes: 0, inputs: 0, keyups: 0 }
 
@@ -85,7 +89,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
               probe.bytes += value.length
             }
 
-            return parse(value, reviver)
+            return reviver ? parse(value, reviver) : parse(value)
           }
         }
 
@@ -147,7 +151,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
           probe.active = active
 
           // SAFETY: The benchmark writes this exact composer document and reads its matching draft key above.
-          return value as { prompt: { content: string }[]; cursor: number; context: { items: unknown[] } } | undefined
+          return value as { cursor: number; context: { items: unknown[] } } | undefined
         } finally {
           db.close()
         }
@@ -190,8 +194,6 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
       return probe
     })
 
-    expect((await stored())?.prompt.map((part) => part.content).join("")).toBe(expectedText)
-
     if (scenario === "submit-cleanup") {
       await expect.poll(() => submitted.length).toBe(1)
       expect(submitted[0].text).toContain(text)
@@ -225,5 +227,10 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
     await cdp.detach()
 
     if (testInfo.repeatEachIndex === 0) await page.screenshot({ path: testInfo.outputPath(`${scenario}.png`) })
+
+    // Large text is stored as blob references; let the production reader restore it after measurement.
+    await page.reload()
+    await expectSessionTitle(page, title)
+    await expect(editor).toHaveText(expectedText)
   })
 }
