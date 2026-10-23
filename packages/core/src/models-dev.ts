@@ -103,7 +103,10 @@ export function source(snapshot: Snapshot) {
   if (!entry) return
 
   if ("text" in entry.catalog.data) {
-    entry.catalog.data = { value: JSON.parse(entry.catalog.data.text) as Record<string, SourceProvider> }
+    // SAFETY: normalize() already consumed this catalog as SourceProvider values.
+    entry.catalog.data = {
+      value: Schema.decodeUnknownSync(CatalogJson)(entry.catalog.data.text) as Record<string, SourceProvider>,
+    }
   }
 
   return entry.catalog.data.value[entry.key]

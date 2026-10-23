@@ -455,6 +455,16 @@ test("configured managed service port overrides the channel default", async () =
     const info = await waitForInfo(registration)
     expect(new URL(info.url).port).toBe(String(port))
     expect(info.password).not.toBe("")
+
+    // Registration is published before startup persists the password to the config.
+    await Effect.runPromise(
+      Service.discover({ file: registration }).pipe(
+        Effect.repeat({ until: (endpoint) => endpoint !== undefined, schedule: Schedule.spaced("50 millis") }),
+        Effect.timeout("20 seconds"),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+
     expect((await Bun.file(config).json()).password).toBe(info.password)
     await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
     await owner.exited
