@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { ServiceConfig } from "../src/services/service-config"
@@ -100,7 +102,13 @@ function fake(handle: (request: Request) => Response) {
 
 async function register(root: string, url: string) {
   const file = path.join(root, "state", "opencode", ServiceConfig.filename())
-  const info = { version: OPENCODE_VERSION, url, pid: process.pid, password: "secret" }
+  const info = {
+    version: OPENCODE_VERSION,
+    url,
+    pid: process.pid,
+    password: "secret",
+    provenance: await Effect.runPromise(Service.provenance),
+  }
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.writeFile(file, JSON.stringify(info))
   return { file, info }
