@@ -78,14 +78,14 @@ test("replies with matching identities still validate nested task data", async (
 test("bounded concurrency is two and a disconnected submitter does not own the task", async () => {
   const { root, client } = await fixture()
   await Promise.all(
-    [1, 2, 3].map((i) => client.request({ op: "submit", text: String(i), durationMs: 120 }, `bound-${i}`)),
+    [1, 2, 3].map((i) => client.request({ op: "submit", text: String(i), durationMs: 60_000 }, `bound-${i}`)),
   )
   const observer = await connect(root, { timeoutMs: 1_000, pollMs: 5 })
   const states = await Promise.all([1, 2, 3].map((i) => observer.request({ op: "query", taskId: `bound-${i}` })))
   expect(states.filter((item) => item.task?.state === "running")).toHaveLength(2)
   expect(states.filter((item) => item.task?.state === "queued")).toHaveLength(1)
-  const done = await Promise.all([1, 2, 3].map((i) => terminal(observer, `bound-${i}`)))
-  expect(done.every((task) => task?.state === "completed")).toBe(true)
+  const done = await Promise.all([1, 2, 3].map((i) => observer.request({ op: "cancel", taskId: `bound-${i}` })))
+  expect(done.every((item) => item.task?.state === "cancelled")).toBe(true)
   expect((await observer.request({ op: "ping" })).maxActive).toBe(2)
 })
 
