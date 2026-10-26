@@ -1180,9 +1180,10 @@ for (const delivery of ["steer", "queue"] as const) {
       await expect(bubble).toHaveCSS("transition-duration", "0s")
       await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
       // Pending stands in for the time of a steer that has not been sent.
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending\s*·\s*Queue Model$/, {
-        useInnerText: true,
-      })
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(
+        /^Pending\s*·\s*Build\s*·\s*Queue Model$/,
+        { useInnerText: true },
+      )
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 
@@ -1264,9 +1265,10 @@ for (const delivery of ["steer", "queue"] as const) {
 
     if (colors) {
       await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model\s*·\s*Just now$/, {
-        useInnerText: true,
-      })
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(
+        /^Build\s*·\s*Queue Model\s*·\s*Just now$/,
+        { useInnerText: true },
+      )
       await expect(bubble).toHaveCSS("background-color", colors.delivered.background)
       await expect(bubble).toHaveCSS("color", colors.delivered.text)
       // Only delivery animates the colour; reduced motion switches instantly.
