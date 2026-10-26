@@ -49,11 +49,28 @@ describe("cli-version", () => {
     expect(releasedBuild(input.running)).toBe(input.expected)
   })
 
-  // The file follows the CLI, not the app: a source build of the desktop runs whichever CLI it downloaded or built.
+  // The file follows the CLI, not the app: dev keeps the fork's eric_dev identity, other previews use their channel,
+  // and released builds keep the shared registration.
   test.each([
-    { version: "0.0.0-dev-9", server: undefined, expected: path.join("/state", "opencode", "service-dev.json") },
+    {
+      version: "0.0.0-dev-9",
+      server: undefined,
+      expected: path.join("/state", "opencode", "service-eric_dev.json"),
+    },
+    {
+      version: "0.0.0-eric_dev-9",
+      server: undefined,
+      expected: path.join("/state", "opencode", "service-eric_dev.json"),
+    },
+    {
+      version: "0.0.0-preview-a-9.2",
+      server: undefined,
+      expected: path.join("/state", "opencode", "service-preview-a.json"),
+    },
     { version: "2.0.32", server: undefined, expected: undefined },
     { version: "0.0.0-beta-2", server: undefined, expected: undefined },
+    { version: "0.0.0-next-5", server: undefined, expected: undefined },
+    { version: "local", server: undefined, expected: path.join("/state", "opencode", "service-local.json") },
     { version: "local", server: "local", expected: path.join("/state", "opencode", "service-local.json") },
   ])("serviceFile($version, server=$server)", (input) => {
     expect(serviceFile({ ...input, stateHome: "/state" })).toBe(input.expected)
