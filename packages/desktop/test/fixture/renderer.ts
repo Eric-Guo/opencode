@@ -38,6 +38,8 @@ export async function rendererFixture(url: string, storage?: StateStore) {
     }),
     WindowRpcs.toLayer({
       WindowThemeReady: () => Effect.void,
+      WindowRequestMicrophone: () => Effect.succeed(false),
+      WindowSetVoiceCallActive: () => Effect.void,
       WindowGetFocused: () => Effect.succeed(true),
       WindowGetFullscreen: () => Effect.succeed(false),
       WindowSetFocus: () => Effect.void,
@@ -47,6 +49,7 @@ export async function rendererFixture(url: string, storage?: StateStore) {
       WindowGetPinchZoomEnabled: () => Effect.succeed(false),
       WindowSetPinchZoomEnabled: () => Effect.void,
       WindowSetTitlebar: () => Effect.void,
+      WindowSetTrafficLightsPosition: () => Effect.void,
     }),
     StorageRpcs.toLayer({
       StorageItems: ({ name }) => Effect.sync(() => storage?.items(name) ?? { items: {}, revision: 0 }),
