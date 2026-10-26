@@ -265,7 +265,7 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("README.md")).toHaveAttribute("aria-selected", "true")
   await expect(tab("Open file")).toHaveCount(1)
   await tab("Open file").click()
-  await page.keyboard.press("Control+w")
+  await page.keyboard.press("ControlOrMeta+w")
   await expect(tab("Open file")).toHaveCount(0)
   await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
 
