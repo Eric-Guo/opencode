@@ -1,10 +1,11 @@
-import { DESKTOP_NATIVE_KEYS } from "./desktop-native"
+import { DESKTOP_NATIVE_ENGLISH, DESKTOP_NATIVE_KEYS } from "./desktop-native"
 
 const desktop = [
   "OpenCode",
   "Skrá",
   "Breyta",
   "Skoða",
+  DESKTOP_NATIVE_ENGLISH["desktop.menu.history"],
   "Fara",
   "Gluggi",
   "Hjálp",
@@ -64,6 +65,8 @@ const desktop = [
   "Veldu möppu",
   "Veldu skrá",
   "Vista skrá",
+  DESKTOP_NATIVE_ENGLISH["desktop.dialog.saveImageFailed"],
+  DESKTOP_NATIVE_ENGLISH["desktop.dialog.imageUnavailable"],
   "Skrár",
   "Staðbundinn þjónn",
   "Sjálfgefið verkefni",
