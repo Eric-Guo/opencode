@@ -1,10 +1,11 @@
-import { DESKTOP_NATIVE_KEYS } from "./desktop-native"
+import { DESKTOP_NATIVE_ENGLISH, DESKTOP_NATIVE_KEYS } from "./desktop-native"
 
 const desktop = [
   "OpenCode",
   "Datoteka",
   "Uredi",
   "Prikaz",
+  DESKTOP_NATIVE_ENGLISH["desktop.menu.history"],
   "Idi",
   "Prozor",
   "Pomoć",
@@ -64,6 +65,8 @@ const desktop = [
   "Odaberite mapu",
   "Odaberite datoteku",
   "Spremi datoteku",
+  DESKTOP_NATIVE_ENGLISH["desktop.dialog.saveImageFailed"],
+  DESKTOP_NATIVE_ENGLISH["desktop.dialog.imageUnavailable"],
   "Datoteke",
   "Lokalni poslužitelj",
   "Zadani projekt",
