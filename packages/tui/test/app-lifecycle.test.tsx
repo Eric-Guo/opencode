@@ -3,6 +3,7 @@ import { EmbeddedTerminalRenderable, type Renderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
+import { Flock } from "@opencode/util/flock"
 import * as Open from "@opencode/util/open"
 import { waitForGoUpsellConnect } from "../src/component/dialog-go-upsell"
 import { GoUpsellArtRenderable } from "../src/component/go-upsell-art"
@@ -376,6 +377,49 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
   }
+})
+
+test("shutdown waits for pending session tab writes", async () => {
+  await using state = await tmpdir()
+  const file = path.join(state.path, "test", "tui", "tabs.json")
+  const lock = await Flock.acquire(file, { dir: path.join(state.path, "test", "locks") })
+  const session = {
+    id: "ses_pending_write",
+    title: "Pending tab write",
+    projectID: "project",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+
+  const setup = await createAppFixture({
+    args: { sessionID: session.id },
+    state: state.path,
+    config: { animations: false, tabs: { scope: "global" } },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [{ id: "msg_pending_write", type: "user", text: session.title, time: { created: 1 } }],
+          cursor: {},
+        })
+      if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
+      return undefined
+    },
+  })
+  try {
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes(session.title))
+    setup.renderer.destroy()
+  } finally {
+    await lock.release()
+    await setup[Symbol.asyncDispose]()
+  }
+
+  expect(await Bun.file(file).json()).toMatchObject({
+    global: { tabs: [{ sessionID: session.id, title: session.title }] },
+  })
 })
 
 test("session title generated while an untitled session is loading remains visible", async () => {
