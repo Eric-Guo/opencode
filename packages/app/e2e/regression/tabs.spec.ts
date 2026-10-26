@@ -504,14 +504,14 @@ for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
     const tabB = strip.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
     await editor.fill("Draft A")
 
-    await (navigation === "keyboard" ? page.keyboard.press("Control+Alt+ArrowRight") : tabB.click())
+    await (navigation === "keyboard" ? page.keyboard.press("ControlOrMeta+Alt+ArrowRight") : tabB.click())
     await expectPath(page, sessionHref(b.id))
     await expect(editor).toBeFocused()
     await page.evaluate(() => navigator.clipboard.writeText("Draft B"))
     await page.keyboard.press("ControlOrMeta+V")
     await expect(editor).toHaveText("Draft B")
 
-    await page.keyboard.press("Control+Alt+ArrowLeft")
+    await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft")
     await expectPath(page, sessionHref(a.id))
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("Draft A")
