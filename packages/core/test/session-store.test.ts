@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
-import { asc, eq } from "drizzle-orm"
-import { Effect } from "effect"
+import { asc, eq, sql } from "drizzle-orm"
+import { DateTime, Effect } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -57,6 +57,42 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
   })
 
 describe("SessionStore", () => {
+  it.effect("reads retained legacy messages through both media modes", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([{ id: "ses_retained", updated: 20 }])
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+
+      yield* database.db.run(sql`
+        CREATE TABLE session_message_retained (
+          id text PRIMARY KEY,
+          session_id text NOT NULL,
+          type text NOT NULL,
+          seq integer NOT NULL,
+          time_created integer NOT NULL,
+          time_updated integer NOT NULL,
+          data text NOT NULL
+        )
+      `)
+      yield* database.db.run(sql`
+        INSERT INTO session_message_retained (id, session_id, type, seq, time_created, time_updated, data)
+        VALUES ('msg_retained', 'ses_retained', 'user', 2, 10, 10, '{"text":"retained prompt","time":{"created":10}}')
+      `)
+      const input = { sessionID: Session.ID.make("ses_retained") }
+      const expected = [
+        {
+          id: SessionMessage.ID.make("msg_retained"),
+          type: "user",
+          text: "retained prompt",
+          time: { created: DateTime.makeUnsafe(10) },
+        },
+      ] satisfies SessionMessage.Info[]
+
+      expect(yield* store.messages(input)).toEqual(expected)
+      expect(yield* store.messagesWithRefs(input)).toEqual(expected)
+    }),
+  )
+
   it.effect("lists by updated time and ID with exclusive two-item pages in either direction", () =>
     Effect.gen(function* () {
       yield* seedSessions([
