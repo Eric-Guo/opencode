@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
-import { isMac, NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session } from "../utils/app"
+import { isMac, NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session, sessionHref } from "../utils/app"
+import { openWithDirection } from "../utils/direction"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSession, openSettings, type WorkspaceInput } from "../utils/workspace"
 
@@ -94,8 +95,8 @@ test("a settings page survives refresh", async ({ page }) => {
   await expect(page).toHaveURL("/settings?tab=appearance")
 })
 
-for (const locale of ["en", "ar"]) {
-  test(`background activity alignment stays physical and persists (${locale})`, async ({ page }) => {
+for (const direction of ["ltr", "rtl"] as const) {
+  test(`background activity alignment stays physical and persists (${direction})`, async ({ page }) => {
     const id = "ses_activity_settings"
     const childID = "ses_activity_settings_child"
     const stopped: string[] = []
@@ -105,14 +106,13 @@ for (const locale of ["en", "ar"]) {
       if (request.method() === "DELETE" && new URL(request.url()).pathname.startsWith("/api/shell/"))
         stopped.push(request.url())
     })
-    await openSession(page, {
+    await mockWorkspace(page, {
       name: "Activity settings",
       sessions: [
         { id, title: "Activity settings" },
         { id: childID, parentID: id, title: "Inspect capsule" },
       ],
       sessionStatus: { [id]: { type: "busy" }, [childID]: { type: "busy" } },
-      seed: { locale },
       pageMessages: (): { items: SessionMessageInfo[] } => ({
         items: [
           { id: "msg_activity_user", type: "user", text: "Inspect the activity capsule", time: { created: 1 } },
@@ -163,13 +163,14 @@ for (const locale of ["en", "ar"]) {
         },
       ],
     })
+    await openWithDirection(page, sessionHref(id), direction)
     const capsule = page.locator('[data-slot="session-activity-chip"]')
     const panel = page.locator('[data-slot="session-activity-panel"]')
     await expect(capsule).toBeVisible()
-    await expect(page.locator("html")).toHaveAttribute("dir", locale === "ar" ? "rtl" : "ltr")
+    await expect(page.locator("html")).toHaveAttribute("dir", direction)
 
     for (const value of ["Center", "Right", "Hidden", "Left", "Right"]) {
-      await page.keyboard.press("Control+,")
+      await page.keyboard.press("ControlOrMeta+,")
       const settings = page.getByTestId("settings-screen")
       const control = settings.getByLabel("Background activity", { exact: true })
       await expect(control).toBeVisible()
@@ -178,7 +179,7 @@ for (const locale of ["en", "ar"]) {
       await expect(options.getByRole("option")).toHaveText(["Hidden", "Left", "Center", "Right"])
       await options.getByRole("option", { name: value, exact: true }).click()
       await expect(control).toHaveText(value)
-      await page.goBack()
+      await settings.getByRole("button", { name: "Back to app", exact: true }).click()
       if (value === "Hidden") {
         await expect(capsule).toHaveCount(0)
         await expect(panel).toHaveCount(0)
@@ -223,8 +224,9 @@ for (const locale of ["en", "ar"]) {
         page.evaluate(() => JSON.parse(localStorage.getItem("settings.v3") ?? "{}").general?.backgroundActivity),
       )
       .toBe("right")
-    await page.keyboard.press("Control+,")
     await page.reload()
+    await expect(capsule).toBeVisible()
+    await page.keyboard.press("ControlOrMeta+,")
     await expect(page.getByTestId("settings-screen").getByLabel("Background activity", { exact: true })).toHaveText(
       "Right",
     )
