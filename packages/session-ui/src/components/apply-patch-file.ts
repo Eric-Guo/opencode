@@ -24,7 +24,7 @@ export const changedFileDiff = Schema.is(
   }).check(Schema.makeFilter((value) => value.additions > 0 || value.deletions > 0)),
 )
 
-export function patchFile(value: Schema.Json): ApplyPatchFile | undefined {
+export function patchFile(value: unknown): ApplyPatchFile | undefined {
   if (!changedFileDiff(value)) return
   let view: ViewDiff | undefined
 
@@ -44,13 +44,13 @@ export function patchFile(value: Schema.Json): ApplyPatchFile | undefined {
   }
 }
 
-export function patchFiles(value: Schema.Json | undefined) {
+export function patchFiles(value: unknown) {
   if (!Array.isArray(value)) return []
 
   return value.map(patchFile).filter((file): file is ApplyPatchFile => !!file)
 }
 
-export function patchFileGroups(value: Schema.Json | undefined): ApplyPatchFileGroup[] {
+export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
   const groups = patchFiles(value).reduce((result, file) => {
     const files = result.get(file.path)
 
