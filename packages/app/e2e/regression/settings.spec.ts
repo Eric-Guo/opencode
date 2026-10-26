@@ -677,9 +677,17 @@ test.describe("pages open before slow data", () => {
   })
 
   test("extensions", async ({ page }) => {
-    const { settings } = await open(page, { mcp: [{ name: "demo-mcp", status: { status: "connected" } }] })
-    const mcp = await holdRoute(page, (url) => url.pathname === "/api/mcp")
-    await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+    await mockWorkspace(page, {
+      name: "Settings demo",
+      directory,
+      sessions: [],
+      seed: { tabs: [] },
+      mcp: [{ name: "demo-mcp", status: { status: "connected" } }],
+    })
+    // Hold before startup can populate the Location's MCP cache.
+    const mcp = await holdRoute(page, /\/api\/mcp\?/)
+    await page.goto("/settings?tab=extensions")
+    const settings = page.getByTestId("settings-screen")
     await mcp.arrived
     await expect(settings.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible()
     await expect(settings.getByRole("button", { name: "Back to app" })).toBeVisible()
