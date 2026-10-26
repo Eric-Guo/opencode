@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { project, provider, sessionHref } from "../utils/app"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { mockOpenCodeServer, type MockProject } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
 import { openSession } from "../utils/workspace"
 
@@ -13,7 +13,7 @@ test("creates a session in a new project and selects its model", async ({ page }
   )
   const created = project({ id: "proj_model_selection_flow", directory, name: "NewProject" })
   // The server knows no project until the user adds this one.
-  const projects: unknown[] = []
+  const projects: MockProject[] = []
   await mockOpenCodeServer(page, {
     directory,
     project: created,
