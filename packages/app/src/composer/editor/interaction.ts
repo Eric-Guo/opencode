@@ -120,6 +120,7 @@ export function createComposerEditor(input: {
   const draft = createComposerEditorActions(input.store, input.onChange)
   const [localQuoteComment, setLocalQuoteComment] = createSignal<string>()
   const quoteComment = input.quoteComment ?? { key: localQuoteComment, set: setLocalQuoteComment }
+
   const capabilities = {
     commands: input.capabilities?.commands !== false,
     context: input.capabilities?.context !== false,
