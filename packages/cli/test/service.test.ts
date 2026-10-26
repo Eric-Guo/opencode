@@ -711,11 +711,9 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
     const exitCode = await Promise.race([contender.exited, Bun.sleep(20_000).then(() => undefined)])
     expect(exitCode).toBe(1)
     const output = (await new Response(contender.stdout).text()) + (await new Response(contender.stderr).text())
-    expect(output).toContain(
-      `Managed service port ${listener.port} on 127.0.0.1 is already in use by ${
-        lsof ? `PID ${process.pid} (` : "another process"
-      }`,
-    )
+    // Process details are best effort; the dedicated port-owner test covers successful lookups.
+    expect(output).toContain(`Managed service port ${listener.port} on 127.0.0.1 is already in use`)
+    expect(output).toContain("opencode service set port <port>")
     if (lsof) expect(await Bun.file(path.join(root, "inherited-state")).text()).toBe(path.join(root, "state"))
     expect(await Bun.file(registration).json()).toEqual(stale)
   } finally {
