@@ -44,8 +44,9 @@ async function mount(
       for (let elapsed = 5; elapsed <= ms; elapsed += 5) {
         clock.advance(5)
         if (other && elapsed % other === 0) await app.renderOnce()
-        await Bun.sleep(0)
-        await Bun.sleep(0)
+        // Finish ready frames before advancing the clock again.
+        await new Promise<void>((resolve) => setImmediate(resolve))
+        await app.waitFor(() => !app.renderer.getSchedulerState().isRendering)
       }
       return frames
     },
@@ -73,8 +74,6 @@ test("an attention glow becomes idle after ignition", async () => {
 })
 
 test.each([
-  // A requested frame draws asynchronously, on the same 5 ms clock step or a later one depending on the event loop,
-  // so frames alone come 50 to 55 ms apart.
   { name: "alone", other: 0, min: 18, max: 20 },
   { name: "beside a 25 fps animation", other: 40, min: 25, max: 25 },
   { name: "beside a 50 fps animation", other: 20, min: 50, max: 50 },
