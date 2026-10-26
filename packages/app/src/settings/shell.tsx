@@ -273,6 +273,7 @@ function RootSettings() {
       connections.visible[0]
     )
   })
+
   const sourceDirectory = useSettingsDirectory(sourceServer)
   const serverCtx = useServerCtx(sourceServer)
   const title = useSettingsDialogTitle(() => serverCtx()?.sync, sourceDirectory)
