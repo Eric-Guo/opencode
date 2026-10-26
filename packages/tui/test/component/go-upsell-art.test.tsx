@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test"
 /** @jsxImportSource @opentui/solid */
 import { OptimizedBuffer, RGBA } from "@opentui/core"
-import { ManualClock } from "@opentui/core/testing"
+import { ManualClock, setRendererCapabilities } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal, Show } from "solid-js"
 import "../../src/component/go-upsell-art"
@@ -13,7 +13,7 @@ const colors = {
   logoBase: RGBA.fromHex("#9a9a9a"),
 }
 
-test("the art stops every frame when hidden, closed, or still, and leaves nothing live after repeated opens", async () => {
+test.each([false, true])("the art stops when hidden, closed, or still (rgb: %s)", async (rgb) => {
   const clock = new ManualClock()
   const [open, setOpen] = createSignal(true)
   const [visible, setVisible] = createSignal(true)
@@ -36,6 +36,8 @@ test("the art stops every frame when hidden, closed, or still, and leaves nothin
     ),
     { width: 60, height: 20, clock },
   )
+  app.renderer.pause()
+  setRendererCapabilities(app.renderer, { rgb })
   const draws = spyOn(OptimizedBuffer.prototype, "withBuffers")
   const setCell = spyOn(OptimizedBuffer.prototype, "setCell")
 
@@ -45,7 +47,7 @@ test("the art stops every frame when hidden, closed, or still, and leaves nothin
     // Each frame is one direct write into the art's own buffer, never a draw call per cell.
     expect(draws).toHaveBeenCalledTimes(1)
     expect(setCell).not.toHaveBeenCalled()
-    expect(app.captureCharFrame()).toContain("█▀▀▀ █▀▀█")
+    expect(app.captureCharFrame()).toContain(rgb ? "▀ ▀▀ ▀  ▀" : "█▀▀▀ █▀▀█")
 
     setVisible(false)
     expect(app.renderer.liveRequestCount).toBe(0)
