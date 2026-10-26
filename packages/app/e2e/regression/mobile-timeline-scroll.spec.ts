@@ -272,6 +272,9 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
               element.removeEventListener("scrollend", settled)
             })
           })
+          // macOS native navigation follows the composer's selection even after focus moves to the scrollport.
+          await nested.focus()
+          await page.evaluate(() => window.getSelection()?.removeAllRanges())
           await nested.press((await isMac(page)) ? "Meta+ArrowDown" : "Control+End")
           await expect(nested).toHaveAttribute("data-end-settled")
           await nested.press((await isMac(page)) ? "Meta+ArrowUp" : "Control+Home")
@@ -586,8 +589,11 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
           await page.mouse.move(0, 0)
         }
 
-        if (handoff.key !== "latest" && !usesScrollbar)
+        if (handoff.key !== "latest" && !usesScrollbar) {
+          await scroller.focus()
+          await page.evaluate(() => window.getSelection()?.removeAllRanges())
           await scroller.press(handoff.key === "Control+Home" && (await isMac(page)) ? "Meta+ArrowUp" : handoff.key)
+        }
 
         if (handoff.key.startsWith("Control+"))
           await expect(scroller).toHaveAttribute("data-native-scroll-prevented", "false")
