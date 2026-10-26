@@ -749,6 +749,18 @@ test("reconnects the event stream and resyncs active data", async () => {
   let resolveActive!: (response: Response) => void
   let resolveMessages!: (response: Response) => void
   const calls = createFetch((url) => {
+    if (["/api/session/session-stale", "/api/session/session-new"].includes(url.pathname))
+      return json({
+        data: {
+          id: url.pathname.split("/").at(-1),
+          projectID: "proj_test",
+          title: "Reconnected session",
+          location: { directory },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+        },
+      })
     if (url.pathname === "/api/event") {
       requests.event++
       return events.v2()
@@ -842,7 +854,7 @@ test("reconnects the event stream and resyncs active data", async () => {
     )
     await wait(() => data.session.message.get("session-stale", "message-fresh") !== undefined)
     expect(data.session.message.get("session-stale", "message-stale")).toBeUndefined()
-    await wait(() => data.session.status("session-new") === "running")
+    await wait(() => data.session.status("session-new") === "running" && data.session.get("session-new") !== undefined)
     expect(requests.event).toBe(2)
     expect(requests.message).toBe(2)
     expect(client.connection.status()).toBe("connected")
@@ -1331,10 +1343,10 @@ test("tracks session status from active sessions and execution events", async ()
   let settled = false
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session/active") return json({ data: { "session-active": { type: "running" } } })
-    if (url.pathname === "/api/session/session-live")
+    if (["/api/session/session-live", "/api/session/session-active"].includes(url.pathname))
       return json({
         data: {
-          id: "session-live",
+          id: url.pathname.split("/").at(-1),
           projectID: "proj_test",
           cost: settled ? 0.75 : 0,
           tokens: settled
@@ -1382,7 +1394,9 @@ test("tracks session status from active sessions and execution events", async ()
   ))
 
   try {
-    await wait(() => data.session.status("session-active") === "running")
+    await wait(
+      () => data.session.status("session-active") === "running" && data.session.get("session-active") !== undefined,
+    )
     expect(data.session.status("session-idle")).toBe("idle")
     await data.session.sync("session-live")
 
