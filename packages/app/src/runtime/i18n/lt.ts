@@ -1,10 +1,11 @@
-import { DESKTOP_NATIVE_KEYS } from "./desktop-native"
+import { DESKTOP_NATIVE_ENGLISH, DESKTOP_NATIVE_KEYS } from "./desktop-native"
 
 const desktop = [
   "OpenCode",
   "Failas",
   "Taisa",
   "Rodymas",
+  DESKTOP_NATIVE_ENGLISH["desktop.menu.history"],
   "Eiti",
   "Langas",
   "Žinynas",
@@ -64,6 +65,8 @@ const desktop = [
   "Pasirinkite aplanką",
   "Pasirinkite failą",
   "Įrašyti failą",
+  DESKTOP_NATIVE_ENGLISH["desktop.dialog.saveImageFailed"],
+  DESKTOP_NATIVE_ENGLISH["desktop.dialog.imageUnavailable"],
   "Failai",
   "Vietinis serveris",
   "Numatytasis projektas",
