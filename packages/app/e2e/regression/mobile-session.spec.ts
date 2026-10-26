@@ -166,6 +166,7 @@ for (const position of ["top", "bottom"] as const) {
     const trigger = page.locator('[data-slot="mobile-tabs-trigger"]')
 
     const openTabs = async () => {
+      await expect(views).toBeHidden()
       await trigger.click()
       await expect(drawer).not.toHaveAttribute("data-transitioning")
     }
