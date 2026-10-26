@@ -57,10 +57,6 @@ export const SOUND_OPTIONS = [
   { id: "yup-06", label: "sound.option.yup06" },
 ] as const
 
-type SoundOption = (typeof SOUND_OPTIONS)[number]
-
-type SoundID = SoundOption["id"]
-
 function getLoads() {
   if (loads) return loads
   loads = Object.fromEntries(
