@@ -106,8 +106,7 @@ const decodeError = (row: MessageRow) => () =>
     messageID: SessionMessage.ID.make(row.id),
   })
 
-export const decodeMessageRow = (row: MessageRow) =>
-  decode(rowInput(row)).pipe(Effect.mapError(decodeError(row)))
+export const decodeMessageRow = (row: MessageRow) => decode(rowInput(row)).pipe(Effect.mapError(decodeError(row)))
 
 /** Decodes a row without its blobs, so user files may stay refs. Only for readers that never use file bytes. */
 const decodeStoredRow = (
