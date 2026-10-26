@@ -92,8 +92,8 @@ test("ZIP file tabs search and expand metadata without downloading members or re
   const panel = page.locator("#review-panel")
 
   const open = async (file: string) => {
-    await panel.getByRole("button", { name: "Open file" }).click()
-    await panel.getByRole("button", { name: file, exact: true }).click()
+    await openFileLauncher(panel)
+    await panel.getByRole("treeitem", { name: file, exact: true }).click()
     await expect(panel.getByRole("tab", { name: file, exact: true })).toHaveAttribute("aria-selected", "true")
   }
 
