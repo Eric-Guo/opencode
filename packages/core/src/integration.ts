@@ -316,6 +316,10 @@ const layer = Layer.effect(
     const statuses = new Map<string, IntegrationConnection.Status>()
     const statusKey = (integrationID: ID, connection: IntegrationConnection.Info) =>
       `${integrationID}:${IntegrationConnection.key(connection)}`
+    const notify = State.changes(
+      (integrations: Info[]) => integrations,
+      () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
+    )
     const state = State.create<Data, Editor>({
       name: "integration",
       initial: () => ({ integrations: new Map<ID, Entry>() }),
@@ -378,13 +382,13 @@ const layer = Layer.effect(
           },
         },
       }),
-      notify: State.changes(
-        (data) =>
-          Array.from(data.integrations.values(), (entry) => project(entry, resolveConnections(entry, []))).toSorted(
-            (a, b) => a.name.localeCompare(b.name),
-          ),
-        () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
-      ),
+      notify: (data) =>
+        Effect.forEach(data.integrations.values(), (entry) =>
+          resolveConnections(entry, []).pipe(Effect.map((connections) => project(entry, connections))),
+        ).pipe(
+          Effect.map((integrations) => integrations.toSorted((a, b) => a.name.localeCompare(b.name))),
+          Effect.flatMap(notify),
+        ),
     })
 
     const createCredential = Effect.fnUntraced(function* (input: Parameters<Credential.Interface["create"]>[0]) {
