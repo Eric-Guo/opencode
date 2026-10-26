@@ -57,7 +57,7 @@ async function open(
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
 
     if (input.surface === "settings") {
-      await page.keyboard.press("Control+,")
+      await page.keyboard.press("ControlOrMeta+,")
 
       return panel.getByRole("tab", { name: "Extensions", exact: true }).click()
     }
