@@ -23,7 +23,7 @@ const it = testEffect(NodeFileSystem.layer)
 
 test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(ServiceConfig.defaultPort("eric_dev", "linux"))
   expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("next", "linux")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("local", "linux")).toBe(0xc0df)
@@ -34,7 +34,7 @@ test("managed service ports are stable per installation channel", () => {
 
 test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
   expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70de)
+  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(ServiceConfig.defaultPort("eric_dev", "win32"))
   expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70df)
   const ports = Array.from({ length: 200 }, (_, index) => ({
     windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
@@ -309,9 +309,10 @@ test.each([false, true])(
   30_000,
 )
 
-test("service filenames share release channels and identify preview channels", () => {
+test("service filenames share release channels, alias dev to eric_dev, and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
-  expect(ServiceConfig.filename("dev")).toBe("service.json")
+  expect(ServiceConfig.filename("dev")).toBe("service-eric_dev.json")
+  expect(ServiceConfig.filename("eric_dev")).toBe("service-eric_dev.json")
   expect(ServiceConfig.filename("beta")).toBe("service.json")
   expect(ServiceConfig.filename("next")).toBe("service.json")
   expect(ServiceConfig.filename("local")).toBe("service-local.json")

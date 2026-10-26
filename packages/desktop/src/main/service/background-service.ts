@@ -5,6 +5,7 @@ import { promisify } from "node:util"
 import extension from "#desktop-main-extension"
 import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages } from "./cli-stages"
+import { serviceFile } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { DesktopProxy } from "../network"
@@ -29,7 +30,7 @@ export const layer = Layer.effect(
 
     const path = yield* Path.Path
     const client = yield* Effect.promise(() => import("@opencode/client/service"))
-    const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+    const desktopCli = yield* DesktopCli.Service
 
     const state = yield* BackgroundServiceState.make({
       initial: connect("initial").pipe(Effect.provide(context)),
@@ -38,7 +39,10 @@ export const layer = Layer.effect(
 
     return Service.of({
       ...state,
-      stop: Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path, isolated) })).pipe(
+      stop: Effect.gen(function* () {
+        const cli = yield* desktopCli.resolve
+        yield* Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path, cli.version) }))
+      }).pipe(
         Effect.tap(() => Effect.logInfo("v2 CLI background service stopped")),
         Effect.asVoid,
         Effect.catch((error) => Effect.logWarning("failed to stop background service", { error })),
@@ -89,7 +93,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     ensureProxyService(
       proxy,
       {
-        file: registrationFile(path, isolated),
+        file: registrationFile(path, cli.version),
         version,
         env: proxy.environment(),
         // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
@@ -135,10 +139,12 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   return ready
 })
 
-function registrationFile(path: Path.Path, isolated: boolean) {
-  if (!isolated || process.env.OPENCODE_DESKTOP_SERVER_CHANNEL !== "local") return undefined
-
-  return path.join(app.getPath("userData"), "opencode", "service-local.json")
+function registrationFile(path: Path.Path, version: string) {
+  return serviceFile({
+    version,
+    server: process.env.OPENCODE_DESKTOP_SERVER_CHANNEL,
+    stateHome: process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
+  })
 }
 
 function endpoint(url: string | undefined) {
