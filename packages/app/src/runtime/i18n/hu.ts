@@ -1,10 +1,11 @@
-import { DESKTOP_NATIVE_KEYS } from "./desktop-native"
+import { DESKTOP_NATIVE_ENGLISH, DESKTOP_NATIVE_KEYS } from "./desktop-native"
 
 const desktop = [
   "OpenCode",
   "Fájl",
   "Szerkesztés",
   "Nézet",
+  DESKTOP_NATIVE_ENGLISH["desktop.menu.history"],
   "Ugrás",
   "Ablak",
   "Súgó",
@@ -64,6 +65,8 @@ const desktop = [
   "Mappa kiválasztása",
   "Fájl kiválasztása",
   "Fájl mentése",
+  DESKTOP_NATIVE_ENGLISH["desktop.dialog.saveImageFailed"],
+  DESKTOP_NATIVE_ENGLISH["desktop.dialog.imageUnavailable"],
   "Fájlok",
   "Helyi kiszolgáló",
   "Alapértelmezett projekt",
