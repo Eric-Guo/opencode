@@ -1,3 +1,5 @@
+import path from "node:path"
+
 export function parseCliVersion(output: string) {
   const marker = output.lastIndexOf(" v")
   const version = marker === -1 ? output : output.slice(marker + 2)
@@ -18,6 +20,36 @@ export function serviceVersion(input: {
   if (input.channel === "beta" && !input.isolated) return undefined
 
   return input.version
+}
+
+/**
+ * The registration file the CLI writes, or undefined for the shared `service.json` of the released channels. Follows
+ * the CLI itself rather than the app's channel, because a source build can run any CLI: a preview build writes
+ * `service-<channel>.json` (with dev mapped to this fork's eric_dev identity), a released one `service.json`. Matches
+ * the CLI's `ServiceConfig.filename`.
+ */
+export function serviceFile(input: {
+  /** The CLI's version. */
+  readonly version: string
+  /** `OPENCODE_DESKTOP_SERVER_CHANNEL`: `local` for a CLI built from this checkout. */
+  readonly server?: string
+  readonly stateHome: string
+}) {
+  if (input.server === "local" || input.version === "local")
+    return path.join(input.stateHome, "opencode", "service-local.json")
+
+  const channel = previewChannel(input.version)
+
+  if (channel === undefined || channel === "latest" || channel === "beta" || channel === "next") return undefined
+
+  const name = channel === "dev" ? "eric_dev" : channel
+
+  return path.join(input.stateHome, "opencode", `service-${name.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`)
+}
+
+/** The channel embedded in a preview version such as `0.0.0-dev-202610260744`. */
+function previewChannel(version: string) {
+  return /^0\.0\.0-(.+?)-\d+(?:\.\d+)?$/.exec(version)?.[1]
 }
 
 // Retrying on timeout can also replace a server stuck in a migration longer than 120 s, which is accepted.
