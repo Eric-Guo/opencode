@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { queryOptions } from "@tanstack/solid-query"
 import { createRoot, getOwner } from "solid-js"
 import { createStore } from "solid-js/store"
-import { loadLspQuery } from "../sync"
 import { ServerScope } from "@/runtime/server/scope"
 import type { persisted } from "@/runtime/persistence/storage"
 
@@ -34,7 +34,8 @@ const data = {
 } satisfies Parameters<typeof createChildStoreManager>[0]["data"]
 
 const queryOptionsApi = {
-  lsp: (directory) => loadLspQuery(ServerScope.local, directory),
+  lsp: (directory: string) =>
+    queryOptions({ queryKey: [ServerScope.local, directory, "lsp"] as const, queryFn: async () => [] }),
 } satisfies Parameters<typeof createChildStoreManager>[0]["queryOptions"]
 
 function setup(input: { connected?: () => boolean } = {}) {
