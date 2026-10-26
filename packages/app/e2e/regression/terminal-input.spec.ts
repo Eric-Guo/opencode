@@ -15,8 +15,8 @@ test("clears the terminal line with Command+Delete and suppresses printable Comm
   await expect(terminal.locator("textarea")).toHaveCount(1)
   await expect.poll(() => pty.sockets.length).toBe(1)
 
-  await page.keyboard.press("Meta+k")
-  await page.keyboard.press("Meta+j")
+  await page.keyboard.press("Meta+a")
+  await page.keyboard.press("Meta+z")
   await terminal.locator("textarea").evaluate((textarea) => {
     const clipboardData = new DataTransfer()
     clipboardData.setData("text/plain", "echo pasted")
