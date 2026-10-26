@@ -1,7 +1,6 @@
 import { Predicate } from "effect"
 import { Icon, type IconProps } from "@opencode/ui/icon"
-import { Toast, showToast, toaster, type ToastOptions } from "@opencode/ui/toast"
-import type { JSX } from "solid-js"
+import { Toast, showToast, type ToastOptions } from "@opencode/ui/toast"
 
 type AppToastOptions = Omit<ToastOptions, "icon"> & {
   icon?: IconProps["name"]
