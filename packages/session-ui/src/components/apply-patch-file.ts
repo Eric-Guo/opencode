@@ -25,7 +25,7 @@ export const changedFileDiff = Schema.is(
 )
 
 /** `context` is how many unchanged lines the diff keeps around each change. */
-export function patchFile(value: Schema.Json, context?: number): ApplyPatchFile | undefined {
+export function patchFile(value: unknown, context?: number): ApplyPatchFile | undefined {
   if (!changedFileDiff(value)) return
   let view: ViewDiff | undefined
 
@@ -45,13 +45,13 @@ export function patchFile(value: Schema.Json, context?: number): ApplyPatchFile 
   }
 }
 
-export function patchFiles(value: Schema.Json | undefined, context?: number) {
+export function patchFiles(value: unknown, context?: number) {
   if (!Array.isArray(value)) return []
 
   return value.map((file) => patchFile(file, context)).filter((file): file is ApplyPatchFile => !!file)
 }
 
-export function patchFileGroups(value: Schema.Json | undefined, context?: number): ApplyPatchFileGroup[] {
+export function patchFileGroups(value: unknown, context?: number): ApplyPatchFileGroup[] {
   const groups = patchFiles(value, context).reduce((result, file) => {
     const files = result.get(file.path)
 
