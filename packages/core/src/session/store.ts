@@ -124,14 +124,14 @@ const layer = Layer.effect(
         // projection, so keep those sessions readable without admitting them to V2 context.
         const messages = yield* V1Migration.retainedMessages(db, input.sessionID)
         const anchor = input.cursor ? messages.find((message) => message.id === input.cursor?.id) : undefined
-        if (input.cursor && !anchor) return []
+        if (input.cursor && !anchor) return { retained: false as const, rows: [] }
         const rows = (order === "asc" ? messages : messages.toReversed())
           .filter((message) => {
             if (!anchor) return true
             return order === "asc" ? message.seq > anchor.seq : message.seq < anchor.seq
           })
           .slice(0, input.limit)
-        return direction === "previous" ? rows.toReversed() : rows
+        return { retained: true as const, rows: direction === "previous" ? rows.toReversed() : rows }
       }
       const anchor = input.cursor
         ? yield* db
@@ -143,7 +143,7 @@ const layer = Layer.effect(
             .get()
             .pipe(Effect.orDie)
         : undefined
-      if (input.cursor && !anchor) return []
+      if (input.cursor && !anchor) return { retained: false as const, rows: [] }
       const boundary = anchor
         ? order === "asc"
           ? gt(SessionMessageTable.seq, anchor.seq)
@@ -161,7 +161,7 @@ const layer = Layer.effect(
         )
         .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
       const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(Effect.orDie)
-      return direction === "previous" ? rows.toReversed() : rows
+      return { retained: false as const, rows: direction === "previous" ? rows.toReversed() : rows }
     })
 
     const messageRow = (messageID: SessionMessage.ID) =>
@@ -216,14 +216,22 @@ const layer = Layer.effect(
         return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       messages: Effect.fn("SessionStore.messages")(function* (input) {
-        return (yield* SessionHistory.decodeMessageRows(db, yield* messageRows(input))).map((message) =>
-          LiveToolMetadata.overlay(message),
-        )
+        const page = yield* messageRows(input)
+
+        // Retained V1 messages predate blob refs and decode directly through the legacy upgrade path.
+        const messages = page.retained
+          ? yield* Effect.forEach(page.rows, SessionHistory.decodeMessageRow)
+          : yield* SessionHistory.decodeMessageRows(db, page.rows)
+
+        return messages.map((message) => LiveToolMetadata.overlay(message))
       }),
       messagesWithRefs: Effect.fn("SessionStore.messagesWithRefs")(function* (input) {
-        return (yield* SessionHistory.decodeMessageRowsWithRefs(db, yield* messageRows(input))).map(
-          LiveToolMetadata.overlay,
-        )
+        const page = yield* messageRows(input)
+        const messages = page.retained
+          ? yield* Effect.forEach(page.rows, SessionHistory.decodeMessageRow)
+          : yield* SessionHistory.decodeMessageRowsWithRefs(db, page.rows)
+
+        return messages.map(LiveToolMetadata.overlay)
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       lastAssistantAfter: Effect.fn("SessionStore.lastAssistantAfter")(function* (input) {

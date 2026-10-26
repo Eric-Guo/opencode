@@ -1,4 +1,4 @@
-import type { Model } from "@/runtime/server/types"
+import type { Provider } from "@/runtime/server/types"
 
 type AgentModel = {
   providerID: string
@@ -12,7 +12,7 @@ type Agent = {
 
 type VariantModel = AgentModel & {
   baseModelID?: string
-  variants?: Model["variants"]
+  variants?: Provider["models"][string]["variants"]
 }
 
 /** What a selection says about the variant: follow preferences and configuration, the explicit Default, or a name. */
