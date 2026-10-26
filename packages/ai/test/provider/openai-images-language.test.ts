@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { LLM, LLMEvent, Media, Message } from "../../src/effect.js"
-import { languageModel } from "../../src/providers/openai/images.js"
+import { languageModel } from "@opencode/ai/providers/openai/images"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, json } from "../lib/http.js"
 
