@@ -39,11 +39,15 @@ const decodeLegacy = Schema.decodeUnknownOption(
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
 // Released channels share one service, port and database, so switching between stable and beta keeps the same sessions.
-// Dev builds come from every merge to dev and run their own: sharing let a dev build replace the stable server, and a
-// beta app then adopt that dev server.
+// This fork's dev builds are the eric_dev server: they keep the eric_dev registration, port, and database so a CLI
+// built from the branch and one built from dev discover the same server.
+function serviceChannel(channel: string) {
+  return channel === "dev" ? "eric_dev" : channel
+}
+
 export function filename(channel = OPENCODE_CHANNEL) {
   if (channel === "latest" || channel === "beta" || channel === "next") return "service.json"
-  return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+  return `service-${serviceChannel(channel).replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
 export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
@@ -59,8 +63,7 @@ export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platf
 function channelPort(channel: string) {
   if (channel === "latest" || channel === "beta" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
-  if (channel === "dev") return 0xc0e0
-  return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
+  return 10_000 + (Number.parseInt(Hash.fast(serviceChannel(channel)).slice(0, 8), 16) % 50_000)
 }
 
 export function legacyFilename(channel = OPENCODE_CHANNEL) {
@@ -122,18 +125,21 @@ const paths = Effect.gen(function* () {
   const global = yield* Global.Service
   const name = filename()
   const legacy = legacyFilename()
+  const legacyNames = [
+    // The dev channel wrote service-dev.json while it was isolated, before this fork gave it the eric_dev identity.
+    ...(OPENCODE_CHANNEL === "dev" ? ["service-dev.json"] : []),
+    ...(legacy ? [legacy] : []),
+  ]
   const file = path.join(global.state, name)
   return {
     fs,
     file,
-    legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
+    legacyConfigFiles: legacyNames.map((legacy) => path.join(global.config, legacy)),
     legacyRegistrationFiles: [
-      ...(legacy ? [path.join(global.state, legacy)] : []),
-      // Dev never owned the shared registration, even while it wrote there; a dev server still in it belongs to an
-      // older build and is left for a released client to replace.
-      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" && OPENCODE_CHANNEL !== "dev"
-        ? [path.join(global.state, "service.json")]
-        : []),
+      ...legacyNames.map((legacy) => path.join(global.state, legacy)),
+      // Dev used the shared registration before the isolation change; a released registration never passes the
+      // channel's version check, so only a stale dev server moves and gets replaced instead of left running.
+      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
     configFile: path.join(global.config, name),
   }
@@ -160,8 +166,8 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
-  const { fs, configFile, legacyConfigFile } = yield* paths
-  if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
+  const { fs, configFile, legacyConfigFiles } = yield* paths
+  yield* Effect.forEach(legacyConfigFiles, (legacy) => migrateConfig(legacy, configFile), { discard: true })
   const text = yield* fs.readFileString(configFile).pipe(Effect.option)
   if (Option.isNone(text)) return {} as Info
   const info = yield* decodeInfo(text.value).pipe(Effect.option)
