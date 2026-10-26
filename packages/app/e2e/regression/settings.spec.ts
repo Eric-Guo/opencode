@@ -581,7 +581,7 @@ test("shortcuts list Search sessions once and unbind a shortcut while recording 
 
   const binding = settings.locator('[data-keybind-id="settings.open"]')
   const unbind = settings.getByRole("button", { name: "Unbind", exact: true })
-  await expect(binding).toHaveText("Ctrl+,")
+  await expect(binding).toHaveText((await isMac(page)) ? "⌘," : "Ctrl+,")
   await expect(unbind).toHaveCount(0)
   await binding.click()
   await expect(binding).toHaveText("Press keys")
@@ -602,7 +602,9 @@ for (const own of [false, true]) {
 
     await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
     await expect(settings.locator('[data-keybind-id="terminal.new"]')).toBeVisible()
-    await expect(settings.locator('[data-keybind-id="terminal.close"]')).toHaveText(own ? ["Ctrl+Alt+E"] : [])
+    await expect(settings.locator('[data-keybind-id="terminal.close"]')).toHaveText(
+      own ? [(await isMac(page)) ? "⌃⌥E" : "Ctrl+Alt+E"] : [],
+    )
   })
 }
 
