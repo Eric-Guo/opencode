@@ -32,7 +32,7 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
     if (selection === "selected")
       project.myTodo = { project_id: 1, project_name: "Test PLM project", work_package_id: 42 }
 
-    await mockOpenCodeServer(page, {
+    const mock = await mockOpenCodeServer(page, {
       directory,
       project,
       provider: {
@@ -53,7 +53,7 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
     await page.route("**/api/project", (route) =>
       route.fulfill({ json: selection === "missing" && sessions.length === 0 ? [] : [project], headers }),
     )
-    await page.route("**/api/session", (route) => {
+    await page.route("**/api/session", async (route) => {
       if (route.request().method() !== "POST") return route.fallback()
 
       const body = Schema.decodeUnknownSync(
@@ -67,6 +67,21 @@ for (const selection of ["missing", "unselected", "selected"] as const) {
 
       const session = currentSession({ ...body, id: body.id, projectID, title: "First session" }, directory)
       sessions.push(session)
+
+      if (selection === "missing")
+        await mock.push([
+          {
+            id: "evt_project_created",
+            created: 1700000000000,
+            type: "project.updated",
+            data: {
+              ...project,
+              canonical: directory,
+              sandboxes: [],
+              time: { created: 1700000000000, updated: 1700000000000, active: 1700000000000 },
+            },
+          },
+        ])
 
       return route.fulfill({ json: { data: session }, headers })
     })
