@@ -144,6 +144,7 @@ export function createComposerEditor(input: {
   onCleanup(cancelFocus)
   const draft = createComposerEditorActions(input.store, input.onChange)
   const quoteComment = input.quoteComment ?? createQuoteCommentController()
+
   const capabilities = {
     commands: input.capabilities?.commands !== false,
     context: input.capabilities?.context !== false,

@@ -12,7 +12,7 @@ import {
   sessionHref,
   T0,
 } from "../utils/app"
-import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
+import { mockOpenCodeServer, mockServers, type MockProject } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer, mockWorkspace, newSessionLocation } from "../utils/workspace"
 import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
@@ -267,7 +267,7 @@ const entry = (name: string, active: number, id = `proj_${name}`) =>
     time: { created: T0, updated: T0, active: T0 + active },
   })
 
-async function homeProjects(page: Page, projects: unknown[]) {
+async function homeProjects(page: Page, projects: MockProject[]) {
   const directory = "C:/OpenCode/home"
 
   const server = await mockOpenCodeServer(page, {
