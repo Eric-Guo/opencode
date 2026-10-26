@@ -5,9 +5,42 @@ import { brotliCompressSync } from "node:zlib"
 import { pathToFileURL } from "node:url"
 import { build } from "vite"
 import { appArchiveAsset, mainConfig, payloadAssetsPlugin, rawTextPlugin } from "../vite.node.config"
+import { sidecarConfig } from "../vite.sidecar.config"
 import { nodeTarget } from "../src/node/target"
 import { AppArchive } from "../src/app-archive"
 import { tmpdir } from "./fixture/tmpdir"
+
+test.each(["cli", "sidecar"])("bundles the selected release catalog in the %s", async (target) => {
+  await using temporary = await tmpdir()
+  const snapshot = JSON.stringify({ release: { name: "Selected release catalog" } })
+  const entry = path.join(temporary.path, "entry.mjs")
+  await Bun.write(
+    entry,
+    `export { load } from ${JSON.stringify(path.resolve(import.meta.dirname, "../../core/src/models-dev/snapshot.ts"))}`,
+  )
+  const config = sidecarConfig({
+    version: "test",
+    channel: "test",
+    assetHash: "test",
+    modelsSnapshot: snapshot,
+    target: nodeTarget(process.platform, process.arch),
+  })
+  const outDir = path.join(temporary.path, "built")
+  await build({
+    configFile: false,
+    logLevel: "silent",
+    plugins: target === "cli" ? [payloadAssetsPlugin(snapshot)] : config.plugins,
+    build: {
+      ssr: entry,
+      ssrEmitAssets: true,
+      outDir,
+      rollupOptions: { output: { format: "esm", entryFileNames: "index.mjs" } },
+    },
+  })
+  const { load } = await import(pathToFileURL(path.join(outDir, "index.mjs")).href)
+
+  expect(load()).toBe(snapshot)
+})
 
 test("loads packaged payloads on demand from split chunks after relocation", async () => {
   await using temporary = await tmpdir()
