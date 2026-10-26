@@ -282,6 +282,14 @@ test.each([false, true])(
       state: path.join(service.root, "state", "opencode"),
     })
     const config = Bun.file(path.join(service.root, "config", "opencode", "service-local.json"))
+    // Registration is published before startup persists the password to the config.
+    await Effect.runPromise(
+      Service.discover({ file: service.registration }).pipe(
+        Effect.repeat({ until: (endpoint) => endpoint !== undefined, schedule: Schedule.spaced("50 millis") }),
+        Effect.timeout("20 seconds"),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
     const before = await config.text()
     try {
       await Effect.runPromise(
