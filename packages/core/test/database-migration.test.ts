@@ -423,7 +423,6 @@ describe("DatabaseMigration", () => {
         const canonical = yield* db.all(sql`SELECT * FROM session_message`)
         const events = yield* db.all(sql`SELECT * FROM event`)
         const instructions = yield* db.all(sql`SELECT * FROM instruction_state`)
-        const pending = yield* db.all(sql`SELECT * FROM session_pending`)
 
         yield* DatabaseMigration.apply(db)
         yield* DatabaseMigration.apply(db)
@@ -435,7 +434,9 @@ describe("DatabaseMigration", () => {
         expect(yield* db.all(sql`SELECT * FROM session_message WHERE session_id = 'ses_v2'`)).toEqual(canonical)
         expect(yield* db.all(sql`SELECT * FROM event`)).toEqual(events)
         expect(yield* db.all(sql`SELECT * FROM instruction_state`)).toEqual(instructions)
-        expect(yield* db.all(sql`SELECT * FROM session_pending`)).toEqual(pending)
+        expect(
+          yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_pending'`),
+        ).toBeUndefined()
         expect(yield* db.all(sql`SELECT aggregate_id, seq FROM event_sequence ORDER BY aggregate_id`)).toEqual([
           { aggregate_id: "ses_legacy", seq: 20 },
           { aggregate_id: "ses_v2", seq: 41 },
@@ -932,7 +933,7 @@ function previousV2Database(db: EffectDrizzleSqlite.EffectSQLiteDatabase) {
       db.run(sql`DROP INDEX ${sql.identifier("session_v2_" + name + "_idx")}`),
     )
     yield* db.run(sql`ALTER TABLE session_v2 RENAME TO session`)
-    yield* Effect.forEach(["resume_attempts", "time_idle", "time_viewed", "idle_outcome"], (column) =>
+    yield* Effect.forEach(["resume_attempts", "time_busy", "time_idle", "time_viewed", "idle_outcome"], (column) =>
       db.run(sql`ALTER TABLE session DROP COLUMN ${sql.identifier(column)}`),
     )
     yield* Effect.forEach(["project_id", "project_name", "work_package_id", "time_active", "time_archived"], (column) =>
@@ -940,6 +941,21 @@ function previousV2Database(db: EffectDrizzleSqlite.EffectSQLiteDatabase) {
     )
     yield* db.run(sql`DROP TABLE session_inbox`)
     yield* db.run(sql`DROP TABLE worktree`)
+    yield* db.run(sql`DROP TABLE blob_ref`)
+    yield* db.run(sql`DROP TABLE blob`)
+    yield* db.run(sql`DROP TABLE schedule`)
+    yield* db.run(sql`DROP TABLE session_part`)
+    yield* db.run(sql`
+      CREATE TABLE session_pending (
+        id text PRIMARY KEY,
+        session_id text NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+        type text NOT NULL,
+        data text NOT NULL,
+        delivery text,
+        admitted_seq integer NOT NULL,
+        time_created integer NOT NULL
+      )
+    `)
     yield* db.run(sql`DELETE FROM migration WHERE id >= ${previousV2Migration.id}`)
     yield* db.run(sql`INSERT INTO migration VALUES ('20260730195856_optional_session_title', 1)`)
     yield* db.run(sql`
