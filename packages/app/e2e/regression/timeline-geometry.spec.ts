@@ -758,7 +758,7 @@ async function scrollsBehindComposerRegion(
             },
             time: { created: 2 },
           },
-          { type: "text", id: "prt_timeline_end", text: "The last answer ends above the composer region." },
+          { type: "text", text: "The last answer ends above the composer region." },
         ],
         time: { created: 2 },
       },
