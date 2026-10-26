@@ -46,6 +46,8 @@ export async function rendererFixture(url: string, storage?: StateStore) {
       WindowShow: () => Effect.void,
       WindowGetZoomFactor: () => Effect.succeed(1),
       WindowSetZoomFactor: () => Effect.void,
+      WindowGetZoomLevel: () => Effect.succeed(1),
+      WindowSetZoomLevel: () => Effect.void,
       WindowGetPinchZoomEnabled: () => Effect.succeed(false),
       WindowSetPinchZoomEnabled: () => Effect.void,
       WindowSetTitlebar: () => Effect.void,
