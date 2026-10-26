@@ -28,7 +28,9 @@ export type {
   SkillPart,
   TextPart,
 } from "./schema"
+
 export type { FileSelection } from "../workspaces/files/types"
+
 export type { PromptScope } from "./state"
 
 export type FilePartSource = NonNullable<FileAttachmentPart["source"]>
