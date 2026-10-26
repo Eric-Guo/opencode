@@ -1270,7 +1270,7 @@ for (const delivery of ["steer", "queue"] as const) {
 
     if (colors) {
       await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model$/, {
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Build\s*·\s*Queue Model$/, {
         useInnerText: true,
       })
       await expect(bubble).toHaveCSS("background-color", colors.delivered.background)
