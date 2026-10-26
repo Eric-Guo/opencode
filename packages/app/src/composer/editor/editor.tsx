@@ -75,6 +75,8 @@ const COMPOSER_SUGGESTION_ROW_PEEK = 18
 
 const COMPOSER_SUGGESTION_TOP_PADDING = 6
 
+const COMPOSER_HISTORY_PADDING = 8
+
 const COMPOSER_SUGGESTION_SEARCH_HEIGHT = 28
 
 const COMPOSER_SUGGESTION_CONTEXT_RESERVE = 80
@@ -1444,8 +1446,10 @@ function ComposerEditorPopover(props: {
 function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean, history = false) {
   const reserve = Math.min(COMPOSER_SUGGESTION_CONTEXT_RESERVE, boundaryHeight / 4)
   const limit = Math.min(COMPOSER_SUGGESTION_MAX_HEIGHT, boundaryHeight - reserve)
-  // History has padding on both edges and shows whole rows below the pinned search control.
-  const chrome = COMPOSER_SUGGESTION_TOP_PADDING * (history ? 2 : 1) + (search ? COMPOSER_SUGGESTION_SEARCH_HEIGHT : 0)
+  // History's p-2 wrapper reserves 8px on both edges so the viewport below search fits whole rows.
+  const chrome =
+    (history ? COMPOSER_HISTORY_PADDING * 2 : COMPOSER_SUGGESTION_TOP_PADDING) +
+    (search ? COMPOSER_SUGGESTION_SEARCH_HEIGHT : 0)
   const row = COMPOSER_SUGGESTION_ROW_HEIGHT
   const peek = history ? 0 : COMPOSER_SUGGESTION_ROW_PEEK
 
