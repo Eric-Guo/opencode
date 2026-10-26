@@ -47,7 +47,7 @@ test("home commands do not wait for session search", async ({ page }) => {
 
 test("finds a setting and opens Settings with its row in view and highlighted", async ({ page }) => {
   await openPaletteWorkspace(page)
-  await page.keyboard.press("Control+K")
+  await page.keyboard.press("ControlOrMeta+K")
   const dialog = page.getByRole("dialog")
   const input = dialog.getByRole("combobox")
   await expect(input).toBeFocused()
