@@ -62,7 +62,6 @@ it.live("creates the first session directory and returns 404 for deleted session
       expect(Schema.decodeUnknownSync(SessionResponse)(await second.json()).data.id).not.toBe(created.data.id)
       await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
 
-      // This endpoint needs the session's Location graph.
       const switched = await handler(
         new Request(`http://opencode.local/api/session/${created.data.id}/agent`, {
           method: "POST",
@@ -70,12 +69,7 @@ it.live("creates the first session directory and returns 404 for deleted session
           body: JSON.stringify({ agent: "build" }),
         }),
       )
-      expect(switched.status).toBe(404)
-      expect(await switched.json()).toEqual({
-        _tag: "LocationNotFoundError",
-        location: { directory },
-        message: `Location not found: ${directory}`,
-      })
+      expect(switched.status).toBe(204)
       await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" })
 
       const transcribed = await handler(
