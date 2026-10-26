@@ -14,7 +14,7 @@ import {
 export function sidecarConfig(input: NodeBuildInput): UserConfig {
   return defineConfig({
     root: import.meta.dirname,
-    plugins: [rawTextPlugin(), runtimeRequirePlugin(), fffNodePlugin()],
+    plugins: [rawTextPlugin(input.modelsSnapshot), runtimeRequirePlugin(), fffNodePlugin()],
     resolve,
     define: {
       OPENCODE_VERSION: JSON.stringify(input.version),
