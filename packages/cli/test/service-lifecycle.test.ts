@@ -111,15 +111,15 @@ serviceTest(
     await using home = await serviceHome()
     using listener = Bun.serve({ hostname: "127.0.0.1", port: home.port, fetch: () => new Response("unrelated") })
 
+    // lsof can be installed but fail or time out; exercise the best-effort fallback.
+    await fs.writeFile(path.join(home.root, "lsof"), "#!/bin/sh\nexit 1\n", { mode: 0o755 })
+    home.env.PATH = `${home.root}${path.delimiter}${home.env.PATH}`
+
     const conflict = await cli(home, "service", "start").then(
       () => undefined,
       (error: Error) => error.message,
     )
-    expect(conflict).toContain(
-      `Managed service port ${home.port} on 127.0.0.1 is already in use by ${
-        process.platform !== "win32" && Bun.which("lsof") ? `PID ${process.pid} (` : "another process"
-      }`,
-    )
+    expect(conflict).toContain(`Managed service port ${home.port} on 127.0.0.1 is already in use by another process`)
     expect(conflict).toContain("opencode service set port <port>")
     expect(await servers(home)).toEqual([])
     expect(await Bun.file(home.registration).exists()).toBe(false)
