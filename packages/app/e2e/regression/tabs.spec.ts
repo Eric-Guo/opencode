@@ -661,8 +661,9 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await expect(sidebar).toHaveCSS("width", "276px")
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
+  // Home sits above the PLM picker; Search and New session share the action stack below it.
   const actions = await Promise.all(
-    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
+    ["vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
       const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
 
       if (!box) throw new Error(`${action} is not rendered`)
@@ -672,7 +673,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   )
 
   const gaps = actions.slice(1).map((box, index) => box.y - (actions[index].y + actions[index].height))
-  expect(gaps).toEqual([4, 4])
+  expect(gaps).toEqual([4])
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
 
