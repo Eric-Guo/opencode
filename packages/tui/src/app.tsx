@@ -42,6 +42,7 @@ import {
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
   useTuiApp,
+  useTuiLifecycle,
   useTuiPaths,
   useTuiStartup,
   useTuiTerminalEnvironment,
@@ -516,6 +517,11 @@ function App() {
   const plugins = usePlugin()
   const clipboard = useClipboard()
   const terminalEnvironment = useTuiTerminalEnvironment()
+  const storage = useStorage()
+  const lifecycle = useTuiLifecycle()
+
+  lifecycle.add(storage.flush)
+
   let paletteTimer: ReturnType<typeof setTimeout> | undefined
   let disposed = false
   // OpenTUI draws Markdown prose natively, so the first thought or code fence would start the tree-sitter worker
@@ -553,7 +559,7 @@ function App() {
       .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
       .catch(toast.error)
   })
-  const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
+  const [layout, updateLayout] = storage.store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
   const tabsResize = createPaneResize({
@@ -742,7 +748,6 @@ function App() {
   })
 
   // Opens the release highlights once after an update, but only into an idle home screen during startup.
-  const storage = useStorage()
   const paths = useTuiPaths()
   let highlighted = false
   createEffect(() => {
