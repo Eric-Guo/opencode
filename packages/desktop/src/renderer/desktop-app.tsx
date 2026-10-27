@@ -139,6 +139,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders
+        plugins={extension.plugins}
         locale={selectStartupLocale(startup.state())}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
         onThemeApplied={(mode, scheme) => {
