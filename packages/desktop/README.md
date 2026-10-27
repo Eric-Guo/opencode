@@ -35,7 +35,7 @@ the unpacked app on Windows, and AppImage/deb/rpm on Linux. The release workflow
 bun run build && bun run pack
 ```
 
-The desktop prebuild first runs every project/script pair in the selected extension's `desktop-extension.json`
+The desktop build first runs every project/script pair in the selected extension's `desktop-extension.json`
 `builds` map, in order, on every invocation. For `desktop-tab`, this rebuilds 7777 and plm-meeting together through
 `plm-meeting`'s `build:shared` before preparing the embedded server sidecar and compiling Electron. Missing or stale
 shared output needs no separate build command. A failed renderer build stops the desktop build. With no extension
@@ -46,8 +46,8 @@ With the extension exported in your shell, the Windows x64 build steps remain:
 ```bash
 export OPENCODE_DESKTOP_EXTENSION="<repo-root>/packages/desktop-tab"
 cd "<repo-root>/packages/desktop"
-RUST_TARGET=x86_64-pc-windows-msvc bun run build && \
-RUST_TARGET=x86_64-pc-windows-msvc bun run package:win -- --x64 --publish never
+OPENCODE_TARGET=windows-x64 bun run build && \
+OPENCODE_TARGET=windows-x64 bun run pack
 ```
 
 See [Adding another Sigma agent](../desktop-tab/README.md#adding-another-sigma-agent) for shared build registration,
@@ -71,11 +71,11 @@ OPENCODE_CHANNEL=prod OPENCODE_DESKTOP_EXTENSION=../desktop-tab bun run pack
 
 Both read the same environment as every other release package:
 
-| Variable | Meaning |
-| --- | --- |
-| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity and icons. |
-| `OPENCODE_VERSION` | Version stamped into the app and its packages. |
-| `OPENCODE_TARGET` | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
+| Variable           | Meaning                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity and icons.                                  |
+| `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
+| `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
 All channels build the embedded server sidecar from source, along with its assets.
 The sidecar and its assets are included under `out/main` in the app archive. A separate CLI distribution is not required.
