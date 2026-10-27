@@ -1,4 +1,4 @@
-import { app, contentTracing, screen, type BrowserWindow } from "electron"
+import { app, contentTracing, screen, type BrowserWindow, type WebContents } from "electron"
 import { Schema } from "effect"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -77,7 +77,7 @@ const setup: Plugin.MainSetup = (ctx) => {
 
     const native = await recordNative(directory)
     const windows = ctx.windows.list()
-    const pages = await Promise.all(windows.map((window) => describeWindow(window)))
+    const pages = await Promise.all(windows.map((window) => describeWindow(window, ctx.windows.contents(window))))
 
     // The server is another process, so it serializes its heap while the windows do. Windows go one at a time: a
     // snapshot can double a process's memory, and a leaking app may not have room for every window at once. Main goes
@@ -87,7 +87,7 @@ const setup: Plugin.MainSetup = (ctx) => {
       (async () => {
         const list: Snapshot[] = []
 
-        for (const window of windows) list.push(await captureWindow(window, directory))
+        for (const window of windows) list.push(await captureWindow(window, ctx.windows.contents(window), directory))
 
         return list
       })(),
@@ -251,9 +251,7 @@ async function recordNative(directory: string) {
   )
 }
 
-async function describeWindow(window: BrowserWindow) {
-  const contents = window.webContents
-
+async function describeWindow(window: BrowserWindow, contents: WebContents) {
   // A hung or busy renderer never answers, and the snapshots wait for this step, so give up after a few seconds.
   const page = await Promise.race([
     contents.executeJavaScript(pageStatsScript).then(decodePageStats),
@@ -273,8 +271,7 @@ async function describeWindow(window: BrowserWindow) {
   }
 }
 
-function captureWindow(window: BrowserWindow, directory: string) {
-  const contents = window.webContents
+function captureWindow(window: BrowserWindow, contents: WebContents, directory: string) {
   const pid = contents.getOSProcessId()
   const file = `window-${window.id}-${pid}.heapsnapshot`
 
