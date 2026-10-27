@@ -540,10 +540,10 @@ describe("ShellTool conditional process substitution", () => {
             const location = yield* Location.Service
             yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["wait *"] })
             const marker = path.join(directory.active, "marker")
-            const command = '[[ -n <(printf reached > marker) ]]; wait "$!"'
+            const command = "[[ -n <(printf reached > marker) ]]; wait"
             const result = yield* runPermissionCommand(registry, command, marker, [reply])
             expect(result.requests).toMatchObject([
-              { action: "shell", resources: ["printf reached > marker", 'wait "$!"'], save: ["printf *", "wait *"] },
+              { action: "shell", resources: ["printf reached > marker", "wait"], save: ["printf *", "wait *"] },
             ])
             if (reply === "reject") {
               expect(Exit.isFailure(result.exit)).toBe(true)
