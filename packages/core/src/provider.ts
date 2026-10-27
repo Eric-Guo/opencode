@@ -136,13 +136,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/openai", () => import("@opencode/ai/providers/openai")],
   ["@opencode/ai/providers/openai/chat", () => import("@opencode/ai/providers/openai/chat")],
   ["@opencode/ai/providers/openai/responses", () => import("@opencode/ai/providers/openai/responses")],
-  [
-    "@opencode/ai/providers/openai/images",
-    async () => {
-      const { languageModel } = await import("@opencode/ai/providers/openai/images")
-      return { model: languageModel }
-    },
-  ],
+  ["@opencode/ai/providers/openai/images", () => import("@opencode/ai/providers/openai/images")],
   ["@opencode/ai/providers/openai-compatible", () => import("@opencode/ai/providers/openai-compatible")],
   [
     "@opencode/ai/providers/openai-compatible/responses",
@@ -573,6 +567,12 @@ const importPackage = Effect.fn("Provider.importPackage")(function* (
     return yield* new LoadError({
       package: specifier,
       cause: new Error(`Provider package ${specifier} does not export model(modelID, settings)`),
+    })
+  }
+  if ("languageModel" in module && module.languageModel !== undefined && typeof module.languageModel !== "function") {
+    return yield* new LoadError({
+      package: specifier,
+      cause: new Error(`Provider package ${specifier} exports an invalid languageModel(modelID, settings)`),
     })
   }
   return module as ProviderPackageDefinition

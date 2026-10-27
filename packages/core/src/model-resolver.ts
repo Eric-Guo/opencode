@@ -249,7 +249,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
   return yield* Effect.try({
     try: () => {
-      const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      const runtime = (module.languageModel ?? module.model)(resolved.modelID ?? resolved.id, settings)
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
         compatibility: resolved.compatibility
@@ -370,7 +370,8 @@ function prepareProviderURL(
   const prepared = baseURL.replace(
     /\$\{([^}]+)\}/g,
     (placeholder, name: string) =>
-      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ?? placeholder,
+      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ??
+      placeholder,
   )
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)
@@ -466,10 +467,10 @@ export const layer = Layer.effect(
         ...selectedVariant,
         settings: Provider.mergeOverlay(provider?.settings, Provider.modelSettings(selectedVariant.settings)),
       }
-      return { provider, credential, runtimeInfo }
+      return { provider, connection, integrationID, credential, runtimeInfo }
     })
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
-      const { provider, credential, runtimeInfo } = yield* prepare(selected, variant)
+      const { provider, connection, integrationID, credential, runtimeInfo } = yield* prepare(selected, variant)
       const model = yield* fromCatalogModel(runtimeInfo, credential, dependencies)
       const runtime =
         provider?.activation === "enabled" &&
