@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { BaseWindow, ImageView, screen, View, type BrowserWindow, type WebContentsView } from "electron"
 import type { Embed } from "@opencode/plugin/gui/main"
 import type { BridgeLayout } from "@opencode/plugin/gui/host"
-import { getContentView } from "../windows/content"
+import { getContentView, getPrimaryWebContents } from "../windows/content"
 import { createCornerImages } from "../native/corners"
 import type { Instance } from "./lifecycle"
 
@@ -47,8 +47,8 @@ export function createEmbeds() {
     // The renderer measures a frame or more behind a window resize. Edges beside the window
     // edge follow it now, so the view and its corner masks do not trail inside the panel.
     // This assumes the box takes the whole change, as the side panel beside the fixed-width chat does.
-    const [width = 0, height = 0] = entry.window.getContentSize()
-    const zoom = entry.window.webContents.getZoomFactor()
+    const { width, height } = getContentView(entry.window).getBounds()
+    const zoom = getPrimaryWebContents(entry.window).getZoomFactor()
     // A child window uses screen coordinates and must stay inside its owner.
     const clip = cutout && intersectWindow(cutout, width, height)
 
@@ -90,8 +90,9 @@ export function createEmbeds() {
 
         if (container.window) {
           const origin = entry.window.getContentBounds()
+          const content = getContentView(entry.window).getBounds()
 
-          container.window.setBounds({ ...clip, x: origin.x + clip.x, y: origin.y + clip.y })
+          container.window.setBounds({ ...clip, x: origin.x + content.x + clip.x, y: origin.y + content.y + clip.y })
         } else container.root.setBounds(clip)
 
         bounds.x -= clip.x
