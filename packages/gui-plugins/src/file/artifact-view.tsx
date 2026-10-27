@@ -24,7 +24,14 @@ import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/mark
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createKeyed, usePlugin, type FileContent, type MountedSession } from "@opencode/plugin/gui"
-import { blobUrlFromContent, bytesFromContent, contentBytes, formatBytes, parseDelimited, resolveArtifactPath } from "./artifact"
+import {
+  blobUrlFromContent,
+  bytesFromContent,
+  contentBytes,
+  formatBytes,
+  parseDelimited,
+  resolveArtifactPath,
+} from "./artifact"
 import { current, useShared } from "./context"
 import { FileViewer } from "@opencode/plugin/gui/file"
 import { workspaceFileUrl } from "./path"
