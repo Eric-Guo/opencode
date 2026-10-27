@@ -2,10 +2,13 @@ import { Effect, Option } from "effect"
 import { Commands, Server, Standalone } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
+import { errorMessage } from "../../util/error"
 
 export default Runtime.handler(Commands.commands.run, (input) =>
   Effect.gen(function* () {
-    const { reportRunError, runNonInteractive, formatMessage, mergeInput } = yield* Effect.promise(() => import("../../run/run"))
+    const { reportRunError, runNonInteractive, formatMessage, mergeInput } = yield* Effect.promise(
+      () => import("../../run/run"),
+    )
     const sharing = Option.getOrUndefined(input.workspaceSharing)
     if (sharing !== undefined) {
       const server = yield* Effect.serviceOption(Server).pipe(Effect.map(Option.flatten))
@@ -52,7 +55,7 @@ export default Runtime.handler(Commands.commands.run, (input) =>
     // A one-off run uses the background service when it is already up, but never leaves a new one running.
     const server = yield* ServerConnection.resolve({ autostart: false }).pipe(
       Effect.tapError((error) => Effect.logError("run could not resolve its server", { cause: error })),
-      Effect.catch((error) => Effect.sync(() => reportRunError(input, error.message))),
+      Effect.catch((error) => Effect.sync(() => reportRunError(input, errorMessage(error)))),
     )
     if (!server) return
     yield* Effect.promise(() =>
