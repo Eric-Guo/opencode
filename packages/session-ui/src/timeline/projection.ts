@@ -1078,6 +1078,8 @@ function contentGroupType(
 
   if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
+  if (content.type === "file") return undefined
+
   return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
 }
 
