@@ -674,7 +674,7 @@ const RichUserAttachments = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Prompt with rich attachments"
-      description="An image, JSON attachment, source-file reference, and agent mention remain individually visible."
+      description="User and generated images, a JSON attachment, source-file reference, and agent mention remain individually visible."
       document={{
         ...thinkingDocument,
         status: { type: "idle" },
@@ -701,6 +701,22 @@ const RichUserAttachments = {
               },
             ],
             time: { created: 1_735_689_633_000 },
+          },
+          {
+            id: "msg_story_generated_image",
+            type: "assistant",
+            agent: "build",
+            model: STORY_MODEL,
+            content: [
+              {
+                type: "file",
+                id: "generated-msg_story_generated_image-0",
+                mime: "image/png",
+                filename: "generated-chart.png",
+                url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+              },
+            ],
+            time: { created: 1_735_689_634_000, completed: 1_735_689_635_000 },
           },
         ],
       }}
