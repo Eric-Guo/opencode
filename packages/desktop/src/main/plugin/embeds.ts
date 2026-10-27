@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { ImageView, screen, type BrowserWindow, type WebContentsView } from "electron"
 import type { BridgeLayout } from "@opencode/plugin/gui/host"
 import type { Embed } from "@opencode/plugin/gui/main"
-import { getContentView } from "../windows/content"
+import { getContentView, getPrimaryWebContents } from "../windows/content"
 import { createCornerImages } from "../native/corners"
 import type { Instance } from "./lifecycle"
 
@@ -39,8 +39,8 @@ export function createEmbeds() {
     // The renderer measures a frame or more behind a window resize. Edges beside the window
     // edge follow it now, so the view and its corner masks do not trail inside the panel.
     // This assumes the box takes the whole change, as the side panel beside the fixed-width chat does.
-    const [width = 0, height = 0] = entry.window.getContentSize()
-    const zoom = entry.window.webContents.getZoomFactor()
+    const { width, height } = getContentView(entry.window).getBounds()
+    const zoom = getPrimaryWebContents(entry.window).getZoomFactor()
 
     // The renderer's viewport is whole CSS px, so it can be off by one CSS px plus rounding; that is not a resize.
     const follow = (inset: number, change: number) =>
