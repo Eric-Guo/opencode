@@ -17,6 +17,8 @@ export interface Definition<
   Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
 > {
   readonly model: (modelID: string, settings: ProviderSettings) => LanguageModel<Options, Compact>
+  /** Optional session adapter when the entrypoint's native model generates media. */
+  readonly languageModel?: (modelID: string, settings: ProviderSettings) => LanguageModel<Options, Compact>
 }
 
 export * as ProviderPackage from "./provider-package.js"
