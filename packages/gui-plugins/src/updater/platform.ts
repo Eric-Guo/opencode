@@ -1,13 +1,9 @@
-import { execFile } from "node:child_process"
-import { promisify } from "node:util"
 import { app, autoUpdater } from "electron"
 import pkg from "electron-updater"
 import { Effect } from "effect"
 import type { Platform } from "./machine"
 
 const updateClient = pkg.autoUpdater
-
-const execFileAsync = promisify(execFile)
 
 const restartTimeout = 10_000
 
@@ -137,7 +133,7 @@ export const make = Effect.fn("Updater.platform")(function* (
           }
         },
         catch: (error) => error,
-      }).pipe(Effect.flatMap(unpackInstaller))
+      })
 
     const downloadId = ++quitState.macDownloadId
     quitState.macDownloaded = false
@@ -280,24 +276,3 @@ export const make = Effect.fn("Updater.platform")(function* (
     isPendingQuitInstall: () => quitState.squirrelStaged,
   } satisfies DesktopPlatform
 })
-
-// The NSIS installer unpacks the update beside the install directory while the app keeps running, so the
-// install after the restart moves one directory into place instead of decompressing the whole app. When this
-// fails, the restart still installs the update, only slower.
-function unpackInstaller(files: string[]) {
-  const installer = files.find((file) => file.endsWith(".exe"))
-
-  if (process.platform !== "win32" || !app.isPackaged || !installer) return Effect.void
-
-  return Effect.tryPromise((signal) =>
-    execFileAsync(installer, ["--stage"], { windowsHide: true, timeout: unpackTimeout, signal }),
-  ).pipe(
-    Effect.andThen(Effect.logInfo("update unpacked before restart", { installer })),
-    Effect.catch((error) =>
-      Effect.logWarning("update not unpacked before restart", {
-        installer,
-        message: error.cause instanceof Error ? error.cause.message : String(error.cause),
-      }),
-    ),
-  )
-}
