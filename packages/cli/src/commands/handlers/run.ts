@@ -2,10 +2,13 @@ import { Effect, Option } from "effect"
 import { Commands, Server, Standalone } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
+import { errorMessage } from "../../util/error"
 
 export default Runtime.handler(Commands.commands.run, (input) =>
   Effect.gen(function* () {
-    const { reportRunError, runNonInteractive, formatMessage, mergeInput } = yield* Effect.promise(() => import("../../run/run"))
+    const { reportRunError, runNonInteractive, formatMessage, mergeInput } = yield* Effect.promise(
+      () => import("../../run/run"),
+    )
     const separator = process.argv.indexOf("--", 2)
     const sharing = Option.getOrUndefined(input.workspaceSharing)
     if (sharing !== undefined) {
@@ -52,7 +55,7 @@ export default Runtime.handler(Commands.commands.run, (input) =>
       throw new Error("--detach and --request-id require --workspace-sharing")
     const server = yield* ServerConnection.resolve().pipe(
       Effect.tapError((error) => Effect.logError("run could not resolve its server", { cause: error })),
-      Effect.catch((error) => Effect.sync(() => reportRunError(input, error.message))),
+      Effect.catch((error) => Effect.sync(() => reportRunError(input, errorMessage(error)))),
     )
     if (!server) return
     yield* Effect.promise(() =>
