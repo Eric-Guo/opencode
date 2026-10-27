@@ -525,7 +525,7 @@ export function createBrowserPane(input: {
         if (!entry.pages.has(id) || entry.focusedTabID !== id || entry.win.isDestroyed()) return
 
         // The page held keyboard focus; the command runs in the app, which may move focus there, as ⌘L does.
-        if (entry.win.isFocused()) entry.win.webContents.focus()
+        if (entry.win.isFocused()) input.windows.contents(entry.win).focus()
         publish(entry, { type: "shortcut", ...shortcut })
       },
       focused: () => {
