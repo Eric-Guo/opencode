@@ -1,10 +1,11 @@
 import { MessageChannelMain } from "electron"
 import type { WebContents } from "electron"
-import { Effect, Layer, ManagedRuntime } from "effect"
+import { Effect, Layer, ManagedRuntime, Schema } from "effect"
 import { RpcServer } from "effect/rpc"
+import { Ssh, SshState } from "../../../gui-plugins/src/ssh/contract"
 import { AppRpcs } from "../../src/shared/ipc-rpc/app"
 import { EventRpcs } from "../../src/shared/ipc-rpc/events"
-import { ExtensionRpcs } from "../../src/shared/ipc-rpc/extensions"
+import { PluginRpcs } from "../../src/shared/ipc-rpc/plugins"
 import { StorageRpcs } from "../../src/shared/ipc-rpc/storage"
 import { WindowRpcs } from "../../src/shared/ipc-rpc/window"
 import { IpcTransportPort } from "../../src/shared/ipc-transport"
@@ -14,9 +15,9 @@ import type { StateStore } from "../../src/main/storage/state"
 
 /** Real renderer/transport with fixture-owned native state and no installed service. */
 export async function rendererFixture(url: string, storage?: StateStore) {
-  // This fixture has no native SSH/updater hosts; disable them rather than wait for their main stores.
-  const extensions = ["ssh", "updater"].map((id) => ({ id, name: id, version: "1", builtin: true, enabled: false }))
-  const rpcs = AppRpcs.merge(WindowRpcs, StorageRpcs, EventRpcs, ExtensionRpcs)
+  // Built-ins always run. SSH publishes an empty inventory so the server startup gate can settle.
+  const plugins = ["ssh", "updater"].map((id) => ({ id, builtin: true, enabled: true }))
+  const rpcs = AppRpcs.merge(WindowRpcs, StorageRpcs, EventRpcs, PluginRpcs)
 
   const handlers = Layer.mergeAll(
     AppRpcs.toLayer({
@@ -63,21 +64,24 @@ export async function rendererFixture(url: string, storage?: StateStore) {
       DraftsPutBlob: () => Effect.die("Fixture must not write attachments"),
       DraftsGetBlob: () => Effect.succeed(null),
     }),
-    ExtensionRpcs.toLayer({
-      ExtensionCall: () => Effect.die("No fixture GUI extensions"),
-      ExtensionSubscribe: () => Effect.succeed({ available: false }),
-      ExtensionEmbed: () => Effect.void,
-      ExtensionCapture: () => Effect.succeed(null),
-      ExtensionMenubarItem: () => Effect.void,
-      ExtensionMenubarItems: () => Effect.succeed([]),
-      ExtensionConfigure: () => Effect.void,
-      ExtensionList: () => Effect.succeed(extensions),
-      ExtensionEnable: () => Effect.void,
-      ExtensionDisable: () => Effect.void,
-      ExtensionReload: () => Effect.void,
-      ExtensionInstall: () => Effect.void,
-      ExtensionRemove: () => Effect.void,
-      ExtensionSource: () => Effect.succeed(""),
+    PluginRpcs.toLayer({
+      PluginCall: () => Effect.die("No fixture GUI plugins"),
+      PluginSubscribe: ({ ipc }) =>
+        Effect.succeed(
+          ipc === Ssh.id
+            ? { available: true, state: Schema.encodeSync(SshState)({ servers: [], revision: 0 }) }
+            : { available: false },
+        ),
+      PluginEmbed: () => Effect.void,
+      PluginCapture: () => Effect.succeed(null),
+      PluginMenubarItem: () => Effect.void,
+      PluginMenubarItems: () => Effect.succeed([]),
+      PluginConfigure: () => Effect.void,
+      PluginList: () => Effect.succeed(plugins),
+      PluginEnable: () => Effect.void,
+      PluginDisable: () => Effect.void,
+      PluginReload: () => Effect.void,
+      PluginGuis: () => Effect.succeed({ plugins: [], reserved: [] }),
     }),
     eventHandlers,
   )
@@ -89,7 +93,7 @@ export async function rendererFixture(url: string, storage?: StateStore) {
   const handoff = await runtime.runPromise(IpcPortHandoff)
 
   return {
-    extensions,
+    plugins,
     bind(contents: WebContents) {
       contents.on("did-finish-load", () => {
         const channel = new MessageChannelMain()
