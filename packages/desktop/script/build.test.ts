@@ -11,18 +11,18 @@ afterEach(async () => {
 })
 
 async function fixture(failure = false) {
-  const directory = await realpath(await mkdtemp(join(tmpdir(), "desktop-prebuild-")))
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "desktop-build-")))
   directories.push(directory)
 
   await Promise.all([
-    ...["prebuild", "build-extension", "extension", "utils", "copy-icons", "copy-metainfo"].map((name) =>
-      Bun.write(join(directory, "desktop/scripts", `${name}.ts`), Bun.file(new URL(`./${name}.ts`, import.meta.url))),
+    ...["build", "build-extension", "extension", "utils", "copy-icons", "copy-metainfo"].map((name) =>
+      Bun.write(join(directory, "desktop/script", `${name}.ts`), Bun.file(new URL(`./${name}.ts`, import.meta.url))),
     ),
     Bun.write(
       join(directory, "desktop/package.json"),
       JSON.stringify({
         type: "module",
-        scripts: { prebuild: pkg.scripts.prebuild, build: pkg.scripts.build },
+        scripts: { build: pkg.scripts.build },
         devDependencies: { electron: pkg.devDependencies.electron },
       }),
     ),
@@ -32,7 +32,7 @@ async function fixture(failure = false) {
     Bun.write(join(directory, "desktop/entry.ts"), 'document.title = "host fixture"'),
     Bun.write(
       join(directory, "desktop/electron.vite.config.ts"),
-      `import { desktopExtension } from "./scripts/extension"
+      `import { desktopExtension } from "./script/extension"
 export default {
   renderer: {
     root: import.meta.dirname,
