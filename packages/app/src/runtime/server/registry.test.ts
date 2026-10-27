@@ -131,7 +131,9 @@ test("used and last projects follow dynamic server scopes, and migration consume
     }),
   )
 
-  const [props, setProps] = createStore<ProjectScopeProps>({ server: ServerConnection.Key.make("https://remote.example") })
+  const [props, setProps] = createStore<ProjectScopeProps>({
+    server: ServerConnection.Key.make("https://remote.example"),
+  })
 
   const projects = createServerProjects({
     store,
