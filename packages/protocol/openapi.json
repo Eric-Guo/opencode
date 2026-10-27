@@ -18264,14 +18264,10 @@
           "shell": {
             "anyOf": [
               {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string"
+              },
+              {
+                "type": "null"
               },
               {
                 "type": "null"
@@ -18281,22 +18277,14 @@
           "websearch": {
             "anyOf": [
               {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "boolean",
-                        "enum": [false]
-                      },
-                      {
-                        "$ref": "#/components/schemas/ConfigWebSearch.InfoEncoded"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "boolean",
+                "enum": [false]
+              },
+              {
+                "$ref": "#/components/schemas/ConfigWebSearch.InfoEncoded"
+              },
+              {
+                "type": "null"
               },
               {
                 "type": "null"
@@ -18839,7 +18827,8 @@
               },
               "size": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "entries": {
                 "type": "array",
@@ -18860,7 +18849,8 @@
               },
               "size": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["status", "size"],
@@ -18873,7 +18863,8 @@
         "properties": {
           "id": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "name": {
             "type": "string"
@@ -18883,11 +18874,13 @@
           },
           "size": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "compressedSize": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "encrypted": {
             "type": "boolean"
@@ -18897,7 +18890,8 @@
           },
           "compressionMethod": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["id", "name", "directory", "size", "compressedSize", "encrypted", "symlink", "compressionMethod"],
