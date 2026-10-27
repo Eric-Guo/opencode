@@ -1,4 +1,6 @@
 export { imageModel as model } from "../openai.js"
+export type { Settings } from "../openai.js"
+import type { Settings } from "../openai.js"
 import { Effect, Schema, Stream } from "effect"
 import { ImageRequest, ImageResponse } from "../../image.js"
 import { OpenAIImages } from "../../protocols/openai-images.js"
@@ -10,11 +12,6 @@ import { Protocol } from "../../route/protocol.js"
 import type { HttpMiddleware, Transport } from "../../route/transport/index.js"
 import { Finish, MediaEvent, StepFinish, Usage, type LLMEvent } from "../../schema/index.js"
 import type { ProviderPackage } from "../../provider-package.js"
-
-export type Settings = ProviderPackage.Settings & {
-  readonly apiKey?: string
-  readonly provider?: string
-}
 
 // Images endpoints return one JSON response, even when the caller consumes LLM.stream.
 // Reuse the media route so authentication, multipart edits, timeouts, and decoding have one owner.
@@ -37,7 +34,10 @@ const transport = {
   ImageResponse
 >
 
-export const languageModel: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const languageModel: ProviderPackage.Definition<Settings & { readonly provider?: string }>["model"] = (
+  modelID,
+  settings,
+) => {
   const { apiKey, baseURL, headers, body, provider, ...providerOptions } = settings
   const auth = AuthOptions.bearer({ apiKey }, "OPENAI_API_KEY")
   const image = OpenAIImages.model({ id: modelID, baseURL, auth })
