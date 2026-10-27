@@ -205,7 +205,12 @@ describe("Image", () => {
     it.effect("keeps an http url as a URL asset", () =>
       Effect.gen(function* () {
         const response = yield* generate([{ url: "https://cdn.image.test/result.png" }])
-        expect(response.image.source).toEqual({ type: "url", url: "https://cdn.image.test/result.png" })
+        expect(response.image.source).toEqual({
+          type: "url",
+          url: "https://cdn.image.test/result.png",
+          // The response reports no format, so the protocol keeps the requested/default format for the URL.
+          mediaType: "image/png",
+        })
       }),
     )
 
