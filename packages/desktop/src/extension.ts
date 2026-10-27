@@ -1,6 +1,7 @@
 // SAFETY: These type-only, versioned plugin hooks intentionally carry plugin-owned payloads.
 // Each plugin validates its own input and result; the host cannot prescribe a schema for them.
 /* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type */
+import type { Entry } from "@opencode/plugin/gui/host"
 import type { BrowserWindow, ContextMenuParams, IpcMainInvokeEvent, WebContents, WebContentsView, View } from "electron"
 
 /** Versioned, type-only contract. Extensions must not import desktop internals. */
@@ -77,6 +78,8 @@ export type DesktopExtension = {
 }
 
 export type DesktopRendererExtension = {
+  /** GUI contributions bundled with this distribution, mounted by the app plugin host. */
+  plugins?: readonly Entry[]
   setup?(host: { showLogin(onLogin: (credentials: { username: string; password: string }) => Promise<void>): void }): {
     command(id: string): boolean
   }
