@@ -771,6 +771,7 @@ test("artifact actions copy and download content, switch source, and follow the 
 
   const workspace = await openSession(page, {
     name: "ArtifactActions",
+    seed: { theme: { id: "oc-2", scheme: "light" } },
     fileList: () => [],
     fileContent: (path) => {
       if (path === "vector.svg") return { content: source }
