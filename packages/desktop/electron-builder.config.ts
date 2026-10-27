@@ -221,6 +221,8 @@ const getBase = (appId: string): Configuration => {
           "!**/.git/**",
           "!tmp/**",
           "!opencode-thape.sublime-workspace",
+          // Package managers leave absolute .bin shims; after copy they dangle and 7-Zip fails NSIS.
+          "!**/node_modules/.bin{,/**/*}",
           "!node_modules/**/*.d.ts",
           "!node_modules/**/*.{js,cjs,mjs,css,ts,cts,mts}.map",
           "!node_modules/effect/src/**",
@@ -233,6 +235,7 @@ const getBase = (appId: string): Configuration => {
         to: "thape-config/node_modules",
         filter: [
           "**/*",
+          "!**/.bin{,/**/*}",
           "!**/*.d.ts",
           "!**/*.{js,cjs,mjs,css,ts,cts,mts}.map",
           "!effect/src/**",
