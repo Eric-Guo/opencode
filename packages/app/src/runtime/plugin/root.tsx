@@ -40,7 +40,7 @@ export function useHostApis() {
 }
 
 /** Mounts the plugin host for the window. Lives above the app interface so plugins can contribute servers. */
-export function PluginRoot(props: ParentProps) {
+export function PluginRoot(props: ParentProps<{ plugins?: readonly Entry[] }>) {
   const platform = usePlatform()
   const apis = createHostApis()
   const bridge = platform.plugins
@@ -50,7 +50,8 @@ export function PluginRoot(props: ParentProps) {
 
   const os = platform.platform === "desktop" ? platform.os : undefined
 
-  const localBuiltins = builtins.filter((definition) => runsOn(definition, os))
+  // Distribution plugins are fixed for this window, so read this prop once with the built-ins.
+  const localBuiltins = [...builtins, ...(props.plugins ?? [])].filter((definition) => runsOn(definition, os))
 
   // The GUIs of the plugins on the app's own server, as main sends them, and the plugins whose GUI cannot load because a
   // built-in claims the id, which Extensions › Plugins shows. Settled once the loader first publishes, even empty after
@@ -70,7 +71,7 @@ export function PluginRoot(props: ParentProps) {
     },
   )
 
-  const builtinIds = new Set(builtins.map((builtin) => builtin.id))
+  const builtinIds = new Set(localBuiltins.map((builtin) => builtin.id))
 
   return (
     <HostApisContext.Provider value={apis}>
