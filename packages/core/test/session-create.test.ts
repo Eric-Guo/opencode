@@ -382,11 +382,11 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("stores a trailing-slash directory in the same session list", () =>
+  it.live("stores a trailing-slash directory in the same session list", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
 
-      const created = yield* session.create({ location: { directory: AbsolutePath.make("/project/") } })
+      const created = yield* session.create({ location: { directory: AbsolutePath.make(`${location.directory}/`) } })
 
       expect(created.location.directory).toBe(location.directory)
       expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([

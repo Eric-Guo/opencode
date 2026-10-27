@@ -72,7 +72,9 @@ function nativeTarget() {
   throw new Error(`Unsupported platform: ${platform}/${arch}`)
 }
 
-export function getCurrentCli(target = process.env.OPENCODE_TARGET ?? process.env.OPENCODE_CLI_TARGET ?? process.env.RUST_TARGET ?? nativeTarget()) {
+export function getCurrentCli(
+  target = process.env.OPENCODE_TARGET ?? process.env.OPENCODE_CLI_TARGET ?? process.env.RUST_TARGET ?? nativeTarget(),
+) {
   const binaryConfig = CLI_BINARIES.find((item) => item.rustTarget === target || item.target === target)
 
   if (!binaryConfig) throw new Error(`CLI configuration not available for target '${target}'`)
