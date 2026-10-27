@@ -29,6 +29,7 @@ import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
+import type { Entry } from "@opencode/plugin/gui/host"
 import { PluginRoot } from "@/runtime/plugin/root"
 import { baseRouter } from "@/runtime/platform/base-path-router"
 
@@ -61,6 +62,7 @@ function BodyTypography() {
 export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
+    plugins?: readonly Entry[]
     onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
     onThemeApplied?: (mode: "light" | "dark", scheme: "system" | "light" | "dark") => void
   }>,
@@ -83,7 +85,7 @@ export function AppBaseProviders(
             >
               <QueryProvider>
                 <DialogProvider>
-                  <PluginRoot>
+                  <PluginRoot plugins={props.plugins}>
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
                   </PluginRoot>
                 </DialogProvider>
