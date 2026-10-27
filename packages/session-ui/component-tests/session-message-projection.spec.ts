@@ -273,9 +273,12 @@ story("renders aliased and long custom model notices", async ({ mount, page }) =
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
-story("renders user image, file attachment, file reference, and agent reference", async ({ mount }) => {
+story("renders user and generated images, file attachment, file reference, and agent reference", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "attachments" } })
   await expect(timeline.getByAltText("pixel.png")).toBeVisible()
+  const generated = timeline.getByAltText("generated-chart.png")
+  await expect(generated).toBeVisible()
+  await expect(generated).toHaveJSProperty("naturalWidth", 1)
   await expect(timeline.getByText("tsconfig.json")).toBeVisible()
   await expect(timeline.getByText("@src/a.ts", { exact: true })).toBeVisible()
   await expect(timeline.getByText("@explore", { exact: true })).toBeVisible()
