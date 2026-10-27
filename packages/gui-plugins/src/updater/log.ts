@@ -1,6 +1,6 @@
 import { Effect, Layer, Logger, Predicate, References } from "effect"
 
-import type { Log } from "../sdk/main"
+import type { Log } from "@opencode/plugin/gui/main"
 
 /** Services for running the updater's effects: every log goes to the desktop log file, debug included. */
 export function logContext(
