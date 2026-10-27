@@ -27,7 +27,8 @@ bundles. For renderer hot reload, run each renderer's dev server and set its tab
 
 ## Build
 
-`bun run build` prepares `resources/` (icons and metainfo) and builds the app into `out/`.
+`bun run build` prepares `resources/` (icons and metainfo) and builds the app into `out/`. It selects an adjacent
+`desktop-tab` checkout automatically; set `OPENCODE_DESKTOP_EXTENSION=none` to build the base desktop instead.
 `bun run pack` then packages it, unsigned, into `dist/desktop/` at the repository root: a `.app` tarball on macOS,
 the unpacked app on Windows, and AppImage/deb/rpm on Linux. The release workflow signs and notarizes afterwards.
 
