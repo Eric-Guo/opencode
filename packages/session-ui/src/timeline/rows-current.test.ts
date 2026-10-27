@@ -117,7 +117,18 @@ describe("current session timeline rows", () => {
       },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
+    const detail = timelinePresets.find((preset) => preset.id === "compact")!.value
+
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      true,
+      { type: "idle" },
+      undefined,
+      false,
+      false,
+      undefined,
+      detail,
+    )
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user",
