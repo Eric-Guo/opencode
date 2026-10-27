@@ -489,9 +489,9 @@ const defaultSource = "https://models.opencode.ai"
 
 // The experimental v2 API, limited to the model types opencode keeps.
 export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}`
-export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.map((catalog) => normalize(catalog, text)))
 
-export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, text)))
+export const decodeSnapshot = (text: string) =>
+  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, text)))
 
 // Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
