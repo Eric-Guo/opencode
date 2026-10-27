@@ -67,6 +67,30 @@ index f5470bf52e923dc47266cea4684c76ef78ced451..ba5a7d92434351a7c7bea660c393288a
      Goto DoneExtract7za
  
    AbortExtract7za:
+diff --git a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh b/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
+index a5cb3fe536a9fe95a95ac796f92a27f62d9762cc..705472713852ea6c7e38db4096f135aaf33b3b84 100644
+--- a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
++++ b/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
+@@ -123,6 +123,9 @@
+       doStopProcess:
+ 
+       DetailPrint "$(appClosing)"
++      !ifmacrodef setInstallStatus
++        !insertmacro setInstallStatus "$(appClosing)"
++      !endif
+ 
+       !insertmacro KILL_PROCESS "${APP_EXECUTABLE_FILENAME}" 0
+       # to ensure that files are not "in-use"
+@@ -133,6 +136,9 @@
+ 
+       loop:
+         IntOp $R1 $R1 + 1
++        !ifmacrodef advanceInstallProgress
++          !insertmacro advanceInstallProgress 300 5400
++        !endif
+ 
+         !insertmacro FIND_PROCESS "${APP_EXECUTABLE_FILENAME}" $R0
+         ${if} $R0 == 0
 diff --git a/templates/nsis/include/installUtil.nsh b/templates/nsis/include/installUtil.nsh
 index 47367741632726ba0886ac516461dbe98b7aea58..5f8e08e87fc3411afbf05efbe09d4a8fb4c9dc7a 100644
 --- a/templates/nsis/include/installUtil.nsh
