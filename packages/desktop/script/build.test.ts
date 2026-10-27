@@ -77,7 +77,7 @@ await Bun.write("dist-shared/assets/shared.txt", process.env.RUST_TARGET ?? "mis
   return directory
 }
 
-async function build(directory: string, extension = "../extension") {
+async function build(directory: string, extension: string | undefined = "../extension") {
   const child = Bun.spawn([process.execPath, "run", "build"], {
     cwd: join(directory, "desktop"),
     env: {
@@ -98,6 +98,20 @@ async function build(directory: string, extension = "../extension") {
 
   return { code, log: stdout + stderr }
 }
+
+test("desktop build selects an adjacent desktop-tab checkout by default", async () => {
+  const directory = await fixture()
+  await symlink(
+    join(directory, "extension"),
+    join(directory, "desktop-tab"),
+    process.platform === "win32" ? "junction" : "dir",
+  )
+
+  const result = await build(directory, undefined)
+  expect(result.code, result.log).toBe(0)
+  expect(await Bun.file(join(directory, "desktop/out/renderer/sigma-agents/agent.html")).text()).toBe("first build")
+  expect(await Bun.file(join(directory, "steps")).text()).toBe("shared\n")
+}, 30000)
 
 test("desktop build prepares missing shared assets and rebuilds them once on every invocation", async () => {
   const directory = await fixture()
