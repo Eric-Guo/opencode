@@ -82,6 +82,22 @@ function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effec
 }
 
 describe("ModelResolver", () => {
+  it.effect("uses the image provider's session adapter for language generation", () =>
+    Effect.gen(function* () {
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model("@opencode/ai/providers/openai/images", {
+          modelID: "gpt-image-1-mini",
+          settings: { baseURL: "https://images.test/v1" },
+        }),
+        Credential.Key.make({ type: "key", key: "fixture" }),
+      )
+      const request = yield* compileRequest(LLM.request({ model: resolved, prompt: "A koi pond" }))
+
+      expect(resolved.route.transport.id).toBe("openai-images")
+      expect(request.body).toMatchObject({ prompt: "A koi pond", model: { id: "gpt-image-1-mini" } })
+    }),
+  )
+
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(
