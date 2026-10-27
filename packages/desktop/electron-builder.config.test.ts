@@ -346,4 +346,5 @@ test("bundled config excludes repository instructions and retains runtime files"
   expect(include("opencode.json")).toBe(true)
   expect(include("plugin/index.ts")).toBe(true)
   expect(include("node_modules/effect/dist/index.js")).toBe(true)
+  expect(include("node_modules/.bin/semver")).toBe(false)
 })
