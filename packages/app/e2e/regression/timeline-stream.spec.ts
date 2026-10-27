@@ -5,7 +5,7 @@ import type { SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@op
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
 import { readSessionDraftText } from "../utils/drafts"
-import { holdRoute } from "../utils/app"
+import { holdRoute, seed } from "../utils/app"
 import {
   assistantID,
   assistantMessage,
@@ -2261,6 +2261,7 @@ test("a failed direct quote send keeps the popup and comment for retry", async (
 
 test("highlights the exact duplicate passage whenever its quote comment is open", async ({ page }) => {
   let reject = true
+  await seed(page, { storage: { "opencode-color-scheme": "system" } })
   await setupTimeline(page, {
     seedHistory: true,
     messages: [
@@ -2740,6 +2741,7 @@ test("highlights a horizontally clipped code quote without scrolling its source"
 
 test("quotes table rows and diff lines selected across a diff viewer", async ({ page }) => {
   const prompts: string[] = []
+  await seed(page, { theme: { id: "oc-2", scheme: "light" } })
   await setupTimeline(page, {
     settings: { editToolPartsExpanded: true },
     messages: [
