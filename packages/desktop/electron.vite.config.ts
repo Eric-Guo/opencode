@@ -1,6 +1,6 @@
 import { defineConfig, type RendererViteConfig } from "electron-vite"
 import { loadConfigFromFile, mergeConfig, type ConfigEnv, type Plugin } from "vite"
-import { desktopExtension } from "./scripts/extension"
+import { desktopExtension } from "./script/extension"
 import { resolve } from "node:path"
 import { pickerPlugin } from "./script/picker"
 import { nodePtyPackage } from "./script/utils"
