@@ -4,6 +4,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
+import { seed } from "../utils/app"
 import {
   assistantID,
   assistantMessage,
@@ -2082,6 +2083,7 @@ test("quotes plain timeline text into the composer, with or without a comment", 
 
 test("highlights a quote's source only while its first comment is written", async ({ page }) => {
   let reject = true
+  await seed(page, { storage: { "opencode-color-scheme": "system" } })
   await setupTimeline(page, {
     messages: [
       userMessage(),
@@ -2332,6 +2334,7 @@ test("reveals a pending quote's source and restores its retained draft after its
 
 test("quotes table rows and diff lines selected across a diff viewer", async ({ page }) => {
   const prompts: string[] = []
+  await seed(page, { theme: { id: "oc-2", scheme: "light" } })
   await setupTimeline(page, {
     settings: { editToolPartsExpanded: true },
     messages: [
