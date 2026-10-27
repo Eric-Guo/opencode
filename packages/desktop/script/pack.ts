@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
-import { cp, mkdir, readdir, rm } from "node:fs/promises"
+import { cp, mkdir, readdir, rm, stat, unlink } from "node:fs/promises"
 import path from "node:path"
 import { getConfig } from "../electron-builder.config"
 import { getCurrentCli, resolveChannel } from "./utils"
@@ -35,6 +35,9 @@ await mkdir(out, { recursive: true })
 if (app) {
   // The installer uses the channel's icons; the rest of the app is already built and signed.
   await $`bun ./script/copy-icons.ts ${resolveChannel()}`
+  // Cross-pack on macOS can leave absolute .bin shims that point into a deleted win-unpacked tree;
+  // 7-Zip then exits 1 and electron-builder aborts the NSIS build.
+  await removeDanglingSymlinks(app)
   await $`bunx electron-builder ${flags} --prepackaged ${app}`
   const installers = (await readdir("dist")).filter((file) => file.endsWith(".exe"))
 
@@ -63,6 +66,24 @@ if (!app && os === "win") {
   const unpacked = path.join("dist", cli.cpu === "arm64" ? "win-arm64-unpacked" : "win-unpacked")
   await writeUpdateConfig(path.join(unpacked, "resources"))
   await cp(unpacked, path.join(out, "app"), { recursive: true })
+}
+
+async function removeDanglingSymlinks(root: string) {
+  const entries = await readdir(root, { withFileTypes: true, recursive: true })
+
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isSymbolicLink())
+      .map(async (entry) => {
+        const file = path.join(entry.parentPath, entry.name)
+
+        try {
+          await stat(file)
+        } catch {
+          await unlink(file)
+        }
+      }),
+  )
 }
 
 // electron-builder writes resources/app-update.yml only for dmg, zip and nsis targets, not for --dir builds.
