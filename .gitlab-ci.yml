@@ -96,7 +96,7 @@ packages:
   extends: .ci
   stage: test
   script:
-    - bun run --cwd packages/codemode script/publish.ts --dry-run
+    - bun run --cwd packages/codemode pack
     - bun turbo verify:package --filter=@opencode/sdk
 
 .browser:
