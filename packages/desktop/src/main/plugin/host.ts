@@ -231,7 +231,9 @@ export function createHost(input: {
   const closed = new Set<(win: BrowserWindow) => void>()
   let nextEntry = 0
 
-  const broadcast = (event: DesktopEvent) => getMainWindows().forEach((win) => emitIpcEvent(getPrimaryWebContents(win), event))
+  const broadcast = (event: DesktopEvent) =>
+    getMainWindows().forEach((win) => emitIpcEvent(getPrimaryWebContents(win), event))
+
   const changed = () => broadcast(new PluginsChanged({ list: installed() }))
 
   const subscribers = (ipc: string, window?: number) => {
