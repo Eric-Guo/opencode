@@ -1,6 +1,6 @@
 # Optional desktop extensions
 
-Select a trusted build-time extension with `OPENCODE_DESKTOP_EXTENSION=../desktop-tab` when running commands from `packages/desktop`. Omit it, or set it to `none`, to develop or build the base desktop. This is a distribution composition seam, not a runtime marketplace or an untrusted plugin loader.
+Select a trusted build-time extension with `OPENCODE_DESKTOP_EXTENSION=../desktop-tab` when running commands from `packages/desktop`. Development defaults to the base desktop when the variable is omitted. Production builds select an adjacent `desktop-tab` checkout automatically; set the variable to `none` (or an empty value) to build the base desktop. This is a distribution composition seam, not a runtime marketplace or an untrusted plugin loader.
 
 For the SigmaAgents tab shell, select the extension on each host command:
 
@@ -10,7 +10,7 @@ OPENCODE_DESKTOP_EXTENSION=../desktop-tab bun run build
 OPENCODE_DESKTOP_EXTENSION=../desktop-tab bun run pack
 ```
 
-An environment variable prefixed to one command does not persist to later commands; exporting it once in your shell applies it to subsequent build and packaging commands. `dev` rebuilds from source and does not reuse a previous build's extension selection. The `packages/desktop-tab` development and build scripts set this variable automatically and delegate preparation to the host. Keep the same selection on packaging commands, using `pack` with `OPENCODE_TARGET` for the desired platform and architecture. Packaging uses the current `out` directory without rebuilding it, so it must follow an extension-enabled build.
+An environment variable prefixed to one command does not persist to later commands; exporting it once in your shell applies it to subsequent build and packaging commands. `dev` rebuilds from source and does not reuse a previous build's extension selection. The `packages/desktop-tab` development and `build:extension` scripts set this variable automatically and delegate preparation to the host. Keep the same selection on packaging commands, using `pack` with `OPENCODE_TARGET` for the desired platform and architecture. Packaging uses the current `out` directory without rebuilding it, so it must follow an extension-enabled build.
 
 The checkout supplies a `desktop-extension.json` manifest with `apiVersion: 1`, `main`, `preload`, `renderer`, `preloads` (entry name to source path), and `assets` (output-relative path to source path). An optional `builds` map associates project directories with package scripts. All source and project paths are relative to the manifest directory. Both `bun run build` and `bun dev` run those scripts in order on every invocation, inheriting the caller's environment, and stop on failure. Production builds prepare them before loading the Electron Vite configuration, so their output need not exist yet. Development also copies the assets into `out/renderer` before launching Electron, including directory assets used by local tabs without a development server. Renderer files are also served during development, and assets are copied during builds. Electron's packager consumes only the resulting output.
 

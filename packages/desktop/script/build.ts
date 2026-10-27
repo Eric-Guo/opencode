@@ -7,6 +7,13 @@ import { buildCliToResources, resolveChannel } from "./utils"
 // Prepare distribution assets and the development CLI before building the desktop bundle.
 process.chdir(path.resolve(import.meta.dir, ".."))
 
+if (
+  process.env.OPENCODE_DESKTOP_EXTENSION === undefined &&
+  (await Bun.file("../desktop-tab/desktop-extension.json").exists())
+) {
+  process.env.OPENCODE_DESKTOP_EXTENSION = "../desktop-tab"
+}
+
 const channel = resolveChannel()
 
 await buildExtension()
