@@ -116,15 +116,41 @@ test("restart rejects malformed persisted tasks without dispatching them", async
 })
 
 test("two active tasks bound concurrency and cancellation remains task-specific", async () => {
-  const { client, input } = await fixture()
-  await Promise.all([1, 2, 3].map((i) => client.request({ op: "run", input }, `bound-${i}`)))
+  const release = Promise.withResolvers<void>()
+  const started = Promise.withResolvers<void>()
+  const { client, input } = await fixture({
+    async run(task, signal) {
+      const aborted = Promise.withResolvers<void>()
+      signal.addEventListener("abort", () => aborted.resolve(), { once: true })
+
+      if (task.id === "bound-3") started.resolve()
+
+      await Promise.race([release.promise, aborted.promise])
+
+      return signal.aborted
+        ? { state: "cancelled", exitCode: 130, stdout: "", stderr: "" }
+        : { state: "completed", exitCode: 0, stdout: `answer:${task.input.message}`, stderr: "" }
+    },
+  })
+
+  // Wait for both admissions because concurrent file publication can reorder requests.
+  await Promise.all([1, 2].map((i) => client.request({ op: "run", input }, `bound-${i}`)))
+  await client.request({ op: "run", input }, "bound-3")
+
   const status = await client.request({ op: "ping" })
   expect(status.active).toBe(2)
   expect((await client.request({ op: "status", taskID: "bound-3" })).task?.state).toBe("queued")
   await client.request({ op: "cancel", taskID: "bound-2" })
   expect((await terminal(client, "bound-2")).state).toBe("cancelled")
+
+  await started.promise
+
+  expect((await client.request({ op: "status", taskID: "bound-1" })).task?.state).toBe("running")
+  expect((await client.request({ op: "ping" })).active).toBe(2)
+  release.resolve()
   expect((await terminal(client, "bound-1")).state).toBe("completed")
   expect((await terminal(client, "bound-3")).state).toBe("completed")
+  expect((await client.request({ op: "ping" })).maxActive).toBe(2)
 })
 
 test("worker rejects conflicting startup and directories outside its workspace", async () => {
