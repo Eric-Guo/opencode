@@ -536,36 +536,43 @@ describe("LocationWatcher subscriptions", () => {
     }),
   )
 
-  it.live("does not start before configured policy is ready", () => {
-    const subscriptions: Watcher.WatchInput[] = []
-    const watcher = Layer.succeed(
-      Watcher.Service,
-      Watcher.Service.of({
-        subscribe: (input) => Effect.sync(() => subscriptions.push(input)).pipe(Effect.as(Stream.never)),
-      }),
-    )
-    const plugins = makeLocationNode({
-      name: "test/watcher-plugins",
-      layer: Layer.effectDiscard(
-        Effect.gen(function* () {
-          const policy = yield* LocationWatcherPolicy.Service
-          yield* policy.transform((editor) => editor.add([".git"]))
+  it.live("does not start before configured policy is ready", () =>
+    Effect.gen(function* () {
+      const subscriptions: Watcher.WatchInput[] = []
+      const subscribed = yield* Deferred.make<void>()
+      const watcher = Layer.succeed(
+        Watcher.Service,
+        Watcher.Service.of({
+          subscribe: (input) =>
+            Effect.sync(() => subscriptions.push(input)).pipe(
+              Effect.andThen(Deferred.succeed(subscribed, undefined)),
+              Effect.as(Stream.never),
+            ),
         }),
-      ),
-      deps: [LocationWatcherPolicy.node],
-    })
-    return withTmp(
-      (directory) =>
-        Effect.gen(function* () {
-          yield* LocationWatcher.Service
-          yield* Effect.sleep("50 millis")
-          expect(subscriptions).toEqual([
-            { path: directory, type: "directory", ignore: expect.arrayContaining([".git"]) },
-          ])
-        }),
-      { vcs: "git", watcher, plugins: PluginSupervisor.node.replace(plugins) },
-    )
-  })
+      )
+      const plugins = makeLocationNode({
+        name: "test/watcher-plugins",
+        layer: Layer.effectDiscard(
+          Effect.gen(function* () {
+            const policy = yield* LocationWatcherPolicy.Service
+            yield* policy.transform((editor) => editor.add([".git"]))
+          }),
+        ),
+        deps: [LocationWatcherPolicy.node],
+      })
+      return withTmp(
+        (directory) =>
+          Effect.gen(function* () {
+            yield* LocationWatcher.Service
+            yield* Deferred.await(subscribed)
+            expect(subscriptions).toEqual([
+              { path: directory, type: "directory", ignore: expect.arrayContaining([".git"]) },
+            ])
+          }),
+        { vcs: "git", watcher, plugins: PluginSupervisor.node.replace(plugins) },
+      )
+    }),
+  )
 })
 
 function wait(check: (event: WatcherEvent) => boolean) {
