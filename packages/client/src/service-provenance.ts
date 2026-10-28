@@ -64,7 +64,7 @@ export async function ownerAlive(info: Info) {
     }
   }
   const stat = await readFile(`/proc/${info.pid}/stat`, "utf8").catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return undefined
+    if (error.code === "ENOENT" || error.code === "ESRCH") return undefined
     throw error
   })
   if (stat === undefined) return false
