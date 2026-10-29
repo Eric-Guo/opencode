@@ -343,7 +343,7 @@ for (const action of ["tray", "picker"] as const) {
           },
         ],
         connected: ["opencode", "opencode-go"],
-        default: { build: "opencode-go/glm-5-go" },
+        default: { providerID: model.providerID, modelID: model.id },
       }),
       pageMessages: () => ({
         items: [
