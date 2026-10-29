@@ -860,9 +860,9 @@ function renderImportedEffectFiles(
           : `${item.operation.success === "stream" ? "preserveStream" : "preserveEffect"}<${prefix}Output>()(${result})`
       const declarations =
         options.shapeModule === undefined && item.operation.inputMode !== "none"
-          ? `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0]\ntype ${prefix}Input = { ${input} }\n`
+          ? `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0] & { readonly responseMode?: "decoded-only" }\ntype ${prefix}Input = { ${input} }\n`
           : isOpaquePayload(item)
-            ? `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0]\n`
+            ? `type ${prefix}Request = Parameters<${rawGroup}[${JSON.stringify(item.endpoint.identifier)}]>[0] & { readonly responseMode?: "decoded-only" }\n`
             : ""
       return `${declarations}const ${adapter} = (raw: ${rawGroup}) => (${argument}) => ${output}`
     })
