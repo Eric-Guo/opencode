@@ -933,7 +933,7 @@ function previousV2Database(db: EffectDrizzleSqlite.EffectSQLiteDatabase) {
       db.run(sql`DROP INDEX ${sql.identifier("session_v2_" + name + "_idx")}`),
     )
     yield* db.run(sql`ALTER TABLE session_v2 RENAME TO session`)
-    yield* Effect.forEach(["resume_attempts", "time_idle", "time_viewed", "idle_outcome"], (column) =>
+    yield* Effect.forEach(["resume_attempts", "time_busy", "time_idle", "time_viewed", "idle_outcome"], (column) =>
       db.run(sql`ALTER TABLE session DROP COLUMN ${sql.identifier(column)}`),
     )
     yield* Effect.forEach(["project_id", "project_name", "work_package_id", "time_active", "time_archived"], (column) =>
