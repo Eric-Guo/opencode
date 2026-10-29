@@ -50,7 +50,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["archive", "read", "list", "find", "write", "watch", "unwatch"])
   expect(Object.keys(client.mcp)).toEqual(["list", "resource", "add", "remove", "connect", "disconnect", "client"])
-  expect(Object.keys(client.config)).toEqual(["get", "shells", "update"])
+  expect(Object.keys(client.config)).toEqual(["get", "shells", "global", "update"])
   expect(Object.keys(client.vcs)).toEqual(["init", "get", "base", "status", "branch", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
