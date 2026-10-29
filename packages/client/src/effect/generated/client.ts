@@ -1845,7 +1845,9 @@ const EndpointDebugAgentTools = (raw: RawClient["server.debug"]) => (input: Debu
     ),
   )
 
-type DebugAgentExecuteToolRequest = Parameters<RawClient["server.debug"]["debug.agent.executeTool"]>[0]
+type DebugAgentExecuteToolRequest = Parameters<RawClient["server.debug"]["debug.agent.executeTool"]>[0] & {
+  readonly responseMode?: "decoded-only"
+}
 const EndpointDebugAgentExecuteTool = (raw: RawClient["server.debug"]) => (input: DebugAgentExecuteToolInput) =>
   preserveEffect<DebugAgentExecuteToolOutput>()(
     raw["debug.agent.executeTool"]({
@@ -1946,7 +1948,9 @@ const EndpointAudioRecordingRelease = (raw: RawClient["server.audio"]) => (input
 const EndpointAudioRecordingStatus = (raw: RawClient["server.audio"]) => () =>
   preserveEffect<AudioRecordingStatusOutput>()(raw["audio.recording.status"]({}).pipe(Effect.mapError(mapClientError)))
 
-type AudioTranscriptionsRequest = Parameters<RawClient["server.audio"]["audio.transcriptions"]>[0]
+type AudioTranscriptionsRequest = Parameters<RawClient["server.audio"]["audio.transcriptions"]>[0] & {
+  readonly responseMode?: "decoded-only"
+}
 const EndpointAudioTranscriptions = (raw: RawClient["server.audio"]) => (input: AudioTranscriptionsInput) =>
   preserveEffect<AudioTranscriptionsOutput>()(
     raw["audio.transcriptions"]({
