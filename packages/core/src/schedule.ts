@@ -4,7 +4,8 @@ import { and, asc, eq, gt, isNull, lte, min, or } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Schedule as ScheduleSchema } from "@opencode/schema/schedule"
+import { CreateInput, durationMillis, ID, Info } from "@opencode/schema/schedule"
+import type { Ends, When } from "@opencode/schema/schedule"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { Instance } from "./instance/service.js"
@@ -15,18 +16,8 @@ import { SessionSchema } from "./session/schema.js"
 import { SessionInboxTable } from "./session/sql.js"
 import { ScheduleTable } from "./schedule/sql.js"
 
-export const ID = ScheduleSchema.ID
-export type ID = ScheduleSchema.ID
-export const Info = ScheduleSchema.Info
-export type Info = ScheduleSchema.Info
-export const CreateInput = ScheduleSchema.CreateInput
-export type CreateInput = ScheduleSchema.CreateInput
-export const Request = ScheduleSchema.Request
-export type Request = ScheduleSchema.Request
-export const When = ScheduleSchema.When
-export const Status = ScheduleSchema.Status
-export const Outcome = ScheduleSchema.Outcome
-export const toCreateInput = ScheduleSchema.toCreateInput
+export { CreateInput, ID, Info }
+export { Outcome, Request, Status, When, toCreateInput } from "@opencode/schema/schedule"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Schedule.NotFoundError", {
   scheduleID: ID,
@@ -85,7 +76,7 @@ const DISABLED_RETRY = HOUR
 const FAILED_RETRY = 5 * MINUTE
 
 const duration = (value: string) =>
-  Option.match(ScheduleSchema.durationMillis(value), {
+  Option.match(durationMillis(value), {
     onNone: () => Effect.fail(new InvalidError({ reason: `Invalid duration: ${value}` })),
     onSome: (millis) =>
       millis > 0
@@ -95,7 +86,7 @@ const duration = (value: string) =>
 
 /** Stored durations were validated on create. */
 const millis = (value: string) =>
-  Option.getOrThrowWith(ScheduleSchema.durationMillis(value), () => new Error(`Invalid duration: ${value}`))
+  Option.getOrThrowWith(durationMillis(value), () => new Error(`Invalid duration: ${value}`))
 
 const OFFSET = /\d(?:z|[+-]\d{2}:?\d{2})$/i
 
@@ -356,7 +347,7 @@ const layer = Layer.effect(
       })
     }
 
-    const firstDue = Effect.fnUntraced(function* (when: ScheduleSchema.When, zone: DateTime.TimeZone, now: number) {
+    const firstDue = Effect.fnUntraced(function* (when: When, zone: DateTime.TimeZone, now: number) {
       switch (when.type) {
         case "in":
           return now + (yield* duration(when.in))
@@ -384,7 +375,7 @@ const layer = Layer.effect(
     })
 
     const endsAt = Effect.fnUntraced(function* (
-      ends: ScheduleSchema.Ends | undefined,
+      ends: Ends | undefined,
       zone: DateTime.TimeZone,
       now: number,
     ) {
