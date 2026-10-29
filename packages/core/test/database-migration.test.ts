@@ -943,6 +943,7 @@ function previousV2Database(db: EffectDrizzleSqlite.EffectSQLiteDatabase) {
     yield* db.run(sql`DROP TABLE worktree`)
     yield* db.run(sql`DROP TABLE blob_ref`)
     yield* db.run(sql`DROP TABLE blob`)
+    yield* db.run(sql`DROP TABLE schedule`)
     yield* db.run(sql`
       CREATE TABLE session_pending (
         id text PRIMARY KEY,
