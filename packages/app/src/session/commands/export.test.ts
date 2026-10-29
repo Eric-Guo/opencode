@@ -27,7 +27,7 @@ describe("fetchSessionExport", () => {
     const api = {
       session: { get: async () => info },
       message: {
-        list: async (input: { cursor?: string }, options: ServerRequestOptions) => {
+        list: async (input: { cursor?: string }, options?: ServerRequestOptions) => {
           calls.push([input, options])
 
           if (!input.cursor) return { data: [first], cursor: { next: "page-2" } }
