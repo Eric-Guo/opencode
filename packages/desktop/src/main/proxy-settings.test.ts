@@ -111,6 +111,7 @@ test.each(["default", "manual", "direct"] as const)("resolves %s mode without mo
     ALL_PROXY: "socks5://inherited.test",
     WSS_PROXY: "http://ws.test",
     NO_PROXY: "inherited.test",
+    no_proxy: "lower-inherited.test",
   }
 
   const before = { ...inherited }
@@ -121,7 +122,13 @@ test.each(["default", "manual", "direct"] as const)("resolves %s mode without mo
   expect(env.http_proxy).toBe(env.HTTP_PROXY)
   expect(env.https_proxy).toBe(env.HTTPS_PROXY)
   expect(env.wss_proxy).toBe(env.WSS_PROXY)
-  expect(env.NO_PROXY).toContain("127.0.0.1,localhost,::1")
+  expect(env.NO_PROXY).toBe(
+    {
+      default: "inherited.test,lower-inherited.test,127.0.0.1,localhost,::1,[::1]",
+      manual: ".internal.test,127.0.0.1,localhost,::1,[::1]",
+      direct: "*,127.0.0.1,localhost,::1,[::1]",
+    }[mode],
+  )
   expect(env.NO_PROXY).toBe(env.no_proxy)
 
   if (mode === "manual") {

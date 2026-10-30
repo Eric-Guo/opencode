@@ -14,7 +14,7 @@ export type ElectronProxyConfig = {
 }
 
 export function getProxyEnvironment(settings: DesktopProxySettings, env: Record<string, string | undefined>) {
-  const bypass = settings.mode === "manual" ? settings.bypass : readEnv(env, "no_proxy")
+  const bypass = settings.mode === "manual" ? settings.bypass : [env.NO_PROXY, env.no_proxy].join(",")
 
   const noProxy = [
     ...new Set([
