@@ -1,5 +1,9 @@
-import electron, { type BrowserWindow } from "electron"
+import type electron from "electron"
+import type { BrowserWindow } from "electron"
 import { schemes } from "@opencode/gui-plugins/schemes"
+import { createRequire } from "node:module"
+
+const native = createRequire(import.meta.url)
 
 export const rendererProtocol = "oc"
 
@@ -34,7 +38,10 @@ export function isRendererUrl(value?: string, html = false) {
 // Scheme privileges can only be granted before the app is ready, so the entry module calls this
 // before it loads anything else.
 export function registerRendererScheme() {
-  electron.protocol.registerSchemesAsPrivileged([
+  // SAFETY: Desktop main loads Electron's real CommonJS export, which implements its declared API.
+  const runtime = native("electron") as typeof electron
+
+  runtime.protocol.registerSchemesAsPrivileged([
     ...schemes,
     {
       scheme: rendererProtocol,
