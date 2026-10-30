@@ -160,7 +160,9 @@
     "open": "11.0.4",
     "astro": "catalog:",
     "@astrojs/starlight": "catalog:",
-    "solid-js": "catalog:"
+    "solid-js": "catalog:",
+    "seroval": "1.6.11",
+    "seroval-plugins": "1.6.11"
   },
   "patchedDependencies": {
     "@ai-sdk/openai-compatible@2.0.41": "patches/@ai-sdk%2Fopenai-compatible@2.0.41.patch",
