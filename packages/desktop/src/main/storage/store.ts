@@ -1,9 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { createRequire } from "node:module"
 import path from "node:path"
 import { Option, Schema } from "effect"
-import electron from "electron"
+import type { App } from "electron"
 
 import { SETTINGS_STORE } from "./keys"
+
+const native = createRequire(import.meta.url)
 
 /** The file: one JSON object, each key a setting whose reader decodes its value. */
 const SettingsFile = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json))
@@ -27,6 +30,8 @@ export function getStore(name = SETTINGS_STORE) {
   const cached = cache.get(name)
 
   if (cached) return cached
+  // SAFETY: Desktop main loads Electron's real CommonJS export, which provides app.
+  const electron = native("electron") as { app: App }
   const next = createSettingsStore(path.join(electron.app.getPath("userData"), name))
   cache.set(name, next)
 
