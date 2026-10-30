@@ -2,7 +2,7 @@ export * as Schedule from "./schedule.js"
 
 import { randomUUID } from "node:crypto"
 import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
-import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
+import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import {
@@ -590,7 +590,8 @@ const layer = Layer.effect(
     const heartbeat = Clock.currentTimeMillis.pipe(
       Effect.flatMap(claimLeader),
       Effect.ignore,
-      Effect.schedule(EffectSchedule.spaced(LEADER_TTL / 3)),
+      Effect.andThen(Effect.sleep(LEADER_TTL / 3)),
+      Effect.forever,
     )
 
     const loop = Effect.gen(function* () {
