@@ -229,7 +229,7 @@ test.describe("location", () => {
     const location = header.locator('[data-slot="session-location-trigger"]')
     const row = header.locator(".session-header-layout")
     const review = page.getByRole("button", { name: "Toggle review", exact: true })
-    const tooltip = page.getByRole("tooltip")
+    const tooltip = page.getByRole("tooltip", { name: "Location / quiet-falcon", exact: true })
     const usage = header.getByRole("button", { name: "Toggle session context", exact: true })
     const usageMenu = header.getByRole("button", { name: "View context usage", exact: true })
     await expect(header.getByRole("button", { name: "More options", exact: true })).toBeVisible()
