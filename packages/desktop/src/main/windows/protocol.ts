@@ -1,9 +1,12 @@
-import electron from "electron"
+import type electron from "electron"
 import type { Protocol, WebContents } from "electron"
+import { createRequire } from "node:module"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
 import { rendererHost, rendererProtocol } from "./scheme"
+
+const native = createRequire(import.meta.url)
 
 const rendererOrigins = new Set<string>()
 
@@ -57,10 +60,13 @@ export function rendererAssetsServed(options: { quietMs: number; capMs: number }
   })
 }
 
-export function registerRendererProtocol(rendererRoot: string, target: Protocol = electron.protocol) {
-  if (target.isProtocolHandled(rendererProtocol)) return
+export function registerRendererProtocol(rendererRoot: string, target?: Protocol) {
+  // SAFETY: Desktop main loads Electron's real CommonJS export, which implements its declared API.
+  const protocol = target ?? (native("electron") as typeof electron).protocol
 
-  target.handle(rendererProtocol, async (request) => {
+  if (protocol.isProtocolHandled(rendererProtocol)) return
+
+  protocol.handle(rendererProtocol, async (request) => {
     inflight++
     lastRequest = Date.now()
 
@@ -94,7 +100,8 @@ async function serve(request: Request, rendererRoot: string) {
   try {
     const range = request.headers.get("range")
 
-    const response = await electron.net.fetch(pathToFileURL(file).toString(), {
+    // SAFETY: Desktop main loads Electron's real CommonJS export, which implements its declared API.
+    const response = await (native("electron") as typeof electron).net.fetch(pathToFileURL(file).toString(), {
       headers: range ? { range } : undefined,
     })
 
