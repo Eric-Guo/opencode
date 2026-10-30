@@ -1,4 +1,4 @@
-import { net, protocol } from "electron"
+import electron from "electron"
 import type { Protocol, WebContents } from "electron"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -57,7 +57,7 @@ export function rendererAssetsServed(options: { quietMs: number; capMs: number }
   })
 }
 
-export function registerRendererProtocol(rendererRoot: string, target: Protocol = protocol) {
+export function registerRendererProtocol(rendererRoot: string, target: Protocol = electron.protocol) {
   if (target.isProtocolHandled(rendererProtocol)) return
 
   target.handle(rendererProtocol, async (request) => {
@@ -93,7 +93,10 @@ async function serve(request: Request, rendererRoot: string) {
 
   try {
     const range = request.headers.get("range")
-    const response = await net.fetch(pathToFileURL(file).toString(), { headers: range ? { range } : undefined })
+
+    const response = await electron.net.fetch(pathToFileURL(file).toString(), {
+      headers: range ? { range } : undefined,
+    })
 
     if (response.status >= 400) {
       report("error", "fetch failed", {
