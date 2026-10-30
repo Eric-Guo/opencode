@@ -149,6 +149,7 @@
     "electron"
   ],
   "overrides": {
+    "@opentelemetry/core": "2.12.0",
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
