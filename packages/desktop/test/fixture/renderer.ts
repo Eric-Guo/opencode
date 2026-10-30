@@ -18,6 +18,7 @@ export async function rendererFixture(url: string, storage?: StateStore) {
   // Built-ins always run. SSH publishes an empty inventory so the server startup gate can settle.
   const plugins = ["ssh", "updater"].map((id) => ({ id, builtin: true, enabled: true }))
   const rpcs = AppRpcs.merge(WindowRpcs, StorageRpcs, EventRpcs, PluginRpcs)
+  const settings = { spellcheck: true }
 
   const handlers = Layer.mergeAll(
     AppRpcs.toLayer({
@@ -32,6 +33,11 @@ export async function rendererFixture(url: string, storage?: StateStore) {
       AppSetBackgroundColor: () => Effect.void,
       AppExportDebugLogs: () => Effect.succeed(""),
       AppSetForceFocus: () => Effect.void,
+      AppGetSpellcheckEnabled: () => Effect.sync(() => settings.spellcheck),
+      AppSetSpellcheckEnabled: ({ enabled }) =>
+        Effect.sync(() => {
+          settings.spellcheck = enabled
+        }),
       AppRecordFatalRendererError: ({ error }) => Effect.die(error),
       AppSetNativeTranslations: () => Effect.void,
       AppRelaunch: () => Effect.die("Fixture must not relaunch"),
