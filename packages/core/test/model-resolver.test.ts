@@ -91,7 +91,7 @@ describe("ModelResolver", () => {
         }),
         Credential.Key.make({ type: "key", key: "fixture" }),
       )
-      const request = yield* compileRequest(LLM.request({ model: resolved, prompt: "A koi pond" }))
+      const request = yield* compileRequest(ai.request({ model: resolved, prompt: "A koi pond" }))
 
       expect(resolved.route.transport.id).toBe("openai-images")
       expect(request.body).toMatchObject({ prompt: "A koi pond", model: { id: "gpt-image-1-mini" } })
