@@ -108,7 +108,6 @@ export async function ensureSsoUsername() {
           siliconflow_cn_api_key: string
           moonshot_api_key: string
           exa_api_key: string
-          deepseek_api_key: string
           cerebras_api_key: string
           vipai_api_key: string
           hide_agents: string[]
@@ -130,7 +129,6 @@ export async function ensureSsoUsername() {
   KimiEnvironment.names().forEach(deleteRuntimeEnv)
   kimiKeys.forEach((key, index) => setRuntimeEnv(KimiEnvironment.name(index), key))
   if (payload.moonshot_api_key) setRuntimeEnv("DOC_MOONSHOT_API_KEY", payload.moonshot_api_key)
-  if (payload.deepseek_api_key) setRuntimeEnv("DEEPSEEK_API_KEY", payload.deepseek_api_key)
   setRuntimeEnv("THAPE_SSO_USER_NAME", payload.chinese_name || payload.email)
   setRuntimeEnv("THAPE_SSO_CLERK_CODE", payload.clerk_code)
   setRuntimeEnv("OPENCODE_ENABLE_EXA", "true")
