@@ -93,8 +93,8 @@ test("retains permissions across all live windows on a shared session and revoke
   const first = createWindow(1, shared.session)
   const second = createWindow(2, shared.session)
 
-  allowRendererPermissions(first.win)
-  allowRendererPermissions(second.win)
+  allowRendererPermissions(first.win.webContents)
+  allowRendererPermissions(second.win.webContents)
 
   const audioReq: RequestDetails = { requestingUrl: url, isMainFrame: true, mediaTypes: ["audio"] }
   const audioCheck: CheckDetails = { requestingUrl: url, isMainFrame: true, mediaType: "audio" }
