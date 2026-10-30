@@ -15,7 +15,7 @@ async function fixture(failure = false) {
   directories.push(directory)
 
   await Promise.all([
-    ...["build", "build-extension", "extension", "utils", "copy-icons", "copy-metainfo"].map((name) =>
+    ...["build", "build-extension", "extension", "utils", "copy-icons", "copy-metainfo", "verify-bundles"].map((name) =>
       Bun.write(join(directory, "desktop/script", `${name}.ts`), Bun.file(new URL(`./${name}.ts`, import.meta.url))),
     ),
     Bun.write(
@@ -30,10 +30,14 @@ async function fixture(failure = false) {
     Bun.write(join(directory, "desktop/resources/fixture.txt"), "resources"),
     Bun.write(join(directory, "desktop/index.html"), '<!doctype html><script type="module" src="./entry.ts"></script>'),
     Bun.write(join(directory, "desktop/entry.ts"), 'document.title = "host fixture"'),
+    Bun.write(join(directory, "desktop/main.ts"), "export {}"),
+    Bun.write(join(directory, "desktop/preload.ts"), "export {}"),
     Bun.write(
       join(directory, "desktop/electron.vite.config.ts"),
       `import { desktopExtension } from "./script/extension"
 export default {
+  main: { build: { rolldownOptions: { input: "main.ts" } } },
+  preload: { build: { rolldownOptions: { input: "preload.ts" } } },
   renderer: {
     root: import.meta.dirname,
     plugins: [desktopExtension()?.assetsPlugin],
