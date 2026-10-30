@@ -70,7 +70,6 @@ test("ensureSsoUsername populates the runtime environment", async () => {
         siliconflow_cn_api_key: "siliconflow-key",
         moonshot_api_key: "moonshot-key",
         exa_api_key: "exa-key",
-        deepseek_api_key: "deepseek-key",
         cerebras_api_key: "cerebras-key",
         vipai_api_key: "vipai-key",
         hide_agents: ["bid-assistant", "7777"],
@@ -87,7 +86,7 @@ test("ensureSsoUsername populates the runtime environment", async () => {
   expect(process.env.KIMI_API_KEY_2).toBe("kimi-key-2")
   expect(process.env.KIMI_API_KEY_3).toBe("kimi-key-3")
   expect(process.env.KIMI_API_KEY_4).toBe("kimi-key-4")
-  expect(process.env.DEEPSEEK_API_KEY).toBe("deepseek-key")
+  expect(process.env.DEEPSEEK_API_KEY).toBeUndefined()
   expect(process.env.VIPAI_API_KEY).toBe("vipai-key")
   expect(Bun.env.THAPE_SSO_USER_NAME).toBe("Test User")
   expect(Bun.env.THAPE_SSO_CLERK_CODE).toBe("123456")
@@ -96,7 +95,7 @@ test("ensureSsoUsername populates the runtime environment", async () => {
   expect(Bun.env.KIMI_API_KEY_2).toBe("kimi-key-2")
   expect(Bun.env.KIMI_API_KEY_3).toBe("kimi-key-3")
   expect(Bun.env.KIMI_API_KEY_4).toBe("kimi-key-4")
-  expect(Bun.env.DEEPSEEK_API_KEY).toBe("deepseek-key")
+  expect(Bun.env.DEEPSEEK_API_KEY).toBeUndefined()
   expect(Bun.env.VIPAI_API_KEY).toBe("vipai-key")
   expect(ssoHideAgents()).toEqual(["bid-assistant", "7777"])
   expect(process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined()
