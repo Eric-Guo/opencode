@@ -50,11 +50,13 @@ default:
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git config --global user.email "bot@opencode.ai"
     - git config --global user.name "opencode"
-    - bun install --frozen-lockfile
 
 .ci:
   # Allow dependency installation and job scripts to share a one-hour budget.
   timeout: 3600 seconds
+  before_script:
+    - !reference [default, before_script]
+    - bun install --frozen-lockfile
   # All jobs participate in the pipeline types allowed by workflow, including merge requests.
   rules:
     - when: on_success
@@ -141,11 +143,37 @@ components:
 build:
   extends: .ci
   stage: build
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    OPENCODE_TARGET: windows-x64
+    OPENCODE_VERSION: "2.2.2"
+    OPENCODE_DESKTOP_EXTENSION: "$CI_PROJECT_DIR/packages/desktop-tab"
+  before_script:
+    - !reference [default, before_script]
+    # NSIS uses a 32-bit bootstrapper even for x64 installers, so Wine needs its i386 runtime.
+    - dpkg --add-architecture i386
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends libc6:amd64 libstdc++6:amd64 libgcc-s1:amd64 zlib1g:amd64 wine:amd64 wine32:i386 wine64:amd64
+    # Replace any submodule checkouts with the branches required by the desktop extension.
+    - rm -rf packages/desktop/resources/thape-config packages/7777 packages/plm-meeting packages/desktop-tab
+    - git clone --depth 1 --branch main "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-thape.git" packages/desktop/resources/thape-config
+    - git clone --depth 1 --branch main "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-agent-7777.git" packages/7777
+    - git clone --depth 1 --branch plm-meeting "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-agent-7777.git" packages/plm-meeting
+    - git clone --depth 1 --branch v2 "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-desktop-tab.git" packages/desktop-tab
+    - bun install --frozen-lockfile
   script:
-    - bun turbo build --concurrency=2 --filter='@opencode/cli^...' --filter='@opencode/app^...'
-    - cd packages/cli
-    - bun run script/build.ts --single --skip-install
-    - bun run script/service-smoke.ts
-    # build-node.ts downloads and verifies its pinned Node 26 SEA runtime.
-    - bun run script/build-node.ts --single --skip-install --outdir=dist/node
-    - bun run script/service-smoke.ts --node
+    - cd packages/desktop
+    - bun run build
+    - bun run pack
+    - rm -rf "$RUNNER_TEMP/sigma-agents-win-app"
+    - mkdir -p "$RUNNER_TEMP/sigma-agents-win-app"
+    - cp -R ../../dist/desktop/app "$RUNNER_TEMP/sigma-agents-win-app/app"
+    - OPENCODE_DESKTOP_APP="$RUNNER_TEMP/sigma-agents-win-app/app" bun run pack
+    - cp "dist/SigmaAgents-win-x64-${OPENCODE_VERSION}.exe.blockmap" dist/builder-debug.yml dist/latest.yml ../../dist/desktop/
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - dist/desktop/SigmaAgents-win-x64-2.2.2.exe
+      - dist/desktop/SigmaAgents-win-x64-2.2.2.exe.blockmap
+      - dist/desktop/builder-debug.yml
+      - dist/desktop/latest.yml
