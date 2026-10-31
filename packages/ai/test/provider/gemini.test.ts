@@ -5,6 +5,7 @@ import {
   ai,
   AIError,
   isRetryable,
+  LLM,
   LLMEvent,
   Media,
   Message,
