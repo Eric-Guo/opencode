@@ -1,7 +1,7 @@
 import http from "node:http"
 import https from "node:https"
 import { connect } from "node:net"
-import { NodeWS } from "@effect/platform-node/NodeSocket"
+import { WebSocketServer } from "ws"
 import type { Socket } from "node:net"
 import { isString } from "effect/Predicate"
 
@@ -11,8 +11,8 @@ export async function proxyFixture(tls: { key: string; cert: string }) {
   const sockets = new Set<Socket>()
   const target = http.createServer((request, response) => response.end(request.url))
   const secure = https.createServer(tls, (request, response) => response.end(request.url))
-  const plainSockets = new NodeWS.WebSocketServer({ server: target })
-  const secureSockets = new NodeWS.WebSocketServer({ server: secure })
+  const plainSockets = new WebSocketServer({ server: target })
+  const secureSockets = new WebSocketServer({ server: secure })
   plainSockets.on("connection", (socket) => socket.close())
   secureSockets.on("connection", (socket) => socket.close())
 
