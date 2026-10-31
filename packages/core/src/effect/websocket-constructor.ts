@@ -1,5 +1,4 @@
-// The platform barrel also exposes Redis and its optional native hash loader, which workerd cannot resolve.
-import { WebSocket as NodeWebSocket } from "@effect/platform-node/NodeWS"
+import NodeWebSocket from "ws"
 import { HttpProxyAgent } from "http-proxy-agent"
 import { HttpsProxyAgent } from "https-proxy-agent"
 import { Layer } from "effect"
