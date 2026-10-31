@@ -9506,27 +9506,20 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
                     }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
+                  ]
                 }
-              ]
+              },
+              "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
@@ -16939,27 +16932,20 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
                     }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
+                  ]
                 }
-              ]
+              },
+              "additionalProperties": false
             },
             "required": false
           },
@@ -16967,15 +16953,8 @@
             "name": "target",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": ["global", "user"]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "type": "string",
+              "enum": ["global", "user"]
             },
             "required": false
           }
