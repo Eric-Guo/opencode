@@ -9247,27 +9247,20 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
                     }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
+                  ]
                 }
-              ]
+              },
+              "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
@@ -15396,27 +15389,20 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
                     }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
+                  ]
                 }
-              ]
+              },
+              "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
@@ -15525,27 +15511,20 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
                     }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
+                  ]
                 }
-              ]
+              },
+              "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
@@ -16220,27 +16199,20 @@
             "name": "location",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
                     }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
+                  ]
                 }
-              ]
+              },
+              "additionalProperties": false
             },
             "required": false
           },
@@ -16248,15 +16220,8 @@
             "name": "target",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": ["global", "user"]
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "type": "string",
+              "enum": ["global", "user"]
             },
             "required": false
           }
@@ -20475,6 +20440,9 @@
         "required": ["data"],
         "additionalProperties": false
       },
+      "GlobalConfig": {
+        "type": "object"
+      },
       "Instruction.Hash": {
         "type": "string",
         "pattern": "^[a-f0-9]{64}$"
@@ -20482,9 +20450,6 @@
       "Instruction.Key": {
         "type": "string",
         "pattern": "^[a-z0-9][a-z0-9._-]*\\/[a-z0-9][a-z0-9._/-]*$"
-      },
-      "GlobalConfig": {
-        "type": "object"
       },
       "InstructionEntry.Info": {
         "type": "object",
@@ -24146,6 +24111,38 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "Session.Error.ConnectionFallbackRecovery": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["connection-fallback"]
+          },
+          "integrationID": {
+            "$ref": "#/components/schemas/Integration.ID"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/Connection.Info"
+          },
+          "promoted": {
+            "$ref": "#/components/schemas/Connection.Info"
+          },
+          "unavailableUntil": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["type", "integrationID", "previous", "promoted", "unavailableUntil"],
+        "additionalProperties": false
+      },
+      "Session.Error.Recovery": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Session.Error.ConnectionFallbackRecovery"
+          }
+        ]
+      },
       "Session.Event.Durable": {
         "anyOf": [
           {
@@ -24251,6 +24248,9 @@
             "$ref": "#/components/schemas/session.reasoning.ended"
           },
           {
+            "$ref": "#/components/schemas/session.file.generated"
+          },
+          {
             "$ref": "#/components/schemas/session.tool.input.started"
           },
           {
@@ -24291,38 +24291,6 @@
           },
           {
             "$ref": "#/components/schemas/session.message.content.updated"
-          }
-        ]
-      },
-      "Session.Error.ConnectionFallbackRecovery": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["connection-fallback"]
-          },
-          "integrationID": {
-            "$ref": "#/components/schemas/Integration.ID"
-          },
-          "previous": {
-            "$ref": "#/components/schemas/Connection.Info"
-          },
-          "promoted": {
-            "$ref": "#/components/schemas/Connection.Info"
-          },
-          "unavailableUntil": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          }
-        },
-        "required": ["type", "integrationID", "previous", "promoted", "unavailableUntil"],
-        "additionalProperties": false
-      },
-      "Session.Error.Recovery": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Session.Error.ConnectionFallbackRecovery"
           }
         ]
       },
@@ -25045,6 +25013,9 @@
           },
           {
             "$ref": "#/components/schemas/Session.Message.Assistant.Reasoning"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Assistant.File"
           },
           {
             "$ref": "#/components/schemas/Session.Message.Assistant.Tool"
@@ -26717,6 +26688,9 @@
             "$ref": "#/components/schemas/integration.updated"
           },
           {
+            "$ref": "#/components/schemas/integration.connection.switched"
+          },
+          {
             "$ref": "#/components/schemas/provider.updated"
           },
           {
@@ -26835,6 +26809,9 @@
           },
           {
             "$ref": "#/components/schemas/session.reasoning.ended"
+          },
+          {
+            "$ref": "#/components/schemas/session.file.generated"
           },
           {
             "$ref": "#/components/schemas/session.tool.input.started"
@@ -27984,6 +27961,45 @@
         "required": ["id", "created", "type", "data"],
         "additionalProperties": false
       },
+      "integration.connection.switched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["integration.connection.switched"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "integrationID": {
+                "$ref": "#/components/schemas/Integration.ID"
+              },
+              "previous": {
+                "$ref": "#/components/schemas/Connection.Info"
+              },
+              "promoted": {
+                "$ref": "#/components/schemas/Connection.Info"
+              }
+            },
+            "required": ["integrationID", "previous", "promoted"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
       "integration.updated": {
         "type": "object",
         "properties": {
@@ -28430,6 +28446,9 @@
               },
               "name": {
                 "type": "string"
+              },
+              "myTodo": {
+                "$ref": "#/components/schemas/MyTodo.Project"
               },
               "icon": {
                 "$ref": "#/components/schemas/Project.Icon"
@@ -29304,6 +29323,61 @@
               }
             },
             "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.file.generated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.file.generated"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "assistantMessageID": {
+                "$ref": "#/components/schemas/Session.Message.ID"
+              },
+              "file": {
+                "$ref": "#/components/schemas/Session.Message.Assistant.File"
+              }
+            },
+            "required": ["sessionID", "assistantMessageID", "file"],
             "additionalProperties": false
           }
         },
