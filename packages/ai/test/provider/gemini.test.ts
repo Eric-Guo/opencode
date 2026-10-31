@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { ai, AIError, isRetryable, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/effect.js"
+import { ai, AIError, isRetryable, LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Gemini from "../../src/protocols/gemini.js"

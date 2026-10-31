@@ -199,4 +199,4 @@ export type {
   ToolSchema,
   ToolToModelOutput,
 } from "./tool.js"
-export type { LLM } from "./llm.js"
+export { LLM } from "./llm.js"
