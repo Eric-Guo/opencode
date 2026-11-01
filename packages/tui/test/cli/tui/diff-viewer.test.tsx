@@ -1487,9 +1487,13 @@ test.each([80, 160])(
       expect(viewer.app.renderer.root.findDescendantById("diff-file-header-1")).toBeUndefined()
 
       viewer.app.mockInput.pressKey("n")
-      await viewer.app.flush()
+      await viewer.app.waitFor(
+        () => viewer.app.renderer.root.findDescendantById("diff-file-header-1") !== undefined,
+      )
       viewer.app.mockInput.pressKey("m")
-      await viewer.app.flush()
+      await viewer.app.waitFor(
+        () => viewer.app.renderer.root.findDescendantById("diff-file-header-2") !== undefined,
+      )
       expect(viewer.app.renderer.root.findDescendantById("diff-file-header-2")).toBeDefined()
       viewer.app.mockInput.pressKey("m")
       await viewer.app.flush()
