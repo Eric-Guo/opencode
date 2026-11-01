@@ -657,7 +657,7 @@ export const layer = (options?: Options) =>
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const response = yield* fetchApi()
-        if (!response) return {}
+        if (!response) return { catalog: {}, body: undefined }
         const catalog = yield* decodeCatalog(response.text)
         yield* writeCache(response.text, response.etag)
         return { catalog, body: response.text }
