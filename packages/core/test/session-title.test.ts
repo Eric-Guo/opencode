@@ -36,7 +36,6 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
-import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
@@ -258,9 +257,14 @@ it.effect("resolves saved project variables in the title agent system", () =>
       })
     })
     yield* database.db
-      .update(ProjectTable)
-      .set({ project_id: 42, project_name: "Selected project" })
-      .where(eq(ProjectTable.id, location.project.id))
+      .insert(ProjectTable)
+      .values({
+        id: location.project.id,
+        worktree: location.project.directory,
+        sandboxes: [],
+        project_id: 42,
+        project_name: "Selected project",
+      })
       .run()
       .pipe(Effect.orDie)
 
