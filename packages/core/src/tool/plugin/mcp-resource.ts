@@ -49,7 +49,7 @@ export const Plugin = {
           name: "read_mcp_resource",
           options: { namespace: "opencode", codemode: true },
           description:
-            "Read one MCP resource by server and URI. Not for local files. Always return the full contents rather than slicing or filtering them; oversized output is truncated automatically and the full content is saved to a file you can read. Images and PDFs are shown to you directly.",
+            "Read one MCP resource by server and URI. Not for local files. Return full contents when inspecting a document or an unfamiliar schema; oversized output is saved to a file automatically. For structured data with a verified schema, parse the complete response and compute or select relevant fields in Code Mode, retaining source, filters, units, notices and pagination needed to interpret the result. Do not slice raw JSON or hide unread pages. Images and PDFs are shown to you directly.",
           input: Schema.Struct({
             server: Schema.String.annotate({
               description: "The server field of the discovered resource.",
