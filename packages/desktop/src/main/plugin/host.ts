@@ -160,6 +160,8 @@ const os = Match.value(process.platform).pipe(
  * reach its Ipcs over the bridge and main scopes state and events by `caller.window`.
  */
 export function createHost(input: {
+  /** Distribution plugins, composed with the built-ins before activation and ID reservation. */
+  readonly entries?: readonly Entry[]
   readonly db: Database
   readonly state: StateStore
   readonly cli: Cli
@@ -176,7 +178,15 @@ export function createHost(input: {
     data: Data,
   ) => void
 }) {
-  const definitions: readonly Entry[] = builtins
+  const definitions: readonly Entry[] = [...builtins, ...(input.entries ?? [])]
+  const ids = new Set<string>()
+
+  definitions.forEach((definition) => {
+    if (ids.has(definition.id)) throw new Error(`Duplicate bundled plugin ID: ${definition.id}`)
+
+    ids.add(definition.id)
+  })
+
   const local = definitions.filter((definition) => runsOn(definition, os))
 
   const manager = createManager(
@@ -381,7 +391,8 @@ export function createHost(input: {
 
     return (sidecar.unavailable ??= sidecar.module.OpenCode.make({
       baseUrl: "http://unavailable.invalid/",
-      fetch: () => Promise.reject(new Error("The app's own server is unavailable")),
+      // SAFETY: the promise client only invokes fetch; Bun's ambient preconnect extension is never used.
+      fetch: ((_input, _init) => Promise.reject(new Error("The app's own server is unavailable"))) as typeof fetch,
     }))
   }
 
