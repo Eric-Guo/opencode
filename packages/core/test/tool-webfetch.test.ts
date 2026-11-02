@@ -544,7 +544,10 @@ describe("WebFetchTool registration", () => {
       respond = () => Effect.succeed(new Response("", { status: 301, headers: { location: "file:///etc/passwd" } }))
       expect(yield* executeTool(registry, call({ url: "https://example.com/a", format: "text" }))).toMatchObject({
         status: "error",
-        error: { message: "URL must use http:// or https://" },
+        error: {
+          type: "tool.execution",
+          message: "Unable to fetch https://example.com/a: URL must use http:// or https://",
+        },
       })
       expect(checks).toEqual([])
 
@@ -552,7 +555,10 @@ describe("WebFetchTool registration", () => {
       respond = (request) => Effect.succeed(new Response("", { status: 307, headers: { location: `${request.url}x` } }))
       expect(yield* executeTool(registry, call({ url: "https://example.com/a", format: "text" }))).toMatchObject({
         status: "error",
-        error: { message: `Too many redirects (more than ${WebFetchTool.MAX_REDIRECTS})` },
+        error: {
+          type: "tool.execution",
+          message: `Unable to fetch https://example.com/a: Too many redirects (more than ${WebFetchTool.MAX_REDIRECTS})`,
+        },
       })
       expect(requests).toHaveLength(WebFetchTool.MAX_REDIRECTS + 1)
     }),
@@ -563,10 +569,12 @@ describe("WebFetchTool registration", () => {
       reset()
       const registry = yield* Tool.Service
 
-      // toSessionError unwraps the "Unable to fetch <url>" ToolFailure to its cause message.
       expect(yield* executeTool(registry, call({ url: "file:///etc/passwd", format: "text" }))).toEqual({
         status: "error",
-        error: { type: "unknown", message: "URL must use http:// or https://" },
+        error: {
+          type: "tool.execution",
+          message: "Unable to fetch file:///etc/passwd: URL must use http:// or https://",
+        },
       })
       expect(assertions).toEqual([])
       expect(requests).toEqual([])
@@ -627,8 +635,8 @@ describe("WebFetchTool registration", () => {
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/declared", format: "text" }))).toEqual({
         status: "error",
         error: {
-          type: "unknown",
-          message: `Response too large (exceeds ${WebFetchTool.MAX_RESPONSE_BYTES} byte limit)`,
+          type: "tool.execution",
+          message: `Unable to fetch https://1.1.1.1/declared: Response too large (exceeds ${WebFetchTool.MAX_RESPONSE_BYTES} byte limit)`,
         },
       })
 
@@ -639,8 +647,8 @@ describe("WebFetchTool registration", () => {
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/streamed", format: "text" }))).toEqual({
         status: "error",
         error: {
-          type: "unknown",
-          message: `Response too large (exceeds ${WebFetchTool.MAX_RESPONSE_BYTES} byte limit)`,
+          type: "tool.execution",
+          message: `Unable to fetch https://1.1.1.1/streamed: Response too large (exceeds ${WebFetchTool.MAX_RESPONSE_BYTES} byte limit)`,
         },
       })
     }),
@@ -653,13 +661,19 @@ describe("WebFetchTool registration", () => {
       respond = () => Effect.succeed(new Response("png", { headers: { "content-type": "image/png" } }))
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/image", format: "html" }))).toEqual({
         status: "error",
-        error: { type: "unknown", message: "Unsupported fetched image content type: image/png" },
+        error: {
+          type: "tool.execution",
+          message: "Unable to fetch https://1.1.1.1/image: Unsupported fetched image content type: image/png",
+        },
       })
 
       respond = () => Effect.succeed(new Response("pdf", { headers: { "content-type": "application/pdf" } }))
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/file", format: "html" }))).toEqual({
         status: "error",
-        error: { type: "unknown", message: "Unsupported fetched file content type: application/pdf" },
+        error: {
+          type: "tool.execution",
+          message: "Unable to fetch https://1.1.1.1/file: Unsupported fetched file content type: application/pdf",
+        },
       })
     }),
   )
@@ -695,7 +709,10 @@ describe("WebFetchTool registration", () => {
 
       expect(yield* executeTool(registry, call({ url, format: "text" }))).toEqual({
         status: "error",
-        error: { type: "unknown", message: `StatusCode: non 2xx status code (403 GET ${url})` },
+        error: {
+          type: "tool.execution",
+          message: `Unable to fetch ${url}: StatusCode: non 2xx status code (403 GET ${url})`,
+        },
       })
       expect(requests).toHaveLength(1)
       expect(requests[0]?.headers["user-agent"]).toBe(webFetchUserAgent)
@@ -715,7 +732,7 @@ describe("WebFetchTool registration", () => {
 
       expect(yield* Fiber.join(fiber)).toEqual({
         status: "error",
-        error: { type: "unknown", message: "Request timed out" },
+        error: { type: "tool.execution", message: "Unable to fetch https://1.1.1.1/slow: Request timed out" },
       })
     }),
   )
