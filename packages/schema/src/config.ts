@@ -123,8 +123,8 @@ export const UpdateTarget = Schema.Literals(["global", "user"])
 export type UpdateTarget = typeof UpdateTarget.Type
 
 export const Patch = Schema.Struct({
-  shell: Schema.optional(Schema.NullOr(Schema.String)),
-  websearch: Schema.optional(Schema.NullOr(ConfigWebSearch.Selection)),
+  shell: Schema.NullOr(Schema.String).pipe(optional),
+  websearch: Schema.NullOr(ConfigWebSearch.Selection).pipe(optional),
 }).annotate({ identifier: "Config.Patch" })
 export interface Patch extends Schema.Schema.Type<typeof Patch> {}
 
