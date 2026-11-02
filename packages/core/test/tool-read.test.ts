@@ -634,7 +634,7 @@ describe("ReadTool", () => {
             input: { path: "archive.dat", offset: 2, limit: 1 },
           },
         }),
-      ).toEqual({ status: "error", error: { type: "unknown", message: "Cannot read binary file: archive.dat" } })
+      ).toEqual({ status: "error", error: { type: "tool.execution", message: "Cannot read binary file: archive.dat" } })
       expect(readCalls).toEqual([
         { input: AbsolutePath.make(path.join(process.cwd(), "archive.dat")), page: { offset: 2, limit: 1 } },
       ])
@@ -661,7 +661,7 @@ describe("ReadTool", () => {
             ...toolIdentity,
             call: { type: "tool-call", id: `call-${error._tag}`, name: "read", input: { path: "target" } },
           }),
-        ).toEqual({ status: "error", error: { type: "unknown", message } })
+        ).toEqual({ status: "error", error: { type: "tool.execution", message } })
       }
     }),
   )
