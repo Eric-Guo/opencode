@@ -181,6 +181,15 @@ test("trims external dependencies without excluding runtime files", () => {
       ),
       "ajv/lib/core.ts",
       "ajv-formats/src/formats.ts",
+      "zod/src/index.ts",
+      "puppeteer-core/src/puppeteer-core.ts",
+      "puppeteer-core/lib/es5-iife/puppeteer-core-browser.js",
+      "devtools-protocol/json/browser_protocol.json",
+      "devtools-protocol/pdl/browser_protocol.pdl",
+      "third-party-web/dist/domain-map.csv",
+      "third-party-web/.yarn/install-state.gz",
+      "third-party-web/lib/index.test.js",
+      "third-party-web/lib/__snapshots__/index.test.js.snap",
       "js-yaml/dist/js-yaml.js",
       "js-yaml/dist/js-yaml.min.js",
       "js-yaml/dist/js-yaml.mjs.map",
@@ -200,6 +209,20 @@ test("trims external dependencies without excluding runtime files", () => {
       "ajv/dist/ajv.js",
       "ajv/dist/refs/json-schema-draft-07.json",
       "ajv-formats/dist/formats.js",
+      "zod/index.js",
+      "zod/index.cjs",
+      "zod/v4/core/index.js",
+      "puppeteer-core/lib/puppeteer/puppeteer-core.js",
+      "puppeteer-core/lib/puppeteer/cdp/CDPSession.js",
+      "devtools-protocol/package.json",
+      "third-party-web/lib/index.js",
+      "third-party-web/lib/create-entity-finder-api.js",
+      "third-party-web/lib/subsets/nostats.js",
+      "third-party-web/dist/entities.json",
+      "third-party-web/dist/entities-nostats.json",
+      "lighthouse/dist/report/standalone.js",
+      "lighthouse/shared/localization/locales/en-US.json",
+      "lighthouse/shared/localization/locales/zh.json",
       "js-yaml/index.js",
       "js-yaml/dist/js-yaml.mjs",
       "unrelated/dist/index.js",
@@ -215,6 +238,17 @@ test("trims external dependencies without excluding runtime files", () => {
 
     expect(included("@zip.js/zip.js/dist", dirStats)).toBe(false)
     expect(included("@zip.js/zip.js/lib", dirStats)).toBe(true)
+
+    for (const directory of [
+      "zod/src",
+      "puppeteer-core/src",
+      "puppeteer-core/lib/es5-iife",
+      "devtools-protocol/json",
+      "devtools-protocol/pdl",
+      "third-party-web/.yarn",
+      "third-party-web/lib/__snapshots__",
+    ])
+      expect(included(directory, dirStats)).toBe(false)
   }
 
   for (const item of CLI_BINARIES) {
