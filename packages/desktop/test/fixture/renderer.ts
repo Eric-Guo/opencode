@@ -10,11 +10,13 @@ import { StorageRpcs } from "../../src/shared/ipc-rpc/storage"
 import { WindowRpcs } from "../../src/shared/ipc-rpc/window"
 import { IpcTransportPort } from "../../src/shared/ipc-transport"
 import { IpcPortHandoff, IpcServerProtocolLive } from "../../src/main/ipc-transport"
+import { pluginHandlers } from "../../src/main/ipc-handlers/plugins"
+import { Plugins } from "../../src/main/plugin"
 import { eventHandlers } from "../../src/main/ipc-handlers/events"
 import type { StateStore } from "../../src/main/storage/state"
 
 /** Real renderer/transport with fixture-owned native state and no installed service. */
-export async function rendererFixture(url: string, storage?: StateStore) {
+export async function rendererFixture(url: string, storage?: StateStore, main?: Plugins.Interface) {
   // Built-ins always run. SSH publishes an empty inventory so the server startup gate can settle.
   const plugins = ["ssh", "updater"].map((id) => ({ id, builtin: true, enabled: true }))
   const rpcs = AppRpcs.merge(WindowRpcs, StorageRpcs, EventRpcs, PluginRpcs)
@@ -70,25 +72,37 @@ export async function rendererFixture(url: string, storage?: StateStore) {
       DraftsPutBlob: () => Effect.die("Fixture must not write attachments"),
       DraftsGetBlob: () => Effect.succeed(null),
     }),
-    PluginRpcs.toLayer({
-      PluginCall: () => Effect.die("No fixture GUI plugins"),
-      PluginSubscribe: ({ ipc }) =>
-        Effect.succeed(
-          ipc === Ssh.id
-            ? { available: true, state: Schema.encodeSync(SshState)({ servers: [], revision: 0 }) }
-            : { available: false },
-        ),
-      PluginEmbed: () => Effect.void,
-      PluginCapture: () => Effect.succeed(null),
-      PluginMenubarItem: () => Effect.void,
-      PluginMenubarItems: () => Effect.succeed([]),
-      PluginConfigure: () => Effect.void,
-      PluginList: () => Effect.succeed(plugins),
-      PluginEnable: () => Effect.void,
-      PluginDisable: () => Effect.void,
-      PluginReload: () => Effect.void,
-      PluginGuis: () => Effect.succeed({ plugins: [], reserved: [] }),
-    }),
+    main
+      ? pluginHandlers.pipe(
+          Layer.provide(
+            Layer.succeed(Plugins.Service)({
+              ...main,
+              subscribe: (ipc, window) =>
+                ipc === Ssh.id
+                  ? { available: true, state: Schema.encodeSync(SshState)({ servers: [], revision: 0 }) }
+                  : main.subscribe(ipc, window),
+            }),
+          ),
+        )
+      : PluginRpcs.toLayer({
+          PluginCall: () => Effect.die("No fixture GUI plugins"),
+          PluginSubscribe: ({ ipc }) =>
+            Effect.succeed(
+              ipc === Ssh.id
+                ? { available: true, state: Schema.encodeSync(SshState)({ servers: [], revision: 0 }) }
+                : { available: false },
+            ),
+          PluginEmbed: () => Effect.void,
+          PluginCapture: () => Effect.succeed(null),
+          PluginMenubarItem: () => Effect.void,
+          PluginMenubarItems: () => Effect.succeed([]),
+          PluginConfigure: () => Effect.void,
+          PluginList: () => Effect.succeed(plugins),
+          PluginEnable: () => Effect.void,
+          PluginDisable: () => Effect.void,
+          PluginReload: () => Effect.void,
+          PluginGuis: () => Effect.succeed({ plugins: [], reserved: [] }),
+        }),
     eventHandlers,
   )
 
@@ -101,7 +115,46 @@ export async function rendererFixture(url: string, storage?: StateStore) {
   return {
     plugins,
     bind(contents: WebContents) {
-      contents.on("did-finish-load", () => {
+      contents.on("did-finish-load", async () => {
+        // Fixture-only raw wire access exercises the production decoder and caller checks.
+        await contents.executeJavaScript(`
+          (() => {
+            let id = 1000000;
+            const port = new Promise(resolve => {
+              const receive = event => {
+                if (event.source !== window || event.data !== ${JSON.stringify(IpcTransportPort)}) return;
+                window.removeEventListener("message", receive);
+                resolve(event.ports[0]);
+              };
+              window.addEventListener("message", receive);
+            });
+            window.fixtureRpc = async (tag, payload, signal) => {
+              const channel = await port;
+              const request = id++;
+              return new Promise((resolve, reject) => {
+                const abort = () => {
+                  channel.postMessage({ _tag: "Interrupt", requestId: request });
+                  channel.removeEventListener("message", receive);
+                  reject(new Error("aborted"));
+                };
+                const receive = event => {
+                  const message = event.data;
+                  if (message._tag !== "Exit" || Number(message.requestId) !== request) return;
+                  channel.removeEventListener("message", receive);
+                  signal?.removeEventListener("abort", abort);
+                  if (message.exit._tag === "Success") resolve(message.exit.value);
+                  else reject(new Error(JSON.stringify(message.exit.cause)));
+                };
+                if (signal?.aborted) return reject(new Error("aborted"));
+                signal?.addEventListener("abort", abort, { once: true });
+                channel.addEventListener("message", receive);
+                channel.start();
+                channel.postMessage({ _tag: "Request", id: request, tag, payload, headers: [] });
+              });
+            };
+          })()
+        `)
+
         const channel = new MessageChannelMain()
         handoff.bind(contents, channel.port1)
         contents.postMessage(IpcTransportPort, null, [channel.port2])
