@@ -357,7 +357,7 @@ for (const fallback of [false, true]) {
         capabilities: { tools: false, input: ["text", "image"], output: ["image"] },
       })
       selectedSmall = fallback ? small : undefined
-      titleStream = () => Stream.make(LLMEvent.providerError({ message: "Small model unavailable" }))
+      titleStream = () => Stream.fail(providerRejected({ message: "Small model unavailable" }))
       yield* enableTitleAgent
       const sessionID = Session.ID.make(`ses_title_image_${fallback}`)
       yield* insertSession(sessionID)
