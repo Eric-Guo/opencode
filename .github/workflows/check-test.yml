@@ -210,6 +210,8 @@ jobs:
         working-directory: packages/cli
         env:
           NODE_OPTIONS: ${{ runner.os == 'Windows' && '--max-old-space-size=4096' || '' }}
+          # The compiled CLI check already built and compressed this job's web UI.
+          OPENCODE_APP_ARCHIVE: .cache/bun-app-archive.bin
         run: |
           bun run script/build-node.ts --single --skip-install --outdir=dist/node
           bun run script/service-smoke.ts --node
