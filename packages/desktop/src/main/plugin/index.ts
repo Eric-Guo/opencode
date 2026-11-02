@@ -12,6 +12,9 @@ import { DesktopCli } from "../service/desktop-cli"
 import { DesktopStorage } from "../storage"
 import { setAppQuitting } from "../windows"
 import type { PluginHost } from "./host"
+import { BackgroundService } from "../service/background-service"
+import { DesktopProxy } from "../network"
+import extension from "#desktop-main-extension"
 
 /** The host once it loaded, and its load while one is in flight. */
 type LoadedHost = { host?: PluginHost; loading?: Promise<PluginHost> }
@@ -37,6 +40,8 @@ export const layer = Layer.effect(
     const shutdown = yield* Shutdown.Service
     const lifecycle = yield* ApplicationLifecycle.Service
     const desktopCli = yield* DesktopCli.Service
+    const background = yield* BackgroundService.Service
+    const proxy = yield* DesktopProxy.Service
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
@@ -68,6 +73,14 @@ export const layer = Layer.effect(
     const host = () => {
       current.loading ??= Promise.all([import("./host"), runPromise(desktopCli.resolve)]).then(([module, cli]) => {
         current.host = module.createHost({
+          entries: extension.plugins?.({
+            connection: () => runPromise(background.connection),
+            proxy: {
+              get: async () => proxy.get(),
+              set: async (input) => proxy.set(input),
+              restart: lifecycle.relaunch,
+            },
+          }),
           db: storage.db,
           state: storage.state,
           cli: {
