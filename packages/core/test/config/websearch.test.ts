@@ -43,7 +43,7 @@ describe("ConfigWebSearchPlugin.Plugin", () => {
         editor.add({ id: WebSearch.ID.make("searchkimi"), name: "Kimi fixture", execute: () => Effect.succeed([]) })
         editor.add({ id: WebSearch.ID.make("exa"), name: "Exa fixture", execute: () => Effect.succeed([]) })
       })
-      yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins)).pipe(Effect.provide(services))
+      yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test")).pipe(Effect.provide(services))
       expect((yield* websearch.query({ query: "fixture before saving" })).providerID).toBe(
         WebSearch.ID.make("searchkimi"),
       )
