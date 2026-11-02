@@ -12,6 +12,7 @@ import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { bodyDigest, ModelsDev } from "@opencode/core/models-dev"
+import { load } from "@opencode/core/models-dev/snapshot"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -1117,21 +1118,36 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.live("get() falls back to the bundled snapshot when KV is empty and fetch is disabled", () =>
+  it.live("get() reuses a matching bundled snapshot until the UTC day changes", () =>
     Effect.gen(function* () {
+      setSystemTime(new Date("2027-02-28T23:59:00Z"))
       const cache = makeCache()
-      const state = yield* Ref.make(initialState)
+      const state = yield* Ref.make({ ...initialState, body: load() })
       const result = yield* provided(
         state,
         cache,
-        ModelsDev.Service.use((s) => s.get()),
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          const bundled = yield* svc.get()
+          expect((yield* Ref.get(state)).calls).toEqual([])
+
+          yield* svc.refresh(true)
+          const refreshed = yield* svc.get()
+          expect(refreshed === bundled).toBe(true)
+
+          setSystemTime(new Date("2027-03-01T00:01:00Z"))
+          yield* svc.refresh(false)
+          const repriced = yield* svc.get()
+          expect(repriced === bundled).toBe(false)
+          return repriced
+        }),
       )
       expect(result.length).toBeGreaterThan(0)
       const anthropic = result.find((snapshot) => snapshot.info.id === "anthropic")
       expect(anthropic?.environment).toContain("ANTHROPIC_API_KEY")
       const final = yield* Ref.get(state)
-      expect(final.calls).toEqual([])
-    }),
+      expect(final.calls.length).toBe(1)
+    }).pipe(Effect.ensuring(Effect.sync(() => setSystemTime()))),
   )
 
   it.live("get() recovers from a corrupted KV entry by fetching a fresh catalog", () =>
