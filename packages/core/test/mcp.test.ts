@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test"
 import {
   Client,
   InMemoryTransport,
+  ProtocolError,
   StreamableHTTPClientTransport,
   isJSONRPCRequest,
   type ListToolsResult,
@@ -131,6 +132,7 @@ function resourceServer(
         resourceReads: [] as string[],
         templatesUnsupported: false,
         missing: [] as string[],
+        resourceErrors: new Map<string, ProtocolError>(),
         templateLists: 0,
         toolLists: 0,
         toolCalls: [] as Array<{
@@ -273,6 +275,8 @@ function resourceServer(
           })
           protocol.setRequestHandler("resources/read", (request) => {
             state.resourceReads.push(request.params.uri)
+            const error = state.resourceErrors.get(request.params.uri)
+            if (error) return Promise.reject(error)
             if (state.missing.includes(request.params.uri)) return Promise.reject(new Error("Resource not found"))
             return Promise.resolve({ contents: state.contents })
           })
@@ -1736,6 +1740,26 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
       )
       expect(gone.metadata?.error).toBe(true)
       expect(gone.output.output).toContain("Resource not found")
+      const metadata = "cybros://reports/report.subsidiary_department_receive/metadata"
+      const invalid = `${metadata}?start_date=2026-01-01`
+      server.state.resourceErrors.set(
+        invalid,
+        new ProtocolError(-32602, "Unknown parameter: start_date", {
+          kind: "invalid_filters",
+          metadata_uri: metadata,
+        }),
+      )
+      for (const code of [
+        `return await tools.opencode.read_mcp_resource({ server: "resources", uri: "${invalid}" })`,
+        `try { await tools.opencode.read_mcp_resource({ server: "resources", uri: "${invalid}" }) } catch (error) { return error.message }`,
+      ]) {
+        const failed = yield* run(code)
+        expect(failed.output.output).toContain(`Unable to read MCP resource resources:${invalid}`)
+        expect(failed.output.output).toContain("Unknown parameter: start_date")
+        expect(failed.output.output).toContain("invalid_filters")
+        expect(failed.output.output).toContain(`"metadata_uri":"${metadata}"`)
+      }
+      expect(server.state.resourceReads.filter((uri) => uri === invalid)).toHaveLength(2)
       const missing = yield* run(
         'return await tools.opencode.read_mcp_resource({ server: "missing", uri: "docs://readme" })',
       )
