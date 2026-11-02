@@ -10,6 +10,7 @@ import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { bodyDigest, ModelsDev } from "@opencode/core/models-dev"
+import { load } from "@opencode/core/models-dev/snapshot"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { location } from "./fixture/location"
@@ -732,20 +733,29 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.live("get() falls back to the bundled snapshot when KV is empty and fetch is disabled", () =>
+  it.live("get() reuses the bundled snapshot when the fetched catalog matches", () =>
     Effect.gen(function* () {
       const cache = makeCache()
-      const state = yield* Ref.make(initialState)
+      const state = yield* Ref.make({ ...initialState, body: load() })
       const result = yield* provided(
         state,
         cache,
-        ModelsDev.Service.use((s) => s.get()),
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          const bundled = yield* svc.get()
+          expect((yield* Ref.get(state)).calls).toEqual([])
+
+          yield* svc.refresh(true)
+          const refreshed = yield* svc.get()
+          expect(refreshed === bundled).toBe(true)
+          return refreshed
+        }),
       )
       expect(result.length).toBeGreaterThan(0)
       const anthropic = result.find((snapshot) => snapshot.info.id === "anthropic")
       expect(anthropic?.environment).toContain("ANTHROPIC_API_KEY")
       const final = yield* Ref.get(state)
-      expect(final.calls).toEqual([])
+      expect(final.calls.length).toBe(1)
     }),
   )
 
