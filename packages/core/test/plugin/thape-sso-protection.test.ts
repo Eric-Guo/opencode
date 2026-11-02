@@ -27,7 +27,7 @@ describe("ThapeSsoProtection", () => {
       withEnv({ OPENCODE_API_KEY: scenario.key, VIPAI_API_KEY: "vipai-key" }, () =>
         Effect.gen(function* () {
           const plugin = yield* Plugin.Service
-          const host = yield* PluginHost.make(plugin)
+          const host = yield* PluginHost.make(plugin, "test")
           const models = yield* Model.Service
 
           yield* ConfigProviderPlugin.Plugin.effect(host).pipe(
