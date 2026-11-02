@@ -209,6 +209,20 @@ describe("toSessionError", () => {
     })
   })
 
+  test("keeps actionable tool messages when their underlying cause is unclassified", () => {
+    const message = "Unable to read MCP resource cybros:report: Unknown parameter: start_date"
+    for (const [error, expected] of [
+      [new Error("Unknown parameter: start_date"), message],
+      [new Error("Connection refused"), `${message}: Connection refused`],
+      [new Error(""), message],
+      [{ code: -32602 }, message],
+    ] as const) {
+      for (const failure of [new ToolFailure({ message, error }), new Tool.Error({ message, error })]) {
+        expect(toSessionError(failure)).toEqual({ type: "tool.execution", message: expected })
+      }
+    }
+  })
+
   test("preserves provider HTTP status without exposing runtime diagnostics", () => {
     const http = new HttpContext({
       url: "https://example.com",

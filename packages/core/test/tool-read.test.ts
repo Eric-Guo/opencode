@@ -689,7 +689,7 @@ describe("ReadTool", () => {
             input: { path: "archive.dat", offset: 2, limit: 1 },
           },
         }),
-      ).toEqual({ status: "error", error: { type: "unknown", message: "Cannot read binary file: archive.dat" } })
+      ).toEqual({ status: "error", error: { type: "tool.execution", message: "Cannot read binary file: archive.dat" } })
       expect(readCalls).toEqual([
         { input: AbsolutePath.make(path.join(process.cwd(), "archive.dat")), page: { offset: 2, limit: 1 } },
       ])
@@ -706,7 +706,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-path-kind", name: "read", input: { path: "target" } },
         }),
-      ).toEqual({ status: "error", error: { type: "unknown", message: "Path is not a file: socket" } })
+      ).toEqual({ status: "error", error: { type: "tool.execution", message: "Path is not a file: socket" } })
     }),
   )
 
@@ -1228,7 +1228,7 @@ describe("ReadTool", () => {
         }),
       ).toEqual({
         status: "error",
-        error: { type: "unknown", message: "A negative offset only works for files, and src is a directory" },
+        error: { type: "tool.execution", message: "A negative offset only works for files, and src is a directory" },
       })
     }),
   )
