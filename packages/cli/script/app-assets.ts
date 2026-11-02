@@ -29,13 +29,12 @@ export async function buildAppArchive(channel: string, version: string, options?
   )
 }
 
-// The assets compress once per release, so they take brotli's best quality: about 11% smaller than quality 6 for the
-// web UI. Each runs on the thread pool, which keeps the build to about a minute. Beta builds on every push and only
-// bundles the CLI into the desktop app, so it keeps quality 6, which takes a few seconds.
+// Production archives favor size. Preview builds repeat locally and in CI, where quality 9 avoids the much slower
+// quality 11 compression at the cost of a slightly larger embedded web UI.
 function compress(body: Buffer, channel: string) {
   return promisify(brotliCompress)(body, {
     params: {
-      [constants.BROTLI_PARAM_QUALITY]: channel === "beta" ? 6 : 11,
+      [constants.BROTLI_PARAM_QUALITY]: channel === "latest" || channel === "prod" ? 11 : 9,
       [constants.BROTLI_PARAM_SIZE_HINT]: body.length,
     },
   })
