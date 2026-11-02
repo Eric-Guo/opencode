@@ -45,6 +45,11 @@ const toError = (error: unknown) => (error instanceof Error ? error : new Error(
 // HTTP statuses and network error codes live on error properties and are lost once flattened to a message.
 const describe = (error: unknown) => {
   if (!(error instanceof Error)) return String(error)
+  // Resource errors carry recovery URIs and invalid-filter details in JSON-RPC data.
+  // Preserve them before the client and Code Mode flatten failures to text.
+  if (error instanceof ProtocolError)
+    return `${error.message} (MCP ${error.code})${error.data === undefined ? "" : `: ${JSON.stringify(error.data)}`}`
+
   const detail =
     error instanceof SdkHttpError
       ? `HTTP ${error.status}`
