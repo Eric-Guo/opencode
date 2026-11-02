@@ -186,6 +186,15 @@ describe("Config.Entry", () => {
     expect(encoded.info.providers?.custom).not.toHaveProperty("headers")
     expect(encoded.info.providers?.custom).not.toHaveProperty("canonical")
   })
+
+  test.each<{ input: Config.Patch; encoded: Schema.Json }>([
+    { input: { shell: undefined, websearch: undefined }, encoded: {} },
+    { input: { shell: "/bin/zsh", websearch: undefined }, encoded: { shell: "/bin/zsh" } },
+    { input: { shell: undefined, websearch: false as const }, encoded: { websearch: false } },
+    { input: { shell: null, websearch: null }, encoded: { shell: null, websearch: null } },
+  ])("patch encoding preserves omission separately from explicit clearing: %j", ({ input, encoded }) => {
+    expect(Schema.encodeSync(Schema.toCodecJson(Config.Patch))(input)).toStrictEqual(encoded)
+  })
 })
 
 test("no flag is named after the everything-on switches", () => {
