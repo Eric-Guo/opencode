@@ -237,6 +237,9 @@ const normalize = Effect.fnUntraced(function* (
   recommended: boolean,
   text = JSON.stringify(catalog),
 ) {
+  const bundled = bundledCatalog(text, recommended)
+  if (bundled) return bundled.snapshot
+
   const original: CatalogSource = { data: { text } }
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
@@ -747,6 +750,18 @@ const bundledSnapshot = (recommended: boolean) =>
         )
   })
 
+function bundledCatalog(text: string, recommended?: boolean) {
+  const cached = recommended === undefined ? bundledCache.values().next().value : bundledCache.get(recommended)
+  if (!cached) return
+
+  const data = providerSources.get(cached[0])?.catalog.data
+  if (!data || !("text" in data) || data.text !== text) return
+
+  // A refresh can fetch the bundled body unchanged. Reuse its definitions and
+  // original text rather than retaining another complete catalog.
+  return { text: data.text, snapshot: cached }
+}
+
 // Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models,
 // v3 no embedding or transcription models.
 function cacheKey(source: string) {
@@ -862,7 +877,7 @@ export const layer = (options?: Options) =>
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
           ),
         )
-        validatedBody = text
+        validatedBody = bundledCatalog(text)?.text ?? text
       })
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
