@@ -38,6 +38,15 @@ const appFiles = [
   // These packages execute compiled JavaScript, not their sources.
   "!**/node_modules/ajv/lib{,/**/*}",
   "!**/node_modules/ajv-formats/src{,/**/*}",
+  "!**/node_modules/{zod,puppeteer-core}/src{,/**/*}",
+  // Lighthouse uses Puppeteer's Node entry and compiled protocol code, not browser bundles or protocol definitions.
+  "!**/node_modules/puppeteer-core/lib/es5-iife{,/**/*}",
+  "!**/node_modules/devtools-protocol/{json,pdl}{,/**/*}",
+  // third-party-web reads its entity JSON at runtime; the CSV, Yarn cache and test fixtures are build inputs.
+  "!**/node_modules/third-party-web/dist/domain-map.csv",
+  "!**/node_modules/third-party-web/.yarn{,/**/*}",
+  "!**/node_modules/third-party-web/lib/**/*.test.js",
+  "!**/node_modules/third-party-web/lib/__snapshots__{,/**/*}",
   // Keep js-yaml's CommonJS sources and dist/js-yaml.mjs ESM entry, not browser bundles or its CLI.
   "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
   "!**/node_modules/js-yaml/bin{,/**/*}",
