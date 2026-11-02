@@ -968,8 +968,8 @@ describe("ShellTool", () => {
             expect(settled).toEqual({
               status: "error",
               error: {
-                type: "unknown",
-                message: `Working directory does not exist: ${path.join(tmp.path, "missing")}`,
+                type: "tool.execution",
+                message: `Unable to execute command: ${cwdCommand}: Working directory does not exist: ${path.join(tmp.path, "missing")}`,
               },
             }),
           ),
@@ -1041,7 +1041,10 @@ describe("ShellTool", () => {
           Effect.sync(() => {
             expect(settled).toMatchObject({
               status: "error",
-              error: { message: `Working directory is not a directory: ${workdir}` },
+              error: {
+                type: "tool.execution",
+                message: `Unable to execute command: ${cwdCommand}: Working directory is not a directory: ${workdir}`,
+              },
             })
             expect(assertions.map((input) => input.action)).toEqual(["shell"])
           }),
