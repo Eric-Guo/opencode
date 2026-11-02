@@ -27,6 +27,14 @@ export type DesktopProxyHost = {
   restart(): void
 }
 
+/** Main-process capabilities shared by extension IPC and bundled GUI plugins. */
+export type DesktopExtensionServices = {
+  /** Resolve the current managed service connection, including its private credential. */
+  connection(): Promise<{ url: string; password: string | null }>
+  /** Desktop-wide proxy preferences and restart flow, when supported by the host. */
+  proxy?: DesktopProxyHost
+}
+
 export type DesktopWindowHost = {
   window: BrowserWindow
   id: string
@@ -71,10 +79,9 @@ export type DesktopExtension = {
   request?(contents: WebContents, method: string, input?: unknown): Promise<unknown>
   rendererData?(contents: WebContents): Record<string, unknown>
   createWindow?(host: DesktopWindowHost): DesktopWindowExtension
-  ipc?(host: {
-    connection(): Promise<{ url: string; password: string | null }>
-    proxy?: DesktopProxyHost
-  }): Record<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>
+  /** Bundled main plugins. IDs must be unique across built-ins and this extension; entries load lazily. */
+  plugins?(host: DesktopExtensionServices): readonly Entry[]
+  ipc?(host: DesktopExtensionServices): Record<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>
 }
 
 export type DesktopRendererExtension = {
