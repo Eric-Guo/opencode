@@ -133,13 +133,12 @@ export async function buildCliToResources(dest?: string, stateHome?: string) {
 
   try {
     // The CLI builder installs target-specific optional dependencies needed for cross-builds.
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} ${`--target=${cli.target}`} --outdir=${directory}`.env(
-      {
-        ...process.env,
-        OPENCODE_CHANNEL: resolveChannel(),
-        OPENCODE_VERSION: process.env.OPENCODE_VERSION,
-      },
-    )
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build-node.ts")} --outdir=${directory}`.env({
+      ...process.env,
+      OPENCODE_CHANNEL: resolveChannel(),
+      OPENCODE_VERSION: process.env.OPENCODE_VERSION,
+      OPENCODE_TARGET: cli.target,
+    })
 
     if (stateHome && (await Bun.file(resource).exists())) {
       const child = Bun.spawn([resource, "service", "stop"], {
