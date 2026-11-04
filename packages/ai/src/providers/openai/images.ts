@@ -56,6 +56,7 @@ export const languageModel: ProviderPackage.Definition<Settings & { readonly pro
           prompt,
           images: content.flatMap((part) => (part.type === "media" ? [part.media] : [])),
           providerOptions: request.providerOptions,
+          headers: request.headers,
           http: request.http,
         })
       }),
