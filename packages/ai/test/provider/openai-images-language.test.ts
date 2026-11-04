@@ -48,7 +48,7 @@ for (const fixture of [
           messages: [Message.user("Earlier request"), Message.assistant("Earlier reply"), Message.user("A koi pond")],
           generation: { maxTokens: 100, temperature: 0.2 },
           providerOptions: { quality: "high", output_format: fixture.format },
-          http: { headers: { "x-request": "yes" } },
+          headers: { "x-request": "yes" },
         }).pipe(Stream.runCollect)
 
         expect(events.map((event) => event.type)).toEqual(["media", "step-finish", "finish"])
