@@ -5,7 +5,7 @@
     "emitDeclarationOnly": false,
     "noEmit": true,
     "rootDir": "../..",
-    "types": ["node", "bun"]
+    "types": ["node", "bun", "vite/client"]
   },
   "include": ["./**/*.ts", "./**/*.tsx", "../component-tests/**/*.ts", "../perf/**/*.ts", "../src/types.ts"]
 }
