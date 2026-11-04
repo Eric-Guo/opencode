@@ -184,7 +184,6 @@ build:
 
 release:
   stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
     - job: build
       artifacts: true
@@ -192,8 +191,7 @@ release:
     - if: "$CI_COMMIT_TAG"
   variables:
     RELEASE_PACKAGE_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/sigma-agents/${CI_COMMIT_TAG}"
-  before_script:
-    - apk add --no-cache curl
+  before_script: []
   script:
     - |
       for file in \
@@ -208,10 +206,15 @@ release:
           "${RELEASE_PACKAGE_URL}/${file}"
       done
     - |
-      release-cli create \
-        --name "Release ${CI_COMMIT_TAG}" \
-        --tag-name "${CI_COMMIT_TAG}" \
-        --assets-link "{\"name\":\"SigmaAgents-win-x64.exe\",\"url\":\"${RELEASE_PACKAGE_URL}/SigmaAgents-win-x64.exe\",\"link-type\":\"package\"}" \
-        --assets-link "{\"name\":\"SigmaAgents-win-x64.exe.blockmap\",\"url\":\"${RELEASE_PACKAGE_URL}/SigmaAgents-win-x64.exe.blockmap\",\"link-type\":\"package\"}" \
-        --assets-link "{\"name\":\"builder-debug.yml\",\"url\":\"${RELEASE_PACKAGE_URL}/builder-debug.yml\",\"link-type\":\"package\"}" \
-        --assets-link "{\"name\":\"latest.yml\",\"url\":\"${RELEASE_PACKAGE_URL}/latest.yml\",\"link-type\":\"package\"}"
+      node <<'NODE'
+      const { CI_API_V4_URL, CI_PROJECT_ID, CI_JOB_TOKEN, CI_COMMIT_TAG, RELEASE_PACKAGE_URL } = process.env
+      const links = ["SigmaAgents-win-x64.exe", "SigmaAgents-win-x64.exe.blockmap", "builder-debug.yml", "latest.yml"]
+        .map(name => ({ name, url: RELEASE_PACKAGE_URL + "/" + name, link_type: "package" }))
+      fetch(CI_API_V4_URL + "/projects/" + CI_PROJECT_ID + "/releases", {
+        method: "POST",
+        headers: { "JOB-TOKEN": CI_JOB_TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({ tag_name: CI_COMMIT_TAG, name: "Release " + CI_COMMIT_TAG, assets: { links } }),
+      }).then(async response => {
+        if (!response.ok) throw new Error(response.status + ": " + await response.text())
+      })
+      NODE
