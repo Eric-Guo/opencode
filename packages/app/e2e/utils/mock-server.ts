@@ -564,7 +564,10 @@ export async function mockServers(page: Page, servers: Record<string, Omit<MockS
 }
 
 // `emit` publishes the events a real server sends after a mutation (without a page, nothing is published).
-function createMockServerHandler(config: MockServerConfig, emit: (events: MockServerEvent[]) => void = () => {}) {
+export function createMockServerHandler(
+  config: MockServerConfig,
+  emit: (events: MockServerEvent[]) => void = () => {},
+) {
   const persistentPty = createPersistentPty({ config: config.persistentPty, directory: config.directory }, emit)
 
   const web = HttpRouter.toWebHandler(
