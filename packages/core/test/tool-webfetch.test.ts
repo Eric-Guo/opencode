@@ -548,8 +548,12 @@ describe("WebFetchTool registration", () => {
       reset()
       expect(yield* executeTool(registry, call({ url: "https://user@example.com/", format: "text" }))).toMatchObject({
         status: "error",
-        error: { message: "URL must not include credentials" },
+        error: {
+          type: "tool.execution",
+          message: "Unable to fetch https://user@example.com/: URL must not include credentials",
+        },
       })
+      expect(assertions).toEqual([])
       expect(requests).toEqual([])
     }),
   )
