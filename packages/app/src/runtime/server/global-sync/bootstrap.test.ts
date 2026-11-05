@@ -3,9 +3,14 @@ import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
 import { OpenCode, type LocationGetInput } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { bootstrapGlobal, inferHomeDirectory, loadGlobalConfigQuery, loadPathQuery, loadProjectsQuery } from "./bootstrap"
+import {
+  bootstrapGlobal,
+  inferHomeDirectory,
+  loadGlobalConfigQuery,
+  loadPathQuery,
+  loadProjectsQuery,
+} from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
-import type { ServerApi } from "@/runtime/server/api"
 import { createServerTransport } from "@/runtime/server/client"
 import type { ServerSync } from "@/runtime/server/sync"
 import { worktreeInventoryKey } from "@/workspaces/inventory"
