@@ -199,7 +199,7 @@ export function createComposerEditor(input: {
     createEffect(
       on(
         input.identity,
-        () => setState(reconcile({ ...createComposerInteractionState(), mode: draft.state.mode ?? "normal" })),
+        () => writeState(createComposerInteractionState()),
         { defer: true },
       ),
     )
