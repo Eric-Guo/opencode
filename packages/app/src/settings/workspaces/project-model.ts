@@ -1,4 +1,3 @@
-import { Predicate } from "effect"
 import { getFilename } from "@opencode/util/path"
 import type { ProjectUpdateInput } from "@opencode/client/promise"
 import { createMemo } from "solid-js"

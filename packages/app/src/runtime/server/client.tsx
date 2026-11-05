@@ -204,10 +204,6 @@ function resolveEndpoint(
   return undefined
 }
 
-function sameEndpoint(a: ServerConnection.HttpBase, b: ServerConnection.HttpBase) {
-  return a.url === b.url && a.password === b.password
-}
-
 /** A server's HTTP client, kept stable when its endpoint changes. */
 export interface ServerTransport {
   /** Updates the endpoint and returns the existing API client. */

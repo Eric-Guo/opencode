@@ -259,7 +259,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               const conn =
                 global.servers.list().find((item) => ServerConnection.key(item) === key) ?? global.servers.list()[0]
 
-              return conn ? global.ensureServerCtx(conn) : undefined
+              return conn ? global.serverCtx(ServerConnection.key(conn)) : undefined
             })
 
             const workProject = createMemo(() => {
@@ -282,7 +282,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     project.worktrees?.some((worktree) => sameDirectory(worktree.directory, directory)),
                 )
             })
-
 
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
               const detail = readSessionTabsRemovedDetail(event)
