@@ -409,15 +409,25 @@ describe("ConfigSkillPlugin.Plugin", () => {
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
-          const source = path.join(tmp.path, "generated", "skills")
-          const skill = yield* start([source], tmp.path)
+          const parent = path.join(tmp.path, "generated")
+          const source = path.join(parent, "skills")
+          const reloaded = yield* Deferred.make<void>()
+          const skill = yield* start([source], tmp.path).pipe(
+            Effect.updateService(Skill.Service, (service) => ({
+              ...service,
+              reload: () => service.reload().pipe(Effect.tap(() => Deferred.succeed(reloaded, undefined))),
+            })),
+          )
           const watcher = yield* Watcher.Test
           expect(yield* skill.list()).toEqual([])
-          expect(yield* watcher.subscriptions()).toEqual([{ path: path.join(tmp.path, "generated"), type: "file" }])
+          expect(yield* watcher.subscriptions()).toEqual([{ path: parent, type: "file" }])
 
-          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "generated")))
-          yield* watcher.emit({ type: "create", path: path.join(tmp.path, "generated") })
-          while ((yield* watcher.subscriptions()).at(-1)?.path !== source) yield* Effect.sleep("10 millis")
+          yield* Effect.promise(() => fs.mkdir(parent))
+          yield* watcher.emit({ type: "create", path: parent })
+          // The catalog is still empty, so the parent rescan emits no skill update.
+          yield* Deferred.await(reloaded)
+          expect((yield* watcher.subscriptions()).at(-1)).toEqual({ path: source, type: "file" })
+
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(source, "deploy"), { recursive: true })
             await write(source, "deploy", "Deploy")
