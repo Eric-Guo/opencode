@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
-import type { ServerRequestOptions } from "@/runtime/server/api"
+import type { ServerApi, ServerRequestOptions } from "@/runtime/server/api"
 import { sessionInfo, userMessage } from "@/test/fixtures"
 import type { Platform } from "@/runtime/platform/platform"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "./export"
