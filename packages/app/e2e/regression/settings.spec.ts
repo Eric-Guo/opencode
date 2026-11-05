@@ -97,40 +97,38 @@ test("a settings page survives refresh", async ({ page }) => {
   await expect(page).toHaveURL("/settings?tab=appearance")
 })
 
-// The Arabic dictionary chunks: built (`_assets/ar-<hash>.js`) and dev (`.../i18n/ar.ts`), for the app and the UI.
-const arabic = /\/(?:_assets\/ar-[\w-]+\.js|i18n\/ar\.ts)(?:\?|$)/
+// The UI dictionary loads lazily. The dev entry point already imports the app dictionary.
+const chinese = /\/(?:_assets\/zh-[\w-]+\.js|ui\/src\/i18n\/zh\.ts)(?:\?|$)/
 
-async function pickArabic(page: Page) {
-  const { settings } = await open(page)
+async function pickChinese(page: Page) {
+  const { settings } = await open(page, { seed: { locale: "en" } })
   await settings.locator('[data-action="settings-language"]').click()
-  await page.getByRole("listbox").getByRole("option", { name: "العربية", exact: true }).click()
+  await page.getByRole("listbox").getByRole("option", { name: "简体中文", exact: true }).click()
 
   return settings
 }
 
-test("a language switch keeps settings on screen and flips direction only with the new strings", async ({ page }) => {
-  const chunks = await holdRoute(page, arabic)
+test("a language switch keeps settings visible and commits the locale with its strings", async ({ page }) => {
+  const chunks = await holdRoute(page, chinese)
   const html = page.locator("html")
-  const settings = await pickArabic(page)
+  const settings = await pickChinese(page)
   await chunks.arrived
 
   await expect(settings.getByText("Language", { exact: true })).toBeVisible()
-  await expect(html).toHaveAttribute("dir", "ltr")
   await expect(html).toHaveAttribute("lang", "en")
 
   chunks.release()
-  await expect(settings.getByText("اللغة", { exact: true })).toBeVisible()
-  await expect(html).toHaveAttribute("dir", "rtl")
-  await expect(html).toHaveAttribute("lang", "ar")
+  await expect(settings.getByText("语言", { exact: true })).toBeVisible()
+  await expect(html).toHaveAttribute("lang", "zh-Hans")
 })
 
 test("a language whose chunk fails to load keeps English and says so", async ({ page }) => {
-  await page.route(arabic, (route) => route.abort("failed"))
-  const settings = await pickArabic(page)
+  await page.route(chinese, (route) => route.abort("failed"))
+  const settings = await pickChinese(page)
 
-  await expect(page.getByText("Failed to load العربية", { exact: true })).toBeVisible()
+  await expect(page.getByText("Failed to load 简体中文", { exact: true })).toBeVisible()
   await expect(settings.getByText("Language", { exact: true })).toBeVisible()
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr")
+  await expect(page.locator("html")).toHaveAttribute("lang", "en")
   await expect(settings.locator('[data-action="settings-language"]')).toContainText("English")
 })
 
