@@ -203,7 +203,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
     const stored = untrack(() => store.locale)
 
-    const boot = createLanguageState({
+    const boot = createLanguageState<Dictionary, Locale>({
       initial: stored,
       cached: dicts.get(stored),
       fallbackLocale: "en",
@@ -213,7 +213,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const [machine, setMachine] = createSignal(boot.state)
     let timer: ReturnType<typeof setTimeout> | undefined
 
-    const dispatch = (event: LanguageEvent<Dictionary>) =>
+    const dispatch = (event: LanguageEvent<Dictionary, Locale>) =>
       batch(() => {
         const prev = untrack(machine)
         const next = transitionLanguage(prev, event)
@@ -222,7 +222,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
         next.effects.forEach(run)
       })
 
-    const run = (effect: LanguageEffect) => {
+    const run = (effect: LanguageEffect<Locale>) => {
       if (effect.type === "load")
         return void Promise.try(() => loadDict(effect.locale)).then(
           (dictionary) => dispatch({ type: "load.succeeded", attempt: effect.attempt, dictionary }),
