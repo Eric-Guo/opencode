@@ -92,6 +92,6 @@ export const languageModel: ProviderPackage.Definition<Settings & { readonly pro
     endpoint: Endpoint.path("/images/generations", { baseURL: baseURL ?? "https://api.openai.com/v1" }),
     auth,
     transport,
-    defaults: { headers, http: body === undefined ? undefined : { body }, providerOptions },
+    options: { headers, http: body === undefined ? undefined : { body }, providerOptions },
   }).model({ id: modelID })
 }
