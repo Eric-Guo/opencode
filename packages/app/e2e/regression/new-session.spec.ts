@@ -158,6 +158,8 @@ test("the worktree picker shortcut is disabled for non-Git projects", async ({ p
 })
 
 test("picker scrollbars overlay full-width rows and support dragging", async ({ page }) => {
+  await page.clock.install()
+
   const root = "C:/OpenCode/OverlayMenus"
 
   await openDraft(page, {
@@ -179,16 +181,20 @@ test("picker scrollbars overlay full-width rows and support dragging", async ({ 
 
   const thumb = menu.locator('[data-slot="menu-scroll-thumb"]')
 
+  // Keep the 800ms idle timer from hiding the thumb before assertions or pointer actions reach it.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 10_000)
   await menu.hover()
   await expect(thumb).toHaveCSS("opacity", "0")
   await page.mouse.wheel(0, 100)
   await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   await expect(thumb).toHaveCSS("opacity", "1")
+  await page.clock.fastForward(800)
   await expect(thumb).toHaveCSS("opacity", "0")
 
   await page.mouse.wheel(0, 100)
   await expect(thumb).toHaveCSS("opacity", "1")
   await thumb.hover()
+  await page.clock.fastForward(800)
   await expect(menu).not.toHaveAttribute("data-scrolling")
   await expect(thumb).toHaveCSS("opacity", "1")
 
