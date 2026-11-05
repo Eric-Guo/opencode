@@ -6,21 +6,21 @@ import { openSettings } from "../utils/workspace"
 // could not fail.
 test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } })
 
-async function geometry(viewport: Locator, row: Locator) {
-  return viewport.evaluate(
-    (element: HTMLElement, item) => {
-      const box = element.getBoundingClientRect()
-      const rect = item!.getBoundingClientRect()
+async function geometry(row: Locator) {
+  return row.evaluate((item) => {
+    const viewport = item.closest<HTMLElement>('[data-component="menu-scroll"] > [data-scrollable]')
 
-      return {
-        overflow: element.scrollHeight > element.clientHeight,
-        scrollbar: element.offsetWidth - element.clientWidth,
-        start: Math.round(rect.left - box.left),
-        end: Math.round(box.right - rect.right),
-      }
-    },
-    await row.elementHandle(),
-  )
+    if (!viewport?.isConnected) return
+
+    const box = viewport.getBoundingClientRect()
+    const rect = item.getBoundingClientRect()
+
+    return {
+      overflow: viewport.scrollHeight > viewport.clientHeight,
+      scrollbar: viewport.offsetWidth - viewport.clientWidth,
+      insetDelta: Math.round(rect.left - box.left) - Math.round(box.right - rect.right),
+    }
+  })
 }
 
 const surfaces = [
@@ -41,38 +41,29 @@ const surfaces = [
       await dialog.getByRole("combobox").fill("Overflowing")
       await expect(dialog.getByRole("option")).toHaveCount(23)
 
-      return {
-        viewport: dialog.locator('[data-slot="search-list-scroll"]'),
-        row: dialog.getByRole("option", { name: /Overflowing result 0/ }),
-      }
+      return dialog.getByRole("option", { name: /Overflowing result 0/ })
     },
   },
   {
     name: "a select",
     async open(page: Page) {
       const view = await openSettings(page, { name: "Menu scrollbars" })
-      await view.settings.locator('[data-action="settings-language"]').click()
-      const listbox = page.getByRole("listbox")
-      await expect(listbox.getByRole("option", { name: "English", exact: true })).toBeVisible()
+      await view.settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+      // Bundled themes fill the menu even in distributions with only a few locales.
+      await view.settings.locator('[data-action="settings-theme"]').click()
 
-      return {
-        viewport: page.locator('[data-slot="select-v2-content"] [data-component="menu-scroll"] > [data-scrollable]'),
-        row: listbox.getByRole("option", { name: "English", exact: true }),
-      }
+      return page.getByRole("listbox").getByRole("option", { name: "OpenCode", exact: true })
     },
   },
 ]
 
 for (const surface of surfaces) {
   test(`${surface.name} overlays its scrollbar so rows keep equal insets while it overflows`, async ({ page }) => {
-    const list = await surface.open(page)
+    const row = await surface.open(page)
 
-    const overlaid = await geometry(list.viewport, list.row)
-    expect(overlaid.overflow).toBe(true)
-    expect(overlaid.scrollbar).toBe(0)
-    expect(overlaid.end).toBe(overlaid.start)
+    await expect.poll(() => geometry(row)).toEqual({ overflow: true, scrollbar: 0, insetDelta: 0 })
 
     await page.emulateMedia({ forcedColors: "active" })
-    await expect.poll(async () => (await geometry(list.viewport, list.row)).scrollbar).toBeGreaterThan(0)
+    await expect.poll(async () => (await geometry(row))?.scrollbar ?? 0).toBeGreaterThan(0)
   })
 }
