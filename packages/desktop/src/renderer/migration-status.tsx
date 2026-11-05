@@ -1,7 +1,7 @@
-import { useGlobal, useLanguage, type ServerConnection } from "@opencode/app/desktop"
+import { useGlobal, useLanguage, ServerConnection } from "@opencode/app/desktop"
 import { Loader } from "@opencode/ui/loader"
 import { showToast, toaster, Toast } from "@opencode/ui/toast"
-import { createRoot, createSignal } from "solid-js"
+import { createMemo, createRoot, createSignal } from "solid-js"
 import type { MigrationProgress } from "./migration-status-machine"
 import { createMigrationStatusPoller } from "./migration-status-poller"
 
@@ -9,7 +9,8 @@ type ToastHandle = { id: number; closed: boolean; dispose: (() => void) | undefi
 
 export function MigrationStatus(props: { server: ServerConnection.Any }) {
   const language = useLanguage()
-  const sdk = useGlobal().ensureServerCtx(props.server).sdk
+  const global = useGlobal()
+  const sdk = createMemo(() => global.serverCtx(ServerConnection.key(props.server))?.sdk)
   const [progress, setProgress] = createSignal<MigrationProgress>()
   // One handle per shown toast: a render that lands after the dismissal disposes its own root at once.
   let toast: ToastHandle | undefined
@@ -86,8 +87,8 @@ export function MigrationStatus(props: { server: ServerConnection.Any }) {
   }
 
   createMigrationStatusPoller({
-    connected: () => sdk.connection.status() === "connected",
-    status: (signal) => sdk.api.experimental.migration.v1.status({ signal }),
+    connected: () => sdk()?.connection.status() === "connected",
+    status: (signal) => sdk()!.api.experimental.migration.v1.status({ signal }),
     onStatus(status) {
       setProgress(status.status === "running" ? status.progress : undefined)
 

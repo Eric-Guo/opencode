@@ -617,10 +617,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
         </div>
       </form>
       <Show when={touch()}>
-        <Show when={dock()} fallback={<ComposerEditorTouchBar controller={props.controller} />}>
+        <Show
+          when={dock()}
+          fallback={<ComposerEditorTouchBar controller={props.controller} disabled={props.disabled} />}
+        >
           {(mount) => (
             <Portal mount={mount()}>
-              <ComposerEditorTouchBar controller={props.controller} docked />
+              <ComposerEditorTouchBar controller={props.controller} disabled={props.disabled} docked />
             </Portal>
           )}
         </Show>
@@ -1627,7 +1630,7 @@ function ComposerEditorSubmitButton(props: {
 // The composer's actions on a touch device, where Return only adds a line: this bar is the one way to send, steer,
 // queue or stop, and every target is at least 44px. Docked, it spans the bottom of the shell, which is the top of the
 // keyboard while one is open. Buttons keep the editor focused so the keyboard stays open.
-function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked?: boolean }) {
+function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; disabled?: boolean; docked?: boolean }) {
   const i18n = useI18n()
   const state = props.controller.state
   const view = props.controller.view
@@ -1647,7 +1650,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
   const alternate = createMemo(() => {
     const queue = view.submit.queue
 
-    if (state.mode !== "normal" || !queue || !props.controller.canSubmit()) return undefined
+    if (props.disabled || state.mode !== "normal" || !queue || !props.controller.canSubmit()) return undefined
 
     if (queue.editing()) return "steer" as const
 
@@ -1702,7 +1705,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           class="size-11 rounded-lg"
           icon={<Icon name="plus" />}
           aria-label={i18n.t("ui.promptInput.add")}
-          disabled={view.draftOnly}
+          disabled={view.draftOnly || props.disabled}
           onMouseDown={keep}
           onClick={props.controller.attach}
         />
@@ -1722,7 +1725,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
               class="size-11 rounded-lg"
               icon={<span class="font-mono text-[17px] leading-5">{key.glyph}</span>}
               aria-label={i18n.t(key.label)}
-              disabled={view.draftOnly}
+              disabled={view.draftOnly || props.disabled}
               onMouseDown={keep}
               onClick={() => props.controller[key.run]()}
             />
