@@ -196,7 +196,7 @@ test("ignores a transient missing session ID during navigation", async () => {
     const [id, setId] = createSignal<string | undefined>()
     const current = createSessionResolution(id, () => fixture.sessions)
 
-    expect(current()).toBeUndefined()
+    expect(current().status).toBe("idle")
     await flush()
     expect(fixture.resolves).toEqual([])
 
@@ -206,7 +206,7 @@ test("ignores a transient missing session ID during navigation", async () => {
 
     fixture.settle("ses_a")
     await flush()
-    expect(current()?.id).toBe("ses_a")
+    expect(resolved(current())?.id).toBe("ses_a")
 
     dispose()
   })
