@@ -147,7 +147,7 @@ build:
   variables:
     GIT_SUBMODULE_STRATEGY: none
     OPENCODE_TARGET: windows-x64
-    OPENCODE_VERSION: "2.2.2"
+    OPENCODE_VERSION: "2.2.5"
     OPENCODE_DESKTOP_EXTENSION: "$CI_PROJECT_DIR/packages/desktop-tab"
   before_script:
     - !reference [default, before_script]
