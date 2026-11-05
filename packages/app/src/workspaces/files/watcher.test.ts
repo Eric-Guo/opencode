@@ -28,7 +28,6 @@ describe("file watcher invalidation", () => {
     }
 
     const tree = createFileTreeStore({
-      scope: () => directory,
       normalizeDir: paths.normalizeDir,
       list: async () => fixture.files,
       onError: (message) => {
