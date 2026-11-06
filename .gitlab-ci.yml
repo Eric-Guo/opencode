@@ -51,6 +51,17 @@ default:
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - git config --global user.email "bot@opencode.ai"
     - git config --global user.name "opencode"
+    # bun.lock tracks @opencode/nexus-ui and its file: dependency @cybros/agent; development provides them as a
+    # 7777 worktree and a .local/nexus-sdk symlink, so clone both to give bun install the same layout.
+    - rm -rf packages/nexus-ui
+    - git clone --depth 1 --branch nexus_backend "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-agent-7777.git" packages/nexus-ui
+    - git clone --depth 1 --branch main "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/nexus_rho.git" "$RUNNER_TEMP/nexus_rho"
+    - mkdir -p packages/nexus-ui/.local
+    - ln -s "$RUNNER_TEMP/nexus_rho/sdks/typescript" packages/nexus-ui/.local/nexus-sdk
+    # @cybros/agent exports gitignored dist/ files, so the SDK must be built before
+    # bun install copies it into node_modules; a later build would not propagate.
+    - bun install --cwd "$RUNNER_TEMP/nexus_rho/sdks/typescript"
+    - bun run --cwd "$RUNNER_TEMP/nexus_rho/sdks/typescript" build
 
 .ci:
   # Allow dependency installation and job scripts to share a one-hour budget.
