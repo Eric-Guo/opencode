@@ -394,10 +394,7 @@ const subagentJob: ExperimentalJobListOutput[number] = {
 describe("runNonInteractivePrompt", () => {
   test("preserves an explicit prompt identity for workspace task admission", async () => {
     const sdk = await run({ messageID: "msg_workspace_stable", turn: (id) => [prompted(id), settled()] })
-    expect(sdk.session.prompt).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "msg_workspace_stable" }),
-      expect.anything(),
-    )
+    expect(sdk.session.prompt).toHaveBeenCalledWith(expect.objectContaining({ id: "msg_workspace_stable" }))
   })
 
   test("keeps formatted tool output and compact tool metadata in JSON", async () => {
