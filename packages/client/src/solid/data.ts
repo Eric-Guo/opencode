@@ -54,9 +54,15 @@ import {
 } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
-import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
+
+type ActiveSnapshot =
+  | { status: "pending" }
+  | { status: "loading"; updates: Map<string, DataSessionStatus | undefined> }
+  | { status: "settled" }
+
 /**
  * Where a pending user prompt stands relative to the runner: `starting` is promoted at the next idle boundary,
  * `steering` waits for the next step boundary of an execution that already delivered input, `stranded` outlived an
@@ -328,11 +334,12 @@ export function createData(config: CreateDataInput) {
   const messageIndex = new Map<string, Map<string, number>>()
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
-  let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  const [activeSnapshot, setActiveSnapshot] = createSignal<ActiveSnapshot>({ status: "pending" })
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
-    activeUpdates?.set(sessionID, status)
+    const snapshot = untrack(activeSnapshot)
+    if (snapshot.status === "loading") snapshot.updates.set(sessionID, status)
     setStore("session", "active", sessionID, status)
   }
 
@@ -679,7 +686,8 @@ export function createData(config: CreateDataInput) {
   }
 
   function removeSession(sessionID: string) {
-    activeUpdates?.set(sessionID, undefined)
+    const snapshot = untrack(activeSnapshot)
+    if (snapshot.status === "loading") snapshot.updates.set(sessionID, undefined)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
@@ -711,21 +719,23 @@ export function createData(config: CreateDataInput) {
   function handleEvent(event: OpenCodeEvent) {
     switch (event.type) {
       case "server.connected": {
-        const updates = new Map<string, DataSessionStatus | undefined>()
-        activeUpdates = updates
+        const load = { status: "loading", updates: new Map<string, DataSessionStatus | undefined>() } as const
+        setActiveSnapshot(load)
         refresh(() =>
           api()
             .session.active()
             .then((active) => {
-              if (activeUpdates !== updates) return
+              if (activeSnapshot() !== load) return
               // Lifecycle events received during hydration supersede the snapshot.
               const snapshot = new Map<string, DataSessionStatus>(Object.keys(active).map((id) => [id, "running"]))
-              updates.forEach((status, id) => {
+              load.updates.forEach((status, id) => {
                 if (status === undefined) return snapshot.delete(id)
                 snapshot.set(id, status)
               })
-              activeUpdates = undefined
-              setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
+              batch(() => {
+                setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
+                setActiveSnapshot({ status: "settled" })
+              })
               // Sessions created before this connection (while disconnected, or before the client started)
               // never delivered `session.created`; without their info a running child never joins its root's family.
               snapshot.forEach((status, id) => {
@@ -733,7 +743,7 @@ export function createData(config: CreateDataInput) {
               })
             })
             .catch(() => {
-              if (activeUpdates === updates) activeUpdates = undefined
+              if (activeSnapshot() === load) setActiveSnapshot({ status: "settled" })
             }),
         )
         refresh(() =>
@@ -1582,6 +1592,9 @@ export function createData(config: CreateDataInput) {
         return Object.entries(store.session.active).flatMap(([sessionID, status]) =>
           status === "running" ? [sessionID] : [],
         )
+      },
+      activeSnapshotSettled() {
+        return activeSnapshot().status === "settled"
       },
       // Inputs are the pending user and synthetic items; compactions are control items.
       input: {

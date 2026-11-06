@@ -284,7 +284,10 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       serversSettled: connections().every((item, index) => {
         if (!canUseServer(global.servers.health[ServerConnection.key(item.conn)])) return true
 
-        return !!queries[index]?.isSuccess || !!queries[index]?.isError
+        // The first paint needs both snapshots so an already-running session is not announced as new work.
+        return (
+          item.ctx.data.session.activeSnapshotSettled() && (!!queries[index]?.isSuccess || !!queries[index]?.isError)
+        )
       }),
       workingKeys: entries().flatMap((entry) =>
         entry.status === "working" || workingSince(entry.session) !== undefined ? [entry.key] : [],
