@@ -1452,9 +1452,7 @@ for (const delivery of ["steer", "queue"] as const) {
       // Pending closes the meta line, after the agent and model that show on hover.
       await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(
         /^Build\s*·\s*Queue Model\s*·\s*Pending$/,
-        {
-          useInnerText: true,
-        },
+        { useInnerText: true },
       )
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
