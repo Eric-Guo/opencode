@@ -2236,21 +2236,27 @@ test("the inbox waits for initial requests and orders attention by waiting age r
   })
 
   const pending = await holdRoute(page, /\/api\/session\/ses_waiting_old\/permission(?:\?|$)/)
-  // Running sessions join Working only once this snapshot loads, which can be after the inbox shows; runs it reveals
-  // had already started, so they are not announced.
-  const running = await holdRoute(page, /\/api\/session\/active(?:\?|$)/)
+
+  const active = await holdRoute(page, /\/api\/session\/active(?:\?|$)/)
 
   await page.goto("/")
-  await Promise.all([pending.arrived, running.arrived])
+  await active.arrived
+
+  const request = await pending.arrived
 
   const inbox = page.locator('[data-slot="sidebar-inbox"]')
 
   await expect(inbox).toHaveAttribute("aria-busy", "true")
   await expect(inbox.getByText("Sessions you work on will appear here", { exact: true })).toHaveCount(0)
-  const checked = page.waitForResponse(/\/api\/session\/ses_waiting_old\/permission(?:\?|$)/)
+
+  const permission = page
+    .waitForResponse((response) => response.request() === request)
+    .then((response) => response.finished())
+
   pending.release()
-  await checked
-  running.release()
+  await permission
+  await expect(inbox).toHaveAttribute("aria-busy", "true")
+  active.release()
 
   const needs = inbox
     .getByRole("group", { name: "Needs attention", exact: true })
@@ -2258,6 +2264,7 @@ test("the inbox waits for initial requests and orders attention by waiting age r
 
   await expect(needs).toContainText(["Oldest waiting session", "Newer waiting session"])
   await expect(inbox).toHaveAttribute("aria-busy", "false")
+  await expect(inbox.getByRole("group", { name: "Working", exact: true }).getByText("New live question")).toBeVisible()
   await expect(inbox.getByRole("status")).toBeEmpty()
   workspace.push([
     {
