@@ -172,7 +172,8 @@ build:
     - git clone --depth 1 --branch main "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-agent-7777.git" packages/7777
     - git clone --depth 1 --branch plm-meeting "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-agent-7777.git" packages/plm-meeting
     - git clone --depth 1 --branch v2 "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-desktop-tab.git" packages/desktop-tab
-    - bun install --frozen-lockfile
+    # Install desktop's Windows prebuilds too; the CLI build's filtered install only links its own dependencies.
+    - bun install --frozen-lockfile --os=linux --os=win32 --cpu=x64
   script:
     - cd packages/desktop
     - bun run build
