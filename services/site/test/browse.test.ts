@@ -3,8 +3,6 @@ import { extensionPages } from "~/component/site/extension-data"
 
 const browse = extensionPages.find((extension) => extension.slug === "browse")!
 
-// The browse page (anomalyco/browse): the Chrome Web Store is the main action, the install leads
-// with the extension and then lists the CLI commands, and the product name is always lowercase.
 describe("browse", () => {
   test("is a product at /product/browse with the Chrome Web Store as its main action", () => {
     expect(browse.product).toBe(true)
@@ -12,12 +10,15 @@ describe("browse", () => {
     expect(browse.source).toBe("https://github.com/anomalyco/browse")
   })
 
-  test("leads the install with the extension, then lists the standalone scripts first", () => {
+  test("leads with the extension, then offers standalone scripts and package manager commands for the CLI", () => {
     expect(browse.install.lead).toContain("[Chrome extension]")
-    expect(browse.install.commands?.slice(0, 2)).toEqual([
+    expect(browse.install.commands).toEqual([
       { method: "curl", command: "curl -fsSL https://opencode.ai/browse/install | bash" },
       { method: "pwsh", command: "irm https://opencode.ai/browse/install.ps1 | iex" },
+      { method: "npm", command: "npm install -g @opencode/browse && browse install" },
+      { method: "bun", command: "bun add -g @opencode/browse && browse install" },
     ])
+    expect(browse.install.lead).not.toMatch(/node\.?js|npx/i)
   })
 
   test("keeps the documented title and description lengths", () => {
