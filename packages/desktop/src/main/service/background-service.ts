@@ -6,6 +6,7 @@ import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import extension from "#desktop-main-extension"
+import { CHANNEL } from "../constants"
 import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { serviceFile } from "./cli-version"
@@ -145,7 +146,8 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 function registrationFile(path: Path.Path, version: string) {
   return serviceFile({
     version,
-    server: process.env.OPENCODE_DESKTOP_SERVER_CHANNEL,
+    // Dev packages build a dev CLI even when CI supplies a plain release version.
+    server: process.env.OPENCODE_DESKTOP_SERVER_CHANNEL ?? (app.isPackaged && CHANNEL === "dev" ? "dev" : undefined),
     stateHome: process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
   })
 }
