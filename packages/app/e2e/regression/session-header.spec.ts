@@ -531,6 +531,8 @@ test.describe("location", () => {
       })}`,
     )
     await expectSessionTitle(page, "Location session")
+    // Initial composer autofocus would cancel the review panel's deferred focus handoff.
+    await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
     await page.getByRole("button", { name: "Toggle review", exact: true }).click()
     await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
     // Control the launch timeout, not the page's initial focus and panel animation.
