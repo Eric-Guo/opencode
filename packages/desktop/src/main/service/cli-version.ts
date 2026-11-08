@@ -26,19 +26,19 @@ export function serviceVersion(input: {
  * The registration file the CLI writes, or undefined for the shared `service.json` of the released channels. Follows
  * the CLI itself rather than the app's channel, because a source build can run any CLI: a preview build writes
  * `service-<channel>.json` (with dev mapped to this fork's eric_dev identity), a released one `service.json`. Matches
- * the CLI's `ServiceConfig.filename`.
+ * the CLI's `ServiceConfig.filename`. An explicit channel takes precedence because CI can give a dev CLI a release version.
  */
 export function serviceFile(input: {
   /** The CLI's version. */
   readonly version: string
-  /** `OPENCODE_DESKTOP_SERVER_CHANNEL`: `local` for a CLI built from this checkout. */
+  /** Explicit CLI channel, including `local` for a CLI built from this checkout. */
   readonly server?: string
   readonly stateHome: string
 }) {
   if (input.server === "local" || input.version === "local")
     return path.join(input.stateHome, "opencode", "service-local.json")
 
-  const channel = previewChannel(input.version)
+  const channel = input.server ?? previewChannel(input.version)
 
   if (channel === undefined || channel === "latest" || channel === "beta" || channel === "next") return undefined
 

@@ -29,6 +29,12 @@ describe("cli-version", () => {
       server: undefined,
       expected: path.join("/state", "opencode", "service-preview-a.json"),
     },
+    {
+      version: "2.2.5",
+      server: "dev",
+      expected: path.join("/state", "opencode", "service-eric_dev.json"),
+    },
+    { version: "2.2.5", server: "beta", expected: undefined },
     { version: "2.0.32", server: undefined, expected: undefined },
     { version: "0.0.0-beta-2", server: undefined, expected: undefined },
     { version: "0.0.0-next-5", server: undefined, expected: undefined },
