@@ -5,6 +5,7 @@ import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Service } from "@opencode/client/effect/service"
 import { ServiceConfig } from "../../../services/service-config"
+import { waitForPlugins } from "../../../services/plugin-startup"
 
 export default Runtime.handler(
   Commands.commands.debug.commands.agent,
@@ -14,6 +15,8 @@ export default Runtime.handler(
     const endpoint = found ?? (yield* Service.ensure(options))
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const location = { directory: process.cwd() }
+    yield* waitForPlugins(client, location.directory)
+
     const agents = yield* Effect.promise(() => client.agent.list({ location }))
     const agent =
       agents.data.find((item) => item.id === input.name) ?? agents.data.find((item) => item.name === input.name)
