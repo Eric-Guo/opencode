@@ -122,7 +122,13 @@ export class Info extends Schema.Class<Info>("Config.Info")({
 export const UpdateTarget = Schema.Literals(["global", "user"])
 export type UpdateTarget = typeof UpdateTarget.Type
 
+export const ExperimentalPatch = Schema.Struct({
+  image_generate: Schema.NullOr(ConfigExperimental.Info.fields.image_generate).pipe(optional),
+}).annotate({ identifier: "Config.ExperimentalPatch" })
+export interface ExperimentalPatch extends Schema.Schema.Type<typeof ExperimentalPatch> {}
+
 export const Patch = Schema.Struct({
+  experimental: ExperimentalPatch.pipe(optional),
   shell: Schema.NullOr(Schema.String).pipe(optional),
   websearch: Schema.NullOr(ConfigWebSearch.Selection).pipe(optional),
 }).annotate({ identifier: "Config.Patch" })

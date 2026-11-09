@@ -203,6 +203,10 @@ export const layer = Layer.effect(
           n: input.n,
           aspect: input.aspect,
           resolution: input.resolution,
+          providerOptions: {
+            ...input.providerOptions,
+            ...(input.mask ? { mask: Media.base64(input.mask.data, input.mask.mime) } : {}),
+          },
         })
         .pipe(
           Effect.provideService(ImageClient.Service, images),
@@ -356,7 +360,12 @@ function providerError(ref: Model.Ref, error: AIError) {
   return new ProviderRequestError({
     providerID: ref.providerID,
     reason: failureReason(reason._tag, status),
-    message: reason.message,
+    message: [
+      reason.message,
+      ...(error.code ? [`code=${error.code}`] : []),
+      ...(status === undefined ? [] : [`HTTP ${status}`]),
+      ...(reason.http?.headers["x-request-id"] ? [`requestID=${reason.http.headers["x-request-id"]}`] : []),
+    ].join("; "),
     ...(status === undefined ? {} : { status }),
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   })
