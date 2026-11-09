@@ -499,6 +499,14 @@ export const layer = (options?: Options) =>
               if (errors.length || typeof input !== "object" || input === null || Array.isArray(input))
                 throw new Error("Invalid user configuration")
               const fields = [
+                ...(patch.experimental?.image_generate === undefined
+                  ? []
+                  : [
+                      {
+                        path: ["experimental", "image_generate"],
+                        value: patch.experimental.image_generate ?? undefined,
+                      },
+                    ]),
                 ...(patch.shell === undefined ? [] : [{ path: ["shell"], value: patch.shell ?? undefined }]),
                 ...(patch.websearch === undefined
                   ? []
