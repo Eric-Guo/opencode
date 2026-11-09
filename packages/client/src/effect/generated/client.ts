@@ -974,6 +974,8 @@ const EndpointExperimentalGenerateImage =
           n: input["n"],
           aspect: input["aspect"],
           resolution: input["resolution"],
+          providerOptions: input["providerOptions"],
+          mask: input["mask"],
         },
       }).pipe(
         Effect.mapError(mapClientError),
@@ -2093,7 +2095,7 @@ const EndpointExperimentalConfigUpdate = (raw: RawClient["server.config"]) => (i
   preserveEffect<ExperimentalConfigUpdateOutput>()(
     raw["config.update"]({
       query: { location: input?.["location"], target: input?.["target"] },
-      payload: { shell: input?.["shell"], websearch: input?.["websearch"] },
+      payload: { experimental: input?.["experimental"], shell: input?.["shell"], websearch: input?.["websearch"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
