@@ -447,6 +447,13 @@ describe("image and decision generation", () => {
             request,
             Response.json({ model: "openjev", answers: { photo: { type: "noul", noul: 0.7 } } }),
           )
+        if (request.url.startsWith("https://generativelanguage.googleapis.com/") && text.includes("Style: warm"))
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aW1hZ2U=" } }] } }],
+            }),
+          )
         if (request.url === "https://api.typesafe.ai/v1/systemone")
           return HttpClientResponse.fromWeb(
             request,
@@ -501,6 +508,51 @@ describe("image and decision generation", () => {
       expect(result).toMatchObject({
         images: [{ type: "image", data: "aW1hZ2U=", mime: "image/png" }],
         tokens: { input: 9, output: 272 },
+      })
+    }),
+  )
+
+  mediaIt.effect("forwards per-call image options to the native image adapter", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      yield* generate.image({
+        model: ref("openai", "gpt-image-1-mini"),
+        prompt: "courtyard",
+        n: 2,
+        aspect: "3:2",
+        providerOptions: { quality: "medium", style: "natural" },
+      })
+      expect(requests[0]).toMatchObject({ body: { n: 2, size: "1536x1024", quality: "medium", style: "natural" } })
+    }),
+  )
+
+  mediaIt.effect("converts a separate mask file into native image media", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      yield* generate.image({
+        model: ref("google", "gemini-3.1-flash-image"),
+        prompt: "edit",
+        images: [{ data: "aW1hZ2U=", mime: "image/png" }],
+        mask: { data: "bWFzaw==", mime: "image/png" },
+        resolution: "4K",
+        providerOptions: { style: "warm" },
+      })
+      expect(requests[0]).toMatchObject({
+        body: {
+          contents: [
+            {
+              parts: [
+                { text: "edit\n\nStyle: warm" },
+                { inlineData: { mimeType: "image/png", data: "aW1hZ2U=" } },
+                { text: "Mask (visual guidance):" },
+                { inlineData: { mimeType: "image/png", data: "bWFzaw==" } },
+              ],
+            },
+          ],
+          generationConfig: { imageConfig: { imageSize: "4K" } },
+        },
       })
     }),
   )
