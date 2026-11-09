@@ -85,7 +85,7 @@ export const provider = configure()
 export const model: ProviderPackage.Model<Settings, Gemini.ProviderOptionsInput> = (modelID, settings) =>
   configure(toConfig(settings)).model(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = toConfig(settings)
+  const input = { ...toConfig(settings), baseURL: settings?.baseURL ?? process.env.GOOGLE_IMAGE_BASE_URL }
   return configure(input).image(modelID, input.providerOptions)
 }
 export const embeddingModel = (modelID: string, settings?: Settings) => {
