@@ -17367,6 +17367,55 @@
           }
         ]
       },
+      "Config.ExperimentalPatch": {
+        "type": "object",
+        "properties": {
+          "image_generate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string",
+                            "pattern": "^[^/#]+$"
+                          },
+                          "model": {
+                            "type": "string",
+                            "pattern": "^[^#]+$"
+                          },
+                          "variant": {
+                            "type": "string",
+                            "pattern": "^[^#]+$"
+                          }
+                        },
+                        "required": ["providerID", "model"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "Config.Formatter.EntryEncoded": {
         "type": "object",
         "properties": {
@@ -18196,6 +18245,9 @@
       "Config.Patch": {
         "type": "object",
         "properties": {
+          "experimental": {
+            "$ref": "#/components/schemas/Config.ExperimentalPatch"
+          },
           "shell": {
             "anyOf": [
               {
@@ -20183,6 +20235,12 @@
           },
           "resolution": {
             "$ref": "#/components/schemas/Generate.ImageResolution"
+          },
+          "providerOptions": {
+            "type": "object"
+          },
+          "mask": {
+            "$ref": "#/components/schemas/Generate.File"
           }
         },
         "required": ["model", "prompt"],

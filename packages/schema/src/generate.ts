@@ -61,6 +61,8 @@ export const ImageRequest = Schema.Struct({
   n: PositiveInt.pipe(optional).annotate(description("Number of images to generate; defaults to 1")),
   aspect: ImageAspect.pipe(optional),
   resolution: ImageResolution.pipe(optional),
+  providerOptions: Schema.Record(Schema.String, Schema.Json).pipe(optional),
+  mask: File.pipe(optional).annotate(description("Mask for the first input image; visual guidance for Gemini")),
 }).annotate({ identifier: "Generate.ImageRequest" })
 
 export interface ImageOutput extends Schema.Schema.Type<typeof ImageOutput> {}

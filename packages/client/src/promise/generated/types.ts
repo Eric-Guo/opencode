@@ -4114,6 +4114,8 @@ export type ExperimentalGenerateImageInput = {
   readonly n?: number | undefined
   readonly aspect?: `${number}${":"}${number}` | undefined
   readonly resolution?: ("1K" | "2K" | "4K" | (string & {})) | undefined
+  readonly providerOptions?: { readonly [x: string]: JsonValue } | undefined
+  readonly mask?: { readonly data: string; readonly mime: string; readonly name?: string } | undefined
 }
 
 export type ExperimentalGenerateImageOutput = GenerateImageResponse["data"]
@@ -5066,6 +5068,18 @@ export type ConfigGlobalOutput = GlobalConfig
 export type ExperimentalConfigUpdateInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly target?: "global" | "user" | undefined
+  readonly experimental?:
+    | {
+        readonly image_generate?:
+          | boolean
+          | {
+              readonly model?:
+                | string
+                | { readonly providerID: string; readonly model: string; readonly variant?: string }
+            }
+          | null
+      }
+    | undefined
   readonly shell?: string | null | undefined
   readonly websearch?: false | { readonly provider: "random" | string } | null | undefined
 }
