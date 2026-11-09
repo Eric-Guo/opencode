@@ -131,6 +131,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/openai", () => import("@opencode/ai/providers/openai")],
   ["@opencode/ai/providers/openai/chat", () => import("@opencode/ai/providers/openai/chat")],
   ["@opencode/ai/providers/openai/responses", () => import("@opencode/ai/providers/openai/responses")],
+  ["@opencode/ai/providers/vipai/images", () => import("@opencode/ai/providers/vipai/images")],
   ["@opencode/ai/providers/openai/images", () => import("@opencode/ai/providers/openai/images")],
   ["@opencode/ai/providers/openai-compatible", () => import("@opencode/ai/providers/openai-compatible")],
   [

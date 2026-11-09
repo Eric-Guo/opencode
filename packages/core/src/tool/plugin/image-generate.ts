@@ -1,6 +1,8 @@
 export * as ImageGenerateTool from "./image-generate.js"
 
 import path from "path"
+import { fileURLToPath } from "node:url"
+import { ImageAspect, ImageResolution } from "@opencode/schema/generate"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Document, Entry } from "@opencode/schema/config"
@@ -40,12 +42,30 @@ export const description = [
   "Generates a new image, or edits existing ones.",
   "Only call this when the user asks you to create or edit an image. If you think an image would help but the user didn't ask for one, ask them first instead of generating it.",
   "Images you pass are used as the source to edit, or as references for style and subject.",
-  "Each call makes one image. For several images, call it once per image.",
+  "Each call makes one image by default. Use n for variations of the same prompt when supported; different prompts need separate calls.",
   "It runs in the background: the call starts a job and returns right away, and you are notified automatically when the image is saved, with its path. Never poll, sleep, or check for the file while you wait.",
   "Don't repeat a request unless the user asks.",
 ].join("\n")
 
 export const Input = Schema.Struct({
+  n: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10 }))).annotate({
+    description: "Variations of the same prompt, 1–10; Gemini supports one image.",
+  }),
+  aspect: Schema.optionalKey(ImageAspect),
+  resolution: Schema.optionalKey(ImageResolution),
+  size: Schema.optionalKey(Schema.String).annotate({
+    description: "Provider pixel size or legacy size alias. Omit when using aspect/resolution.",
+  }),
+  quality: Schema.optionalKey(Schema.String).annotate({
+    description: "GPT image quality, not resolution. For Gemini use resolution.",
+  }),
+  style: Schema.optionalKey(Schema.String).annotate({
+    description: "Style preset or instruction supported by the selected provider.",
+  }),
+  mask: Schema.optionalKey(Schema.String).annotate({
+    description:
+      "Mask for the first input image, loaded like images. For Gemini this is visual guidance; explain it in the prompt.",
+  }),
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
     description:
       "What to create, or for edits, what to change. Be specific about subject, style, composition and any text that should appear in the image.",
@@ -54,7 +74,7 @@ export const Input = Schema.Struct({
     Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
   ).annotate({
     description:
-      "Images to edit, or to use as references for style and subject when creating a new image, in order. Local file paths (relative to the session directory or absolute) or http(s) URLs.",
+      "Images to edit, or to use as references for style and subject when creating a new image, in order. Local file paths (relative to the session directory or absolute), file URLs, image data URLs, or http(s) URLs. The original goes first, then ordered references; describe their roles in the prompt.",
   }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
@@ -157,51 +177,70 @@ export const Plugin = {
       source: string,
       context: FileAccess.Invocation,
     ) {
-      const bytes = /^https?:\/\//i.test(source)
-        ? yield* Effect.gen(function* () {
-            // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
-            yield* permission.assert({
-              action: "webfetch",
-              resources: [source],
-              save: ["*"],
-              metadata: { url: source },
-              ...Permission.invocation(context),
+      const inline = source.startsWith("data:")
+        ? /^data:image\/(?:png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/.exec(source)
+        : undefined
+      if (source.startsWith("data:") && !inline)
+        return yield* new ToolFailure({ message: "Input image must be a base64 PNG, JPEG, WebP or GIF data URL." })
+      if (inline && inline[1].length > Math.ceil(MAX_INPUT_BYTES / 3) * 4)
+        return yield* new ToolFailure({ message: "Input image is larger than 20 MiB." })
+      const bytes = inline
+        ? Buffer.from(inline[1], "base64")
+        : /^https?:\/\//i.test(source)
+          ? yield* Effect.gen(function* () {
+              // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
+              yield* permission.assert({
+                action: "webfetch",
+                resources: [source],
+                save: ["*"],
+                metadata: { url: source },
+                ...Permission.invocation(context),
+              })
+              return yield* Effect.gen(function* () {
+                const response = yield* http
+                  .execute(HttpClientRequest.get(source))
+                  .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
+                return yield* collectBoundedResponseBody(
+                  response,
+                  MAX_INPUT_BYTES,
+                  () => new ToolFailure({ message: `${source} is larger than 20 MiB.` }),
+                )
+              }).pipe(
+                Effect.timeoutOrElse({
+                  duration: DOWNLOAD_TIMEOUT,
+                  orElse: () => Effect.fail(new ToolFailure({ message: `Timed out downloading ${source}.` })),
+                }),
+                Effect.mapError(toolFailure(`Unable to download ${source}`)),
+              )
             })
-            return yield* Effect.gen(function* () {
-              const response = yield* http
-                .execute(HttpClientRequest.get(source))
-                .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
-              return yield* collectBoundedResponseBody(
-                response,
-                MAX_INPUT_BYTES,
-                () => new ToolFailure({ message: `${source} is larger than 20 MiB.` }),
-              )
-            }).pipe(
-              Effect.timeoutOrElse({
-                duration: DOWNLOAD_TIMEOUT,
-                orElse: () => Effect.fail(new ToolFailure({ message: `Timed out downloading ${source}.` })),
-              }),
-              Effect.mapError(toolFailure(`Unable to download ${source}`)),
-            )
-          })
-        : yield* Effect.gen(function* () {
-            const target = yield* access.authorizeRead(source, context)
-            const info = yield* environment.files
-              .stat(target.absolute)
-              .pipe(
-                Effect.catchTag(
-                  "Environment.NotFound",
-                  () => new ToolFailure({ message: `File not found: ${source}` }),
-                ),
-              )
-            if (info.size > MAX_INPUT_BYTES)
-              return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
-            return (yield* environment.files.read(target.absolute)).bytes
-          })
+          : yield* Effect.gen(function* () {
+              const file = source.startsWith("file:")
+                ? yield* Effect.try({
+                    try: () => fileURLToPath(source),
+                    catch: () => new ToolFailure({ message: `Invalid file URL: ${source}` }),
+                  })
+                : source
+              const target = yield* access.authorizeRead(file, context)
+              const info = yield* environment.files
+                .stat(target.absolute)
+                .pipe(
+                  Effect.catchTag(
+                    "Environment.NotFound",
+                    () => new ToolFailure({ message: `File not found: ${source}` }),
+                  ),
+                )
+              if (info.size > MAX_INPUT_BYTES)
+                return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
+              return (yield* environment.files.read(target.absolute)).bytes
+            })
       const mime = Mime.detect(bytes)
       if (!INPUT_TYPES.includes(mime))
         return yield* new ToolFailure({ message: `${source} is not a PNG, JPEG, WebP or GIF image.` })
-      return { data: Buffer.from(bytes).toString("base64"), mime, name: path.basename(source) }
+      return {
+        data: Buffer.from(bytes).toString("base64"),
+        mime,
+        name: inline ? `input${EXTENSIONS[mime]}` : path.basename(source),
+      }
     })
 
     const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
@@ -262,6 +301,10 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
+              if (input.mask && !input.images?.length)
+                return yield* new ToolFailure({ message: "A mask requires at least one input image." })
+              if (input.size !== undefined && (input.aspect !== undefined || input.resolution !== undefined))
+                return yield* new ToolFailure({ message: "Use size or aspect/resolution, not both." })
               const resolved = yield* resolveModel(input.model, context.sessionID, input.images !== undefined)
               const model = resolved.model
               const variant = resolved.variant
@@ -292,6 +335,13 @@ export const Plugin = {
                 ? yield* Effect.forEach(input.images, (image) => readImage(image, context))
                 : undefined
 
+              const mask = input.mask ? yield* readImage(input.mask, context) : undefined
+              const providerOptions = {
+                ...(input.size === undefined ? {} : { size: input.size }),
+                ...(input.quality === undefined ? {} : { quality: input.quality }),
+                ...(input.style === undefined ? {} : { style: input.style }),
+              }
+
               // Everything that needs the user or can fail fast happened above; the paid call runs as a background job.
               const run = Effect.gen(function* () {
                 const result = yield* generate
@@ -302,7 +352,11 @@ export const Plugin = {
                       ...(variant ? { variant } : {}),
                     }),
                     prompt: input.prompt,
-                    n: 1,
+                    n: input.n ?? 1,
+                    ...(input.aspect === undefined ? {} : { aspect: input.aspect }),
+                    ...(input.resolution === undefined ? {} : { resolution: input.resolution }),
+                    ...(Object.keys(providerOptions).length ? { providerOptions } : {}),
+                    ...(mask ? { mask } : {}),
                     ...(images ? { images } : {}),
                   })
                   .pipe(
@@ -311,27 +365,38 @@ export const Plugin = {
                       orElse: () => Effect.fail(new Error("Image generation timed out after 30 minutes.")),
                     }),
                   )
-                const image = result.images[0]
-                if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
-                const bytes = Buffer.from(image.data, "base64")
-                const file = stem + (EXTENSIONS[Mime.detect(bytes)] ?? ".png")
-                // The edit prompt covered the requested path. Replacing a different existing file needs its own
-                // approval; a new file only has to pass the deny rules.
-                if (target && file !== target.absolute) {
-                  const actual = yield* access.resolve({ path: file, kind: "file" })
-                  const replaces = yield* environment.files.stat(file).pipe(
-                    Effect.as(true),
-                    Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
-                  )
-                  const request = {
-                    action: "edit",
-                    resources: [actual.resource],
-                    ...Permission.invocation(context),
-                  }
-                  yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
-                }
-                yield* environment.files.write(file, bytes)
-                return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
+                if (!result.images.length) return yield* Effect.fail(new Error(`${ref} returned no image.`))
+                const saved: string[] = []
+                yield* Effect.forEach(result.images, (image, index) =>
+                  Effect.gen(function* () {
+                    const bytes = Buffer.from(image.data, "base64")
+                    const file = `${stem}${index ? `-${index + 1}` : ""}${EXTENSIONS[Mime.detect(bytes)] ?? ".png"}`
+                    // Numbered outputs and corrected extensions must respect their own edit rules.
+                    if (target && file !== target.absolute) {
+                      const actual = yield* access.resolve({ path: file, kind: "file" })
+                      const replaces = yield* environment.files.stat(file).pipe(
+                        Effect.as(true),
+                        Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+                      )
+                      const request = {
+                        action: "edit",
+                        resources: [actual.resource],
+                        ...Permission.invocation(context),
+                      }
+                      yield* replaces
+                        ? permission.assert({ ...request, save: ["*"] })
+                        : permission.assertNotDenied(request)
+                    }
+                    yield* environment.files.write(file, bytes)
+                    saved.push(file)
+                  }),
+                ).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new Error(`${error.message}${saved.length ? `; already saved: ${saved.join(", ")}` : ""}`),
+                  ),
+                )
+                return `Image request finished. Saved image: ${saved.join(", ")} (${ref}).\nUse the read tool on ${saved.length === 1 ? "this path to view the image" : "these paths to view the images"}.\nSubmitted settings: ${JSON.stringify({ n: input.n ?? 1, aspect: input.aspect, resolution: input.resolution, ...providerOptions })}`
               }).pipe(
                 // The job keeps this text, so a restart can still deliver the outcome.
                 Effect.mapError((error) => new Error(`Image request failed for ${stem}: ${error.message}`)),
@@ -359,9 +424,7 @@ export const Plugin = {
                 ].join("\n"),
                 metadata: { path: stem, model: ref, jobID: id },
               }
-            }).pipe(
-              Effect.mapError(toolFailure("Unable to generate image")),
-            ),
+            }).pipe(Effect.mapError(toolFailure("Unable to generate image"))),
         })
       })
       .pipe(Effect.orDie)

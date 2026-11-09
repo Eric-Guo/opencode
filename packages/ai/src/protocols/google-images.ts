@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
+import { Media } from "../media.js"
 import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -17,6 +18,11 @@ export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1bet
 
 /** Provider-native `generationConfig` fields. Common fields (`aspect`, `resolution`, `images`) live on the request. */
 export type GoogleImageOptions = {
+  readonly mask?: Media.Asset
+  readonly style?: string
+  readonly size?: string
+  readonly quality?: string
+  readonly defaultResolution?: string
   readonly seed?: number
   readonly thinkingLevel?: OpenString<"MINIMAL" | "LOW" | "MEDIUM" | "HIGH">
   readonly includeThoughts?: boolean
@@ -82,9 +88,21 @@ const GoogleImageResponse = Schema.Struct({
 // ---------------------------------------------------------------------------
 
 const generationConfig = (request: Request) => {
-  const { thinkingLevel, includeThoughts, ...native } = request.providerOptions ?? {}
+  const {
+    thinkingLevel,
+    includeThoughts,
+    mask: _mask,
+    style: _style,
+    size: _size,
+    quality: _quality,
+    defaultResolution,
+    ...native
+  } = request.providerOptions ?? {}
   // Google names the half tier `512` and rejects `0.5K`.
-  const imageSize = request.resolution?.toUpperCase() === "0.5K" ? "512" : request.resolution?.toUpperCase()
+  const imageSize =
+    (request.resolution ?? defaultResolution)?.toUpperCase() === "0.5K"
+      ? "512"
+      : (request.resolution ?? defaultResolution)?.toUpperCase()
   const imageConfig = { aspectRatio: request.aspect, imageSize }
   const thinkingConfig = { thinkingLevel, includeThoughts }
   return (
@@ -105,14 +123,48 @@ const fromRequest = Effect.fn("GoogleImages.fromRequest")(function* (request: Re
       "media.n",
       `${route.name} generates one image per request; call it once per image instead of n=${request.n}`,
     )
+  if (request.providerOptions?.quality !== undefined)
+    return yield* ProviderShared.invalidRequest("quality is a GPT Image option; for Gemini use resolution")
+  if (request.providerOptions?.size !== undefined && (request.aspect !== undefined || request.resolution !== undefined))
+    return yield* ProviderShared.invalidRequest("Use size or aspect/resolution, not both")
+  if (request.providerOptions?.mask !== undefined && !request.images?.length)
+    return yield* ProviderShared.invalidRequest("A mask requires an input image")
+  const mask =
+    request.providerOptions?.mask === undefined
+      ? undefined
+      : yield* Schema.decodeUnknownEffect(Media.AssetSchema)(request.providerOptions.mask).pipe(
+          Effect.mapError((cause) => ProviderShared.invalidRequest("Invalid image mask", cause)),
+        )
+  const size = request.providerOptions?.size
+  const aspect = size === "square" ? "1:1" : size === "portrait" ? "9:16" : size?.replace(/x/g, ":")
+  if (aspect !== undefined && !Schema.is(Media.AspectRatio)(aspect))
+    return yield* ProviderShared.invalidRequest("Google image size must be a ratio or pixel dimensions")
   const parts = yield* Effect.forEach(request.images ?? [], (image) =>
     GeminiGenerateContent.mediaPart(route.name, image),
   )
   return MediaProtocol.json(
     mergeJsonRecords(
       {
-        contents: [{ role: "user", parts: [{ text: request.prompt }, ...parts] }],
-        generationConfig: generationConfig(request),
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: request.providerOptions?.style
+                  ? `${request.prompt}\n\nStyle: ${request.providerOptions.style}`
+                  : request.prompt,
+              },
+              ...parts,
+              ...(mask
+                ? [{ text: "Mask (visual guidance):" }, yield* GeminiGenerateContent.mediaPart(route.name, mask)]
+                : []),
+            ],
+          },
+        ],
+        generationConfig: generationConfig({
+          ...request,
+          aspect: request.aspect ?? (Schema.is(Media.AspectRatio)(aspect) ? aspect : undefined),
+        }),
       },
       request.http?.body,
     ) ?? {},
