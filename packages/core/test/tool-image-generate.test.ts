@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "node:url"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Generate } from "@opencode/core/generate"
@@ -250,7 +251,7 @@ describe("experimental_image_generate", () => {
       ])
       // The notice carries the job ID from the start result, like shell notices.
       expect(yield* notice(result)).toBe(
-        `<image id="${id}" state="completed">\nImage request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.\n</image>`,
+        `<image id="${id}" state="completed">\nImage request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.\nSubmitted settings: {"n":1}\n</image>`,
       )
       expect((yield* Effect.promise(() => fs.readFile(file))).toString("base64")).toBe(PNG)
       expect(fixture.requests).toEqual([
@@ -499,6 +500,83 @@ describe("experimental_image_generate", () => {
       expect(yield* models({ type: "image" })).toEqual(["test/painter"])
       expect(yield* models({})).not.toContain("test/painter")
       expect(yield* models({})).toContain("test/chat")
+    }),
+  )
+})
+
+describe("image generation migration", () => {
+  it.live("loads file/data inputs and mask, forwards options and saves all variations", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter", (model) => {
+        model.capabilities.input = ["text", "image"]
+      })
+      const { run, notice, directory } = yield* setup()
+      yield* Effect.promise(() => fs.writeFile(path.join(directory, "source.png"), Buffer.from(PNG, "base64")))
+      fixture.result = {
+        images: [
+          { type: "image", data: PNG, mime: "image/png" },
+          { type: "image", data: JPEG, mime: "image/jpeg" },
+        ],
+      }
+      const result = yield* run({
+        prompt: "variations",
+        images: [pathToFileURL(path.join(directory, "source.png")).href, `data:image/png;base64,${PNG}`],
+        mask: `data:image/png;base64,${PNG}`,
+        n: 2,
+        aspect: "3:2",
+        resolution: "4K",
+        style: "warm",
+        path: "page-01.png",
+      })
+      const completed = yield* notice(result)
+      expect(completed).toContain(path.join(directory, "page-01.png"))
+      expect(completed).toContain(path.join(directory, "page-01-2.jpg"))
+      expect(fixture.requests[0]).toMatchObject({
+        n: 2,
+        aspect: "3:2",
+        resolution: "4K",
+        providerOptions: { style: "warm" },
+        mask: { data: PNG, mime: "image/png" },
+      })
+      expect(fixture.requests[0].images?.map((image) => image.data)).toEqual([PNG, PNG])
+      expect((yield* Effect.promise(() => fs.readFile(path.join(directory, "page-01-2.jpg")))).toString("base64")).toBe(
+        JPEG,
+      )
+    }),
+  )
+
+  it.live("reports saved files when a later batch output cannot be written", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter")
+      const { run, notice, directory } = yield* setup()
+      fixture.result = {
+        images: [
+          { type: "image", data: PNG, mime: "image/png" },
+          { type: "image", data: JPEG, mime: "image/jpeg" },
+        ],
+      }
+      yield* Effect.promise(() => fs.mkdir(path.join(directory, "page-2.jpg")))
+      const result = yield* run({ prompt: "two variations", n: 2, path: "page.png" })
+      const completed = yield* notice(result)
+      expect(completed).toContain('state="error"')
+      expect(completed).toContain(`already saved: ${path.join(directory, "page.png")}`)
+      expect((yield* Effect.promise(() => fs.readFile(path.join(directory, "page.png")))).toString("base64")).toBe(PNG)
+    }),
+  )
+
+  it.live("rejects mask-without-source and conflicting sizing before creating a job", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter")
+      const { run } = yield* setup()
+      for (const input of [
+        { mask: `data:image/png;base64,${PNG}` },
+        { size: "1024x1024", aspect: "1:1" },
+        { images: ["data:image/png;base64,!!!"] },
+      ]) {
+        const result = yield* run({ prompt: "invalid", ...input })
+        expect(failure(result)?.length).toBeGreaterThan(0)
+      }
+      expect(fixture.requests).toHaveLength(0)
     }),
   )
 })
