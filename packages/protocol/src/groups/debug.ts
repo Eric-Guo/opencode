@@ -8,7 +8,6 @@ import {
   ForbiddenError,
   InvalidRequestError,
   LocationNotFoundError,
-  ServiceUnavailableError,
   UnknownError,
 } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
@@ -86,7 +85,7 @@ export const DebugGroup = HttpApiGroup.make("server.debug")
       params: { agentID: Agent.ID },
       query: LocationQuery,
       success: Location.response(Schema.Record(Schema.String, Schema.Boolean)),
-      error: [AgentNotFoundError, ServiceUnavailableError, LocationNotFoundError],
+      error: [AgentNotFoundError, LocationNotFoundError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -103,7 +102,7 @@ export const DebugGroup = HttpApiGroup.make("server.debug")
       query: LocationQuery,
       payload: ToolParams,
       success: Location.response(ToolResult),
-      error: [AgentNotFoundError, ForbiddenError, InvalidRequestError, ServiceUnavailableError, LocationNotFoundError],
+      error: [AgentNotFoundError, ForbiddenError, InvalidRequestError, LocationNotFoundError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
