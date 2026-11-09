@@ -16013,16 +16013,6 @@
                 }
               }
             }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
-                }
-              }
-            }
           }
         },
         "description": "List registered tools and whether each tool is enabled for the agent.",
@@ -16139,16 +16129,6 @@
                       "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
                     }
                   ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
                 }
               }
             }
@@ -19257,9 +19237,6 @@
               },
               {
                 "type": "null"
-              },
-              {
-                "type": "null"
               }
             ]
           },
@@ -19271,9 +19248,6 @@
               },
               {
                 "$ref": "#/components/schemas/ConfigWebSearch.InfoEncoded"
-              },
-              {
-                "type": "null"
               },
               {
                 "type": "null"
