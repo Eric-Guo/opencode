@@ -4,17 +4,10 @@ import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Permission } from "@opencode/core/permission"
-import { Plugin } from "@opencode/core/plugin"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
-import {
-  AgentNotFoundError,
-  ForbiddenError,
-  InvalidRequestError,
-  ServiceUnavailableError,
-  UnknownError,
-} from "@opencode/protocol/errors"
+import { AgentNotFoundError, ForbiddenError, InvalidRequestError, UnknownError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
 import { HeapSnapshot } from "@opencode/util/heap-snapshot"
 import { Effect, Option, RcMap, Stream } from "effect"
@@ -96,7 +89,6 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
 
 const listAgentTools = Effect.fn("server.debug.agent.listTools")(function* (agentID: Agent.ID) {
   const agent = yield* requireAgent(agentID)
-  yield* awaitPlugins()
   const registry = yield* Tool.Service
   const available = toolIDs(yield* registry.snapshot())
   const enabled = new Set(toolIDs(yield* registry.snapshot(agent.permissions)))
@@ -111,7 +103,6 @@ const executeAgentTool = Effect.fn("server.debug.agent.execute")(function* (
   sessions: Session.Interface,
 ) {
   const agent = yield* requireAgent(agentID)
-  yield* awaitPlugins()
   const registry = yield* Tool.Service
   const available = toolIDs(yield* registry.snapshot())
   if (!available.includes(toolID))
@@ -152,19 +143,6 @@ const executeAgentTool = Effect.fn("server.debug.agent.execute")(function* (
     })
     .pipe(Effect.mapError((error) => new InvalidRequestError({ message: error.message })))
   return yield* response(Effect.succeed(result))
-})
-
-const awaitPlugins = Effect.fn("server.debug.agent.awaitPlugins")(function* () {
-  const plugins = yield* Plugin.Service
-  yield* plugins.awaitActivation.pipe(
-    Effect.timeoutOrElse({
-      duration: "5 seconds",
-      orElse: () =>
-        Effect.fail(
-          new ServiceUnavailableError({ message: "Tool initialization timed out", service: "tool-registry" }),
-        ),
-    }),
-  )
 })
 
 const requireAgent = Effect.fn("server.debug.agent.require")(function* (agentID: Agent.ID) {
