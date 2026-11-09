@@ -1,40 +1,47 @@
 import { expect } from "bun:test"
-import { Effect } from "effect"
-import { HttpServer } from "effect/http"
+import { Agent } from "@opencode/schema/agent"
+import { Effect, Schema } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
-import { ServerProcess } from "../src/process"
+import { serveRoutes } from "./fixture/routes"
 
-it.live("waits for plugin initialization before listing agents", () =>
-  Effect.acquireUseRelease(
-    Effect.promise(() => tmpdir("opencode-agent-endpoint-")),
-    (tmp) =>
-      Effect.gen(function* () {
-        const server = yield* ServerProcess.start<never, never>({
-          hostname: "127.0.0.1",
-          port: 0,
-          password: "secret",
-          app: { version: "test-version" },
-          database: { path: ":memory:" },
-          models: { fetch: false },
-          config: { directory: tmp.path },
-          fs: { filewatcher: false },
-        })
-        const url = new URL("/api/agent", HttpServer.formatAddress(server.address))
-        url.searchParams.set("location[directory]", tmp.path)
-        const response = yield* Effect.promise(() =>
-          fetch(url, { headers: { authorization: `Basic ${btoa("opencode:secret")}` } }),
-        )
+it.live("lists and retrieves loaded agents", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-agent-endpoint-")))
+    const server = yield* serveRoutes({
+      app: { version: "test-version" },
+      database: { path: ":memory:" },
+      models: { fetch: false },
+      config: { directory: tmp.path },
+      fs: { filewatcher: false },
+    })
+    yield* server.pluginsLoaded(tmp.path)
 
-        expect(response.status).toBe(200)
-        const body: unknown = yield* Effect.promise(() => response.json())
-        if (!isRecord(body) || !Array.isArray(body["data"])) throw new Error("Expected an agent list response")
-        expect(body["data"].some((agent) => isRecord(agent) && agent["id"] === "build")).toBeTrue()
-      }),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ),
+    const url = new URL("/api/agent", "http://opencode.local")
+    url.searchParams.set("location[directory]", tmp.path)
+    const response = yield* Effect.promise(() => server.fetch(url))
+    expect(response.status).toBe(200)
+
+    const body = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.Array(Agent.Info) }))(
+      yield* Effect.promise(() => response.json()),
+    )
+    expect(body.data.some((agent) => agent.id === "build")).toBeTrue()
+
+    url.pathname = "/api/agent/build"
+    const found = yield* Effect.promise(() => server.fetch(url))
+    expect(found.status).toBe(200)
+
+    const agent = Schema.decodeUnknownSync(Schema.Struct({ data: Agent.Info }))(
+      yield* Effect.promise(() => found.json()),
+    )
+    expect(agent.data.id).toBe(Agent.ID.make("build"))
+
+    url.pathname = "/api/agent/missing"
+    const missing = yield* Effect.promise(() => server.fetch(url))
+    expect(missing.status).toBe(404)
+    expect(yield* Effect.promise(() => missing.json())).toMatchObject({
+      _tag: "AgentNotFoundError",
+      agentID: "missing",
+    })
+  }),
 )
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
