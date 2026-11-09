@@ -1811,6 +1811,8 @@ export type ExperimentalGenerateImageInput = {
   readonly n?: number | undefined
   readonly aspect?: Generate.ImageAspect | undefined
   readonly resolution?: Generate.ImageResolution | undefined
+  readonly providerOptions?: { readonly [x: string]: Schema.Json } | undefined
+  readonly mask?: Generate.File | undefined
 }
 export type ExperimentalGenerateImageOutput = Generate.ImageResult
 export type ExperimentalGenerateImageOperation<E = never> = (
@@ -3159,6 +3161,7 @@ export interface ConfigApi<E = never> {
 export type ExperimentalConfigUpdateInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly target?: "global" | "user" | undefined
+  readonly experimental?: Config.ExperimentalPatch | undefined
   readonly shell?: string | null | undefined
   readonly websearch?: false | { readonly provider: "random" | WebSearch.ID } | null | undefined
 }

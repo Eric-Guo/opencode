@@ -1,6 +1,8 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Config } from "@opencode/schema/config"
 import { Skill } from "@opencode/schema/skill"
 import { Location } from "@opencode/schema/location"
@@ -10,6 +12,54 @@ import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { WebSearch } from "@opencode/schema/websearch"
+
+it.live("saves and resets image defaults without replacing unrelated JSONC settings", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("config-image-")))
+    const file = Bun.file(path.join(tmp.path, "opencode.jsonc"))
+    yield* Effect.promise(() =>
+      Bun.write(
+        file,
+        '{\n // keep image preferences\n "experimental": { "part_rows": false, "image_generate": false },\n "shell": "keep"\n}\n',
+      ),
+    )
+    const server = yield* startServer(tmp.path, tmp.path)
+    const url = new URL(
+      `/api/experimental/config?target=user&location[directory]=${encodeURIComponent(tmp.path)}`,
+      server.base,
+    )
+    for (const value of [{ model: "vipai/gpt-image-2" }, true, {}, null]) {
+      const response = yield* Effect.promise(() =>
+        fetch(url, {
+          method: "PATCH",
+          headers: { ...server.headers, "content-type": "application/json" },
+          body: JSON.stringify({ experimental: { image_generate: value } }),
+        }),
+      )
+      expect(response.status).toBe(204)
+      const text = yield* Effect.promise(() => file.text())
+      expect(text).toContain("// keep image preferences")
+      expect(text).toContain('"part_rows": false')
+      expect(text).toContain('"shell": "keep"')
+      const read = yield* Effect.promise(() =>
+        fetch(new URL(`/api/config?location[directory]=${encodeURIComponent(tmp.path)}`, server.base), {
+          headers: server.headers,
+        }),
+      )
+      const entries = yield* Effect.promise(() => read.json()).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Config.Entry))),
+      )
+      const actual = entries.findLast((entry) => entry.type === "document")
+      expect(actual?.type === "document" ? actual.info.experimental?.image_generate : undefined).toEqual(
+        value === null
+          ? undefined
+          : typeof value === "object" && "model" in value
+            ? { model: { providerID: Provider.ID.make("vipai"), model: Model.ID.make("gpt-image-2") } }
+            : value,
+      )
+    }
+  }),
+)
 
 it.live("saves user search selection through config.update and returns fresh ordered sources", () =>
   Effect.gen(function* () {
