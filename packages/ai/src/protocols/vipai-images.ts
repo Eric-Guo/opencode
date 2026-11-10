@@ -4,6 +4,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { MediaInput } from "./utils/media-input.js"
+import { OpenAIImages } from "./openai-images.js"
 import { ProviderShared } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "vipai-images", name: "VIPAI Images", provider: "vipai" })
@@ -39,14 +40,14 @@ const fromRequest = Effect.fn("VIPAIImages.fromRequest")(function* (request: Req
       (editing && request.n !== undefined && request.n !== 1))
   )
     return yield* ProviderShared.invalidRequest("GPT edits support one input image and no mask, style or batch")
-  if (!gemini && request.resolution !== undefined)
-    return yield* ProviderShared.invalidRequest("For GPT Image use size or aspect and quality, not resolution")
   if (gemini && !editing && request.resolution !== undefined)
     return yield* ProviderShared.invalidRequest("VIPAI Gemini resolution requires an input image")
   if (options.size !== undefined && (request.aspect !== undefined || request.resolution !== undefined))
     return yield* ProviderShared.invalidRequest("Use size or aspect/resolution, not both")
 
-  const size = mapSize(options.size ?? request.aspect, editing)
+  // Shared sizing follows the model's pixel limits; explicit legacy aliases keep their existing mapping.
+  const size =
+    (gemini ? undefined : OpenAIImages.pixelSize(request)?.size) ?? mapSize(options.size ?? request.aspect, editing)
   const quality = mapQuality(options.quality, editing)
   if (!editing)
     return MediaProtocol.json({
