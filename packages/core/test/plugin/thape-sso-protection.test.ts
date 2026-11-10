@@ -1,19 +1,75 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Config } from "@opencode/core/config"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
-import { ThapeSsoProtection, REDACTED, redact } from "@opencode/core/plugin/thape-sso-protection"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { ThapeSsoProtection } from "@opencode/thape/sso-protection"
 import { Provider } from "@opencode/core/provider"
 import { Document, Info } from "@opencode/schema/config"
+import { Agent } from "@opencode/schema/agent"
+import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Schema } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
+
+it.effect("registers read protection and redaction with the real plugin host", () =>
+  withEnv({ OPENCODE_API_KEY: "secret-key", THAPE_SSO_BEARER_API_KEY: "bearer-token" }, () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const hooks = yield* PluginHooks.Service
+      const host = yield* PluginHost.make(plugin, ThapeSsoProtection.ID)
+      const call = {
+        tool: "read",
+        sessionID: Session.ID.make("ses_protection"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_protection"),
+        id: Tool.CallID.make("call_protection"),
+      }
+
+      yield* ThapeSsoProtection.Plugin.effect(host)
+
+      const blocked = yield* hooks
+        .trigger("tool", "execute.before", { ...call, input: { path: ".env.local" } })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(blocked)).toBe(true)
+      yield* hooks.trigger("tool", "execute.before", { ...call, input: { path: "README.md" } })
+
+      const completed = yield* hooks.trigger("tool", "execute.after", {
+        ...call,
+        input: {},
+        status: "completed",
+        result: {
+          output: { key: "secret-key" },
+          content: [{ type: "text", text: "secret-key bearer-token" }],
+          metadata: { nested: ["secret-key"] },
+        },
+      })
+      const failed = yield* hooks.trigger("tool", "execute.after", {
+        ...call,
+        input: {},
+        status: "error",
+        error: new Tool.Error({ message: "secret-key", metadata: { key: "secret-key" } }),
+      })
+
+      expect(completed).toMatchObject({
+        result: {
+          output: { key: "[REDACTED]" },
+          content: [{ type: "text", text: "[REDACTED] bearer-token" }],
+          metadata: { nested: ["[REDACTED]"] },
+        },
+      })
+      expect(failed).toMatchObject({ error: { message: "[REDACTED]", metadata: { key: "[REDACTED]" } } })
+    }),
+  ),
+)
 
 describe("ThapeSsoProtection", () => {
   for (const scenario of [
@@ -80,35 +136,4 @@ describe("ThapeSsoProtection", () => {
       ),
     )
   }
-
-  test("redacts API keys from nested tool results", () => {
-    expect(
-      redact(
-        {
-          text: "token=opencode-secret",
-          nested: ["opencode-secret", { url: "https://example.test/opencode-secret" }],
-          unchanged: 1,
-        },
-        ["opencode-secret"],
-      ),
-    ).toEqual({
-      text: `token=${REDACTED}`,
-      nested: [REDACTED, { url: `https://example.test/${REDACTED}` }],
-      unchanged: 1,
-    })
-  })
-
-  test("preserves Tool.Error behavior while redacting", () => {
-    const error = redact(
-      new Tool.Error({
-        message: "token=opencode-secret",
-        metadata: { nested: ["opencode-secret"] },
-      }),
-      ["opencode-secret"],
-    )
-
-    expect(error).toBeInstanceOf(Tool.Error)
-    expect(error.message).toBe(`token=${REDACTED}`)
-    expect(error.metadata).toEqual({ nested: [REDACTED] })
-  })
 })
