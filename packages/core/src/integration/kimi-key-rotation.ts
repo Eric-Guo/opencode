@@ -8,7 +8,7 @@ import { Clock, Context, Effect, Layer, Option, Schema, Semaphore } from "effect
 import { isDeepStrictEqual } from "node:util"
 import { Bus } from "../bus.js"
 import { KV } from "../kv.js"
-import { KimiEnvironment } from "./kimi-environment.js"
+import { KimiEnvironment } from "@opencode/util/kimi-environment"
 
 export const integrationID = Integration.ID.make("kimi-for-coding")
 const integrationIDs = [
