@@ -177,7 +177,7 @@ const sizes = (model: string): ImageSizing.Limits | ReadonlyArray<ImageSizing.Si
 /** The body fields `aspect` and `resolution` lower to; gateways that read other fields than `size` pass their own. */
 export type OpenAIImageSizing = (request: Request) => Record<string, unknown> | undefined
 
-const pixelSize: OpenAIImageSizing = (request) => {
+const pixelSize = (request: Request) => {
   if (!ImageSizing.isRequested(request)) return undefined
   const options = sizes(request.model.id)
   const size = "multiple" in options ? ImageSizing.fit(request, options) : ImageSizing.nearest(request, options)
