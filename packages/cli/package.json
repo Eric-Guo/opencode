@@ -37,6 +37,7 @@
     "@opencode/pty": "0.5.2",
     "@opencode/schema": "workspace:*",
     "@opencode/server": "workspace:*",
+    "@opencode/thape": "workspace:*",
     "@opencode/tui": "workspace:*",
     "@opencode/util": "workspace:*",
     "@opentui/core": "catalog:",
