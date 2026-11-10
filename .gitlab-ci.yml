@@ -37,8 +37,6 @@ default:
     paths:
       - .cache/bun/
   before_script:
-    - apt-get update -qq
-    - apt-get install -y --no-install-recommends build-essential python3-setuptools ripgrep unzip
     - npm install --global "$(node -p 'require("./package.json").packageManager')"
     - test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
     - |
@@ -67,6 +65,8 @@ default:
   # Allow dependency installation and job scripts to share a one-hour budget.
   timeout: 3600 seconds
   before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends build-essential python3-setuptools ripgrep unzip
     - !reference [default, before_script]
     - bun install --frozen-lockfile
   # All jobs participate in the pipeline types allowed by workflow, including merge requests.
@@ -116,7 +116,13 @@ packages:
 .browser:
   extends: .ci
   stage: test
+  # Browser fixtures need no native toolchain. Downloading it on every shard can
+  # exhaust the job timeout before Playwright gets to run.
+  before_script:
+    - !reference [default, before_script]
+    - bun install --frozen-lockfile
   variables:
+    ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     PLAYWRIGHT_JUNIT_OUTPUT_FILE: "$CI_PROJECT_DIR/reports/playwright.xml"
     PLAYWRIGHT_HTML_OUTPUT_DIR: "$CI_PROJECT_DIR/reports/html"
   artifacts:
@@ -165,7 +171,7 @@ build:
     # NSIS uses a 32-bit bootstrapper even for x64 installers, so Wine needs its i386 runtime.
     - dpkg --add-architecture i386
     - apt-get update -qq
-    - apt-get install -y --no-install-recommends libc6:amd64 libstdc++6:amd64 libgcc-s1:amd64 zlib1g:amd64 wine:amd64 wine32:i386 wine64:amd64
+    - apt-get install -y --no-install-recommends build-essential python3-setuptools ripgrep unzip libc6:amd64 libstdc++6:amd64 libgcc-s1:amd64 zlib1g:amd64 wine:amd64 wine32:i386 wine64:amd64
     # Replace any submodule checkouts with the branches required by the desktop extension.
     - rm -rf packages/desktop/resources/thape-config packages/7777 packages/plm-meeting packages/desktop-tab
     - git clone --depth 1 --branch main "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/ai/opencode-thape.git" packages/desktop/resources/thape-config
