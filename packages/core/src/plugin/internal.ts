@@ -121,7 +121,9 @@ import { VerbosityPlugin } from "./verbosity.js"
 import { WarmingPlugin } from "./warming.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
 import { Project } from "../project.js"
-import { CybrosTrace } from "./cybros.js"
+import { CybrosTrace } from "@opencode/thape/cybros"
+import { InstallationVersion } from "../installation/version.js"
+import { MyTodo } from "../my-todo.js"
 import { SessionStore } from "../session/store.js"
 
 const services = [
@@ -267,7 +269,20 @@ const pre = [
   SkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
   ModelsDevPlugin,
-  CybrosTrace.Plugin,
+  CybrosTrace.create({
+    version: InstallationVersion,
+    read: Effect.fn(function* (sessionID: Session.ID) {
+      const sessions = yield* SessionStore.Service
+      const session = yield* sessions.get(sessionID)
+      if (!session) return
+
+      return {
+        session,
+        messages: yield* sessions.context(sessionID),
+        workPackageID: (yield* MyTodo.selected(session.projectID))?.work_package_id,
+      }
+    }),
+  }),
   ...ProviderPlugins,
   ...WebSearchPlugins,
   PatchTool.Plugin,
