@@ -145,8 +145,15 @@ const QUOTA_TEXT =
   /insufficient[-_\s]?(?:quota|balance)|(?<!token_)quota[-_\s]?exceeded|budget exceeded|usage limit|limit exhausted|package has expired|plan does not yet include/i
 const KIMI_ROLLING_QUOTA_TEXTS = [
   "you've reached your usage limit for this period. your quota will be refreshed in the next period.",
-  "you've reached your 5-hour usage limit. your quota will reset when the current 5-hour window ends. to continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
-  "you've reached your weekly (7-day) usage limit. your quota will reset when the current 7-day window ends. to continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
+  ...[
+    "you've reached your 5-hour usage limit. your quota will reset when the current 5-hour window ends.",
+    "you've reached your weekly (7-day) usage limit. your quota will reset when the current 7-day window ends.",
+  ].flatMap((message) =>
+    ["membership", "settings"].map(
+      (path) =>
+        `${message} to continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/${path}/subscription?tab=quota`,
+    ),
+  ),
 ]
 const KIMI_ORDINARY_QUOTA_TEXT =
   /you(?:'|’)ve reached (?:your usage limit for this billing cycle|kimi monthly usage limit)\b/i
