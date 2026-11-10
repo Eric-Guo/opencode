@@ -222,8 +222,8 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
-    if (part.type === "text") return cut ? part.text.trim() !== "" : part.text !== ""
-    if (part.type !== "reasoning") return true
+    if (part.type === "text" && cut) return part.text.trim() !== ""
+    if (part.type !== "text" && part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
   const results = items
