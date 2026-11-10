@@ -2,7 +2,7 @@ export * as DesktopInitialization from "./desktop-initialization"
 
 import { app, session } from "electron"
 import { Context, Effect, Layer } from "effect"
-import { ensureSsoUsername } from "@opencode/core/thape-sso"
+import { ensureSsoUsername } from "@opencode/thape/sso"
 import { DesktopLogging } from "../native/logging"
 import { configureNodeProxyFromEnv } from "../proxy"
 import { DesktopProxy } from "../network"

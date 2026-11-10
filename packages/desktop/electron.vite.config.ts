@@ -70,7 +70,14 @@ export async function createDesktopConfig({ command, mode }: ConfigEnv, root = p
         },
         externalizeDeps: {
           // Bundle the Effect family together.
-          exclude: ["@opencode/core", "effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
+          exclude: [
+            "@opencode/core",
+            "@opencode/thape",
+            "effect",
+            "@effect/platform-node",
+            "@effect/platform-node-shared",
+            "drizzle-orm",
+          ],
           include: [nodePtyPkg],
         },
       },
