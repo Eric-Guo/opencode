@@ -89,7 +89,7 @@ describe("toLLMMessages", () => {
     ])
   })
 
-  test("restores generated file provider metadata", () => {
+  test.each(["stop", undefined] as const)("replays generated files with finish %s", (finish) => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -98,6 +98,11 @@ describe("toLLMMessages", () => {
           agent: build,
           model,
           content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Generating an image",
+              native: { signature: "reasoning-signature" },
+            }),
             SessionMessage.AssistantFile.make({
               type: "file",
               id: "generated-image",
@@ -107,6 +112,7 @@ describe("toLLMMessages", () => {
               native: { thoughtSignature: "image-signature" },
             }),
           ],
+          finish,
           time: { created, completed: created },
         }),
       ],
@@ -115,10 +121,15 @@ describe("toLLMMessages", () => {
 
     expect(messages[0]?.content).toEqual([
       {
+        type: "reasoning",
+        text: "Generating an image",
+        providerMetadata: { provider: { signature: "reasoning-signature" } },
+      },
+      {
         type: "media",
         media: Media.base64("aGVsbG8=", "image/png"),
         filename: "generated-image.png",
-        providerMetadata: { provider: { thoughtSignature: "image-signature" } },
+        providerMetadata: finish === undefined ? undefined : { provider: { thoughtSignature: "image-signature" } },
       },
     ])
   })
