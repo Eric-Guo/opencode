@@ -5,7 +5,7 @@ import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
-import { KimiEnvironment } from "../integration/kimi-environment.js"
+import { KimiEnvironment } from "@opencode/util/kimi-environment"
 import { KimiKeyRotation } from "../integration/kimi-key-rotation.js"
 
 // These catalog entries require inference profiles on Bedrock Runtime.
