@@ -32,8 +32,10 @@ import { Npm } from "@opencode/util/npm"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
+import { Project } from "@opencode/core/project"
 import { Session } from "@opencode/core/session"
 import { SessionInbox } from "@opencode/core/session/inbox"
+import { SessionStore } from "@opencode/core/session/store"
 import { SharedCache } from "@opencode/core/shared-cache"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
@@ -133,6 +135,7 @@ export const makePluginTestLayer = (
       Automation.node,
       BlobStore.node,
       Provider.node,
+      Project.node,
       Model.node,
       ModelsDev.node,
       Command.node,
@@ -143,6 +146,7 @@ export const makePluginTestLayer = (
       Mcp.node,
       SessionInbox.node,
       Session.node,
+      SessionStore.node,
       SharedCache.node,
       InstructionEntry.node,
       PersistentPty.node,
