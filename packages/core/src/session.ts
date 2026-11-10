@@ -533,7 +533,7 @@ const layer = (options?: Options) =>
               return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
             return {
               agent,
-              model: yield* models.resolve(session, modelState.available),
+              model: yield* models.resolve(session, modelState.available, { kind: "primary", agent: agent.id }),
               tools: yield* registry.snapshot(agent.info.permissions),
             }
           }).pipe(instances.provide(session))
