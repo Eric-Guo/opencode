@@ -118,6 +118,57 @@ describe("VIPAI Images", () => {
     ),
   )
 
+  it.effect("converts GPT aspect and resolution to pixel sizes for generation and edits", () =>
+    Effect.forEach(
+      [
+        { aspect: "3:4", resolution: "2K", size: "1776x2368" },
+        { aspect: "16:9", resolution: "4K", size: "3840x2160" },
+        { aspect: "3:4", resolution: undefined, size: "880x1184" },
+        { aspect: undefined, resolution: "2K", size: "2048x2048" },
+      ] as const,
+      (shape) =>
+        Effect.forEach([false, true], (editing) =>
+          ai.image
+            .generate({
+              model: painter(),
+              prompt: "Shanghai Jiading weekly weather",
+              aspect: shape.aspect,
+              resolution: shape.resolution,
+              images: editing ? [source] : undefined,
+              providerOptions: { quality: "high" },
+            })
+            .pipe(
+              Effect.tap((result) => Effect.sync(() => expect(result.images).toHaveLength(1))),
+              Effect.provide(
+                ImageClient.layer.pipe(
+                  Layer.provide(
+                    dynamicResponse((input) =>
+                      Effect.gen(function* () {
+                        const body = editing
+                          ? Object.fromEntries(
+                              yield* HttpClientRequest.toWeb(input.request).pipe(
+                                Effect.orDie,
+                                Effect.flatMap((web) => Effect.promise(() => web.formData())),
+                              ),
+                            )
+                          : JSON.parse(input.text)
+
+                        expect(input.request.url).toEndWith(editing ? "/images/edits" : "/images/generations")
+                        expect(body.size).toBe(shape.size)
+                        expect(body.quality).toBe("high")
+                        expect(body.resolution).toBeUndefined()
+
+                        return input.respond(JSON.stringify({ data: [{ b64_json: "aW1hZ2U=" }] }), response)
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ),
+    ),
+  )
+
   it.effect("rejects incompatible options before sending HTTP", () =>
     Effect.forEach(
       [
@@ -126,7 +177,8 @@ describe("VIPAI Images", () => {
         { model: painter(), providerOptions: { mask: source } },
         { model: painter(), images: [source, source] },
         { model: painter(), images: [source], providerOptions: { style: "vivid" } },
-        { model: painter(), resolution: "4K" },
+        { model: painter(), resolution: "2K", providerOptions: { size: "1024x1024" } },
+        { model: painter(), aspect: "3:4", providerOptions: { size: "1024x1024" } },
       ],
       (input) =>
         ai.image.generate({ ...input, prompt: "invalid" }).pipe(
