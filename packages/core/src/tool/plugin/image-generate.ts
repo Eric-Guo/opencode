@@ -57,7 +57,7 @@ export const Input = Schema.Struct({
     description: "Provider pixel size or legacy size alias. Omit when using aspect/resolution.",
   }),
   quality: Schema.optionalKey(Schema.String).annotate({
-    description: "GPT image quality, not resolution. For Gemini use resolution.",
+    description: "GPT image rendering quality, separate from aspect/resolution. Do not set for Gemini.",
   }),
   style: Schema.optionalKey(Schema.String).annotate({
     description: "Style preset or instruction supported by the selected provider.",
