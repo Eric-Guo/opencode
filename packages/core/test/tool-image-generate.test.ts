@@ -251,7 +251,7 @@ describe("experimental_image_generate", () => {
       ])
       // The notice carries the job ID from the start result, like shell notices.
       expect(yield* notice(result)).toBe(
-        `<image id="${id}" state="completed">\nImage request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.\nSubmitted settings: {"n":1}\n</image>`,
+        `<image id="${id}" state="completed">\nImage request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.\nActual pixel dimensions: ${file}: 1x1.\nSubmitted settings: {"n":1}\nReport the actual dimensions. The provider may return a different size; submitted settings do not prove the requested resolution was achieved.\n</image>`,
       )
       expect((yield* Effect.promise(() => fs.readFile(file))).toString("base64")).toBe(PNG)
       expect(fixture.requests).toEqual([
@@ -505,6 +505,25 @@ describe("experimental_image_generate", () => {
 })
 
 describe("image generation migration", () => {
+  it.live("reports the actual smaller image when the provider ignores a 2K request", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter")
+      const { run, notice } = yield* setup()
+      const bytes = yield* Effect.promise(() =>
+        Bun.file(new URL("./fixture/image-dimensions/smaller-than-2k.png", import.meta.url)).bytes(),
+      )
+      fixture.result = { images: [{ type: "image", data: Buffer.from(bytes).toString("base64"), mime: "image/png" }] }
+
+      const result = yield* run({ prompt: "weather card", aspect: "3:4", resolution: "2K" })
+      const completed = yield* notice(result)
+      expect(completed).toContain(`Actual pixel dimensions: ${result.output.path}.png: 1086x1448.`)
+      expect(completed).toContain('Submitted settings: {"n":1,"aspect":"3:4","resolution":"2K"}')
+      expect(completed).toContain("submitted settings do not prove the requested resolution was achieved")
+      expect(yield* Effect.promise(() => Bun.file(`${result.output.path}.png`).bytes())).toEqual(bytes)
+      expect(fixture.requests).toHaveLength(1)
+    }),
+  )
+
   it.live("loads file/data inputs and mask, forwards options and saves all variations", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter", (model) => {
