@@ -15,7 +15,6 @@ import {
   TransportError,
   InvalidProviderOutputError,
   InvalidRequestError,
-  QuotaExceededError,
   RateLimitError,
   UnknownProviderError,
   type UserMessage,
@@ -749,13 +748,16 @@ const rateLimited = (retryAfterMs?: number) =>
     reason: new RateLimitError({ message: "Rate limited", retryAfterMs }),
   })
 
-const kimiRollingQuota = () =>
-  new AIError({
-    reason: new QuotaExceededError({
-      message: "You've reached your usage limit for this period. Your quota will be refreshed in the next period.",
-      classification: "rolling-window",
-    }),
+const kimiRollingQuota = () => {
+  const message =
+    "You've reached your weekly (7-day) usage limit. Your quota will reset when the current 7-day window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/settings/subscription?tab=quota"
+
+  return RequestExecutor.httpFailure({
+    message,
+    status: 429,
+    responseBody: JSON.stringify({ error: { message, type: "exceeded_current_quota_error" } }),
   })
+}
 
 const kimiConcurrentLimit = () =>
   RequestExecutor.httpFailure({
@@ -7241,7 +7243,7 @@ describe("SessionRunnerLLM", () => {
       ),
     )
 
-    it.effect(`rotates through ${integrationID} keys without replaying failed steps`, () => {
+    it.effect(`rotates through ${integrationID} keys on weekly quota errors without replaying failed steps`, () => {
       const keys = ["runner-account-a", "runner-account-b", "runner-account-c", "runner-account-d"]
       return withEnv(
         {
