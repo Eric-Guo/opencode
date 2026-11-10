@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/thape",
-  "version": "2.2.6",
+  "version": "2.2.7",
   "description": "Built-in Thape SSO, protection, and Cybros integrations for OpenCode",
   "type": "module",
   "license": "MIT",
