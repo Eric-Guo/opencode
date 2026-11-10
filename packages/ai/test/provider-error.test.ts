@@ -597,12 +597,13 @@ describe("provider error classification", () => {
       [
         "You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
         "You've reached your weekly (7-day) usage limit. Your quota will reset when the current 7-day window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota",
+        "You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/settings/subscription?tab=quota",
+        "You've reached your weekly (7-day) usage limit. Your quota will reset when the current 7-day window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/settings/subscription?tab=quota",
       ].map((message) => [status, message] as const),
     ),
   )(
     "classifies Kimi's rolling quota response with status %s as rotation-triggering: %s",
     (status, message) => {
-
       expect(classifyProviderFailure({ message, status })).toMatchObject({
         _tag: "QuotaExceeded",
         classification: "rolling-window",
