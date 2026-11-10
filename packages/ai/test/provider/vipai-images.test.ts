@@ -27,8 +27,7 @@ describe("VIPAI Images", () => {
                 prompt: "courtyard",
                 n: 10,
                 size: "1024x1024",
-                quality: "standard",
-                style: "vivid",
+                quality: "auto",
                 response_format: "url",
               })
               return Effect.succeed(
