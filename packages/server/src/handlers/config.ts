@@ -1,6 +1,6 @@
 import { Config } from "@opencode/core/config"
 import { ShellSelect } from "@opencode/core/shell/select"
-import { ssoHideAgents } from "@opencode/core/thape-sso"
+import { ssoHideAgents } from "@opencode/thape/sso"
 import { GlobalConfig } from "@opencode/protocol/groups/config"
 import { Info } from "@opencode/schema/config"
 import { InvalidRequestError } from "@opencode/protocol/errors"

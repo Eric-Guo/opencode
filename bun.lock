@@ -153,6 +153,7 @@
         "@opencode/pty": "0.4.0",
         "@opencode/schema": "workspace:*",
         "@opencode/server": "workspace:*",
+        "@opencode/thape": "workspace:*",
         "@opencode/tui": "workspace:*",
         "@opencode/util": "workspace:*",
         "@opentui/core": "catalog:",
@@ -266,6 +267,7 @@
         "@opencode/plugin-browser": "workspace:*",
         "@opencode/pty": "0.4.0",
         "@opencode/schema": "workspace:*",
+        "@opencode/thape": "workspace:*",
         "@opencode/util": "workspace:*",
         "@parcel/watcher": "2.5.1",
         "@silvia-odwyer/photon-node": "0.3.4",
@@ -339,6 +341,7 @@
         "@opencode/gui-plugins": "workspace:*",
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
+        "@opencode/thape": "workspace:*",
         "@opencode/ui": "workspace:*",
         "@sentry/solid": "catalog:",
         "@solidjs/router": "catalog:",
@@ -757,6 +760,7 @@
         "@opencode/protocol": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/simulation": "workspace:*",
+        "@opencode/thape": "workspace:*",
         "@opencode/util": "workspace:*",
         "effect": "catalog:",
       },
@@ -902,6 +906,22 @@
         "typescript": "catalog:",
         "vite": "7.3.7",
         "vite-plugin-solid": "2.11.12",
+      },
+    },
+    "packages/thape": {
+      "name": "@opencode/thape",
+      "version": "2.2.7",
+      "dependencies": {
+        "@opencode/plugin": "workspace:*",
+        "@opencode/schema": "workspace:*",
+        "@opencode/util": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/theme": {
@@ -2028,6 +2048,8 @@
     "@opencode/stats-server": ["@opencode/stats-server@workspace:packages/stats/server"],
 
     "@opencode/stories": ["@opencode/stories@workspace:packages/stories"],
+
+    "@opencode/thape": ["@opencode/thape@workspace:packages/thape"],
 
     "@opencode/theme": ["@opencode/theme@workspace:packages/theme"],
 

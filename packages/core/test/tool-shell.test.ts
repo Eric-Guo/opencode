@@ -919,6 +919,50 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  it.live("filters SSO API keys only from protected shell invocations", () =>
+    withTempDir((tmp) => {
+      reset()
+
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const shell = yield* Shell.Service
+
+          yield* sessions.environment({
+            sessionID,
+            variables: {
+              OPENCODE_API_KEY: "opencode-secret",
+              KIMI_API_KEY_12: "kimi-secret",
+              THAPE_SSO_BEARER_API_KEY: "sso-token",
+            },
+          })
+
+          // Inspect the assembled environment before spawning an ordinary shell.
+          yield* shell
+            .create({ command: "unused", metadata: { sessionID } }, (invocation) => {
+              expect(invocation.env.OPENCODE_API_KEY).toBe("opencode-secret")
+              expect(invocation.env.KIMI_API_KEY_12).toBe("kimi-secret")
+              expect(invocation.env.THAPE_SSO_BEARER_API_KEY).toBe("sso-token")
+
+              return Effect.fail("inspected" as const)
+            })
+            .pipe(
+              Effect.flip,
+              Effect.tap((result) => Effect.sync(() => expect(result).toBe("inspected"))),
+            )
+
+          const command = isWindows
+            ? '[Console]::Out.Write("$env:OPENCODE_API_KEY|$env:KIMI_API_KEY_12|$env:THAPE_SSO_BEARER_API_KEY")'
+            : 'printf %s "$OPENCODE_API_KEY|$KIMI_API_KEY_12|$THAPE_SSO_BEARER_API_KEY"'
+          const settled = yield* executeTool(registry, call({ command }))
+
+          expect(settled.status).toBe("completed")
+          expect(settled.content?.[0]).toEqual({ type: "text", text: "||sso-token" })
+        }),
+      )
+    }),
+  )
+
   productionIt.live(
     "identifies agent shell commands without inheriting a stale session ID",
     () =>
