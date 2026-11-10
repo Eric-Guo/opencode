@@ -40,7 +40,7 @@ test("minifies only builds, previews onboarding only in development, and ships s
       process.env.OPENCODE_TARGET = item.target
       const main = (await load("build")).config.main
       expect(main?.build?.externalizeDeps).toEqual({
-        exclude: ["@opencode/core", ...bundled],
+        exclude: ["@opencode/core", "@opencode/thape", ...bundled],
         include: [nodePtyPackage(item.target)],
       })
     }
@@ -65,7 +65,7 @@ test("minifies only builds, previews onboarding only in development, and ships s
 })
 
 test("bundles one Effect runtime and Drizzle while keeping native dependencies external", async () => {
-  for (const name of bundled) {
+  for (const name of ["@opencode/thape", ...bundled]) {
     expect(Object.keys(pkg.dependencies)).not.toContain(name)
     expect(Object.keys(pkg.optionalDependencies)).not.toContain(name)
   }
@@ -114,6 +114,9 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
       expect(imports.filter((id) => id === name || id.startsWith(`${name}/`))).toEqual([])
       expect(modules.some((id) => id.includes(`/node_modules/${name}/`))).toBe(true)
     }
+
+    expect(imports.some((id) => id === "@opencode/thape" || id.startsWith("@opencode/thape/"))).toBe(false)
+    expect(modules.some((id) => id.endsWith("/packages/thape/src/sso.ts"))).toBe(true)
 
     const effect = modules.filter((id) => id.includes("/node_modules/effect/"))
     expect(new Set(effect.map((id) => id.split("/node_modules/effect/")[0])).size).toBe(1)

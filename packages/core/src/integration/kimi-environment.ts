@@ -1,15 +1,13 @@
-export * as KimiEnvironment from "./kimi-environment.js"
+import { KimiEnvironment } from "@opencode/util/kimi-environment"
 
-export function name(index: number) {
-  return index === 0 ? "KIMI_API_KEY" : `KIMI_API_KEY_${index + 1}`
-}
+/** @deprecated Use `@opencode/util/kimi-environment`. Removed in the next minor. */
+export { KimiEnvironment }
 
-export function isName(value: string) {
-  return /^KIMI_API_KEY(?:_(?:[2-9]|[1-9]\d+))?$/.test(value)
-}
+/** @deprecated Use `@opencode/util/kimi-environment`. Removed in the next minor. */
+export const name = KimiEnvironment.name
 
-export function names() {
-  return [...new Set([name(0), ...Object.keys(process.env).filter(isName)])].toSorted((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true }),
-  )
-}
+/** @deprecated Use `@opencode/util/kimi-environment`. Removed in the next minor. */
+export const isName = KimiEnvironment.isName
+
+/** @deprecated Use `@opencode/util/kimi-environment`. Removed in the next minor. */
+export const names = KimiEnvironment.names
