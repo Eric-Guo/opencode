@@ -19,7 +19,7 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
-import { ensureSsoUsername } from "@opencode/core/thape-sso"
+import { ensureSsoUsername } from "@opencode/thape/sso"
 import { configDirectory } from "./config-directory"
 import { isWorkspaceClient } from "./services/workspace-sharing/selection"
 
