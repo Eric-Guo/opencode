@@ -55,7 +55,7 @@ const fromRequest = Effect.fn("VIPAIImages.fromRequest")(function* (request: Req
       prompt: gemini && options.style ? `${request.prompt}\n\nStyle: ${options.style}` : request.prompt,
       size,
       n: request.n ?? 1,
-      ...(gemini ? {} : { quality, style: options.style ?? "vivid", response_format: "url" }),
+      ...(gemini ? {} : { quality, ...(options.style ? { style: options.style } : {}), response_format: "url" }),
     })
 
   const form = new FormData()
@@ -148,7 +148,7 @@ function mapAspect(size: string) {
 }
 
 function mapQuality(quality: string | undefined, editing: boolean) {
-  const value = (quality ?? (editing ? "2k" : "standard")).toLowerCase()
+  const value = (quality ?? (editing ? "2k" : "auto")).toLowerCase()
   if (value === "1k" || (editing && value === "hd")) return "low"
   if (value === "2k") return "medium"
   return value

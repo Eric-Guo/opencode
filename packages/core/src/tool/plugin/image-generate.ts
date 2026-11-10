@@ -16,6 +16,7 @@ import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Generate } from "../../generate.js"
+import { ImageDimensions } from "../../image/dimensions.js"
 import { ImageNotice } from "../../image/notice.js"
 import { Job } from "../../job.js"
 import { Mime } from "../../mime.js"
@@ -367,6 +368,7 @@ export const Plugin = {
                   )
                 if (!result.images.length) return yield* Effect.fail(new Error(`${ref} returned no image.`))
                 const saved: string[] = []
+                const dimensions: string[] = []
                 yield* Effect.forEach(result.images, (image, index) =>
                   Effect.gen(function* () {
                     const bytes = Buffer.from(image.data, "base64")
@@ -390,6 +392,8 @@ export const Plugin = {
                     }
                     yield* environment.files.write(file, bytes)
                     saved.push(file)
+                    const size = ImageDimensions.read(bytes)
+                    dimensions.push(`${file}: ${size ? `${size.width}x${size.height}` : "unknown"}`)
                   }),
                 ).pipe(
                   Effect.mapError(
@@ -397,7 +401,7 @@ export const Plugin = {
                       new Error(`${error.message}${saved.length ? `; already saved: ${saved.join(", ")}` : ""}`),
                   ),
                 )
-                return `Image request finished. Saved image: ${saved.join(", ")} (${ref}).\nUse the read tool on ${saved.length === 1 ? "this path to view the image" : "these paths to view the images"}.\nSubmitted settings: ${JSON.stringify({ n: input.n ?? 1, aspect: input.aspect, resolution: input.resolution, ...providerOptions })}`
+                return `Image request finished. Saved image: ${saved.join(", ")} (${ref}).\nUse the read tool on ${saved.length === 1 ? "this path to view the image" : "these paths to view the images"}.\nActual pixel dimensions: ${dimensions.join(", ")}.\nSubmitted settings: ${JSON.stringify({ n: input.n ?? 1, aspect: input.aspect, resolution: input.resolution, ...providerOptions })}\nReport the actual dimensions. The provider may return a different size; submitted settings do not prove the requested resolution was achieved.`
               }).pipe(
                 // The job keeps this text, so a restart can still deliver the outcome.
                 Effect.mapError((error) => new Error(`Image request failed for ${stem}: ${error.message}`)),
