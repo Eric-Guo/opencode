@@ -1,90 +1,16 @@
-export * as ThapeSsoProtection from "./thape-sso-protection"
+import { ThapeSsoProtection } from "@opencode/thape/sso-protection"
 
-import { define, type Context } from "@opencode/plugin/effect/plugin"
-import { Tool } from "@opencode/schema/tool"
-import { Effect } from "effect"
-import { isApiKeyEnvName } from "../thape-sso"
+/** @deprecated Use `@opencode/thape/sso-protection`. Removed in the next minor. */
+export { ThapeSsoProtection }
 
-export const ID = "opencode.protection.thape-sso"
-export const REDACTED = "[REDACTED]"
+/** @deprecated Use `@opencode/thape/sso-protection`. Removed in the next minor. */
+export const ID = ThapeSsoProtection.ID
 
-export const Plugin = define({
-  id: ID,
-  effect: Effect.fn("ThapeSsoProtection.Plugin")(function* (ctx: Context) {
-    yield* ctx.model.transform((models) => {
-      // SSO supplies the OpenCode key to users with Zen/Go access; VIPAI still uses its own key for requests.
-      if (process.env.OPENCODE_API_KEY?.trim()) return
+/** @deprecated Use `@opencode/thape/sso-protection`. Removed in the next minor. */
+export const REDACTED = ThapeSsoProtection.REDACTED
 
-      models.remove("vipai", "gpt-6-astra")
-      models.remove("vipai", "gpt-6.1-sol")
-    })
+/** @deprecated Use `@opencode/thape/sso-protection`. Removed in the next minor. */
+export const Plugin = ThapeSsoProtection.Plugin
 
-    yield* ctx.tool
-      .hook("execute.before", (event) =>
-        Effect.sync(() => {
-          if (event.tool !== "read") return
-          if (!event.input || typeof event.input !== "object" || !("path" in event.input)) return
-          if (typeof event.input.path !== "string" || !event.input.path.includes(".env")) return
-          throw new Error("Reading .env files is disabled to protect API keys")
-        }),
-      )
-      .pipe(Effect.asVoid)
-
-    yield* ctx.tool
-      .hook("execute.after", (event) =>
-        Effect.sync(() => {
-          const secrets = Object.keys(process.env)
-            .filter(isApiKeyEnvName)
-            .flatMap((name) => {
-              const value = process.env[name]
-              return value ? [value] : []
-            })
-          if (secrets.length === 0) return
-          if (event.status === "error") {
-            event.error = redact(event.error, secrets)
-            return
-          }
-          event.result = {
-            ...(event.result.output === undefined ? {} : { output: redact(event.result.output, secrets) }),
-            ...(event.result.content === undefined
-              ? {}
-              : {
-                  content:
-                    typeof event.result.content === "string"
-                      ? redactString(event.result.content, secrets)
-                      : event.result.content.map((item) => redactContent(item, secrets)),
-                }),
-            ...(event.result.metadata === undefined ? {} : { metadata: redact(event.result.metadata, secrets) }),
-          }
-        }),
-      )
-      .pipe(Effect.asVoid)
-  }),
-})
-
-function redactContent(content: Tool.Content, secrets: readonly string[]): Tool.Content {
-  if (content.type === "text") return { ...content, text: redactString(content.text, secrets) }
-  return {
-    ...content,
-    uri: redactString(content.uri, secrets),
-    mime: redactString(content.mime, secrets),
-    ...(content.name ? { name: redactString(content.name, secrets) } : {}),
-  }
-}
-
-export function redact<Value>(value: Value, secrets: readonly string[]): Value {
-  if (typeof value === "string") return redactString(value, secrets) as Value
-  if (Array.isArray(value)) return value.map((item) => redact(item, secrets)) as Value
-  if (!value || typeof value !== "object") return value
-  if (value instanceof Tool.Error)
-    return new Tool.Error({
-      message: redactString(value.message, secrets),
-      ...(value.error === undefined ? {} : { error: redact(value.error, secrets) }),
-      ...(value.metadata === undefined ? {} : { metadata: redact(value.metadata, secrets) }),
-    }) as Value
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redact(item, secrets)])) as Value
-}
-
-function redactString(value: string, secrets: readonly string[]) {
-  return secrets.reduce((result, secret) => result.replaceAll(secret, REDACTED), value)
-}
+/** @deprecated Use `@opencode/thape/sso-protection`. Removed in the next minor. */
+export const redact = ThapeSsoProtection.redact
