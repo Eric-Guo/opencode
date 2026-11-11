@@ -22,6 +22,34 @@ const step = (id: string, created: number, rest: Partial<SessionMessageAssistant
 })
 
 describe("New timeline projection", () => {
+  test("generated files keep their own rows in Messages only", () => {
+    const message = step("answer", 1, {
+      content: [
+        { type: "text", text: "Here is the image." },
+        { type: "file", id: "image", mime: "image/png", url: "data:image/png;base64,AA==" },
+      ],
+    })
+
+    const parts = createRoot((dispose) => {
+      const projection = createNextTimelineProjection({
+        sessionMessages: () => [message],
+        status: () => ({ type: "idle" }),
+        timelineDetail: () => messagesOnly,
+      })
+
+      const ids = projection
+        .rows()
+        .flatMap((row) =>
+          Predicate.isTagged(row, "AssistantPart") && row.group.type === "part" ? [row.group.ref.partID] : [],
+        )
+      dispose()
+
+      return ids
+    })
+
+    expect(parts).toEqual(["answer:text:0", "image"])
+  })
+
   test("a stopped turn says how long it worked where the work stopped, above Interrupted and what followed", () => {
     const document = replayScript(scenarios["Feature work"], Number.MAX_SAFE_INTEGER, 0).document
 
