@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { Match, Switch } from "solid-js"
-import { AssistantTextContent } from "../../message/message-content"
+import { AssistantFileContent, AssistantTextContent } from "../../message/message-content"
 import {
   currentToolError,
   currentToolInput,
@@ -12,7 +12,7 @@ import { toolRule, toolStopped } from "../rules"
 import { ThoughtRow } from "./thought"
 import { ToolDisplay } from "./tool-display"
 
-/** One part of an assistant message on its own row: the agent's words, a thought, or a call. */
+/** One part of an assistant message on its own row: the agent's words, a file, a thought, or a call. */
 export function AssistantContent(props: {
   message: SessionMessageAssistant
   content: SessionMessageAssistant["content"][number]
@@ -56,6 +56,9 @@ export function AssistantContent(props: {
             onContentRendered={props.onContentRendered}
           />
         )}
+      </Match>
+      <Match when={props.content.type === "file" ? props.content : undefined}>
+        {(file) => <AssistantFileContent file={file()} />}
       </Match>
       <Match when={props.content.type === "tool" ? props.content : undefined}>
         {(tool) => (
