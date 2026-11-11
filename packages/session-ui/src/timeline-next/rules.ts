@@ -97,6 +97,8 @@ export function toolStopped(tool: SessionMessageAssistantTool) {
 
 /** Whether a part of an assistant message shows. A failure shows only where its category does. */
 export function contentShows(detail: TimelineDetail, content: Content) {
+  if (content.type === "file") return true
+
   if (content.type === "text") return textShows(content)
 
   if (content.type === "reasoning") return detail.thinking.placement !== "hidden" && textShows(content)
@@ -114,7 +116,7 @@ export function contentShows(detail: TimelineDetail, content: Content) {
 
 // A thought shows while it streams, before its first words arrive, so the timeline never hides that the model is
 // thinking. Once finished, a thought without text has nothing to open.
-export function textShows(content: Exclude<Content, { type: "tool" }>) {
+export function textShows(content: Extract<Content, { type: "text" | "reasoning" }>) {
   if (content.text.trim()) return true
 
   return content.type === "reasoning" && content.time?.completed === undefined
@@ -128,6 +130,8 @@ export function textShows(content: Exclude<Content, { type: "tool" }>) {
  * - `file`: a file's changes, as a card.
  */
 export function contentGroup(detail: TimelineDetail, content: Content, commentary: ReadonlySet<Content>) {
+  if (content.type === "file") return undefined
+
   if (content.type === "text") return commentary.has(content) ? ("context" as const) : undefined
 
   if (content.type === "reasoning") return detail.thinking.placement === "grouped" ? ("context" as const) : undefined
@@ -157,7 +161,7 @@ export function contentGroup(detail: TimelineDetail, content: Content, commentar
  * and changes, its diff opening as `diffOpens` says, and a call that errored opens to its error where details expand.
  */
 export function contentOpens(detail: TimelineDetail, content: Content) {
-  if (content.type === "text") return false
+  if (content.type === "text" || content.type === "file") return false
 
   if (content.type === "reasoning") return thoughtOpens(detail, false)
   const rule = toolRule(content)
