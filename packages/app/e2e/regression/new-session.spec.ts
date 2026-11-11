@@ -389,7 +389,7 @@ test("the dialog chooses the base branch for a new worktree", async ({ page }) =
   await expect(page.getByRole("option", { name: "release/base", exact: true })).toBeVisible()
   await search.fill("release")
   await expect(search).not.toHaveAttribute("aria-busy", "true")
-  await expect(page.getByRole("option")).toHaveText(["release/base"])
+  await expect(options).toHaveText(["release/base"])
   await page.getByRole("option", { name: "release/base", exact: true }).click()
 
   // Choosing a base returns to the worktree step with that branch selected.
