@@ -51,7 +51,7 @@ export function toolRule(tool: SessionMessageAssistantTool): ToolRule & { name: 
 
 // A thought shows while it streams, before its first words arrive, so the timeline never hides that the model is
 // thinking. Once finished, a thought without text has nothing to open.
-export function textShows(content: Exclude<Content, { type: "tool" }>) {
+export function textShows(content: Extract<Content, { type: "text" | "reasoning" }>) {
   if (content.text.trim()) return true
 
   return content.type === "reasoning" && content.time?.completed === undefined
