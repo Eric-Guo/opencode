@@ -119,7 +119,9 @@ export function createNextTimelineProjection(input: {
       input
         .sessionMessages()
         .flatMap((message) =>
-          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+          message.type === "assistant"
+            ? message.content.filter((content) => content.type === "text" || content.type === "reasoning")
+            : [],
         ),
     (content) => {
       // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
@@ -145,7 +147,7 @@ export function createNextTimelineProjection(input: {
       queuedCompactionIDs: input.queuedCompactionIDs?.() ?? [],
       turnDiffs: input.turnDiffs?.() ?? false,
       shows: (content) =>
-        content.type === "tool"
+        content.type === "tool" || content.type === "file"
           ? contentShows(detail, content)
           : (content.type === "text" || detail.thinking.placement !== "hidden") && textVisible().get(content)!(),
     })
@@ -226,14 +228,16 @@ export function workedDuration(user: SessionMessageUser | undefined, steps: read
     Math.max(
       stopped.time.created,
       ...stopped.content.flatMap((content) =>
-        content.type === "text" ? [] : [content.time?.completed ?? content.time?.created ?? stopped.time.created],
+        content.type === "reasoning" || content.type === "tool"
+          ? [content.time?.completed ?? content.time?.created ?? stopped.time.created]
+          : [],
       ),
     )
 
   return Math.max(0, end - start)
 }
 
-/** A part of an assistant message by its ID: a tool's own ID, or `<message>:<text|reasoning>:<n>`. */
+/** A part of an assistant message by its tool or file ID, or `<message>:<text|reasoning>:<n>`. */
 export function resolveContent(message: SessionMessageInfo | undefined, partID: string): Content | undefined {
   if (message?.type !== "assistant") return undefined
 
@@ -244,7 +248,10 @@ export function contentEntries(message: SessionMessageAssistant) {
   const ordinals = { text: 0, reasoning: 0 }
 
   return message.content.map((content) => ({
-    id: content.type === "tool" ? content.id : `${message.id}:${content.type}:${ordinals[content.type]++}`,
+    id:
+      content.type === "tool" || content.type === "file"
+        ? content.id
+        : `${message.id}:${content.type}:${ordinals[content.type]++}`,
     content,
   }))
 }
