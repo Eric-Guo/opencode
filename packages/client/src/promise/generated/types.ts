@@ -2623,6 +2623,7 @@ export type ConfigEntry =
           all_flags?: boolean
           todo?: boolean
           media_blob?: boolean
+          kimi_weekly_quota_retry?: boolean
           artifacts?: boolean
           console_watches?: boolean
           recommended_api?: boolean
