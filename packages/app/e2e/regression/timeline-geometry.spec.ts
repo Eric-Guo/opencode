@@ -769,30 +769,16 @@ async function scrollsBehindComposerRegion(
 ) {
   await setupTimeline(page, {
     viewport: input.viewport,
-    sessionMessages: [
-      ...validateTimelineMessages(historyMessages(18)),
-      { id: "msg_9000_user", type: "user", text: "Split the work.", time: { created: 1 } },
-      {
-        id: "msg_9001_assistant",
-        type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
-        content: [
-          {
-            type: "tool",
-            id: "call_blocking_shell",
-            name: "shell",
-            state: {
-              status: "running",
-              input: { command: "bun test" },
-              metadata: {},
-            },
-            time: { created: 2 },
-          },
-          { type: "text", text: "The last answer ends above the composer region." },
+    seedHistory: true,
+    messages: [
+      userMessage(),
+      assistantMessage(
+        [
+          shell("call_running_shell", "running", "", "bun run build"),
+          textPart("prt_last_answer", "The last answer ends above the composer region."),
         ],
-        time: { created: 2 },
-      },
+        { completed: false },
+      ),
     ],
     sessions: [
       session(),

@@ -699,6 +699,82 @@ test("holds undelivered input still while live status above it comes and goes", 
   await expect.poll(lane).toBe(36)
 })
 
+for (const fixture of [
+  { name: "from far below", before: 40, searches: 40, after: 80 },
+  // The collapsed timeline fits the viewport, so it only becomes scrollable once the group opens.
+  { name: "in a timeline that fits the viewport", before: 0, searches: 40, after: 0 },
+  // Revealing the last call reaches the scroll limit until more content arrives.
+  { name: "at the end of the timeline", before: 40, searches: 0, after: 0 },
+]) {
+  test(`reveals a finished shell's call ${fixture.name} and keeps it below its group header`, async ({ page }) => {
+    const timeline = await setupTimeline(page, {
+      settings: { timelineDetail: detailed },
+      sessionMessages: [
+        userMessage(),
+        assistantMessage([
+          ...(fixture.before ? [textPart("prt_earlier", notes("Earlier", fixture.before))] : []),
+          ...searches(0, 42 - fixture.searches),
+          toolPart(
+            "prt_notice_shell",
+            "shell",
+            "completed",
+            { command: "bun serve.ts", background: true },
+            { output: "listening", metadata: { shellID: "shell_notice", status: "running" } },
+          ),
+          ...searches(42 - fixture.searches, fixture.searches),
+          ...(fixture.after ? [textPart("prt_follow_up", notes("Follow-up", fixture.after))] : []),
+        ]),
+        {
+          id: "msg_shell_finished",
+          type: "synthetic",
+          text: '<shell id="shell_notice" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+          description: "bun serve.ts",
+          metadata: { source: "shell", shellID: "shell_notice", state: "completed" },
+          time: { created: 1700000003000 },
+        },
+      ],
+    })
+
+    const notice = page.getByRole("button", { name: /^Shell finished/ })
+
+    const group = page
+      .locator('[data-component="collapsed-tool-group"]')
+      .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+
+    const call = page.locator('[data-timeline-part-id="prt_notice_shell"]')
+    const trigger = call.locator('[data-slot="collapsible-trigger"]')
+
+    const aligned = () =>
+      expect
+        .poll(async () => {
+          const [header, row] = await Promise.all([group.boundingBox(), call.boundingBox()])
+
+          return header && row ? Math.round(row.y - (header.y + header.height)) : undefined
+        })
+        .toBe(0)
+
+    await expect(notice).toBeInViewport()
+    await expect(call).toHaveCount(0)
+    await notice.click()
+
+    await expect(group).toHaveAttribute("aria-expanded", "true")
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await expect(trigger).toBeInViewport()
+
+    if (fixture.searches) await aligned()
+    await trigger.click({ trial: true })
+
+    // New output below the revealed call must not pull it away from the sticky header.
+    const next = assistantMessage([], { id: "msg_step_after_notice", completed: false, created: 1700000004000 })
+    await timeline.send([
+      stepStarted(next),
+      ...partUpdated({ id: "prt_late", messageID: next.id, type: "text", text: notes("Late", 30) }),
+    ])
+    await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
+    await aligned()
+  })
+}
+
 test.describe("Working", () => {
   test("shows Working between busy and reasoning states", async ({ page }) => {
     const timeline = await setupTimeline(page, {
@@ -1182,80 +1258,49 @@ test.describe("background work", () => {
     await expect(capsule).toHaveCount(0)
   })
 
-  test("shows the shortcut for a blocking shell and lists background work in the capsule", async ({ page }) => {
+  test("offers the foreground shell shortcut while the activity panel lists only background work", async ({ page }) => {
     const backgroundID = "ses_background_existing"
 
     const timeline = await setupTimeline(page, {
       settings: { timelineDetail: detailed },
-      sessionMessages: [
-        user,
-        {
-          id: "msg_backgrounded",
-          type: "assistant",
-          agent: "build",
-          model: { id: "model", providerID: "provider" },
-          content: [
-            {
-              type: "tool",
-              id: "call_shell_backgrounded",
-              name: "shell",
-              state: {
-                status: "completed",
-                input: { command: "sleep 120" },
-                content: [{ type: "text", text: "working" }],
-                metadata: { shellID: "shell_backgrounded", status: "running" },
-              },
-              time: { created: 2, completed: 3 },
-            },
-            {
-              type: "tool",
-              id: "call_backgrounded",
-              name: "subagent",
-              state: {
-                status: "completed",
-                input: { description: "Background task", agent: "explore" },
-                content: [{ type: "text", text: "working" }],
-                metadata: { sessionID: backgroundID, status: "running" },
-              },
-              time: { created: 2, completed: 3 },
-            },
-          ],
-          time: { created: 2, completed: 3 },
-        },
-        {
-          id: "msg_blocking",
-          type: "assistant",
-          agent: "build",
-          model: { id: "model", providerID: "provider" },
-          content: [
-            {
-              type: "tool",
-              id: "call_blocking",
-              name: "shell",
-              state: { status: "running", input: { command: "sleep 10" }, metadata: { shellID: "shell_blocking" } },
-              time: { created: 4 },
-            },
-          ],
-          time: { created: 4 },
-        },
+      messages: [
+        userMessage(),
+        assistantMessage([
+          toolPart(
+            "call_backgrounded",
+            "subagent",
+            "completed",
+            { description: "Background task", agent: "explore" },
+            { metadata: { sessionID: backgroundID, status: "running" } },
+          ),
+          toolPart(
+            "call_shell_backgrounded",
+            "shell",
+            "completed",
+            { command: "sleep 120", background: true },
+            { metadata: { shellID: "shell_backgrounded", status: "running" } },
+          ),
+        ]),
+        assistantMessage([shell("call_blocking", "running", "", "bun run build")], {
+          id: "msg_1002_blocking",
+          completed: false,
+          created: 1700000004000,
+        }),
       ],
       sessions: [
         session(),
         session({ id: backgroundID, parentID: sessionID, title: "Background task", agent: "explore" }),
       ],
-      sessionStatus: {
-        [sessionID]: { type: "busy" },
-        [backgroundID]: { type: "busy" },
-      },
+      sessionStatus: { [sessionID]: { type: "busy" }, [backgroundID]: { type: "busy" } },
       shellCommands: [
         { id: "shell_backgrounded", command: "sleep 120" },
-        { id: "shell_blocking", command: "sleep 10" },
-      ].map((shell) => ({
-        ...shell,
-        status: "running" as const,
+        { id: "shell_blocking", command: "bun run build" },
+      ].map((item) => ({
+        ...item,
+        status: "running",
         cwd: directory,
         shell: "bash",
-        file: `/tmp/${shell.id}.out`,
+        file: `/tmp/${item.id}.out`,
         metadata: { sessionID },
         time: { started: 2 },
       })),
@@ -1263,13 +1308,13 @@ test.describe("background work", () => {
 
     const backgroundCard = page.locator('[data-timeline-part-id="call_backgrounded"]')
     await expect(backgroundHint(page)).toBeVisible()
-    await expect(backgroundCard).toContainText("Background task")
+    await expect(backgroundCard.getByText("Background task", { exact: true })).toBeVisible()
 
     const used = page
-      .locator('[data-timeline-part-ids="call_shell_backgrounded"]')
+      .locator('[data-timeline-part-ids="call_shell_backgrounded,call_blocking"]')
       .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
 
-    await expect(used).toHaveText(/^Used\s*1\s*Shell$/)
+    await expect(used).toHaveText(/^Used\s*2\s*Shell$/)
     await expect(used).toHaveAttribute("aria-expanded", "false")
     const summary = "1 subagent · 1 shell"
     const list = page.getByRole("menu", { name: summary, exact: true })
@@ -1317,7 +1362,7 @@ test.describe("background work", () => {
       })
       .toBe(true)
     await expect(list.getByRole("menuitem")).toHaveText([
-      // The fixture starts every task near the epoch, so each row ends with an hours-long run time.
+      // Both tasks started hours ago, so the elapsed labels use hours and minutes.
       /^Explore\s*Background task\d+h \d{2}m$/,
       /^sleep 120\d+h \d{2}m$/,
     ])
@@ -1366,89 +1411,8 @@ test.describe("background work", () => {
 
     await timeline.send(status("idle", 1, backgroundID))
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
-    await expect(backgroundCard).toContainText("Background task")
+    await expect(backgroundCard.getByText("Background task", { exact: true })).toBeVisible()
   })
-
-  for (const fixture of [
-    { name: "from far below", before: 40, searches: 40, after: 80 },
-    // The collapsed timeline fits the viewport, so it only becomes scrollable once the group opens.
-    { name: "in an initially unscrollable timeline", before: 0, searches: 40, after: 0 },
-    // Reaching the shell lands on the end of the timeline, which would otherwise follow new content again.
-    { name: "at the end of the timeline", before: 40, searches: 0, after: 0 },
-  ]) {
-    test(`holds the call revealed by a shell notice ${fixture.name} just under its stuck group header`, async ({
-      page,
-    }) => {
-      const timeline = await setupTimeline(page, {
-        settings: { timelineDetail: detailed },
-        sessionMessages: [
-          userMessage(),
-          assistantMessage([
-            ...(fixture.before ? [textPart("prt_earlier", notes("Earlier", fixture.before))] : []),
-            ...searches(0, 42 - fixture.searches),
-            toolPart(
-              "prt_far_call",
-              "shell",
-              "completed",
-              { command: "bun serve.ts" },
-              {
-                output: "listening",
-                metadata: { shellID: "shell_notice", status: "running" },
-              },
-            ),
-            // The open group outgrows the viewport, so aligning the group instead of the call misses it.
-            ...searches(42 - fixture.searches, fixture.searches),
-            ...(fixture.after ? [textPart("prt_follow_up", notes("Follow-up", fixture.after))] : []),
-          ]),
-          {
-            id: "msg_1002_shell_finished",
-            type: "synthetic",
-            text: '<shell id="shell_notice" state="completed" command="bun serve.ts">\nlistening\n</shell>',
-            description: "bun serve.ts",
-            metadata: { source: "shell", shellID: "shell_notice", state: "completed" },
-            time: { created: 1700000003000 },
-          },
-        ],
-      })
-
-      const group = page
-        .locator('[data-component="collapsed-tool-group"]')
-        .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-
-      const call = page.locator('[data-timeline-part-id="prt_far_call"]')
-
-      const aligned = () =>
-        expect
-          .poll(async () => {
-            const [header, row] = await Promise.all([group.boundingBox(), call.boundingBox()])
-
-            return header && row ? Math.round(row.y - (header.y + header.height)) : undefined
-          })
-          .toBe(0)
-
-      const notice = page.getByRole("button", { name: /^Shell finished/ })
-      await expect(notice).toBeInViewport()
-      await expect(call).toHaveCount(0)
-      await notice.click()
-
-      await expect(group).toHaveAttribute("aria-expanded", "true")
-      const trigger = call.locator('[data-slot="collapsible-trigger"]')
-      await expect(trigger).toHaveAttribute("aria-expanded", "true")
-      await expect(trigger).toBeInViewport()
-
-      // A call at the very end cannot rise under the header until more content arrives below it.
-      if (fixture.searches) await aligned()
-      // Nothing covers the row, so it takes the next click.
-      await trigger.click({ trial: true })
-
-      // The agent keeps writing below the call; the call stays where it was revealed.
-      const late = assistantMessage([], { id: "msg_1003_late", completed: false, created: 1700000004000 })
-      await timeline.send(stepStarted(late))
-      await timeline.send(partUpdated({ id: "prt_late", messageID: late.id, type: "text", text: notes("Late", 30) }))
-      await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
-      await aligned()
-    })
-  }
 
   test("shows a running subagent's working indicator beside its title", async ({ page }) => {
     const childID = "ses_only_running_child"
