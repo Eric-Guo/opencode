@@ -55,6 +55,7 @@ interface Input {
   readonly prepared: Omit<SessionModelRequest.Prepared, "event">
   /** Set when this attempt runs because an earlier one in the step scheduled a retry. */
   readonly retryAttempt?: number
+  readonly retryWeeklyQuota?: Effect.Effect<boolean>
   readonly retry: (
     cause: AIError,
     error: SessionError.Error,
@@ -223,11 +224,11 @@ export const make = Effect.gen(function* () {
             : undefined
         const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
         const baseLLMError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
+        const quota = llmFailure?.reason._tag === "QuotaExceeded" ? llmFailure.reason : undefined
         const fallback =
           kimi &&
           baseLLMError &&
-          llmFailure?.reason._tag === "QuotaExceeded" &&
-          llmFailure.reason.classification === "rolling-window" &&
+          quota?.classification === "rolling-window" &&
           input.model.connection &&
           KimiKeyRotation.supports(input.model.connection.integrationID) &&
           input.model.connection.ref.type === "env" &&
@@ -265,13 +266,27 @@ export const make = Effect.gen(function* () {
           !recorded.outputStarted
         )
           return Outcome.RecoverFull()
+
+        const weeklyRetry =
+          baseLLMError &&
+          fallback?.failure?.promoted &&
+          quota?.window === "weekly" &&
+          !recorded.outputStarted &&
+          input.retryWeeklyQuota &&
+          (yield* input.retryWeeklyQuota)
+            ? {
+                ...baseLLMError,
+                message: `${fallback.failure.previous.name} reached its weekly Kimi quota. ${fallback.failure.promoted.name} is now selected.`,
+              }
+            : undefined
         const retry =
           llmFailure && llmError && !isContextOverflowFailure(llmFailure)
             ? yield* restore(
                 input.retry(
                   llmFailure,
-                  llmError,
-                  SessionRunnerRetry.isRetryable(llmFailure) ||
+                  weeklyRetry ?? llmError,
+                  weeklyRetry !== undefined ||
+                    SessionRunnerRetry.isRetryable(llmFailure) ||
                     (recorded.outputStarted && isInterruptedStream(llmFailure)),
                 ),
               )
@@ -280,7 +295,7 @@ export const make = Effect.gen(function* () {
           // Retry state projects onto the existing assistant, even before it has produced output.
           yield* publisher.startAssistant()
           return Outcome.Retry({
-            error: llmError,
+            error: weeklyRetry ?? llmError,
             decision: retry,
             concurrencyLimited:
               llmFailure?.reason._tag === "RateLimit" && llmFailure.reason.classification === "concurrency",
@@ -391,7 +406,7 @@ function kimiFallbackError(
     }
   return {
     type: error.type,
-    message: `${fallback.previous.name} reached Kimi's rolling usage limit and is unavailable until ${unavailableUntil}. All configured Kimi accounts are cooling down, so no account was switched. The earliest account becomes available at ${new Date(fallback.earliestAvailableAt).toISOString()}. Start a blank session after that time.`,
+    message: `${fallback.previous.name} reached Kimi's rolling usage limit and is unavailable until ${unavailableUntil}. All configured Kimi accounts are cooling down, so no account was switched. The earliest local cooldown ends at ${new Date(fallback.earliestAvailableAt).toISOString()}. Retry this session once an account has quota again.`,
     ...(error.status === undefined ? {} : { status: error.status }),
   }
 }

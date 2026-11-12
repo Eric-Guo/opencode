@@ -2586,6 +2586,7 @@ export type ConfigEntry =
           todo?: boolean
           media_blob?: boolean
           automations?: boolean
+          kimi_weekly_quota_retry?: boolean
           artifacts?: boolean
           video_generate?: boolean
           console_watches?: boolean
