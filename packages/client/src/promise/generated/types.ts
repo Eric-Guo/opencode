@@ -2548,6 +2548,7 @@ export type ConfigEntry =
           background_compaction?: boolean
           media_blob?: boolean
           schedules?: boolean
+          kimi_weekly_quota_retry?: boolean
           artifacts?: boolean
           shell_timeout_background?: boolean
           console_watches?: boolean

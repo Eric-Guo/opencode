@@ -17821,6 +17821,9 @@
               "schedules": {
                 "type": "boolean"
               },
+              "kimi_weekly_quota_retry": {
+                "type": "boolean"
+              },
               "artifacts": {
                 "type": "boolean"
               },
