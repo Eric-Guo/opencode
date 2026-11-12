@@ -12,6 +12,8 @@ export const registry = {
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   automations:
     "Run a prompt or Code Mode action on a timer, or on a connected MCP server's push event when mcp_events is enabled.",
+  kimi_weekly_quota_retry:
+    "Retry in the same session with the next available Kimi key when the weekly quota is reached before output starts.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   video_generate:
     "Enable experimental video generation: the HTTP API that starts a video job and stores the result, and the agent tool that saves the videos into the workspace.",
