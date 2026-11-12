@@ -48,7 +48,7 @@ test("populates the runtime environment and caches the SSO identity", async () =
   process.env.THAPE_SSO_BEARER_API_KEY = "sso-token"
 
   using server = http((request) => {
-    expect(request.method).toBe("OPTIONS")
+    expect(request.method).toBe("POST")
     expect(request.headers.get("Authorization")).toBe("Bearer sso-token")
     expect(request.headers.get("JWT-AUD")).toBe("opencode")
     expect(request.headers.get("Accept")).toBe("application/json")
@@ -74,7 +74,7 @@ test("populates the runtime environment and caches the SSO identity", async () =
   await ensureSsoUsername(server.request)
   await ensureSsoUsername(server.request)
 
-  expect(server.urls).toEqual(["https://sso.thape.com.cn/api/me.json"])
+  expect(server.urls).toEqual(["https://sso.thape.com.cn/api/sigma_agents.json"])
 
   const expected = {
     THAPE_SSO_USER_NAME: "Test User",
