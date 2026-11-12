@@ -149,18 +149,22 @@ const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?ma
 // Cerebras reports its per-minute token throttle as `token_quota_exceeded`; that is a rate limit.
 const QUOTA_TEXT =
   /insufficient[-_\s]?(?:quota|balance)|(?<!token_)quota[-_\s]?exceeded|budget exceeded|usage limit|(?<!rate[-_\s]?)limit exhausted|package has expired|plan does not yet include/i
-const KIMI_ROLLING_QUOTA_TEXTS = [
-  "you've reached your usage limit for this period. your quota will be refreshed in the next period.",
-  ...[
-    "you've reached your 5-hour usage limit. your quota will reset when the current 5-hour window ends.",
-    "you've reached your weekly (7-day) usage limit. your quota will reset when the current 7-day window ends.",
-  ].flatMap((message) =>
-    ["membership", "settings"].map(
-      (path) =>
-        `${message} to continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/${path}/subscription?tab=quota`,
-    ),
-  ),
-]
+const KIMI_QUOTA_WINDOWS = new Map<string, "5-hour" | "weekly">([
+  ["you've reached your usage limit for this period. your quota will be refreshed in the next period.", "5-hour"],
+  ...["membership", "settings"].flatMap((path) => {
+    const extraUsage = `to continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/${path}/subscription?tab=quota`
+    return [
+      [
+        `you've reached your 5-hour usage limit. your quota will reset when the current 5-hour window ends. ${extraUsage}`,
+        "5-hour",
+      ],
+      [
+        `you've reached your weekly (7-day) usage limit. your quota will reset when the current 7-day window ends. ${extraUsage}`,
+        "weekly",
+      ],
+    ] as const
+  }),
+])
 const KIMI_ORDINARY_QUOTA_TEXT =
   /you(?:'|’)ve reached (?:your usage limit for this billing cycle|kimi monthly usage limit)\b/i
 const KIMI_CONCURRENT_RATE_LIMIT_TEXT =
@@ -258,8 +262,8 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (codes.some((code) => CONTENT_POLICY_CODES.has(code)) || (clientScoped && CONTENT_POLICY_TEXT.test(input.message)))
     return new ContentPolicyError(details)
-  if ([input.message, body].some(isKimiRollingQuota))
-    return new QuotaExceededError({ ...details, classification: "rolling-window" })
+  const window = kimiQuotaWindow(input.message) ?? kimiQuotaWindow(body)
+  if (window) return new QuotaExceededError({ ...details, classification: "rolling-window", window })
   if (KIMI_ORDINARY_QUOTA_TEXT.test(text)) return new QuotaExceededError(details)
   // Kimi uses 403 for temporary concurrency limits; handle these before authentication failures.
   if ([input.message, body].some(isKimiConcurrentRateLimit))
@@ -315,8 +319,8 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   return new UnknownProviderError(details)
 }
 
-function isKimiRollingQuota(value: string) {
-  return KIMI_ROLLING_QUOTA_TEXTS.includes(value.trim().replaceAll("’", "'").toLowerCase())
+function kimiQuotaWindow(value: string) {
+  return KIMI_QUOTA_WINDOWS.get(value.trim().replaceAll("’", "'").toLowerCase())
 }
 
 function isKimiConcurrentRateLimit(value: string) {
