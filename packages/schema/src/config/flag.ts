@@ -10,6 +10,8 @@ export const wildcard = "all"
 export const registry = {
   todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
+  kimi_weekly_quota_retry:
+    "Retry in the same session with the next available Kimi key when the weekly quota is reached before output starts.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
