@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
+import { Flag } from "../../flag.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
@@ -56,6 +57,7 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
     const kimi = yield* KimiKeyRotation.Service
+    const flags = yield* Flag.Service
     const steps = yield* SessionStep.make
     const pty = yield* PersistentPty.Service
     // Title generation starts once input is visible and must not delay model execution.
@@ -311,6 +313,7 @@ const layer = Layer.effect(
             executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
           },
           retryAttempt,
+          retryWeeklyQuota: flags.enabled("kimi_weekly_quota_retry"),
           retry: (cause, error, proposed) =>
             retry.decide({
               cause,
@@ -492,5 +495,6 @@ export const node = makeLocationNode({
     ToolOutput.node,
     Database.node,
     KimiKeyRotation.node,
+    Flag.node,
   ],
 })
