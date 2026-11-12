@@ -60,6 +60,7 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
     const kimi = yield* KimiKeyRotation.Service
+    const flags = yield* Flag.Service
     const steps = yield* SessionStep.make
     const cwd = yield* SessionCwd.make
     const pty = yield* PersistentPty.Service
@@ -318,6 +319,7 @@ const layer = Layer.effect(
               executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
             },
             retryAttempt,
+            retryWeeklyQuota: flags.enabled("kimi_weekly_quota_retry"),
             retry: (cause, error, proposed) =>
               retry.decide({
                 cause,
