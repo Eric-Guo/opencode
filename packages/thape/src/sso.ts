@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { Observability } from "@opencode/util/observability"
 import { KimiEnvironment } from "@opencode/util/kimi-environment"
 
-const SSO_ME_URL = "https://sso.thape.com.cn/api/me.json"
+const SSO_SIGMA_URL = "https://sso.thape.com.cn/api/sigma_agents.json"
 const bun = globalThis as typeof globalThis & { Bun?: { env: Record<string, string | undefined> } }
 let hideAgents: string[] = []
 let loaded = false
@@ -65,8 +65,8 @@ export async function ensureSsoUsername(request: (url: string, init: RequestInit
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10000)
-  const response = await request(SSO_ME_URL, {
-    method: "OPTIONS",
+  const response = await request(SSO_SIGMA_URL, {
+    method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
