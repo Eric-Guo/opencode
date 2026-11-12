@@ -36,6 +36,7 @@ import { Permission } from "@opencode/core/permission"
 import { EventTable } from "@opencode/core/event/sql"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { Flag } from "@opencode/core/flag"
 import { Form } from "@opencode/core/form"
 import { Job } from "@opencode/core/job"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -757,6 +758,20 @@ const kimiRollingQuota = () => {
     status: 429,
     responseBody: JSON.stringify({ error: { message, type: "exceeded_current_quota_error" } }),
   })
+}
+
+function trackKimiConnections(s: Scenario, rotation: KimiKeyRotation.Interface, integrationID: string) {
+  const selected: string[] = []
+  s.modelResolveHook = Effect.gen(function* () {
+    const connection = (yield* rotation.connections(KimiEnvironment.names()))[0]!
+    selected.push(connection.name)
+    s.currentConnection = {
+      integrationID: Integration.ID.make(integrationID),
+      ref: connection,
+      fingerprint: Hash.sha256(process.env[connection.name]!),
+    }
+  })
+  return selected
 }
 
 const kimiConcurrentLimit = () =>
@@ -7051,6 +7066,93 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  const quotaTests = (overrides: string) =>
+    testEffect(layer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
+  const weeklyQuotaRetry = quotaTests("kimi_weekly_quota_retry")
+  const manualQuotaRetry = quotaTests("-kimi_weekly_quota_retry")
+
+  weeklyQuotaRetry.effect("retries a weekly Kimi quota rejection in the same session until a key succeeds", () =>
+    withEnv(
+      {
+        ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
+        KIMI_API_KEY: "weekly-a",
+        KIMI_API_KEY_2: "weekly-b",
+        KIMI_API_KEY_3: "weekly-c",
+      },
+      () =>
+        Effect.gen(function* () {
+          const s = yield* setup
+          yield* s.llm.push(TestLLM.text("Earlier answer", "earlier"))
+          yield* s.runPrompt("Earlier question")
+
+          const rotation = yield* KimiKeyRotation.Service
+          const selected = trackKimiConnections(s, rotation, "kimi-code-plan-cn")
+          const failure = kimiRollingQuota()
+          yield* s.admit("Follow up")
+          yield* s.llm.push(Stream.fail(failure), Stream.fail(failure), TestLLM.text("Recovered", "recovered"))
+          const scheduled = yield* subscribeRetries(s)
+          const run = yield* s.resume.pipe(Effect.forkChild)
+          const assistant = yield* Queue.take(scheduled)
+          yield* TestClock.adjust(RETRY_GAPS_MAX[0])
+          expect(yield* Queue.take(scheduled)).toBe(assistant)
+          yield* TestClock.adjust(RETRY_GAPS_MAX[1])
+          yield* Fiber.join(run)
+
+          expect(selected).toEqual(["KIMI_API_KEY", "KIMI_API_KEY_2", "KIMI_API_KEY_3"])
+          expect(s.requests[2].messages).toEqual(s.requests[1].messages)
+          expect(s.requests[3].messages).toEqual(s.requests[1].messages)
+          expect(yield* s.context).toMatchObject([
+            Expected.user("Earlier question"),
+            Expected.assistant({ finish: "stop" }, [Expected.text("Earlier answer")]),
+            Expected.user("Follow up"),
+            Expected.assistant({ id: assistant, finish: "stop" }, [Expected.text("Recovered")]),
+          ])
+          expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.failed.1")
+
+          yield* s.llm.push(Stream.fail(failure))
+          expect(yield* s.runPrompt("Use the last account again").pipe(Effect.flip)).toBe(failure)
+          expect(selected).toEqual(["KIMI_API_KEY", "KIMI_API_KEY_2", "KIMI_API_KEY_3", "KIMI_API_KEY_3"])
+          expect((yield* s.context).at(-1)).toMatchObject({
+            error: {
+              type: "provider.quota",
+              message: expect.stringContaining("All configured Kimi accounts are cooling down"),
+            },
+          })
+        }),
+    ),
+  )
+
+  weeklyQuotaRetry.effect("keeps a weekly Kimi quota failure terminal after a tool call", () =>
+    withEnv(
+      {
+        ...Object.fromEntries(KimiEnvironment.names().map((name) => [name, undefined])),
+        KIMI_API_KEY: "weekly-a",
+        KIMI_API_KEY_2: "weekly-b",
+      },
+      () =>
+        Effect.gen(function* () {
+          const s = yield* setup
+          const rotation = yield* KimiKeyRotation.Service
+          const selected = trackKimiConnections(s, rotation, "kimi-code-plan-cn")
+          const failure = kimiRollingQuota()
+          yield* s.llm.push(
+            Stream.concat(
+              Stream.make(LLMEvent.toolCall({ id: "call-before-quota", name: "echo", input: { text: "once" } })),
+              Stream.fail(failure),
+            ),
+          )
+          expect(yield* s.runPrompt("Run a tool").pipe(Effect.flip)).toBe(failure)
+          expect(selected).toEqual(["KIMI_API_KEY"])
+          expect(s.executions).toHaveLength(1)
+          expect(requireAssistant(yield* s.context).error?.recovery?.promoted).toEqual({
+            type: "env",
+            name: "KIMI_API_KEY_2",
+          })
+          expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+        }),
+    ),
+  )
+
   for (const count of [1, 2]) {
     it.effect(`bounds Kimi concurrency retries with ${count} busy keys and resets counts for the next step`, () =>
       withEnv(
@@ -7064,16 +7166,7 @@ describe("SessionRunnerLLM", () => {
           Effect.gen(function* () {
             const s = yield* setup
             const rotation = yield* KimiKeyRotation.Service
-            const selected: string[] = []
-            s.modelResolveHook = Effect.gen(function* () {
-              const connection = (yield* rotation.connections(KimiEnvironment.names()))[0]!
-              selected.push(connection.name)
-              s.currentConnection = {
-                integrationID: KimiKeyRotation.integrationID,
-                ref: connection,
-                fingerprint: Hash.sha256(process.env[connection.name]!),
-              }
-            })
+            const selected = trackKimiConnections(s, rotation, KimiKeyRotation.integrationID)
             const failure = kimiConcurrentLimit()
             yield* s.admit("All Kimi accounts are busy")
             yield* s.llm.always(Stream.fail(failure))
@@ -7152,16 +7245,7 @@ describe("SessionRunnerLLM", () => {
           Effect.gen(function* () {
             const s = yield* setup
             const rotation = yield* KimiKeyRotation.Service
-            const selected: string[] = []
-            s.modelResolveHook = Effect.gen(function* () {
-              const connection = (yield* rotation.connections(KimiEnvironment.names()))[0]!
-              selected.push(connection.name)
-              s.currentConnection = {
-                integrationID: Integration.ID.make(integrationID),
-                ref: connection,
-                fingerprint: Hash.sha256(process.env[connection.name]!),
-              }
-            })
+            const selected = trackKimiConnections(s, rotation, integrationID)
             yield* s.admit("Rotate busy Kimi keys")
             yield* s.llm.push(
               ...Array.from({ length: 4 }, () => Stream.fail(kimiConcurrentLimit())),
@@ -7243,7 +7327,7 @@ describe("SessionRunnerLLM", () => {
       ),
     )
 
-    it.effect(`rotates through ${integrationID} keys on weekly quota errors without replaying failed steps`, () => {
+    manualQuotaRetry.effect(`promotes a ${integrationID} key without retrying when the flag is off`, () => {
       const keys = ["runner-account-a", "runner-account-b", "runner-account-c", "runner-account-d"]
       return withEnv(
         {
