@@ -322,6 +322,7 @@ const layer = Layer.effect(
             },
             ...(endsTurnTool === undefined ? {} : { endsTurnTool }),
             retryAttempt,
+            retryWeeklyQuota: flags.enabled("kimi_weekly_quota_retry"),
             retry: (cause, error, proposed) =>
               retry.decide({
                 cause,
