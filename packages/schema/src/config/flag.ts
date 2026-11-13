@@ -9,6 +9,7 @@ export const wildcard = "all"
  */
 export const registry = {
   todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
+  nexus_runtime: "Connect the managed OpenCode service to Nexus as an Agent and local Runner.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   automations:
     "Run a prompt or Code Mode action on a timer, or on a connected MCP server's push event when mcp_events is enabled.",
