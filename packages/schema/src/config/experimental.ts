@@ -20,9 +20,13 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   todo: Schema.Boolean.pipe(optional).annotate({
     description: "Enable the experimental todowrite tool. Defaults to false.",
   }),
-  ...Record.map(ConfigFlag.registry, (description) =>
+  ...Record.map(ConfigFlag.registry, (description, key) =>
     Schema.Boolean.pipe(optional).annotate({
-      description: `${description} Defaults to on in local and dev builds and off in releases.`,
+      description:
+        description +
+        (ConfigFlag.ericDevDefaults.has(key)
+          ? " Defaults to on in local, dev and eric_dev builds, including releases built from eric_dev."
+          : " Defaults to on in local and dev builds and off in releases."),
     }),
   ),
   // The flag also takes settings; an object turns it on.

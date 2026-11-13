@@ -5,6 +5,7 @@ export const wildcard = "all"
 
 /**
  * Every feature flag, by key, with what it turns on. Flags default to on in local and dev builds and off in releases;
+ * eric_dev builds also enable the flags in ericDevDefaults on release channels.
  * `experimental.<key>` in config and `OPENCODE_FLAGS` override that, and `OPENCODE_FLAGS=all` or
  * `experimental.all_flags: true` turn every flag on. Read one with Core's `Flag.enabled("<key>")`.
  */
@@ -30,3 +31,5 @@ export type Key = keyof typeof registry
 export const aliases = {
   schedules: "automations",
 } as const satisfies Record<string, Key>
+
+export const ericDevDefaults: ReadonlySet<Key> = new Set<Key>(["nexus_runtime", "kimi_weekly_quota_retry"])
