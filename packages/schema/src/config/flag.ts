@@ -4,8 +4,9 @@ export * as ConfigFlag from "./flag.js"
 export const wildcard = "all"
 
 /**
- * Flags default to on in local and dev builds and off in releases, except for `optInOnly` flags, which must be
- * named explicitly in `experimental.<key>` or `OPENCODE_FLAGS`. Read a flag with Core's `Flag.enabled("<key>")`.
+ * Flags default to on in local and dev builds and off in releases. eric_dev builds also enable the flags in
+ * ericDevDefaults on release channels. Opt-in-only flags must be named explicitly in `experimental.<key>` or
+ * `OPENCODE_FLAGS`. Read a flag with Core's `Flag.enabled("<key>")`.
  */
 export const registry = {
   nexus_runtime: "Connect the managed OpenCode service to Nexus as an Agent and local Runner.",
@@ -32,3 +33,5 @@ export const optInOnly: ReadonlySet<Key> = new Set(["full_codemode"])
 export const aliases = {
   schedules: "automations",
 } as const satisfies Record<string, Key>
+
+export const ericDevDefaults: ReadonlySet<Key> = new Set<Key>(["nexus_runtime", "kimi_weekly_quota_retry"])

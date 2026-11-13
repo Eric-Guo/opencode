@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/runtime.ts"
+    ".": "./src/runtime.ts",
+    "./editor": "./src/editor.ts"
   },
   "scripts": {
     "test": "bun test test",
@@ -12,11 +13,14 @@
     "typecheck:tsc": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.6.0",
     "@cybros/agent": "file:./vendor/cybros-agent-0.1.0.tgz",
     "@opencode/core": "workspace:*",
     "@opencode/codemode": "workspace:*",
+    "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
     "effect": "catalog:",
+    "ipaddr.js": "^2.2.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

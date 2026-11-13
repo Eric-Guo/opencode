@@ -1,3 +1,4 @@
+import { NexusCommand, NexusOperator } from "../nexus-command.js"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { ForbiddenError, InvalidRequestError, ServiceUnavailableError } from "../errors.js"
@@ -55,6 +56,20 @@ export const NexusGroup = HttpApiGroup.make("server.nexus").add(
   HttpApiEndpoint.post("nexus.logout", "/api/experimental/nexus/logout", { success: Schema.Void, error }).annotateMerge(
     annotations("logout", "Sign out of the Nexus platform"),
   ),
+  HttpApiEndpoint.post("nexus.operator", "/api/experimental/nexus/operator", {
+    payload: NexusOperator,
+    success: Schema.Struct({ upload: Schema.NullOr(Schema.String) }),
+    error,
+  }).annotateMerge(annotations("operator", "Download a conversation runner file or restore a recorded local change")),
+  HttpApiEndpoint.post("nexus.manage", "/api/experimental/nexus/manage", {
+    payload: NexusCommand,
+    headers: Schema.Struct({
+      "x-nexus-origin": Schema.optional(Schema.String),
+      "x-nexus-member-token": Schema.optional(Schema.String),
+    }),
+    success: Schema.Json,
+    error,
+  }).annotateMerge(annotations("manage", "Manage Nexus schedules and memory documents")),
   HttpApiEndpoint.get("nexus.catalog", "/api/experimental/nexus/catalog", {
     query: Schema.Struct({
       kind: Schema.Literals(["schedules", "memory", "mcp"]),
@@ -88,6 +103,16 @@ export const NexusGroup = HttpApiGroup.make("server.nexus").add(
     success: Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean }),
     error,
   }).annotateMerge(annotations("modes", "Read or update conversation tool choices")),
+  HttpApiEndpoint.post("nexus.grant", "/api/experimental/nexus/grant", {
+    payload: Schema.Struct({
+      workspace: Schema.String,
+      conversation: Schema.String,
+      run: Schema.String,
+      task: Schema.String,
+    }),
+    success: Schema.Void,
+    error,
+  }).annotateMerge(annotations("grant", "Remember the approved web fetch site until the service restarts")),
   HttpApiEndpoint.post("nexus.policy", "/api/experimental/nexus/policy", {
     payload: Schema.Struct({ workspace: Schema.String, conversation: Schema.String }),
     success: Schema.Struct({
