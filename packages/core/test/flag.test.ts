@@ -60,6 +60,36 @@ describe("Flag.resolve", () => {
     ).toEqual({ enabled: false, source: "config" })
   })
 
+  test("eric_dev previews and releases enable Nexus and weekly Kimi retry by default", () => {
+    const defaults = {
+      ...implicit({ enabled: false, source: "default" }),
+      nexus_runtime: { enabled: true, source: "default" },
+      kimi_weekly_quota_retry: { enabled: true, source: "default" },
+    } satisfies Record<Flag.Key, Flag.State>
+    for (const build of [
+      { channel: "eric_dev" },
+      { channel: "prod", branch: "eric_dev" },
+      { channel: "latest", branch: "eric_dev" },
+    ]) {
+      expect(Flag.resolve({ entries: [], ...build })).toEqual(defaults)
+    }
+    expect(Flag.resolve({ entries: [], channel: "prod", branch: "dev" })).toEqual(
+      implicit({ enabled: false, source: "default" }),
+    )
+    expect(
+      Flag.resolve({
+        entries: [document({ nexus_runtime: false })],
+        channel: "prod",
+        branch: "eric_dev",
+        overrides: "-kimi_weekly_quota_retry",
+      }),
+    ).toEqual({
+      ...defaults,
+      nexus_runtime: { enabled: false, source: "config" },
+      kimi_weekly_quota_retry: { enabled: false, source: "env" },
+    })
+  })
+
   test("config overrides the default and OPENCODE_FLAGS overrides config", () => {
     const entries = [document({ todo: true, automations: false })]
     const flags = Flag.resolve({ entries, channel: "dev", overrides: " media_blob , -todo,unknown_flag" })
