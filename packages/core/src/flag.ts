@@ -22,6 +22,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fl
 
 export const Overrides = FlagResolve.Overrides
 
+declare const OPENCODE_BUILD_BRANCH: string
+
 export const resolve = FlagResolve.resolve
 
 export const layer = Layer.effect(
@@ -30,7 +32,8 @@ export const layer = Layer.effect(
     const app = yield* App.Service
     const config = yield* Config.Service
     const overrides = yield* Overrides
-    const resolveEntries = (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, overrides })
+    const branch = typeof OPENCODE_BUILD_BRANCH === "string" ? OPENCODE_BUILD_BRANCH : undefined
+    const resolveEntries = (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, branch, overrides })
     const all = Effect.gen(function* () {
       return resolveEntries(yield* config.entries())
     })
