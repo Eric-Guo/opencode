@@ -36,6 +36,7 @@ test("exposes every standard HTTP API group", () => {
     "audio",
     "generate",
     "voice",
+    "nexus",
     "migration",
     "usage",
   ])
@@ -66,6 +67,7 @@ test("exposes every standard HTTP API group", () => {
     "schedule",
     "artifacts",
     "job",
+    "nexus",
     "migration",
     "usage",
     "config",
@@ -86,6 +88,21 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.experimental.integration.wellknown)).toEqual(["add"])
   expect(Object.keys(client.experimental.file)).toEqual(["write", "watch", "unwatch"])
   expect(Object.keys(client.experimental.media)).toEqual(["get"])
+  expect(Object.keys(client.experimental.nexus)).toEqual([
+    "status",
+    "pair",
+    "disconnect",
+    "login",
+    "account",
+    "logout",
+    "operator",
+    "manage",
+    "catalog",
+    "runners",
+    "modes",
+    "grant",
+    "policy",
+  ])
   expect(Object.keys(client.experimental.schedule)).toEqual(["create", "list", "get", "pause", "resume", "delete"])
   expect(client.experimental.persistentPty.read).toBeFunction()
 })
@@ -158,6 +175,19 @@ test("nests a method under client.experimental exactly when its route is experim
     "mcp.disconnect",
     "mcp.remove",
     "migration.v1.status",
+    "nexus.account",
+    "nexus.catalog",
+    "nexus.disconnect",
+    "nexus.grant",
+    "nexus.login",
+    "nexus.logout",
+    "nexus.manage",
+    "nexus.modes",
+    "nexus.operator",
+    "nexus.pair",
+    "nexus.policy",
+    "nexus.runners",
+    "nexus.status",
     "session.export",
     "session.import",
     "session.instructions.entry.list",
