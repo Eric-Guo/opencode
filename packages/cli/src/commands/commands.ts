@@ -574,6 +574,28 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "Reload configuration",
       globalFlags: ServerFlags,
     }),
+    Spec.make("nexus", {
+      description: "Manage the Nexus agent and local runner",
+      params: {
+        action: Argument.Literals("action", [
+          "status",
+          "pair",
+          "disconnect",
+          "runners",
+          "login",
+          "account",
+          "logout",
+          "schedules",
+          "memory",
+          "mcp",
+        ]).pipe(Argument.withDefault("status")),
+        after: Flag.String("after").pipe(Flag.optional),
+        url: Flag.String("url").pipe(Flag.optional),
+        model: Flag.String("model").pipe(Flag.optional),
+        workspace: Flag.String("workspace").pipe(Flag.optional),
+        directory: Flag.String("directory").pipe(Flag.optional),
+      },
+    }),
     Spec.make("pair", {
       description: "Print one-time links to connect a browser or app",
       params: {
