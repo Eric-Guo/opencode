@@ -315,6 +315,20 @@ import type {
   DebugAgentToolsOutput,
   DebugAgentExecuteToolInput,
   DebugAgentExecuteToolOutput,
+  ExperimentalNexusStatusOutput,
+  ExperimentalNexusPairInput,
+  ExperimentalNexusPairOutput,
+  ExperimentalNexusDisconnectOutput,
+  ExperimentalNexusLoginOutput,
+  ExperimentalNexusAccountOutput,
+  ExperimentalNexusLogoutOutput,
+  ExperimentalNexusCatalogInput,
+  ExperimentalNexusCatalogOutput,
+  ExperimentalNexusRunnersOutput,
+  ExperimentalNexusModesInput,
+  ExperimentalNexusModesOutput,
+  ExperimentalNexusPolicyInput,
+  ExperimentalNexusPolicyOutput,
   ExperimentalMigrationV1StatusOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
@@ -1740,6 +1754,127 @@ export function make(options: ClientOptions) {
             requestOptions,
           ).then((value) => value.data),
       },
+      nexus: {
+        status: (requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusStatusOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/nexus/status`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        pair: (input: ExperimentalNexusPairInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusPairOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/pair`,
+              body: {
+                origin: input["origin"],
+                model: input["model"],
+                workspace: input["workspace"],
+                directory: input["directory"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        disconnect: (requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusDisconnectOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/disconnect`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        login: (requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusLoginOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/login`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        account: (requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusAccountOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/nexus/account`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        logout: (requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusLogoutOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/logout`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        catalog: (input: ExperimentalNexusCatalogInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusCatalogOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/nexus/catalog`,
+              query: { kind: input["kind"], after: input["after"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        runners: (requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusRunnersOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/nexus/runners`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        modes: (input: ExperimentalNexusModesInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusModesOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/modes`,
+              body: { workspace: input["workspace"], conversation: input["conversation"], patch: input["patch"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        policy: (input: ExperimentalNexusPolicyInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusPolicyOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/policy`,
+              body: { workspace: input["workspace"], conversation: input["conversation"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
       migration: {
         v1: {
           status: (requestOptions?: RequestOptions) =>
@@ -2919,6 +3054,29 @@ export function make(options: ClientOptions) {
       watch: client.experimental.file.watch,
       /** @deprecated Use `client.experimental.file.unwatch`. Removed in the next minor. */
       unwatch: client.experimental.file.unwatch,
+    },
+    /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
+    nexus: {
+      /** @deprecated Use `client.experimental.nexus.status`. Removed in the next minor. */
+      status: client.experimental.nexus.status,
+      /** @deprecated Use `client.experimental.nexus.pair`. Removed in the next minor. */
+      pair: client.experimental.nexus.pair,
+      /** @deprecated Use `client.experimental.nexus.disconnect`. Removed in the next minor. */
+      disconnect: client.experimental.nexus.disconnect,
+      /** @deprecated Use `client.experimental.nexus.login`. Removed in the next minor. */
+      login: client.experimental.nexus.login,
+      /** @deprecated Use `client.experimental.nexus.account`. Removed in the next minor. */
+      account: client.experimental.nexus.account,
+      /** @deprecated Use `client.experimental.nexus.logout`. Removed in the next minor. */
+      logout: client.experimental.nexus.logout,
+      /** @deprecated Use `client.experimental.nexus.catalog`. Removed in the next minor. */
+      catalog: client.experimental.nexus.catalog,
+      /** @deprecated Use `client.experimental.nexus.runners`. Removed in the next minor. */
+      runners: client.experimental.nexus.runners,
+      /** @deprecated Use `client.experimental.nexus.modes`. Removed in the next minor. */
+      modes: client.experimental.nexus.modes,
+      /** @deprecated Use `client.experimental.nexus.policy`. Removed in the next minor. */
+      policy: client.experimental.nexus.policy,
     },
     /** @deprecated Use `client.experimental.migration`. Removed in the next minor. */
     migration: {

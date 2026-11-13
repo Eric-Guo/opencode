@@ -53,6 +53,7 @@ import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
+import { NexusHost } from "./handlers/nexus"
 import { AudioRecording } from "./audio"
 import type { ServerOptions } from "./options"
 
@@ -99,6 +100,7 @@ export function createRoutes(
   options: ServerOptions = {},
   serviceURLs: () => ReadonlyArray<string> = () => [],
   overrides: LayerNode.Replacements = [],
+  nexus?: typeof NexusHost.Service,
 ) {
   return makeRoutes(
     options.password
@@ -107,6 +109,8 @@ export function createRoutes(
     options,
     serviceURLs,
     overrides,
+    undefined,
+    nexus,
   )
 }
 
@@ -129,6 +133,7 @@ function makeRoutes<AuthError, AuthServices>(
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
+  nexus?: typeof NexusHost.Service,
 ) {
   const standard: LayerNode.Replacements = [
     Database.node.replace(Database.configured(options.database)),
@@ -200,6 +205,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(
           handlers.pipe(
             Layer.provide(services),
+            Layer.provide(Layer.succeed(NexusHost, nexus ?? null)),
             Layer.provide(Layer.succeed(CorsConfig, options)),
             Layer.provide(Layer.succeed(AudioRecording.Config, options.audio)),
           ),

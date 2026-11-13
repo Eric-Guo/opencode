@@ -313,6 +313,20 @@ import type {
   DebugAgentToolsOutput,
   DebugAgentExecuteToolInput,
   DebugAgentExecuteToolOutput,
+  ExperimentalNexusStatusOutput,
+  ExperimentalNexusPairInput,
+  ExperimentalNexusPairOutput,
+  ExperimentalNexusDisconnectOutput,
+  ExperimentalNexusLoginOutput,
+  ExperimentalNexusAccountOutput,
+  ExperimentalNexusLogoutOutput,
+  ExperimentalNexusCatalogInput,
+  ExperimentalNexusCatalogOutput,
+  ExperimentalNexusRunnersOutput,
+  ExperimentalNexusModesInput,
+  ExperimentalNexusModesOutput,
+  ExperimentalNexusPolicyInput,
+  ExperimentalNexusPolicyOutput,
   ExperimentalMigrationV1StatusOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
@@ -1962,6 +1976,70 @@ const adaptGroupDebug = (raw: RawClient["server.debug"]) => ({
   agent: { tools: EndpointDebugAgentTools(raw), executeTool: EndpointDebugAgentExecuteTool(raw) },
 })
 
+const EndpointExperimentalNexusStatus = (raw: RawClient["server.nexus"]) => () =>
+  preserveEffect<ExperimentalNexusStatusOutput>()(raw["nexus.status"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalNexusPair = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusPairInput) =>
+  preserveEffect<ExperimentalNexusPairOutput>()(
+    raw["nexus.pair"]({
+      payload: {
+        origin: input["origin"],
+        model: input["model"],
+        workspace: input["workspace"],
+        directory: input["directory"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalNexusDisconnect = (raw: RawClient["server.nexus"]) => () =>
+  preserveEffect<ExperimentalNexusDisconnectOutput>()(raw["nexus.disconnect"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalNexusLogin = (raw: RawClient["server.nexus"]) => () =>
+  preserveEffect<ExperimentalNexusLoginOutput>()(raw["nexus.login"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalNexusAccount = (raw: RawClient["server.nexus"]) => () =>
+  preserveEffect<ExperimentalNexusAccountOutput>()(raw["nexus.account"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalNexusLogout = (raw: RawClient["server.nexus"]) => () =>
+  preserveEffect<ExperimentalNexusLogoutOutput>()(raw["nexus.logout"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalNexusCatalog = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusCatalogInput) =>
+  preserveEffect<ExperimentalNexusCatalogOutput>()(
+    raw["nexus.catalog"]({ query: { kind: input["kind"], after: input["after"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointExperimentalNexusRunners = (raw: RawClient["server.nexus"]) => () =>
+  preserveEffect<ExperimentalNexusRunnersOutput>()(raw["nexus.runners"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalNexusModes = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusModesInput) =>
+  preserveEffect<ExperimentalNexusModesOutput>()(
+    raw["nexus.modes"]({
+      payload: { workspace: input["workspace"], conversation: input["conversation"], patch: input["patch"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalNexusPolicy = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusPolicyInput) =>
+  preserveEffect<ExperimentalNexusPolicyOutput>()(
+    raw["nexus.policy"]({ payload: { workspace: input["workspace"], conversation: input["conversation"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const adaptGroupExperimentalNexus = (raw: RawClient["server.nexus"]) => ({
+  status: EndpointExperimentalNexusStatus(raw),
+  pair: EndpointExperimentalNexusPair(raw),
+  disconnect: EndpointExperimentalNexusDisconnect(raw),
+  login: EndpointExperimentalNexusLogin(raw),
+  account: EndpointExperimentalNexusAccount(raw),
+  logout: EndpointExperimentalNexusLogout(raw),
+  catalog: EndpointExperimentalNexusCatalog(raw),
+  runners: EndpointExperimentalNexusRunners(raw),
+  modes: EndpointExperimentalNexusModes(raw),
+  policy: EndpointExperimentalNexusPolicy(raw),
+})
+
 const EndpointExperimentalMigrationV1Status = (raw: RawClient["server.migration"]) => () =>
   preserveEffect<ExperimentalMigrationV1StatusOutput>()(
     raw["migration.v1.status"]({}).pipe(Effect.mapError(mapClientError)),
@@ -2086,6 +2164,7 @@ const adaptClient = (raw: RawClient) => {
       integration: adaptGroupExperimentalIntegration(raw["server.integration"]),
       mcp: adaptGroupExperimentalMcp(raw["server.mcp"]),
       file: adaptGroupExperimentalFile(raw["server.fs"]),
+      nexus: adaptGroupExperimentalNexus(raw["server.nexus"]),
       migration: adaptGroupExperimentalMigration(raw["server.migration"]),
       usage: adaptGroupExperimentalUsage(raw["server.usage"]),
       config: adaptGroupExperimentalConfig(raw["server.config"]),
@@ -2189,6 +2268,29 @@ const adaptClient = (raw: RawClient) => {
       watch: client.experimental.file.watch,
       /** @deprecated Use `client.experimental.file.unwatch`. Removed in the next minor. */
       unwatch: client.experimental.file.unwatch,
+    },
+    /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
+    nexus: {
+      /** @deprecated Use `client.experimental.nexus.status`. Removed in the next minor. */
+      status: client.experimental.nexus.status,
+      /** @deprecated Use `client.experimental.nexus.pair`. Removed in the next minor. */
+      pair: client.experimental.nexus.pair,
+      /** @deprecated Use `client.experimental.nexus.disconnect`. Removed in the next minor. */
+      disconnect: client.experimental.nexus.disconnect,
+      /** @deprecated Use `client.experimental.nexus.login`. Removed in the next minor. */
+      login: client.experimental.nexus.login,
+      /** @deprecated Use `client.experimental.nexus.account`. Removed in the next minor. */
+      account: client.experimental.nexus.account,
+      /** @deprecated Use `client.experimental.nexus.logout`. Removed in the next minor. */
+      logout: client.experimental.nexus.logout,
+      /** @deprecated Use `client.experimental.nexus.catalog`. Removed in the next minor. */
+      catalog: client.experimental.nexus.catalog,
+      /** @deprecated Use `client.experimental.nexus.runners`. Removed in the next minor. */
+      runners: client.experimental.nexus.runners,
+      /** @deprecated Use `client.experimental.nexus.modes`. Removed in the next minor. */
+      modes: client.experimental.nexus.modes,
+      /** @deprecated Use `client.experimental.nexus.policy`. Removed in the next minor. */
+      policy: client.experimental.nexus.policy,
     },
     /** @deprecated Use `client.experimental.migration`. Removed in the next minor. */
     migration: {
