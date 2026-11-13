@@ -1,9 +1,11 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
-import { fileURLToPath } from "node:url"
-import { defineConfig } from "vite"
+import { resolve } from "node:path"
+import { defineConfig, normalizePath } from "vite"
 import desktopPlugin, { channel } from "./vite.js"
 import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
+
+const outDir = normalizePath(resolve(import.meta.dirname, process.env.OPENCODE_APP_OUTDIR ?? "dist"))
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -16,20 +18,21 @@ const sentry =
           name: process.env.SENTRY_RELEASE ?? process.env.VITE_SENTRY_RELEASE,
         },
         sourcemaps: {
-          assets: "./dist/**",
-          filesToDeleteAfterUpload: "./dist/**/*.map",
+          assets: `${outDir}/**`,
+          filesToDeleteAfterUpload: `${outDir}/**/*.map`,
         },
       })
     : false
 
 export default defineConfig({
-  plugins: [desktopPlugin, icons(channel), serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))), sentry],
+  plugins: [desktopPlugin, icons(channel), serviceWorker(outDir), sentry],
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
     port: 3000,
   },
   build: {
+    outDir,
     rolldownOptions:
       process.env.VITE_OPENCODE_TEST_FIXTURES === "1"
         ? {
