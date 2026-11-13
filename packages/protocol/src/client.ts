@@ -34,6 +34,7 @@ export const ClientApi: ClientApiShape = makeDefaultApi({
 })
 
 export const groupNames = {
+  "server.nexus": "nexus",
   "server.audio": "audio",
   "server.server": "server",
   "server.debug": "debug",
@@ -92,6 +93,16 @@ export const deprecatedClientPaths = new Set([
   "mcp.disconnect",
   "mcp.remove",
   "migration.v1.status",
+  "nexus.account",
+  "nexus.catalog",
+  "nexus.disconnect",
+  "nexus.login",
+  "nexus.logout",
+  "nexus.modes",
+  "nexus.pair",
+  "nexus.policy",
+  "nexus.runners",
+  "nexus.status",
   "session.export",
   "session.import",
   "session.instructions.entry.list",
