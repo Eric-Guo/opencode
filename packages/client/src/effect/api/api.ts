@@ -3168,6 +3168,86 @@ export type ExperimentalNexusAccountOperation<E = never> = () => Effect.Effect<E
 export type ExperimentalNexusLogoutOutput = void
 export type ExperimentalNexusLogoutOperation<E = never> = () => Effect.Effect<ExperimentalNexusLogoutOutput, E>
 
+export type ExperimentalNexusOperatorInput = {
+  readonly workspace: string
+  readonly conversation: string
+  readonly runner: string
+  readonly receipt: string
+  readonly operation:
+    | { readonly tool: "files_bytes"; readonly path: string }
+    | { readonly tool: "checkpoint_restore"; readonly run: string; readonly task: string }
+}
+export type ExperimentalNexusOperatorOutput = { readonly upload: string | null }
+export type ExperimentalNexusOperatorOperation<E = never> = (
+  input: ExperimentalNexusOperatorInput,
+) => Effect.Effect<ExperimentalNexusOperatorOutput, E>
+
+export type ExperimentalNexusManageInput = {
+  readonly "x-nexus-origin"?: string | undefined
+  readonly "x-nexus-member-token"?: string | undefined
+  readonly payload:
+    | {
+        readonly action: "schedule.create"
+        readonly conversation: string
+        readonly key: string
+        readonly prompt: string
+        readonly name?: string | undefined
+        readonly rule:
+          | { readonly kind: "once"; readonly run_at: string }
+          | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
+          | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
+      }
+    | {
+        readonly action:
+          | "schedule.pause"
+          | "schedule.resume"
+          | "schedule.cancel"
+          | "schedule.run"
+          | "schedule.read"
+          | "schedule.executions"
+        readonly conversation: string
+        readonly id: string
+      }
+    | {
+        readonly action: "schedule.update"
+        readonly conversation: string
+        readonly id: string
+        readonly version: number
+        readonly prompt: string
+        readonly rule:
+          | { readonly kind: "once"; readonly run_at: string }
+          | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
+          | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
+      }
+    | { readonly action: "memory.create"; readonly name: string }
+    | {
+        readonly action: "memory.list" | "memory.read" | "memory.grep"
+        readonly collection: string
+        readonly path?: string | undefined
+        readonly pattern?: string | undefined
+      }
+    | {
+        readonly action: "memory.write"
+        readonly collection: string
+        readonly path: string
+        readonly content: string
+        readonly id: string | null
+        readonly version: number | null
+      }
+    | {
+        readonly action: "memory.delete"
+        readonly collection: string
+        readonly path: string
+        readonly id: string
+        readonly version: number
+      }
+    | { readonly action: "memory.archive" | "memory.restore"; readonly collection: string; readonly version: number }
+}
+export type ExperimentalNexusManageOutput = Schema.Json
+export type ExperimentalNexusManageOperation<E = never> = (
+  input: ExperimentalNexusManageInput,
+) => Effect.Effect<ExperimentalNexusManageOutput, E>
+
 export type ExperimentalNexusCatalogInput = {
   readonly kind: "schedules" | "memory" | "mcp"
   readonly after?: string | undefined
@@ -3198,6 +3278,17 @@ export type ExperimentalNexusModesOperation<E = never> = (
   input: ExperimentalNexusModesInput,
 ) => Effect.Effect<ExperimentalNexusModesOutput, E>
 
+export type ExperimentalNexusGrantInput = {
+  readonly workspace: string
+  readonly conversation: string
+  readonly run: string
+  readonly task: string
+}
+export type ExperimentalNexusGrantOutput = void
+export type ExperimentalNexusGrantOperation<E = never> = (
+  input: ExperimentalNexusGrantInput,
+) => Effect.Effect<ExperimentalNexusGrantOutput, E>
+
 export type ExperimentalNexusPolicyInput = { readonly workspace: string; readonly conversation: string }
 export type ExperimentalNexusPolicyOutput = {
   readonly tools: ReadonlyArray<string>
@@ -3215,9 +3306,12 @@ export interface ExperimentalNexusApi<E = never> {
   readonly login: ExperimentalNexusLoginOperation<E>
   readonly account: ExperimentalNexusAccountOperation<E>
   readonly logout: ExperimentalNexusLogoutOperation<E>
+  readonly operator: ExperimentalNexusOperatorOperation<E>
+  readonly manage: ExperimentalNexusManageOperation<E>
   readonly catalog: ExperimentalNexusCatalogOperation<E>
   readonly runners: ExperimentalNexusRunnersOperation<E>
   readonly modes: ExperimentalNexusModesOperation<E>
+  readonly grant: ExperimentalNexusGrantOperation<E>
   readonly policy: ExperimentalNexusPolicyOperation<E>
 }
 
@@ -3657,6 +3751,24 @@ export type NexusLogoutOutput = ExperimentalNexusLogoutOutput
 /** @deprecated Use `ExperimentalNexusLogoutOperation`. Removed in the next minor. */
 export type NexusLogoutOperation<E = never> = ExperimentalNexusLogoutOperation<E>
 
+/** @deprecated Use `ExperimentalNexusOperatorInput`. Removed in the next minor. */
+export type NexusOperatorInput = ExperimentalNexusOperatorInput
+
+/** @deprecated Use `ExperimentalNexusOperatorOutput`. Removed in the next minor. */
+export type NexusOperatorOutput = ExperimentalNexusOperatorOutput
+
+/** @deprecated Use `ExperimentalNexusOperatorOperation`. Removed in the next minor. */
+export type NexusOperatorOperation<E = never> = ExperimentalNexusOperatorOperation<E>
+
+/** @deprecated Use `ExperimentalNexusManageInput`. Removed in the next minor. */
+export type NexusManageInput = ExperimentalNexusManageInput
+
+/** @deprecated Use `ExperimentalNexusManageOutput`. Removed in the next minor. */
+export type NexusManageOutput = ExperimentalNexusManageOutput
+
+/** @deprecated Use `ExperimentalNexusManageOperation`. Removed in the next minor. */
+export type NexusManageOperation<E = never> = ExperimentalNexusManageOperation<E>
+
 /** @deprecated Use `ExperimentalNexusCatalogInput`. Removed in the next minor. */
 export type NexusCatalogInput = ExperimentalNexusCatalogInput
 
@@ -3680,6 +3792,15 @@ export type NexusModesOutput = ExperimentalNexusModesOutput
 
 /** @deprecated Use `ExperimentalNexusModesOperation`. Removed in the next minor. */
 export type NexusModesOperation<E = never> = ExperimentalNexusModesOperation<E>
+
+/** @deprecated Use `ExperimentalNexusGrantInput`. Removed in the next minor. */
+export type NexusGrantInput = ExperimentalNexusGrantInput
+
+/** @deprecated Use `ExperimentalNexusGrantOutput`. Removed in the next minor. */
+export type NexusGrantOutput = ExperimentalNexusGrantOutput
+
+/** @deprecated Use `ExperimentalNexusGrantOperation`. Removed in the next minor. */
+export type NexusGrantOperation<E = never> = ExperimentalNexusGrantOperation<E>
 
 /** @deprecated Use `ExperimentalNexusPolicyInput`. Removed in the next minor. */
 export type NexusPolicyInput = ExperimentalNexusPolicyInput
@@ -3812,6 +3933,12 @@ export interface AppApi<E = never> {
     /** @deprecated Use `client.experimental.nexus.logout`. Removed in the next minor. */
     readonly logout: ExperimentalNexusLogoutOperation<E>
 
+    /** @deprecated Use `client.experimental.nexus.operator`. Removed in the next minor. */
+    readonly operator: ExperimentalNexusOperatorOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.manage`. Removed in the next minor. */
+    readonly manage: ExperimentalNexusManageOperation<E>
+
     /** @deprecated Use `client.experimental.nexus.catalog`. Removed in the next minor. */
     readonly catalog: ExperimentalNexusCatalogOperation<E>
 
@@ -3820,6 +3947,9 @@ export interface AppApi<E = never> {
 
     /** @deprecated Use `client.experimental.nexus.modes`. Removed in the next minor. */
     readonly modes: ExperimentalNexusModesOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.grant`. Removed in the next minor. */
+    readonly grant: ExperimentalNexusGrantOperation<E>
 
     /** @deprecated Use `client.experimental.nexus.policy`. Removed in the next minor. */
     readonly policy: ExperimentalNexusPolicyOperation<E>

@@ -15,6 +15,7 @@ import { FileWrite } from "./file-write.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
+import { Ripgrep } from "./ripgrep.js"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Generate } from "./generate.js"
 import { Voice } from "./voice.js"
@@ -84,6 +85,7 @@ const nodes = [
   InstancePlugins.node,
   PluginSupervisor.node,
   WorktreeStrategies.node,
+  Ripgrep.node,
   FileSystemSearch.node,
   FileSystem.node,
   ShellSelect.node,

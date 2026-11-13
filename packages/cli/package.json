@@ -33,6 +33,7 @@
     "@effect/platform-node": "catalog:",
     "@opencode/client": "workspace:*",
     "@opencode/core": "workspace:*",
+    "@opencode/nexus-runtime": "workspace:*",
     "@opencode/plugin": "workspace:*",
     "@opencode/pty": "0.5.2",
     "@opencode/schema": "workspace:*",

@@ -31,19 +31,19 @@ export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/O
   defaultValue: () => process.env.OPENCODE_FLAGS,
 })
 
-// Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident.
-const onByDefault = (channel: string) => channel === "local" || channel === "dev"
+declare const OPENCODE_BUILD_BRANCH: string
 
 /**
  * Resolves every flag: `OPENCODE_FLAGS` (`-key`, then `all`), then `experimental.<key>` from the highest-priority
  * document that sets `experimental` (the same document every other `experimental` setting reads), then `all_flags: true`
  * from the highest-priority document that sets `all_flags`, so a global switch survives a project's own `experimental`
- * block, then on for local and dev builds. `all_flags: false` falls through rather than turning flags off.
+ * block, then the build defaults. `all_flags: false` falls through rather than turning flags off.
  * A remote kill switch belongs above `OPENCODE_FLAGS` here.
  */
 export function resolve(input: {
   readonly entries: readonly Entry[]
   readonly channel: string
+  readonly branch?: string
   readonly overrides?: string
 }) {
   const env = new Map(
@@ -54,6 +54,8 @@ export function resolve(input: {
       .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
   )
   const all = env.get(ConfigFlag.wildcard) === true
+  const dev = input.channel === "local" || input.channel === "dev"
+  const ericDev = input.channel === "eric_dev" || input.branch === "eric_dev"
   const experimental = Config.latest(input.entries, "experimental")
   const allFlags =
     input.entries.findLast(
@@ -67,7 +69,7 @@ export function resolve(input: {
         ? [override, "env"]
         : configured !== undefined
           ? [configured, "config"]
-          : [onByDefault(input.channel), "default"]
+          : [dev || (ericDev && ConfigFlag.ericDevDefaults.has(key)), "default"]
     return { enabled, source }
   })
 }
@@ -78,7 +80,8 @@ export const layer = Layer.effect(
     const app = yield* App.Service
     const config = yield* Config.Service
     const overrides = yield* Overrides
-    const resolveEntries = (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, overrides })
+    const branch = typeof OPENCODE_BUILD_BRANCH === "string" ? OPENCODE_BUILD_BRANCH : undefined
+    const resolveEntries = (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, branch, overrides })
     const all = Effect.gen(function* () {
       return resolveEntries(yield* config.entries())
     })
