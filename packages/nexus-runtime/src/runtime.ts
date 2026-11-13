@@ -251,6 +251,26 @@ export class NexusRuntime {
                 { signal, idempotencyKey: settings.identifier.slice("opencode.".length) },
               )
             ).workspace
+        // Reading a workspace does not imply this agent may write to it.
+        if (workspace.dedicated) {
+          let after: string | undefined
+          do {
+            const page = await member.workspaces.list(
+              {
+                dedicated_to_current_agent: true,
+                state: ["archiving", "archived"].includes(workspace.state) ? "archived" : undefined,
+                after,
+              },
+              { signal },
+            )
+            if (page.items.some((item) => item.public_id === workspace.public_id)) break
+            after = page.next_after ?? undefined
+            if (!after)
+              throw new Error(
+                `Nexus workspace "${workspace.name}" is dedicated to another agent. Disconnect and pair OpenCode with a different workspace, or leave Workspace ID blank to create one.`,
+              )
+          } while (after)
+        }
         if (!settings.workspace) {
           settings = { ...settings, workspace: workspace.public_id }
           await atomic(join(this.storage, "settings.json"), settings)
