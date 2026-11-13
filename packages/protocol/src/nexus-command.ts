@@ -1,0 +1,75 @@
+import { Schema } from "effect"
+
+const Rule = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("once"), run_at: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("interval"), starts_at: Schema.String, every_seconds: Schema.Int }),
+  Schema.Struct({ kind: Schema.Literal("daily"), local_time: Schema.String, time_zone: Schema.String }),
+])
+export const NexusCommand = Schema.Union([
+  Schema.Struct({
+    action: Schema.Literal("schedule.create"),
+    conversation: Schema.String,
+    key: Schema.NonEmptyString,
+    prompt: Schema.String,
+    name: Schema.optional(Schema.String),
+    rule: Rule,
+  }),
+  Schema.Struct({
+    action: Schema.Literals([
+      "schedule.pause",
+      "schedule.resume",
+      "schedule.cancel",
+      "schedule.run",
+      "schedule.read",
+      "schedule.executions",
+    ]),
+    conversation: Schema.String,
+    id: Schema.String,
+  }),
+  Schema.Struct({
+    action: Schema.Literal("schedule.update"),
+    conversation: Schema.String,
+    id: Schema.String,
+    version: Schema.Int,
+    prompt: Schema.String,
+    rule: Rule,
+  }),
+  Schema.Struct({ action: Schema.Literal("memory.create"), name: Schema.String }),
+  Schema.Struct({
+    action: Schema.Literals(["memory.list", "memory.read", "memory.grep"]),
+    collection: Schema.String,
+    path: Schema.optional(Schema.String),
+    pattern: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("memory.write"),
+    collection: Schema.String,
+    path: Schema.String,
+    content: Schema.String,
+    id: Schema.NullOr(Schema.String),
+    version: Schema.NullOr(Schema.Int),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("memory.delete"),
+    collection: Schema.String,
+    path: Schema.String,
+    id: Schema.String,
+    version: Schema.Int,
+  }),
+  Schema.Struct({
+    action: Schema.Literals(["memory.archive", "memory.restore"]),
+    collection: Schema.String,
+    version: Schema.Int,
+  }),
+])
+
+export const NexusOperator = Schema.Struct({
+  workspace: Schema.String,
+  conversation: Schema.String,
+  runner: Schema.String,
+  receipt: Schema.NonEmptyString,
+  operation: Schema.Union([
+    Schema.Struct({ tool: Schema.Literal("files_bytes"), path: Schema.String }),
+    Schema.Struct({ tool: Schema.Literal("checkpoint_restore"), run: Schema.String, task: Schema.String }),
+  ]),
+})

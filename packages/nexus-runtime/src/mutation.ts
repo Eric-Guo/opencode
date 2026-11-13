@@ -13,7 +13,7 @@ const Edit = Schema.Struct({
 const limit = 65536
 
 // Resolve missing path components from the nearest existing parent before creating them.
-async function destination(root: string, file: string): Promise<string> {
+export async function destination(root: string, file: string): Promise<string> {
   const path = resolve(root, file)
   const info = await lstat(path).catch((cause: unknown) => {
     if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") return undefined
@@ -26,7 +26,20 @@ async function destination(root: string, file: string): Promise<string> {
   return target
 }
 
-export async function mutate(root: string, name: "edit" | "write", input: JsonObject, signal: AbortSignal) {
+export async function mutate(
+  root: string,
+  name: "edit" | "write",
+  input: JsonObject,
+  signal: AbortSignal,
+  checkpoint?: (change: {
+    kind: "file"
+    path: string
+    before: string | null
+    after: string
+    mode: number
+  }) => Promise<{ hash: string; store: string }>,
+  restoreMode?: number,
+) {
   signal.throwIfAborted()
   const request = name === "edit" ? Schema.decodeUnknownSync(Edit)(input) : Schema.decodeUnknownSync(Write)(input)
   const path = await destination(root, request.path)
@@ -43,13 +56,20 @@ export async function mutate(root: string, name: "edit" | "write", input: JsonOb
   const file = relative(root, path)
   const status = info ? "modified" : "added"
   const change = fileDiff(file, before, after, status)
+  const saved = await checkpoint?.({
+    kind: "file",
+    path: file,
+    before: info ? before : null,
+    after,
+    mode: info?.mode ?? 0o666 & ~process.umask(),
+  })
   if (!info || before !== after) {
     await mkdir(dirname(path), { recursive: true })
     const temporary = join(dirname(path), ".opencode-nexus-" + crypto.randomUUID())
     const handle = await open(temporary, "wx", info ? info.mode & 0o777 : 0o666)
     try {
       await handle.writeFile(after, { signal })
-      if (info) await handle.chmod(info.mode & 0o777)
+      if (info || restoreMode !== undefined) await handle.chmod((restoreMode ?? info!.mode) & 0o777)
       await handle.close()
       signal.throwIfAborted()
       await rename(temporary, path)
@@ -59,6 +79,7 @@ export async function mutate(root: string, name: "edit" | "write", input: JsonOb
     }
   }
   return {
+    ...(saved ? { metadata: { checkpoint: saved } } : {}),
     content: "Wrote " + Buffer.byteLength(after) + " bytes to " + file,
     structured_content: {
       root,

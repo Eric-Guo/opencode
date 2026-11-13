@@ -112,6 +112,7 @@ for (const target of targets) {
   const input = {
     version: Script.version,
     channel: Script.channel,
+    branch: Script.branch,
     highlights,
     modelsSnapshot,
     assetHash,

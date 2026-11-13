@@ -14,6 +14,7 @@ const Record = Schema.Struct({
       outcome: Schema.Literals(["completed", "failed"]),
       content: Schema.optional(Schema.MutableJson),
       structured_content: Schema.optional(Schema.MutableJson),
+      metadata: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
       is_error: Schema.optional(Schema.Boolean),
     }),
   ),
