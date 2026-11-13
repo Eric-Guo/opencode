@@ -18,20 +18,18 @@ export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/O
   defaultValue: () => process.env.OPENCODE_FLAGS,
 })
 
-// Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident.
-const onByDefault = (channel: string) => channel === "local" || channel === "dev"
-
 /**
  * Resolves every flag: `OPENCODE_FLAGS` (`key` or `-key`, then `all`), then `experimental.<key>` from the highest-priority
  * document that sets `experimental` (the same document every other `experimental` setting reads), then `all_flags: true`
  * from the highest-priority document that sets `all_flags`, so a global switch survives a project's own `experimental`
- * block, then on for local and dev builds. `all_flags: false` falls through rather than turning flags off.
+ * block, then the build defaults. `all_flags: false` falls through rather than turning flags off.
  * Opt-in-only flags skip both wildcards and default to off on every channel.
  * A remote kill switch belongs above `OPENCODE_FLAGS` here.
  */
 export function resolve(input: {
   readonly entries: readonly Entry[]
   readonly channel: string
+  readonly branch?: string
   readonly overrides?: string
 }) {
   const env = new Map(
@@ -42,6 +40,8 @@ export function resolve(input: {
       .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
   )
   const all = env.get(ConfigFlag.wildcard) === true
+  const dev = input.channel === "local" || input.channel === "dev"
+  const ericDev = input.channel === "eric_dev" || input.branch === "eric_dev"
   const experimental = input.entries.findLast(
     (entry): entry is Document => entry.type === "document" && entry.info.experimental !== undefined,
   )?.info.experimental
@@ -58,7 +58,7 @@ export function resolve(input: {
         ? [override, "env"]
         : configured !== undefined
           ? [configured, "config"]
-          : [!optInOnly && onByDefault(input.channel), "default"]
+          : [!optInOnly && (dev || (ericDev && ConfigFlag.ericDevDefaults.has(key))), "default"]
     return { enabled, source }
   })
 }
