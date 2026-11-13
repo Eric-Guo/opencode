@@ -8,6 +8,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { createComputed, createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from "solid-js"
 import { LinkedText } from "../../components/linked-text"
 import { useData } from "../../context"
+import { shellMessageMetadata } from "../../message/current-tool-state"
 import {
   createShellRunState,
   shellRunProps,
@@ -201,12 +202,7 @@ export function ShellMessage(props: {
       <ShellCard
         tool="shell"
         input={{ command: props.message.command }}
-        metadata={{
-          shellID: props.message.shellID,
-          status: props.message.status,
-          exit: props.message.exit,
-          truncated: props.message.output?.truncated,
-        }}
+        metadata={shellMessageMetadata(props.message)}
         output={props.message.output?.output}
         status={props.message.status === "running" ? "running" : "completed"}
         open={props.open}
