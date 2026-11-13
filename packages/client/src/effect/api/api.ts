@@ -3091,6 +3091,136 @@ export interface DebugApi<E = never> {
   }
 }
 
+export type ExperimentalNexusStatusOutput = {
+  readonly origin: string
+  readonly model: string
+  readonly workspace: string
+  readonly directory: string
+  readonly state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
+  readonly identity?:
+    | {
+        readonly agent: string
+        readonly name: string
+        readonly runner: string
+        readonly workspace: string
+        readonly workspaceName: string
+      }
+    | undefined
+  readonly pairing?: { readonly code: string; readonly url: string } | undefined
+  readonly error?: string | undefined
+}
+export type ExperimentalNexusStatusOperation<E = never> = () => Effect.Effect<ExperimentalNexusStatusOutput, E>
+
+export type ExperimentalNexusPairInput = {
+  readonly origin: string
+  readonly model: string
+  readonly workspace: string
+  readonly directory: string
+}
+export type ExperimentalNexusPairOutput = {
+  readonly origin: string
+  readonly model: string
+  readonly workspace: string
+  readonly directory: string
+  readonly state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
+  readonly identity?:
+    | {
+        readonly agent: string
+        readonly name: string
+        readonly runner: string
+        readonly workspace: string
+        readonly workspaceName: string
+      }
+    | undefined
+  readonly pairing?: { readonly code: string; readonly url: string } | undefined
+  readonly error?: string | undefined
+}
+export type ExperimentalNexusPairOperation<E = never> = (
+  input: ExperimentalNexusPairInput,
+) => Effect.Effect<ExperimentalNexusPairOutput, E>
+
+export type ExperimentalNexusDisconnectOutput = {
+  readonly origin: string
+  readonly model: string
+  readonly workspace: string
+  readonly directory: string
+  readonly state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
+  readonly identity?:
+    | {
+        readonly agent: string
+        readonly name: string
+        readonly runner: string
+        readonly workspace: string
+        readonly workspaceName: string
+      }
+    | undefined
+  readonly pairing?: { readonly code: string; readonly url: string } | undefined
+  readonly error?: string | undefined
+}
+export type ExperimentalNexusDisconnectOperation<E = never> = () => Effect.Effect<ExperimentalNexusDisconnectOutput, E>
+
+export type ExperimentalNexusLoginOutput = { readonly url: string }
+export type ExperimentalNexusLoginOperation<E = never> = () => Effect.Effect<ExperimentalNexusLoginOutput, E>
+
+export type ExperimentalNexusAccountOutput = { readonly id: string; readonly role: string } | null
+export type ExperimentalNexusAccountOperation<E = never> = () => Effect.Effect<ExperimentalNexusAccountOutput, E>
+
+export type ExperimentalNexusLogoutOutput = void
+export type ExperimentalNexusLogoutOperation<E = never> = () => Effect.Effect<ExperimentalNexusLogoutOutput, E>
+
+export type ExperimentalNexusCatalogInput = {
+  readonly kind: "schedules" | "memory" | "mcp"
+  readonly after?: string | undefined
+}
+export type ExperimentalNexusCatalogOutput = {
+  readonly items: ReadonlyArray<{
+    readonly id: string
+    readonly name: string
+    readonly state: string
+    readonly detail: string | null
+  }>
+  readonly next: string | null
+}
+export type ExperimentalNexusCatalogOperation<E = never> = (
+  input: ExperimentalNexusCatalogInput,
+) => Effect.Effect<ExperimentalNexusCatalogOutput, E>
+
+export type ExperimentalNexusRunnersOutput = ReadonlyArray<{ readonly id: string; readonly name: string }>
+export type ExperimentalNexusRunnersOperation<E = never> = () => Effect.Effect<ExperimentalNexusRunnersOutput, E>
+
+export type ExperimentalNexusModesInput = {
+  readonly workspace: string
+  readonly conversation: string
+  readonly patch?: { readonly code_mode?: boolean | undefined; readonly subagent?: boolean | undefined } | undefined
+}
+export type ExperimentalNexusModesOutput = { readonly code_mode: boolean; readonly subagent: boolean }
+export type ExperimentalNexusModesOperation<E = never> = (
+  input: ExperimentalNexusModesInput,
+) => Effect.Effect<ExperimentalNexusModesOutput, E>
+
+export type ExperimentalNexusPolicyInput = { readonly workspace: string; readonly conversation: string }
+export type ExperimentalNexusPolicyOutput = {
+  readonly tools: ReadonlyArray<string>
+  readonly directory: string | null
+  readonly runner: string | null
+}
+export type ExperimentalNexusPolicyOperation<E = never> = (
+  input: ExperimentalNexusPolicyInput,
+) => Effect.Effect<ExperimentalNexusPolicyOutput, E>
+
+export interface ExperimentalNexusApi<E = never> {
+  readonly status: ExperimentalNexusStatusOperation<E>
+  readonly pair: ExperimentalNexusPairOperation<E>
+  readonly disconnect: ExperimentalNexusDisconnectOperation<E>
+  readonly login: ExperimentalNexusLoginOperation<E>
+  readonly account: ExperimentalNexusAccountOperation<E>
+  readonly logout: ExperimentalNexusLogoutOperation<E>
+  readonly catalog: ExperimentalNexusCatalogOperation<E>
+  readonly runners: ExperimentalNexusRunnersOperation<E>
+  readonly modes: ExperimentalNexusModesOperation<E>
+  readonly policy: ExperimentalNexusPolicyOperation<E>
+}
+
 export type ExperimentalMigrationV1StatusOutput =
   | { readonly status: "required" | "completed" }
   | {
@@ -3488,6 +3618,78 @@ export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
 /** @deprecated Use `ExperimentalFileUnwatchOperation`. Removed in the next minor. */
 export type FileUnwatchOperation<E = never> = ExperimentalFileUnwatchOperation<E>
 
+/** @deprecated Use `ExperimentalNexusStatusOutput`. Removed in the next minor. */
+export type NexusStatusOutput = ExperimentalNexusStatusOutput
+
+/** @deprecated Use `ExperimentalNexusStatusOperation`. Removed in the next minor. */
+export type NexusStatusOperation<E = never> = ExperimentalNexusStatusOperation<E>
+
+/** @deprecated Use `ExperimentalNexusPairInput`. Removed in the next minor. */
+export type NexusPairInput = ExperimentalNexusPairInput
+
+/** @deprecated Use `ExperimentalNexusPairOutput`. Removed in the next minor. */
+export type NexusPairOutput = ExperimentalNexusPairOutput
+
+/** @deprecated Use `ExperimentalNexusPairOperation`. Removed in the next minor. */
+export type NexusPairOperation<E = never> = ExperimentalNexusPairOperation<E>
+
+/** @deprecated Use `ExperimentalNexusDisconnectOutput`. Removed in the next minor. */
+export type NexusDisconnectOutput = ExperimentalNexusDisconnectOutput
+
+/** @deprecated Use `ExperimentalNexusDisconnectOperation`. Removed in the next minor. */
+export type NexusDisconnectOperation<E = never> = ExperimentalNexusDisconnectOperation<E>
+
+/** @deprecated Use `ExperimentalNexusLoginOutput`. Removed in the next minor. */
+export type NexusLoginOutput = ExperimentalNexusLoginOutput
+
+/** @deprecated Use `ExperimentalNexusLoginOperation`. Removed in the next minor. */
+export type NexusLoginOperation<E = never> = ExperimentalNexusLoginOperation<E>
+
+/** @deprecated Use `ExperimentalNexusAccountOutput`. Removed in the next minor. */
+export type NexusAccountOutput = ExperimentalNexusAccountOutput
+
+/** @deprecated Use `ExperimentalNexusAccountOperation`. Removed in the next minor. */
+export type NexusAccountOperation<E = never> = ExperimentalNexusAccountOperation<E>
+
+/** @deprecated Use `ExperimentalNexusLogoutOutput`. Removed in the next minor. */
+export type NexusLogoutOutput = ExperimentalNexusLogoutOutput
+
+/** @deprecated Use `ExperimentalNexusLogoutOperation`. Removed in the next minor. */
+export type NexusLogoutOperation<E = never> = ExperimentalNexusLogoutOperation<E>
+
+/** @deprecated Use `ExperimentalNexusCatalogInput`. Removed in the next minor. */
+export type NexusCatalogInput = ExperimentalNexusCatalogInput
+
+/** @deprecated Use `ExperimentalNexusCatalogOutput`. Removed in the next minor. */
+export type NexusCatalogOutput = ExperimentalNexusCatalogOutput
+
+/** @deprecated Use `ExperimentalNexusCatalogOperation`. Removed in the next minor. */
+export type NexusCatalogOperation<E = never> = ExperimentalNexusCatalogOperation<E>
+
+/** @deprecated Use `ExperimentalNexusRunnersOutput`. Removed in the next minor. */
+export type NexusRunnersOutput = ExperimentalNexusRunnersOutput
+
+/** @deprecated Use `ExperimentalNexusRunnersOperation`. Removed in the next minor. */
+export type NexusRunnersOperation<E = never> = ExperimentalNexusRunnersOperation<E>
+
+/** @deprecated Use `ExperimentalNexusModesInput`. Removed in the next minor. */
+export type NexusModesInput = ExperimentalNexusModesInput
+
+/** @deprecated Use `ExperimentalNexusModesOutput`. Removed in the next minor. */
+export type NexusModesOutput = ExperimentalNexusModesOutput
+
+/** @deprecated Use `ExperimentalNexusModesOperation`. Removed in the next minor. */
+export type NexusModesOperation<E = never> = ExperimentalNexusModesOperation<E>
+
+/** @deprecated Use `ExperimentalNexusPolicyInput`. Removed in the next minor. */
+export type NexusPolicyInput = ExperimentalNexusPolicyInput
+
+/** @deprecated Use `ExperimentalNexusPolicyOutput`. Removed in the next minor. */
+export type NexusPolicyOutput = ExperimentalNexusPolicyOutput
+
+/** @deprecated Use `ExperimentalNexusPolicyOperation`. Removed in the next minor. */
+export type NexusPolicyOperation<E = never> = ExperimentalNexusPolicyOperation<E>
+
 /** @deprecated Use `ExperimentalMigrationV1StatusOutput`. Removed in the next minor. */
 export type MigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput
 
@@ -3518,6 +3720,9 @@ export type GenerateApi<E = never> = ExperimentalGenerateApi<E>
 /** @deprecated Use `ExperimentalVoiceApi`. Removed in the next minor. */
 export type VoiceApi<E = never> = ExperimentalVoiceApi<E>
 
+/** @deprecated Use `ExperimentalNexusApi`. Removed in the next minor. */
+export type NexusApi<E = never> = ExperimentalNexusApi<E>
+
 /** @deprecated Use `ExperimentalMigrationApi`. Removed in the next minor. */
 export type MigrationApi<E = never> = ExperimentalMigrationApi<E>
 
@@ -3537,6 +3742,7 @@ export interface AppApi<E = never> {
     readonly integration: ExperimentalIntegrationApi<E>
     readonly mcp: ExperimentalMcpApi<E>
     readonly file: ExperimentalFileApi<E>
+    readonly nexus: ExperimentalNexusApi<E>
     readonly migration: ExperimentalMigrationApi<E>
     readonly usage: ExperimentalUsageApi<E>
     readonly config: ExperimentalConfigApi<E>
@@ -3584,6 +3790,39 @@ export interface AppApi<E = never> {
 
     /** @deprecated Use `client.experimental.voice.session`. Removed in the next minor. */
     readonly session: ExperimentalVoiceSessionOperation<E>
+  }
+
+  /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
+  readonly nexus: {
+    /** @deprecated Use `client.experimental.nexus.status`. Removed in the next minor. */
+    readonly status: ExperimentalNexusStatusOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.pair`. Removed in the next minor. */
+    readonly pair: ExperimentalNexusPairOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.disconnect`. Removed in the next minor. */
+    readonly disconnect: ExperimentalNexusDisconnectOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.login`. Removed in the next minor. */
+    readonly login: ExperimentalNexusLoginOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.account`. Removed in the next minor. */
+    readonly account: ExperimentalNexusAccountOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.logout`. Removed in the next minor. */
+    readonly logout: ExperimentalNexusLogoutOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.catalog`. Removed in the next minor. */
+    readonly catalog: ExperimentalNexusCatalogOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.runners`. Removed in the next minor. */
+    readonly runners: ExperimentalNexusRunnersOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.modes`. Removed in the next minor. */
+    readonly modes: ExperimentalNexusModesOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.policy`. Removed in the next minor. */
+    readonly policy: ExperimentalNexusPolicyOperation<E>
   }
 
   /** @deprecated Use `client.experimental.migration`. Removed in the next minor. */

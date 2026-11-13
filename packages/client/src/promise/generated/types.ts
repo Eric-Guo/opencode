@@ -2548,6 +2548,7 @@ export type ConfigEntry =
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
           all_flags?: boolean
+          nexus_runtime?: boolean
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
@@ -5032,6 +5033,76 @@ export type DebugAgentExecuteToolInput = {
 
 export type DebugAgentExecuteToolOutput = { location: LocationPublicRef; data: AgentToolResult }
 
+export type ExperimentalNexusStatusOutput = {
+  origin: string
+  model: string
+  workspace: string
+  directory: string
+  state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
+  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string } | undefined
+  pairing?: { code: string; url: string } | undefined
+  error?: string | undefined
+}
+
+export type ExperimentalNexusPairInput = {
+  readonly origin: string
+  readonly model: string
+  readonly workspace: string
+  readonly directory: string
+}
+
+export type ExperimentalNexusPairOutput = {
+  origin: string
+  model: string
+  workspace: string
+  directory: string
+  state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
+  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string } | undefined
+  pairing?: { code: string; url: string } | undefined
+  error?: string | undefined
+}
+
+export type ExperimentalNexusDisconnectOutput = {
+  origin: string
+  model: string
+  workspace: string
+  directory: string
+  state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
+  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string } | undefined
+  pairing?: { code: string; url: string } | undefined
+  error?: string | undefined
+}
+
+export type ExperimentalNexusLoginOutput = { url: string }
+
+export type ExperimentalNexusAccountOutput = { id: string; role: string } | null
+
+export type ExperimentalNexusLogoutOutput = void
+
+export type ExperimentalNexusCatalogInput = {
+  readonly kind: "schedules" | "memory" | "mcp"
+  readonly after?: string | undefined
+}
+
+export type ExperimentalNexusCatalogOutput = {
+  items: Array<{ id: string; name: string; state: string; detail: string | null }>
+  next: string | null
+}
+
+export type ExperimentalNexusRunnersOutput = Array<{ id: string; name: string }>
+
+export type ExperimentalNexusModesInput = {
+  readonly workspace: string
+  readonly conversation: string
+  readonly patch?: { readonly code_mode?: boolean | undefined; readonly subagent?: boolean | undefined } | undefined
+}
+
+export type ExperimentalNexusModesOutput = { code_mode: boolean; subagent: boolean }
+
+export type ExperimentalNexusPolicyInput = { readonly workspace: string; readonly conversation: string }
+
+export type ExperimentalNexusPolicyOutput = { tools: Array<string>; directory: string | null; runner: string | null }
+
 export type ExperimentalMigrationV1StatusOutput =
   | { status: "required" | "completed" }
   | { status: "running"; progress: { label: string; numerator?: number | undefined; denominator?: number | undefined } }
@@ -5237,6 +5308,48 @@ export type FileUnwatchInput = ExperimentalFileUnwatchInput
 
 /** @deprecated Use `ExperimentalFileUnwatchOutput`. Removed in the next minor. */
 export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
+
+/** @deprecated Use `ExperimentalNexusStatusOutput`. Removed in the next minor. */
+export type NexusStatusOutput = ExperimentalNexusStatusOutput
+
+/** @deprecated Use `ExperimentalNexusPairInput`. Removed in the next minor. */
+export type NexusPairInput = ExperimentalNexusPairInput
+
+/** @deprecated Use `ExperimentalNexusPairOutput`. Removed in the next minor. */
+export type NexusPairOutput = ExperimentalNexusPairOutput
+
+/** @deprecated Use `ExperimentalNexusDisconnectOutput`. Removed in the next minor. */
+export type NexusDisconnectOutput = ExperimentalNexusDisconnectOutput
+
+/** @deprecated Use `ExperimentalNexusLoginOutput`. Removed in the next minor. */
+export type NexusLoginOutput = ExperimentalNexusLoginOutput
+
+/** @deprecated Use `ExperimentalNexusAccountOutput`. Removed in the next minor. */
+export type NexusAccountOutput = ExperimentalNexusAccountOutput
+
+/** @deprecated Use `ExperimentalNexusLogoutOutput`. Removed in the next minor. */
+export type NexusLogoutOutput = ExperimentalNexusLogoutOutput
+
+/** @deprecated Use `ExperimentalNexusCatalogInput`. Removed in the next minor. */
+export type NexusCatalogInput = ExperimentalNexusCatalogInput
+
+/** @deprecated Use `ExperimentalNexusCatalogOutput`. Removed in the next minor. */
+export type NexusCatalogOutput = ExperimentalNexusCatalogOutput
+
+/** @deprecated Use `ExperimentalNexusRunnersOutput`. Removed in the next minor. */
+export type NexusRunnersOutput = ExperimentalNexusRunnersOutput
+
+/** @deprecated Use `ExperimentalNexusModesInput`. Removed in the next minor. */
+export type NexusModesInput = ExperimentalNexusModesInput
+
+/** @deprecated Use `ExperimentalNexusModesOutput`. Removed in the next minor. */
+export type NexusModesOutput = ExperimentalNexusModesOutput
+
+/** @deprecated Use `ExperimentalNexusPolicyInput`. Removed in the next minor. */
+export type NexusPolicyInput = ExperimentalNexusPolicyInput
+
+/** @deprecated Use `ExperimentalNexusPolicyOutput`. Removed in the next minor. */
+export type NexusPolicyOutput = ExperimentalNexusPolicyOutput
 
 /** @deprecated Use `ExperimentalMigrationV1StatusOutput`. Removed in the next minor. */
 export type MigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput
