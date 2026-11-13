@@ -5079,6 +5079,82 @@ export type ExperimentalNexusAccountOutput = { id: string; role: string } | null
 
 export type ExperimentalNexusLogoutOutput = void
 
+export type ExperimentalNexusOperatorInput = {
+  readonly workspace: string
+  readonly conversation: string
+  readonly runner: string
+  readonly receipt: string
+  readonly operation:
+    | { readonly tool: "files_bytes"; readonly path: string }
+    | { readonly tool: "checkpoint_restore"; readonly run: string; readonly task: string }
+}
+
+export type ExperimentalNexusOperatorOutput = { upload: string | null }
+
+export type ExperimentalNexusManageInput = {
+  readonly "x-nexus-origin"?: string | undefined
+  readonly "x-nexus-member-token"?: string | undefined
+  readonly payload:
+    | {
+        readonly action: "schedule.create"
+        readonly conversation: string
+        readonly key: string
+        readonly prompt: string
+        readonly name?: string | undefined
+        readonly rule:
+          | { readonly kind: "once"; readonly run_at: string }
+          | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
+          | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
+      }
+    | {
+        readonly action:
+          | "schedule.pause"
+          | "schedule.resume"
+          | "schedule.cancel"
+          | "schedule.run"
+          | "schedule.read"
+          | "schedule.executions"
+        readonly conversation: string
+        readonly id: string
+      }
+    | {
+        readonly action: "schedule.update"
+        readonly conversation: string
+        readonly id: string
+        readonly version: number
+        readonly prompt: string
+        readonly rule:
+          | { readonly kind: "once"; readonly run_at: string }
+          | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
+          | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
+      }
+    | { readonly action: "memory.create"; readonly name: string }
+    | {
+        readonly action: "memory.list" | "memory.read" | "memory.grep"
+        readonly collection: string
+        readonly path?: string | undefined
+        readonly pattern?: string | undefined
+      }
+    | {
+        readonly action: "memory.write"
+        readonly collection: string
+        readonly path: string
+        readonly content: string
+        readonly id: string | null
+        readonly version: number | null
+      }
+    | {
+        readonly action: "memory.delete"
+        readonly collection: string
+        readonly path: string
+        readonly id: string
+        readonly version: number
+      }
+    | { readonly action: "memory.archive" | "memory.restore"; readonly collection: string; readonly version: number }
+}
+
+export type ExperimentalNexusManageOutput = JsonValue
+
 export type ExperimentalNexusCatalogInput = {
   readonly kind: "schedules" | "memory" | "mcp"
   readonly after?: string | undefined
@@ -5098,6 +5174,15 @@ export type ExperimentalNexusModesInput = {
 }
 
 export type ExperimentalNexusModesOutput = { code_mode: boolean; subagent: boolean }
+
+export type ExperimentalNexusGrantInput = {
+  readonly workspace: string
+  readonly conversation: string
+  readonly run: string
+  readonly task: string
+}
+
+export type ExperimentalNexusGrantOutput = void
 
 export type ExperimentalNexusPolicyInput = { readonly workspace: string; readonly conversation: string }
 
@@ -5330,6 +5415,18 @@ export type NexusAccountOutput = ExperimentalNexusAccountOutput
 /** @deprecated Use `ExperimentalNexusLogoutOutput`. Removed in the next minor. */
 export type NexusLogoutOutput = ExperimentalNexusLogoutOutput
 
+/** @deprecated Use `ExperimentalNexusOperatorInput`. Removed in the next minor. */
+export type NexusOperatorInput = ExperimentalNexusOperatorInput
+
+/** @deprecated Use `ExperimentalNexusOperatorOutput`. Removed in the next minor. */
+export type NexusOperatorOutput = ExperimentalNexusOperatorOutput
+
+/** @deprecated Use `ExperimentalNexusManageInput`. Removed in the next minor. */
+export type NexusManageInput = ExperimentalNexusManageInput
+
+/** @deprecated Use `ExperimentalNexusManageOutput`. Removed in the next minor. */
+export type NexusManageOutput = ExperimentalNexusManageOutput
+
 /** @deprecated Use `ExperimentalNexusCatalogInput`. Removed in the next minor. */
 export type NexusCatalogInput = ExperimentalNexusCatalogInput
 
@@ -5344,6 +5441,12 @@ export type NexusModesInput = ExperimentalNexusModesInput
 
 /** @deprecated Use `ExperimentalNexusModesOutput`. Removed in the next minor. */
 export type NexusModesOutput = ExperimentalNexusModesOutput
+
+/** @deprecated Use `ExperimentalNexusGrantInput`. Removed in the next minor. */
+export type NexusGrantInput = ExperimentalNexusGrantInput
+
+/** @deprecated Use `ExperimentalNexusGrantOutput`. Removed in the next minor. */
+export type NexusGrantOutput = ExperimentalNexusGrantOutput
 
 /** @deprecated Use `ExperimentalNexusPolicyInput`. Removed in the next minor. */
 export type NexusPolicyInput = ExperimentalNexusPolicyInput

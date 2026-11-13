@@ -1,13 +1,27 @@
-import { Client, DeviceFlow, ExecutorClient, OAuthCredentials, Toolsets, type CredentialStore } from "@cybros/agent"
+import {
+  Client,
+  DeviceFlow,
+  ExecutorClient,
+  OAuthCredentials,
+  Toolsets,
+  type AgentConfigurationInput,
+  type CredentialStore,
+  type JsonObject,
+} from "@cybros/agent"
 import { RealtimeClient } from "@cybros/agent/realtime"
 import { mkdir, readFile, realpath, stat } from "node:fs/promises"
-import { isAbsolute, join, relative, sep } from "node:path"
+import { isAbsolute, join, relative, sep, win32, posix } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
+import type { NexusCommand, NexusOperator } from "@opencode/protocol/nexus-command"
 import { Schema } from "effect"
 import { atomic, missing, vault } from "./storage"
 import type { HostTools } from "./host"
 export { hostTools } from "./host"
+import { loadExtensions, type RunnerTool } from "./extensions"
+import { Checkpoints } from "./checkpoints"
+export type { NexusExtension, RunnerTool, RunnerContext } from "./extensions"
 import { ClaimJournal } from "./claims"
+import { webSite } from "./web"
 import { HumanLogin } from "./login"
 import { readEffect, serveInbox, tools } from "./runner"
 
@@ -24,7 +38,12 @@ const Settings = Schema.Struct({
 type Settings = typeof Settings.Type
 type Identity = { agent: string; name: string; runner: string; workspace: string; workspaceName: string }
 type Pairing = { code: string; url: string }
-type Connection = { member: Client; candidates: ReadonlySet<string>; identity: Identity }
+type Connection = {
+  configuration: AgentConfigurationInput
+  member: Client
+  candidates: ReadonlySet<string>
+  identity: Identity
+}
 
 export type Status = {
   state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
@@ -46,6 +65,8 @@ export class NexusRuntime {
   private pending?: Promise<Status>
   private settings?: Settings
   private connection?: Connection
+  private readonly sites = new Set<string>()
+  private declaring = Promise.resolve()
   private credentials?: OAuthCredentials
   private statusValue: Status = { state: "unpaired", origin: "", model: "", directory: "", workspace: "" }
 
@@ -190,7 +211,22 @@ export class NexusRuntime {
     const member = new Client({ baseURL: settings.origin, credentialProvider: credentials.provider("member") })
     const options = { baseURL: settings.origin, credentialProvider: credentials.provider("executor") }
     const executor = new ExecutorClient(options)
-    const availableTools = tools.filter((tool) => this.host || (tool.name !== "bash" && tool.name !== "find"))
+    const extensions = await loadExtensions(settings.directory, signal, this.host)
+    const availableTools = [
+      ...tools.filter((tool) => this.host || !["bash", "find", "grep"].includes(tool.name)),
+      ...extensions.map((tool) => tool.definition),
+    ]
+    const hidden = [
+      { name: "files_bytes", effect_profile: readEffect },
+      { name: "checkpoints", effect_profile: readEffect },
+      {
+        name: "checkpoint_restore",
+        effect_profile: { ...readEffect, kind: "write" as const, destructive: true, idempotency: "none" as const },
+      },
+    ]
+    const names = [...availableTools, ...hidden].map((tool) => tool.name)
+    if (new Set(names).size !== names.length) throw new Error("Nexus extensions must provide unique tool names.")
+    const checkpoints = new Checkpoints(join(this.storage, "checkpoints", settings.identifier), settings.directory)
     const journal = new ClaimJournal(join(this.storage, "claims", settings.identifier))
     while (!signal.aborted) {
       try {
@@ -199,7 +235,7 @@ export class NexusRuntime {
             services: {
               agent: { tools: [] },
               runner: {
-                tools: [...availableTools, { name: "files_bytes", effect_profile: readEffect }],
+                tools: [...availableTools, ...hidden],
                 environment: { root: settings.directory },
               },
             },
@@ -230,16 +266,35 @@ export class NexusRuntime {
           "schedules",
         ).filter((name) => available.has(name))
         const candidates = await member.executors.list({ role: "runner" }, { signal })
+        const imports = process.env.OPENCODE_NEXUS_MCP_IMPORTS
+        const configuration: AgentConfigurationInput = {
+          ...(imports
+            ? {
+                mcp_tools: Schema.decodeUnknownSync(
+                  Schema.fromJsonString(
+                    Schema.mutable(
+                      Schema.Array(
+                        Schema.Struct({
+                          name: Schema.String,
+                          tool_name: Schema.String,
+                          connection_public_id: Schema.String,
+                        }),
+                      ),
+                    ),
+                  ),
+                )(imports),
+              }
+            : {}),
+          default_model: settings.model,
+          approval_mode: "ask",
+          prompt_mechanism: "default",
+          kernel_tools: kernel,
+          runner_executor_public_ids: [...new Set([runner, ...candidates.map((row) => row.public_id)])],
+          runner_tool_names: availableTools.map((tool) => tool.name),
+        }
         const profile = await member.profile.declareConfiguration(
           {
-            configuration: {
-              default_model: settings.model,
-              approval_mode: "ask",
-              prompt_mechanism: "default",
-              kernel_tools: kernel,
-              runner_executor_public_ids: [...new Set([runner, ...candidates.map((row) => row.public_id)])],
-              runner_tool_names: availableTools.map((tool) => tool.name),
-            },
+            configuration: { ...configuration, approval_rules: this.siteRules() },
           },
           { signal },
         )
@@ -250,9 +305,60 @@ export class NexusRuntime {
           workspace: workspace.public_id,
           workspaceName: workspace.name,
         }
-        this.connection = { member, candidates: new Set([runner, ...candidates.map((row) => row.public_id)]), identity }
+        this.connection = {
+          member,
+          configuration,
+          candidates: new Set([runner, ...candidates.map((row) => row.public_id)]),
+          identity,
+        }
         this.statusValue = { ...this.view("ready"), identity }
-        await this.listen(options, executor, runner, settings.directory, journal, signal)
+        const ingress = new AbortController()
+        const token = process.env.OPENCODE_NEXUS_TELEGRAM_TOKEN
+        const chats = process.env.OPENCODE_NEXUS_TELEGRAM_CHATS?.split(",")
+          .map((id) => id.trim())
+          .filter(Boolean)
+        const bot =
+          token && chats?.length
+            ? (async () => {
+                const { telegram } = await import("./telegram")
+                await telegram({
+                  token,
+                  chats,
+                  member,
+                  workspace: workspace.public_id,
+                  agent: identity.agent,
+                  runner,
+                  directory: settings.directory,
+                  file: join(
+                    this.storage,
+                    "telegram-" + settings.identifier + "-" + token.split(":")[0].replace(/[^0-9]/g, "") + ".json",
+                  ),
+                  signal: AbortSignal.any([signal, ingress.signal]),
+                })
+              })()
+            : undefined
+        try {
+          const inbox = this.listen(
+            options,
+            executor,
+            runner,
+            settings.directory,
+            journal,
+            AbortSignal.any([signal, ingress.signal]),
+            checkpoints,
+            extensions,
+          )
+          if (bot) {
+            try {
+              await Promise.race([inbox, bot])
+            } finally {
+              ingress.abort()
+              await Promise.allSettled([inbox, bot])
+            }
+          } else await inbox
+        } finally {
+          ingress.abort()
+        }
       } catch (cause) {
         this.connection = undefined
         this.failed(cause)
@@ -269,6 +375,8 @@ export class NexusRuntime {
     directory: string,
     journal: ClaimJournal,
     signal: AbortSignal,
+    checkpoints: Checkpoints,
+    extensions: readonly RunnerTool[],
   ) {
     await journal.recover(executor, signal)
     const socket = new RealtimeClient(options)
@@ -288,14 +396,27 @@ export class NexusRuntime {
         await delay(5000, undefined, { signal: active })
       }
     })().catch(() => {})
+    const programs = new Set<Promise<void>>()
+    let failure: unknown
+    const background = (work: Promise<void>) => {
+      programs.add(work)
+      void work
+        .catch((error) => {
+          failure = error
+          owner.abort()
+        })
+        .finally(() => programs.delete(work))
+    }
     try {
-      while (!signal.aborted) {
+      while (!active.aborted) {
         wake = new AbortController()
-        await serveInbox(executor, id, directory, journal, signal, this.host)
+        await serveInbox(executor, id, directory, journal, active, background, this.host, checkpoints, extensions)
         await delay(5000, undefined, { signal: AbortSignal.any([active, wake.signal]) }).catch(() => {})
       }
+      if (failure) throw failure
     } finally {
       owner.abort()
+      await Promise.allSettled(programs)
       await socket.close()
       await notifications
     }
@@ -378,6 +499,140 @@ export class NexusRuntime {
     return { tools: selected, directory, runner }
   }
 
+  async operator(input: typeof NexusOperator.Type) {
+    const active = this.connection
+    if (!active || input.workspace !== active.identity.workspace) throw new Error("Unknown paired workspace.")
+    const workspace = active.member.workspace(input.workspace)
+    const chat = await workspace.conversation(input.conversation).fetch()
+    if (chat.side || chat.answering_user_public_id !== active.identity.agent || !active.candidates.has(input.runner))
+      throw new Error("Unknown conversation or runner.")
+    const operation = input.operation
+    const args = await (async (): Promise<JsonObject> => {
+      if (operation.tool === "files_bytes") {
+        if (chat.default_runner?.executor_public_id !== input.runner) throw new Error("The runner binding changed.")
+        const root = (await active.member.executors.fetch(input.runner)).services.runner?.environment.root
+        if (typeof root !== "string" || !root) throw new Error("Unknown runner directory.")
+        const paths = /^[a-z]:[\\/]|^\\\\/i.test(root) ? win32 : posix
+        const path = paths.resolve(root, operation.path)
+        const rel = paths.relative(root, path)
+        if (!rel || paths.isAbsolute(rel) || rel.split(paths.sep).some((part) => part.startsWith(".")))
+          throw new Error("Select a visible file inside the runner directory.")
+        return { path }
+      }
+      if (chat.archived_at || input.runner !== active.identity.runner)
+        throw new Error("This checkpoint is unavailable.")
+      const run = workspace.run(operation.run)
+      const info = await run.fetch()
+      if (info.turn?.conversation_public_id !== chat.public_id) throw new Error("Unknown conversation run.")
+      const detail = await run.task(operation.task).fetch()
+      if (
+        detail.task.target?.executor_public_id !== input.runner ||
+        detail.task.status !== "completed" ||
+        !["write", "edit", "bash"].includes(detail.task.tool_name ?? "")
+      )
+        throw new Error("Unknown local change.")
+      const checkpoint = Schema.decodeUnknownSync(Schema.Struct({ hash: Schema.String, store: Schema.String }))(
+        detail.metadata?.checkpoint,
+      )
+      return { checkpoint: checkpoint.hash, store: checkpoint.store }
+    })()
+    // An operator run is addressed by its creator. The paired agent owns its private runner.
+    const run = await workspace.runs.startToolCall(
+      { runner_executor_public_id: input.runner, tool: operation.tool, input: args, timeout_ms: 30000 },
+      { idempotencyKey: input.receipt },
+    )
+    const result = await run.waitForToolResult({ patienceMs: 35000 })
+    if (result.task.status !== "completed" || result.task.result?.is_error)
+      throw new Error(result.output || "Runner operation failed.")
+    if (operation.tool === "checkpoint_restore") return { upload: null }
+    for (const block of Array.isArray(result.content) ? result.content : []) {
+      if (
+        block &&
+        typeof block === "object" &&
+        !Array.isArray(block) &&
+        block.type === "resource_link" &&
+        typeof block.uri === "string" &&
+        block.uri.startsWith("nexus://uploads/")
+      )
+        return { upload: block.uri.slice("nexus://uploads/".length) }
+    }
+    throw new Error("Runner file unavailable.")
+  }
+
+  async manage(command: typeof NexusCommand.Type, origin?: string, token?: string) {
+    const active = this.connection
+    if (!active || !this.settings) throw new Error("Nexus is disconnected.")
+    if (token && origin !== this.settings.origin)
+      throw new Error("The Human credential requires the paired Nexus origin.")
+    const member = token ? new Client({ baseURL: this.settings.origin, credential: token }) : active.member
+    if (token && (await member.profile.fetch()).member.kind !== "human") throw new Error("Use a Human member token.")
+    const workspace = member.workspace(active.identity.workspace)
+    if ("conversation" in command) {
+      const chat = workspace.conversation(command.conversation)
+      const info = await chat.fetch()
+      if (info.side || info.archived_at || info.answering_user_public_id !== active.identity.agent)
+        throw new Error("Unknown active agent conversation.")
+      const schedules = chat.schedules
+      if (command.action === "schedule.create") {
+        const policy = await this.policy(active.identity.workspace, command.conversation)
+        return (
+          await schedules.create(
+            {
+              prompt: command.prompt,
+              name: command.name,
+              rule: command.rule,
+              answering_user_public_id: active.identity.agent,
+              approval_mode: "ask",
+              tool_names: policy.tools,
+              ...(policy.runner && policy.directory
+                ? { executor_contexts: { [policy.runner]: { "opencode.directory": policy.directory } } }
+                : {}),
+            },
+            { idempotencyKey: command.key },
+          )
+        ).schedule
+      }
+      if (command.action === "schedule.update")
+        return schedules.update(command.id, {
+          expected_lock_version: command.version,
+          rule: command.rule,
+          prompt: command.prompt,
+        })
+      if (command.action === "schedule.read") return schedules.fetch(command.id)
+      if (command.action === "schedule.pause") return schedules.pause(command.id)
+      if (command.action === "schedule.resume") return schedules.resume(command.id)
+      if (command.action === "schedule.cancel") return schedules.cancel(command.id)
+      if (command.action === "schedule.run") return schedules.run(command.id)
+      return schedules.executions(command.id)
+    }
+    const collections = workspace.memoryCollections
+    if (command.action === "memory.create") return collections.create({ name: command.name })
+    const collection = await collections.fetch(command.collection)
+    if (collection.scope !== "workspace" || collection.owner_public_id !== active.identity.workspace)
+      throw new Error("Select a memory collection from the paired workspace.")
+    if (command.action === "memory.archive")
+      return collections.archive(command.collection, { lock_version: command.version })
+    if (command.action === "memory.restore")
+      return collections.restore(command.collection, { lock_version: command.version })
+    const docs = collections.documents(command.collection)
+    if (command.action === "memory.list") return docs.list()
+    if (command.action === "memory.read" && command.path) return docs.read(command.path)
+    if (command.action === "memory.grep" && command.pattern)
+      return docs.grep({ pattern: command.pattern, path: command.path })
+    if (command.action === "memory.write")
+      return docs.write({
+        path: command.path,
+        content: command.content,
+        expected_public_id: command.id,
+        expected_lock_version: command.version,
+      })
+    if (command.action === "memory.delete") {
+      await docs.delete(command.path, { expected_public_id: command.id, expected_lock_version: command.version })
+      return null
+    }
+    throw new Error("Memory reads require a path and searches require a pattern.")
+  }
+
   async catalog(kind: "schedules" | "memory" | "mcp", after?: string) {
     const active = this.connection
     if (!active) throw new Error("Nexus is disconnected.")
@@ -418,6 +673,56 @@ export class NexusRuntime {
     }
   }
 
+  private siteRules() {
+    return [...this.sites].map((site) => ({
+      tool: "web_fetch",
+      path: "url",
+      match: site + "/*",
+      verdict: "allow" as const,
+    }))
+  }
+
+  grant(workspace: string, conversation: string, runID: string, key: string) {
+    const active = this.connection
+    const signal = this.stop.signal
+    const pending = this.declaring.then(async () => {
+      if (!active || active !== this.connection || workspace !== active.identity.workspace)
+        throw new Error("Nexus connection changed.")
+      const space = active.member.workspace(workspace)
+      const run = space.run(runID)
+      const [chat, data, detail] = await Promise.all([
+        space.conversation(conversation).fetch(),
+        run.fetch(),
+        run.task(key).fetch(),
+      ])
+      if (
+        chat.side ||
+        chat.archived_at ||
+        chat.answering_user_public_id !== active.identity.agent ||
+        chat.metadata["opencode.surface"] !== "desktop" ||
+        data.turn?.conversation_public_id !== conversation ||
+        detail.task.tool_name !== "web_fetch" ||
+        detail.task.target?.executor_public_id !== active.identity.runner ||
+        !detail.task.approval ||
+        typeof detail.task.approval !== "object" ||
+        Array.isArray(detail.task.approval) ||
+        detail.task.approval.origin !== "human" ||
+        ["needs_approval", "failed", "canceled"].includes(detail.task.status)
+      )
+        throw new Error("This call cannot grant access to a site.")
+      const site = webSite(detail.tool_input?.url)
+      if (this.sites.has(site)) return
+      const rule = { tool: "web_fetch", path: "url", match: site + "/*", verdict: "allow" as const }
+      await active.member.profile.declareConfiguration(
+        { configuration: { ...active.configuration, approval_rules: [...this.siteRules(), rule] } },
+        { signal },
+      )
+      this.sites.add(site)
+    })
+    this.declaring = pending.catch(() => {})
+    return pending
+  }
+
   async login() {
     if (!this.settings || !this.connection) throw new Error("Connect the Nexus agent before signing in.")
     return this.human.start(this.settings.origin, this.settings.identifier)
@@ -449,7 +754,17 @@ export class NexusRuntime {
   }
 
   async close() {
+    const active = this.connection
     this.stop.abort()
+    await this.declaring
+    if (active && this.sites.size)
+      await active.member.profile
+        .declareConfiguration(
+          { configuration: { ...active.configuration, approval_rules: [] } },
+          { signal: AbortSignal.timeout(5000) },
+        )
+        .catch(() => {})
+    this.sites.clear()
     await this.human.close()
     await this.pending?.catch(() => {})
     await this.work

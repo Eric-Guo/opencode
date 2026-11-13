@@ -17,9 +17,13 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Turn every feature flag on regardless of the build channel, like OPENCODE_FLAGS=all; explicit per-flag settings still win, and false is not a kill switch.",
   }),
-  ...Record.map(ConfigFlag.registry, (description) =>
+  ...Record.map(ConfigFlag.registry, (description, key) =>
     Schema.Boolean.pipe(optional).annotate({
-      description: `${description} Defaults to on in local and dev builds and off in releases.`,
+      description:
+        description +
+        (ConfigFlag.ericDevDefaults.has(key)
+          ? " Defaults to on in local, dev and eric_dev builds, including releases built from eric_dev."
+          : " Defaults to on in local and dev builds and off in releases."),
     }),
   ),
   part_rows: Schema.Boolean.pipe(optional).annotate({

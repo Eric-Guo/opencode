@@ -29,7 +29,7 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
 const every = (state: Flag.State) => Record.map(ConfigFlag.registry, () => state)
 
 describe("Flag.resolve", () => {
-  test("turns flags on by default only in local and dev builds", () => {
+  test("turns the todo flag on by default only in local and dev builds", () => {
     const table = ["local", "dev", "beta", "latest", "my-branch", "unknown"].map((channel) => [
       channel,
       Flag.resolve({ entries: [], channel }).todo.enabled,
@@ -46,6 +46,36 @@ describe("Flag.resolve", () => {
 
   test("every registered flag is off in a latest release build", () => {
     expect(Flag.resolve({ entries: [], channel: "latest" })).toEqual(every({ enabled: false, source: "default" }))
+  })
+
+  test("eric_dev previews and releases enable Nexus and weekly Kimi retry by default", () => {
+    const defaults = {
+      ...every({ enabled: false, source: "default" }),
+      nexus_runtime: { enabled: true, source: "default" },
+      kimi_weekly_quota_retry: { enabled: true, source: "default" },
+    } satisfies Record<Flag.Key, Flag.State>
+    for (const build of [
+      { channel: "eric_dev" },
+      { channel: "prod", branch: "eric_dev" },
+      { channel: "latest", branch: "eric_dev" },
+    ]) {
+      expect(Flag.resolve({ entries: [], ...build })).toEqual(defaults)
+    }
+    expect(Flag.resolve({ entries: [], channel: "prod", branch: "dev" })).toEqual(
+      every({ enabled: false, source: "default" }),
+    )
+    expect(
+      Flag.resolve({
+        entries: [document({ nexus_runtime: false })],
+        channel: "prod",
+        branch: "eric_dev",
+        overrides: "-kimi_weekly_quota_retry",
+      }),
+    ).toEqual({
+      ...defaults,
+      nexus_runtime: { enabled: false, source: "config" },
+      kimi_weekly_quota_retry: { enabled: false, source: "env" },
+    })
   })
 
   test("config overrides the default and OPENCODE_FLAGS overrides config", () => {

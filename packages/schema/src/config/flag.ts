@@ -4,7 +4,8 @@ export * as ConfigFlag from "./flag.js"
 export const wildcard = "all"
 
 /**
- * Every feature flag, by key, with what it turns on. A flag is on in local and dev builds and off in released ones;
+ * Every feature flag, by key, with what it turns on. Local and dev builds enable all flags;
+ * eric_dev builds also enable the flags in ericDevDefaults on release channels.
  * `experimental.<key>` in config and `OPENCODE_FLAGS` override that, and `OPENCODE_FLAGS=all` or
  * `experimental.all_flags: true` turn every flag on. Read one with Core's `Flag.enabled("<key>")`.
  */
@@ -25,3 +26,5 @@ export const registry = {
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
+
+export const ericDevDefaults: ReadonlySet<Key> = new Set<Key>(["nexus_runtime", "kimi_weekly_quota_retry"])

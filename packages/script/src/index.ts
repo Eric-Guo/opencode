@@ -21,12 +21,22 @@ const env = {
   OPENCODE_CHANNEL: process.env["OPENCODE_CHANNEL"],
   OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
 }
-const CHANNEL = await (async () => {
+const checkoutBranch = (
+  await $`git branch --show-current`.cwd(path.dirname(rootPkgPath)).quiet().nothrow().text()
+).trim()
+// CI often checks out a detached commit; a tag build can supply its source branch explicitly.
+const branch =
+  process.env.OPENCODE_BUILD_BRANCH ||
+  process.env.CI_MERGE_REQUEST_SOURCE_BRANCH_NAME ||
+  process.env.CI_COMMIT_BRANCH ||
+  process.env.GITHUB_HEAD_REF ||
+  (process.env.GITHUB_REF_TYPE === "branch" && process.env.GITHUB_REF_NAME) ||
+  checkoutBranch
+const CHANNEL = (() => {
   if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
   if (env.OPENCODE_VERSION && !env.OPENCODE_VERSION.startsWith("0.0.0-")) return "latest"
-  const branch = await $`git branch --show-current`.text().then((x) => x.trim())
-  if (!branch) return "detached"
-  const channel = branch.replace(/[^a-zA-Z0-9._-]/g, "-")
+  if (!checkoutBranch) return "detached"
+  const channel = checkoutBranch.replace(/[^a-zA-Z0-9._-]/g, "-")
   if (/^[a-zA-Z0-9]/.test(channel)) return channel
   return `branch-${channel}`
 })()
@@ -58,6 +68,7 @@ const team = [
 ]
 
 export const Script = {
+  branch,
   get channel() {
     return CHANNEL
   },

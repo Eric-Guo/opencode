@@ -4,7 +4,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { ForbiddenError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
-import { Context, Effect } from "effect"
+import { Context, Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 
@@ -58,10 +58,23 @@ export const NexusHandler = HttpApiBuilder.group(Api, "server.nexus", (handlers)
       .handle("nexus.login", () => call(async (runtime) => ({ url: await runtime.login() })))
       .handle("nexus.account", () => call((runtime) => runtime.account()))
       .handle("nexus.logout", () => call((runtime) => runtime.logout()))
+      .handle("nexus.operator", (ctx) => call((runtime) => runtime.operator(ctx.payload)))
+      .handle("nexus.manage", (ctx) =>
+        call(async (runtime) =>
+          Schema.decodeUnknownSync(Schema.Json)(
+            await runtime.manage(ctx.payload, ctx.headers["x-nexus-origin"], ctx.headers["x-nexus-member-token"]),
+          ),
+        ),
+      )
       .handle("nexus.catalog", (ctx) => call((runtime) => runtime.catalog(ctx.query.kind, ctx.query.after)))
       .handle("nexus.runners", () => call((runtime) => runtime.runners()))
       .handle("nexus.modes", (ctx) =>
         call((runtime) => runtime.modes(ctx.payload.workspace, ctx.payload.conversation, ctx.payload.patch)),
+      )
+      .handle("nexus.grant", (ctx) =>
+        call((runtime) =>
+          runtime.grant(ctx.payload.workspace, ctx.payload.conversation, ctx.payload.run, ctx.payload.task),
+        ),
       )
       .handle("nexus.policy", (ctx) =>
         call((runtime) => runtime.policy(ctx.payload.workspace, ctx.payload.conversation)),
