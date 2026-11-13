@@ -1,0 +1,27 @@
+{
+  "name": "@opencode/nexus-runtime",
+  "version": "2.3.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/runtime.ts"
+  },
+  "scripts": {
+    "test": "bun test test",
+    "typecheck": "bun check --project tsconfig.json",
+    "typecheck:tsc": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cybros/agent": "file:./vendor/cybros-agent-0.1.0.tgz",
+    "@opencode/core": "workspace:*",
+    "@opencode/codemode": "workspace:*",
+    "@opencode/schema": "workspace:*",
+    "effect": "catalog:",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:"
+  }
+}
