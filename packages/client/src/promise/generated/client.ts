@@ -337,11 +337,17 @@ import type {
   ExperimentalNexusLoginOutput,
   ExperimentalNexusAccountOutput,
   ExperimentalNexusLogoutOutput,
+  ExperimentalNexusOperatorInput,
+  ExperimentalNexusOperatorOutput,
+  ExperimentalNexusManageInput,
+  ExperimentalNexusManageOutput,
   ExperimentalNexusCatalogInput,
   ExperimentalNexusCatalogOutput,
   ExperimentalNexusRunnersOutput,
   ExperimentalNexusModesInput,
   ExperimentalNexusModesOutput,
+  ExperimentalNexusGrantInput,
+  ExperimentalNexusGrantOutput,
   ExperimentalNexusPolicyInput,
   ExperimentalNexusPolicyOutput,
   ExperimentalMigrationV1StatusOutput,
@@ -1952,6 +1958,40 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+        operator: (input: ExperimentalNexusOperatorInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusOperatorOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/operator`,
+              body: {
+                workspace: input["workspace"],
+                conversation: input["conversation"],
+                runner: input["runner"],
+                receipt: input["receipt"],
+                operation: input["operation"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        manage: (input: ExperimentalNexusManageInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusManageOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/manage`,
+              headers: {
+                "x-nexus-origin": input["x-nexus-origin"],
+                "x-nexus-member-token": input["x-nexus-member-token"],
+              },
+              body: input["payload"],
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
         catalog: (input: ExperimentalNexusCatalogInput, requestOptions?: RequestOptions) =>
           request<ExperimentalNexusCatalogOutput>(
             {
@@ -1984,6 +2024,23 @@ export function make(options: ClientOptions) {
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 503],
               empty: false,
+            },
+            requestOptions,
+          ),
+        grant: (input: ExperimentalNexusGrantInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusGrantOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/grant`,
+              body: {
+                workspace: input["workspace"],
+                conversation: input["conversation"],
+                run: input["run"],
+                task: input["task"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: true,
             },
             requestOptions,
           ),
@@ -3194,12 +3251,18 @@ export function make(options: ClientOptions) {
       account: client.experimental.nexus.account,
       /** @deprecated Use `client.experimental.nexus.logout`. Removed in the next minor. */
       logout: client.experimental.nexus.logout,
+      /** @deprecated Use `client.experimental.nexus.operator`. Removed in the next minor. */
+      operator: client.experimental.nexus.operator,
+      /** @deprecated Use `client.experimental.nexus.manage`. Removed in the next minor. */
+      manage: client.experimental.nexus.manage,
       /** @deprecated Use `client.experimental.nexus.catalog`. Removed in the next minor. */
       catalog: client.experimental.nexus.catalog,
       /** @deprecated Use `client.experimental.nexus.runners`. Removed in the next minor. */
       runners: client.experimental.nexus.runners,
       /** @deprecated Use `client.experimental.nexus.modes`. Removed in the next minor. */
       modes: client.experimental.nexus.modes,
+      /** @deprecated Use `client.experimental.nexus.grant`. Removed in the next minor. */
+      grant: client.experimental.nexus.grant,
       /** @deprecated Use `client.experimental.nexus.policy`. Removed in the next minor. */
       policy: client.experimental.nexus.policy,
     },
