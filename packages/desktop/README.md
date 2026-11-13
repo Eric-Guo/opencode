@@ -78,6 +78,8 @@ Both read the same environment as every other release package:
 | `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
 | `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
+Builds from `eric_dev` enable `experimental.nexus_runtime` and `experimental.kimi_weekly_quota_retry` by default, including production packages. The build reads the source branch from the checkout or CI. When building an `eric_dev` release from a detached tag, set `OPENCODE_BUILD_BRANCH=eric_dev` for the build. Users can disable either flag in their service configuration or through `OPENCODE_FLAGS`.
+
 All channels build the embedded server sidecar from source, along with its assets.
 The sidecar and its assets are included under `out/main` in the app archive. A separate CLI distribution is not required.
 
