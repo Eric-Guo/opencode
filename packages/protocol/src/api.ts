@@ -33,6 +33,7 @@ import { CredentialGroup } from "./groups/credential.js"
 import { ProjectGroup } from "./groups/project.js"
 import { WorktreeGroup } from "./groups/worktree.js"
 import { VcsGroup } from "./groups/vcs.js"
+import { NexusGroup } from "./groups/nexus.js"
 import { MigrationGroup } from "./groups/migration.js"
 import { ConfigGroup } from "./groups/config.js"
 import { AudioGroup } from "./groups/audio.js"
@@ -97,6 +98,7 @@ type ApiGroups<
 > =
   | typeof ServerGroup
   | typeof DebugGroup
+  | typeof NexusGroup
   | typeof MigrationGroup
   | typeof WorktreeGroup
   | typeof GenerateGroup
@@ -195,6 +197,7 @@ const makeApiFromGroup = <
     .add(WorktreeGroup)
     .add(VcsGroup.middleware(locationMiddleware))
     .add(DebugGroup)
+    .add(NexusGroup)
     .add(MigrationGroup)
     .add(WebSearchGroup.middleware(locationMiddleware))
     .add(UsageGroup.middleware(locationMiddleware))
