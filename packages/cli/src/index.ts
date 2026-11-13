@@ -96,6 +96,7 @@ const Handlers = Runtime.handlers(Commands, {
     list: () => import("./commands/handlers/machine/list"),
     remove: () => import("./commands/handlers/machine/remove"),
   },
+  nexus: () => import("./commands/handlers/nexus"),
   pair: () => import("./commands/handlers/pair"),
   reload: () => import("./commands/handlers/reload"),
   session: {
