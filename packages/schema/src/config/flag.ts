@@ -8,6 +8,7 @@ export const wildcard = "all"
  * named explicitly in `experimental.<key>` or `OPENCODE_FLAGS`. Read a flag with Core's `Flag.enabled("<key>")`.
  */
 export const registry = {
+  nexus_runtime: "Connect the managed OpenCode service to Nexus as an Agent and local Runner.",
   todo: "Enable the experimental todowrite tool.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   automations:
