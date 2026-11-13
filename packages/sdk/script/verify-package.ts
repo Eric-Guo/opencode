@@ -18,6 +18,7 @@ const names = [
   "plugin-browser",
   "thape",
   "core",
+  "nexus-runtime",
   "simulation",
   "server",
   "sdk",
@@ -204,6 +205,18 @@ for (const module of modules) {
 }
 `,
     ),
+    Bun.write(
+      join(consumer, "nexus.mjs"),
+      `import { NexusRuntime, hostTools } from "@opencode/nexus-runtime"
+import { editor } from "@opencode/nexus-runtime/editor"
+
+const runtime = new NexusRuntime("/unused-nexus-storage")
+if (runtime.status().state !== "unpaired" || typeof hostTools !== "function" || typeof editor !== "function") {
+  throw new Error("Packed Nexus runtime entrypoints are incomplete")
+}
+await runtime.close()
+`,
+    ),
   ])
 
   const sdk = archives.get("@opencode/sdk")
@@ -215,6 +228,8 @@ for (const module of modules) {
   }
   await $`bun imports.mjs`.cwd(consumer)
   await $`node imports.mjs`.cwd(consumer)
+  await $`bun nexus.mjs`.cwd(consumer)
+  await $`node nexus.mjs`.cwd(consumer)
   await $`bun --conditions=workerd imports.mjs`.cwd(consumer)
   await $`node_modules/.bin/wrangler deploy --dry-run --config wrangler.jsonc --outdir dist`.cwd(consumer)
 
