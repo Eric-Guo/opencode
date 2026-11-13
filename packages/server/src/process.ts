@@ -12,6 +12,10 @@ import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/pers
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isMachineLinkUpgrade } from "@opencode/protocol/groups/machine"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
+import { join } from "node:path"
+import type { NexusRuntime } from "@opencode/nexus-runtime"
+import { LocationServiceMap } from "@opencode/core/location-services"
+import { nexusEnabled } from "./handlers/nexus"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -136,6 +140,18 @@ const startScoped = Effect.fnUntraced(function* <E = never, R = never>(
   // Built without the startup span: route handlers and background fibers capture this context, and would
   // otherwise nest every request and session turn for the life of the process under one trace.
   const boot = Effect.gen(function* () {
+    let runtime: Promise<NexusRuntime> | undefined
+    const storage = join(Global.Path.data, "nexus-runtime")
+    const get = () =>
+      (runtime ??= (async () => {
+        const { NexusRuntime, hostTools } = await import("@opencode/nexus-runtime")
+        const nexus = new NexusRuntime(storage, hostTools(Context.get(context, LocationServiceMap.Service)))
+        await nexus.restore()
+        return nexus
+      })().catch((cause) => {
+        runtime = undefined
+        throw cause
+      }))
     const context = yield* Layer.buildWithScope(
       createRoutes(
         {
@@ -153,10 +169,25 @@ const startScoped = Effect.fnUntraced(function* <E = never, R = never>(
             }).pipe(Layer.orDie),
           ),
         ],
+        lifecycle ? { get } : undefined,
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )
     if (lifecycle) {
+      yield* Scope.addFinalizer(
+        applicationScope,
+        Effect.promise(async () => {
+          await (await runtime?.catch(() => undefined))?.close()
+        }),
+      )
+      const { existsSync } = yield* Effect.promise(() => import("node:fs"))
+      if (existsSync(join(storage, "settings.json")))
+        yield* nexusEnabled.pipe(
+          Effect.provide(Layer.succeedContext(context)),
+          Effect.flatMap((enabled) => (enabled ? Effect.tryPromise(get) : Effect.void)),
+          Effect.catch((cause) => Effect.logWarning("Nexus setup could not be restored", { cause })),
+          Effect.forkIn(applicationScope),
+        )
       yield* installRestartContinuity(Context.get(context, SessionRestart.Service)).pipe(
         Effect.provideService(Scope.Scope, applicationScope),
       )

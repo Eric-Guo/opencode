@@ -60,6 +60,7 @@ import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
+import { NexusHost } from "./handlers/nexus"
 import { AudioRecording } from "./audio"
 import type { ServerOptions } from "./options"
 
@@ -116,8 +117,16 @@ export function createRoutes(
   options: ServerOptions = {},
   serviceURLs: () => ReadonlyArray<string> = () => [],
   overrides: LayerNode.Replacements = [],
+  nexus?: typeof NexusHost.Service,
 ) {
-  return makeRoutes(options.password ? Option.some(options.password) : Option.none(), options, serviceURLs, overrides)
+  return makeRoutes(
+    options.password ? Option.some(options.password) : Option.none(),
+    options,
+    serviceURLs,
+    overrides,
+    undefined,
+    nexus,
+  )
 }
 
 type InstanceNode = (
@@ -139,6 +148,7 @@ function makeRoutes(
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
+  nexus?: typeof NexusHost.Service,
 ) {
   const auth = ServerAuth.Config.configLayer({ password })
   // Code Mode `opencode://` fetches go straight to this router, set once the router below is built. They carry the
@@ -237,6 +247,7 @@ function makeRoutes(
         Layer.provide(
           handlers.pipe(
             Layer.provide(services),
+            Layer.provide(Layer.succeed(NexusHost, nexus ?? null)),
             Layer.provide(Layer.succeed(CorsConfig, options)),
             Layer.provide(Layer.succeed(AudioRecording.Config, options.audio)),
           ),
