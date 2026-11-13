@@ -320,11 +320,17 @@ import type {
   ExperimentalNexusLoginOutput,
   ExperimentalNexusAccountOutput,
   ExperimentalNexusLogoutOutput,
+  ExperimentalNexusOperatorInput,
+  ExperimentalNexusOperatorOutput,
+  ExperimentalNexusManageInput,
+  ExperimentalNexusManageOutput,
   ExperimentalNexusCatalogInput,
   ExperimentalNexusCatalogOutput,
   ExperimentalNexusRunnersOutput,
   ExperimentalNexusModesInput,
   ExperimentalNexusModesOutput,
+  ExperimentalNexusGrantInput,
+  ExperimentalNexusGrantOutput,
   ExperimentalNexusPolicyInput,
   ExperimentalNexusPolicyOutput,
   ExperimentalMigrationV1StatusOutput,
@@ -2003,6 +2009,30 @@ const EndpointExperimentalNexusAccount = (raw: RawClient["server.nexus"]) => () 
 const EndpointExperimentalNexusLogout = (raw: RawClient["server.nexus"]) => () =>
   preserveEffect<ExperimentalNexusLogoutOutput>()(raw["nexus.logout"]({}).pipe(Effect.mapError(mapClientError)))
 
+const EndpointExperimentalNexusOperator = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusOperatorInput) =>
+  preserveEffect<ExperimentalNexusOperatorOutput>()(
+    raw["nexus.operator"]({
+      payload: {
+        workspace: input["workspace"],
+        conversation: input["conversation"],
+        runner: input["runner"],
+        receipt: input["receipt"],
+        operation: input["operation"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+type ExperimentalNexusManageRequest = Parameters<RawClient["server.nexus"]["nexus.manage"]>[0] & {
+  readonly responseMode?: "decoded-only"
+}
+const EndpointExperimentalNexusManage = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusManageInput) =>
+  preserveEffect<ExperimentalNexusManageOutput>()(
+    raw["nexus.manage"]({
+      headers: { "x-nexus-origin": input["x-nexus-origin"], "x-nexus-member-token": input["x-nexus-member-token"] },
+      payload: input["payload"],
+    } as ExperimentalNexusManageRequest).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointExperimentalNexusCatalog = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusCatalogInput) =>
   preserveEffect<ExperimentalNexusCatalogOutput>()(
     raw["nexus.catalog"]({ query: { kind: input["kind"], after: input["after"] } }).pipe(
@@ -2020,6 +2050,18 @@ const EndpointExperimentalNexusModes = (raw: RawClient["server.nexus"]) => (inpu
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalNexusGrant = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusGrantInput) =>
+  preserveEffect<ExperimentalNexusGrantOutput>()(
+    raw["nexus.grant"]({
+      payload: {
+        workspace: input["workspace"],
+        conversation: input["conversation"],
+        run: input["run"],
+        task: input["task"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointExperimentalNexusPolicy = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusPolicyInput) =>
   preserveEffect<ExperimentalNexusPolicyOutput>()(
     raw["nexus.policy"]({ payload: { workspace: input["workspace"], conversation: input["conversation"] } }).pipe(
@@ -2034,9 +2076,12 @@ const adaptGroupExperimentalNexus = (raw: RawClient["server.nexus"]) => ({
   login: EndpointExperimentalNexusLogin(raw),
   account: EndpointExperimentalNexusAccount(raw),
   logout: EndpointExperimentalNexusLogout(raw),
+  operator: EndpointExperimentalNexusOperator(raw),
+  manage: EndpointExperimentalNexusManage(raw),
   catalog: EndpointExperimentalNexusCatalog(raw),
   runners: EndpointExperimentalNexusRunners(raw),
   modes: EndpointExperimentalNexusModes(raw),
+  grant: EndpointExperimentalNexusGrant(raw),
   policy: EndpointExperimentalNexusPolicy(raw),
 })
 
@@ -2283,12 +2328,18 @@ const adaptClient = (raw: RawClient) => {
       account: client.experimental.nexus.account,
       /** @deprecated Use `client.experimental.nexus.logout`. Removed in the next minor. */
       logout: client.experimental.nexus.logout,
+      /** @deprecated Use `client.experimental.nexus.operator`. Removed in the next minor. */
+      operator: client.experimental.nexus.operator,
+      /** @deprecated Use `client.experimental.nexus.manage`. Removed in the next minor. */
+      manage: client.experimental.nexus.manage,
       /** @deprecated Use `client.experimental.nexus.catalog`. Removed in the next minor. */
       catalog: client.experimental.nexus.catalog,
       /** @deprecated Use `client.experimental.nexus.runners`. Removed in the next minor. */
       runners: client.experimental.nexus.runners,
       /** @deprecated Use `client.experimental.nexus.modes`. Removed in the next minor. */
       modes: client.experimental.nexus.modes,
+      /** @deprecated Use `client.experimental.nexus.grant`. Removed in the next minor. */
+      grant: client.experimental.nexus.grant,
       /** @deprecated Use `client.experimental.nexus.policy`. Removed in the next minor. */
       policy: client.experimental.nexus.policy,
     },

@@ -209,6 +209,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_CLI_NAME: "'opencode'",
       OPENCODE_CHANNEL: `'${Script.channel}'`,
+      OPENCODE_BUILD_BRANCH: JSON.stringify(Script.branch),
       OPENCODE_ARTIFACT: `'cli'`,
       ...(highlights ? { OPENCODE_RELEASE_HIGHLIGHTS: JSON.stringify(highlights) } : {}),
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
