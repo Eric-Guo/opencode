@@ -64,6 +64,7 @@ import {
   executeToolCalls,
   executeToolSubtitle,
   readImagePath,
+  shellMessageMetadata,
   type ExecuteToolCall,
 } from "../message/current-tool-state"
 import { AssistantReasoningContent } from "../message/message-content"
@@ -2414,12 +2415,7 @@ export function SessionShellMessage(props: {
         component={render}
         tool="shell"
         input={{ command: props.message.command }}
-        metadata={{
-          shellID: props.message.shellID,
-          status: props.message.status,
-          exit: props.message.exit,
-          truncated: props.message.output?.truncated,
-        }}
+        metadata={shellMessageMetadata(props.message)}
         output={props.message.output?.output}
         status={props.message.status === "running" ? "running" : "completed"}
         defaultOpen={props.defaultOpen}
