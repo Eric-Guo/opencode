@@ -6,6 +6,7 @@ export const wildcard = "all"
 /**
  * Flags default to on in local and dev builds and off in releases, except for `optInOnly` flags, which must be
  * named explicitly in `experimental.<key>` or `OPENCODE_FLAGS`. Read a flag with Core's `Flag.enabled("<key>")`.
+ * eric_dev builds also enable the flags in ericDevDefaults on release channels.
  */
 export const registry = {
   todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
@@ -36,3 +37,5 @@ export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
 
 /** Flags that stay off outside local and dev builds, whatever `OPENCODE_FLAGS` or config say. */
 export const localOnly: ReadonlySet<Key> = new Set(["opencode_api"])
+
+export const ericDevDefaults: ReadonlySet<Key> = new Set<Key>(["nexus_runtime", "kimi_weekly_quota_retry"])
