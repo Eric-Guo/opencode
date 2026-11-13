@@ -24,15 +24,18 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fl
 
 export const Overrides = FlagResolve.Overrides
 
+declare const OPENCODE_BUILD_BRANCH: string
+
 export const resolve = FlagResolve.resolve
 
 const make = Effect.fnUntraced(function* (updates: Stream.Stream<unknown>) {
   const app = yield* App.Service
   const config = yield* Config.Service
   const overrides = yield* Overrides
+  const branch = typeof OPENCODE_BUILD_BRANCH === "string" ? OPENCODE_BUILD_BRANCH : undefined
   const changes = yield* PubSub.unbounded<ReadonlySet<Key>>()
   yield* Effect.addFinalizer(() => PubSub.shutdown(changes))
-  const resolveEntries = (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, overrides })
+  const resolveEntries = (entries: readonly Entry[]) => resolve({ entries, channel: app.channel, branch, overrides })
   let current = resolveEntries(yield* config.entries())
   const refresh = Effect.gen(function* () {
     const next = resolveEntries(yield* config.entries())
