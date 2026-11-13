@@ -21,7 +21,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     Schema.Boolean.pipe(optional).annotate({
       description: ConfigFlag.optInOnly.has(key)
         ? description
-        : `${description} Defaults to on in local and dev builds and off in releases.`,
+        : description +
+          (ConfigFlag.ericDevDefaults.has(key)
+            ? " Defaults to on in local, dev and eric_dev builds, including releases built from eric_dev."
+            : " Defaults to on in local and dev builds and off in releases."),
     }),
   ),
   schedules: Schema.Boolean.pipe(optional).annotate({
