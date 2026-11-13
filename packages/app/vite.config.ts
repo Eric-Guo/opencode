@@ -1,9 +1,11 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
-import { fileURLToPath } from "node:url"
-import { defineConfig, type Plugin, type UserConfig } from "vite"
+import { resolve } from "node:path"
+import { defineConfig, normalizePath, type Plugin, type UserConfig } from "vite"
 import desktopPlugin, { channel } from "./vite.js"
 import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
+
+const outDir = normalizePath(resolve(import.meta.dirname, process.env.OPENCODE_APP_OUTDIR ?? "dist"))
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -16,8 +18,8 @@ const sentry =
           name: process.env.SENTRY_RELEASE ?? process.env.VITE_SENTRY_RELEASE,
         },
         sourcemaps: {
-          assets: "./dist/**",
-          filesToDeleteAfterUpload: "./dist/**/*.map",
+          assets: `${outDir}/**`,
+          filesToDeleteAfterUpload: `${outDir}/**/*.map`,
         },
       })
     : false
@@ -39,18 +41,12 @@ const testFixtureInput = [
   "e2e/utils/windows-menu.html",
 ]
 
-const build: UserConfig["build"] = { assetsDir: "_assets", target: "esnext", sourcemap: true }
+const build: UserConfig["build"] = { outDir, assetsDir: "_assets", target: "esnext", sourcemap: true }
 
 if (process.env.VITE_OPENCODE_TEST_FIXTURES === "1") build.rolldownOptions = { input: testFixtureInput }
 
 export default defineConfig({
-  plugins: [
-    basePath,
-    desktopPlugin,
-    icons(channel),
-    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
-    sentry,
-  ],
+  plugins: [basePath, desktopPlugin, icons(channel), serviceWorker(outDir), sentry],
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
