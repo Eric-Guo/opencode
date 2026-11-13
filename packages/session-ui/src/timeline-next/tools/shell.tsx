@@ -5,6 +5,7 @@ import { Badge } from "@opencode/ui/badge"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createComputed, createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from "solid-js"
 import { useData } from "../../context"
+import { shellMessageMetadata } from "../../message/current-tool-state"
 import {
   createShellRunState,
   shellRunProps,
@@ -172,12 +173,7 @@ export function ShellMessage(props: { message: SessionMessageShell }) {
       <ShellCard
         tool="shell"
         input={{ command: props.message.command }}
-        metadata={{
-          shellID: props.message.shellID,
-          status: props.message.status,
-          exit: props.message.exit,
-          truncated: props.message.output?.truncated,
-        }}
+        metadata={shellMessageMetadata(props.message)}
         output={props.message.output?.output}
         status={props.message.status === "running" ? "running" : "completed"}
       />

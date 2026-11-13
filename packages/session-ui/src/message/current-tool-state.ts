@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageShell } from "@opencode/client/promise"
 import { Option, Predicate, Schema } from "effect"
 import type { ToolProps } from "../tools/tool-renderer"
 
@@ -43,6 +43,15 @@ export function currentToolFailed(tool: SessionMessageAssistantTool) {
     (tool.name === "execute" && executeToolFailed(currentToolMetadata(tool))) ||
     (tool.name === "shell" && tool.state.status === "completed" && shellResultFailed(currentToolMetadata(tool)))
   )
+}
+
+export function shellMessageMetadata(message: SessionMessageShell): Schema.JsonObject {
+  return {
+    shellID: message.shellID,
+    status: message.status,
+    ...(message.exit === undefined ? {} : { exit: message.exit }),
+    ...(message.output && { truncated: message.output.truncated }),
+  }
 }
 
 export function shellResultFailed(metadata: Schema.JsonObject) {
