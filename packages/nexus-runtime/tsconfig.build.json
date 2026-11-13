@@ -8,6 +8,5 @@
     "declaration": true,
     "emitDeclarationOnly": true
   },
-  "include": ["src"],
-  "references": [{ "path": "../core" }]
+  "include": ["src"]
 }
