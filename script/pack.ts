@@ -35,6 +35,7 @@ for (const name of [
   "plugin-browser",
   "thape",
   "core",
+  "nexus-runtime",
   "simulation",
   "server",
   "sdk",
