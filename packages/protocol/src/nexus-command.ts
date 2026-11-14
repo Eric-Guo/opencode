@@ -1,5 +1,7 @@
 import { Schema } from "effect"
 import { Nexus } from "@opencode/schema/nexus"
+import { NexusPreset } from "@opencode/schema/nexus-preset"
+import { NexusBot } from "@opencode/schema/nexus-bot"
 
 const Rule = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("once"), run_at: Schema.String }),
@@ -7,6 +9,32 @@ const Rule = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("daily"), local_time: Schema.String, time_zone: Schema.String }),
 ])
 export const NexusCommand = Schema.Union([
+  ...NexusPreset.Command.members,
+  ...NexusBot.Command.members,
+  Schema.Struct({ action: Schema.Literal("persona.read") }),
+  Schema.Struct({ action: Schema.Literal("persona.reset") }),
+  Schema.Struct({ action: Schema.Literal("persona.write"), content: Schema.String }),
+  Schema.Struct({
+    action: Schema.Literal("application.open"),
+    key: Schema.NonEmptyString,
+    title: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("application.submit"),
+    key: Schema.NonEmptyString,
+    workspace: Schema.String,
+    conversation: Schema.String,
+    text: Schema.String,
+    model: Schema.optional(Schema.String),
+    preset: Schema.optional(Schema.String),
+    delivery: Schema.optional(Schema.Literals(["queue", "steer", "steer_now"])),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("application.result"),
+    workspace: Schema.String,
+    conversation: Schema.String,
+    input: Schema.String,
+  }),
   Schema.Struct({ action: Schema.Literal("extension.list") }),
   Schema.Struct({ action: Schema.Literal("extension.configure"), change: Nexus.ExtensionChange }),
   Schema.Struct({
