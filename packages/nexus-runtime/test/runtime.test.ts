@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Toolsets, type OAuthDocument, type Workspace } from "@cybros/agent"
+import { Toolsets, type CredentialDocument, type Workspace } from "@cybros/agent"
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -22,6 +22,8 @@ test.each([
   { name: "this agent's dedicated", dedicated: true, owned: true, create: false },
   { name: "non-dedicated", dedicated: false, owned: false, create: false },
   { name: "automatically created", dedicated: true, owned: true, create: true },
+  { name: "restored API key", dedicated: false, owned: false, create: false, apiKey: true },
+  { name: "imported API key", dedicated: false, owned: false, create: false, importKeys: true },
 ])("validates $name workspace before reporting ready", async (fixture) => {
   const directory = await realpath(await mkdtemp(join(tmpdir(), "nexus-runtime-")))
   const storage = join(directory, "storage")
@@ -61,7 +63,17 @@ test.each([
         state: runtime.status().state,
       })
 
-      if (path === "/agent_api/v1/executor/announcement")
+      if (path === "/oauth/revoke") return new Response(null, { status: 200 })
+      if (path === "/agent_api/v1/profile") {
+        if (request.headers.get("authorization") === "Bearer invalid")
+          return Response.json({ error: { code: "invalid_token" } }, { status: 401 })
+        return Response.json({
+          member: { public_id: "agent", handle: "opencode", kind: "agent", role: "member" },
+          credential: { plane: "member", expires_at: null },
+          measured_at: measured,
+        })
+      }
+      if (path === "/agent_api/v1/executor" || path === "/agent_api/v1/executor/announcement")
         return Response.json({
           executor: {
             public_id: "runner",
@@ -138,20 +150,52 @@ test.each([
       identifier: "opencode.fixture",
       directory: project,
       workspace: fixture.create ? "" : "workspace",
-      model: "model",
+      model: "provider/model",
     })
-    const credentials: OAuthDocument = {
-      version: 2,
-      authentication_kind: "oauth",
-      connection: "fixture",
-      rotation: 0,
-      refresh_token: "fixture-refresh",
-      access_token: "fixture-member",
-      executor_access_token: "fixture-executor",
-      expires_at: new Date(Date.now() + 3600_000).toISOString(),
-    }
+    const credentials: CredentialDocument =
+      "apiKey" in fixture
+        ? {
+            version: 2,
+            authentication_kind: "api_key",
+            connection: "fixture",
+            access_token: "fixture-member",
+            executor_access_token: "fixture-executor",
+          }
+        : {
+            version: 2,
+            authentication_kind: "oauth",
+            connection: "fixture",
+            rotation: 0,
+            refresh_token: "fixture-refresh",
+            access_token: "fixture-member",
+            executor_access_token: "fixture-executor",
+            expires_at: new Date(Date.now() + 3600_000).toISOString(),
+          }
     await atomic(join(storage, "agent.json"), credentials)
-    await runtime.restore()
+    if ("importKeys" in fixture) {
+      await expect(
+        runtime.manage({
+          action: "connection.import",
+          origin: nexus.url.origin,
+          model: "provider/model",
+          directory: project,
+          workspace: "workspace",
+          access_token: "invalid",
+          executor_access_token: "fixture-executor",
+        }),
+      ).rejects.toThrow()
+      expect(await Bun.file(join(storage, "agent.json")).json()).toEqual(credentials)
+      await runtime.manage({
+        action: "connection.import",
+        origin: nexus.url.origin,
+        model: "provider/model",
+        directory: project,
+        workspace: "workspace",
+        access_token: "fixture-member",
+        executor_access_token: "fixture-executor",
+      })
+    }
+    if (!("importKeys" in fixture)) await runtime.restore()
 
     const deadline = Date.now() + 3000
     while (runtime.status().state === "connecting" && Date.now() < deadline) await Bun.sleep(1)
@@ -196,6 +240,12 @@ test.each([
       expect(() => runtime.runners()).toThrow("Nexus is disconnected.")
     }
 
+    if ("apiKey" in fixture || "importKeys" in fixture) {
+      expect((await Bun.file(join(storage, "agent.json")).json()).authentication_kind).toBe("api_key")
+      await runtime.disconnect()
+      expect(await Bun.file(join(storage, "agent.json")).exists()).toBe(false)
+      expect(calls.filter((call) => call.path === "/oauth/revoke")).toHaveLength(2)
+    }
     expect(
       calls.filter(
         (call) => call.path === "/agent_api/v1/workspaces" && call.method === "GET" && call.state === "connecting",
