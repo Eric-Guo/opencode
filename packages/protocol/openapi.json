@@ -19010,6 +19010,17 @@
                     "properties": {
                       "action": {
                         "type": "string",
+                        "enum": ["application.skills"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
                         "enum": ["persona.read"]
                       }
                     },
@@ -19084,7 +19095,7 @@
                     "properties": {
                       "action": {
                         "type": "string",
-                        "enum": ["application.submit"]
+                        "enum": ["application.prepare", "application.submit"]
                       },
                       "key": {
                         "type": "string",
@@ -19163,6 +19174,37 @@
                         ]
                       },
                       "preset": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "approval": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["bypass", "ask", "rules"]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "target": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "instructions": {
                         "anyOf": [
                           {
                             "type": "string"

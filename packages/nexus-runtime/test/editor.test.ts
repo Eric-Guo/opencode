@@ -7,6 +7,8 @@ import { join } from "node:path"
 import { editor, editorPrompt } from "../src/editor"
 import { editorBridge, editorRoots } from "../src/editor-bridge"
 import { EditorTranscript } from "../src/editor-follow"
+import { NexusApplication } from "../src/application"
+import { storeFixture } from "./fixture/store"
 import { conversationFixture } from "./fixture/conversation"
 
 test("ACP initializes without kernel requests and authenticates before session setup", async () => {
@@ -25,7 +27,6 @@ test("ACP initializes without kernel requests and authenticates before session s
     { readable: inbound.readable, writable: outbound.writable },
     { state: "unpaired", origin: server.url.origin, directory: process.cwd(), workspace: "", model: "model" },
     "",
-    async () => ({ tools: [] }),
   )
   const peer = client().connect({ readable: outbound.readable, writable: inbound.writable })
 
@@ -203,6 +204,37 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
       return Response.json({ error: { code: "unexpected" } }, { status: 400 })
     },
   })
+  const submitted: JsonObject[] = []
+  const admissions = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: conversationFixture() })
+    if (path.endsWith("/inputs") && request.method === "POST") {
+      expect(request.headers.get("authorization")).toBe("Bearer human")
+      submitted.push(((await request.json()) as { input: JsonObject }).input)
+      return Response.json({ error: { code: "response_lost" } }, { status: 503 })
+    }
+  })
+  const application = new NexusApplication(
+    admissions.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({ default_model: "model" }),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {
+      async author(draft) {
+        return { ...draft, lead: "Authored ACP instructions" }
+      },
+      async describeEnvironment() {
+        return "Editor environment"
+      },
+      async follow() {},
+      async bindings() {
+        return []
+      },
+    },
+  )
   const inbound = new TransformStream<AnyMessage>()
   const outbound = new TransformStream<AnyMessage>()
   const work = editor(
@@ -216,7 +248,21 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
       identity: { agent: "main", runner: "runner", workspace: "workspace", name: "Main", workspaceName: "Workspace" },
     },
     "fixture",
-    async () => ({ tools: [] }),
+    {
+      defaults: { mode: "bypass", model: "launch-model" },
+      skills: async () => [
+        { name: "project-guide", description: "Project guide" },
+        { name: "retry", description: "Collision" },
+      ],
+      submit: async (input, signal) => {
+        const receipt = await application.submit(
+          { ...input, workspace: "workspace", principal: "human" },
+          new Client({ baseURL: admissions.server.url.origin, credential: "human" }),
+          { signal },
+        )
+        return receipt.input.public_id
+      },
+    },
   )
   const peer = client()
     .onNotification("session/update", ({ params }) => {
@@ -240,7 +286,29 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     await peer.agent.request("authenticate", { methodId: "nexus" })
     expect(await peer.agent.request("session/new", { cwd: directory, mcpServers: [] })).toMatchObject({
       sessionId: "conversation",
-      modes: { currentModeId: "ask" },
+      modes: { currentModeId: "bypass" },
+    })
+    expect(metadata.value["opencode.acp.model"]).toBe("launch-model")
+    const commands = updates.find((event) => event.update.sessionUpdate === "available_commands_update")!.update
+    expect(commands).toMatchObject({
+      availableCommands: [
+        { name: "retry" },
+        { name: "abandon" },
+        { name: "compact" },
+        { name: "project-guide", description: "Project guide" },
+      ],
+    })
+    await expect(
+      peer.agent.request("session/prompt", {
+        sessionId: "conversation",
+        prompt: [{ type: "text", text: "Use the runtime" }],
+      }),
+    ).rejects.toBeDefined()
+    expect(submitted).toHaveLength(1)
+    expect(submitted[0]).toMatchObject({
+      instructions: "Authored ACP instructions",
+      model: { model: "launch-model" },
+      approval_mode: "bypass",
     })
     await peer.agent.request("session/set_mode", { sessionId: "conversation", modeId: "rules" })
     await peer.agent.request("session/close", { sessionId: "conversation" })
@@ -288,6 +356,7 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     await inbound.writable.close()
     await work
     server.stop(true)
+    admissions.server.stop(true)
     await rm(directory, { recursive: true, force: true })
   }
 })
