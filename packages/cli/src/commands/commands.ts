@@ -645,6 +645,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         agent: Flag.String("agent").pipe(Flag.optional),
         instructions: Flag.String("instructions").pipe(Flag.optional),
         attach: Flag.String("attach").pipe(Flag.atMost(100)),
+        mode: Flag.Literals("mode", ["bypass", "ask", "rules"]).pipe(Flag.optional),
         codeMode: Flag.Boolean("code-mode").pipe(Flag.optional),
         until: Flag.String("until").pipe(Flag.optional),
         attempts: Flag.Int("attempts").pipe(Flag.optional),

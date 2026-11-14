@@ -1188,8 +1188,22 @@ export class NexusRuntime {
     if (token && origin !== this.settings.origin)
       throw new Error("The Human credential requires the paired Nexus origin.")
     const member = token ? new Client({ baseURL: this.settings.origin, credential: token }) : active.member
-    if (token && (await member.profile.fetch()).member.kind !== "human") throw new Error("Use a Human member token.")
+    const principal = token ? (await member.profile.fetch()).member : undefined
+    if (principal && principal.kind !== "human") throw new Error("Use a Human member token.")
     if (command.action === "bot.submit") return active.application.bots.submit(command, member)
+    if (command.action === "application.skills") {
+      const catalog = Schema.decodeUnknownSync(
+        Schema.Struct({
+          agent: Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.NullOr(Schema.String) })),
+          workspace: Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.NullOr(Schema.String) })),
+        }),
+      )(await active.application.operations.command({ action: "skills" }))
+      const rows = [...catalog.agent, ...catalog.workspace, ...(this.extensionManager?.documents() ?? [])]
+
+      return [
+        ...new Map(rows.map((row) => [row.name, { name: row.name, description: row.description ?? "" }])).values(),
+      ]
+    }
     if (command.action === "application.accepted") {
       const chat = await member.workspace(command.workspace).conversation(command.conversation).fetch()
       if (chat.answering_user_public_id !== active.identity.agent || chat.side)
@@ -1209,21 +1223,21 @@ export class NexusRuntime {
         .conversation(command.conversation)
         .inputExecution(command.input)
         .recover()
-    if (command.action === "application.submit") {
-      return active.application.submit(
-        {
-          ...command,
-          preparation: async () => {
-            const prepared = await this.policy(command.workspace, command.conversation, command.preset)
+    if (command.action === "application.prepare" || command.action === "application.submit") {
+      const input = {
+        ...command,
+        action: "application.submit" as const,
+        principal: principal?.public_id,
+        preparation: () => this.policy(command.workspace, command.conversation, command.preset, command.model),
+      }
 
-            return {
-              ...prepared,
-            }
-          },
-        },
-        member,
-      )
+      if (command.action === "application.prepare") {
+        await active.application.captureInput(input, member)
+        return null
+      }
+      return active.application.submit(input, member)
     }
+
     const workspace = member.workspace(active.identity.workspace)
     if ("conversation" in command) {
       const chat = workspace.conversation(command.conversation)
