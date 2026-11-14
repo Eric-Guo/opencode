@@ -1,28 +1,32 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test"
 import { ExecutorClient, type ClaimedTask, type OperationEvent } from "@cybros/agent"
-import { ClaimLease, ClaimOperations } from "../src/claim-control"
+import { ClaimDeadline, ClaimLease, ClaimOperations } from "../src/claim-control"
 import { RunnerAdmission } from "../src/runner"
 import { definition } from "../src/extensions"
+import { executorFixture } from "./fixture/executor"
 
 afterEach(() => setSystemTime())
 
 test("claim renewal follows its grant and transient status errors retain execution", async () => {
   const initial = Date.now()
   const calls: string[] = []
+  const extensions: number[] = []
   using server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
-    fetch(request) {
+    async fetch(request) {
       const path = new URL(request.url).pathname
 
       calls.push(path.split("/").at(-1)!)
 
-      if (path.endsWith("/extend"))
+      if (path.endsWith("/extend")) {
+        extensions.push(((await request.json()) as { timeout_ms: number }).timeout_ms)
         return Response.json({
           claim_token: "claim",
           deadline_at: new Date(initial + 120000).toISOString(),
           task: claimed.task,
         })
+      }
 
       return Response.json({ error: { code: "unavailable" } }, { status: 503 })
     },
@@ -33,15 +37,56 @@ test("claim renewal follows its grant and transient status errors retain executi
     deadline_at: new Date(initial + 60000).toISOString(),
     task: {},
   } as ClaimedTask
-  const lease = new ClaimLease(task, claimed, new AbortController().signal)
+  const lease = new ClaimLease(task, claimed, new AbortController().signal, true, 600000)
 
   try {
     setSystemTime(initial + 40000)
     await lease.maintain()
     expect(lease.signal.aborted).toBe(false)
     expect(calls).toEqual(["claim", "extend"])
+    expect(extensions).toEqual([600000])
   } finally {
     await lease.close()
+  }
+})
+
+test("execution timeout leaves claim headroom for delivery and renewal is not restarted after the clamp", async () => {
+  const fixture = await executorFixture()
+  fixture.add("run", "timed", "probe")
+  const task = fixture.client.inboxTask("run", "timed")
+  const claim = await task.claim()
+  const lease = new ClaimLease(task, claim, new AbortController().signal)
+  try {
+    setSystemTime(lease.deadlineAt - 14000)
+    await lease.maintain()
+    expect(lease.executionSignal.aborted).toBe(true)
+    expect(lease.executionSignal.reason).toBeInstanceOf(ClaimDeadline)
+    expect(lease.signal.aborted).toBe(false)
+    expect(fixture.calls.some((call) => call.path.endsWith("/extend"))).toBe(false)
+    setSystemTime(lease.deadlineAt + 1)
+    await lease.maintain()
+    expect(lease.signal.aborted).toBe(true)
+  } finally {
+    await lease.close()
+    await fixture.close()
+  }
+})
+
+test("a claim without a deadline is observed without inventing an execution timeout", async () => {
+  const fixture = await executorFixture()
+  fixture.control.deadline = null
+  fixture.add("run", "unbounded", "probe")
+  const task = fixture.client.inboxTask("run", "unbounded")
+  const lease = new ClaimLease(task, await task.claim(), new AbortController().signal)
+  try {
+    setSystemTime(Date.now() + 86400000)
+    await lease.maintain()
+    expect(lease.deadlineAt).toBe(Infinity)
+    expect(lease.executionSignal.aborted).toBe(false)
+    expect(fixture.calls.some((call) => call.path.endsWith("/extend"))).toBe(false)
+  } finally {
+    await lease.close()
+    await fixture.close()
   }
 })
 
