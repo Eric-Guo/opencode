@@ -1,3 +1,4 @@
+import { setPanelPresentation } from "../windows/presentation"
 import { app, systemPreferences } from "electron"
 import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
@@ -21,6 +22,13 @@ export const windowHandlers = WindowRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
 
     return WindowRpcs.of({
+      WindowSetPanelPresentation: (value, context) =>
+        Effect.sync(() => {
+          const contents = sender(handoff, context)
+          const win = getWindowFromWebContents(contents)
+
+          if (win) setPanelPresentation(win, contents, value)
+        }),
       WindowRequestMicrophone: () =>
         Effect.promise(() =>
           process.platform === "darwin" ? systemPreferences.askForMediaAccess("microphone") : Promise.resolve(true),

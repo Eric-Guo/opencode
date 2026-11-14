@@ -35,7 +35,24 @@ export type DesktopExtensionServices = {
   proxy?: DesktopProxyHost
 }
 
+/** Resolved, non-secret appearance data for isolated bundled panels. */
+export type DesktopPanelPresentation = {
+  mode: "light" | "dark"
+  locale: string
+  motion?: "reduce" | "full"
+  direction: "ltr" | "rtl"
+  variables: Readonly<Record<string, string>>
+  stylesheets: readonly string[]
+}
+
 export type DesktopWindowHost = {
+  /** Current managed service credentials, resolved only in main. */
+  connection?: DesktopExtensionServices["connection"]
+  /** Follows this window's primary renderer without granting a panel its RPC bridge. */
+  presentation?: {
+    get(): DesktopPanelPresentation | undefined
+    subscribe(listener: (value: DesktopPanelPresentation) => void): () => void
+  }
   window: BrowserWindow
   id: string
   preloadRoot: string
