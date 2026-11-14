@@ -5656,6 +5656,7 @@ export type ExperimentalNexusManageInput = {
         readonly model?: string | null
         readonly replayed: boolean
       }
+    | { readonly action: "application.skills" }
     | { readonly action: "persona.read" }
     | { readonly action: "persona.reset" }
     | { readonly action: "persona.write"; readonly content: string }
@@ -5666,7 +5667,7 @@ export type ExperimentalNexusManageInput = {
         readonly runner?: string | null | null
       }
     | {
-        readonly action: "application.submit"
+        readonly action: "application.prepare" | "application.submit"
         readonly key: string
         readonly workspace: string
         readonly conversation: string
@@ -5679,6 +5680,9 @@ export type ExperimentalNexusManageInput = {
         } | null
         readonly model?: string | null
         readonly preset?: string | null
+        readonly approval?: "bypass" | "ask" | "rules" | null
+        readonly target?: string | null
+        readonly instructions?: string | null
         readonly delivery?: "queue" | "steer" | "steer_now" | null
       }
     | {

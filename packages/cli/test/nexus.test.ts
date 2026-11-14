@@ -34,3 +34,31 @@ test("Nexus production commands parse one-shot policy and API-key stdin without 
     { action: "settings", prompt: undefined, code: undefined, format: "text", print: false, keys: false },
   ])
 })
+
+test("Nexus ACP parses launch mode, model and runner independently of pairing options", async () => {
+  const received: unknown[] = []
+  const command = Commands.commands.nexus.spec.pipe(
+    Command.withHandler((input) =>
+      Effect.sync(() => {
+        received.push({
+          action: input.action,
+          mode: Option.getOrUndefined(input.mode),
+          model: Option.getOrUndefined(input.model),
+          runner: Option.getOrUndefined(input.runner),
+        })
+      }),
+    ),
+  )
+  await Effect.runPromise(
+    Command.runWith(command, { version: "test" })([
+      "acp",
+      "--mode",
+      "rules",
+      "--model",
+      "provider/model",
+      "--runner",
+      "remote",
+    ]).pipe(Effect.provide(NodeServices.layer)),
+  )
+  expect(received).toEqual([{ action: "acp", mode: "rules", model: "provider/model", runner: "remote" }])
+})
