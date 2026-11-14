@@ -57,13 +57,27 @@ export default Runtime.handler(
       return
     }
     const result = yield* Effect.tryPromise(async () => {
+      if (input.action === "extensions") return nexus.extensions()
+      if (input.action === "configure") {
+        if (Option.isNone(input.json)) throw new Error("Provide an extension configuration change using --json.")
+
+        const { Nexus } = await import("@opencode/schema/nexus")
+
+        return nexus.configureExtension(
+          Schema.decodeUnknownSync(Schema.fromJsonString(Nexus.ExtensionChange))(input.json.value) as Parameters<
+            typeof nexus.configureExtension
+          >[0],
+        )
+      }
       if (input.action === "manage") {
         if (Option.isNone(input.json)) throw new Error("Provide a Nexus command using --json.")
         const { NexusCommand } = await import("@opencode/protocol/nexus-command")
         return nexus.manage({
           "x-nexus-origin": process.env.NEXUS_URL,
           "x-nexus-member-token": process.env.NEXUS_MEMBER_TOKEN,
-          payload: Schema.decodeUnknownSync(Schema.fromJsonString(NexusCommand))(input.json.value),
+          payload: Schema.decodeUnknownSync(Schema.fromJsonString(NexusCommand))(input.json.value) as Parameters<
+            typeof nexus.manage
+          >[0]["payload"],
         })
       }
       if (input.action === "disconnect") return nexus.disconnect()
