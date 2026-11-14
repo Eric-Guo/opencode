@@ -1,4 +1,5 @@
 import {
+  APIError,
   Client,
   DeviceFlow,
   ExecutorClient,
@@ -33,7 +34,8 @@ import { NexusApplication } from "./application"
 export { NexusApplication } from "./application"
 import type { NexusPreset } from "@opencode/schema/nexus-preset"
 import type { NexusBot } from "@opencode/schema/nexus-bot"
-import { readEffect, RunnerAdmission, serveInbox, tools } from "./runner"
+import { operatorTools, RunnerAdmission, tools } from "./runner"
+import { RunnerInbox } from "./runner-inbox"
 
 const ModeValues = Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })
 
@@ -65,6 +67,7 @@ export type Status = {
   identity?: Identity
   pairing?: Pairing
   error?: string
+  executor?: Nexus.ExecutorStatus
 }
 
 /** One owner, scoped to the elected OpenCode service. Browser and CLI clients share this instance. */
@@ -80,6 +83,7 @@ export class NexusRuntime {
   private declaring = Promise.resolve()
   private credentials?: OAuthCredentials
   private extensionManager?: ExtensionManager
+  private executor?: RunnerInbox
   private statusValue: Status = { state: "unpaired", origin: "", model: "", directory: "", workspace: "" }
 
   constructor(
@@ -91,7 +95,7 @@ export class NexusRuntime {
   }
 
   status() {
-    return this.statusValue
+    return this.executor ? { ...this.statusValue, executor: this.executor.snapshot() } : this.statusValue
   }
 
   async restore() {
@@ -244,7 +248,7 @@ export class NexusRuntime {
           {
             services: {
               agent: { tools: refresh("agent") },
-              runner: { tools: [...refresh(), ...hidden], environment: { root: settings.directory } },
+              runner: { tools: [...refresh(), ...operatorTools], environment: { root: settings.directory } },
             },
           },
           { signal },
@@ -265,20 +269,13 @@ export class NexusRuntime {
         )
       },
     )
-    const hidden = [
-      { name: "files_bytes", effect_profile: readEffect },
-      { name: "checkpoints", effect_profile: readEffect },
-      {
-        name: "checkpoint_restore",
-        effect_profile: { ...readEffect, kind: "write" as const, destructive: true, idempotency: "none" as const },
-      },
-    ]
     await this.extensionManager.start()
 
-    const names = [...refresh(), ...hidden].map((tool) => tool.name)
+    const names = [...refresh(), ...operatorTools].map((tool) => tool.name)
     if (new Set(names).size !== names.length) throw new Error("Nexus extensions must provide unique tool names.")
     const checkpoints = new Checkpoints(join(this.storage, "checkpoints", settings.identifier), settings.directory)
     const journal = new ClaimJournal(join(this.storage, "claims", settings.identifier))
+    const admission = new RunnerAdmission()
     while (!signal.aborted) {
       try {
         const availableTools = refresh()
@@ -287,7 +284,7 @@ export class NexusRuntime {
             services: {
               agent: { tools: refresh("agent") },
               runner: {
-                tools: [...availableTools, ...hidden],
+                tools: [...availableTools, ...operatorTools],
                 environment: { root: settings.directory },
               },
             },
@@ -426,6 +423,7 @@ export class NexusRuntime {
             AbortSignal.any([signal, ingress.signal]),
             checkpoints,
             () => this.extensionManager?.tools() ?? [],
+            admission,
           )
           if (bot) {
             try {
@@ -441,7 +439,7 @@ export class NexusRuntime {
       } catch (cause) {
         this.connection = undefined
         this.failed(cause)
-        if (signal.aborted) return
+        if (signal.aborted || (cause instanceof APIError && cause.status === 401)) return
         await delay(5000, undefined, { signal })
       }
     }
@@ -456,18 +454,31 @@ export class NexusRuntime {
     signal: AbortSignal,
     checkpoints: Checkpoints,
     extensions: () => readonly RunnerTool[],
+    admission: RunnerAdmission,
   ) {
-    await journal.recover(executor, signal)
     const socket = new RealtimeClient(options)
     const owner = new AbortController()
     const active = AbortSignal.any([signal, owner.signal])
     let wake = new AbortController()
+    const inbox = new RunnerInbox({
+      executor,
+      id,
+      root: directory,
+      journal,
+      signal: active,
+      extensions,
+      admission,
+      host: this.host,
+      checkpoints,
+      wake: () => wake.abort(),
+    })
+    this.executor = inbox
     const notifications = (async () => {
       while (!active.aborted) {
         try {
           const subscription = await socket.executorInbox({ signal: active })
           wake.abort()
-          for await (const _event of subscription) wake.abort()
+          for await (const event of subscription) inbox.notify(event)
         } catch {
           if (active.aborted) return
         }
@@ -475,39 +486,15 @@ export class NexusRuntime {
         await delay(5000, undefined, { signal: active })
       }
     })().catch(() => {})
-    const admission = new RunnerAdmission(() => wake.abort())
-    const programs = new Set<Promise<void>>()
-    let failure: unknown
-    const background = (work: Promise<void>) => {
-      programs.add(work)
-      void work
-        .catch((error) => {
-          failure = error
-          owner.abort()
-        })
-        .finally(() => programs.delete(work))
-    }
     try {
       while (!active.aborted) {
         wake = new AbortController()
-        await serveInbox(
-          executor,
-          id,
-          directory,
-          journal,
-          active,
-          background,
-          this.host,
-          checkpoints,
-          extensions(),
-          admission,
-        )
+        await inbox.sweep()
         await delay(5000, undefined, { signal: AbortSignal.any([active, wake.signal]) }).catch(() => {})
       }
-      if (failure) throw failure
     } finally {
       owner.abort()
-      await Promise.allSettled(programs)
+      await inbox.close()
       await socket.close()
       await notifications
     }
@@ -920,5 +907,6 @@ export class NexusRuntime {
     await this.extensionManager?.close()
     this.extensionManager = undefined
     await this.credentials?.drain()
+    this.executor = undefined
   }
 }
