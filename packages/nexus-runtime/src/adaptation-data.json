@@ -1,0 +1,136 @@
+{
+  "presets": {
+    "format": 1,
+    "words": ["nexus", "claude", "codex"],
+    "plain": {
+      "nexus.graph.delegate_task": "delegate_task",
+      "nexus.graph.wait": "wait",
+      "nexus.human.ask": "ask",
+      "nexus.conversation.spawn": "spawn",
+      "nexus.conversation.send": "send",
+      "nexus.conversation.request": "request",
+      "nexus.conversation.links": "links",
+      "nexus.skill.load": "skill",
+      "nexus.image.generate": "image_generate"
+    },
+    "presets": {
+      "nexus": {
+        "supersedes": [],
+        "aliases": []
+      },
+      "claude": {
+        "supersedes": ["nexus.graph.delegate_task", "nexus.human.ask", "nexus.skill.load"],
+        "aliases": [
+          {
+            "name": "Agent",
+            "canonical": "nexus.graph.delegate_task",
+            "params": {
+              "run_in_background": {
+                "maps_to": "wait",
+                "invert": true,
+                "description": "true (the default): the next round continues alongside the task. false: the next round waits and the answer is this call's result. Lifetime independently controls whether final delivery waits."
+              }
+            },
+            "recut": {
+              "anchor": "`wait: true` means your next round WAITS for the task: the `<task_result>` is\nthis call's result, and several waited calls in one message answer\ntogether, in the order you asked. Use the default for a long test run or\nbuild while you do other work; use `wait: true` when you need the answer\nbefore you can continue.",
+              "replacement": "`run_in_background: false` means your next round WAITS for the task: the\n`<task_result>` is this call's result, and several waited calls in one\nmessage answer together, in the order you asked. Use the default for a\nlong test run or build while you do other work; use\n`run_in_background: false` when you need the answer before you can\ncontinue."
+            }
+          },
+          {
+            "name": "AskUserQuestion",
+            "canonical": "nexus.human.ask"
+          },
+          {
+            "name": "Skill",
+            "canonical": "nexus.skill.load",
+            "params": {
+              "skill": {
+                "maps_to": "name",
+                "description": "The skill name. E.g., \"commit\", \"review-pr\", or \"pdf\""
+              }
+            }
+          }
+        ]
+      },
+      "codex": {
+        "supersedes": [
+          "nexus.conversation.spawn",
+          "nexus.conversation.send",
+          "nexus.human.ask",
+          "nexus.image.generate"
+        ],
+        "aliases": [
+          {
+            "name": "imagegen",
+            "canonical": "nexus.image.generate"
+          },
+          {
+            "name": "spawn_agent",
+            "canonical": "nexus.conversation.spawn",
+            "omit": ["wait"],
+            "recut": {
+              "anchor": "message that is not from the person; `wait: true`\nwaits for the first reply. Use `{{delegate_task}}` for one bounded job that\nends with one answer; use `{{spawn}}` when the work needs another\nagent's tools or memory, or a back-and-forth.",
+              "replacement": "message that is not from the person.\nThe reply follows the selected wake policy. If `{{wait}}` is available,\nit can observe the existing task later. Use `{{delegate_task}}` for one\nbounded job that ends with one answer; use `{{spawn}}` when the work\nneeds another agent's tools or memory, or a back-and-forth."
+            }
+          },
+          {
+            "name": "send_message",
+            "canonical": "nexus.conversation.send",
+            "params": {
+              "target": {
+                "maps_to": "to"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "rows": [
+    {
+      "format": 1,
+      "row": "default",
+      "models": [],
+      "tool_style": ["nexus"],
+      "tool_descriptions": [],
+      "summarizer_prompt": null,
+      "lead_hints": []
+    },
+    {
+      "format": 1,
+      "row": "codex",
+      "models": ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"],
+      "tool_style": ["codex"],
+      "tool_descriptions": [],
+      "summarizer_prompt": null,
+      "lead_hints": []
+    },
+    {
+      "format": 1,
+      "row": "claude",
+      "models": ["claude-opus-5-5", "claude-fable-5", "claude-fable-5-1", "claude-sonnet-5"],
+      "tool_style": ["claude"],
+      "tool_descriptions": [],
+      "summarizer_prompt": null,
+      "lead_hints": []
+    },
+    {
+      "format": 1,
+      "row": "glm-5.3",
+      "models": ["z-ai/glm-5.3"],
+      "tool_style": ["nexus"],
+      "tool_descriptions": [],
+      "summarizer_prompt": null,
+      "lead_hints": []
+    },
+    {
+      "format": 1,
+      "row": "kimi-k3",
+      "models": ["moonshotai/kimi-k3"],
+      "tool_style": ["nexus"],
+      "tool_descriptions": [],
+      "summarizer_prompt": null,
+      "lead_hints": []
+    }
+  ]
+}

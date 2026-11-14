@@ -70,6 +70,10 @@ export const mcpConfiguration = {
   additionalProperties: false,
 } satisfies JsonSchema.JsonSchema
 
+export const mcpDefaults = {
+  context7: { transport: "http", url: "https://mcp.context7.com/mcp", tools: ["*"], enabled: false, serves: "agent" },
+}
+
 export function mcpSettings(
   input: unknown,
   directory: string,
@@ -96,7 +100,13 @@ export function mcpSettings(
     return { rows, faults }
   }
 
-  const table = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))(input)
+  const overrides = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))(
+    input,
+  )
+  const merged = literal ? overrides : { ...overrides, context7: { ...mcpDefaults.context7, ...overrides.context7 } }
+  const table = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json)))(
+    merged,
+  )
 
   for (const [key, value] of Object.entries(table)) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || key.length > 32)
