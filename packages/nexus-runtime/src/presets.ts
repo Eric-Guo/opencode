@@ -3,9 +3,14 @@ import { randomBytes } from "node:crypto"
 import { Schema } from "effect"
 import { NexusPreset } from "@opencode/schema/nexus-preset"
 import { StoreDocument } from "./document"
+import { readPreset, writePreset } from "./preset-document"
+import { memoryPolicy } from "./memory-policy"
+import { applyMcp, selectedMcp, withoutMcp, type McpDirectory } from "./preset-mcp"
 
 export const guidance =
-  "Complete the requested work using the available tools and verify the result. Accepted work retains its captured environment, tools and model policy. Discover capabilities before calling them. Deliver results to their original requester. Save useful confirmed facts through the available memory tools and claim saved changes only after successful tool results."
+  "Complete the requested work using the available tools and verify the result. Accepted work retains its captured environment, tools and model policy. Discover capabilities before calling them. Deliver results to their original requester. Save useful confirmed facts through the available memory tools and claim saved changes only after successful tool results." +
+  "\n\n" +
+  memoryPolicy
 
 const seeds = [
   {
@@ -52,7 +57,10 @@ const seeds = [
 export class Presets {
   private readonly document: StoreDocument<NexusPreset.Catalog>
 
-  constructor(member: Client) {
+  constructor(
+    member: Client,
+    private readonly mcp?: () => Promise<McpDirectory>,
+  ) {
     this.document = new StoreDocument(
       member.profile.storeEntries,
       "opencode.presets",
@@ -104,8 +112,28 @@ export class Presets {
     const catalog = await this.catalog()
 
     if (command.action === "preset.list") return catalog
-    if (command.action === "preset.create" || command.action === "preset.import") {
-      const entry = { ...authored(command.value), public_id: createID(), role: null }
+    if (command.action === "preset.defaults") {
+      return this.document.change((current) => {
+        if (command.main_preset_public_id) find(current!, command.main_preset_public_id)
+        if (command.default_bot_preset_public_id) find(current!, command.default_bot_preset_public_id)
+
+        return {
+          ...current!,
+          main_preset_public_id: command.main_preset_public_id ?? current!.main_preset_public_id,
+          default_bot_preset_public_id: command.default_bot_preset_public_id ?? current!.default_bot_preset_public_id,
+        }
+      })
+    }
+    if (
+      command.action === "preset.create" ||
+      command.action === "preset.import" ||
+      command.action === "preset.import-document"
+    ) {
+      const value =
+        command.action === "preset.import-document"
+          ? readPreset(command.content, command.format, command.filename)
+          : command.value
+      const entry = { ...authored(value), public_id: createID(), role: null }
 
       await this.document.change((current) => ({ ...current!, presets: [...current!.presets, entry] }))
       return entry
@@ -114,6 +142,7 @@ export class Presets {
     const entry = find(catalog, command.id)
 
     if (command.action === "preset.read") return entry
+    if (command.action === "preset.export-document") return writePreset(entry, command.format)
     if (command.action === "preset.export")
       return { name: entry.name, description: entry.description, configuration: entry.configuration }
 
@@ -159,7 +188,11 @@ export class Presets {
   async resolve(base: AgentConfigurationInput, id?: string, inheritedModel?: string) {
     const catalog = await this.catalog()
     const preset = find(catalog, id ?? catalog.main_preset_public_id)
-    const resolved = compile(preset, base, inheritedModel)
+    const directory = await this.mcp?.()
+    const resolved = compile(preset, base, inheritedModel, directory)
+    const parentMcp = directory
+      ? selectedMcp(directory, preset.configuration.mcp).map((entry) => entry.tool.callable_name)
+      : (resolved.configuration.mcp_tools ?? []).map((tool) => tool.name)
     const roles = catalog.presets.filter((entry) => entry.role)
     const spawn = "nexus.conversation.spawn"
     const roleTools = resolved.configuration.kernel_tools?.includes(spawn)
@@ -181,12 +214,16 @@ export class Presets {
 
     return {
       ...resolved,
+      mcp_names: parentMcp,
       configuration: {
         ...resolved.configuration,
         kernel_tools: resolved.configuration.kernel_tools?.filter((name) => name !== spawn),
         tool_definitions: [...(resolved.configuration.tool_definitions ?? []), ...roleTools],
         delegation_catalog: roles.map((entry) => {
-          const child = compile(entry, base, inheritedModel)
+          const child = compile(entry, base, inheritedModel, directory)
+          const names = directory
+            ? selectedMcp(directory, entry.configuration.mcp).map((entry) => entry.tool.callable_name)
+            : (child.configuration.mcp_tools ?? []).map((tool) => tool.name)
           const template =
             child.configuration.prompt_template == null
               ? {
@@ -210,6 +247,10 @@ export class Presets {
           )(
             JSON.stringify({
               ...child.configuration,
+              mcp_tools: [],
+              tool_definitions: directory
+                ? withoutMcp(child.configuration.tool_definitions ?? [], directory)
+                : child.configuration.tool_definitions,
               system_prompt: { content: child.instructions },
               conversation_reach: "subtree",
               memory_context_limit: { bindings: memory.filter((binding) => binding.name === "conversation") },
@@ -224,7 +265,7 @@ export class Presets {
             name: entry.role!.name,
             description: entry.role!.description,
             model_mode: entry.configuration.model_mode === "follow" ? "caller" : "default",
-            inherited_tool_names: [],
+            inherited_tool_names: names.filter((name) => parentMcp.includes(name)),
             declaration,
           }
         }),
@@ -274,7 +315,12 @@ export function createID() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-function compile(preset: NexusPreset.Entry, base: AgentConfigurationInput, inheritedModel?: string) {
+function compile(
+  preset: NexusPreset.Entry,
+  base: AgentConfigurationInput,
+  inheritedModel?: string,
+  directory?: McpDirectory,
+) {
   const configuration = preset.configuration
   const value: AgentConfigurationInput = {
     ...base,
@@ -347,7 +393,7 @@ function compile(preset: NexusPreset.Entry, base: AgentConfigurationInput, inher
 
   return {
     preset: preset.public_id,
-    configuration: value,
+    configuration: directory ? applyMcp(value, directory, configuration.mcp) : value,
     instructions: [guidance, configuration.system_prompt].filter(Boolean).join("\n\n"),
   }
 }

@@ -5409,6 +5409,18 @@ export type ExperimentalNexusManageInput = {
           }
         }
       }
+    | {
+        readonly action: "preset.import-document"
+        readonly content: string
+        readonly format: "md" | "json"
+        readonly filename?: string
+      }
+    | { readonly action: "preset.export-document"; readonly id: string; readonly format: "md" | "json" }
+    | {
+        readonly action: "preset.defaults"
+        readonly main_preset_public_id?: string
+        readonly default_bot_preset_public_id?: string
+      }
     | { readonly action: "bot.list" }
     | {
         readonly action: "bot.create"
@@ -5451,9 +5463,15 @@ export type ExperimentalNexusManageInput = {
         readonly text: string
         readonly model?: string
         readonly speaker?: string
+        readonly attachments?: ReadonlyArray<string>
+        readonly delivery?: "queue" | "steer" | "steer_now"
+        readonly observe?: boolean
+        readonly deliver_at?: string
+        readonly expected_steering_run_public_id?: string
       }
     | { readonly action: "bot.read" | "bot.remove" | "bot.history"; readonly id: string }
     | { readonly action: "bot.current" | "bot.new"; readonly id: string; readonly key: string }
+    | { readonly action: "bot.workspace"; readonly id: string; readonly key: string; readonly workspace: string }
     | {
         readonly action: "bot.resume"
         readonly id: string
@@ -5484,6 +5502,12 @@ export type ExperimentalNexusManageInput = {
         readonly workspace: string
         readonly conversation: string
         readonly text: string
+        readonly attachments?: ReadonlyArray<string> | null
+        readonly until?: {
+          readonly command: string
+          readonly attempts?: number | null
+          readonly directory?: string | null
+        } | null
         readonly model?: string | null
         readonly preset?: string | null
         readonly delivery?: "queue" | "steer" | "steer_now" | null
@@ -5506,6 +5530,7 @@ export type ExperimentalNexusManageInput = {
           >
         }
       }
+    | { readonly action: "extension.call"; readonly name: string; readonly input: JsonValue }
     | {
         readonly action: "schedule.create"
         readonly conversation: string
