@@ -28,6 +28,7 @@ for await (const line of createInterface({input:process.stdin})) {
   const m = JSON.parse(line)
   if(m.method==="initialize") write({id:m.id,result:{protocolVersion:1,agentCapabilities:{},authMethods:[]}})
   if(m.method==="session/new") write({id:m.id,result:{sessionId:"s"}})
+  if(m.method==="session/close") write({id:m.id,result:{}})
   if(m.method==="session/prompt"){
     prompt=m.id
     write({id:"ask",method:"session/request_permission",params:{sessionId:"s",toolCall:{toolCallId:"t",title:"Read a project file"},options:[{optionId:"once",kind:"allow_once",name:"Allow once"}]}})
@@ -38,7 +39,7 @@ for await (const line of createInterface({input:process.stdin})) {
   }
 }`,
     )
-    const tool = acpTool(JSON.stringify({ peer: [process.execPath, peer] }))
+    await using tool = acpTool(JSON.stringify({ peer: [process.execPath, peer] }))
     const result = await tool.execute(
       { agent: "peer", prompt: "inspect" },
       {
