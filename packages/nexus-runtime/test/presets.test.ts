@@ -2,7 +2,75 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { StoreDocument } from "../src/document"
 import { Presets } from "../src/presets"
+import { readPreset, writePreset } from "../src/preset-document"
 import { storeFixture } from "./fixture/store"
+
+test("portable Presets preserve authored configuration without identity and accept agent Markdown", () => {
+  const authored = {
+    name: "Writer",
+    description: "Write reports",
+    configuration: {
+      system_prompt: "Keep ${VARIABLE} literal.\n",
+      model: null,
+      model_mode: "follow" as const,
+      fallback_models: [],
+      tools: null,
+    },
+  }
+
+  for (const format of ["md", "json"] as const)
+    expect(readPreset(writePreset(authored, format), format)).toEqual(authored)
+
+  expect(
+    readPreset(
+      "---\ndescription: Inspect code\nmodel: inherit\ntools: read, grep\n---\nInspect only.\n",
+      "md",
+      "explorer.md",
+    ),
+  ).toEqual({
+    name: "explorer",
+    description: "Inspect code",
+    configuration: { model: null, model_mode: "follow", tools: ["read", "grep"], system_prompt: "Inspect only.\n" },
+  })
+  expect(() => readPreset('{"name":"x","description":"x","configuration":{},"public_id":"identity"}', "json")).toThrow(
+    "Unsupported Preset fields",
+  )
+  expect(() => readPreset("---\nname: x\ndescription: &text words\nconfiguration: *text\n---\n", "md")).toThrow()
+})
+
+test("Preset defaults change atomically and importing a document never publishes its role", async () => {
+  const fixture = storeFixture()
+  const presets = new Presets(fixture.client)
+
+  try {
+    const original = await presets.catalog()
+    const content = writePreset({ name: "New", description: "Imported", configuration: { fallback_models: [] } }, "md")
+
+    await presets.command({ action: "preset.import-document", format: "md", content })
+    const imported = (await presets.catalog()).presets.at(-1)!
+
+    expect(imported.role).toBeNull()
+    await expect(
+      presets.command({
+        action: "preset.defaults",
+        main_preset_public_id: imported.public_id,
+        default_bot_preset_public_id: "missing",
+      }),
+    ).rejects.toThrow("Unknown Preset")
+    expect((await presets.catalog()).main_preset_public_id).toBe(original.main_preset_public_id)
+    await presets.command({
+      action: "preset.defaults",
+      main_preset_public_id: imported.public_id,
+      default_bot_preset_public_id: imported.public_id,
+    })
+    expect(await new Presets(fixture.client).catalog()).toMatchObject({
+      main_preset_public_id: imported.public_id,
+      default_bot_preset_public_id: imported.public_id,
+    })
+  } finally {
+    fixture.server.stop(true)
+  }
+})
 
 test("Store documents reconcile a committed response loss and do not replay stale mutations", async () => {
   const fixture = storeFixture()
