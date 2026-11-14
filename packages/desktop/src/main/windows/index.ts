@@ -31,6 +31,8 @@ import { loadWebContents, registerRendererOrigin, registerRendererProtocol, setP
 import { createWindowRegistry } from "./registry"
 import { windowRecovery } from "./recovery"
 import { createRendererLoader } from "./renderer-loading"
+import { SidecarCredentials } from "../service/sidecar-credentials"
+import { presentationFor } from "./presentation"
 import { createPanel } from "./panel"
 import { createRevealDriver } from "./reveal-machine"
 import { restoreEarlyWindow, type EarlyWindow } from "./early"
@@ -191,6 +193,14 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
     }
 
     const shell = extension.createWindow?.({
+      connection: async () => {
+        const connection = SidecarCredentials.get()
+
+        if (!connection) throw new Error("Managed service unavailable")
+
+        return connection
+      },
+      presentation: presentationFor(win),
       window: win,
       id,
       preloadRoot: paths.preloadRoot,
