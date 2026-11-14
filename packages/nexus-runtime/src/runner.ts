@@ -3,7 +3,6 @@ import { constants } from "node:fs"
 import { open, readdir, realpath, mkdir, mkdtemp, rm } from "node:fs/promises"
 import { basename, isAbsolute, relative, resolve, sep, join } from "node:path"
 import {
-  APIError,
   type CommitTask,
   type AnnouncedTool,
   type ExecutorClient,
@@ -14,15 +13,19 @@ import {
 
 import type { Checkpoints } from "./checkpoints"
 import type { RunnerContext, RunnerTool } from "./extensions"
-import type { ClaimJournal } from "./claims"
 import { webFetch } from "./web"
-import { ClaimLease, ClaimOperations } from "./claim-control"
 import { destination, mutate, readText } from "./mutation"
 
 export class RunnerAdmission {
   private resources = new Map<string, { concurrency: number; active: number }>()
+  private listeners = new Set<() => void>()
 
   constructor(private readonly wake: () => void = () => {}) {}
+
+  subscribe(wake: () => void) {
+    this.listeners.add(wake)
+    return () => this.listeners.delete(wake)
+  }
 
   reserve(tool?: RunnerTool) {
     if (!tool?.resource) return () => {}
@@ -46,6 +49,7 @@ export class RunnerAdmission {
     return () => {
       resource.active--
       this.wake()
+      this.listeners.forEach((wake) => wake())
     }
   }
 }
@@ -177,6 +181,24 @@ export const tools: AnnouncedTool[] = [
   },
 ]
 
+export const operatorTools: AnnouncedTool[] = [
+  { name: "files_bytes", effect_profile: readEffect, input_schema: { ...pathInput, required: ["path"] } },
+  {
+    name: "checkpoints",
+    effect_profile: readEffect,
+    input_schema: { type: "object", properties: { run_public_id: { type: "string" } }, required: ["run_public_id"] },
+  },
+  {
+    name: "checkpoint_restore",
+    effect_profile: { ...readEffect, kind: "write", destructive: true, idempotency: "none" },
+    input_schema: {
+      type: "object",
+      properties: { checkpoint: { type: "string" }, store: { type: "string" } },
+      required: ["checkpoint"],
+    },
+  },
+]
+
 async function runnerPath(root: string, input: JsonObject, signal: AbortSignal) {
   signal.throwIfAborted()
   if (typeof input.path !== "string" || !input.path || Object.keys(input).length !== 1)
@@ -205,7 +227,7 @@ export async function execute(
   return readText(path, signal)
 }
 
-async function runClaim(
+export async function runClaim(
   executor: ExecutorClient,
   row: InboxTask,
   root: string,
@@ -368,123 +390,4 @@ async function runClaim(
   } finally {
     await handle.close()
   }
-}
-
-export async function serveInbox(
-  executor: ExecutorClient,
-  id: string,
-  root: string,
-  journal: ClaimJournal,
-  signal: AbortSignal,
-  background: (work: Promise<void>) => void,
-  host?: HostTools,
-  checkpoints?: Checkpoints,
-  extensions: readonly RunnerTool[] = [],
-  admission = new RunnerAdmission(),
-) {
-  const addressed = (row: InboxTask) =>
-    row.kind === "tool_call" &&
-    ["agent", "runner"].includes(row.addressed_to?.role ?? "") &&
-    row.addressed_to?.executor_public_id === id
-  let after: string | undefined
-  do {
-    const page = await executor.inbox.list({ after }, { signal })
-    for (const row of page.items.filter((row) => !row.claimed && addressed(row))) {
-      const release = admission.reserve(extensions.find((tool) => tool.definition.name === row.tool_name))
-
-      if (!release) continue
-
-      const task = executor.inboxTask(row.run_public_id, row.task_key)
-      const claim = await task.claim({ signal }).catch((error) => {
-        if (error instanceof APIError && error.status === 409) return null
-        release()
-        throw error
-      })
-      if (!claim) {
-        release()
-        continue
-      }
-      const finish = async () => {
-        const extension = extensions.find((tool) => tool.definition.name === claim.task.tool_name)
-        const lease = new ClaimLease(task, claim, signal, !extension?.internalTimeout)
-        const active = lease.signal
-        lease.start()
-        try {
-          const binding = claim.task.executor_context?.["opencode.directory"]
-          const valid =
-            addressed(claim.task) &&
-            claim.task.run_public_id === row.run_public_id &&
-            claim.task.task_key === row.task_key &&
-            (binding === root ||
-              (extension?.role === "agent" && binding === undefined) ||
-              (["files_bytes", "checkpoints", "checkpoint_restore"].includes(claim.task.tool_name ?? "") &&
-                binding === undefined &&
-                !claim.task.conversation_public_id))
-          const record = { run: row.run_public_id, task: row.task_key, token: claim.claim_token }
-          await journal.save(record)
-          const executing = active
-          const operations = new ClaimOperations(task, claim.claim_token, executing)
-          const operation = (key: string, request: JsonObject) => operations.invoke(key, request)
-          const ask = async (key: string, prompt: string, options?: string[]) => {
-            const result = await operation(key, {
-              kind: "ask",
-              input: { prompt, ...(options?.length ? { options } : {}) },
-            })
-            if (
-              !result ||
-              typeof result !== "object" ||
-              Array.isArray(result) ||
-              result.status !== "completed" ||
-              result.is_error ||
-              !Array.isArray(result.content)
-            )
-              throw new Error("Question was not answered.")
-            return result.content
-              .flatMap((block) =>
-                block &&
-                typeof block === "object" &&
-                !Array.isArray(block) &&
-                block.type === "text" &&
-                typeof block.text === "string"
-                  ? [block.text]
-                  : [],
-              )
-              .join("\n")
-          }
-          const result = valid
-            ? await runClaim(
-                executor,
-                claim.task,
-                root,
-                executing,
-                host,
-                checkpoints,
-                extensions,
-                ask,
-                claim.claim_token,
-                operation,
-              ).then(
-                (result) => ({ ...result, outcome: "completed" as const }),
-                (cause) => ({
-                  content: cause instanceof Error ? cause.message : "Runner tool failed",
-                  outcome: "completed" as const,
-                  is_error: true,
-                }),
-              )
-            : { content: "This claim does not match the captured runner directory.", outcome: "failed" as const }
-          await journal.save({ ...record, result })
-          if (signal.aborted) return
-          if (!active.aborted && (await task.claimStatus(claim.claim_token, { signal: active })).active) {
-            await task.commit({ claim_token: claim.claim_token, ...result }, { signal: active })
-          }
-          await journal.remove(record)
-        } finally {
-          await lease.close()
-        }
-      }
-      // Every yielding handler leaves the inbox available to its children and other conversations.
-      background(finish().finally(release))
-    }
-    after = page.next_after ?? undefined
-  } while (after !== undefined)
 }
