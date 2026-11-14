@@ -68,6 +68,7 @@ export class Bots {
     private readonly environment?: () => Record<string, JsonObject>,
     private readonly event?: (name: string, value: Schema.Json) => Promise<void>,
     admissions?: InputAdmissions,
+    private readonly hints?: (model: string) => string,
   ) {
     this.admissions = admissions ?? new InputAdmissions(member)
   }
@@ -312,7 +313,12 @@ export class Bots {
       },
       agent_configuration: Schema.decodeUnknownSync(
         Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)),
-      )(JSON.stringify({ ...prepared.configuration, system_prompt: { content: prepared.instructions } })),
+      )(
+        JSON.stringify({
+          ...prepared.configuration,
+          system_prompt: { content: [prepared.instructions, this.hints?.(model)].filter(Boolean).join("\n\n") },
+        }),
+      ),
       fallback_models: prepared.configuration.fallback_models ?? [],
       ...(settings.audience === "owner" && this.environment ? { executor_contexts: this.environment() } : {}),
     } satisfies CreateInput
@@ -478,7 +484,7 @@ export class Bots {
               create: {
                 answering_user_public_id: agent.public_id,
                 default_runner_executor_public_id: settings.audience === "external" ? null : this.runner,
-                metadata: { "opencode.bot": agent.public_id },
+                metadata: { "opencode.bot": agent.public_id, "opencode.title_pending": true },
               },
             }
 

@@ -34,6 +34,7 @@ test("MCP settings isolate faults, expand credentials once and default the trans
     ["local", "runner", 600000],
     ["remote", "agent", 60000],
     ["parked", "runner", 600000],
+    ["context7", "agent", 60000],
   ])
   expect(settings.rows[0].config).toMatchObject({ environment: { EXPANDED: "${NESTED_TOKEN}" }, cwd: "/project" })
   expect(settings.rows[0].secrets).toEqual(["${NESTED_TOKEN}", "literal-secret"])
