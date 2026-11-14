@@ -1,4 +1,4 @@
-import { isAbsolute } from "node:path"
+import { isAbsolute, join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -7,13 +7,14 @@ import type { HostTools } from "./host"
 import { mcpTools, terminalTools, type NexusExtension } from "./extensions"
 import type { ExtensionModule } from "./extension-manager"
 import { missing } from "./storage"
+import { acpConfiguration } from "./acp-settings"
 
 const Browser = Schema.Struct({ executable: Schema.String, idle_seconds: Schema.optional(Schema.Number) })
-const ACP = Schema.Struct({ agents: Schema.Record(Schema.String, Schema.Array(Schema.String)) })
+const ACP = Schema.Struct({ agents: Schema.Record(Schema.String, Schema.MutableJson) })
 const MCP = Schema.Struct({ servers: Schema.Array(Schema.String) })
 const T3 = Schema.Struct({ url: Schema.String, token: Schema.String, project: Schema.String })
 
-export async function builtinExtensions(host?: HostTools): Promise<ExtensionModule[]> {
+export async function builtinExtensions(host?: HostTools, storage?: string): Promise<ExtensionModule[]> {
   const modules: ExtensionModule[] = [
     {
       descriptor: {
@@ -86,19 +87,10 @@ export async function builtinExtensions(host?: HostTools): Promise<ExtensionModu
         name: "ACP delegation",
         description: "Delegate work to configured ACP agents.",
         default_enabled: !!process.env.OPENCODE_NEXUS_ACP_AGENTS,
-        configuration_version: 1,
+        configuration_version: 2,
         restart_only: true,
-        configuration_schema: {
-          type: "object",
-          properties: {
-            agents: {
-              type: "object",
-              additionalProperties: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
-            },
-          },
-          required: ["agents"],
-          additionalProperties: false,
-        },
+        configuration_schema: acpConfiguration,
+        migrate: (configuration) => configuration,
         defaults: {
           agents: process.env.OPENCODE_NEXUS_ACP_AGENTS
             ? Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(process.env.OPENCODE_NEXUS_ACP_AGENTS)
@@ -107,9 +99,20 @@ export async function builtinExtensions(host?: HostTools): Promise<ExtensionModu
       },
       async register(api) {
         const configuration = Schema.decodeUnknownSync(ACP)(api.configuration)
-        const { acpTool } = await import("./acp")
-
-        api.registerTool(acpTool(JSON.stringify(configuration.agents)))
+        const { AcpClient } = await import("./acp")
+        const client = new AcpClient(configuration.agents, {
+          storage: storage ? join(storage, "acp") : undefined,
+          directory: api.directory,
+          protectedRoots: storage ? [storage] : [],
+          signal: api.signal,
+        })
+        api.onShutdown(() => client.close())
+        api.describeStatus(() => client.status())
+        await client.check()
+        const tool = client.tool()
+        if (tool) api.registerTool(tool)
+        for (const name of ["acp.list", "acp.probe", "acp.sessions", "acp.kill", "acp.logs", "acp.release"])
+          api.registerCommand(name, (input) => client.command(input))
       },
     },
     {

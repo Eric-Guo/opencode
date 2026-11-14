@@ -13,6 +13,7 @@ import type { Checkpoints } from "./checkpoints"
 import type { RunnerTool } from "./extensions"
 import type { ClaimJournal } from "./claims"
 import { ClaimDeadline, ClaimInterrupted, ClaimLease, ClaimOperations } from "./claim-control"
+import { runnerRefusal } from "./runner-policy"
 import { claimResult, type ClaimResult } from "./claim-result"
 import { operatorTools, RunnerAdmission, runClaim, tools } from "./runner"
 
@@ -56,6 +57,7 @@ export class RunnerInbox {
       wake(): void
       host?: HostTools
       checkpoints?: Checkpoints
+      protectedRoots?: readonly string[]
       startupLimit?: number
     },
   ) {
@@ -314,7 +316,10 @@ export class RunnerInbox {
       return { outcome: "failed", content: "Tool admission changed before execution; retry this call." }
     if (!definition)
       return { outcome: "failed", content: "This runner no longer serves the claimed tool on this role." }
-    if (this.valid(definition, row.tool_input)) return
+    if (this.valid(definition, row.tool_input)) {
+      const reason = runnerRefusal(row.tool_name ?? "", row.tool_input, this.options.root, this.options.protectedRoots)
+      return reason ? { outcome: "completed", is_error: true, content: reason } : undefined
+    }
     return {
       outcome: "completed",
       is_error: true,

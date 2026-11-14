@@ -92,12 +92,14 @@ test("disabled modules stay inert and failed registration releases staged resour
               return { content: "partial" }
             },
           })
+          api.registerCommand("partial.command", async () => "partial")
           throw new Error("registration failed")
         },
       },
       {
         descriptor,
         register(api) {
+          api.registerCommand("fixture.command", async () => "ok")
           api.registerTool({
             definition: definition("fixture", "fixture", {}, []),
             async execute() {
@@ -115,6 +117,8 @@ test("disabled modules stay inert and failed registration releases staged resour
   try {
     await manager.start()
     expect(manager.tools().map((tool) => tool.definition.name)).toEqual(["fixture"])
+    expect(await manager.command("fixture.command", {})).toBe("ok")
+    await expect(manager.command("partial.command", {})).rejects.toThrow("not loaded")
     expect(events).toEqual(["released"])
     expect(manager.list().find((row) => row.id === "broken")?.diagnostics).toEqual(["registration failed"])
     expect(manager.list().find((row) => row.id === "disabled")?.active).toBe(false)
@@ -136,6 +140,11 @@ test("configuration returns before activation, and replacement leases survive un
         descriptor,
         register(api) {
           const count = Number(api.configuration.count)
+
+          api.registerCommand("fixture.command", async () => {
+            await latch.promise
+            return count
+          })
 
           api.onShutdown(() => {
             released.push(count)
@@ -165,6 +174,7 @@ test("configuration returns before activation, and replacement leases survive un
       {},
       { directory, workspace: "w", conversation: "c", run: "r", task: "t", signal: new AbortController().signal },
     )
+    const command = manager.command("fixture.command", {})
     const result = await manager.change({ id: descriptor.id, operations: [{ op: "set", path: ["count"], value: 2 }] })
 
     expect(result).toEqual({ saved: true, applied: false, published: false, restart_required: false })
@@ -172,6 +182,7 @@ test("configuration returns before activation, and replacement leases survive un
     expect(released).toEqual([])
     latch.resolve()
     expect((await call).content).toBe("1")
+    expect(await command).toBe(1)
     await manager.close()
     expect(released.toSorted()).toEqual([1, 2])
   } finally {

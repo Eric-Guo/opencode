@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { Nexus } from "@opencode/schema/nexus"
 import { NexusPreset } from "@opencode/schema/nexus-preset"
 import { NexusBot } from "@opencode/schema/nexus-bot"
+import { NexusAcp } from "@opencode/schema/nexus-acp"
 
 const Rule = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("once"), run_at: Schema.String }),
@@ -11,6 +12,7 @@ const Rule = Schema.Union([
 export const NexusCommand = Schema.Union([
   ...NexusPreset.Command.members,
   ...NexusBot.Command.members,
+  ...NexusAcp.Command.members,
   Schema.Struct({ action: Schema.Literal("persona.read") }),
   Schema.Struct({ action: Schema.Literal("persona.reset") }),
   Schema.Struct({ action: Schema.Literal("persona.write"), content: Schema.String }),

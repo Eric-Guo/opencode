@@ -240,7 +240,7 @@ export class NexusRuntime {
       }))
     this.extensionManager = new ExtensionManager(
       new Configuration(join(this.storage, "configuration.json")),
-      await builtinExtensions(this.host),
+      await builtinExtensions(this.host, this.storage),
       settings.directory,
       signal,
       async () => {
@@ -470,6 +470,7 @@ export class NexusRuntime {
       admission,
       host: this.host,
       checkpoints,
+      protectedRoots: [this.storage],
       wake: () => wake.abort(),
     })
     this.executor = inbox
@@ -654,6 +655,14 @@ export class NexusRuntime {
     if (command.action === "extension.list") return this.extensions()
     if (command.action === "extension.configure") return this.configureExtension(command.change)
 
+    if (command.action.startsWith("acp.")) {
+      if (!this.extensionManager) throw new Error("ACP delegation is not loaded.")
+      return this.extensionManager.command(
+        command.action,
+        Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(command)),
+      )
+    }
+
     const active = this.connection
     if (!active || !this.settings) throw new Error("Nexus is disconnected.")
     if (command.action.startsWith("preset.")) return active.application.presets.command(command as NexusPreset.Command)
@@ -727,6 +736,7 @@ export class NexusRuntime {
           )
         ).schedule
       }
+      if (!("id" in command)) throw new Error("Unknown conversation command.")
       if (command.action === "schedule.update")
         return schedules.update(command.id, {
           expected_lock_version: command.version,
