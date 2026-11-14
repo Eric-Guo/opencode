@@ -109,6 +109,7 @@ const unavailable = (server: ServerName, status: Status) => {
 }
 
 type ServerEntry = {
+  readonly clientOptions?: McpConnection.ClientOptions
   readonly config: Mcp.ServerConfig
   status: Status
   readonly startup: Latch.Latch
@@ -159,6 +160,7 @@ const isEnded = (error: Error) =>
   error instanceof EventsUnavailableError
 
 type Data = {
+  clients: Map<ServerName, McpConnection.ClientOptions>
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
   removed: Set<ServerName>
 }
@@ -166,7 +168,7 @@ type Data = {
 export type Editor = {
   list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
   get: (server: ServerName | string) => Types.DeepMutable<Mcp.ServerConfig> | undefined
-  set: (server: ServerName | string, config: Mcp.ServerConfig) => void
+  set: (server: ServerName | string, config: Mcp.ServerConfig, clientOptions?: McpConnection.ClientOptions) => void
   update: (server: ServerName | string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void) => void
   remove: (server: ServerName | string) => void
 }
@@ -192,6 +194,7 @@ export interface Interface extends State.Transformable<Editor> {
    */
   readonly awaitStartup: () => Effect.Effect<void>
   readonly callTool: (input: {
+    readonly onSessionRenewed?: () => void
     readonly server: ServerName | string
     readonly name: string
     readonly args?: Record<string, unknown>
@@ -200,6 +203,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly prompts: () => Effect.Effect<Prompt[]>
   readonly prompt: (input: {
+    readonly onSessionRenewed?: () => void
     readonly server: ServerName | string
     readonly name: string
     readonly args?: Record<string, string>
@@ -207,6 +211,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly resourceCatalog: () => Effect.Effect<ResourceCatalog>
   readonly resources: (input: { readonly server: ServerName | string }) => Effect.Effect<ResourceCatalog, Error>
   readonly readResource: (input: {
+    readonly onSessionRenewed?: () => void
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
@@ -664,8 +669,10 @@ export const layer = (options?: Options) =>
       }
 
       const makeEntry = (name: ServerName, config: Mcp.ServerConfig, started: number): ServerEntry => {
+        const clientOptions = state.get().clients.get(name)
         // Local servers run on this Location's execution plane, so only Locations on the host share them.
         const pooled =
+          clientOptions === undefined &&
           config.pool === true &&
           config.protocol !== "legacy" &&
           (config.type === "remote" || environment.local === true)
@@ -690,11 +697,13 @@ export const layer = (options?: Options) =>
           })
         const entry: ServerEntry = {
           config,
+          clientOptions,
           status: { status: "pending" },
           startup: Latch.makeUnsafe(),
           attempt: { started, settled: Latch.makeUnsafe() },
           connection: (pooled ? share : McpConnection.make)({
             name,
+            clientOptions,
             config,
             directory: location.directory,
             clientInfo: options?.clientInfo,
@@ -958,7 +967,11 @@ export const layer = (options?: Options) =>
 
         for (const [name, entry] of entries) {
           const updated = servers.get(name)
-          if (isDeepStrictEqual(entry.config, updated)) continue
+          if (
+            isDeepStrictEqual(entry.config, updated) &&
+            isDeepStrictEqual(entry.clientOptions, state.get().clients.get(name))
+          )
+            continue
           yield* (updated ? replaceServer(name, updated) : removeServer(name, entry)).pipe(locks.withLock(name))
         }
         for (const [name, updated] of servers) {
@@ -990,6 +1003,7 @@ export const layer = (options?: Options) =>
       const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
         initial: () => ({
+          clients: new Map(),
           servers: new Map(
             Array.from(overrides).flatMap(([name, config]) =>
               config === false ? [] : [[name, cloneConfig(config)] as const],
@@ -1000,17 +1014,22 @@ export const layer = (options?: Options) =>
         editor: (editor) => ({
           list: () => Array.from(editor.servers),
           get: (server) => editor.servers.get(ServerName.make(server)),
-          set: (server, serverConfig) => {
+          set: (server, serverConfig, clientOptions) => {
             const name = ServerName.make(server)
             if (editor.removed.has(name)) return
             editor.servers.set(name, cloneConfig(serverConfig))
+            if (clientOptions) editor.clients.set(name, { ...clientOptions })
+            else editor.clients.delete(name)
           },
           update: (server, update) => {
             const current = editor.servers.get(ServerName.make(server))
             if (!current) return
             update(current)
           },
-          remove: (server) => editor.servers.delete(ServerName.make(server)),
+          remove: (server) => {
+            editor.clients.delete(ServerName.make(server))
+            editor.servers.delete(ServerName.make(server))
+          },
         }),
         notify: () => State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
       })
@@ -1113,7 +1132,9 @@ export const layer = (options?: Options) =>
               tool: input.name,
               message: unavailable(server, target.entry.status),
             })
-          return yield* target.entry.connection.recovering(target.client, call).pipe(failed("server"))
+          return yield* target.entry.connection
+            .recovering(target.client, call, input.onSessionRenewed)
+            .pipe(failed("server"))
         }),
         instructions: Effect.fn("MCP.instructions")(function* () {
           return Array.from(entries)
@@ -1136,7 +1157,11 @@ export const layer = (options?: Options) =>
           const target = yield* connected(ServerName.make(input.server))
           if (!target.client) return undefined
           return yield* target.entry.connection
-            .recovering(target.client, (connection) => connection.prompt({ name: input.name, args: input.args }))
+            .recovering(
+              target.client,
+              (connection) => connection.prompt({ name: input.name, args: input.args }),
+              input.onSessionRenewed,
+            )
             .pipe(Effect.orElseSucceed(() => undefined))
         }),
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
@@ -1164,8 +1189,10 @@ export const layer = (options?: Options) =>
           const name = ServerName.make(input.server)
           const target = yield* connected(name)
           if (!target.client) return undefined
-          const result = yield* target.entry.connection.recovering(target.client, (connection) =>
-            connection.readResource({ uri: input.uri }),
+          const result = yield* target.entry.connection.recovering(
+            target.client,
+            (connection) => connection.readResource({ uri: input.uri }),
+            input.onSessionRenewed,
           )
           if (!result) return undefined
           return ResourceContent.make({

@@ -125,6 +125,12 @@ export class HumanLogin {
     return { id: profile.member.public_id, role: profile.member.role }
   }
 
+  async memberCredential(origin: string) {
+    const credentials = await this.credentials(origin)
+
+    return credentials ? credentials.memberCredential() : null
+  }
+
   async platform(origin: string) {
     const credentials = await this.credentials(origin)
 
