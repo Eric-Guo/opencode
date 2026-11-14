@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { JsonObject } from "@cybros/agent"
+import { Client, type JsonObject } from "@cybros/agent"
 import { NexusApplication } from "../src/application"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture, inputFixture } from "./fixture/conversation"
@@ -246,3 +246,156 @@ test("Mainline model inheritance follows settled execution while explicit choice
     fixture.server.stop(true)
   }
 })
+
+test("prepared Human inputs retain authored policy through restart and never admit another request or principal", async () => {
+  const posts: { authorization: string | null; body: JsonObject }[] = []
+  const state = { authored: 0, refuse: false, lose: true }
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: conversationFixture() })
+    if (path.endsWith("/inputs") && request.method === "POST") {
+      posts.push({
+        authorization: request.headers.get("authorization"),
+        body: ((await request.json()) as { input: JsonObject }).input,
+      })
+      if (state.lose) {
+        state.lose = false
+        return Response.json({ error: { code: "response_lost" } }, { status: 503 })
+      }
+      return Response.json({ input: inputFixture() }, { status: 202 })
+    }
+  })
+  const human = new Client({ baseURL: fixture.server.url.origin, credential: "human" })
+  const open = () =>
+    new NexusApplication(
+      fixture.client,
+      { workspace: "workspace", agent: "main", runner: "runner" },
+      () => ({ default_model: "provider/model" }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        async author(draft) {
+          if (state.refuse) throw new Error("author refused")
+          state.authored++
+          return { ...draft, lead: "Captured author", notes: { captured: true } }
+        },
+        async describeEnvironment() {
+          return "Environment"
+        },
+        async follow() {},
+        async bindings() {
+          return []
+        },
+      },
+    )
+  const input = {
+    key: "human-input",
+    principal: "human",
+    workspace: "workspace",
+    conversation: "conversation",
+    text: "Inspect",
+    delivery: "steer_now" as const,
+    target: "original-run",
+    approval: "ask" as const,
+    attachments: ["upload"],
+    preparation: async () => ({
+      agent_configuration: { system_prompt: { content: "Original system" } },
+      model: "provider/original",
+      fallback_models: ["provider/fallback"],
+      tools: ["read"],
+      executor_contexts: { runner: { "opencode.directory": "/original" } },
+    }),
+  }
+  try {
+    state.refuse = true
+    await expect(open().captureInput(input, human)).rejects.toThrow("author refused")
+    expect(posts).toHaveLength(0)
+    expect(
+      [...fixture.entries.values()].filter((entry) => entry.namespace === "opencode.input-admission"),
+    ).toHaveLength(0)
+    state.refuse = false
+    const prepared = await open().captureInput(input, human)
+    expect(posts).toHaveLength(0)
+    state.refuse = true
+    const replay = {
+      ...input,
+      preparation: async () => {
+        throw new Error("must use captured policy")
+      },
+    }
+    expect(await open().captureInput(replay, human)).toEqual(prepared)
+    await expect(open().submit(replay, human)).rejects.toThrow()
+    await open().submit(replay, human)
+    expect(state.authored).toBe(1)
+    expect(posts).toHaveLength(2)
+    expect(posts[1]).toEqual(posts[0])
+    expect(posts[0]).toMatchObject({
+      authorization: "Bearer human",
+      body: {
+        instructions: "Captured author",
+        model: { model: "provider/original" },
+        fallback_models: ["provider/fallback"],
+        tool_names: ["read"],
+        attachments: ["upload"],
+        delivery_mode: "steer_now",
+        expected_steering_run_public_id: "original-run",
+        executor_contexts: { runner: { "opencode.directory": "/original" } },
+      },
+    })
+    for (const patch of [
+      { principal: "other" },
+      { text: "Changed" },
+      { conversation: "other" },
+      { target: "other-run" },
+    ])
+      await expect(open().submit({ ...replay, ...patch }, human)).rejects.toThrow("another request")
+    expect(posts).toHaveLength(2)
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
+test.each([
+  [422, "validation_failed", "Approval mode only tightens the declaring profile's approval mode"],
+  [409, "idempotency_envelope_mismatch", "Mismatch"],
+] as const)(
+  "admission persists stricter approval after %s before an uncertain rules response",
+  async (status, code, message) => {
+    const modes: unknown[] = []
+    const state = { lose: true }
+    const fixture = storeFixture(async (request) => {
+      const path = new URL(request.url).pathname
+      if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: conversationFixture() })
+      if (path.endsWith("/inputs") && request.method === "POST") {
+        const body = ((await request.json()) as { input: JsonObject }).input
+        modes.push(body.approval_mode)
+        if (body.approval_mode === "ask") return Response.json({ error: { code, message } }, { status })
+        if (state.lose) {
+          state.lose = false
+          return Response.json({ error: { code: "lost" } }, { status: 503 })
+        }
+        return Response.json({ input: inputFixture() }, { status: 202 })
+      }
+    })
+    const open = () =>
+      new NexusApplication(fixture.client, { workspace: "workspace", agent: "main", runner: "runner" }, () => ({
+        default_model: "model",
+      }))
+    const input = {
+      key: "approval",
+      workspace: "workspace",
+      conversation: "conversation",
+      text: "Hello",
+      approval: "ask" as const,
+    }
+    try {
+      await expect(open().submit(input)).rejects.toThrow()
+      await open().submit(input)
+      expect(modes).toEqual(["ask", "rules", "rules"])
+    } finally {
+      fixture.server.stop(true)
+    }
+  },
+)
