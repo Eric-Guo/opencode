@@ -155,6 +155,39 @@ jobs:
         working-directory: packages/protocol
         run: bun run check:generated
 
+  nexus-conformance:
+    name: Nexus runtime conformance
+    if: ${{ !inputs.quarantine && !github.event.pull_request.draft }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - uses: ./.github/actions/setup-bun
+      - name: Find affected runtime
+        id: affected
+        run: |
+          if [ "$AFFECTED" != "true" ]; then
+            echo "runtime=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          bun x turbo@2.10.2 ls --affected --filter=@opencode/nexus-runtime --output=json > affected.json
+          bun -e 'console.log(`runtime=${(await Bun.file("affected.json").json()).packages.count > 0}`)' >> "$GITHUB_OUTPUT"
+      - name: Install isolated Chromium
+        if: steps.affected.outputs.runtime == 'true'
+        working-directory: packages/app
+        run: bunx --no-install playwright install --with-deps chromium
+      - name: Run local conformance
+        if: steps.affected.outputs.runtime == 'true'
+        working-directory: packages/nexus-runtime
+        timeout-minutes: 10
+        run: |
+          export OPENCODE_NEXUS_CHROMIUM="$(bun --cwd ../app -e 'import { chromium } from "@playwright/test"; console.log(chromium.executablePath())')"
+          bun run test:conformance
+
   build:
     name: build (${{ matrix.settings.name }})
     # Compiling the CLI and smoke-testing its service lifecycle is part of the full tier.

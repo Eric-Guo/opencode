@@ -2,8 +2,10 @@ import { NexusCommand, NexusOperator } from "../nexus-command.js"
 import { Nexus } from "@opencode/schema/nexus"
 import { optional } from "@opencode/schema/schema"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ForbiddenError, InvalidRequestError, ServiceUnavailableError } from "../errors.js"
+
+import { NexusRun } from "@opencode/schema/nexus-run"
 
 const Setup = Schema.Struct({
   origin: Schema.String,
@@ -34,6 +36,11 @@ const annotations = (name: string, summary: string) =>
   })
 
 export const NexusGroup = HttpApiGroup.make("server.nexus").add(
+  HttpApiEndpoint.post("nexus.run", "/api/experimental/nexus/run", {
+    payload: NexusRun.Input,
+    success: HttpApiSchema.StreamSse({ data: NexusRun.Event }),
+    error,
+  }).annotateMerge(annotations("run", "Run a Nexus prompt to completion")),
   HttpApiEndpoint.get("nexus.extensions", "/api/experimental/nexus/extensions", {
     success: Schema.Array(Nexus.Extension),
     error,
@@ -112,7 +119,12 @@ export const NexusGroup = HttpApiGroup.make("server.nexus").add(
         Schema.Struct({ code_mode: Schema.optional(Schema.Boolean), subagent: Schema.optional(Schema.Boolean) }),
       ),
     }),
-    success: Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean }),
+    success: Schema.Struct({
+      code_mode: Schema.Boolean,
+      subagent: Schema.Boolean,
+      available: Schema.optional(Schema.Boolean),
+      code_mode_available: Schema.optional(Schema.Boolean),
+    }),
     error,
   }).annotateMerge(annotations("modes", "Read or update conversation tool choices")),
   HttpApiEndpoint.post("nexus.grant", "/api/experimental/nexus/grant", {
@@ -126,8 +138,14 @@ export const NexusGroup = HttpApiGroup.make("server.nexus").add(
     error,
   }).annotateMerge(annotations("grant", "Remember the approved web fetch site until the service restarts")),
   HttpApiEndpoint.post("nexus.policy", "/api/experimental/nexus/policy", {
-    payload: Schema.Struct({ workspace: Schema.String, conversation: Schema.String }),
+    payload: Schema.Struct({
+      workspace: Schema.String,
+      conversation: Schema.String,
+      model: Schema.optional(Schema.String),
+    }),
     success: Schema.Struct({
+      instructions: Schema.optional(Schema.String),
+      executor_contexts: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Json))),
       tools: Schema.Array(Schema.String),
       directory: Schema.NullOr(Schema.String),
       runner: Schema.NullOr(Schema.String),

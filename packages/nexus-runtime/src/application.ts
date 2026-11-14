@@ -22,10 +22,13 @@ import { Until, untilParagraph } from "./until"
 import { TurnLifecycle } from "./turn-lifecycle"
 import { Environments } from "./environments"
 import { SideConversations, sideLeads, sideReadTools } from "./sides"
+import { StoreDocument } from "./document"
+import { ConversationTitles } from "./conversation-titles"
 import { Runners } from "./runners"
 import type { ExtensionLifecycle } from "./extension-lifecycle"
 
 type Preparation = {
+  instructions?: string
   agent_configuration: JsonObject
   model?: string
   fallback_models: string[]
@@ -35,6 +38,7 @@ type Preparation = {
 
 /** Surface-independent admission and following. Nexus remains the durable execution owner. */
 export class NexusApplication {
+  readonly titles: ConversationTitles
   readonly operations: Operations
   readonly presets: Presets
   readonly bots: Bots
@@ -57,22 +61,44 @@ export class NexusApplication {
     private readonly hooks?: ExtensionLifecycle,
     private readonly approvals?: { grant(value: ApprovalGrant): Promise<void>; list(): readonly ApprovalGrant[] },
     private readonly realtimeFactory?: () => RealtimeClient,
+    readonly defaults: () => {
+      code_mode: boolean
+      subagent: boolean
+      title_model: string | null
+      hints?: (model: string) => string
+      adaptations?: (model?: string) => JsonObject
+    } = () => ({ code_mode: true, subagent: true, title_model: null }),
   ) {
+    this.titles = new ConversationTitles(member, () => this.defaults().title_model)
     this.environments = new Environments(member, identity)
     this.runners = new Runners(member, identity.runner)
     this.operations = new Operations(member, this, identity)
-    this.admissions = new InputAdmissions(member, hooks, async (input, notes) => {
-      if (notes["nexus.until"]) await this.until.save(input.workspace, input.conversation, notes["nexus.until"])
-      if (notes["nexus.side"]) {
-        const side = Schema.decodeUnknownSync(
-          Schema.Struct({ at: Schema.Number, model: Schema.optional(Schema.String) }),
-        )(notes["nexus.side"])
-        await this.sides.touch(input.workspace, input.conversation, side.at, side.model)
-      }
-      this.lifecycle.adopt(input.workspace, input.conversation)
-    })
+    this.admissions = new InputAdmissions(
+      member,
+      hooks,
+      async (input, notes) => {
+        if (notes["nexus.until"]) await this.until.save(input.workspace, input.conversation, notes["nexus.until"])
+        if (notes["nexus.side"]) {
+          const side = Schema.decodeUnknownSync(
+            Schema.Struct({ at: Schema.Number, model: Schema.optional(Schema.String) }),
+          )(notes["nexus.side"])
+          await this.sides.touch(input.workspace, input.conversation, side.at, side.model)
+        }
+        this.lifecycle.adopt(input.workspace, input.conversation)
+      },
+      (target, input, body, replayed) => this.titles.accept(target, input, body, replayed),
+    )
     this.presets = new Presets(member, mcp)
-    this.bots = new Bots(member, this.presets, base, identity.runner, environment, event, this.admissions)
+    this.bots = new Bots(
+      member,
+      this.presets,
+      base,
+      identity.runner,
+      environment,
+      event,
+      this.admissions,
+      (model) => this.defaults().hints?.(model) ?? "",
+    )
     this.memoryReviews = new MemoryReviews(member, identity.agent, event)
     this.until = new Until(member, identity.agent)
     this.lifecycle = new TurnLifecycle(member, identity.agent, this.admissions, hooks, (name, value) =>
@@ -95,6 +121,16 @@ export class NexusApplication {
     })
   }
 
+  async setModes(workspace: string, conversation: string, patch: { code_mode?: boolean; subagent?: boolean }) {
+    const document = new StoreDocument(
+      this.member.workspace(workspace).conversation(conversation).storeEntries,
+      "opencode",
+      "modes",
+      Schema.decodeUnknownSync(Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })),
+    )
+    return document.change((current) => ({ code_mode: true, subagent: true, ...current, ...patch }))
+  }
+
   openSide(
     input: { key: string; parent?: string; workspace?: string; tools?: "read" | "write" },
     options: RequestOptions = {},
@@ -111,7 +147,12 @@ export class NexusApplication {
     } finally {
       stopped.abort()
       await Promise.allSettled(observers)
+      await this.titles.close()
     }
+  }
+
+  get realtimeAvailable() {
+    return !!this.realtimeFactory
   }
 
   realtime() {
@@ -256,9 +297,35 @@ export class NexusApplication {
             }
           : {}),
         title: input.title,
+        ...(recipient === this.identity.agent
+          ? {
+              metadata: {
+                "opencode.title_pending": !input.title,
+                "opencode.initial_modes": { code_mode: this.defaults().code_mode, subagent: this.defaults().subagent },
+              },
+            }
+          : {}),
       },
       { ...options, idempotencyKey: input.key },
     )
+    if (recipient === this.identity.agent) {
+      const modes = new StoreDocument(
+        this.member.workspace(workspace).conversation(result.conversation.public_id).storeEntries,
+        "opencode",
+        "modes",
+        Schema.decodeUnknownSync(Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })),
+      )
+      await modes.change(
+        (current) =>
+          current ??
+          Schema.decodeUnknownSync(Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean }))(
+            result.conversation.metadata["opencode.initial_modes"] ?? {
+              code_mode: this.defaults().code_mode,
+              subagent: this.defaults().subagent,
+            },
+          ),
+      )
+    }
     this.lifecycle.adopt(result.conversation.workspace_public_id, result.conversation.public_id)
     return result
   }
@@ -416,7 +483,9 @@ export class NexusApplication {
             throw new Error("tool_names cannot expand a side conversation's tool posture.")
           return input.tools ?? selected
         })()
-      : (input.tools ?? prepared.tools)
+      : input.tools
+        ? input.tools.filter((name) => !prepared.tools || prepared.tools.includes(name))
+        : prepared.tools
     const executor_contexts =
       input.executor_contexts ?? prepared.executor_contexts ?? (foreignSide ? undefined : this.environment?.())
     const instructions = Schema.decodeUnknownSync(
@@ -485,9 +554,11 @@ export class NexusApplication {
               ...(foreignSide ? { "nexus.addressed": { recipient: conversation.answering_user_public_id } } : {}),
             },
           }
-        : input.instructions
-          ? { instructions: input.instructions }
-          : {}),
+        : {
+            instructions: [input.instructions, model ? this.defaults().hints?.(model) : undefined]
+              .filter(Boolean)
+              .join("\n\n"),
+          }),
       ...(input.approval ? { approval_mode: input.approval } : {}),
       ...(input.deliver_at ? { deliver_at: input.deliver_at } : {}),
       ...(input.deliver_in ? { deliver_in: input.deliver_in } : {}),
@@ -518,7 +589,16 @@ export class NexusApplication {
       delivery_mode: input.delivery,
       executor_contexts,
       ...(acceptance
-        ? { ...acceptance, instructions: [input.instructions, acceptance.instructions].filter(Boolean).join("\n\n") }
+        ? {
+            ...acceptance,
+            instructions: [
+              input.instructions,
+              model ? this.defaults().hints?.(model) : undefined,
+              acceptance.instructions,
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+          }
         : {}),
       ...(tools ? { tool_names: [...tools] } : {}),
     } satisfies CreateInput & { admission_notes?: JsonObject }
