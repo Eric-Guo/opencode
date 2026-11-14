@@ -5032,6 +5032,39 @@ export type DebugAgentExecuteToolInput = {
 
 export type DebugAgentExecuteToolOutput = { location: LocationPublicRef; data: AgentToolResult }
 
+export type ExperimentalNexusExtensionsOutput = Array<{
+  id: string
+  name: string
+  description: string
+  configuration_version: number
+  configuration_schema: JsonValue
+  enabled: boolean
+  active: boolean
+  ready: boolean
+  restart_required: boolean
+  configuration: { [x: string]: JsonValue }
+  diagnostics: Array<string>
+  tools: Array<string>
+}>
+
+export type ExperimentalNexusConfigureExtensionInput = {
+  readonly id: string
+  readonly enabled?: boolean | undefined
+  readonly operations?:
+    | ReadonlyArray<
+        | { readonly op: "set"; readonly path: readonly [string, ...Array<string>]; readonly value: JsonValue }
+        | { readonly op: "unset"; readonly path: readonly [string, ...Array<string>] }
+      >
+    | undefined
+}
+
+export type ExperimentalNexusConfigureExtensionOutput = {
+  saved: boolean
+  applied: boolean
+  published: boolean
+  restart_required: boolean
+}
+
 export type ExperimentalNexusStatusOutput = {
   origin: string
   model: string
@@ -5094,12 +5127,24 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | { readonly action: "extension.list" }
+    | {
+        readonly action: "extension.configure"
+        readonly change: {
+          readonly id: string
+          readonly enabled?: boolean
+          readonly operations?: ReadonlyArray<
+            | { readonly op: "set"; readonly path: readonly [string, ...Array<string>]; readonly value: JsonValue }
+            | { readonly op: "unset"; readonly path: readonly [string, ...Array<string>] }
+          >
+        }
+      }
     | {
         readonly action: "schedule.create"
         readonly conversation: string
         readonly key: string
         readonly prompt: string
-        readonly name?: string | undefined
+        readonly name?: string | null
         readonly rule:
           | { readonly kind: "once"; readonly run_at: string }
           | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
@@ -5131,8 +5176,8 @@ export type ExperimentalNexusManageInput = {
     | {
         readonly action: "memory.list" | "memory.read" | "memory.grep"
         readonly collection: string
-        readonly path?: string | undefined
-        readonly pattern?: string | undefined
+        readonly path?: string | null
+        readonly pattern?: string | null
       }
     | {
         readonly action: "memory.write"
@@ -5392,6 +5437,15 @@ export type FileUnwatchInput = ExperimentalFileUnwatchInput
 
 /** @deprecated Use `ExperimentalFileUnwatchOutput`. Removed in the next minor. */
 export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
+
+/** @deprecated Use `ExperimentalNexusExtensionsOutput`. Removed in the next minor. */
+export type NexusExtensionsOutput = ExperimentalNexusExtensionsOutput
+
+/** @deprecated Use `ExperimentalNexusConfigureExtensionInput`. Removed in the next minor. */
+export type NexusConfigureExtensionInput = ExperimentalNexusConfigureExtensionInput
+
+/** @deprecated Use `ExperimentalNexusConfigureExtensionOutput`. Removed in the next minor. */
+export type NexusConfigureExtensionOutput = ExperimentalNexusConfigureExtensionOutput
 
 /** @deprecated Use `ExperimentalNexusStatusOutput`. Removed in the next minor. */
 export type NexusStatusOutput = ExperimentalNexusStatusOutput

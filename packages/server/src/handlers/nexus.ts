@@ -52,6 +52,8 @@ export const NexusHandler = HttpApiBuilder.group(Api, "server.nexus", (handlers)
         }),
       )
     return handlers
+      .handle("nexus.extensions", () => call((runtime) => Promise.resolve(runtime.extensions())))
+      .handle("nexus.configureExtension", (ctx) => call((runtime) => runtime.configureExtension(ctx.payload)))
       .handle("nexus.status", () => Effect.map(gated, (runtime) => runtime.status()))
       .handle("nexus.pair", (ctx) => call((runtime) => runtime.pair(ctx.payload)))
       .handle("nexus.disconnect", () => call((runtime) => runtime.disconnect()))

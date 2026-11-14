@@ -3091,6 +3091,42 @@ export interface DebugApi<E = never> {
   }
 }
 
+export type ExperimentalNexusExtensionsOutput = ReadonlyArray<{
+  readonly id: string
+  readonly name: string
+  readonly description: string
+  readonly configuration_version: number
+  readonly configuration_schema: Schema.Json
+  readonly enabled: boolean
+  readonly active: boolean
+  readonly ready: boolean
+  readonly restart_required: boolean
+  readonly configuration: { readonly [x: string]: Schema.Json }
+  readonly diagnostics: ReadonlyArray<string>
+  readonly tools: ReadonlyArray<string>
+}>
+export type ExperimentalNexusExtensionsOperation<E = never> = () => Effect.Effect<ExperimentalNexusExtensionsOutput, E>
+
+export type ExperimentalNexusConfigureExtensionInput = {
+  readonly id: string
+  readonly enabled?: boolean | undefined
+  readonly operations?:
+    | ReadonlyArray<
+        | { readonly op: "set"; readonly path: readonly [string, ...Array<string>]; readonly value: Schema.Json }
+        | { readonly op: "unset"; readonly path: readonly [string, ...Array<string>] }
+      >
+    | undefined
+}
+export type ExperimentalNexusConfigureExtensionOutput = {
+  readonly saved: boolean
+  readonly applied: boolean
+  readonly published: boolean
+  readonly restart_required: boolean
+}
+export type ExperimentalNexusConfigureExtensionOperation<E = never> = (
+  input: ExperimentalNexusConfigureExtensionInput,
+) => Effect.Effect<ExperimentalNexusConfigureExtensionOutput, E>
+
 export type ExperimentalNexusStatusOutput = {
   readonly origin: string
   readonly model: string
@@ -3186,6 +3222,24 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | { readonly action: "extension.list" }
+    | {
+        readonly action: "extension.configure"
+        readonly change: {
+          readonly id: string
+          readonly enabled?: boolean | undefined
+          readonly operations?:
+            | ReadonlyArray<
+                | {
+                    readonly op: "set"
+                    readonly path: readonly [string, ...Array<string>]
+                    readonly value: Schema.Json
+                  }
+                | { readonly op: "unset"; readonly path: readonly [string, ...Array<string>] }
+              >
+            | undefined
+        }
+      }
     | {
         readonly action: "schedule.create"
         readonly conversation: string
@@ -3300,6 +3354,8 @@ export type ExperimentalNexusPolicyOperation<E = never> = (
 ) => Effect.Effect<ExperimentalNexusPolicyOutput, E>
 
 export interface ExperimentalNexusApi<E = never> {
+  readonly extensions: ExperimentalNexusExtensionsOperation<E>
+  readonly configureExtension: ExperimentalNexusConfigureExtensionOperation<E>
   readonly status: ExperimentalNexusStatusOperation<E>
   readonly pair: ExperimentalNexusPairOperation<E>
   readonly disconnect: ExperimentalNexusDisconnectOperation<E>
@@ -3712,6 +3768,21 @@ export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
 /** @deprecated Use `ExperimentalFileUnwatchOperation`. Removed in the next minor. */
 export type FileUnwatchOperation<E = never> = ExperimentalFileUnwatchOperation<E>
 
+/** @deprecated Use `ExperimentalNexusExtensionsOutput`. Removed in the next minor. */
+export type NexusExtensionsOutput = ExperimentalNexusExtensionsOutput
+
+/** @deprecated Use `ExperimentalNexusExtensionsOperation`. Removed in the next minor. */
+export type NexusExtensionsOperation<E = never> = ExperimentalNexusExtensionsOperation<E>
+
+/** @deprecated Use `ExperimentalNexusConfigureExtensionInput`. Removed in the next minor. */
+export type NexusConfigureExtensionInput = ExperimentalNexusConfigureExtensionInput
+
+/** @deprecated Use `ExperimentalNexusConfigureExtensionOutput`. Removed in the next minor. */
+export type NexusConfigureExtensionOutput = ExperimentalNexusConfigureExtensionOutput
+
+/** @deprecated Use `ExperimentalNexusConfigureExtensionOperation`. Removed in the next minor. */
+export type NexusConfigureExtensionOperation<E = never> = ExperimentalNexusConfigureExtensionOperation<E>
+
 /** @deprecated Use `ExperimentalNexusStatusOutput`. Removed in the next minor. */
 export type NexusStatusOutput = ExperimentalNexusStatusOutput
 
@@ -3915,6 +3986,12 @@ export interface AppApi<E = never> {
 
   /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
   readonly nexus: {
+    /** @deprecated Use `client.experimental.nexus.extensions`. Removed in the next minor. */
+    readonly extensions: ExperimentalNexusExtensionsOperation<E>
+
+    /** @deprecated Use `client.experimental.nexus.configureExtension`. Removed in the next minor. */
+    readonly configureExtension: ExperimentalNexusConfigureExtensionOperation<E>
+
     /** @deprecated Use `client.experimental.nexus.status`. Removed in the next minor. */
     readonly status: ExperimentalNexusStatusOperation<E>
 

@@ -162,7 +162,10 @@ test("code can call only the captured catalog and routes file work through Nexus
     },
     signal,
   )
-  expect(result).toBe('"Nexus fixture"')
+  expect(result).toEqual({
+    content: [],
+    structured_content: { status: "completed", content: [{ type: "text", text: "Nexus fixture" }] },
+  })
   expect(calls).toEqual([{ kind: "tool", name: "read", input: { path: "readme.txt" } }])
   await expect(
     runCode('return await tools.code({code:"return 1"})', {}, declarations, async () => null, signal),
