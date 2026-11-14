@@ -3484,6 +3484,10 @@ export type ExperimentalNexusManageInput = {
         readonly turn: string
         readonly variant?: string | undefined
       }
+    | { readonly action: "acp.list" | "acp.sessions" }
+    | { readonly action: "acp.probe"; readonly agent: string; readonly workdir?: string | undefined }
+    | { readonly action: "acp.kill" | "acp.logs"; readonly session: string }
+    | { readonly action: "acp.release"; readonly workspace: string; readonly conversation: string }
     | { readonly action: "persona.read" }
     | { readonly action: "persona.reset" }
     | { readonly action: "persona.write"; readonly content: string }
