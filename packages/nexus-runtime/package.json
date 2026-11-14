@@ -36,6 +36,7 @@
     "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
     "effect": "catalog:",
+    "cross-spawn": "catalog:",
     "ipaddr.js": "^2.2.0",
     "werift": "0.27.0",
     "ws": "^8.18.0"
@@ -44,6 +45,7 @@
     "@opencode/util": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
+    "@types/cross-spawn": "catalog:",
     "@typescript/native": "catalog:"
   }
 }
