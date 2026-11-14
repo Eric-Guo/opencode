@@ -8,7 +8,7 @@ import type { ExtensionModule } from "./extension-manager"
 import { missing } from "./storage"
 import { acpConfiguration } from "./acp-settings"
 import { readEffect } from "./runner"
-import { mcpConfiguration } from "./mcp-settings"
+import { mcpConfiguration, mcpDefaults } from "./mcp-settings"
 import { t3Configuration } from "./t3-settings"
 import { telegramConfiguration } from "./telegram-settings"
 import { memoryReviewExtension } from "./memory-review-extension"
@@ -38,6 +38,22 @@ const Terminal = Schema.Struct({
 
 export async function builtinExtensions(host?: HostTools, storage?: string): Promise<ExtensionModule[]> {
   const modules: ExtensionModule[] = [
+    {
+      descriptor: {
+        id: "nexus.codemode",
+        name: "Code mode",
+        description: "Combine tools in an isolated JavaScript program.",
+        default_enabled: true,
+        configuration_version: 1,
+        configuration_schema: {
+          type: "object",
+          properties: { default: { type: "string", enum: ["on", "off"] } },
+          additionalProperties: false,
+        },
+        defaults: { default: "on" },
+      },
+      register() {},
+    },
     memoryReviewExtension(),
     skillsExtension(),
     ...(storage ? [processesExtension(storage)] : []),
@@ -278,7 +294,7 @@ export async function builtinExtensions(host?: HostTools, storage?: string): Pro
           servers:
             process.env.OPENCODE_NEXUS_MCP?.split(",")
               .map((name) => name.trim())
-              .filter(Boolean) ?? [],
+              .filter(Boolean) ?? structuredClone(mcpDefaults),
         },
       },
       async register(api) {

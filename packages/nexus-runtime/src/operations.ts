@@ -291,12 +291,10 @@ export class Operations {
     if (input.action === "identity") return this.identity
     if (input.action === "followers") {
       const conversations = await Promise.all(
-        this.application.lifecycle
-          .hostsSnapshot()
-          .map(async (host) => ({
-            host,
-            info: await this.member.workspace(host.workspace).conversation(host.conversation).fetch(options),
-          })),
+        this.application.lifecycle.hostsSnapshot().map(async (host) => ({
+          host,
+          info: await this.member.workspace(host.workspace).conversation(host.conversation).fetch(options),
+        })),
       )
       return conversations
         .filter((row) => row.info.side === (input.side === true))
@@ -321,6 +319,7 @@ export class Operations {
       return {
         model,
         configuration: prepared.agent_configuration,
+        adaptations: this.application.defaults().adaptations?.(model),
         facts: (await this.member.models.list(undefined, options)).find((row) => row.ref === model) ?? null,
       }
     }
