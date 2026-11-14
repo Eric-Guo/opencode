@@ -1,6 +1,9 @@
+import { PanelPresentation } from "../panel-presentation"
 import { desktopZoomLevels } from "@opencode/app/desktop-menu"
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
+
+export const WindowSetPanelPresentation = Rpc.make("WindowSetPanelPresentation", { payload: PanelPresentation })
 
 export const WindowThemeReady = Rpc.make("WindowThemeReady")
 
@@ -61,6 +64,7 @@ export const WindowSetTaskbarProgress = Rpc.make("WindowSetTaskbarProgress", {
 
 export const WindowRpcs = RpcGroup.make(
   WindowRequestAttention,
+  WindowSetPanelPresentation,
   WindowRequestMicrophone,
   WindowSetVoiceCallActive,
   WindowThemeReady,
