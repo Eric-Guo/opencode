@@ -8,6 +8,7 @@ export type ExtensionAPI = {
   signal: AbortSignal
   configuration: Record<string, Schema.Json>
   registerTool(tool: RunnerTool): void
+  registerCommand(name: string, handler: (input: Schema.Json) => Promise<Schema.Json>): void
   onShutdown(close: () => Promise<void> | void): void
   describeStatus(status: () => { ready: boolean; issues: string[] }): void
 }
@@ -17,6 +18,7 @@ export type ExtensionModule = {
 }
 type Active = {
   tools: RunnerTool[]
+  commands: Map<string, (input: Schema.Json) => Promise<Schema.Json>>
   configuration: Record<string, Schema.Json>
   status(): { ready: boolean; issues: string[] }
   close(): Promise<void>
@@ -66,6 +68,12 @@ export class ExtensionManager {
 
   tools() {
     return [...this.active.values()].flatMap((state) => state.tools)
+  }
+
+  async command(name: string, input: Schema.Json) {
+    const handler = [...this.active.values()].map((active) => active.commands.get(name)).find((handler) => handler)
+    if (!handler) throw new Error("This extension command is not loaded: " + name)
+    return handler(input)
   }
 
   list(): Nexus.Extension[] {
@@ -164,6 +172,7 @@ export class ExtensionManager {
 
     const owner = new AbortController()
     const tools: RunnerTool[] = []
+    const commands = new Map<string, (input: Schema.Json) => Promise<Schema.Json>>()
     const cleanup: Array<() => Promise<void> | void> = []
     const status = { read: () => ({ ready: true, issues: [] as string[] }) }
     const lifecycle = { committed: false, retired: false, leases: 0, finish: () => {} }
@@ -175,6 +184,16 @@ export class ExtensionManager {
       if (lifecycle.leases) await drained
       owner.abort()
       await Promise.allSettled(cleanup.toReversed().map((handler) => Promise.resolve().then(handler)))
+    }
+    const use = async <A>(handler: () => Promise<A>) => {
+      if (lifecycle.retired) throw new Error("The extension owning this handler has retired.")
+      lifecycle.leases++
+      try {
+        return await handler()
+      } finally {
+        lifecycle.leases--
+        if (lifecycle.retired && !lifecycle.leases) lifecycle.finish()
+      }
     }
     const registering = Promise.resolve().then(() =>
       module.register({
@@ -190,20 +209,16 @@ export class ExtensionManager {
           tools.push({
             ...tool,
             execute: async (value, context: RunnerContext) => {
-              if (lifecycle.retired) throw new Error("The extension owning this tool has retired.")
-
               context.signal.throwIfAborted()
-
-              lifecycle.leases++
-
-              try {
-                return await tool.execute(value, context)
-              } finally {
-                lifecycle.leases--
-                if (lifecycle.retired && !lifecycle.leases) lifecycle.finish()
-              }
+              return use(() => tool.execute(value, context))
             },
           })
+        },
+        registerCommand: (name, handler) => {
+          if (lifecycle.committed) throw new Error("Extension registration has finished.")
+          if (!/^[a-z][a-z0-9.-]{0,63}$/.test(name) || commands.has(name))
+            throw new Error("Invalid or duplicate extension command: " + name)
+          commands.set(name, (input) => use(() => handler(input)))
         },
         onShutdown: (handler) => {
           if (lifecycle.committed) throw new Error("Extension registration has finished.")
@@ -257,7 +272,15 @@ export class ExtensionManager {
       throw new Error("Nexus extensions must provide unique tool names.")
     }
 
-    this.active.set(id, { tools, configuration: selected.configuration, status: () => status.read(), close })
+    const duplicate = [...this.active.entries()]
+      .filter(([key]) => key !== id)
+      .flatMap(([, active]) => [...active.commands.keys()])
+      .find((name) => commands.has(name))
+    if (duplicate) {
+      await close()
+      throw new Error("Duplicate extension command: " + duplicate)
+    }
+    this.active.set(id, { tools, commands, configuration: selected.configuration, status: () => status.read(), close })
     this.diagnostics.delete(id)
     // Accepted handlers retain their old instance until their real exit.
     void previous?.close()

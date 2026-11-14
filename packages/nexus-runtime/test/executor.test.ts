@@ -22,7 +22,7 @@ const canceled = (run: string, task: string) => ({
 function inbox(
   fixture: Awaited<ReturnType<typeof executorFixture>>,
   tools: RunnerTool[],
-  options: { admission?: RunnerAdmission; startupLimit?: number; wake?: () => void } = {},
+  options: { admission?: RunnerAdmission; startupLimit?: number; wake?: () => void; protectedRoots?: string[] } = {},
 ) {
   return new RunnerInbox({
     executor: fixture.client,
@@ -34,6 +34,7 @@ function inbox(
     admission: options.admission ?? new RunnerAdmission(),
     startupLimit: options.startupLimit ?? 8,
     wake: options.wake ?? (() => {}),
+    protectedRoots: options.protectedRoots,
   })
 }
 
@@ -292,6 +293,45 @@ test("schema refusals are returned data, handler failures fail the task, and adm
     expect(result("wrong-role")).toMatchObject({ outcome: "failed", content: expect.stringContaining("role") })
     expect(result("unknown")).toMatchObject({ outcome: "failed", content: expect.stringContaining("no longer serves") })
     expect(called.sort()).toEqual(["probe", "thrower"])
+  } finally {
+    await runner.close()
+    await fixture.close()
+  }
+})
+
+test("the native claim boundary returns shared policy refusals before invoking a handler", async () => {
+  const fixture = await executorFixture()
+  const called: string[] = []
+  const runner = inbox(
+    fixture,
+    ["bash", "write"].map((name) => ({
+      definition: definition(name, "Fixture", { command: { type: "string" }, path: { type: "string" } }, []),
+      async execute() {
+        called.push(name)
+        return { content: "safe fixture" }
+      },
+    })),
+    { protectedRoots: [fixture.directory + "/private"] },
+  )
+  fixture.add("run", "force", "bash", { tool_input: { command: "git push --force" } })
+  fixture.add("run", "private", "write", { tool_input: { path: "private/credentials" } })
+  fixture.add("run", "safe", "bash", { tool_input: { command: "git status" } })
+  try {
+    runner.notify(nudge("run", "force", "bash"))
+    runner.notify(nudge("run", "private", "write"))
+    runner.notify(nudge("run", "safe", "bash"))
+    await runner.drain()
+    expect(called).toEqual(["bash"])
+    for (const key of ["force", "private"])
+      expect(fixture.commits.find((row) => row.task === key)!.body).toMatchObject({
+        outcome: "completed",
+        is_error: true,
+        content: expect.stringContaining("Refused:"),
+      })
+    expect(fixture.commits.find((row) => row.task === "safe")!.body).toMatchObject({
+      outcome: "completed",
+      content: "safe fixture",
+    })
   } finally {
     await runner.close()
     await fixture.close()
