@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Nexus } from "@opencode/schema/nexus"
 
 const Rule = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("once"), run_at: Schema.String }),
@@ -6,6 +7,8 @@ const Rule = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("daily"), local_time: Schema.String, time_zone: Schema.String }),
 ])
 export const NexusCommand = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("extension.list") }),
+  Schema.Struct({ action: Schema.Literal("extension.configure"), change: Nexus.ExtensionChange }),
   Schema.Struct({
     action: Schema.Literal("schedule.create"),
     conversation: Schema.String,
