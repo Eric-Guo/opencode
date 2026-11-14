@@ -351,10 +351,14 @@ test("configured secrets are redacted from replies and JSONL capture snapshots",
     { storage: fixture.storage },
   )
   const published: string[] = []
+  const progress: string[] = []
   try {
     const result = await client.tool()!.execute(
       { agent: "peer", prompt: "secret" },
       fixture.context({
+        progress: async (text) => {
+          progress.push(text)
+        },
         publish: async (blob, name) => {
           published.push(await blob.text())
           return { type: "resource_link", uri: "nexus://uploads/transcript", name }
@@ -362,6 +366,9 @@ test("configured secrets are redacted from replies and JSONL capture snapshots",
       }),
     )
     expect(result.is_error).toBe(false)
+    expect(progress.length).toBeGreaterThan(0)
+    expect(progress.join("\n")).toContain("[redacted]")
+    expect(progress.join("\n")).not.toContain("second line")
     expect(JSON.stringify(result)).not.toContain("second line")
     expect(JSON.stringify(result)).toContain("[redacted]")
     expect(published).toHaveLength(1)
