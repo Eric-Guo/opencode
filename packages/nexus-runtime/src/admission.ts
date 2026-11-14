@@ -79,6 +79,12 @@ export class InputAdmissions {
       input: { workspace: string; conversation: string },
       notes: JsonObject,
     ) => Promise<void>,
+    private readonly submitted?: (
+      target: { workspace: string; conversation: string },
+      input: string,
+      body: CreateInput,
+      replayed: boolean,
+    ) => Promise<void>,
   ) {}
 
   async submit(
@@ -94,6 +100,8 @@ export class InputAdmissions {
       .conversation(input.conversation)
       .inputs.create(body, { ...options, idempotencyKey: input.key })
     await this.documents.get(input.key)!.change((state) => ({ ...state!, input: receipt.input.public_id }))
+    if (receipt.input.state !== "blocked")
+      void this.submitted?.(input, receipt.input.public_id, body, receipt.replayed).catch(() => {})
     return receipt
   }
 
