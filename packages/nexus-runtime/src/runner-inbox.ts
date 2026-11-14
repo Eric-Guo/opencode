@@ -2,15 +2,21 @@ import {
   APIError,
   type AnnouncedTool,
   type ClaimedTask,
+  type CommitTask,
   type ExecutorClient,
   type InboxTask,
   type JsonObject,
 } from "@cybros/agent"
+import { access, realpath, stat } from "node:fs/promises"
+import { constants } from "node:fs"
+import { isAbsolute, join, relative, sep } from "node:path"
+import { createHash } from "node:crypto"
 import { availableParallelism } from "node:os"
 import { JsonSchema, Schema, SchemaRepresentation } from "effect"
 import type { HostTools } from "./host"
 import type { Checkpoints } from "./checkpoints"
 import type { RunnerTool } from "./extensions"
+import type { EditorBinding } from "./editor-bridge"
 import type { ClaimJournal } from "./claims"
 import { ClaimDeadline, ClaimInterrupted, ClaimLease, ClaimOperations } from "./claim-control"
 import { runnerRefusal } from "./runner-policy"
@@ -58,7 +64,13 @@ export class RunnerInbox {
       host?: HostTools
       checkpoints?: Checkpoints
       protectedRoots?: readonly string[]
+      artifacts?: string
       startupLimit?: number
+      result?(row: InboxTask, result: Omit<CommitTask, "claim_token">): Promise<Omit<CommitTask, "claim_token">>
+      ports?: {
+        read(workspace: string, anchor: string): EditorBinding | undefined
+        drop(workspace: string, anchor: string, port: EditorBinding): void
+      }
     },
   ) {
     this.capacity = options.startupLimit ?? Math.max(2, Math.min(8, availableParallelism()))
@@ -76,6 +88,10 @@ export class RunnerInbox {
       startup_limit: this.capacity,
       issue: this.issue,
     }
+  }
+
+  setRoot(root: string) {
+    this.options.root = root
   }
 
   notify(message: unknown) {
@@ -256,20 +272,31 @@ export class RunnerInbox {
       (claim.task.addressed_to?.role === "runner"
         ? [...tools, ...operatorTools].find((tool) => tool.name === claim.task.tool_name)
         : undefined)
-    const lease = new ClaimLease(task, claim, this.options.signal, !extension?.internalTimeout, definition?.timeout_ms)
+    const lease = new ClaimLease(
+      task,
+      claim,
+      this.options.signal,
+      !extension?.internalTimeout,
+      definition?.timeout_ms,
+      !extension?.isolated,
+    )
     const executing = AbortSignal.any([lease.executionSignal, owned.cancel.signal])
     const record = { run: hint.run_public_id, task: hint.task_key, token: claim.claim_token }
     lease.start()
     try {
       await this.options.journal.save(record)
+      const root = await this.placement(claim.task, extension).catch(() => undefined)
       const result =
-        this.refusal(hint, claim.task, reserved, extension, definition) ??
+        this.refusal(hint, claim.task, reserved, extension, definition, root) ??
         (await this.execute(
           claim,
           executing,
           owned,
           extensions.filter((tool) => (tool.role ?? "runner") === claim.task.addressed_to?.role),
           started,
+          root!,
+          definition!,
+          extension?.isolated ? () => lease.executionStarted() : undefined,
         ))
       await lease.finishExecution()
       const bounded = claimResult(result)
@@ -293,20 +320,14 @@ export class RunnerInbox {
     reserved: RunnerTool | undefined,
     extension: RunnerTool | undefined,
     definition: AnnouncedTool | undefined,
+    root: string | undefined,
   ): ClaimResult | undefined {
-    const binding = row.executor_context?.["opencode.directory"]
-    const placed =
-      binding === this.options.root ||
-      (extension?.role === "agent" && binding === undefined) ||
-      (["files_bytes", "checkpoints", "checkpoint_restore"].includes(row.tool_name ?? "") &&
-        binding === undefined &&
-        !row.conversation_public_id)
     if (
       !this.addressed(row) ||
       row.run_public_id !== hint.run_public_id ||
       row.task_key !== hint.task_key ||
       row.addressed_to?.role !== hint.role ||
-      !placed
+      !root
     )
       return { outcome: "failed", content: "This claim does not match its captured runner placement." }
     if (
@@ -317,7 +338,7 @@ export class RunnerInbox {
     if (!definition)
       return { outcome: "failed", content: "This runner no longer serves the claimed tool on this role." }
     if (this.valid(definition, row.tool_input)) {
-      const reason = runnerRefusal(row.tool_name ?? "", row.tool_input, this.options.root, this.options.protectedRoots)
+      const reason = runnerRefusal(row.tool_name ?? "", row.tool_input, root, this.options.protectedRoots)
       return reason ? { outcome: "completed", is_error: true, content: reason } : undefined
     }
     return {
@@ -325,6 +346,49 @@ export class RunnerInbox {
       is_error: true,
       content: "invalid_tool_arguments: the arguments do not match this tool's declared schema.",
     }
+  }
+
+  private async placement(row: InboxTask, extension: RunnerTool | undefined) {
+    const environment = row.executor_context?.["opencode.environment"] ?? row.executor_context?.["rho.environment"]
+    const captured =
+      environment === undefined
+        ? undefined
+        : Schema.decodeUnknownSync(
+            Schema.Struct({
+              root: Schema.String,
+              directories: Schema.optional(Schema.Array(Schema.String)),
+              anchor: Schema.optional(Schema.NullOr(Schema.String)),
+            }),
+          )(environment)
+    const binding = captured?.root ?? row.executor_context?.["opencode.directory"]
+    if (
+      binding === undefined &&
+      (extension?.role === "agent" ||
+        (["files_bytes", "checkpoints", "checkpoint_restore", "git_review"].includes(row.tool_name ?? "") &&
+          !row.conversation_public_id))
+    )
+      return this.options.root
+    if (typeof binding !== "string" || !isAbsolute(binding)) throw new Error("Invalid placement")
+    const protectedRoots = await Promise.all(
+      (this.options.protectedRoots ?? []).map((root) => realpath(root).catch(() => root)),
+    )
+    const roots = await Promise.all(
+      [binding, ...(captured?.directories ?? [])].map(async (path) => {
+        if (!isAbsolute(path)) throw new Error("Placement directories must be absolute")
+        const root = await realpath(path)
+        if (!(await stat(root)).isDirectory()) throw new Error("Invalid placement")
+        await access(root, constants.R_OK | constants.X_OK)
+        if (
+          protectedRoots.some((protectedRoot) => {
+            const from = relative(protectedRoot, root)
+            return !isAbsolute(from) && from !== ".." && !from.startsWith(".." + sep)
+          })
+        )
+          throw new Error("Protected placement directory")
+        return root
+      }),
+    )
+    return roots[0]
   }
 
   private valid(definition: AnnouncedTool, input: JsonObject) {
@@ -345,6 +409,9 @@ export class RunnerInbox {
     owned: OwnedTask,
     extensions: readonly RunnerTool[],
     started: () => void,
+    root: string,
+    definition: AnnouncedTool,
+    executionStarted?: () => void,
   ): Promise<ClaimResult> {
     if (signal.aborted) return interrupted(signal.reason)
     const task = this.options.executor.inboxTask(claim.task.run_public_id, claim.task.task_key)
@@ -373,27 +440,46 @@ export class RunnerInbox {
         )
         .join("\n")
     }
-    const running = runClaim(
-      this.options.executor,
-      claim.task,
-      this.options.root,
-      signal,
-      this.options.host,
-      this.options.checkpoints,
-      extensions,
-      ask,
-      claim.claim_token,
-      operation,
-    ).then(
-      (result): ClaimResult => ({ ...result, outcome: "completed" }),
-      (error: unknown): ClaimResult =>
-        signal.aborted
-          ? interrupted(signal.reason)
-          : { outcome: "failed", content: error instanceof Error ? error.message : "The tool could not run." },
+    const checkpoints = this.options.checkpoints?.forRoot(root, this.options.protectedRoots)
+    const call = () =>
+      runClaim(
+        this.options.executor,
+        claim.task,
+        root,
+        signal,
+        this.options.host,
+        checkpoints,
+        extensions,
+        ask,
+        claim.claim_token,
+        operation,
+        this.options.protectedRoots,
+        this.options.artifacts
+          ? join(this.options.artifacts, createHash("sha256").update(root).digest("hex").slice(0, 16))
+          : undefined,
+        this.options.ports,
+        executionStarted
+          ? { executionStarted, started, workerRetired: (reason) => owned.cancel.abort(reason) }
+          : undefined,
+      )
+    const running = (
+      checkpoints &&
+      definition.effect_profile?.kind === "write" &&
+      !["checkpoint_restore", "checkpoints"].includes(definition.name)
+        ? checkpoints.observe(claim.task.run_public_id, claim.task.task_key, claim.task.tool_input, signal, call)
+        : call()
     )
+      .then((result) => this.options.result?.(claim.task, result) ?? result)
+      .then(
+        (result): ClaimResult => ({ ...result, outcome: "completed" }),
+        (error: unknown): ClaimResult =>
+          signal.aborted
+            ? interrupted(signal.reason)
+            : { outcome: "failed", content: error instanceof Error ? error.message : "The tool could not run." },
+      )
     owned.work = running.then(() => {})
     // The synchronous prefix has reached its first wait; child tasks can now reserve startup capacity.
-    started()
+    if (!executionStarted) started()
     return new Promise<ClaimResult>((resolve) => {
       const abort = () => resolve(interrupted(signal.reason))
       signal.addEventListener("abort", abort, { once: true })

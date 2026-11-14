@@ -1,7 +1,9 @@
 import { Schema } from "effect"
-import type { JsonObject } from "@cybros/agent"
 import { definition, type RunnerTool } from "./extensions"
-import { webSite } from "./web"
+import { createHash } from "node:crypto"
+import { mkdir, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { BrowserSession, act, clamp, command, evaluate, loaded, snapshot } from "./browser-session"
 import { readEffect } from "./runner"
 
@@ -25,7 +27,7 @@ export function browserTools(
   const specs = [
     definition(
       "browser_navigate",
-      "Open an HTTP(S) URL and return the resulting accessibility snapshot. Start with its [ref=eN_N] handles; never guess selectors. Refs belong to the latest snapshot.",
+      "Open a URL and return the resulting accessibility snapshot. Start with its [ref=eN_N] handles; never guess selectors. Refs belong to the latest snapshot.",
       { url: string },
       ["url"],
     ),
@@ -66,13 +68,13 @@ export function browserTools(
       : spec,
     async execute(input, ctx) {
       const args = Schema.decodeUnknownSync(Input, { onExcessProperty: "error" })(input)
-      if (!ctx.conversation) throw new Error("A conversation must own the browser.")
-      if (spec.name === "browser_navigate") webSite(args.url)
+      if (spec.name === "browser_navigate" && !args.url?.trim()) return { is_error: true, content: "url is required" }
       if (["browser_click", "browser_type"].includes(spec.name) && !args.ref?.trim())
-        throw new Error("ref is required; use a handle from browser_snapshot.")
+        return { is_error: true, content: "ref is required; use a handle from browser_snapshot." }
       if (spec.name === "browser_type" && args.text === undefined)
-        throw new Error('text is required; send "" to clear the field.')
-      if (spec.name === "browser_evaluate" && !args.expression?.trim()) throw new Error("expression is required.")
+        return { is_error: true, content: 'text is required; send "" to clear the field.' }
+      if (spec.name === "browser_evaluate" && !args.expression?.trim())
+        return { is_error: true, content: "expression is required." }
       return session.run(JSON.stringify([ctx.workspace, ctx.run]), ctx.signal, async (tab, active) => {
         const fresh = tab.fresh
         const noticed = (text: string) => (fresh ? notice : "") + text
@@ -81,7 +83,7 @@ export function browserTools(
             tab.refs.clear()
             const reply = Schema.decodeUnknownSync(
               Schema.Struct({ loaderId: Schema.optional(Schema.String), errorText: Schema.optional(Schema.String) }),
-            )(await command(tab, "Page.navigate", { url: args.url }))
+            )(await command(tab, "Page.navigate", { url: args.url?.trim() }))
             if (reply.errorText) throw new Error(reply.errorText)
             await loaded(tab, active, reply.loaderId)
           }
@@ -90,7 +92,6 @@ export function browserTools(
             await loaded(tab, active)
           }
           if (spec.name === "browser_screenshot") {
-            if (!ctx.publish) throw new Error("Screenshot publication requires an active Nexus claim.")
             const layout = args.full_page
               ? Schema.decodeUnknownSync(
                   Schema.Struct({
@@ -109,11 +110,23 @@ export function browserTools(
                 ...(layout ? { captureBeyondViewport: true, clip: { ...layout.cssContentSize, scale: 1 } } : {}),
               }),
             )
-            const resource = await ctx.publish(
-              new Blob([Buffer.from(image.data, "base64")], { type: "image/png" }),
-              "screenshot.png",
-            )
-            return { content: [...(fresh ? [{ type: "text", text: notice } as JsonObject] : []), resource] }
+            const bytes = Buffer.from(image.data, "base64")
+            const name = "browser-" + createHash("sha256").update(bytes).digest("hex").slice(0, 16) + ".png"
+            const directory =
+              ctx.artifacts ??
+              join(
+                tmpdir(),
+                "opencode-browser-captures",
+                createHash("sha256").update(ctx.directory).digest("hex").slice(0, 16),
+              )
+            await mkdir(directory, { recursive: true, mode: 0o700 })
+            const path = join(directory, name)
+            await writeFile(path, bytes)
+            const url = await evaluate(tab, "location.href")
+            const text = noticed("Saved a screenshot of " + url + " to " + path)
+            if (!ctx.publish) return { content: text, structured_content: { path } }
+            const resource = await ctx.publish(new Blob([bytes], { type: "image/png" }), name)
+            return { content: [{ type: "text", text }, resource], structured_content: { path } }
           }
           if (spec.name === "browser_evaluate") {
             const value = await evaluate(
@@ -134,8 +147,8 @@ export function browserTools(
             )
             if (typeof value !== "string") throw new Error("Page evaluation returned no JSON.")
             return {
-              content: noticed(clamp(value, 32768)),
-              ...(Buffer.byteLength(value) <= 32768
+              content: noticed(clamp(value, 51200)),
+              ...(Buffer.byteLength(value) <= 51200
                 ? { structured_content: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(value) }
                 : {}),
             }

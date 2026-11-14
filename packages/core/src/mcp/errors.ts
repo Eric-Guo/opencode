@@ -22,6 +22,11 @@ export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.Connec
   answered: Schema.optional(Schema.Boolean),
 }) {}
 
+export class TransportError extends Schema.TaggedError<TransportError>()("MCP.TransportError", {
+  server: Schema.String,
+  message: Schema.String,
+}) {}
+
 /** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
 export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError>()("MCP.SessionExpiredError", {
   server: Schema.String,

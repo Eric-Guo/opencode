@@ -43,6 +43,15 @@ export interface Events {
   readonly legacy?: (version: string | undefined) => Effect.Effect<void>
 }
 
+/** Scoped consumer policy; it never changes persisted server configuration. */
+export interface ClientOptions {
+  readonly roots?: boolean
+  readonly elicitation?: boolean
+  readonly listChanged?: boolean
+  readonly events?: boolean
+  readonly reconnectOnFailure?: boolean
+}
+
 /** Everything about the server to connect to and what capabilities to negotiate with it. */
 export interface Spec {
   readonly name: string
@@ -55,6 +64,7 @@ export interface Spec {
 
 export interface Input {
   readonly spec: Spec
+  readonly clientOptions?: ClientOptions
   /**
    * Serves several Locations: it answers no `roots/list`, since no one directory owns it, and skips the
    * per-endpoint handshake turn, since it is already the only connection for its key.
@@ -116,6 +126,7 @@ export interface Connection {
   readonly recovering: <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
+    onSessionRenewed?: () => void,
   ) => Effect.Effect<A, E>
   readonly catalog: (client: McpClient.Connection) => Effect.Effect<Catalog, Error>
 }
@@ -216,6 +227,7 @@ export function make(input: Input): Connection {
   const recovering = <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
+    onSessionRenewed?: () => void,
   ) => {
     // A retry after reconnecting runs on the new client, so a refusal there must end that one.
     const attempt = (target: McpClient.Connection) =>
@@ -231,9 +243,17 @@ export function make(input: Input): Connection {
           recover(client).pipe(
             Effect.flatMap(() => {
               const replacement = current()?.client
-              return replacement ? attempt(replacement) : Effect.fail(error)
+              return replacement
+                ? Effect.sync(() => onSessionRenewed?.()).pipe(Effect.andThen(attempt(replacement)))
+                : Effect.fail(error)
             }),
           ),
+      ),
+      Effect.tapError((error) =>
+        input.clientOptions?.reconnectOnFailure &&
+        (error instanceof McpError.SessionExpiredError || error instanceof McpError.TransportError)
+          ? input.events.failed({ status: "failed", error: error.message }, false)
+          : Effect.void,
       ),
     )
   }
@@ -243,7 +263,7 @@ export function make(input: Input): Connection {
     client.onClose((reason) => live(input.events.closed({ status: "failed", error: reason })))
     // Background refreshes (list-changed) can observe the expiry too; they do not retry, so
     // reconnect here for them. Foreground calls reconnect through `recovering`.
-    client.onSessionExpired(() => input.fork(recover(client)))
+    if (input.clientOptions?.listChanged !== false) client.onSessionExpired(() => input.fork(recover(client)))
     client.onToolsChanged(() => live(refreshTools(client).pipe(Effect.andThen(input.events.changed("tools")))))
     client.onPromptsChanged(() => live(refreshPrompts(client)))
     // MCP Skills announces a changed skill list as a resource list change.
@@ -269,9 +289,10 @@ export function make(input: Input): Connection {
               ...input.spec,
               server: input.spec.name,
               authProvider,
-              elicitation: input.elicitation,
-              roots: !input.shared,
-              events: true,
+              elicitation: input.clientOptions?.elicitation === false ? undefined : input.elicitation,
+              roots: input.clientOptions?.roots ?? !input.shared,
+              listChanged: input.clientOptions?.listChanged,
+              events: input.clientOptions?.events ?? true,
             }).pipe(
               Effect.flatMap(
                 (client): Effect.Effect<Opened, Error> =>
@@ -316,6 +337,7 @@ export function make(input: Input): Connection {
             : { status: "failed", error: error instanceof Error ? error.message : String(error) },
           error instanceof McpError.ConnectError && error.answered === true,
         )
+
       }
       const opened = result.value
       switch (opened._tag) {

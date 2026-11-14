@@ -52,7 +52,7 @@ import { codecFor } from "../tool/runtime.js"
 import { McpStdio } from "./stdio.js"
 import { McpTarget } from "./target.js"
 import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
-import { ConnectError, NeedsAuthError, SessionExpiredError, SkillMismatchError } from "./errors.js"
+import { ConnectError, NeedsAuthError, SessionExpiredError, SkillMismatchError, TransportError } from "./errors.js"
 
 export {
   ConnectError,
@@ -61,6 +61,7 @@ export {
   NeedsAuthError,
   SessionExpiredError,
   SkillMismatchError,
+  TransportError,
 }
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
@@ -345,6 +346,8 @@ export interface ConnectOptions {
   readonly clientInfo?: Implementation
   /** False declares no roots and leaves `roots/list` unanswered, for a connection no one directory owns. */
   readonly roots?: boolean
+  /** False ignores server list-change notifications and does not subscribe to catalogs. */
+  readonly listChanged?: boolean
   /** Experimental: declares MCP Events, a beta extension, and exposes `Connection.events` for a 2026-07-28 server that offers them. */
   readonly events?: boolean
   /** Experimental: declares MCP Skills, a beta extension, and exposes `Connection.skills` for a server that offers them. */
@@ -435,11 +438,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           : {}),
       },
       versionNegotiation: negotiation(protocol, timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT),
-      listChanged: {
-        tools: listChanged("tools"),
-        prompts: listChanged("prompts"),
-        resources: listChanged("resources"),
-      },
+      listChanged:
+        options.listChanged === false
+          ? undefined
+          : {
+              tools: listChanged("tools"),
+              prompts: listChanged("prompts"),
+              resources: listChanged("resources"),
+            },
     })
     // Background work such as the standalone SSE stream reports failures only here; aborts come from close.
     client.onerror = (error) => {
@@ -527,14 +533,19 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       (error instanceof SdkHttpError && error.code === SdkErrorCode.ClientHttpAuthentication)
     )
       return new NeedsAuthError({ server, message: describe(error) })
-    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    const mapped =
+      error instanceof ProtocolError || error instanceof OAuthError || error instanceof InsufficientScopeError
+        ? new Error(explain(error))
+        : new TransportError({ server, message: explain(error) })
+
+    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return mapped
     // Some servers answer a method they don't implement with a 404 that carries a JSON-RPC method-not-found error.
     const expired =
       (error.status === 404 && !methodNotFound(error.data.text)) ||
       (error.status === 400 &&
         typeof error.data.text === "string" &&
         error.data.text.includes("Bad Request: Server not initialized"))
-    if (!expired) return new Error(explain(error))
+    if (!expired) return mapped
     if (!session.reported) {
       session.reported = true
       session.expired?.()
