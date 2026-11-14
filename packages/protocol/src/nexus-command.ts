@@ -35,6 +35,7 @@ export const NexusCommand = Schema.Union([
     model: Schema.optional(Schema.String),
     replayed: Schema.Boolean,
   }),
+  Schema.Struct({ action: Schema.Literal("application.skills") }),
   Schema.Struct({ action: Schema.Literal("persona.read") }),
   Schema.Struct({ action: Schema.Literal("persona.reset") }),
   Schema.Struct({ action: Schema.Literal("persona.write"), content: Schema.String }),
@@ -45,7 +46,7 @@ export const NexusCommand = Schema.Union([
     runner: Schema.optional(Schema.NullOr(Schema.String)),
   }),
   Schema.Struct({
-    action: Schema.Literal("application.submit"),
+    action: Schema.Literals(["application.prepare", "application.submit"]),
     key: Schema.NonEmptyString,
     workspace: Schema.String,
     conversation: Schema.String,
@@ -60,6 +61,9 @@ export const NexusCommand = Schema.Union([
     ),
     model: Schema.optional(Schema.String),
     preset: Schema.optional(Schema.String),
+    approval: Schema.optional(Schema.Literals(["bypass", "ask", "rules"])),
+    target: Schema.optional(Schema.String),
+    instructions: Schema.optional(Schema.String),
     delivery: Schema.optional(Schema.Literals(["queue", "steer", "steer_now"])),
   }),
   Schema.Struct({
