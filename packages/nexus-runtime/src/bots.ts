@@ -13,6 +13,8 @@ import { NexusBot } from "@opencode/schema/nexus-bot"
 import { StoreDocument } from "./document"
 import { Presets } from "./presets"
 import { InputAdmissions } from "./admission"
+import { externalBot, externalRoles } from "./bot-policy"
+import { compactionInstructions } from "./capabilities"
 
 const Locator = Schema.Struct({ public_id: Schema.String, workspace_public_id: Schema.String })
 const Receipt = Schema.Struct({
@@ -28,6 +30,7 @@ const Pending = Schema.Struct({
   previous: Schema.NullOr(Locator),
   selected: Schema.optional(Locator),
   workspace: Schema.optional(Schema.String),
+  home_workspace: Schema.optional(Schema.String),
   create: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
   source: Schema.optional(Locator),
   fork: Schema.optional(
@@ -63,8 +66,10 @@ export class Bots {
     private readonly base: () => AgentConfigurationInput,
     private readonly runner: string,
     private readonly environment?: () => Record<string, JsonObject>,
+    private readonly event?: (name: string, value: Schema.Json) => Promise<void>,
+    admissions?: InputAdmissions,
   ) {
-    this.admissions = new InputAdmissions(member)
+    this.admissions = admissions ?? new InputAdmissions(member)
   }
 
   async command(command: NexusBot.Command) {
@@ -123,6 +128,7 @@ export class Bots {
       })
     if (command.action === "bot.configure") {
       return this.serial(agent.public_id, async () => {
+        await this.recover(agent.public_id)
         const current = await this.readSettings(agent.public_id)
         const next = { ...current, ...command.settings }
 
@@ -130,7 +136,7 @@ export class Bots {
           throw new Error("Duplicate an External Bot to create a Personal Bot.")
         if (next.home_workspace_public_id) await this.member.workspaces.fetch(next.home_workspace_public_id)
 
-        const prepared = await this.prepare(next)
+        const prepared = await this.prepare(next, agent.public_id)
 
         await this.settingsDocument(agent.public_id).change(() => next)
         const updated = await this.member.profile.agents.declare(agent.name, {
@@ -139,6 +145,7 @@ export class Bots {
           display_name: command.display_name ?? agent.display_name,
           configuration: prepared.configuration,
           system_prompt: prepared.instructions,
+          summarizer: compactionInstructions,
         })
         return { ...updated, settings: next }
       })
@@ -189,6 +196,7 @@ export class Bots {
           description: intent.description,
           configuration: intent.configuration,
           system_prompt: intent.instructions,
+          summarizer: compactionInstructions,
           create_only: true,
         })
         .catch(async (error: unknown) => {
@@ -247,59 +255,67 @@ export class Bots {
 
   submit(command: Extract<NexusBot.Command, { action: "bot.submit" }>, author = this.member) {
     return this.serial(command.id, () =>
-      this.admissions.submit(
-        {
-          ...command,
-          request: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))(
-            JSON.stringify(command),
-          ),
-        },
-        async () => {
-          const settings = await this.readSettings(command.id)
-          const current = (await this.state(command.id).read())?.current
-
-          if (
-            !current ||
-            current.public_id !== command.conversation ||
-            current.workspace_public_id !== command.workspace
-          )
-            throw new Error("Select this Bot's current conversation before submitting new input.")
-
-          const chat = author.workspace(command.workspace).conversation(command.conversation)
-          const info = await chat.fetch()
-
-          if (info.answering_user_public_id !== command.id || info.archived_at || info.side)
-            throw new Error("This Bot conversation cannot receive input.")
-          if (settings.audience === "external" && !command.speaker)
-            throw new Error("External Bot inputs require their requester identity.")
-
-          const prepared = await this.prepare(settings)
-          const model = command.model ?? prepared.configuration.default_model
-
-          if (!model) throw new Error("Select a Bot model before submitting input.")
-
-          return {
-            kind: "direct_reply",
-            text: command.text,
-            answering_user_public_id: command.id,
-            ...(command.speaker ? { speaker_public_id: command.speaker } : {}),
-            model: { model },
-            model_selection: {
-              source: command.model ? "explicit" : "default",
-              model,
-              constraint: command.model ? "route" : "any",
-              alternatives: [],
-            },
-            agent_configuration: Schema.decodeUnknownSync(
-              Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)),
-            )(JSON.stringify({ ...prepared.configuration, system_prompt: { content: prepared.instructions } })),
-            fallback_models: prepared.configuration.fallback_models ?? [],
-            ...(settings.audience === "owner" && this.environment ? { executor_contexts: this.environment() } : {}),
-          } satisfies CreateInput
-        },
-        author,
-      ),
+      this.admissions.submit(this.admission(command), () => this.prepareInput(command, author), author),
     )
+  }
+
+  capture(command: Extract<NexusBot.Command, { action: "bot.submit" }>, author = this.member) {
+    return this.serial(command.id, () =>
+      this.admissions.capture(this.admission(command), () => this.prepareInput(command, author)),
+    )
+  }
+
+  private admission(command: Extract<NexusBot.Command, { action: "bot.submit" }>) {
+    return {
+      ...command,
+      request: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))(
+        JSON.stringify(command),
+      ),
+    }
+  }
+
+  private async prepareInput(command: Extract<NexusBot.Command, { action: "bot.submit" }>, author: Client) {
+    const settings = await this.readSettings(command.id)
+    const current = (await this.state(command.id).read())?.current
+
+    if (!current || current.public_id !== command.conversation || current.workspace_public_id !== command.workspace)
+      throw new Error("Select this Bot's current conversation before submitting new input.")
+
+    const chat = author.workspace(command.workspace).conversation(command.conversation)
+    const info = await chat.fetch()
+
+    if (info.answering_user_public_id !== command.id || info.archived_at || info.side)
+      throw new Error("This Bot conversation cannot receive input.")
+    if (settings.audience === "external" && !command.speaker)
+      throw new Error("External Bot inputs require their requester identity.")
+
+    const prepared = await this.prepare(settings, command.id)
+    const model = command.model ?? prepared.configuration.default_model
+
+    if (!model) throw new Error("Select a Bot model before submitting input.")
+
+    return {
+      kind: command.observe ? "message" : "direct_reply",
+      delivery_mode: command.delivery,
+      deliver_at: command.deliver_at,
+      expected_steering_run_public_id: command.expected_steering_run_public_id,
+      text: command.text,
+      ...(command.attachments ? { attachments: [...command.attachments] } : {}),
+      answering_user_public_id: command.id,
+      ...(command.speaker ? { speaker_public_id: command.speaker } : {}),
+      model: { model },
+      model_selection: {
+        source: command.model ? "explicit" : "default",
+        model,
+        constraint: command.model ? "route" : "any",
+        alternatives: [],
+      },
+      agent_configuration: Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)),
+      )(JSON.stringify({ ...prepared.configuration, system_prompt: { content: prepared.instructions } })),
+      fallback_models: prepared.configuration.fallback_models ?? [],
+      ...(settings.audience === "owner" && this.environment ? { executor_contexts: this.environment() } : {}),
+    } satisfies CreateInput
   }
 
   private settingsDocument(id: string) {
@@ -350,7 +366,7 @@ export class Bots {
     return pending
   }
 
-  private async prepare(settings: NexusBot.Settings) {
+  private async prepare(settings: NexusBot.Settings, self?: string) {
     const prepared = await this.presets.resolve(this.base(), settings.preset_public_id)
     const configuration = prepared.configuration
 
@@ -378,16 +394,10 @@ export class Bots {
       )
     if (settings.audience === "external") {
       const catalog = await this.member.tools.list()
-      const narrowed = external(configuration)
-      const names = catalog
-        .filter((tool) => narrowed.kernel_tools?.includes(tool.canonical_name))
-        .map((tool) => tool.name)
-
-      narrowed.approval_rules = [
-        ...(configuration.approval_rules ?? []).filter((rule) => ["deny", "ask"].includes(rule.verdict)),
-        ...(names.length ? [{ tool: names.join("|"), verdict: "allow" as const }] : []),
-      ]
-      Object.assign(configuration, narrowed)
+      const wire = Object.fromEntries(catalog.map((tool) => [tool.canonical_name, tool.name]))
+      const peers = await this.externalPeers(self)
+      configuration.delegation_catalog = externalRoles(configuration, peers, wire)
+      Object.assign(configuration, externalBot(configuration, peers, wire, prepared.mcp_names))
     }
 
     return {
@@ -397,6 +407,24 @@ export class Bots {
         "\n\nBot main conversations keep Code Mode off." +
         (settings.subagent ? "" : " Complete work directly; Subagent is off."),
     }
+  }
+
+  private async externalPeers(self?: string) {
+    const agents = (await this.member.profile.agents.list()).filter(
+      (agent) => agent.scope === "instance" && agent.name.startsWith("bot-"),
+    )
+    const catalog = await this.presets.catalog()
+    const selected = await Promise.all(
+      agents.map(async (agent) => {
+        if (agent.public_id === self) return agent
+        const settings = await this.settingsDocument(agent.public_id).read()
+        const preset = catalog.presets.find((entry) => entry.public_id === settings?.preset_public_id)
+        return settings?.audience === "external" && (preset?.configuration.model || this.base().default_model)
+          ? agent
+          : undefined
+      }),
+    )
+    return selected.filter((agent) => agent !== undefined).sort((a, b) => a.public_id.localeCompare(b.public_id))
   }
 
   private async switch(
@@ -442,7 +470,11 @@ export class Bots {
             }
           : {
               ...pending,
-              workspace: settings.home_workspace_public_id ?? undefined,
+              workspace:
+                command.action === "bot.workspace"
+                  ? command.workspace
+                  : (settings.home_workspace_public_id ?? undefined),
+              ...(command.action === "bot.workspace" ? { home_workspace: command.workspace } : {}),
               create: {
                 answering_user_public_id: agent.public_id,
                 default_runner_executor_public_id: settings.audience === "external" ? null : this.runner,
@@ -452,6 +484,11 @@ export class Bots {
 
     if (!next.selected && !next.source && !next.workspace)
       throw new Error("Choose a Home Workspace before opening a Bot conversation.")
+    if (next.home_workspace) {
+      const workspace = await this.member.workspaces.fetch(next.home_workspace)
+
+      if (workspace.state === "archived") throw new Error("Choose an active Home Workspace.")
+    }
     const target = next.selected ?? next.source
 
     if (target) {
@@ -516,12 +553,23 @@ export class Bots {
     if (pending.previous && !isDeepStrictEqual(pending.previous, selected)) {
       const workspace = await this.member.workspaces.fetch(pending.previous.workspace_public_id)
 
-      if (workspace.state !== "archived")
+      if (workspace.state !== "archived") {
         await this.member
           .workspace(pending.previous.workspace_public_id)
           .conversation(pending.previous.public_id)
           .archive()
+        await this.event?.("conversation.archived", {
+          workspace: pending.previous.workspace_public_id,
+          conversation: pending.previous.public_id,
+        })
+      }
     }
+
+    if (pending.home_workspace)
+      await this.settingsDocument(id).change((current) => ({
+        ...current!,
+        home_workspace_public_id: pending.home_workspace!,
+      }))
 
     await document.change((current) => ({
       current: selected,
@@ -530,55 +578,5 @@ export class Bots {
         [pending.key]: { action: pending.action, request: pending.request, selected, completed_at: Date.now() },
       },
     }))
-  }
-}
-
-function external(base: AgentConfigurationInput): AgentConfigurationInput {
-  const allowed = new Set([
-    "nexus.memory.read",
-    "nexus.memory.write",
-    "nexus.memory.edit",
-    "nexus.memory.ls",
-    "nexus.memory.grep",
-    "nexus.memory.delete",
-    "nexus.skill.load",
-    "nexus.tools.search",
-    "nexus.tools.call",
-    "nexus.models.list",
-    "nexus.human.ask",
-    "nexus.conversation.search",
-    "nexus.conversation.read",
-    "nexus.conversation.status",
-    "nexus.conversation.cancel",
-  ])
-
-  return {
-    ...base,
-    kernel_tools: base.kernel_tools?.filter((name) => allowed.has(name)),
-    tool_definitions: [],
-    runner_tool_names: [],
-    runner_executor_public_ids: [],
-    mcp_tools: [],
-    delegation_catalog: [],
-    approval_mode: "rules",
-    conversation_reach: "subtree",
-    memory_context_limit: {
-      bindings: [
-        { name: "conversation", source: { scope: "conversation" }, access: "read_write" },
-        { name: "speaker", source: { scope: "speaker" }, access: "read_write" },
-        { name: "workspace", source: { scope: "workspace" }, access: "read" },
-      ],
-    },
-    prompt_mechanism: "assembly",
-    prompt_template: {
-      blocks: [
-        { type: "slot", slot: "system_prompt" },
-        { type: "slot", slot: "character" },
-        { type: "memory" },
-        { type: "history" },
-        { type: "skills" },
-        { type: "input" },
-      ],
-    },
   }
 }

@@ -95,5 +95,21 @@ export const Command = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("preset.publish"), id: Schema.String, role: Role }),
   Schema.Struct({ action: Schema.Literal("preset.import"), value: Authored }),
+  Schema.Struct({
+    action: Schema.Literal("preset.import-document"),
+    content: Schema.String,
+    format: Schema.Literals(["md", "json"]),
+    filename: Schema.String.pipe(optional),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("preset.export-document"),
+    id: Schema.String,
+    format: Schema.Literals(["md", "json"]),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("preset.defaults"),
+    main_preset_public_id: Schema.String.pipe(optional),
+    default_bot_preset_public_id: Schema.String.pipe(optional),
+  }),
 ])
 export type Command = typeof Command.Type

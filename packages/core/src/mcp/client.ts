@@ -172,6 +172,11 @@ export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.Connec
   answered: Schema.optional(Schema.Boolean),
 }) {}
 
+export class TransportError extends Schema.TaggedError<TransportError>()("MCP.TransportError", {
+  server: Schema.String,
+  message: Schema.String,
+}) {}
+
 /** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
 export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError>()("MCP.SessionExpiredError", {
   server: Schema.String,
@@ -296,6 +301,8 @@ export interface ConnectOptions {
   readonly clientInfo?: Implementation
   /** False declares no roots and leaves `roots/list` unanswered, for a connection no one directory owns. */
   readonly roots?: boolean
+  /** False ignores server list-change notifications and does not subscribe to catalogs. */
+  readonly listChanged?: boolean
   /** Experimental: declares MCP Events, a draft extension, and exposes `Connection.events` for a server that offers them. */
   readonly events?: boolean
 }
@@ -372,11 +379,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         ...(options.events ? { extensions: { [EVENTS]: {} } } : {}),
       },
       versionNegotiation: negotiation(protocol, timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT),
-      listChanged: {
-        tools: listChanged("tools"),
-        prompts: listChanged("prompts"),
-        resources: listChanged("resources"),
-      },
+      listChanged:
+        options.listChanged === false
+          ? undefined
+          : {
+              tools: listChanged("tools"),
+              prompts: listChanged("prompts"),
+              resources: listChanged("resources"),
+            },
     })
     // Background work such as the standalone SSE stream reports failures only here; aborts come from close.
     client.onerror = (error) => {
@@ -455,13 +465,21 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const failure = (error: unknown) => {
     // A tool call that relists first can fail with the list's already mapped expiry.
     if (error instanceof SessionExpiredError) return error
-    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    const mapped =
+      error instanceof ProtocolError ||
+      error instanceof OAuthError ||
+      error instanceof UnauthorizedError ||
+      error instanceof InsufficientScopeError
+        ? new Error(explain(error))
+        : new TransportError({ server, message: explain(error) })
+
+    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return mapped
     const expired =
       error.status === 404 ||
       (error.status === 400 &&
         typeof error.data.text === "string" &&
         error.data.text.includes("Bad Request: Server not initialized"))
-    if (!expired) return new Error(explain(error))
+    if (!expired) return mapped
     if (!session.reported) {
       session.reported = true
       session.expired?.()

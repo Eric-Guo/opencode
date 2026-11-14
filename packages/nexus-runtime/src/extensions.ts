@@ -2,15 +2,23 @@ import { createHash } from "node:crypto"
 import { Effect, Schedule, Schema } from "effect"
 import type { AnnouncedTool, CommitTask, JsonObject, TaskRealtime } from "@cybros/agent"
 import type { HostTools } from "./host"
+import type { RealtimeOptions } from "./realtime"
 
 export type RunnerContext = {
+  artifacts?: string
   workspace: string
   conversation: string | null
+  anchor?: string | null
   run: string
   task: string
   directory: string
   signal: AbortSignal
+  executionStarted?: () => void
+  started?: () => void
+  workerRetired?: (reason: Error) => void
   publish?: (file: Blob, name: string) => Promise<JsonObject>
+  progress?: (text: string) => Promise<void>
+  processProgress?: (frame: { process_id: string; lines?: string[]; exit?: number | null }) => Promise<void>
   ask?: (key: string, prompt: string, options?: string[]) => Promise<string>
   realtime?: {
     read(): Promise<TaskRealtime>
@@ -22,6 +30,7 @@ export type RunnerTool = {
   role?: "agent" | "runner"
   resource?: { name: string; concurrency: number }
   internalTimeout?: boolean
+  isolated?: boolean
   execute(input: JsonObject, context: RunnerContext): Promise<Omit<CommitTask, "claim_token">>
 }
 /** @deprecated Use ExtensionModule and ExtensionAPI. Removed in the next minor. */
@@ -51,8 +60,16 @@ export function definition(
 }
 const string = { type: "string" }
 
-export function terminalTools(directory: string, signal: AbortSignal, host: HostTools): RunnerTool[] {
-  const ptys = new Map<string, { owner: string; output: string; close(): Promise<void> }>()
+export function terminalTools(
+  _directory: string,
+  signal: AbortSignal,
+  host: HostTools,
+  options: RealtimeOptions = {},
+): RunnerTool[] {
+  const ptys = new Map<
+    string,
+    { owner: string; output: string; close(): Promise<void>; write(text: string, signal: AbortSignal): Promise<void> }
+  >()
   signal.addEventListener(
     "abort",
     () => {
@@ -78,13 +95,20 @@ export function terminalTools(directory: string, signal: AbortSignal, host: Host
         if (input.action === undefined) {
           const { terminalSession } = await import("./terminal")
 
-          return terminalSession(host, ctx)
+          return terminalSession(host, ctx, options)
         }
         const owner = JSON.stringify([ctx.workspace, ctx.conversation])
-        const pty = await host.pty(directory)
         if (input.action === "open") {
-          const info = await Effect.runPromise(pty.create({ cwd: directory, title: "Nexus" }), { signal: ctx.signal })
-          const state = { owner, output: "", close: () => Effect.runPromise(pty.remove(info.id)) }
+          const pty = await host.pty(ctx.directory)
+          const info = await Effect.runPromise(pty.create({ cwd: ctx.directory, title: "Nexus" }), {
+            signal: ctx.signal,
+          })
+          const state = {
+            owner,
+            output: "",
+            close: () => Effect.runPromise(pty.remove(info.id)),
+            write: (text: string, signal: AbortSignal) => Effect.runPromise(pty.write(info.id, text), { signal }),
+          }
           const attachment = await Effect.runPromise(
             pty.attach(info.id, {
               onData: (chunk) => {
@@ -117,8 +141,7 @@ export function terminalTools(directory: string, signal: AbortSignal, host: Host
           return { content: "Closed." }
         }
         if (input.action === "write" && typeof input.text === "string") {
-          const { Pty } = await import("@opencode/core/pty")
-          await Effect.runPromise(pty.write(Pty.ID.make(id), input.text), { signal: ctx.signal })
+          await state.write(input.text, ctx.signal)
         } else if (input.action !== "read") throw new Error("Expected a terminal action.")
         const output = state.output
         state.output = ""

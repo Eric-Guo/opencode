@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test"
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import type { JsonObject } from "@cybros/agent"
 import { RunnerAdmission } from "../src/runner"
 import { RunnerInbox } from "../src/runner-inbox"
-import { definition, type RunnerTool } from "../src/extensions"
+import { definition, type RunnerContext, type RunnerTool } from "../src/extensions"
 import { executorFixture } from "./fixture/executor"
 
 const nudge = (run: string, task: string, tool: string) => ({
@@ -406,7 +408,13 @@ test("Code Mode and its native file child complete with one startup slot and no 
         return Response.json({
           operations: {
             context: {
-              tools: [{ function: { name: "read" }, route: { kind: "runner", tool_name: "read" } }],
+              tools: [
+                {
+                  function: { name: "code", parameters: { $id: "urn:cybros:rho:codemode:javascript:1" } },
+                  canonical: "code",
+                },
+                { function: { name: "read" }, route: { kind: "runner", tool_name: "read" } },
+              ],
               model_defaults: {},
               environment: null,
             },
@@ -560,6 +568,151 @@ test("journal recovery observes live ownership when a nudge starts during its fi
     resume.resolve()
     finish.resolve()
     await sweeping
+    await runner.close()
+    await fixture.close()
+  }
+})
+
+test("claims execute their captured alternate root, report owned progress, and protect resolved runtime paths", async () => {
+  const fixture = await executorFixture()
+  const alternate = join(fixture.directory, "alternate")
+  const protectedRoot = join(fixture.directory, "private")
+  await Promise.all([mkdir(alternate), mkdir(protectedRoot)])
+  await writeFile(join(protectedRoot, "secret"), "unchanged")
+  await symlink(protectedRoot, join(alternate, "link"))
+  const progress: unknown[] = []
+  let processProgress: RunnerContext["processProgress"]
+  fixture.control.route = async (request) => {
+    if (!new URL(request.url).pathname.endsWith("/executor/progress")) return
+    progress.push(await request.json())
+    return new Response(null, { status: 202 })
+  }
+  const runner = inbox(
+    fixture,
+    [
+      {
+        definition: definition("placement", "placement", {}, []),
+        async execute(_, context) {
+          await context.progress!("working")
+          processProgress = context.processProgress
+          return { content: context.directory }
+        },
+      },
+    ],
+    { protectedRoots: [protectedRoot] },
+  )
+  fixture.add("run", "place", "placement", {
+    executor_context: { "opencode.environment": { root: alternate, directories: [alternate, fixture.directory] } },
+  })
+  fixture.add("run", "guard", "write", {
+    executor_context: { "opencode.directory": alternate },
+    tool_input: { path: "link/secret", content: "blocked" },
+  })
+  fixture.add("run", "bytes", "files_bytes", {
+    executor_context: { "opencode.directory": alternate },
+    tool_input: { path: join(protectedRoot, "secret") },
+  })
+  const invalidDirectories = [["relative"], [join(alternate, "missing")], [join(alternate, "link")]]
+  invalidDirectories.forEach((directories, index) =>
+    fixture.add("run", "invalid-" + index, "placement", {
+      executor_context: { "opencode.environment": { root: alternate, directories } },
+    }),
+  )
+  try {
+    await runner.sweep()
+    await runner.drain()
+    await processProgress!({ process_id: "p1", lines: ["still running"], exit: null })
+    expect(fixture.results.get(JSON.stringify(["run", "place"]))?.content).toBe(alternate)
+    invalidDirectories.forEach((_, index) =>
+      expect(fixture.results.get(JSON.stringify(["run", "invalid-" + index]))).toMatchObject({
+        outcome: "failed",
+        content: expect.stringContaining("placement"),
+      }),
+    )
+    expect(progress).toEqual([
+      {
+        frame: {
+          run_public_id: "run",
+          task_key: "place",
+          claim_token: fixture.claims.get(JSON.stringify(["run", "place"])),
+          text_tail: "working",
+        },
+      },
+      {
+        frame: {
+          process_id: "p1",
+          lines: ["still running"],
+          exit: null,
+          conversation_public_id: "conversation",
+          source: {
+            run_public_id: "run",
+            task_key: "place",
+            claim_token: fixture.claims.get(JSON.stringify(["run", "place"])),
+          },
+        },
+      },
+    ])
+    expect(fixture.results.get(JSON.stringify(["run", "guard"]))?.is_error).toBe(true)
+    expect(fixture.results.get(JSON.stringify(["run", "bytes"]))?.outcome).toBe("failed")
+    expect(await readFile(join(protectedRoot, "secret"), "utf8")).toBe("unchanged")
+  } finally {
+    await runner.close()
+    await fixture.close()
+  }
+})
+
+test("captured editor reads and edits preserve unsaved buffers and do not fall back after bridge errors", async () => {
+  const fixture = await executorFixture()
+  const path = join(fixture.directory, "file")
+  await writeFile(path, "disk")
+  const buffer = { content: "unsaved", closed: false }
+  fixture.control.route = async (request) => {
+    const operation = new URL(request.url).pathname
+    if (!["/fs/read", "/fs/write"].includes(operation)) return
+    expect(request.headers.get("authorization")).toBe("Bearer editor-token")
+    const input = (await request.json()) as { path: string; session: string; content: string }
+    expect(input.path).toBe(path)
+    expect(input.session).toBe("editor")
+    if (buffer.closed) return new Response("closed", { status: 410 })
+    if (operation === "/fs/read") return Response.json({ content: buffer.content })
+    buffer.content = input.content
+    return Response.json({})
+  }
+  const runner = inbox(fixture, [])
+  const executor_context = {
+    "opencode.directory": fixture.directory,
+    "opencode.editor": {
+      url: fixture.server.url.origin,
+      token: "editor-token",
+      session: "editor",
+      roots: [fixture.directory],
+      read: true,
+      write: true,
+    },
+  }
+  try {
+    fixture.add("run", "read", "read", { executor_context, tool_input: { path: "file" } })
+    await runner.sweep()
+    await runner.drain()
+    expect(fixture.results.get(JSON.stringify(["run", "read"]))?.content).toBe("unsaved")
+    fixture.add("run", "edit", "edit", {
+      executor_context,
+      tool_input: { path: "file", edits: [{ oldText: "unsaved", newText: "buffer edit" }] },
+    })
+    await runner.sweep()
+    await runner.drain()
+    expect(buffer.content).toBe("buffer edit")
+    expect(await readFile(path, "utf8")).toBe("disk")
+    buffer.closed = true
+    fixture.add("run", "closed", "write", {
+      executor_context,
+      tool_input: { path: "file", content: "must not write disk" },
+    })
+    await runner.sweep()
+    await runner.drain()
+    expect(fixture.results.get(JSON.stringify(["run", "closed"]))?.is_error).toBe(true)
+    expect(await readFile(path, "utf8")).toBe("disk")
+  } finally {
     await runner.close()
     await fixture.close()
   }

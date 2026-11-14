@@ -3498,6 +3498,18 @@ export type ExperimentalNexusManageInput = {
           }
         }
       }
+    | {
+        readonly action: "preset.import-document"
+        readonly content: string
+        readonly format: "md" | "json"
+        readonly filename?: string | undefined
+      }
+    | { readonly action: "preset.export-document"; readonly id: string; readonly format: "md" | "json" }
+    | {
+        readonly action: "preset.defaults"
+        readonly main_preset_public_id?: string | undefined
+        readonly default_bot_preset_public_id?: string | undefined
+      }
     | { readonly action: "bot.list" }
     | {
         readonly action: "bot.create"
@@ -3540,9 +3552,15 @@ export type ExperimentalNexusManageInput = {
         readonly text: string
         readonly model?: string | undefined
         readonly speaker?: string | undefined
+        readonly attachments?: ReadonlyArray<string> | undefined
+        readonly delivery?: "queue" | "steer" | "steer_now" | undefined
+        readonly observe?: boolean | undefined
+        readonly deliver_at?: string | undefined
+        readonly expected_steering_run_public_id?: string | undefined
       }
     | { readonly action: "bot.read" | "bot.remove" | "bot.history"; readonly id: string }
     | { readonly action: "bot.current" | "bot.new"; readonly id: string; readonly key: string }
+    | { readonly action: "bot.workspace"; readonly id: string; readonly key: string; readonly workspace: string }
     | {
         readonly action: "bot.resume"
         readonly id: string
@@ -3573,6 +3591,14 @@ export type ExperimentalNexusManageInput = {
         readonly workspace: string
         readonly conversation: string
         readonly text: string
+        readonly attachments?: ReadonlyArray<string> | undefined
+        readonly until?:
+          | {
+              readonly command: string
+              readonly attempts?: number | undefined
+              readonly directory?: string | undefined
+            }
+          | undefined
         readonly model?: string | undefined
         readonly preset?: string | undefined
         readonly delivery?: "queue" | "steer" | "steer_now" | undefined
@@ -3601,6 +3627,7 @@ export type ExperimentalNexusManageInput = {
             | undefined
         }
       }
+    | { readonly action: "extension.call"; readonly name: string; readonly input: Schema.Json }
     | {
         readonly action: "schedule.create"
         readonly conversation: string
