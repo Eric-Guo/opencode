@@ -4,7 +4,9 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { ForbiddenError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
-import { Context, Effect, Schema } from "effect"
+import { Context, Effect, Schema, Stream } from "effect"
+import { NexusRun } from "@opencode/schema/nexus-run"
+import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 
@@ -52,6 +54,24 @@ export const NexusHandler = HttpApiBuilder.group(Api, "server.nexus", (handlers)
         }),
       )
     return handlers
+      .handleRaw("nexus.run", () =>
+        Effect.gen(function* () {
+          const runtime = yield* gated
+          const input = yield* HttpServerRequest.schemaBodyJson(NexusRun.Input).pipe(
+            Effect.mapError(() => new InvalidRequestError({ message: "Invalid Nexus run request." })),
+          )
+          const signal = new AbortController()
+          const stream = Stream.fromAsyncIterable(runtime.runPrompt(input, signal.signal), (error) => error).pipe(
+            Stream.map((event) => "data: " + JSON.stringify(event) + "\n\n"),
+            Stream.ensuring(Effect.sync(() => signal.abort())),
+            Stream.encodeText,
+          )
+          return HttpServerResponse.stream(stream, {
+            contentType: "text/event-stream",
+            headers: { "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
+          })
+        }),
+      )
       .handle("nexus.extensions", () => call((runtime) => Promise.resolve(runtime.extensions())))
       .handle("nexus.configureExtension", (ctx) => call((runtime) => runtime.configureExtension(ctx.payload)))
       .handle("nexus.status", () => Effect.map(gated, (runtime) => runtime.status()))
@@ -79,7 +99,9 @@ export const NexusHandler = HttpApiBuilder.group(Api, "server.nexus", (handlers)
         ),
       )
       .handle("nexus.policy", (ctx) =>
-        call((runtime) => runtime.policy(ctx.payload.workspace, ctx.payload.conversation)),
+        call((runtime) =>
+          runtime.policy(ctx.payload.workspace, ctx.payload.conversation, undefined, ctx.payload.model),
+        ),
       )
   }),
 )

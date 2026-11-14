@@ -16,14 +16,16 @@
   ],
   "exports": {
     ".": "./src/runtime.ts",
-    "./editor": "./src/editor.ts"
+    "./editor": "./src/editor.ts",
+    "./run": "./src/run.ts"
   },
   "scripts": {
     "build": "bun run script/build.ts",
     "pack": "bun run script/pack.ts",
     "test": "bun test test",
     "typecheck": "bun check --project tsconfig.json",
-    "typecheck:tsc": "tsc --noEmit -p tsconfig.json"
+    "typecheck:tsc": "tsc --noEmit -p tsconfig.json",
+    "test:conformance": "bun run script/conformance.ts"
   },
   "bundledDependencies": [
     "@cybros/agent"
