@@ -33,7 +33,19 @@ type Session = {
 }
 export type EditorOptions = {
   open?: () => Promise<string>
-  accepted?: (conversation: string, input: string, text: string, model: string, replayed: boolean) => Promise<void>
+  defaults?: { mode?: Mode; model?: string }
+  submit?: (
+    input: {
+      conversation: string
+      key: string
+      text: string
+      attachments?: readonly string[]
+      model?: string
+      approval: Mode
+    },
+    signal: AbortSignal,
+  ) => Promise<string>
+  skills?: () => Promise<readonly { name: string; description: string }[]>
 
   authentication?: EditorAuthentication
   setEnvironment?: (conversation: string, binding: Session["bridge"] | null) => Promise<void>
@@ -47,23 +59,7 @@ export type EditorOptions = {
   detachMcp?: (conversation: string) => Promise<void>
 }
 
-export async function editor(
-  stream: Stream,
-  status: Status,
-  token: string,
-  policy: (
-    conversation: string,
-    model?: string,
-  ) => Promise<{
-    tools: readonly string[]
-    instructions?: string
-    agent_configuration?: JsonObject
-    model?: string
-    fallback_models?: readonly string[]
-    executor_contexts?: Record<string, JsonObject>
-  }>,
-  options: EditorOptions = {},
-) {
+export async function editor(stream: Stream, status: Status, token: string, options: EditorOptions = {}) {
   const credentialProvider = async () => {
     const credential = token || (await options.authentication?.credential())
 
@@ -463,6 +459,9 @@ export async function editor(
           { name: "retry", description: "Retry the holding task." },
           { name: "abandon", description: "Abandon the holding task." },
           { name: "compact", description: "Compact this conversation." },
+          ...((await options.skills?.().catch(() => [])) ?? []).filter(
+            (skill) => !["retry", "abandon", "compact"].includes(skill.name),
+          ),
         ],
       },
     })
@@ -534,6 +533,17 @@ export async function editor(
             { signal, idempotencyKey: crypto.randomUUID() },
           )
       const id = result.conversation.public_id
+
+      await save(
+        id,
+        {
+          "opencode.surface": "acp",
+          "opencode.acp.cwd": roots[0],
+          ...(options.defaults?.mode ? { "opencode.acp.mode": options.defaults.mode } : {}),
+          ...(options.defaults?.model ? { "opencode.acp.model": options.defaults.model } : {}),
+        },
+        signal,
+      )
 
       return { sessionId: id, ...(await attach(id, roots, params.mcpServers, peer, signal, false)) }
     })
@@ -683,40 +693,20 @@ export async function editor(
             : question
               ? question.execution
               : await (async () => {
-                  const choices = await policy(id, session.model)
-                  const receipt = await chat.inputs.create(
+                  if (!options.submit) throw new Error("The editor requires shared application admission.")
+
+                  const input = await options.submit(
                     {
-                      kind: "direct_reply",
+                      conversation: id,
+                      key: crypto.randomUUID(),
                       ...prompt,
-                      instructions: choices.instructions,
-                      model: { model: session.model ?? choices.model ?? nexus.status.model },
-                      agent_configuration: choices.agent_configuration,
-                      ...(choices.fallback_models ? { fallback_models: [...choices.fallback_models] } : {}),
-                      approval_mode: session.mode,
-                      tool_names: [...new Set([...choices.tools, ...session.mcp])],
-                      executor_contexts: {
-                        ...choices.executor_contexts,
-                        [nexus.identity!.runner]: {
-                          ...choices.executor_contexts?.[nexus.identity!.runner],
-                          "opencode.directory": session.roots[0],
-                          "opencode.roots": session.roots,
-                          ...(!options.setEnvironment ? { "opencode.editor": session.bridge } : {}),
-                        },
-                      },
+                      model: session.model,
+                      approval: session.mode,
                     },
-                    { signal, idempotencyKey: crypto.randomUUID() },
+                    signal,
                   )
 
-                  void options
-                    .accepted?.(
-                      id,
-                      receipt.input.public_id,
-                      prompt.text ?? "",
-                      session.model ?? choices.model ?? nexus.status.model,
-                      receipt.replayed,
-                    )
-                    .catch(() => {})
-                  return chat.inputExecution(receipt.input.public_id)
+                  return chat.inputExecution(input)
                 })()
 
         session.last = { execution, transcript }
