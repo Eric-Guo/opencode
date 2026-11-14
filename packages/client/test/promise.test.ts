@@ -99,6 +99,8 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.experimental.browser)).toEqual(["tunnel"])
   expect(Object.keys(client.experimental.automation)).toEqual(["create", "list", "get", "pause", "resume", "delete"])
   expect(Object.keys(client.experimental.nexus)).toEqual([
+    "extensions",
+    "configureExtension",
     "status",
     "pair",
     "disconnect",
@@ -186,7 +188,9 @@ test("nests a method under client.experimental exactly when its route is experim
     "migration.v1.status",
     "nexus.account",
     "nexus.catalog",
+    "nexus.configureExtension",
     "nexus.disconnect",
+    "nexus.extensions",
     "nexus.grant",
     "nexus.login",
     "nexus.logout",
