@@ -13,7 +13,10 @@ import type {
   TitlebarTheme,
 } from "../shared/ipc-contract"
 
+import type { DesktopPanelPresentation } from "../extension"
+
 export type ElectronAPI = {
+  setPanelPresentation(value: DesktopPanelPresentation): Promise<void>
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(signal?: AbortSignal): Promise<ServerReadyData>
   onSidecarChanged(cb: (data: ServerReadyData) => void): () => void

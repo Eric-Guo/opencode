@@ -15,6 +15,7 @@ const mutable = <Value>(value: Value) => value as Mutable<Value>
 const toArrayBuffer = (value: Uint8Array) => new Uint8Array(value).buffer
 
 export const api: ElectronAPI = {
+  setPanelPresentation: (value) => invoke("WindowSetPanelPresentation", value),
   awaitInitialization: () => invoke("AppAwaitInitialization").then(mutable),
   reconnectService: (signal) => cancellable("AppReconnectService", undefined, signal),
   onSidecarChanged: (cb) => listen("SidecarChanged", (event) => cb({ url: event.url })),
