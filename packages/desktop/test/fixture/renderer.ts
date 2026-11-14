@@ -1,4 +1,4 @@
-import { MessageChannelMain } from "electron"
+import { BrowserWindow, MessageChannelMain } from "electron"
 import type { WebContents } from "electron"
 import { Effect, Layer, ManagedRuntime, Schema } from "effect"
 import { RpcServer } from "effect/rpc"
@@ -10,6 +10,7 @@ import { StorageRpcs } from "../../src/shared/ipc-rpc/storage"
 import { WindowRpcs } from "../../src/shared/ipc-rpc/window"
 import { IpcTransportPort } from "../../src/shared/ipc-transport"
 import { IpcPortHandoff, IpcServerProtocolLive } from "../../src/main/ipc-transport"
+import { setPanelPresentation } from "../../src/main/windows/presentation"
 import { pluginHandlers } from "../../src/main/ipc-handlers/plugins"
 import { Plugins } from "../../src/main/plugin"
 import { eventHandlers } from "../../src/main/ipc-handlers/events"
@@ -47,6 +48,16 @@ export async function rendererFixture(url: string, storage?: StateStore, main?: 
       AppQuit: () => Effect.die("Fixture must not quit through renderer"),
     }),
     WindowRpcs.toLayer({
+      WindowSetPanelPresentation: (value, context) =>
+        Effect.gen(function* () {
+          const transport = yield* IpcPortHandoff
+          const contents = transport.sender(context.client.id)
+
+          if (!contents) throw new Error("Fixture renderer is gone")
+          const win = BrowserWindow.fromWebContents(contents)
+
+          if (win) setPanelPresentation(win, contents, value)
+        }),
       WindowThemeReady: () => Effect.void,
       WindowRequestMicrophone: () => Effect.succeed(false),
       WindowSetVoiceCallActive: () => Effect.void,
