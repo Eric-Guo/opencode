@@ -4,6 +4,51 @@ OpenCode's managed service hosts the Nexus Agent and Local Runner. The runtime
 uses the packaged TypeScript Nexus SDK and OpenCode's host services. Enablement
 is controlled by `experimental.nexus_runtime`.
 
+## Application settings and one-shot runs
+
+`opencode nexus settings` reads the installation's application policy. Update individual
+fields with `opencode nexus settings --json '{"subagent_default":false}'`. Settings
+include `default_model`, `fallback_models`, `kernel_tools`, `subagent_default`,
+`adaptations`, `adaptations_dir`, and `conversation_title_model`. They are stored
+privately in `application-settings.json`; pairing and Human credentials remain separate.
+The approval default is `ask`.
+
+Adaptations use the bundled reference pack, overlaid by `*.yml` rows in the installation's
+`adaptations` directory or `adaptations_dir`. `adaptations` accepts `auto`, `off`, or a
+row ID. The installation's default model selects declaration spellings; each input's
+selected model supplies its hints. Invalid rows and moved description anchors refuse
+publication. Reference data is shipped in this package, with no runtime dependency on Rho.
+
+`nexus.codemode` controls Code Mode availability and its `default` (`on` or `off`).
+New Main conversations capture Code Mode and Subagent defaults; forks and Sides inherit
+those choices. Existing accepted work keeps its captured declarations.
+
+New untitled Main and Bot conversations get one background title attempt after their
+first accepted reply input. `conversation_title_model` is `follow_current` by default,
+a model reference, or `null` to disable. Manual titles win. Temporary title Sides are
+removed after completion, failure, timeout, or shutdown.
+
+```sh
+opencode nexus run "Inspect this project" --output-format json
+opencode nexus run "Fix the failing test" --until "bun test" --attempts 3 --timeout 600
+opencode nexus run "Describe the image" --attach picture.png -p
+opencode nexus pair --url https://nexus.example.com --model provider/model --api-key-stdin
+```
+
+API-key import reads one JSON object containing `access_token` and
+`executor_access_token` from stdin. Both must identify the same Agent application.
+Candidate validation preserves the current connection on failure. Imported credentials
+restore after restart and disconnect revokes both tokens.
+
+One-shot runs use the same admission, model policy, tools, captured environment and
+Until checks as other surfaces. They deny unattended approvals and stop their owned
+work on a question, unresolved hold, timeout, or interrupt. Exit codes are `0` for
+completion, `1` for failure/refusal/cancellation, `2` when a person or timeout prevents
+completion, and `130` for interruption. `--output-format` accepts `text`, `json`, or
+`stream-json`; `-p` prints only the final answer. HTTP clients use the experimental
+`POST /api/experimental/nexus/run` SSE endpoint. HTTP recovery remains authoritative
+when realtime transcript frames are unavailable.
+
 ## Extension configuration
 
 Inspect saved configuration, active tools and readiness:
@@ -300,6 +345,33 @@ hosted by OpenCode's managed service; the Rho web UI is replaced by `nexus-ui`.
 | rho-t3                    | Native service setup, provider catalog and authentication, persistent assignment handles, uncertain launch reconciliation, fork isolation and callbacks                                                                        |
 | rho-dev                   | Source-only development extension and CLI over shared application operations                                                                                                                                                   |
 | rho-webui                 | Replaced by `packages/nexus-ui`                                                                                                                                                                                                |
+
+## Capability verification
+
+Each row below names the production owner and the local behavioral tests for the
+corresponding Rho package. The implementation uses OpenCode's service, filesystem,
+process, PTY and MCP facilities. Installation, upgrade and remote-access operations
+use OpenCode's existing commands. The Rho WebUI is replaced by `nexus-ui`.
+
+| Rho package            | Production owner                                                                             | Executable verification                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rho`                  | runtime, application, settings, adaptations, titles, Presets/Bots, extensions, memory, Until | `runtime`, `application`, `adaptations`, `conversation-titles`, `run`, `presets`, `bots`, `lifecycle`, `packages`, `memory-review`, `until` tests              |
+| `rho-env`              | runner inbox/claims, files/search, checkpoints, processes, skills, terminal                  | `executor`, `claim-control`, `claim-result`, `runner`, `attachments`, `runner-search`, `checkpoint-store`, `processes`, `skills`, `terminal`, `realtime` tests |
+| `rho-codemode`         | isolated QuickJS and frozen operation bridge                                                 | `code`, `executor` tests                                                                                                                                       |
+| `rho-web-tools`        | bounded DNS-pinned fetch and publication                                                     | `web` tests                                                                                                                                                    |
+| `rho-browser`          | Chromium session and browser tools                                                           | `browser` tests with real Chromium                                                                                                                             |
+| `rho-mcp`              | OpenCode transport adapter, curation, documents and OAuth                                    | `mcp`, `mcp-exchange`, `mcp-session`, `mcp-sessions`, `captured-mcp` tests                                                                                     |
+| `rho-acp`              | editor sessions, auth, environment bridge and replay                                         | `editor`, `editor-auth`, plus Nexus UI bridge reply tests                                                                                                      |
+| `rho-acp-client`       | resident child delegation and permission policy                                              | `acp`, `adapters`, `runner-policy` tests                                                                                                                       |
+| `rho-ingress-telegram` | connections, ingress, scheduling and exact worker delivery                                   | `telegram`, `telegram-workers`, `telegram-cross-bot`, `telegram-render`, `telegram-transport` tests                                                            |
+| `rho-t3`               | authenticated RPC, native service and assignment ownership                                   | `t3` tests                                                                                                                                                     |
+| `rho-dev`              | source-only extension, streams and terminal                                                  | `dev`, `dev-worker` tests                                                                                                                                      |
+
+All named tests live under `test/` with `.test.ts` suffixes. Run `bun run
+test:conformance` with `OPENCODE_NEXUS_CHROMIUM` set to exercise the complete local
+suite without silently skipping browser or WebRTC checks. CI runs this gate on Linux
+when the runtime is affected. External integrations use local HTTP/WebSocket fixtures
+and real local processes; this gate makes no live Nexus, Telegram, or T3 account changes.
 
 ## Verification
 
