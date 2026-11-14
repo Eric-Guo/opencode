@@ -1,177 +1,151 @@
-import { spawn } from "node:child_process"
-import { mkdtemp, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { Readable, Writable } from "node:stream"
 import { Schema } from "effect"
+import type { JsonObject } from "@cybros/agent"
 import { definition, type RunnerTool } from "./extensions"
 import { webSite } from "./web"
+import { BrowserSession, act, clamp, command, evaluate, loaded, snapshot } from "./browser-session"
+import { readEffect } from "./runner"
 
-const Frame = Schema.Struct({
-  id: Schema.optional(Schema.Number),
-  result: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
-  error: Schema.optional(Schema.Struct({ message: Schema.String })),
+const Input = Schema.Struct({
+  url: Schema.optional(Schema.String),
+  ref: Schema.optional(Schema.String),
+  text: Schema.optional(Schema.String),
+  submit: Schema.optional(Schema.Boolean),
+  expression: Schema.optional(Schema.String),
+  full_page: Schema.optional(Schema.Boolean),
 })
+const notice =
+  "NOTE: this loop has a new browser tab; earlier refs are invalid. Use the current snapshot before acting.\n\n"
+const string = { type: "string" }
 
-// Chromium's debugging pipe is private to the spawned browser and needs no listening port.
-async function openPage(executable: string, signal: AbortSignal) {
-  const profile = await mkdtemp(join(tmpdir(), "opencode-nexus-browser-"))
-  const chrome = spawn(
-    executable,
-    [
-      "--headless",
-      "--disable-background-networking",
-      "--disable-sync",
-      "--no-first-run",
-      "--remote-debugging-pipe",
-      "--user-data-dir=" + profile,
-      "about:blank",
-    ],
-    {
-      stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"],
-      env: {
-        PATH: process.env.PATH,
-        HOME: process.env.HOME,
-        TMPDIR: process.env.TMPDIR,
-        SystemRoot: process.env.SystemRoot,
-      },
-    },
-  )
-  const input = chrome.stdio[3]
-  const output = chrome.stdio[4]
-  if (!(input instanceof Writable) || !(output instanceof Readable)) {
-    chrome.kill()
-    throw new Error("Chromium debugging pipe unavailable.")
-  }
-  type Reply = NonNullable<typeof Frame.Type.result>
-  const callbacks = new Map<number, { resolve(value: Reply): void; reject(reason: Error): void }>()
-  let id = 0
-  let buffer = ""
-  const stop = () => {
-    chrome.kill()
-  }
-  signal.addEventListener("abort", stop, { once: true })
-  if (signal.aborted) stop()
-  const fail = () => {
-    for (const item of callbacks.values()) item.reject(new Error("Browser closed."))
-    callbacks.clear()
-  }
-  chrome.on("error", fail)
-  input.on("error", fail)
-  chrome.once("close", () => {
-    fail()
-    signal.removeEventListener("abort", stop)
-    void rm(profile, { recursive: true, force: true }).catch(() => {})
-  })
-  output.setEncoding("utf8").on("data", (chunk: string) => {
-    buffer += chunk
-    if (buffer.length > 32 * 1024 * 1024) {
-      fail()
-      stop()
-      return
-    }
-    let end: number
-    while ((end = buffer.indexOf("\0")) >= 0) {
-      const frame = Schema.decodeUnknownOption(Schema.fromJsonString(Frame))(buffer.slice(0, end))
-      buffer = buffer.slice(end + 1)
-      if (frame._tag !== "Some" || !frame.value.id) continue
-      const reply = callbacks.get(frame.value.id)
-      callbacks.delete(frame.value.id)
-      if (frame.value.error) reply?.reject(new Error(frame.value.error.message))
-      else reply?.resolve(frame.value.result ?? {})
-    }
-  })
-  const send = (method: string, params: object, sessionId?: string) =>
-    new Promise<Reply>((resolve, reject) => {
-      if (chrome.exitCode !== null || chrome.killed || !input.writable) return reject(new Error("Browser is closed."))
-      const key = ++id
-      callbacks.set(key, { resolve, reject })
-      input.write(JSON.stringify({ id: key, method, params, sessionId }) + "\0")
-    })
-  try {
-    const { targetId } = await send("Target.createTarget", { url: "about:blank" })
-    const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true })
-    if (typeof sessionId !== "string") throw new Error("Could not attach to browser page.")
-    return { close: stop, command: (method: string, params: object) => send(method, params, sessionId) }
-  } catch (error) {
-    stop()
-    throw error
-  }
-}
-
-export function browserTools(executable: string, signal: AbortSignal): RunnerTool[] {
-  const pages = new Map<string, Promise<Awaited<ReturnType<typeof openPage>>>>()
-  const string = { type: "string" }
+export function browserTools(
+  executable: string,
+  signal: AbortSignal,
+  session = new BrowserSession(executable, signal),
+): RunnerTool[] {
   const specs = [
-    definition("browser_navigate", "Open an HTTP(S) page in this conversation's private browser.", { url: string }, [
-      "url",
-    ]),
-    definition("browser_snapshot", "Read visible page text and controls.", {}, []),
-    definition("browser_click", "Click the element matching a CSS selector.", { selector: string }, ["selector"]),
-    definition("browser_type", "Replace a form field's value.", { selector: string, text: string }, [
-      "selector",
-      "text",
-    ]),
-    definition("browser_screenshot", "Capture the current page as a PNG.", {}, []),
-    definition("browser_evaluate", "Evaluate JavaScript in the current page.", { expression: string }, ["expression"]),
+    definition(
+      "browser_navigate",
+      "Open an HTTP(S) URL and return the resulting accessibility snapshot. Start with its [ref=eN_N] handles; never guess selectors. Refs belong to the latest snapshot.",
+      { url: string },
+      ["url"],
+    ),
+    definition(
+      "browser_snapshot",
+      "Read the page accessibility tree. Use the returned refs with browser_click and browser_type; a new-tab notice invalidates earlier refs.",
+      {},
+      [],
+    ),
+    definition(
+      "browser_click",
+      "Click an element by its ref from the latest snapshot and return the resulting page.",
+      { ref: string },
+      ["ref"],
+    ),
+    definition(
+      "browser_type",
+      "Replace a field's contents by snapshot ref. Empty text clears it. Optionally press Enter and return the resulting page.",
+      { ref: string, text: string, submit: { type: "boolean" } },
+      ["ref", "text"],
+    ),
+    definition(
+      "browser_screenshot",
+      "Capture the current viewport or whole page as a PNG attachment.",
+      { full_page: { type: "boolean" } },
+      [],
+    ),
+    definition(
+      "browser_evaluate",
+      "Evaluate JavaScript and return JSON. This can act on the page; prefer the other tools when they express the action.",
+      { expression: string },
+      ["expression"],
+    ),
   ]
   return specs.map((spec) => ({
-    definition: spec,
+    definition: ["browser_snapshot", "browser_screenshot"].includes(spec.name)
+      ? { ...spec, effect_profile: readEffect }
+      : spec,
     async execute(input, ctx) {
+      const args = Schema.decodeUnknownSync(Input, { onExcessProperty: "error" })(input)
       if (!ctx.conversation) throw new Error("A conversation must own the browser.")
-      const key = JSON.stringify([ctx.workspace, ctx.conversation])
-      const state = pages.get(key) ?? openPage(executable, signal)
-      pages.set(key, state)
-      const close = () => {
-        pages.delete(key)
-        void state.then(
-          (page) => page.close(),
-          () => {},
-        )
-      }
-      ctx.signal.addEventListener("abort", close, { once: true })
-      try {
-        ctx.signal.throwIfAborted()
-        const page = await state
-        if (spec.name === "browser_navigate") {
-          webSite(input.url)
-          const result = await page.command("Page.navigate", { url: input.url })
-          if (result.errorText) throw new Error(String(result.errorText))
-          return { content: "Opened " + input.url }
-        }
-        if (spec.name === "browser_screenshot") {
-          const { data } = await page.command("Page.captureScreenshot", { format: "png" })
-          if (typeof data !== "string") throw new Error("No screenshot returned.")
-          if (!ctx.publish) throw new Error("Screenshot publication requires an active Nexus claim.")
-          return {
-            content: [
-              await ctx.publish(new Blob([Buffer.from(data, "base64")], { type: "image/png" }), "screenshot.png"),
-            ],
+      if (spec.name === "browser_navigate") webSite(args.url)
+      if (["browser_click", "browser_type"].includes(spec.name) && !args.ref?.trim())
+        throw new Error("ref is required; use a handle from browser_snapshot.")
+      if (spec.name === "browser_type" && args.text === undefined)
+        throw new Error('text is required; send "" to clear the field.')
+      if (spec.name === "browser_evaluate" && !args.expression?.trim()) throw new Error("expression is required.")
+      return session.run(JSON.stringify([ctx.workspace, ctx.run]), ctx.signal, async (tab, active) => {
+        const fresh = tab.fresh
+        const noticed = (text: string) => (fresh ? notice : "") + text
+        try {
+          if (spec.name === "browser_navigate") {
+            tab.refs.clear()
+            const reply = Schema.decodeUnknownSync(
+              Schema.Struct({ loaderId: Schema.optional(Schema.String), errorText: Schema.optional(Schema.String) }),
+            )(await command(tab, "Page.navigate", { url: args.url }))
+            if (reply.errorText) throw new Error(reply.errorText)
+            await loaded(tab, active, reply.loaderId)
           }
+          if (spec.name === "browser_click" || spec.name === "browser_type") {
+            await act(tab, args.ref!, spec.name === "browser_type" ? args.text : undefined, args.submit)
+            await loaded(tab, active)
+          }
+          if (spec.name === "browser_screenshot") {
+            if (!ctx.publish) throw new Error("Screenshot publication requires an active Nexus claim.")
+            const layout = args.full_page
+              ? Schema.decodeUnknownSync(
+                  Schema.Struct({
+                    cssContentSize: Schema.Struct({
+                      x: Schema.Number,
+                      y: Schema.Number,
+                      width: Schema.Number,
+                      height: Schema.Number,
+                    }),
+                  }),
+                )(await command(tab, "Page.getLayoutMetrics"))
+              : undefined
+            const image = Schema.decodeUnknownSync(Schema.Struct({ data: Schema.String }))(
+              await command(tab, "Page.captureScreenshot", {
+                format: "png",
+                ...(layout ? { captureBeyondViewport: true, clip: { ...layout.cssContentSize, scale: 1 } } : {}),
+              }),
+            )
+            const resource = await ctx.publish(
+              new Blob([Buffer.from(image.data, "base64")], { type: "image/png" }),
+              "screenshot.png",
+            )
+            return { content: [...(fresh ? [{ type: "text", text: notice } as JsonObject] : []), resource] }
+          }
+          if (spec.name === "browser_evaluate") {
+            const value = await evaluate(
+              tab,
+              `(async()=>{
+              const seen=new WeakSet();
+              const clean=(value,depth=0)=>{
+                if(typeof value==='bigint')return value.toString();
+                if(typeof value!=='object'||value===null)return typeof value==='number'&&!Number.isFinite(value)?null:value;
+                if(seen.has(value))return '[circular]';
+                if(depth>=64)return '[too deep]';
+                seen.add(value);
+                const output=Array.isArray(value)?value.map(item=>clean(item,depth+1)):Object.fromEntries(Object.entries(value).map(([key,item])=>[key,clean(item,depth+1)]));
+                seen.delete(value);return output;
+              };
+              return JSON.stringify(clean(await (0,eval)(${JSON.stringify(args.expression)})))??'null';
+            })()`,
+            )
+            if (typeof value !== "string") throw new Error("Page evaluation returned no JSON.")
+            return {
+              content: noticed(clamp(value, 32768)),
+              ...(Buffer.byteLength(value) <= 32768
+                ? { structured_content: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(value) }
+                : {}),
+            }
+          }
+          return { content: noticed(await snapshot(tab)) }
+        } catch (error) {
+          active.throwIfAborted()
+          return { is_error: true, content: noticed(error instanceof Error ? error.message : String(error)) }
         }
-        const element = "document.querySelector(" + JSON.stringify(input.selector) + ")"
-        const expression =
-          spec.name === "browser_click"
-            ? element + ".click()"
-            : spec.name === "browser_type"
-              ? "(()=>{const e=" +
-                element +
-                "; e.focus(); e.value=" +
-                JSON.stringify(input.text) +
-                ";e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))})()"
-              : spec.name === "browser_snapshot"
-                ? "({title:document.title,url:location.href,text:document.body.innerText.slice(0,32768),controls:Array.from(document.querySelectorAll('a,button,input,textarea,select')).slice(0,100).map(e=>({tag:e.localName,id:e.id,name:e.getAttribute('name'),label:e.getAttribute('aria-label')||e.innerText?.slice(0,120)}))})"
-                : input.expression
-        if (typeof expression !== "string") throw new Error("Expected a JavaScript expression.")
-        const result = await page.command("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })
-        if (result.exceptionDetails) throw new Error("Page evaluation failed.")
-        return { content: JSON.stringify(result.result).slice(0, 65536) }
-      } catch (error) {
-        close()
-        throw error
-      } finally {
-        ctx.signal.removeEventListener("abort", close)
-      }
+      })
     },
   }))
 }
