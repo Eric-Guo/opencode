@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto"
-import { isAbsolute } from "node:path"
-import { pathToFileURL } from "node:url"
 import { Effect, Schedule, Schema } from "effect"
-import type { AnnouncedTool, CommitTask, JsonObject } from "@cybros/agent"
+import type { AnnouncedTool, CommitTask, JsonObject, TaskRealtime } from "@cybros/agent"
 import type { HostTools } from "./host"
 
 export type RunnerContext = {
@@ -14,11 +12,19 @@ export type RunnerContext = {
   signal: AbortSignal
   publish?: (file: Blob, name: string) => Promise<JsonObject>
   ask?: (key: string, prompt: string, options?: string[]) => Promise<string>
+  realtime?: {
+    read(): Promise<TaskRealtime>
+    offer(input: { connection_id: string; sdp: string; previous_connection_id?: string }): Promise<TaskRealtime>
+  }
 }
 export type RunnerTool = {
   definition: AnnouncedTool
+  role?: "agent" | "runner"
+  resource?: { name: string; concurrency: number }
+  internalTimeout?: boolean
   execute(input: JsonObject, context: RunnerContext): Promise<Omit<CommitTask, "claim_token">>
 }
+/** @deprecated Use ExtensionModule and ExtensionAPI. Removed in the next minor. */
 export type NexusExtension = (context: {
   directory: string
   signal: AbortSignal
@@ -45,32 +51,7 @@ export function definition(
 }
 const string = { type: "string" }
 
-export async function loadExtensions(directory: string, signal: AbortSignal, host?: HostTools) {
-  const tools: RunnerTool[] = []
-  const configured = process.env.OPENCODE_NEXUS_EXTENSIONS
-  if (configured) {
-    const files = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(configured)
-    for (const file of files) {
-      if (!isAbsolute(file)) throw new Error("Nexus extension modules require absolute paths.")
-      const module = await import(pathToFileURL(file).href)
-      if (typeof module.default !== "function") throw new Error("Expected a Nexus extension default export.")
-      const register: NexusExtension = module.default
-      tools.push(...(await register({ directory, signal })))
-    }
-  }
-  if (process.env.OPENCODE_NEXUS_CHROMIUM) {
-    const { browserTools } = await import("./browser")
-    tools.push(...browserTools(process.env.OPENCODE_NEXUS_CHROMIUM, signal))
-  }
-  if (process.env.OPENCODE_NEXUS_ACP_AGENTS) {
-    const { acpTool } = await import("./acp")
-    tools.push(acpTool(process.env.OPENCODE_NEXUS_ACP_AGENTS))
-  }
-  if (process.env.OPENCODE_NEXUS_T3_URL) {
-    const { t3Tools } = await import("./t3")
-    tools.push(...t3Tools(process.env.OPENCODE_NEXUS_T3_URL))
-  }
-  if (!host) return tools
+export function terminalTools(directory: string, signal: AbortSignal, host: HostTools): RunnerTool[] {
   const ptys = new Map<string, { owner: string; output: string; close(): Promise<void> }>()
   signal.addEventListener(
     "abort",
@@ -80,69 +61,75 @@ export async function loadExtensions(directory: string, signal: AbortSignal, hos
     },
     { once: true },
   )
-  tools.push({
-    definition: definition(
-      "terminal",
-      "Open, read, write or close an interactive project terminal in this conversation.",
-      {
-        action: { enum: ["open", "read", "write", "close"] },
-        id: string,
-        text: string,
-      },
-      ["action"],
-    ),
-    async execute(input, ctx) {
-      if (!ctx.conversation) throw new Error("A conversation must own the terminal.")
-      const owner = JSON.stringify([ctx.workspace, ctx.conversation])
-      const pty = await host.pty(directory)
-      if (input.action === "open") {
-        const info = await Effect.runPromise(pty.create({ cwd: directory, title: "Nexus" }), { signal: ctx.signal })
-        const state = { owner, output: "", close: () => Effect.runPromise(pty.remove(info.id)) }
-        const attachment = await Effect.runPromise(
-          pty.attach(info.id, {
-            onData: (chunk) => {
-              state.output = (state.output + chunk).slice(-65536)
-            },
-            onEnd: (event) => {
-              state.output += "\n[terminal exited " + (event.exitCode ?? "") + "]"
-            },
-          }),
-        ).catch(async (error) => {
-          await state.close()
-          throw error
-        })
-        state.output = attachment.replay
-        attachment.activate()
-        if (signal.aborted || ctx.signal.aborted) {
-          await state.close()
-          throw new Error("Terminal opening canceled.")
+  return [
+    {
+      definition: definition(
+        "terminal",
+        "Open, read, write or close an interactive project terminal in this conversation.",
+        {
+          action: { enum: ["open", "read", "write", "close"] },
+          id: string,
+          text: string,
+        },
+        [],
+      ),
+      async execute(input, ctx) {
+        if (!ctx.conversation) throw new Error("A conversation must own the terminal.")
+        if (input.action === undefined) {
+          const { terminalSession } = await import("./terminal")
+
+          return terminalSession(host, ctx)
         }
-        ptys.set(info.id, state)
-        return { content: info.id }
-      }
-      const id = input.id
-      if (typeof id !== "string") throw new Error("Expected a terminal ID.")
-      const state = ptys.get(id)
-      if (!state || state.owner !== owner) throw new Error("Unknown conversation terminal.")
-      if (input.action === "close") {
-        await state.close()
-        ptys.delete(id)
-        return { content: "Closed." }
-      }
-      if (input.action === "write" && typeof input.text === "string") {
-        const { Pty } = await import("@opencode/core/pty")
-        await Effect.runPromise(pty.write(Pty.ID.make(id), input.text), { signal: ctx.signal })
-      } else if (input.action !== "read") throw new Error("Expected a terminal action.")
-      const output = state.output
-      state.output = ""
-      return { content: output }
+        const owner = JSON.stringify([ctx.workspace, ctx.conversation])
+        const pty = await host.pty(directory)
+        if (input.action === "open") {
+          const info = await Effect.runPromise(pty.create({ cwd: directory, title: "Nexus" }), { signal: ctx.signal })
+          const state = { owner, output: "", close: () => Effect.runPromise(pty.remove(info.id)) }
+          const attachment = await Effect.runPromise(
+            pty.attach(info.id, {
+              onData: (chunk) => {
+                state.output = (state.output + chunk).slice(-65536)
+              },
+              onEnd: (event) => {
+                state.output += "\n[terminal exited " + (event.exitCode ?? "") + "]"
+              },
+            }),
+          ).catch(async (error) => {
+            await state.close()
+            throw error
+          })
+          state.output = attachment.replay
+          attachment.activate()
+          if (signal.aborted || ctx.signal.aborted) {
+            await state.close()
+            throw new Error("Terminal opening canceled.")
+          }
+          ptys.set(info.id, state)
+          return { content: info.id }
+        }
+        const id = input.id
+        if (typeof id !== "string") throw new Error("Expected a terminal ID.")
+        const state = ptys.get(id)
+        if (!state || state.owner !== owner) throw new Error("Unknown conversation terminal.")
+        if (input.action === "close") {
+          await state.close()
+          ptys.delete(id)
+          return { content: "Closed." }
+        }
+        if (input.action === "write" && typeof input.text === "string") {
+          const { Pty } = await import("@opencode/core/pty")
+          await Effect.runPromise(pty.write(Pty.ID.make(id), input.text), { signal: ctx.signal })
+        } else if (input.action !== "read") throw new Error("Expected a terminal action.")
+        const output = state.output
+        state.output = ""
+        return { content: output }
+      },
     },
-  })
-  // Only expose MCP servers explicitly selected for this Nexus installation.
-  const selected = process.env.OPENCODE_NEXUS_MCP?.split(",")
-    .map((name) => name.trim())
-    .filter(Boolean)
-  if (!selected?.length) return tools
+  ]
+}
+
+export async function mcpTools(directory: string, signal: AbortSignal, host: HostTools, selected: readonly string[]) {
+  const tools: RunnerTool[] = []
   const mcp = await host.mcp(directory)
   // The config plugin registers servers asynchronously on a cold Location. This runner
   // publishes a single catalog, so wait on the client side for its selected entries.

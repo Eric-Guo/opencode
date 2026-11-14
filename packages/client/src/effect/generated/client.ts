@@ -351,6 +351,9 @@ import type {
   DebugAgentToolsOutput,
   DebugAgentExecuteToolInput,
   DebugAgentExecuteToolOutput,
+  ExperimentalNexusExtensionsOutput,
+  ExperimentalNexusConfigureExtensionInput,
+  ExperimentalNexusConfigureExtensionOutput,
   ExperimentalNexusStatusOutput,
   ExperimentalNexusPairInput,
   ExperimentalNexusPairOutput,
@@ -2234,6 +2237,17 @@ const adaptGroupDebug = (raw: RawClient["server.debug"]) => ({
   agent: { tools: EndpointDebugAgentTools(raw), executeTool: EndpointDebugAgentExecuteTool(raw) },
 })
 
+const EndpointExperimentalNexusExtensions = (raw: RawClient["server.nexus"]) => () =>
+  preserveEffect<ExperimentalNexusExtensionsOutput>()(raw["nexus.extensions"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalNexusConfigureExtension =
+  (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusConfigureExtensionInput) =>
+    preserveEffect<ExperimentalNexusConfigureExtensionOutput>()(
+      raw["nexus.configureExtension"]({
+        payload: { id: input["id"], enabled: input["enabled"], operations: input["operations"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const EndpointExperimentalNexusStatus = (raw: RawClient["server.nexus"]) => () =>
   preserveEffect<ExperimentalNexusStatusOutput>()(raw["nexus.status"]({}).pipe(Effect.mapError(mapClientError)))
 
@@ -2322,6 +2336,8 @@ const EndpointExperimentalNexusPolicy = (raw: RawClient["server.nexus"]) => (inp
   )
 
 const adaptGroupExperimentalNexus = (raw: RawClient["server.nexus"]) => ({
+  extensions: EndpointExperimentalNexusExtensions(raw),
+  configureExtension: EndpointExperimentalNexusConfigureExtension(raw),
   status: EndpointExperimentalNexusStatus(raw),
   pair: EndpointExperimentalNexusPair(raw),
   disconnect: EndpointExperimentalNexusDisconnect(raw),
@@ -2576,6 +2592,10 @@ const adaptClient = (raw: RawClient) => {
     },
     /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
     nexus: {
+      /** @deprecated Use `client.experimental.nexus.extensions`. Removed in the next minor. */
+      extensions: client.experimental.nexus.extensions,
+      /** @deprecated Use `client.experimental.nexus.configureExtension`. Removed in the next minor. */
+      configureExtension: client.experimental.nexus.configureExtension,
       /** @deprecated Use `client.experimental.nexus.status`. Removed in the next minor. */
       status: client.experimental.nexus.status,
       /** @deprecated Use `client.experimental.nexus.pair`. Removed in the next minor. */
