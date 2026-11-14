@@ -1,5 +1,6 @@
 import { NexusCommand, NexusOperator } from "../nexus-command.js"
 import { Nexus } from "@opencode/schema/nexus"
+import { optional } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { ForbiddenError, InvalidRequestError, ServiceUnavailableError } from "../errors.js"
@@ -13,17 +14,16 @@ const Setup = Schema.Struct({
 const Status = Schema.Struct({
   ...Setup.fields,
   state: Schema.Literals(["unpaired", "pairing", "connecting", "ready", "error"]),
-  identity: Schema.optional(
-    Schema.Struct({
-      agent: Schema.String,
-      name: Schema.String,
-      runner: Schema.String,
-      workspace: Schema.String,
-      workspaceName: Schema.String,
-    }),
-  ),
-  pairing: Schema.optional(Schema.Struct({ code: Schema.String, url: Schema.String })),
-  error: Schema.optional(Schema.String),
+  identity: Schema.Struct({
+    agent: Schema.String,
+    name: Schema.String,
+    runner: Schema.String,
+    workspace: Schema.String,
+    workspaceName: Schema.String,
+  }).pipe(optional),
+  pairing: Schema.Struct({ code: Schema.String, url: Schema.String }).pipe(optional),
+  error: Schema.String.pipe(optional),
+  executor: Nexus.ExecutorStatus.pipe(optional),
 })
 const error = [ForbiddenError, InvalidRequestError, ServiceUnavailableError]
 const annotations = (name: string, summary: string) =>
@@ -79,7 +79,9 @@ export const NexusGroup = HttpApiGroup.make("server.nexus").add(
     }),
     success: Schema.Json,
     error,
-  }).annotateMerge(annotations("manage", "Manage Nexus application inputs, Presets, Bots, persona, schedules and memory")),
+  }).annotateMerge(
+    annotations("manage", "Manage Nexus application inputs, Presets, Bots, persona, schedules and memory"),
+  ),
   HttpApiEndpoint.get("nexus.catalog", "/api/experimental/nexus/catalog", {
     query: Schema.Struct({
       kind: Schema.Literals(["schedules", "memory", "mcp"]),

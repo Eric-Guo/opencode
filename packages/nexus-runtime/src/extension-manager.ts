@@ -183,10 +183,8 @@ export class ExtensionManager {
         configuration: structuredClone(selected.configuration),
         registerTool: (tool) => {
           if (lifecycle.committed) throw new Error("Extension registration has finished.")
-          const input = Schema.make<Schema.Codec<unknown>>(
-            SchemaRepresentation.fromJsonSchemaDocument(
-              JsonSchema.fromSchemaDraft2020_12(tool.definition.input_schema ?? { type: "object" }),
-            ).ast,
+          SchemaRepresentation.fromJsonSchemaDocument(
+            JsonSchema.fromSchemaDraft2020_12(tool.definition.input_schema ?? { type: "object" }),
           )
 
           tools.push({
@@ -196,7 +194,6 @@ export class ExtensionManager {
 
               context.signal.throwIfAborted()
 
-              Schema.decodeUnknownSync(input)(value)
               lifecycle.leases++
 
               try {

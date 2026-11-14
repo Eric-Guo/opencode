@@ -1,7 +1,26 @@
 export * as Nexus from "./nexus.js"
 
 import { Schema } from "effect"
-import { optional } from "./schema.js"
+import { NonNegativeInt, PositiveInt, optional } from "./schema.js"
+
+export const ExecutorStatus = Schema.Struct({
+  running: Schema.Boolean,
+  in_flight: NonNegativeInt,
+  starting: NonNegativeInt,
+  startup_limit: PositiveInt,
+  claimed: NonNegativeInt,
+  swept: NonNegativeInt,
+  nudged: NonNegativeInt,
+  canceled: NonNegativeInt,
+  issue: Schema.NullOr(
+    Schema.Struct({
+      /** Arbitrary transport or runtime error class name; no credential-bearing error text. */
+      type: Schema.String,
+      code: Schema.NullOr(Schema.String),
+    }),
+  ),
+}).annotate({ identifier: "Nexus.ExecutorStatus" })
+export interface ExecutorStatus extends Schema.Schema.Type<typeof ExecutorStatus> {}
 
 export const FieldOperation = Schema.Union([
   Schema.Struct({ op: Schema.Literal("set"), path: Schema.NonEmptyArray(Schema.String), value: Schema.Json }),

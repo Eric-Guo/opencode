@@ -10,6 +10,10 @@ import { setTimeout as delay } from "node:timers/promises"
 
 type Task = ReturnType<ExecutorClient["inboxTask"]>
 
+export class ClaimDeadline extends Error {}
+
+export class ClaimInterrupted extends Error {}
+
 /** One granted deadline, independently maintained while its handler waits on child work. */
 export class ClaimLease {
   private owner = new AbortController()
@@ -18,19 +22,30 @@ export class ClaimLease {
   private renewAt: number
   private statusAt = Date.now() + 5000
   private timer?: ReturnType<typeof setTimeout>
+  private clamp?: ReturnType<typeof setTimeout>
+  private execution = new AbortController()
+  private executionAt: number
   private work?: Promise<void>
   readonly signal: AbortSignal
+  readonly executionSignal: AbortSignal
 
   constructor(
     private readonly task: Task,
     private readonly claim: ClaimedTask,
     parent: AbortSignal,
     private readonly renewable = true,
+    private readonly extension = 3600000,
   ) {
-    this.deadline = claim.deadline_at ? Date.parse(claim.deadline_at) : Date.now() + 30000
+    this.deadline = claim.deadline_at ? Date.parse(claim.deadline_at) : Infinity
+    this.executionAt = this.deadline
     this.renewAt = renewable ? Date.now() + Math.max(0, this.deadline - Date.now()) / 2 : Infinity
     this.signal = AbortSignal.any([parent, this.owner.signal])
+    this.executionSignal = AbortSignal.any([this.signal, this.execution.signal])
     this.arm()
+  }
+
+  get deadlineAt() {
+    return this.deadline
   }
 
   start() {
@@ -45,7 +60,10 @@ export class ClaimLease {
   }
 
   async maintain() {
+    if (Date.now() >= this.deadline) this.owner.abort(new ClaimDeadline("Nexus claim deadline exceeded."))
+    if (Date.now() >= this.executionAt) this.execution.abort(new ClaimDeadline("The tool's execution deadline passed."))
     if (this.signal.aborted) return
+    if (this.executionSignal.aborted) this.renewAt = Infinity
 
     const signal = AbortSignal.any([this.signal, this.monitor.signal])
 
@@ -53,19 +71,20 @@ export class ClaimLease {
       await this.task.claimStatus(this.claim.claim_token, { signal }).then(
         (status) => {
           this.statusAt = Date.now() + 5000
-          if (!status.active) this.owner.abort(new Error("Nexus claim is no longer active."))
+          if (!status.active) this.owner.abort(new ClaimInterrupted("Nexus claim is no longer active."))
         },
         (error: unknown) => {
           this.statusAt = Date.now() + Math.max(5000, retryDelay(error))
+          if (error instanceof APIError && error.status === 401) this.owner.abort(error)
           if (error instanceof APIError && (error.status === 404 || error.code === "not_claimant"))
-            this.owner.abort(new Error("Nexus claim is no longer owned by this runner."))
+            this.owner.abort(new ClaimInterrupted("Nexus claim is no longer owned by this runner."))
         },
       )
 
-    if (!this.renewable || this.signal.aborted || Date.now() < this.renewAt) return
+    if (!this.renewable || this.executionSignal.aborted || Date.now() < this.renewAt) return
 
     const grant = await this.task
-      .extend({ claim_token: this.claim.claim_token, timeout_ms: 3600000 }, { signal })
+      .extend({ claim_token: this.claim.claim_token, timeout_ms: Math.min(this.extension, 3600000) }, { signal })
       .catch(() => undefined)
 
     if (!grant?.deadline_at) {
@@ -81,23 +100,43 @@ export class ClaimLease {
 
   private arm() {
     clearTimeout(this.timer)
+    clearTimeout(this.clamp)
+    if (!Number.isFinite(this.deadline)) return
+
+    const remaining = this.deadline - Date.now()
+    this.executionAt = this.deadline - Math.min(15000, Math.max(0, remaining) / 4)
+    this.clamp = setTimeout(
+      () =>
+        this.execution.abort(
+          new ClaimDeadline(
+            "The tool's execution deadline passed. Cancellation was requested; check its effects before retrying.",
+          ),
+        ),
+      Math.max(0, this.executionAt - Date.now()),
+    )
+    this.clamp.unref()
 
     if (this.deadline <= Date.now()) {
-      this.owner.abort(new Error("Nexus claim deadline exceeded."))
+      this.owner.abort(new ClaimDeadline("Nexus claim deadline exceeded."))
       return
     }
 
     this.timer = setTimeout(
-      () => this.owner.abort(new Error("Nexus claim deadline exceeded.")),
+      () => this.owner.abort(new ClaimDeadline("Nexus claim deadline exceeded.")),
       Math.min(this.deadline - Date.now(), 2147483647),
     )
     this.timer.unref()
   }
 
-  async close() {
+  async finishExecution() {
     this.monitor.abort()
-    clearTimeout(this.timer)
+    clearTimeout(this.clamp)
     await this.work
+  }
+
+  async close() {
+    await this.finishExecution()
+    clearTimeout(this.timer)
   }
 }
 
