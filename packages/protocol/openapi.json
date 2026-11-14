@@ -17007,6 +17007,226 @@
         }
       }
     },
+    "/api/experimental/nexus/run": {
+      "post": {
+        "tags": ["server.nexus"],
+        "operationId": "experimental.nexus.run",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "string",
+                      "contentMediaType": "application/json",
+                      "contentSchema": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "required": ["event", "data"],
+                  "additionalProperties": false
+                },
+                "x-effect-stream": {
+                  "encoding": "sse",
+                  "causeSchema": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Fail"]
+                            },
+                            "error": {
+                              "not": {}
+                            }
+                          },
+                          "required": ["_tag", "error"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Die"]
+                            },
+                            "defect": {}
+                          },
+                          "required": ["_tag", "defect"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "_tag": {
+                              "type": "string",
+                              "enum": ["Interrupt"]
+                            },
+                            "fiberId": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": ["_tag", "fiberId"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "errorSchema": {
+                    "not": {}
+                  },
+                  "failureEvent": "effect/http-api/stream/failure"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Experimental: may change without compatibility guarantees.",
+        "summary": "Run a Nexus prompt to completion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "runner": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "directory": {
+                    "type": "string"
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "code_mode": {
+                    "type": "boolean"
+                  },
+                  "timeout_ms": {
+                    "type": "integer",
+                    "maximum": 9007199254740991,
+                    "exclusiveMinimum": 0
+                  },
+                  "until": {
+                    "type": "object",
+                    "properties": {
+                      "command": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "attempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                      }
+                    },
+                    "required": ["command"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["key", "prompt"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/experimental/nexus/extensions": {
       "get": {
         "tags": ["server.nexus"],
@@ -17314,63 +17534,45 @@
                       "enum": ["unpaired", "pairing", "connecting", "ready", "error"]
                     },
                     "identity": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "agent": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "runner": {
-                              "type": "string"
-                            },
-                            "workspace": {
-                              "type": "string"
-                            },
-                            "workspaceName": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["agent", "name", "runner", "workspace", "workspaceName"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "pairing": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "code": {
-                              "type": "string"
-                            },
-                            "url": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["code", "url"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "error": {
-                      "anyOf": [
-                        {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
                           "type": "string"
                         },
-                        {
-                          "type": "null"
+                        "name": {
+                          "type": "string"
+                        },
+                        "runner": {
+                          "type": "string"
+                        },
+                        "workspace": {
+                          "type": "string"
+                        },
+                        "workspaceName": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": ["agent", "name", "runner", "workspace", "workspaceName"],
+                      "additionalProperties": false
+                    },
+                    "pairing": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "url"],
+                      "additionalProperties": false
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "executor": {
+                      "$ref": "#/components/schemas/Nexus.ExecutorStatus"
                     }
                   },
                   "required": ["origin", "model", "workspace", "directory", "state"],
@@ -17455,63 +17657,45 @@
                       "enum": ["unpaired", "pairing", "connecting", "ready", "error"]
                     },
                     "identity": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "agent": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "runner": {
-                              "type": "string"
-                            },
-                            "workspace": {
-                              "type": "string"
-                            },
-                            "workspaceName": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["agent", "name", "runner", "workspace", "workspaceName"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "pairing": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "code": {
-                              "type": "string"
-                            },
-                            "url": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["code", "url"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "error": {
-                      "anyOf": [
-                        {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
                           "type": "string"
                         },
-                        {
-                          "type": "null"
+                        "name": {
+                          "type": "string"
+                        },
+                        "runner": {
+                          "type": "string"
+                        },
+                        "workspace": {
+                          "type": "string"
+                        },
+                        "workspaceName": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": ["agent", "name", "runner", "workspace", "workspaceName"],
+                      "additionalProperties": false
+                    },
+                    "pairing": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "url"],
+                      "additionalProperties": false
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "executor": {
+                      "$ref": "#/components/schemas/Nexus.ExecutorStatus"
                     }
                   },
                   "required": ["origin", "model", "workspace", "directory", "state"],
@@ -17622,63 +17806,45 @@
                       "enum": ["unpaired", "pairing", "connecting", "ready", "error"]
                     },
                     "identity": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "agent": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "runner": {
-                              "type": "string"
-                            },
-                            "workspace": {
-                              "type": "string"
-                            },
-                            "workspaceName": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["agent", "name", "runner", "workspace", "workspaceName"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "pairing": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "code": {
-                              "type": "string"
-                            },
-                            "url": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["code", "url"],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "error": {
-                      "anyOf": [
-                        {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
                           "type": "string"
                         },
-                        {
-                          "type": "null"
+                        "name": {
+                          "type": "string"
+                        },
+                        "runner": {
+                          "type": "string"
+                        },
+                        "workspace": {
+                          "type": "string"
+                        },
+                        "workspaceName": {
+                          "type": "string"
                         }
-                      ]
+                      },
+                      "required": ["agent", "name", "runner", "workspace", "workspaceName"],
+                      "additionalProperties": false
+                    },
+                    "pairing": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["code", "url"],
+                      "additionalProperties": false
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "executor": {
+                      "$ref": "#/components/schemas/Nexus.ExecutorStatus"
                     }
                   },
                   "required": ["origin", "model", "workspace", "directory", "state"],
@@ -18147,12 +18313,1759 @@
           }
         },
         "description": "Experimental: may change without compatibility guarantees.",
-        "summary": "Manage Nexus schedules and memory documents",
+        "summary": "Manage Nexus application inputs, Presets, Bots, persona, schedules and memory",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["settings.read"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["settings.update"]
+                      },
+                      "patch": {
+                        "type": "object",
+                        "properties": {
+                          "default_model": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "fallback_models": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "kernel_tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "subagent_default": {
+                            "type": "boolean"
+                          },
+                          "adaptations": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "adaptations_dir": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "conversation_title_model": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["action", "patch"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["connection.import"]
+                      },
+                      "origin": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "workspace": {
+                        "type": "string"
+                      },
+                      "directory": {
+                        "type": "string"
+                      },
+                      "access_token": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "executor_access_token": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "action",
+                      "origin",
+                      "model",
+                      "workspace",
+                      "directory",
+                      "access_token",
+                      "executor_access_token"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.list"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.create"]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "configuration": {
+                            "type": "object",
+                            "properties": {
+                              "system_prompt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "model": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "model_mode": {
+                                "type": "string",
+                                "enum": ["default", "follow"]
+                              },
+                              "fallback_models": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "tools": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "runner_tool_names": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "mcp": {
+                                "type": "object",
+                                "properties": {
+                                  "disabled_connections": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["nexus"]
+                                            },
+                                            "connection_public_id": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "connection_public_id"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["executor"]
+                                            },
+                                            "executor_public_id": {
+                                              "type": "string"
+                                            },
+                                            "server_key": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "executor_public_id", "server_key"],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "disabled_tools": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["nexus"]
+                                            },
+                                            "connection_public_id": {
+                                              "type": "string"
+                                            },
+                                            "tool_name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "connection_public_id", "tool_name"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["executor"]
+                                            },
+                                            "executor_public_id": {
+                                              "type": "string"
+                                            },
+                                            "server_key": {
+                                              "type": "string"
+                                            },
+                                            "tool_name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "executor_public_id", "server_key", "tool_name"],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": ["disabled_connections", "disabled_tools"],
+                                "additionalProperties": false
+                              },
+                              "prompt_template": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "approval_mode": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": ["bypass", "ask", "rules"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "approval_rules": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "compaction_policy": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "lifecycle_hooks": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "memory_context_limit": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "bindings": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string",
+                                              "enum": ["conversation", "workspace", "user", "agent", "speaker"]
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "scope": {
+                                                  "type": "string",
+                                                  "enum": ["conversation", "workspace", "user", "agent", "speaker"]
+                                                }
+                                              },
+                                              "required": ["scope"],
+                                              "additionalProperties": false
+                                            },
+                                            "access": {
+                                              "type": "string",
+                                              "enum": ["read", "read_write"]
+                                            }
+                                          },
+                                          "required": ["name", "source", "access"],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": ["bindings"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "conversation_reach": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": ["workspace", "subtree"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["name", "description", "configuration"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["action", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.replace"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "configuration": {
+                            "type": "object",
+                            "properties": {
+                              "system_prompt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "model": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "model_mode": {
+                                "type": "string",
+                                "enum": ["default", "follow"]
+                              },
+                              "fallback_models": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "tools": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "runner_tool_names": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "mcp": {
+                                "type": "object",
+                                "properties": {
+                                  "disabled_connections": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["nexus"]
+                                            },
+                                            "connection_public_id": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "connection_public_id"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["executor"]
+                                            },
+                                            "executor_public_id": {
+                                              "type": "string"
+                                            },
+                                            "server_key": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "executor_public_id", "server_key"],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "disabled_tools": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["nexus"]
+                                            },
+                                            "connection_public_id": {
+                                              "type": "string"
+                                            },
+                                            "tool_name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "connection_public_id", "tool_name"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["executor"]
+                                            },
+                                            "executor_public_id": {
+                                              "type": "string"
+                                            },
+                                            "server_key": {
+                                              "type": "string"
+                                            },
+                                            "tool_name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "executor_public_id", "server_key", "tool_name"],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": ["disabled_connections", "disabled_tools"],
+                                "additionalProperties": false
+                              },
+                              "prompt_template": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "approval_mode": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": ["bypass", "ask", "rules"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "approval_rules": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "compaction_policy": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "lifecycle_hooks": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "memory_context_limit": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "bindings": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string",
+                                              "enum": ["conversation", "workspace", "user", "agent", "speaker"]
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "scope": {
+                                                  "type": "string",
+                                                  "enum": ["conversation", "workspace", "user", "agent", "speaker"]
+                                                }
+                                              },
+                                              "required": ["scope"],
+                                              "additionalProperties": false
+                                            },
+                                            "access": {
+                                              "type": "string",
+                                              "enum": ["read", "read_write"]
+                                            }
+                                          },
+                                          "required": ["name", "source", "access"],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": ["bindings"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "conversation_reach": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": ["workspace", "subtree"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["name", "description", "configuration"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["action", "id", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.duplicate"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "id", "name"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": [
+                          "preset.read",
+                          "preset.remove",
+                          "preset.unpublish",
+                          "preset.select-main",
+                          "preset.select-default-bot",
+                          "preset.export"
+                        ]
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.publish"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          }
+                        },
+                        "required": ["name", "description"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["action", "id", "role"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.import"]
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "configuration": {
+                            "type": "object",
+                            "properties": {
+                              "system_prompt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "model": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "model_mode": {
+                                "type": "string",
+                                "enum": ["default", "follow"]
+                              },
+                              "fallback_models": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "tools": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "runner_tool_names": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "mcp": {
+                                "type": "object",
+                                "properties": {
+                                  "disabled_connections": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["nexus"]
+                                            },
+                                            "connection_public_id": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "connection_public_id"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["executor"]
+                                            },
+                                            "executor_public_id": {
+                                              "type": "string"
+                                            },
+                                            "server_key": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "executor_public_id", "server_key"],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "disabled_tools": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["nexus"]
+                                            },
+                                            "connection_public_id": {
+                                              "type": "string"
+                                            },
+                                            "tool_name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "connection_public_id", "tool_name"],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "source": {
+                                              "type": "string",
+                                              "enum": ["executor"]
+                                            },
+                                            "executor_public_id": {
+                                              "type": "string"
+                                            },
+                                            "server_key": {
+                                              "type": "string"
+                                            },
+                                            "tool_name": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": ["source", "executor_public_id", "server_key", "tool_name"],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": ["disabled_connections", "disabled_tools"],
+                                "additionalProperties": false
+                              },
+                              "prompt_template": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "approval_mode": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": ["bypass", "ask", "rules"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "approval_rules": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "compaction_policy": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "lifecycle_hooks": {
+                                "anyOf": [
+                                  {
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "memory_context_limit": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "bindings": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "name": {
+                                              "type": "string",
+                                              "enum": ["conversation", "workspace", "user", "agent", "speaker"]
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "scope": {
+                                                  "type": "string",
+                                                  "enum": ["conversation", "workspace", "user", "agent", "speaker"]
+                                                }
+                                              },
+                                              "required": ["scope"],
+                                              "additionalProperties": false
+                                            },
+                                            "access": {
+                                              "type": "string",
+                                              "enum": ["read", "read_write"]
+                                            }
+                                          },
+                                          "required": ["name", "source", "access"],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": ["bindings"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "conversation_reach": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": ["workspace", "subtree"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["name", "description", "configuration"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["action", "value"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.import-document"]
+                      },
+                      "content": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": ["md", "json"]
+                      },
+                      "filename": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "content", "format"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.export-document"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": ["md", "json"]
+                      }
+                    },
+                    "required": ["action", "id", "format"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["preset.defaults"]
+                      },
+                      "main_preset_public_id": {
+                        "type": "string"
+                      },
+                      "default_bot_preset_public_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.list"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.create"]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "settings": {
+                        "type": "object",
+                        "properties": {
+                          "audience": {
+                            "type": "string",
+                            "enum": ["owner", "external"]
+                          },
+                          "home_workspace_public_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "preset_public_id": {
+                            "type": "string"
+                          },
+                          "welcome_message": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "subagent": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["action", "name", "description", "settings"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.configure"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "settings": {
+                        "type": "object",
+                        "properties": {
+                          "audience": {
+                            "type": "string",
+                            "enum": ["owner", "external"]
+                          },
+                          "home_workspace_public_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "preset_public_id": {
+                            "type": "string"
+                          },
+                          "welcome_message": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "subagent": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "id", "settings"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.duplicate"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": ["owner", "external"]
+                      }
+                    },
+                    "required": ["action", "id", "name"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.submit"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "workspace": {
+                        "type": "string"
+                      },
+                      "conversation": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "speaker": {
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "delivery": {
+                        "type": "string",
+                        "enum": ["queue", "steer", "steer_now"]
+                      },
+                      "observe": {
+                        "type": "boolean"
+                      },
+                      "deliver_at": {
+                        "type": "string"
+                      },
+                      "expected_steering_run_public_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "id", "workspace", "conversation", "key", "text"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.read", "bot.remove", "bot.history"]
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.current", "bot.new"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "id", "key"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.workspace"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "workspace": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "id", "key", "workspace"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.resume"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "conversation": {
+                        "type": "string"
+                      },
+                      "workspace": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "id", "key", "conversation", "workspace"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.fork"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "conversation": {
+                        "type": "string"
+                      },
+                      "workspace": {
+                        "type": "string"
+                      },
+                      "turn": {
+                        "type": "string"
+                      },
+                      "variant": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "id", "key", "conversation", "workspace", "turn"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["acp.list", "acp.sessions"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["acp.probe"]
+                      },
+                      "agent": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "workdir": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "agent"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["acp.kill", "acp.logs"]
+                      },
+                      "session": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "session"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["acp.release"]
+                      },
+                      "workspace": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "conversation": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "workspace", "conversation"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["application.accepted"]
+                      },
+                      "workspace": {
+                        "type": "string"
+                      },
+                      "conversation": {
+                        "type": "string"
+                      },
+                      "input": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "replayed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["action", "workspace", "conversation", "input", "text", "replayed"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["persona.read"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["persona.reset"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["persona.write"]
+                      },
+                      "content": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "content"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["application.open"]
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "title": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "runner": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action", "key"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["application.submit"]
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "workspace": {
+                        "type": "string"
+                      },
+                      "conversation": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "until": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "command": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "attempts": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 20
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "directory": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["command"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "preset": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "delivery": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["queue", "steer", "steer_now"]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action", "key", "workspace", "conversation", "text"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["application.result"]
+                      },
+                      "workspace": {
+                        "type": "string"
+                      },
+                      "conversation": {
+                        "type": "string"
+                      },
+                      "input": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["action", "workspace", "conversation", "input"],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -18240,6 +20153,22 @@
                       }
                     },
                     "required": ["action", "change"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["extension.call"]
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "input": {}
+                    },
+                    "required": ["action", "name", "input"],
                     "additionalProperties": false
                   },
                   {
@@ -18789,6 +20718,26 @@
                     },
                     "subagent": {
                       "type": "boolean"
+                    },
+                    "available": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "code_mode_available": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": ["code_mode", "subagent"],
@@ -18990,6 +20939,29 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "instructions": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "executor_contexts": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "tools": {
                       "type": "array",
                       "items": {
@@ -19010,6 +20982,39 @@
                       "anyOf": [
                         {
                           "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "agent_configuration": {
+                      "anyOf": [
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "model": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "fallback_models": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         {
                           "type": "null"
@@ -19077,6 +21082,16 @@
                   },
                   "conversation": {
                     "type": "string"
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["workspace", "conversation"],
@@ -26578,6 +28593,88 @@
           }
         },
         "required": ["project_id", "project_name", "work_package_id"],
+        "additionalProperties": false
+      },
+      "Nexus.ExecutorStatus": {
+        "type": "object",
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "in_flight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "starting": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "startup_limit": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          },
+          "claimed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "swept": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "nudged": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "canceled": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "issue": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["type", "code"],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "running",
+          "in_flight",
+          "starting",
+          "startup_limit",
+          "claimed",
+          "swept",
+          "nudged",
+          "canceled",
+          "issue"
+        ],
         "additionalProperties": false
       },
       "PairingCode": {
