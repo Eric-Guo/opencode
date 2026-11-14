@@ -1,3 +1,4 @@
+import { setPanelPresentation } from "../windows/presentation"
 import { app, systemPreferences } from "electron"
 import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
@@ -26,7 +27,14 @@ export const windowHandlers = WindowRpcs.toLayer(
 
     return WindowRpcs.of({
       WindowRequestAttention: (_args, context) =>
-        Effect.promise(() => requestAttention(BrowserWindow.fromWebContents(sender(handoff, context)))),
+        Effect.promise(() => requestAttention(getWindowFromWebContents(sender(handoff, context)))),
+      WindowSetPanelPresentation: (value, context) =>
+        Effect.sync(() => {
+          const contents = sender(handoff, context)
+          const win = getWindowFromWebContents(contents)
+
+          if (win) setPanelPresentation(win, contents, value)
+        }),
       WindowRequestMicrophone: () =>
         Effect.promise(() =>
           process.platform === "darwin" ? systemPreferences.askForMediaAccess("microphone") : Promise.resolve(true),
@@ -76,7 +84,7 @@ export const windowHandlers = WindowRpcs.toLayer(
         }),
       WindowSetTaskbarBadge: ({ count, description }, context) =>
         Effect.sync(() => {
-          const win = BrowserWindow.fromWebContents(sender(handoff, context))
+          const win = getWindowFromWebContents(sender(handoff, context))
 
           if (win) setTaskbarBadge(win, count, description)
         }),
