@@ -10,6 +10,7 @@ import {
   preloadRoute,
   ServerConnection,
   useCommand,
+  useLanguage,
   useCurrentRoute,
   usePluginServers,
   useTabs,
@@ -21,6 +22,7 @@ import extension from "#desktop-renderer-extension"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
+import { panelVariables } from "../shared/panel-presentation"
 import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
@@ -290,6 +292,54 @@ function DesktopEffects(props: { api: ElectronAPI }) {
     }),
   )
   const theme = useTheme()
+  const language = useLanguage()
+
+  // Root theme/font/locale changes also update the isolated panels' public presentation.
+  const publish = () => {
+    const root = document.documentElement
+    const style = getComputedStyle(root)
+    void props.api
+      .setPanelPresentation({
+        mode: theme.mode(),
+        locale: language.locale(),
+        motion: root.dataset.motion === "reduce" ? "reduce" : "full",
+        direction: root.dir === "rtl" ? "rtl" : "ltr",
+        variables: Object.fromEntries(panelVariables.map((key) => [key, style.getPropertyValue(key).trim()])),
+        stylesheets: [...document.styleSheets].flatMap((sheet) => (sheet.href ? [sheet.href] : [])),
+      })
+      .catch(() => undefined)
+  }
+
+  const observer = new MutationObserver(publish)
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["style", "dir", "data-theme", "data-color-scheme", "data-motion"],
+  })
+
+  const styles = new MutationObserver((records) => {
+    if (
+      records.some(
+        (record) =>
+          (record.target instanceof HTMLStyleElement && record.target.id === "oc-theme") ||
+          [...record.addedNodes, ...record.removedNodes].some(
+            (node) => node instanceof HTMLLinkElement && node.rel === "stylesheet",
+          ),
+      )
+    )
+      publish()
+  })
+
+  styles.observe(document.head, { subtree: true, childList: true, characterData: true })
+  onCleanup(() => {
+    observer.disconnect()
+    styles.disconnect()
+  })
+  createEffect(() => {
+    language.locale()
+    theme.mode()
+    theme.themeId()
+    publish()
+  })
 
   createEffect(() => {
     theme.themeId()
