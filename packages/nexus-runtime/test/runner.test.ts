@@ -1,5 +1,6 @@
+import { codeBinding } from "../src/code-settings"
 import { afterEach, beforeEach, expect, test } from "bun:test"
-import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { mutate } from "../src/mutation"
@@ -18,25 +19,31 @@ beforeEach(async () => {
 
 afterEach(() => rm(fixture, { recursive: true, force: true }))
 
-test("file reads respect the directory binding", async () => {
+test("captured directories provide placement while ordinary model reads may access external paths", async () => {
   await writeFile(join(root, "readme.txt"), "Nexus fixture")
   await writeFile(join(fixture, "outside.txt"), "private")
   await symlink(join(fixture, "outside.txt"), join(root, "link.txt"))
   expect(await execute(root, "ls", { path: "." }, signal)).toBe("link.txt\nreadme.txt")
   expect(await execute(root, "read", { path: "readme.txt" }, signal)).toBe("Nexus fixture")
   for (const path of ["link.txt", "../outside.txt", join(fixture, "outside.txt")]) {
-    await expect(execute(root, "read", { path }, signal)).rejects.toThrow("outside")
+    expect(await execute(root, "read", { path }, signal)).toBe("private")
   }
 })
 
-test("read accepts a 64 KiB regular UTF-8 file and rejects oversized, non-text or cancelled reads", async () => {
+test("read pages complete lines, bounds giant lines, scrubs invalid UTF-8 and honors cancellation", async () => {
   const path = join(root, "text")
-  await writeFile(path, "a".repeat(65536))
-  expect((await execute(root, "read", { path }, signal)).length).toBe(65536)
+  await writeFile(path, Array.from({ length: 2100 }, (_, index) => "line " + (index + 1)).join("\n"))
+  const first = await execute(root, "read", { path }, signal)
+  expect(first).toContain("Showing lines 1-2000 of 2100")
+  expect(first).not.toContain("line 2001")
+  expect(await execute(root, "read", { path, offset: 2099, limit: 1 }, signal)).toBe(
+    "line 2099\n\n[1 more lines in file. Use offset=2100 to continue.]",
+  )
+  await expect(execute(root, "read", { path, offset: 2101 }, signal)).rejects.toThrow("beyond end")
   await writeFile(path, "a".repeat(65537))
-  await expect(execute(root, "read", { path }, signal)).rejects.toThrow("limit")
+  expect(await execute(root, "read", { path }, signal)).toContain("Line 1 is 65537 bytes")
   await writeFile(path, new Uint8Array([255]))
-  await expect(execute(root, "read", { path }, signal)).rejects.toThrow()
+  expect(await execute(root, "read", { path }, signal)).toBe("�")
   await expect(execute(root, "read", { path: "." }, signal)).rejects.toThrow("regular")
   await expect(execute(root, "read", { path }, AbortSignal.abort())).rejects.toThrow()
 })
@@ -75,7 +82,8 @@ test("writes and disjoint edits record exact patches for the owning task", async
   ).rejects.toThrow("exactly once")
   expect(await execute(root, "read", { path: "lib/example" }, signal)).toBe("gamma β alpha")
   await symlink(fixture, join(root, "link"))
-  await expect(mutate(root, "write", { path: "link/new/file", content: "escape" }, signal)).rejects.toThrow("outside")
+  await mutate(root, "write", { path: "link/new/file", content: "external scratch file" }, signal)
+  expect(await Bun.file(join(fixture, "new/file")).text()).toBe("external scratch file")
 })
 
 test("retained checkpoints survive restart, preserve later edits and create an undo for restoration", async () => {
@@ -116,11 +124,11 @@ test("the web reader keeps a literal site and blocks private and reserved destin
     "http://[::ffff:127.0.0.1]",
     "http://10.1.2.3",
   ])
-    await expect(
-      webFetch(url, signal, async () => {
+    expect(
+      await webFetch(url, signal, async () => {
         throw new Error("Unexpected upload")
       }),
-    ).rejects.toThrow("public")
+    ).toMatchObject({ is_error: true, content: expect.stringContaining("public") })
 })
 
 test("web content renders HTML as Markdown and preserves complete binary or truncated results as attachments", async () => {
@@ -134,21 +142,22 @@ test("web content renders HTML as Markdown and preserves complete binary or trun
   expect((await renderWebContent(html, "text/html; charset=iso-8859-1", publish)).content).toBe("# Title\n\ncafé")
   const plain = "data".repeat(20000)
   expect((await renderWebContent(Buffer.from(plain), "text/plain", publish)).content).toMatchObject([
-    { type: "text", text: plain.slice(0, 65536) },
-    { name: "web-response.txt" },
+    { type: "text", text: expect.stringContaining("exceeds 50.0KB limit. Full output: web-") },
+    { name: expect.stringMatching(/^web-[0-9a-f]{16}\.md$/) },
   ])
-  expect(await uploaded.get("web-response.txt")?.text()).toBe(plain)
+  expect(await [...uploaded.values()][0].text()).toBe(plain)
   const data = Buffer.from([0, 255, 42])
   expect((await renderWebContent(data, "application/octet-stream", publish)).content).toMatchObject([
-    { name: "web-response.bin" },
+    { type: "text", text: expect.stringContaining("3B saved to web-") },
+    { name: expect.stringMatching(/^web-[0-9a-f]{16}\.bin$/) },
   ])
-  expect(await uploaded.get("web-response.bin")?.bytes()).toEqual(new Uint8Array(data))
+  expect(await [...uploaded.values()][1].bytes()).toEqual(new Uint8Array(data))
 })
 
 test("code can call only the captured catalog and routes file work through Nexus", async () => {
   const { runCode } = await import("../src/code")
   const declarations = ["read", "code"].map((name) => ({
-    function: { name },
+    function: { name, parameters: { $id: codeBinding } },
     route: { kind: "runner", tool_name: name },
   }))
   const calls: unknown[] = []
@@ -170,4 +179,20 @@ test("code can call only the captured catalog and routes file work through Nexus
   await expect(
     runCode('return await tools.code({code:"return 1"})', {}, declarations, async () => null, signal),
   ).rejects.toThrow()
+})
+
+test("edits preserve BOM and CRLF, normalize fuzzy matches only on touched lines and serialize each file", async () => {
+  const path = join(root, "fuzzy")
+  await writeFile(path, "\ufeffuntouched “quote”  \r\nreplace ‘word’  \r\nlast\r\n")
+  await mutate(root, "edit", { path, edits: [{ oldText: "replace 'word'", newText: "replaced" }] }, signal)
+  expect(await readFile(path, "utf8")).toBe("\ufeffuntouched “quote”  \r\nreplaced\r\nlast\r\n")
+  await Promise.all([
+    mutate(root, "edit", { path, edits: [{ oldText: "replaced", newText: "first" }] }, signal),
+    mutate(root, "edit", { path, edits: [{ oldText: "last", newText: "second" }] }, signal),
+  ])
+  expect(await Bun.file(path).text()).toContain("first\r\nsecond")
+  await writeFile(path, "'word'\n‘word’")
+  await expect(
+    mutate(root, "edit", { path, edits: [{ oldText: "'word'", newText: "ambiguous" }] }, signal),
+  ).rejects.toThrow("exactly once")
 })

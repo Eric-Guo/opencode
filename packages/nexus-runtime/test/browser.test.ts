@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
 import { tmpdir } from "node:os"
+import { mkdtemp, readdir, rm } from "node:fs/promises"
+import { join } from "node:path"
 import type { JsonObject } from "@cybros/agent"
 import { browserTools } from "../src/browser"
 import { BrowserSession, command, evaluate } from "../src/browser-session"
@@ -34,8 +36,10 @@ test.skipIf(!chromium)(
     const clock = { now: 1000 }
     const browser = new BrowserSession(chromium!, owner.signal, { idle: 600000, now: () => clock.now })
     const tools = browserTools(chromium!, owner.signal, browser)
+    const artifacts = await mkdtemp(join(tmpdir(), "nexus-browser-artifacts-"))
     const ctx: RunnerContext = {
       directory: tmpdir(),
+      artifacts,
       workspace: "workspace",
       conversation: "conversation",
       run: "first",
@@ -90,9 +94,29 @@ test.skipIf(!chromium)(
           .structured_content,
       ).toBe("Second tab")
       expect((await run("browser_snapshot")).content).toContain("Title: Saved fixture")
-      expect((await run("browser_screenshot")).content).toMatchObject([
-        { type: "resource_link", name: "screenshot.png" },
+      const shot = await run("browser_screenshot")
+      expect(shot.content).toMatchObject([
+        { type: "text", text: expect.stringContaining("Saved a screenshot") },
+        { type: "resource_link", name: expect.stringMatching(/^browser-[a-f0-9]{16}\.png$/) },
       ])
+      expect(await readdir(artifacts)).toHaveLength(1)
+      const data = await run(
+        "browser_navigate",
+        {
+          url:
+            "data:text/html," +
+            encodeURIComponent(
+              "<title>" + "t".repeat(400) + "</title><button>Still visible</button>" + "x".repeat(60000),
+            ),
+        },
+        second,
+      )
+      expect(data.is_error).not.toBe(true)
+      expect(String(data.content).split("\n")[0]).toContain("more bytes)")
+      expect(String(data.content).split("\n")[1]).toContain("more bytes)")
+      expect(data.content).toContain("Still visible")
+      expect(Buffer.byteLength(String(data.content))).toBeLessThanOrEqual(51200)
+      expect(data.content).toContain("snapshot truncated:")
       const gates = Promise.withResolvers<void>()
       const started = Promise.withResolvers<void>()
       const order: string[] = []
@@ -139,6 +163,7 @@ test.skipIf(!chromium)(
       owner.abort()
       await browser.close()
       server.stop(true)
+      await rm(artifacts, { recursive: true, force: true })
     }
   },
   15000,
@@ -182,3 +207,60 @@ test.skipIf(!chromium)(
   },
   10000,
 ) // A real browser verifies cancellation, self-closure and nested target cleanup.
+
+test.skipIf(!chromium)(
+  "Browser snapshots route refs into same-origin and isolated frames and reject covered controls",
+  async () => {
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request): Response {
+        const path = new URL(request.url).pathname
+        const html =
+          path === "/frame"
+            ? "<label>Frame field<input></label><button onclick=\"this.textContent='Frame clicked'\">Frame action</button>"
+            : '<button style="position:absolute;left:0;top:0;width:150px;height:40px">Covered</button><div style="position:absolute;left:0;top:0;width:150px;height:40px;z-index:2">Overlay</div><iframe style="margin-top:70px" src="/frame"></iframe><iframe src="' +
+              server.url.href.replace("127.0.0.1", "localhost") +
+              'frame"></iframe>'
+        return new Response(html, { headers: { "Content-Type": "text/html" } })
+      },
+    })
+    const owner = new AbortController()
+    const browser = new BrowserSession(chromium!, owner.signal, { actionTimeout: 50 })
+    const tools = browserTools(chromium!, owner.signal, browser)
+    const context: RunnerContext = {
+      directory: tmpdir(),
+      workspace: "fixture",
+      conversation: "conversation",
+      run: "frames",
+      task: "task",
+      signal: owner.signal,
+    }
+    const run = (name: string, input: JsonObject) =>
+      tools.find((tool) => tool.definition.name === name)!.execute(input, context)
+    const refs = (content: unknown, name: string) =>
+      String(content)
+        .split("\n")
+        .filter((line) => line.includes(name))
+        .map((line) => line.match(/\[ref=(e\d+_\d+)\]/)?.[1])
+        .filter((ref): ref is string => !!ref)
+    try {
+      const opened = await run("browser_navigate", { url: server.url.href })
+      expect(refs(opened.content, 'button "Frame action"')).toHaveLength(2)
+      const covered = await run("browser_click", { ref: refs(opened.content, 'button "Covered"')[0] })
+      expect(covered.is_error).toBe(true)
+      expect(covered.content).toContain("covered")
+      const same = await run("browser_click", { ref: refs(opened.content, 'button "Frame action"')[0] })
+      expect(same.is_error).not.toBe(true)
+      expect(refs(same.content, 'button "Frame clicked"')).toHaveLength(1)
+      const other = await run("browser_click", { ref: refs(same.content, 'button "Frame action"')[0] })
+      expect(other.is_error).not.toBe(true)
+      expect(refs(other.content, 'button "Frame clicked"')).toHaveLength(2)
+    } finally {
+      owner.abort()
+      await browser.close()
+      server.stop(true)
+    }
+  },
+  10000,
+) // One isolated Chromium process exercises real out-of-process iframe input routing.

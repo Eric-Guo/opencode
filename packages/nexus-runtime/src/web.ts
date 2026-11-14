@@ -2,10 +2,26 @@ import { lookup } from "node:dns/promises"
 import http, { type IncomingMessage } from "node:http"
 import https from "node:https"
 import { isIP } from "node:net"
+import { isUtf8 } from "node:buffer"
+import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib"
 import { TextDecoder } from "node:util"
+import { createHash } from "node:crypto"
+import { mkdir, writeFile } from "node:fs/promises"
+import { extname, join } from "node:path"
+import { scheduler } from "node:timers/promises"
 import ipaddr from "ipaddr.js"
 import type { CommitTask } from "@cybros/agent"
 import type { RunnerContext } from "./extensions"
+
+const CAP = 5 * 1024 * 1024
+const INVISIBLE = /[\u200B-\u200F\u2028-\u202E\u2060-\u2064\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
+export type WebOptions = {
+  allowPrivateNetwork?: boolean
+  totalTimeout?: number
+  connectTimeout?: number
+  artifacts?: string
+  raw?: boolean
+}
 
 export function webSite(value: unknown) {
   if (typeof value !== "string" || !URL.canParse(value)) throw new Error("Expected an HTTP(S) URL.")
@@ -14,93 +30,425 @@ export function webSite(value: unknown) {
   return match[1]
 }
 
-function publicAddress(address: string) {
+function webURL(value: string) {
+  const site = webSite(value)
+  const authority = site.slice(site.indexOf("://") + 3)
+  const host = authority.startsWith("[") ? authority.slice(0, authority.indexOf("]") + 1) : authority.split(":")[0]
+  const url = new URL(value)
+
+  if (/[^\x21-\x7e]/.test(value) || !/^https?:\/\//.test(value))
+    throw new Error("Use an ASCII HTTP(S) URL; percent-encode non-ASCII path and query characters.")
+  if (host.startsWith("[") && host.endsWith("]") && isIP(host.slice(1, -1)) === 6) return url
+  if (!host || host !== url.hostname || host !== host.toLowerCase() || host.endsWith(".") || host.includes("%"))
+    throw new Error("Use a canonical lowercase host, without a trailing dot, and four dotted decimals for IPv4.")
+  return url
+}
+
+function publicAddress(address: string, allowPrivateNetwork: boolean) {
   const ip = ipaddr.parse(address)
+  if (allowPrivateNetwork && (ip.range() === "loopback" || (ip.kind() === "ipv4" && ip.range() === "private")))
+    return true
   return ip.range() === "unicast" && (ip.kind() === "ipv4" || ip.toByteArray()[0] >> 5 === 1)
 }
 
-export async function webFetch(input: string, signal: AbortSignal, publish: NonNullable<RunnerContext["publish"]>) {
-  webSite(input)
-  const initial = new URL(input)
-  let url = initial
-  for (let hop = 0; hop <= 3; hop++) {
-    const hostname = url.hostname.replace(/^\[|\]$/g, "")
-    const addresses = isIP(hostname)
-      ? [{ address: hostname, family: isIP(hostname) }]
-      : await lookup(hostname, { all: true })
-    if (!addresses.length || addresses.some((item) => !publicAddress(item.address)))
-      throw new Error("Web fetch requires a public address.")
-    // Connect to the checked IP while preserving the HTTP authority and TLS identity.
-    const response = await new Promise<IncomingMessage>((resolve, reject) => {
-      const request = (url.protocol === "https:" ? https : http).request(
-        url,
-        {
-          hostname: addresses[0].address,
-          servername: isIP(hostname) ? undefined : hostname,
-          agent: false,
-          signal,
-          headers: {
-            Host: url.host,
-            "User-Agent": "OpenCode-Nexus/1.0",
-            Accept: "text/*,application/json,application/xml",
-          },
-        },
-        resolve,
+export async function webFetch(
+  input: string,
+  signal: AbortSignal,
+  publish: NonNullable<RunnerContext["publish"]>,
+  options: WebOptions = {},
+): Promise<Omit<CommitTask, "claim_token">> {
+  const active = AbortSignal.any([signal, AbortSignal.timeout(options.totalTimeout ?? 30000)])
+  const details = {
+    url: input,
+    final_url: null as string | null,
+    status: null as number | null,
+    content_type: null as string | null,
+    bytes: 0,
+    truncation: null,
+  }
+
+  try {
+    active.throwIfAborted()
+    const initial = webURL(input)
+    let url = initial
+
+    for (let hop = 0; hop <= 3; hop++) {
+      active.throwIfAborted()
+      const hostname = url.hostname.replace(/^\[|\]$/g, "")
+      const addresses = await new Promise<{ address: string; family: number }[]>((resolve, reject) => {
+        const abort = () => reject(active.reason)
+        active.addEventListener("abort", abort, { once: true })
+        const resolving = isIP(hostname)
+          ? Promise.resolve([{ address: hostname, family: isIP(hostname) }])
+          : lookup(hostname, { all: true })
+
+        void resolving.then(resolve, reject).finally(() => active.removeEventListener("abort", abort))
+      })
+      active.throwIfAborted()
+      if (
+        !addresses.length ||
+        addresses.some((item) => !publicAddress(item.address, options.allowPrivateNetwork === true))
       )
-      request.on("error", reject)
-      request.end()
-    })
-    try {
-      const status = response.statusCode ?? 0
-      if ([301, 302, 303, 307, 308].includes(status) && response.headers.location) {
-        const next = new URL(response.headers.location, url)
-        webSite(next.href)
-        if (next.origin !== initial.origin)
-          return { is_error: true, content: "Redirect to another site. Request this URL separately: " + next.href }
-        url = next
-        continue
+        throw new Error("Web fetch requires a public address; this host resolves to a private or reserved address.")
+
+      // Connect to the checked IP while preserving the HTTP authority and TLS identity.
+      const response = await new Promise<IncomingMessage>((resolve, reject) => {
+        const request = (url.protocol === "https:" ? https : http).request(
+          url,
+          {
+            hostname: addresses[0].address,
+            servername: isIP(hostname) ? undefined : hostname,
+            agent: false,
+            maxHeaderSize: 1024 * 1024,
+            signal: active,
+            headers: {
+              Host: url.host,
+              "User-Agent": "OpenCode-Nexus/1.0",
+              Accept: "text/markdown, text/html, */*",
+              "Accept-Encoding": "gzip, deflate, br",
+            },
+          },
+          resolve,
+        )
+        const timer = setTimeout(
+          () => request.destroy(new Error("Web server did not accept a connection in time.")),
+          options.connectTimeout ?? 10000,
+        )
+
+        request.once("socket", (socket) =>
+          socket.once(url.protocol === "https:" ? "secureConnect" : "connect", () => clearTimeout(timer)),
+        )
+        request.once("close", () => clearTimeout(timer))
+        request.once("error", reject)
+        request.end()
+      })
+
+      try {
+        const status = response.statusCode ?? 0
+        Object.assign(details, {
+          final_url: url.href,
+          status,
+          content_type: (response.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase(),
+        })
+
+        if (status >= 300 && status < 400 && response.headers.location) {
+          const location = response.headers.location
+          if (!URL.canParse(location, url.href) || /[^\x21-\x7e]/.test(location) || /\\/.test(location)) {
+            details.final_url = null
+            return {
+              is_error: true,
+              content: `The server returned a malformed redirect Location: ${shorten(JSON.stringify(location), 512)}`,
+              structured_content: details,
+            }
+          }
+          const next = new URL(
+            /^https?:\/\//i.test(location)
+              ? location
+              : location.startsWith("//")
+                ? url.protocol + location
+                : new URL(location, url).href,
+          )
+          const same =
+            !next.username &&
+            !next.password &&
+            next.protocol === initial.protocol &&
+            next.port === initial.port &&
+            next.hostname.replace(/^www\./, "") === initial.hostname.replace(/^www\./, "")
+
+          if (!same || hop === 3) {
+            details.final_url = next.href.length <= 8190 ? next.href : null
+            return {
+              is_error: true,
+              content:
+                hop === 3
+                  ? "Too many redirects (maximum 3)."
+                  : "Redirect to another site. Request this URL separately: " + shorten(next.href, 8190),
+              structured_content: details,
+            }
+          }
+          const retry = response.headers["retry-after"]
+          if (retry !== undefined) {
+            const delay = /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now()
+            if (!Number.isFinite(delay)) {
+              details.status = null
+              details.final_url = next.href.length <= 8190 ? next.href : null
+              return {
+                is_error: true,
+                content: `The server's Retry-After is not a number of seconds or an HTTP date. Request this URL separately: ${shorten(next.href, 8190)}`,
+                structured_content: details,
+              }
+            }
+            if (delay > 0) await scheduler.wait(Math.min(delay, 2147483647), { signal: active })
+          }
+          webURL(next.href)
+          url = next
+          continue
+        }
+        if (Number(response.headers["content-length"]) > CAP) throw new WebTooLarge(0)
+        const chunks: Buffer[] = []
+        let size = 0
+
+        for await (const chunk of response) {
+          active.throwIfAborted()
+          const data = Buffer.from(chunk)
+          size += data.length
+          if (size > CAP) throw new WebTooLarge(size)
+          chunks.push(data)
+        }
+        const encoded = Buffer.concat(chunks)
+        const encoding = response.headers["content-encoding"]?.toLowerCase()
+        const bytes =
+          encoding === "gzip"
+            ? gunzipSync(encoded, { maxOutputLength: CAP })
+            : encoding === "deflate"
+              ? inflateSync(encoded, { maxOutputLength: CAP })
+              : encoding === "br"
+                ? brotliDecompressSync(encoded, { maxOutputLength: CAP })
+                : encoded
+        details.bytes = bytes.length
+        active.throwIfAborted()
+
+        if (status < 200 || status >= 300)
+          return {
+            is_error: true,
+            content: `${shorten(url.href, 512)} answered HTTP ${status}\n\n${decode(bytes.subarray(0, 512), response.headers["content-type"] ?? "", false)}`,
+            structured_content: details,
+          }
+
+        const rendered = await renderWebContent(bytes, response.headers["content-type"] ?? "", publish, {
+          ...options,
+          url: url.href,
+        })
+        const heading = `${shorten(url.href, 512)} — ${status} ${details.content_type}; ${formatSize(bytes.length)} fetched${rendered.rendered_bytes ? `, rendered the first ${formatSize(rendered.rendered_bytes)} of ${formatSize(bytes.length)}` : ""}${rendered.markdown_bytes !== undefined ? `, ${formatSize(rendered.markdown_bytes)} markdown` : ""}${hop ? ` (${hop} redirect${hop === 1 ? "" : "s"})` : ""}${rendered.title ? `; title: ${shorten(rendered.title, 256)}` : ""}`
+
+        return {
+          ...(rendered.is_error ? { is_error: true } : {}),
+          content:
+            typeof rendered.content === "string"
+              ? (options.raw ? "" : heading + "\n\n") + rendered.content
+              : [
+                  ...(options.raw ? [] : [{ type: "text", text: heading }]),
+                  ...(Array.isArray(rendered.content) ? rendered.content : []),
+                ],
+          structured_content: {
+            ...details,
+            ...(options.raw ? { status_line: heading, encoding: rendered.encoding ?? "utf8" } : {}),
+            ...(rendered.structured_content &&
+            typeof rendered.structured_content === "object" &&
+            !Array.isArray(rendered.structured_content)
+              ? rendered.structured_content
+              : {}),
+          },
+        }
+      } finally {
+        response.destroy()
       }
-      if (status < 200 || status >= 300) throw new Error("Web server returned HTTP " + status)
-      const bytes: Buffer[] = []
-      let size = 0
-      for await (const chunk of response) {
-        const data = Buffer.from(chunk)
-        size += data.length
-        if (size > 5 * 1024 * 1024) throw new Error("Response exceeds 5 MiB.")
-        bytes.push(data)
-      }
-      return renderWebContent(Buffer.concat(bytes), response.headers["content-type"] ?? "", publish)
-    } finally {
-      response.destroy()
+    }
+    throw new Error("Too many redirects.")
+  } catch (error) {
+    signal.throwIfAborted()
+    const tooLarge = error instanceof Error && "code" in error && error.code === "ERR_BUFFER_TOO_LARGE"
+    return {
+      is_error: true,
+      content: active.aborted
+        ? "Web fetch exceeded its total deadline."
+        : tooLarge
+          ? "Response exceeds 5 MiB."
+          : error instanceof Error
+            ? error.message
+            : "Web fetch failed.",
+      structured_content: {
+        url: input,
+        final_url: null,
+        status: null,
+        content_type: null,
+        bytes: error instanceof WebTooLarge ? error.bytes : tooLarge ? CAP + 1 : 0,
+        truncation: null,
+      },
     }
   }
-  throw new Error("Too many redirects.")
+}
+
+class WebTooLarge extends Error {
+  constructor(readonly bytes: number) {
+    super("Response exceeds 5 MiB.")
+  }
 }
 
 export async function renderWebContent(
   bytes: Buffer<ArrayBuffer>,
   contentType: string,
   publish: NonNullable<RunnerContext["publish"]>,
-): Promise<Omit<CommitTask, "claim_token">> {
+  options: { artifacts?: string; url?: string; raw?: boolean } = {},
+): Promise<
+  Omit<CommitTask, "claim_token"> & {
+    title?: string
+    markdown_bytes?: number
+    rendered_bytes?: number
+    encoding?: "base64"
+  }
+> {
   const type = contentType.split(";")[0].trim().toLowerCase()
   const html = type === "text/html" || type === "application/xhtml+xml"
   if (!html && !type.startsWith("text/") && !/(?:[/+](?:json|xml)|\/javascript)$/.test(type)) {
-    const file = await publish(new Blob([bytes], { type: type || "application/octet-stream" }), "web-response.bin")
-    return { content: [file] }
+    if (options.raw) return { content: bytes.toString("base64"), encoding: "base64" }
+    const own = options.url ? extname(new URL(options.url).pathname).toLowerCase() : ""
+    const subtype = type.split("/").at(-1) ?? ""
+    const extension = /^\.[a-z0-9]{1,8}$/.test(own)
+      ? own
+      : ["png", "jpeg", "gif", "webp", "bmp"].includes(subtype)
+        ? "." + subtype
+        : ".bin"
+    const name = "web-" + createHash("sha256").update(bytes).digest("hex").slice(0, 16) + extension
+    const path = await capture(bytes, name, options.artifacts)
+    const file = await publish(new Blob([bytes], { type: type || "application/octet-stream" }), name)
+    return { content: [{ type: "text", text: `${formatSize(bytes.length)} saved to ${path ?? name}` }, file] }
   }
 
-  const charset = /;\s*charset\s*=\s*"?([^";\s]+)/i.exec(contentType)?.[1] ?? "utf-8"
-  const body = new TextDecoder(charset).decode(bytes)
-  let text = body
-  if (html) {
-    const { convertHTMLToMarkdown } = await import("@opencode/core/tool/html-markdown")
-    text = convertHTMLToMarkdown(body)
+  const body = decode(html ? bytes.subarray(0, 1048576) : bytes, contentType, html)
+  const rendered = html ? await markdown(body) : { text: body }
+  const text = rendered.text.replace(INVISIBLE, "")
+  const lines = text.split("\n")
+  if (text.endsWith("\n")) lines.pop()
+  const kept: string[] = []
+  let size = 0
+  for (const line of lines) {
+    const cost = Buffer.byteLength(line) + (kept.length ? 1 : 0)
+    if (kept.length >= 2000 || size + cost > 51200) break
+    kept.push(line)
+    size += cost
   }
-  if (text.length <= 65536) return { content: text }
+  const truncated = !options.raw && (Buffer.byteLength(text) > 51200 || lines.length > 2000)
+  const axis = kept.length === 2000 ? "lines" : "bytes"
+  const details = {
+    truncation: truncated
+      ? {
+          truncated: true,
+          truncated_by: axis,
+          total_bytes: Buffer.byteLength(text),
+          total_lines: lines.length,
+          output_bytes: size,
+          output_lines: kept.length,
+          first_line_exceeds_limit: !kept.length,
+          last_line_partial: false,
+          max_bytes: 51200,
+          max_lines: 2000,
+        }
+      : null,
+  }
+  const metadata = {
+    ...(rendered.title ? { title: rendered.title } : {}),
+    ...(html ? { markdown_bytes: Buffer.byteLength(text) } : {}),
+    ...(html && bytes.length > 1048576 ? { rendered_bytes: 1048576 } : {}),
+  }
 
-  const file = await publish(
-    new Blob([text], { type: html ? "text/markdown" : type }),
-    html ? "web-response.md" : "web-response.txt",
-  )
-  return { content: [{ type: "text", text: text.slice(0, 65536) }, file] }
+  if (!truncated) return { content: text, structured_content: details, ...metadata }
+
+  const name = "web-" + createHash("sha256").update(text).digest("hex").slice(0, 16) + ".md"
+  const path = await capture(Buffer.from(text), name, options.artifacts)
+  const file = await publish(new Blob([text], { type: html ? "text/markdown" : type }), name)
+  const footer = !kept.length
+    ? `[Line 1 is ${formatSize(Buffer.byteLength(text))}, exceeds 50.0KB limit. Full output: ${path ?? name}]`
+    : `\n\n[Showing lines 1-${kept.length} of ${lines.length}${axis === "bytes" ? " (50.0KB limit)" : ""}. Full output: ${path ?? name}]`
+  return { content: [{ type: "text", text: kept.join("\n") + footer }, file], structured_content: details, ...metadata }
+}
+
+async function markdown(body: string) {
+  const { convertHTMLToMarkdown } = await import("@opencode/core/tool/html-markdown")
+  const { Parser } = await import("htmlparser2")
+  const ranges: { start: number; end: number }[] = []
+  const state = { depth: 0, start: 0, title: false, titleStart: 0, text: "" }
+  const parser = new Parser({
+    onopentag(name) {
+      if (name === "title") {
+        state.title = true
+        state.titleStart = parser.startIndex
+      }
+      if (name !== "svg") return
+      if (!state.depth) state.start = parser.startIndex
+      state.depth++
+    },
+    ontext(text) {
+      if (state.title && !state.depth) state.text += text
+    },
+    onclosetag(name) {
+      if (name === "title") {
+        state.title = false
+        if (!state.depth) ranges.push({ start: state.titleStart, end: parser.endIndex + 1 })
+      }
+      if (name !== "svg" || !state.depth) return
+      state.depth--
+      if (!state.depth) ranges.push({ start: state.start, end: parser.endIndex + 1 })
+    },
+  })
+  parser.end(body)
+  if (state.depth) ranges.push({ start: state.start, end: body.length })
+  const title = state.text.replace(INVISIBLE, "").trim()
+  const clean = ranges.toReversed().reduce((text, range) => text.slice(0, range.start) + text.slice(range.end), body)
+  return { text: convertHTMLToMarkdown(clean), ...(title ? { title } : {}) }
+}
+
+async function capture(bytes: Buffer, name: string, directory?: string) {
+  if (!directory) return
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  const path = join(directory, name)
+  await writeFile(path, bytes, { mode: 0o600 })
+  return path
+}
+
+function formatSize(bytes: number) {
+  return bytes < 1024
+    ? bytes + "B"
+    : bytes < 1048576
+      ? (bytes / 1024).toFixed(1) + "KB"
+      : (bytes / 1048576).toFixed(1) + "MB"
+}
+
+function decode(bytes: Uint8Array, contentType: string, html: boolean) {
+  const bom =
+    bytes[0] === 0xff && bytes[1] === 0xfe
+      ? "utf-16le"
+      : bytes[0] === 0xfe && bytes[1] === 0xff
+        ? "utf-16be"
+        : bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
+          ? "utf-8"
+          : undefined
+  const declared = /;\s*charset\s*=\s*["']?([^"';\s]+)/i.exec(contentType)?.[1]
+  const meta = html
+    ? /<meta[^>]*?charset\s*=\s*["']?\s*([A-Za-z0-9_.:-]+)/i.exec(
+        Buffer.from(bytes.subarray(0, 1024)).toString("latin1"),
+      )?.[1]
+    : undefined
+  const utf8 =
+    isUtf8(bytes) ||
+    [1, 2, 3].some((length) => {
+      if (bytes.length < length || !isUtf8(bytes.subarray(0, bytes.length - length))) return false
+      const tail = bytes.subarray(bytes.length - length)
+      const expected =
+        tail[0] >= 0xc2 && tail[0] <= 0xdf
+          ? 2
+          : tail[0] >= 0xe0 && tail[0] <= 0xef
+            ? 3
+            : tail[0] >= 0xf0 && tail[0] <= 0xf4
+              ? 4
+              : 0
+      return expected > length && tail.subarray(1).every((byte) => (byte & 0xc0) === 0x80)
+    })
+  const labels = [bom, declared, meta, html && !utf8 ? "windows-1252" : "utf-8"].filter((label) => label !== undefined)
+
+  for (const label of labels) {
+    try {
+      return new TextDecoder(label).decode(bytes).replace(INVISIBLE, "")
+    } catch {
+      // Unknown HTTP/meta charset labels fall through to the next encoding source.
+    }
+  }
+  return new TextDecoder().decode(bytes).replace(INVISIBLE, "")
+}
+
+function shorten(value: string, bytes: number) {
+  const line = value.replace(/[\r\n\t]/g, " ").replace(INVISIBLE, "")
+  const encoded = Buffer.from(line)
+  if (encoded.length <= bytes) return line
+  return new TextDecoder().decode(encoded.subarray(0, bytes - 3), { stream: true }) + "…"
 }

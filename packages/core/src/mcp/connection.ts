@@ -41,7 +41,17 @@ export interface Events {
   readonly legacy?: (version: string | undefined) => Effect.Effect<void>
 }
 
+/** Scoped consumer policy; it never changes persisted server configuration. */
+export interface ClientOptions {
+  readonly roots?: boolean
+  readonly elicitation?: boolean
+  readonly listChanged?: boolean
+  readonly events?: boolean
+  readonly reconnectOnFailure?: boolean
+}
+
 export interface Input {
+  readonly clientOptions?: ClientOptions
   readonly name: string
   readonly config: Mcp.ServerConfig
   readonly directory: string
@@ -90,6 +100,7 @@ export interface Connection {
   readonly recovering: <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
+    onSessionRenewed?: () => void,
   ) => Effect.Effect<A, E>
   readonly catalog: (client: McpClient.Connection) => Effect.Effect<Catalog, Error>
 }
@@ -139,12 +150,27 @@ export function make(input: Input): Connection {
   const recovering = <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
+    onSessionRenewed?: () => void,
   ) =>
     run(client).pipe(
       Effect.catchIf(
         // The client module is loaded lazily, so match the tagged error by tag rather than class.
         (error) => "_tag" in error && error._tag === "MCP.SessionExpiredError",
-        (error) => recover(client).pipe(Effect.flatMap(() => (state.client ? run(state.client) : Effect.fail(error)))),
+        (error) =>
+          recover(client).pipe(
+            Effect.flatMap(() =>
+              state.client
+                ? Effect.sync(() => onSessionRenewed?.()).pipe(Effect.andThen(run(state.client)))
+                : Effect.fail(error),
+            ),
+          ),
+      ),
+      Effect.tapError((error) =>
+        input.clientOptions?.reconnectOnFailure &&
+        "_tag" in error &&
+        (error._tag === "MCP.SessionExpiredError" || error._tag === "MCP.TransportError")
+          ? input.events.failed({ status: "failed", error: error.message }, false)
+          : Effect.void,
       ),
     )
 
@@ -153,7 +179,7 @@ export function make(input: Input): Connection {
     client.onClose((reason) => live(input.events.closed(reason)))
     // Background refreshes (list-changed) can observe the expiry too; they do not retry, so
     // reconnect here for them. Foreground calls reconnect through `recovering`.
-    client.onSessionExpired(() => input.fork(recover(client)))
+    if (input.clientOptions?.listChanged !== false) client.onSessionExpired(() => input.fork(recover(client)))
     client.onToolsChanged(() => live(refreshTools(client).pipe(Effect.andThen(input.events.changed("tools")))))
     client.onPromptsChanged(() => live(refreshPrompts(client)))
     client.onResourcesChanged(() => live(input.events.changed("resources")))
@@ -181,10 +207,11 @@ export function make(input: Input): Connection {
         config,
         directory: input.directory,
         authProvider,
-        elicitation: input.elicitation,
+        elicitation: input.clientOptions?.elicitation === false ? undefined : input.elicitation,
         clientInfo: input.clientInfo,
-        roots: !input.shared,
-        events: true,
+        roots: input.clientOptions?.roots ?? !input.shared,
+        listChanged: input.clientOptions?.listChanged,
+        events: input.clientOptions?.events ?? true,
       }).pipe(
         Effect.flatMap(
           (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>

@@ -342,6 +342,7 @@ function resourceServer(
         state,
         url: http.url.toString(),
         clientVersion: () => current.protocol.getClientVersion(),
+        clientCapabilities: () => current.protocol.getClientCapabilities(),
         sendToolListChanged: () =>
           modern ? Promise.resolve(modern.notify.toolsChanged()) : current.protocol.sendToolListChanged(),
         sendResourceListChanged: () =>
@@ -2071,6 +2072,63 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
 
       expect((yield* service.servers()).map((server) => server.name)).toEqual([Mcp.ServerName.make("resources")])
       expect(yield* service.tools()).toEqual([])
+    }),
+)
+
+testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
+  "scopes MCP capabilities, renews an expired session once, and marks repeated expiry failed",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const requests = { calls: 0, renewed: 0 }
+      const lifecycle: { restart?: () => Promise<void> } = {}
+      const server = yield* resourceServer({
+        listChanged: true,
+        async respond(request) {
+          if (request.method !== "POST") return
+
+          const body: unknown = await request.clone().json()
+
+          if (!isJSONRPCRequest(body) || body.method !== "tools/call") return
+
+          requests.calls++
+          await lifecycle.restart?.()
+          return Response.json(
+            { jsonrpc: "2.0", id: body.id, error: { code: -32001, message: "Session not found" } },
+            { status: 404 },
+          )
+        },
+      })
+
+      lifecycle.restart = server.restart
+      yield* service.transform((editor) =>
+        editor.set(
+          "isolated",
+          {
+            type: "remote",
+            url: server.url,
+            oauth: false,
+          },
+          { roots: false, elicitation: false, listChanged: false, events: false, reconnectOnFailure: true },
+        ),
+      )
+      expect(server.clientCapabilities()).toEqual({})
+      expect(yield* service.tools()).toHaveLength(1)
+      const result = yield* Effect.exit(
+        service.callTool({
+          server: "isolated",
+          name: "echo",
+          onSessionRenewed: () => {
+            requests.renewed++
+          },
+        }),
+      )
+
+      expect(Exit.isFailure(result)).toBe(true)
+      expect(requests.calls).toBe(2)
+      expect(requests.renewed).toBe(1)
+      expect(server.state.initializations).toBe(2)
+      expect((yield* service.servers()).find((row) => row.name === "isolated")?.status.status).toBe("failed")
     }),
 )
 

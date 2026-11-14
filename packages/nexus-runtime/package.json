@@ -31,21 +31,32 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "1.6.0",
     "@cybros/agent": "file:./vendor/cybros-agent-0.1.0.tgz",
-    "@opencode/codemode": "workspace:*",
+    "@jitl/quickjs-singlefile-cjs-release-sync": "0.32.0",
     "@opencode/core": "workspace:*",
     "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
-    "effect": "catalog:",
+    "@opencode/util": "workspace:*",
+    "ajv": "8.20.0",
     "cross-spawn": "catalog:",
+    "effect": "catalog:",
+    "entities": "7.0.1",
+    "htmlparser2": "8.0.2",
     "ipaddr.js": "^2.2.0",
+    "marked": "catalog:",
+    "quickjs-emscripten-core": "0.32.0",
+    "semver": "catalog:",
+    "typescript": "catalog:",
     "werift": "0.27.0",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "yaml": "2.9.1"
   },
   "devDependencies": {
-    "@opencode/util": "workspace:*",
+    "@opencode/client": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@types/cross-spawn": "catalog:",
+    "@types/semver": "catalog:",
+    "@types/ws": "8.18.2",
     "@typescript/native": "catalog:"
   }
 }
