@@ -315,6 +315,8 @@ import type {
   DebugAgentToolsOutput,
   DebugAgentExecuteToolInput,
   DebugAgentExecuteToolOutput,
+  ExperimentalNexusRunInput,
+  ExperimentalNexusRunOutput,
   ExperimentalNexusExtensionsOutput,
   ExperimentalNexusConfigureExtensionInput,
   ExperimentalNexusConfigureExtensionOutput,
@@ -1764,6 +1766,33 @@ export function make(options: ClientOptions) {
           ).then((value) => value.data),
       },
       nexus: {
+        run: (
+          input: ExperimentalNexusRunInput,
+          requestOptions?: RequestOptions,
+        ): AsyncIterable<ExperimentalNexusRunOutput> =>
+          sse<ExperimentalNexusRunOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/nexus/run`,
+              body: {
+                key: input["key"],
+                prompt: input["prompt"],
+                model: input["model"],
+                runner: input["runner"],
+                agent: input["agent"],
+                instructions: input["instructions"],
+                directory: input["directory"],
+                attachments: input["attachments"],
+                code_mode: input["code_mode"],
+                timeout_ms: input["timeout_ms"],
+                until: input["until"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
         extensions: (requestOptions?: RequestOptions) =>
           request<ExperimentalNexusExtensionsOutput>(
             {
@@ -1950,7 +1979,7 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/experimental/nexus/policy`,
-              body: { workspace: input["workspace"], conversation: input["conversation"] },
+              body: { workspace: input["workspace"], conversation: input["conversation"], model: input["model"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 503],
               empty: false,
@@ -3140,6 +3169,8 @@ export function make(options: ClientOptions) {
     },
     /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
     nexus: {
+      /** @deprecated Use `client.experimental.nexus.run`. Removed in the next minor. */
+      run: client.experimental.nexus.run,
       /** @deprecated Use `client.experimental.nexus.extensions`. Removed in the next minor. */
       extensions: client.experimental.nexus.extensions,
       /** @deprecated Use `client.experimental.nexus.configureExtension`. Removed in the next minor. */

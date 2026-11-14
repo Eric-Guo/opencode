@@ -3091,6 +3091,24 @@ export interface DebugApi<E = never> {
   }
 }
 
+export type ExperimentalNexusRunInput = {
+  readonly key: string
+  readonly prompt: string
+  readonly model?: string | undefined
+  readonly runner?: string | null | undefined
+  readonly agent?: string | undefined
+  readonly instructions?: string | undefined
+  readonly directory?: string | undefined
+  readonly attachments?: ReadonlyArray<string> | undefined
+  readonly code_mode?: boolean | undefined
+  readonly timeout_ms?: number | undefined
+  readonly until?: { readonly command: string; readonly attempts?: number | undefined } | undefined
+}
+export type ExperimentalNexusRunOutput = { readonly [x: string]: Schema.Json }
+export type ExperimentalNexusRunOperation<E = never> = (
+  input: ExperimentalNexusRunInput,
+) => Stream.Stream<ExperimentalNexusRunOutput, E>
+
 export type ExperimentalNexusExtensionsOutput = ReadonlyArray<{
   readonly id: string
   readonly name: string
@@ -3261,6 +3279,28 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | { readonly action: "settings.read" }
+    | {
+        readonly action: "settings.update"
+        readonly patch: {
+          readonly default_model?: string | null | undefined
+          readonly fallback_models?: ReadonlyArray<string> | undefined
+          readonly kernel_tools?: ReadonlyArray<string> | undefined
+          readonly subagent_default?: boolean | undefined
+          readonly adaptations?: string | undefined
+          readonly adaptations_dir?: string | null | undefined
+          readonly conversation_title_model?: string | null | undefined
+        }
+      }
+    | {
+        readonly action: "connection.import"
+        readonly origin: string
+        readonly model: string
+        readonly workspace: string
+        readonly directory: string
+        readonly access_token: string
+        readonly executor_access_token: string
+      }
     | { readonly action: "preset.list" }
     | {
         readonly action: "preset.create"
@@ -3506,10 +3546,24 @@ export type ExperimentalNexusManageInput = {
     | { readonly action: "acp.probe"; readonly agent: string; readonly workdir?: string | undefined }
     | { readonly action: "acp.kill" | "acp.logs"; readonly session: string }
     | { readonly action: "acp.release"; readonly workspace: string; readonly conversation: string }
+    | {
+        readonly action: "application.accepted"
+        readonly workspace: string
+        readonly conversation: string
+        readonly input: string
+        readonly text: string
+        readonly model?: string | undefined
+        readonly replayed: boolean
+      }
     | { readonly action: "persona.read" }
     | { readonly action: "persona.reset" }
     | { readonly action: "persona.write"; readonly content: string }
-    | { readonly action: "application.open"; readonly key: string; readonly title?: string | undefined }
+    | {
+        readonly action: "application.open"
+        readonly key: string
+        readonly title?: string | undefined
+        readonly runner?: string | null | undefined
+      }
     | {
         readonly action: "application.submit"
         readonly key: string
@@ -3640,7 +3694,12 @@ export type ExperimentalNexusModesInput = {
   readonly conversation: string
   readonly patch?: { readonly code_mode?: boolean | undefined; readonly subagent?: boolean | undefined } | undefined
 }
-export type ExperimentalNexusModesOutput = { readonly code_mode: boolean; readonly subagent: boolean }
+export type ExperimentalNexusModesOutput = {
+  readonly code_mode: boolean
+  readonly subagent: boolean
+  readonly available?: boolean | undefined
+  readonly code_mode_available?: boolean | undefined
+}
 export type ExperimentalNexusModesOperation<E = never> = (
   input: ExperimentalNexusModesInput,
 ) => Effect.Effect<ExperimentalNexusModesOutput, E>
@@ -3656,8 +3715,14 @@ export type ExperimentalNexusGrantOperation<E = never> = (
   input: ExperimentalNexusGrantInput,
 ) => Effect.Effect<ExperimentalNexusGrantOutput, E>
 
-export type ExperimentalNexusPolicyInput = { readonly workspace: string; readonly conversation: string }
+export type ExperimentalNexusPolicyInput = {
+  readonly workspace: string
+  readonly conversation: string
+  readonly model?: string | undefined
+}
 export type ExperimentalNexusPolicyOutput = {
+  readonly instructions?: string | undefined
+  readonly executor_contexts?: { readonly [x: string]: { readonly [x: string]: Schema.Json } } | undefined
   readonly tools: ReadonlyArray<string>
   readonly directory: string | null
   readonly runner: string | null
@@ -3670,6 +3735,7 @@ export type ExperimentalNexusPolicyOperation<E = never> = (
 ) => Effect.Effect<ExperimentalNexusPolicyOutput, E>
 
 export interface ExperimentalNexusApi<E = never> {
+  readonly run: ExperimentalNexusRunOperation<E>
   readonly extensions: ExperimentalNexusExtensionsOperation<E>
   readonly configureExtension: ExperimentalNexusConfigureExtensionOperation<E>
   readonly status: ExperimentalNexusStatusOperation<E>
@@ -4084,6 +4150,15 @@ export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
 /** @deprecated Use `ExperimentalFileUnwatchOperation`. Removed in the next minor. */
 export type FileUnwatchOperation<E = never> = ExperimentalFileUnwatchOperation<E>
 
+/** @deprecated Use `ExperimentalNexusRunInput`. Removed in the next minor. */
+export type NexusRunInput = ExperimentalNexusRunInput
+
+/** @deprecated Use `ExperimentalNexusRunOutput`. Removed in the next minor. */
+export type NexusRunOutput = ExperimentalNexusRunOutput
+
+/** @deprecated Use `ExperimentalNexusRunOperation`. Removed in the next minor. */
+export type NexusRunOperation<E = never> = ExperimentalNexusRunOperation<E>
+
 /** @deprecated Use `ExperimentalNexusExtensionsOutput`. Removed in the next minor. */
 export type NexusExtensionsOutput = ExperimentalNexusExtensionsOutput
 
@@ -4302,6 +4377,9 @@ export interface AppApi<E = never> {
 
   /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
   readonly nexus: {
+    /** @deprecated Use `client.experimental.nexus.run`. Removed in the next minor. */
+    readonly run: ExperimentalNexusRunOperation<E>
+
     /** @deprecated Use `client.experimental.nexus.extensions`. Removed in the next minor. */
     readonly extensions: ExperimentalNexusExtensionsOperation<E>
 
