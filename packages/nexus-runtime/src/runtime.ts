@@ -29,6 +29,10 @@ export type { ExtensionDescriptor } from "./configuration"
 import { ClaimJournal } from "./claims"
 import { webSite } from "./web"
 import { HumanLogin } from "./login"
+import { NexusApplication } from "./application"
+export { NexusApplication } from "./application"
+import type { NexusPreset } from "@opencode/schema/nexus-preset"
+import type { NexusBot } from "@opencode/schema/nexus-bot"
 import { readEffect, RunnerAdmission, serveInbox, tools } from "./runner"
 
 const ModeValues = Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })
@@ -49,6 +53,7 @@ type Connection = {
   member: Client
   candidates: ReadonlySet<string>
   identity: Identity
+  application: NexusApplication
 }
 
 export type Status = {
@@ -378,6 +383,12 @@ export class NexusRuntime {
           configuration,
           candidates: new Set([runner, ...candidates.map((row) => row.public_id)]),
           identity,
+          application: new NexusApplication(
+            member,
+            identity,
+            () => this.connection?.configuration ?? configuration,
+            () => ({ [identity.runner]: { "opencode.directory": settings.directory } }),
+          ),
         }
         this.statusValue = { ...this.view("ready"), identity }
         const ingress = new AbortController()
@@ -554,7 +565,7 @@ export class NexusRuntime {
     return defaults
   }
 
-  async policy(workspace: string, conversation: string) {
+  async policy(workspace: string, conversation: string, preset?: string) {
     const active = this.connection
     if (!active || !this.settings || workspace !== active.identity.workspace)
       throw new Error("The selected workspace is unavailable.")
@@ -563,9 +574,11 @@ export class NexusRuntime {
       throw new Error("This conversation cannot receive input here.")
     const runner = chat.default_runner?.executor_public_id
     const modes = await this.modes(workspace, conversation)
+    const prepared = await active.application.prepare(preset)
     const assembly = await active.member.tools.assemble({
       conversation_public_id: conversation,
       default_runner_executor_public_id: runner ?? null,
+      configuration: prepared.agent_configuration,
     })
     const selected = assembly.tool_definitions.flatMap((row) => {
       if (!row || typeof row !== "object" || Array.isArray(row)) return []
@@ -580,13 +593,14 @@ export class NexusRuntime {
         return []
       return [fn.name]
     })
-    if (!runner) return { tools: selected, directory: null, runner: null }
-    if (runner === active.identity.runner) return { tools: selected, directory: this.settings.directory, runner }
+    if (!runner) return { ...prepared, tools: selected, directory: null, runner: null }
+    if (runner === active.identity.runner)
+      return { ...prepared, tools: selected, directory: this.settings.directory, runner }
     const remote = await active.member.executors.fetch(runner)
     if (!remote.service_roles.includes("runner")) throw new Error("The selected runner is unavailable.")
     const directory = remote.services.runner?.environment.root
     if (typeof directory !== "string" || !directory.length) throw new Error("The remote runner has no bound directory.")
-    return { tools: selected, directory, runner }
+    return { ...prepared, tools: selected, directory, runner }
   }
 
   async operator(input: typeof NexusOperator.Type) {
@@ -655,10 +669,51 @@ export class NexusRuntime {
 
     const active = this.connection
     if (!active || !this.settings) throw new Error("Nexus is disconnected.")
+    if (command.action.startsWith("preset.")) return active.application.presets.command(command as NexusPreset.Command)
+    if (command.action.startsWith("bot.") && command.action !== "bot.submit")
+      return active.application.bots.command(command as NexusBot.Command)
+    if (command.action === "persona.read" || command.action === "persona.write" || command.action === "persona.reset") {
+      const platform = await this.human.platform(this.settings.origin)
+
+      if (command.action === "persona.read") return platform.persona.read()
+      if (command.action === "persona.reset") {
+        await platform.persona.delete()
+        return null
+      }
+      if (Buffer.byteLength(command.content) > 65536) throw new Error("Persona exceeds 64 KiB.")
+
+      return platform.persona.write({ content: command.content })
+    }
     if (token && origin !== this.settings.origin)
       throw new Error("The Human credential requires the paired Nexus origin.")
     const member = token ? new Client({ baseURL: this.settings.origin, credential: token }) : active.member
     if (token && (await member.profile.fetch()).member.kind !== "human") throw new Error("Use a Human member token.")
+    if (command.action === "bot.submit") return active.application.bots.submit(command, member)
+    if (command.action === "application.open") return active.application.open(command)
+    if (command.action === "application.result")
+      return member
+        .workspace(command.workspace)
+        .conversation(command.conversation)
+        .inputExecution(command.input)
+        .recover()
+    if (command.action === "application.submit") {
+      return active.application.submit(
+        {
+          ...command,
+          preparation: async () => {
+            const prepared = await this.policy(command.workspace, command.conversation, command.preset)
+
+            return {
+              ...prepared,
+              ...(prepared.runner && prepared.directory
+                ? { executor_contexts: { [prepared.runner]: { "opencode.directory": prepared.directory } } }
+                : {}),
+            }
+          },
+        },
+        member,
+      )
+    }
     const workspace = member.workspace(active.identity.workspace)
     if ("conversation" in command) {
       const chat = workspace.conversation(command.conversation)
@@ -700,6 +755,7 @@ export class NexusRuntime {
     }
     const collections = workspace.memoryCollections
     if (command.action === "memory.create") return collections.create({ name: command.name })
+    if (!("collection" in command)) throw new Error("Unknown Nexus command.")
     const collection = await collections.fetch(command.collection)
     if (collection.scope !== "workspace" || collection.owner_public_id !== active.identity.workspace)
       throw new Error("Select a memory collection from the paired workspace.")
