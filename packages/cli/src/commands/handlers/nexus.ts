@@ -158,26 +158,44 @@ export default Runtime.handler(
           ),
           current.status,
           "",
-          (conversation, model) => nexus.policy({ workspace: workspace(), conversation, model }),
           {
             authentication,
+            defaults: { mode: Option.getOrUndefined(input.mode), model: Option.getOrUndefined(input.model) },
             open: async () =>
               Schema.decodeUnknownSync(Schema.Struct({ conversation: Schema.Struct({ public_id: Schema.String }) }))(
-                await nexus.manage({ payload: { action: "application.open", key: crypto.randomUUID() } }),
+                await nexus.manage({
+                  payload: {
+                    action: "application.open",
+                    key: crypto.randomUUID(),
+                    runner: Option.getOrUndefined(input.runner),
+                  },
+                }),
               ).conversation.public_id,
-            accepted: async (conversation, input, text, model, replayed) => {
-              await nexus.manage({
-                payload: {
-                  action: "application.accepted",
-                  workspace: workspace(),
-                  conversation,
-                  input,
-                  text,
-                  model,
-                  replayed,
-                },
-              })
+            submit: async (submission, signal) => {
+              const token = await authentication.credential()
+
+              if (!token) throw new Error("A Human member token is required.")
+
+              return Schema.decodeUnknownSync(Schema.Struct({ input: Schema.Struct({ public_id: Schema.String }) }))(
+                await nexus.manage(
+                  {
+                    payload: {
+                      action: "application.submit",
+                      workspace: workspace(),
+                      ...submission,
+                      attachments: submission.attachments ? [...submission.attachments] : undefined,
+                    },
+                    "x-nexus-origin": current.status.origin,
+                    "x-nexus-member-token": token,
+                  },
+                  { signal },
+                ),
+              ).input.public_id
             },
+            skills: async () =>
+              Schema.decodeUnknownSync(
+                Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.String })),
+              )(await nexus.manage({ payload: { action: "application.skills" } })),
             setEnvironment: async (conversation, binding) => {
               await nexus.manage({
                 payload: {
@@ -190,14 +208,17 @@ export default Runtime.handler(
                       ? {
                           root: binding.roots[0],
                           directories: binding.roots.slice(1),
-                          fs: {
-                            url: binding.url,
-                            token: binding.token,
-                            session: binding.session,
-                            read: binding.read,
-                            write: binding.write,
-                            client: "ACP",
-                          },
+                          fs:
+                            binding.read || binding.write
+                              ? {
+                                  url: binding.url,
+                                  token: binding.token,
+                                  session: binding.session,
+                                  read: binding.read,
+                                  write: binding.write,
+                                  client: "ACP",
+                                }
+                              : null,
                         }
                       : { fs: null }),
                   },
