@@ -373,6 +373,18 @@ export type VcsFileStatus = {
 
 export type VcsBranchList = Array<string>
 
+export type NexusExecutorStatus = {
+  running: boolean
+  in_flight: number
+  starting: number
+  startup_limit: number
+  claimed: number
+  swept: number
+  nudged: number
+  canceled: number
+  issue: { type: string; code: string | null } | null
+}
+
 export type WebSearchID = string
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
@@ -5118,9 +5130,10 @@ export type ExperimentalNexusStatusOutput = {
   workspace: string
   directory: string
   state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
-  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string } | undefined
-  pairing?: { code: string; url: string } | undefined
-  error?: string | undefined
+  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string }
+  pairing?: { code: string; url: string }
+  error?: string
+  executor?: NexusExecutorStatus
 }
 
 export type ExperimentalNexusPairInput = {
@@ -5136,9 +5149,10 @@ export type ExperimentalNexusPairOutput = {
   workspace: string
   directory: string
   state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
-  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string } | undefined
-  pairing?: { code: string; url: string } | undefined
-  error?: string | undefined
+  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string }
+  pairing?: { code: string; url: string }
+  error?: string
+  executor?: NexusExecutorStatus
 }
 
 export type ExperimentalNexusDisconnectOutput = {
@@ -5147,9 +5161,10 @@ export type ExperimentalNexusDisconnectOutput = {
   workspace: string
   directory: string
   state: "unpaired" | "pairing" | "connecting" | "ready" | "error"
-  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string } | undefined
-  pairing?: { code: string; url: string } | undefined
-  error?: string | undefined
+  identity?: { agent: string; name: string; runner: string; workspace: string; workspaceName: string }
+  pairing?: { code: string; url: string }
+  error?: string
+  executor?: NexusExecutorStatus
 }
 
 export type ExperimentalNexusLoginOutput = { url: string }

@@ -128,6 +128,14 @@ test.each([
     if (ready) {
       expect(runtime.status().identity).toMatchObject({ agent: "agent", workspace: "workspace" })
       expect(runtime.status().error).toBeUndefined()
+      expect(runtime.status().executor).toMatchObject({
+        running: true,
+        claimed: 0,
+        nudged: 0,
+        canceled: 0,
+        in_flight: 0,
+        starting: 0,
+      })
     } else {
       expect(runtime.status().identity).toBeUndefined()
       expect(runtime.status().error).toBe(
