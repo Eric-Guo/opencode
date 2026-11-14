@@ -29,7 +29,7 @@
     },
     "packages/7777": {
       "name": "@opencode/7777",
-      "version": "2.2.7",
+      "version": "2.3.0",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/gui-plugins": "workspace:*",
@@ -434,7 +434,7 @@
     },
     "packages/desktop-tab": {
       "name": "@opencode/desktop-tab",
-      "version": "2.2.7",
+      "version": "2.3.0",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/nexus-ui": "workspace:*",
@@ -577,7 +577,7 @@
     },
     "packages/nexus-runtime": {
       "name": "@opencode/nexus-runtime",
-      "version": "2.2.7",
+      "version": "2.3.0",
       "dependencies": {
         "@agentclientprotocol/sdk": "1.6.0",
         "@cybros/agent": "file:./vendor/cybros-agent-0.1.0.tgz",
@@ -597,7 +597,7 @@
     },
     "packages/nexus-ui": {
       "name": "@opencode/nexus-ui",
-      "version": "2.2.7",
+      "version": "2.3.0",
       "dependencies": {
         "@cybros/agent": "file:../nexus-runtime/vendor/cybros-agent-0.1.0.tgz",
         "@opencode/client": "workspace:*",
@@ -641,7 +641,7 @@
     },
     "packages/plm-meeting": {
       "name": "@opencode/plm-meeting",
-      "version": "2.2.7",
+      "version": "2.3.0",
       "dependencies": {
         "@betteroffice/docx": "0.4.3",
         "@betteroffice/fonts": "0.4.0",
@@ -913,7 +913,7 @@
     },
     "packages/thape": {
       "name": "@opencode/thape",
-      "version": "2.2.7",
+      "version": "2.3.0",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -1185,6 +1185,7 @@
     "vite@8.2.4": "patches/vite@8.2.4.patch",
     "@ff-labs/fff-bun@0.10.5": "patches/@ff-labs%2Ffff-bun@0.10.5.patch",
     "app-builder-lib@26.15.7": "patches/app-builder-lib@26.15.7.patch",
+    "gcp-metadata@8.1.4": "patches/gcp-metadata@8.1.4.patch",
     "@corvu/drawer@0.2.4": "patches/@corvu%2Fdrawer@0.2.4.patch",
     "@dnd-kit/dom@0.5.0": "patches/@dnd-kit%2Fdom@0.5.0.patch",
     "solid-js@1.9.17": "patches/solid-js@1.9.17.patch",
