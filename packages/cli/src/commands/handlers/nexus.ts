@@ -1,7 +1,7 @@
 import { OpenCode } from "@opencode/client/promise"
 import { Service } from "@opencode/client/effect/service"
 import { Effect, Option, Schema } from "effect"
-import { resolve } from "node:path"
+import { basename, resolve } from "node:path"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
@@ -12,6 +12,96 @@ export default Runtime.handler(
     const server = yield* ServerConnection.resolve({ mismatch: "ignore" })
     const nexus = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
       .experimental.nexus
+    if (input.action === "run") {
+      return yield* Effect.tryPromise(async () => {
+        const stop = new AbortController()
+        const interrupt = () => stop.abort()
+        const { RunOutput } = await import("@opencode/nexus-runtime/run")
+        const output = new RunOutput({
+          format: input.outputFormat,
+          print: input.print,
+          write: (text) => {
+            process.stdout.write(text)
+          },
+          error: (text) => {
+            process.stderr.write(text)
+          },
+        })
+        process.once("SIGINT", interrupt)
+        process.once("SIGTERM", interrupt)
+        try {
+          const prompt = Option.getOrUndefined(input.prompt) ?? (await Bun.stdin.text())
+          const attachments = await Promise.all(
+            input.attach.map(async (path) => {
+              const file = Bun.file(resolve(path))
+              const result = await nexus.manage({
+                payload: {
+                  action: "extension.call",
+                  name: "application.upload",
+                  input: {
+                    name: basename(path),
+                    mime: file.type,
+                    content: Buffer.from(await file.arrayBuffer()).toString("base64"),
+                  },
+                },
+              })
+              return Schema.decodeUnknownSync(Schema.Struct({ public_id: Schema.String }))(result).public_id
+            }),
+          )
+          for await (const event of nexus.run(
+            {
+              key: crypto.randomUUID(),
+              prompt,
+              model: Option.getOrUndefined(input.model),
+              runner: Option.getOrUndefined(input.runner),
+              agent: Option.getOrUndefined(input.agent),
+              directory: Option.getOrUndefined(input.directory),
+              instructions: Option.getOrUndefined(input.instructions),
+              attachments,
+              code_mode: Option.getOrUndefined(input.codeMode),
+              timeout_ms: Option.map(input.timeout, (seconds) => seconds * 1000).pipe(Option.getOrUndefined),
+              until: Option.isSome(input.until)
+                ? { command: input.until.value, attempts: Option.getOrUndefined(input.attempts) }
+                : undefined,
+            },
+            { signal: stop.signal },
+          )) {
+            const exit = output.accept(event)
+            if (exit !== undefined) process.exitCode = exit
+          }
+        } catch (error) {
+          process.exitCode = output.accept({
+            type: "result",
+            subtype: stop.signal.aborted ? "canceled" : "failed",
+            is_error: true,
+            exit_status: stop.signal.aborted ? 130 : 1,
+            status: "failed",
+            reason: error instanceof Error ? error.message : "Run failed.",
+            result: null,
+          })
+        } finally {
+          process.removeListener("SIGINT", interrupt)
+          process.removeListener("SIGTERM", interrupt)
+          if (stop.signal.aborted) process.exitCode = 130
+        }
+      })
+    }
+    if (input.action === "settings") {
+      const result = yield* Effect.tryPromise(() =>
+        nexus.manage({
+          payload: Option.isSome(input.json)
+            ? {
+                action: "settings.update",
+                patch: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+                  input.json.value,
+                ),
+              }
+            : { action: "settings.read" },
+        }),
+      )
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n")
+      return
+    }
     if (input.action === "acp") {
       return yield* Effect.tryPromise(async () => {
         const { ndJsonStream } = await import("@agentclientprotocol/sdk")
@@ -68,9 +158,26 @@ export default Runtime.handler(
           ),
           current.status,
           "",
-          (conversation) => nexus.policy({ workspace: workspace(), conversation }),
+          (conversation, model) => nexus.policy({ workspace: workspace(), conversation, model }),
           {
             authentication,
+            open: async () =>
+              Schema.decodeUnknownSync(Schema.Struct({ conversation: Schema.Struct({ public_id: Schema.String }) }))(
+                await nexus.manage({ payload: { action: "application.open", key: crypto.randomUUID() } }),
+              ).conversation.public_id,
+            accepted: async (conversation, input, text, model, replayed) => {
+              await nexus.manage({
+                payload: {
+                  action: "application.accepted",
+                  workspace: workspace(),
+                  conversation,
+                  input,
+                  text,
+                  model,
+                  replayed,
+                },
+              })
+            },
             setEnvironment: async (conversation, binding) => {
               await nexus.manage({
                 payload: {
@@ -97,6 +204,7 @@ export default Runtime.handler(
                 },
               })
             },
+            codeMode: async (conversation) => (await nexus.modes({ workspace: workspace(), conversation })).code_mode,
             setCodeMode: async (conversation, enabled) => {
               await nexus.modes({ workspace: workspace(), conversation, patch: { code_mode: enabled } })
             },
@@ -139,7 +247,17 @@ export default Runtime.handler(
         workspace: Option.getOrElse(input.workspace, () => ""),
         directory: resolve(Option.getOrElse(input.directory, () => process.cwd())),
       }
-      const status = yield* Effect.tryPromise(() => nexus.pair(settings))
+      const status = yield* Effect.tryPromise(async () => {
+        if (!input.apiKeyStdin) return nexus.pair(settings)
+        const keys = Schema.decodeUnknownSync(
+          Schema.fromJsonString(
+            Schema.Struct({ access_token: Schema.NonEmptyString, executor_access_token: Schema.NonEmptyString }),
+          ),
+        )(await Bun.stdin.text())
+        return Schema.decodeUnknownSync(
+          Schema.Struct({ pairing: Schema.optional(Schema.Struct({ url: Schema.String, code: Schema.String })) }),
+        )(await nexus.manage({ payload: { action: "connection.import", ...settings, ...keys } }))
+      })
       if (status.pairing) process.stdout.write(status.pairing.url + "\n" + status.pairing.code + "\n")
       return
     }
