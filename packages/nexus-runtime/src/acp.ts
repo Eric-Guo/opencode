@@ -103,10 +103,7 @@ export class AcpClient {
       }
     if (command.action === "acp.sessions") return this.documents()
     if (command.action === "acp.release") {
-      const owner = JSON.stringify([command.workspace, command.conversation])
-      await Promise.all(
-        [...this.children.values()].filter((child) => child.owner === owner).map((child) => this.retire(child, true)),
-      )
+      await this.release(command.workspace, command.conversation)
       return null
     }
     if (command.action === "acp.probe") {
@@ -154,6 +151,14 @@ export class AcpClient {
     if (!selected) throw new Error("Unknown delegated session.")
     await this.retire(selected.child, true)
     return null
+  }
+
+  async release(workspace: string, conversation: string) {
+    const owner = JSON.stringify([workspace, conversation])
+
+    await Promise.all(
+      [...this.children.values()].filter((child) => child.owner === owner).map((child) => this.retire(child, true)),
+    )
   }
 
   private async delegate(input: typeof Input.Type, context: RunnerContext) {

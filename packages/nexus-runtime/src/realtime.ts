@@ -1,3 +1,4 @@
+import { APIError, type TaskRealtime } from "@cybros/agent"
 import type { PeerConfig, RTCDataChannel, RTCPeerConnection } from "werift"
 
 export type RealtimeOptions = {
@@ -5,6 +6,53 @@ export type RealtimeOptions = {
   relay?: boolean
   ports?: [number, number]
   addresses?: string[]
+}
+
+/** Permission expires from request start, and is permanently revoked by a replaced or refused handshake. */
+export class RealtimeLease {
+  generation: string | undefined
+  snapshot: TaskRealtime | undefined
+  closed = false
+  since = 0
+  private until = 0
+
+  get allowed() {
+    return !this.closed && performance.now() < this.until
+  }
+
+  get remaining() {
+    return this.allowed ? Math.max(0, this.until - performance.now()) : 0
+  }
+
+  begin(generation: string) {
+    if (this.closed) throw new Error("Realtime signaling is closed.")
+    this.generation = generation
+    this.snapshot = undefined
+    this.until = 0
+  }
+
+  accept(generation: string, snapshot: TaskRealtime, started: number) {
+    if (this.closed || generation !== this.generation) return
+    if (snapshot.status === "closed" || snapshot.connection_id !== generation) {
+      this.closed = true
+      this.until = 0
+      return
+    }
+    if (!this.allowed) this.since = performance.now()
+    this.snapshot = snapshot
+    this.until = snapshot.status === "active" ? started + Math.max(0, Math.min(1000, snapshot.max_age_ms)) : 0
+  }
+
+  unavailable(error: unknown) {
+    if (
+      error instanceof APIError &&
+      ([401, 403, 404].includes(error.status) ||
+        ["not_claimant", "not_found", "unauthorized", "forbidden", "not_authorized"].includes(error.code ?? ""))
+    ) {
+      this.closed = true
+      this.until = 0
+    }
+  }
 }
 
 /** Handler-owned TypeScript replacement for rho-env's Go DataChannel helper. */

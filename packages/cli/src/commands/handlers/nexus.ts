@@ -16,21 +16,117 @@ export default Runtime.handler(
       return yield* Effect.tryPromise(async () => {
         const { ndJsonStream } = await import("@agentclientprotocol/sdk")
         const { Readable, Writable } = await import("node:stream")
-        const { editor } = await import("@opencode/nexus-runtime/editor")
-        const status = await nexus.status()
-        const token = process.env.NEXUS_MEMBER_TOKEN
-        const workspace = status.identity?.workspace
-        if (!workspace) throw new Error("Pair OpenCode before starting the Nexus ACP agent.")
-        if (!token || process.env.NEXUS_URL !== status.origin)
-          throw new Error("Set NEXUS_URL to the paired origin and NEXUS_MEMBER_TOKEN to its Human token.")
+        const { editor, authenticateEditorTerminal } = await import("@opencode/nexus-runtime/editor")
+        const current = { status: await nexus.status() }
+        const workspace = () => current.status.identity?.workspace ?? current.status.workspace
+        const authentication = {
+          status: async () => (current.status = await nexus.status()),
+          credential: async () => {
+            if (process.env.NEXUS_URL === current.status.origin && process.env.NEXUS_MEMBER_TOKEN)
+              return process.env.NEXUS_MEMBER_TOKEN
+
+            return Schema.decodeUnknownSync(Schema.NullOr(Schema.String))(
+              await nexus.manage({ payload: { action: "extension.call", name: "editor.auth.credential", input: {} } }),
+            )
+          },
+          start: async () => {
+            if (!current.status.origin) {
+              const origin = Option.getOrUndefined(input.url) ?? process.env.NEXUS_URL
+              const model = Option.getOrUndefined(input.model) ?? process.env.NEXUS_MODEL
+
+              if (!origin || !model) throw new Error("Configure Nexus with --url and --model before authenticating.")
+
+              current.status = await nexus.pair({
+                origin,
+                model,
+                workspace: Option.getOrElse(input.workspace, () => ""),
+                directory: resolve(Option.getOrElse(input.directory, () => process.cwd())),
+              })
+            }
+
+            return Schema.decodeUnknownSync(
+              Schema.Struct({ url: Schema.String, code: Schema.optional(Schema.String) }),
+            )(await nexus.manage({ payload: { action: "extension.call", name: "editor.auth.start", input: {} } }))
+          },
+        }
+
+        if (process.env.OPENCODE_NEXUS_ACP_AUTH === "1") {
+          await authenticateEditorTerminal(
+            authentication,
+            (message) => {
+              process.stdout.write(message + "\n")
+            },
+            AbortSignal.timeout(10 * 60000),
+          )
+          return
+        }
+
         await editor(
           ndJsonStream(
             Writable.toWeb(process.stdout),
             Readable.toWeb(process.stdin) as unknown as ReadableStream<Uint8Array>,
           ),
-          status,
-          token,
-          (conversation) => nexus.policy({ workspace, conversation }),
+          current.status,
+          "",
+          (conversation) => nexus.policy({ workspace: workspace(), conversation }),
+          {
+            authentication,
+            setEnvironment: async (conversation, binding) => {
+              await nexus.manage({
+                payload: {
+                  action: "extension.call",
+                  name: "editor.environment.bind",
+                  input: {
+                    workspace: workspace(),
+                    conversation,
+                    ...(binding
+                      ? {
+                          root: binding.roots[0],
+                          directories: binding.roots.slice(1),
+                          fs: {
+                            url: binding.url,
+                            token: binding.token,
+                            session: binding.session,
+                            read: binding.read,
+                            write: binding.write,
+                            client: "ACP",
+                          },
+                        }
+                      : { fs: null }),
+                  },
+                },
+              })
+            },
+            setCodeMode: async (conversation, enabled) => {
+              await nexus.modes({ workspace: workspace(), conversation, patch: { code_mode: enabled } })
+            },
+            attachMcp: async (attachment) =>
+              Schema.decodeUnknownSync(
+                Schema.Struct({ tools: Schema.Array(Schema.String), issues: Schema.Array(Schema.String) }),
+              )(
+                await nexus.manage({
+                  payload: {
+                    action: "extension.call",
+                    name: "editor.mcp.attach",
+                    input: {
+                      workspace: workspace(),
+                      conversation: attachment.conversation,
+                      cwd: attachment.cwd,
+                      servers: Schema.decodeUnknownSync(Schema.MutableJson)(attachment.servers),
+                    },
+                  },
+                }),
+              ),
+            detachMcp: async (conversation) => {
+              await nexus.manage({
+                payload: {
+                  action: "extension.call",
+                  name: "editor.mcp.detach",
+                  input: { workspace: workspace(), conversation },
+                },
+              })
+            },
+          },
         )
       })
     }
