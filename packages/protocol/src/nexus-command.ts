@@ -27,6 +27,14 @@ export const NexusCommand = Schema.Union([
     workspace: Schema.String,
     conversation: Schema.String,
     text: Schema.String,
+    attachments: Schema.optional(Schema.Array(Schema.String)),
+    until: Schema.optional(
+      Schema.Struct({
+        command: Schema.NonEmptyString,
+        attempts: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20 }))),
+        directory: Schema.optional(Schema.String),
+      }),
+    ),
     model: Schema.optional(Schema.String),
     preset: Schema.optional(Schema.String),
     delivery: Schema.optional(Schema.Literals(["queue", "steer", "steer_now"])),
@@ -39,6 +47,11 @@ export const NexusCommand = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("extension.list") }),
   Schema.Struct({ action: Schema.Literal("extension.configure"), change: Nexus.ExtensionChange }),
+  Schema.Struct({
+    action: Schema.Literal("extension.call"),
+    name: Schema.NonEmptyString,
+    input: Schema.Json,
+  }),
   Schema.Struct({
     action: Schema.Literal("schedule.create"),
     conversation: Schema.String,

@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect"
-import { setTimeout as delay } from "node:timers/promises"
-import type { TaskRealtime } from "@cybros/agent"
+import { setTimeout } from "node:timers/promises"
+import { APIError, TransportError } from "@cybros/agent"
 import type { HostTools } from "./host"
 import type { RunnerContext } from "./extensions"
-import { OutputWindow, RealtimePeer, type RealtimeOptions } from "./realtime"
+import { OutputWindow, RealtimeLease, RealtimePeer, type RealtimeOptions } from "./realtime"
 
 const Offset = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }))
 const Frame = Schema.Union([
@@ -28,69 +28,106 @@ export async function terminalSession(
 
   const pty = await host.pty(context.directory)
   const window = new OutputWindow()
-  const shell: { id?: Parameters<typeof pty.remove>[0]; ended: boolean } = { ended: false }
-  const permission: { value?: TaskRealtime; until: number; since: number } = { until: 0, since: 0 }
+  const shell: { id?: Parameters<typeof pty.remove>[0]; ended: boolean; size: { cols: number; rows: number } } = {
+    ended: false,
+    size: { cols: 80, rows: 24 },
+  }
+  const permission = new RealtimeLease()
   const controller = new AbortController()
   const signal = AbortSignal.any([context.signal, controller.signal])
-  const allowed = () => performance.now() < permission.until
+  const allowed = () => permission.allowed
   const refresh = (async () => {
     while (!signal.aborted) {
+      const generation = permission.generation
       const started = performance.now()
-      const value = await realtime.read().catch(() => undefined)
-
-      if (value) {
-        if (!allowed()) permission.since = performance.now()
-        permission.value = value
-        permission.until = value.status === "active" ? started + Math.min(1000, value.max_age_ms) : 0
+      if (generation && permission.snapshot && !permission.closed) {
+        const value = await realtime.read().catch((error: unknown) => {
+          permission.unavailable(error)
+          return undefined
+        })
+        if (value) permission.accept(generation, value, started)
       }
-
-      await delay(250, undefined, { signal })
+      await setTimeout(250, undefined, { signal })
     }
   })().catch(() => {})
   let peer: RealtimePeer | undefined
   let previous: string | undefined
   let sequence = 0
+  let failures = 0
+  let relay = options.relay ?? false
+  let retryAfter = 0
 
   try {
     while (!signal.aborted && !shell.ended) {
-      peer = await RealtimePeer.create(options)
-
+      if (permission.closed) {
+        window.clear()
+        await setTimeout(250, undefined, { signal })
+        continue
+      }
+      if (failures) await setTimeout(Math.max(retryAfter, 1000 * 2 ** Math.min(failures - 1, 3)), undefined, { signal })
+      retryAfter = 0
       const id = crypto.randomUUID()
-      const sdp = await peer.offer()
-      const current = await realtime.read()
-      const offered = await realtime
-        .offer({ connection_id: id, sdp, previous_connection_id: previous ?? current.connection_id ?? undefined })
-        .catch(async (error: unknown) => {
-          const receipt = await realtime.read()
-
-          if (receipt.connection_id === id) return receipt
-          throw error
-        })
-
-      permission.value = offered
-      previous = id
+      try {
+        peer = await RealtimePeer.create({ ...options, relay })
+        const sdp = await peer.offer()
+        const started = performance.now()
+        const current = await realtime.read()
+        if (current.status === "closed") {
+          permission.begin(id)
+          permission.accept(id, current, started)
+          await peer.close()
+          peer = undefined
+          continue
+        }
+        permission.begin(id)
+        const offered = await realtime
+          .offer({ connection_id: id, sdp, previous_connection_id: previous ?? current.connection_id ?? undefined })
+          .catch(async (error: unknown) => {
+            const receipt = await realtime.read()
+            if (receipt.connection_id === id) return receipt
+            throw error
+          })
+        permission.accept(id, offered, started)
+        previous = id
+      } catch (error) {
+        signal.throwIfAborted()
+        permission.unavailable(error)
+        await peer?.close()
+        peer = undefined
+        if (permission.closed) continue
+        if (!(error instanceof APIError || error instanceof TransportError)) throw error
+        retryAfter =
+          error instanceof APIError
+            ? Math.max(0, Number(error.retryAfter) * 1000 || Date.parse(error.retryAfter ?? "") - Date.now() || 0)
+            : 0
+        failures = Math.min(failures + 1, 4)
+        relay ||= Boolean(options.servers?.length)
+        continue
+      }
       let resumed = false
       let cursor: number | undefined
       let inputID = 0
       let connected = false
-      const deadline = performance.now() + 10000
+      let deadline = performance.now() + 10000
 
       while (!signal.aborted && !shell.ended) {
-        const snapshot = permission.value
+        const snapshot = permission.snapshot
 
         if (snapshot?.connection_id === id && snapshot.answer_sdp && !connected) {
           await peer.remote(snapshot.answer_sdp)
           connected = true
+          deadline = performance.now() + 10000
         }
 
-        const packet = peer.poll(allowed() ? Math.max(0, permission.until - performance.now()) : 0, permission.since)
+        if (permission.closed) break
+        const packet = peer.poll(permission.remaining, permission.since)
+        if (packet.ready) failures = 0
 
         if (
           ["failed", "disconnected", "closed"].includes(packet.state) ||
           (!packet.ready && performance.now() > deadline)
         )
           break
-        if (snapshot?.connection_id === id && snapshot.status === "closed") return { content: "Terminal closed." }
 
         for (const bytes of packet.data) {
           const frame = Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(bytes.toString("utf8"))
@@ -105,6 +142,7 @@ export async function terminalSession(
           if (!resumed) throw new Error("Terminal input arrived before resume.")
           if (!allowed()) continue
           if (frame.type === "resize") {
+            shell.size = { cols: frame.cols, rows: frame.rows }
             if (shell.id)
               await Effect.runPromise(pty.update(shell.id, { size: { cols: frame.cols, rows: frame.rows } }), {
                 signal,
@@ -125,6 +163,7 @@ export async function terminalSession(
           if (data.length < 1 || data.length > 8192) throw new Error("Terminal input must contain 1..8 KiB.")
 
           inputID = frame.id
+          if (sequence === Number.MAX_SAFE_INTEGER) throw new Error("Terminal input sequence overflow.")
           sequence++
           peer.send(JSON.stringify({ type: "receipt", id: inputID, sequence, status: "received", bytes: data.length }))
           await Effect.runPromise(pty.write(shell.id, data.toString("utf8")), { signal })
@@ -137,6 +176,7 @@ export async function terminalSession(
           const info = await Effect.runPromise(pty.create({ cwd: context.directory, title: "Nexus" }), { signal })
 
           shell.id = info.id
+          await Effect.runPromise(pty.update(info.id, { size: shell.size }), { signal })
 
           const attachment = await Effect.runPromise(
             pty.attach(info.id, {
@@ -158,11 +198,13 @@ export async function terminalSession(
           if (frame && peer.send(JSON.stringify(frame))) cursor = undefined
         }
 
-        await delay(10, undefined, { signal })
+        await setTimeout(10, undefined, { signal })
       }
 
       await peer.close()
       peer = undefined
+      failures = Math.min(failures + 1, 4)
+      relay ||= Boolean(options.servers?.length)
     }
 
     context.signal.throwIfAborted()

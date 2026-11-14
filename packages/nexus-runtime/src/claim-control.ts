@@ -6,7 +6,7 @@ import {
   type JsonValue,
   type OperationEvent,
 } from "@cybros/agent"
-import { setTimeout as delay } from "node:timers/promises"
+import { scheduler } from "node:timers/promises"
 
 type Task = ReturnType<ExecutorClient["inboxTask"]>
 
@@ -26,6 +26,7 @@ export class ClaimLease {
   private execution = new AbortController()
   private executionAt: number
   private work?: Promise<void>
+  private wake = new AbortController()
   readonly signal: AbortSignal
   readonly executionSignal: AbortSignal
 
@@ -35,10 +36,11 @@ export class ClaimLease {
     parent: AbortSignal,
     private readonly renewable = true,
     private readonly extension = 3600000,
+    private begun = true,
   ) {
     this.deadline = claim.deadline_at ? Date.parse(claim.deadline_at) : Infinity
     this.executionAt = this.deadline
-    this.renewAt = renewable ? Date.now() + Math.max(0, this.deadline - Date.now()) / 2 : Infinity
+    this.renewAt = renewable && begun ? Date.now() + Math.max(0, this.deadline - Date.now()) / 2 : Infinity
     this.signal = AbortSignal.any([parent, this.owner.signal])
     this.executionSignal = AbortSignal.any([this.signal, this.execution.signal])
     this.arm()
@@ -48,12 +50,26 @@ export class ClaimLease {
     return this.deadline
   }
 
+  executionStarted() {
+    if (this.begun || this.signal.aborted) return
+    this.begun = true
+    if (this.renewable) this.renewAt = Date.now() + Math.max(0, this.deadline - Date.now()) / 2
+    this.wake.abort()
+    this.wake = new AbortController()
+  }
+
   start() {
     const signal = AbortSignal.any([this.signal, this.monitor.signal])
 
     this.work = (async () => {
       while (!signal.aborted) {
-        await delay(Math.max(1, Math.min(this.statusAt, this.renewAt) - Date.now()), undefined, { signal })
+        await scheduler
+          .wait(Math.max(1, Math.min(this.statusAt, this.renewAt) - Date.now()), {
+            signal: AbortSignal.any([signal, this.wake.signal]),
+          })
+          .catch((error: unknown) => {
+            if (signal.aborted) throw error
+          })
         await this.maintain()
       }
     })().catch(() => {})
@@ -81,7 +97,7 @@ export class ClaimLease {
         },
       )
 
-    if (!this.renewable || this.executionSignal.aborted || Date.now() < this.renewAt) return
+    if (!this.renewable || !this.begun || this.executionSignal.aborted || Date.now() < this.renewAt) return
 
     const grant = await this.task
       .extend({ claim_token: this.claim.claim_token, timeout_ms: Math.min(this.extension, 3600000) }, { signal })
@@ -230,7 +246,7 @@ export class ClaimOperations {
           .catch(async (error: unknown) => {
             if (error instanceof APIError && error.status < 500 && error.status !== 429) throw error
 
-            await delay(retryDelay(error), undefined, { signal: this.signal })
+            await scheduler.wait(retryDelay(error), { signal: this.signal })
             return undefined
           })
 
@@ -239,7 +255,7 @@ export class ClaimOperations {
         this.position = result.position
 
         if (result.observation) this.deliver(result.observation)
-        else await delay(250, undefined, { signal: this.signal })
+        else await scheduler.wait(250, { signal: this.signal })
       }
 
       this.signal.throwIfAborted()
