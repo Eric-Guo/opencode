@@ -21,6 +21,70 @@ const descriptor = {
   defaults: { token: "", count: 1 },
 } as const
 
+test("extension announcement budgets include base, sibling and staged tools without a replaced generation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-announcement-"))
+  const inventories: string[][] = []
+  const published = Promise.withResolvers<void>()
+  const manager = new ExtensionManager(
+    new Configuration(join(directory, "settings.json")),
+    [
+      {
+        descriptor: { ...descriptor, id: "sibling" },
+        register(api) {
+          api.registerTool({
+            definition: definition("sibling", "Sibling", {}, []),
+            async execute() {
+              return { content: "sibling" }
+            },
+          })
+          api.registerTool({
+            role: "agent",
+            definition: definition("agent", "Agent", {}, []),
+            async execute() {
+              return { content: "agent" }
+            },
+          })
+        },
+      },
+      {
+        descriptor,
+        register(api) {
+          inventories.push(api.announced!("runner").map((tool) => tool.name))
+          api.registerTool({
+            definition: definition("own", "Own", {}, []),
+            async execute() {
+              return { content: "own" }
+            },
+          })
+          inventories.push(api.announced!("runner").map((tool) => tool.name))
+          expect(api.announced!("agent").map((tool) => tool.name)).toEqual(["agent"])
+        },
+      },
+    ],
+    directory,
+    new AbortController().signal,
+    async () => {
+      published.resolve()
+    },
+    undefined,
+    (role) => (role === "runner" ? [definition("base", "Base", {}, [])] : []),
+  )
+  try {
+    await manager.start()
+    await manager.change({ id: descriptor.id, operations: [{ op: "set", path: ["count"], value: 2 }] })
+    await published.promise
+    expect(inventories).toEqual([
+      ["base", "sibling"],
+      ["base", "sibling", "own"],
+      ["base", "sibling"],
+      ["base", "sibling", "own"],
+    ])
+  } finally {
+    await manager.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
 test("configuration serializes writes, validates before saving, restores and redacts write-only fields", async () => {
   const directory = await mkdtemp(join(tmpdir(), "nexus-settings-"))
   const file = join(directory, "configuration.json")
