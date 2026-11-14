@@ -44,6 +44,7 @@ test("selected runner survives restart, clears to own, and host changes preserve
       selected.push(body.conversation.default_runner_executor_public_id)
       return Response.json({ conversation: conversationFixture() }, { status: 201 })
     }
+    if (path.includes("/store_entries")) return undefined
     return Response.json({ error: { code: "not_found" } }, { status: 404 })
   })
   const application = new NexusApplication(

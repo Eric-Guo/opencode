@@ -4,15 +4,37 @@ import { NexusPreset } from "@opencode/schema/nexus-preset"
 import { NexusBot } from "@opencode/schema/nexus-bot"
 import { NexusAcp } from "@opencode/schema/nexus-acp"
 
+import { NexusSettings } from "@opencode/schema/nexus-settings"
+
 const Rule = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("once"), run_at: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("interval"), starts_at: Schema.String, every_seconds: Schema.Int }),
   Schema.Struct({ kind: Schema.Literal("daily"), local_time: Schema.String, time_zone: Schema.String }),
 ])
 export const NexusCommand = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("settings.read") }),
+  Schema.Struct({ action: Schema.Literal("settings.update"), patch: NexusSettings.Patch }),
+  Schema.Struct({
+    action: Schema.Literal("connection.import"),
+    origin: Schema.String,
+    model: Schema.String,
+    workspace: Schema.String,
+    directory: Schema.String,
+    access_token: Schema.NonEmptyString,
+    executor_access_token: Schema.NonEmptyString,
+  }),
   ...NexusPreset.Command.members,
   ...NexusBot.Command.members,
   ...NexusAcp.Command.members,
+  Schema.Struct({
+    action: Schema.Literal("application.accepted"),
+    workspace: Schema.String,
+    conversation: Schema.String,
+    input: Schema.String,
+    text: Schema.String,
+    model: Schema.optional(Schema.String),
+    replayed: Schema.Boolean,
+  }),
   Schema.Struct({ action: Schema.Literal("persona.read") }),
   Schema.Struct({ action: Schema.Literal("persona.reset") }),
   Schema.Struct({ action: Schema.Literal("persona.write"), content: Schema.String }),
@@ -20,6 +42,7 @@ export const NexusCommand = Schema.Union([
     action: Schema.Literal("application.open"),
     key: Schema.NonEmptyString,
     title: Schema.optional(Schema.String),
+    runner: Schema.optional(Schema.NullOr(Schema.String)),
   }),
   Schema.Struct({
     action: Schema.Literal("application.submit"),

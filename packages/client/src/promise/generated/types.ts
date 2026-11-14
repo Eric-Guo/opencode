@@ -5164,6 +5164,22 @@ export type DebugAgentExecuteToolInput = {
 
 export type DebugAgentExecuteToolOutput = { location: LocationPublicRef; data: AgentToolResult }
 
+export type ExperimentalNexusRunInput = {
+  readonly key: string
+  readonly prompt: string
+  readonly model?: string | undefined
+  readonly runner?: string | null | undefined
+  readonly agent?: string | undefined
+  readonly instructions?: string | undefined
+  readonly directory?: string | undefined
+  readonly attachments?: ReadonlyArray<string> | undefined
+  readonly code_mode?: boolean | undefined
+  readonly timeout_ms?: number | undefined
+  readonly until?: { readonly command: string; readonly attempts?: number } | undefined
+}
+
+export type ExperimentalNexusRunOutput = { [x: string]: JsonValue }
+
 export type ExperimentalNexusExtensionsOutput = Array<{
   id: string
   name: string
@@ -5262,6 +5278,28 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | { readonly action: "settings.read" }
+    | {
+        readonly action: "settings.update"
+        readonly patch: {
+          readonly default_model?: string | null
+          readonly fallback_models?: ReadonlyArray<string>
+          readonly kernel_tools?: ReadonlyArray<string>
+          readonly subagent_default?: boolean
+          readonly adaptations?: string
+          readonly adaptations_dir?: string | null
+          readonly conversation_title_model?: string | null
+        }
+      }
+    | {
+        readonly action: "connection.import"
+        readonly origin: string
+        readonly model: string
+        readonly workspace: string
+        readonly directory: string
+        readonly access_token: string
+        readonly executor_access_token: string
+      }
     | { readonly action: "preset.list" }
     | {
         readonly action: "preset.create"
@@ -5492,10 +5530,24 @@ export type ExperimentalNexusManageInput = {
     | { readonly action: "acp.probe"; readonly agent: string; readonly workdir?: string }
     | { readonly action: "acp.kill" | "acp.logs"; readonly session: string }
     | { readonly action: "acp.release"; readonly workspace: string; readonly conversation: string }
+    | {
+        readonly action: "application.accepted"
+        readonly workspace: string
+        readonly conversation: string
+        readonly input: string
+        readonly text: string
+        readonly model?: string | null
+        readonly replayed: boolean
+      }
     | { readonly action: "persona.read" }
     | { readonly action: "persona.reset" }
     | { readonly action: "persona.write"; readonly content: string }
-    | { readonly action: "application.open"; readonly key: string; readonly title?: string | null }
+    | {
+        readonly action: "application.open"
+        readonly key: string
+        readonly title?: string | null
+        readonly runner?: string | null | null
+      }
     | {
         readonly action: "application.submit"
         readonly key: string
@@ -5609,7 +5661,12 @@ export type ExperimentalNexusModesInput = {
   readonly patch?: { readonly code_mode?: boolean | undefined; readonly subagent?: boolean | undefined } | undefined
 }
 
-export type ExperimentalNexusModesOutput = { code_mode: boolean; subagent: boolean }
+export type ExperimentalNexusModesOutput = {
+  code_mode: boolean
+  subagent: boolean
+  available?: boolean | undefined
+  code_mode_available?: boolean | undefined
+}
 
 export type ExperimentalNexusGrantInput = {
   readonly workspace: string
@@ -5620,9 +5677,15 @@ export type ExperimentalNexusGrantInput = {
 
 export type ExperimentalNexusGrantOutput = void
 
-export type ExperimentalNexusPolicyInput = { readonly workspace: string; readonly conversation: string }
+export type ExperimentalNexusPolicyInput = {
+  readonly workspace: string
+  readonly conversation: string
+  readonly model?: string | undefined
+}
 
 export type ExperimentalNexusPolicyOutput = {
+  instructions?: string | undefined
+  executor_contexts?: { [x: string]: { [x: string]: JsonValue } } | undefined
   tools: Array<string>
   directory: string | null
   runner: string | null
@@ -5839,6 +5902,12 @@ export type FileUnwatchInput = ExperimentalFileUnwatchInput
 
 /** @deprecated Use `ExperimentalFileUnwatchOutput`. Removed in the next minor. */
 export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
+
+/** @deprecated Use `ExperimentalNexusRunInput`. Removed in the next minor. */
+export type NexusRunInput = ExperimentalNexusRunInput
+
+/** @deprecated Use `ExperimentalNexusRunOutput`. Removed in the next minor. */
+export type NexusRunOutput = ExperimentalNexusRunOutput
 
 /** @deprecated Use `ExperimentalNexusExtensionsOutput`. Removed in the next minor. */
 export type NexusExtensionsOutput = ExperimentalNexusExtensionsOutput
