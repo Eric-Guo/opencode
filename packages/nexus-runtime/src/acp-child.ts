@@ -32,6 +32,7 @@ export type AcpSession = {
   tools: Map<string, ToolCallUpdate>
 }
 type Call = {
+  tail: string
   session: AcpSession
   context: RunnerContext
   text: string
@@ -42,6 +43,8 @@ type Call = {
   usage: JsonObject | null
   canceled: boolean
   pending: boolean
+  progress?: Promise<void>
+  reported?: string
 }
 
 export class AcpChild {
@@ -214,6 +217,7 @@ export class AcpChild {
       session,
       context,
       text: "",
+      tail: "",
       calls: 0,
       refused: 0,
       asks: [],
@@ -296,6 +300,7 @@ export class AcpChild {
         call.text += "\n"
       call.message = update.messageId
       call.text = (call.text + update.content.text).slice(0, 65536)
+      call.tail = (call.tail + update.content.text).slice(-65536)
     }
     if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
       const previous = call.session.tools.get(update.toolCallId)
@@ -310,6 +315,28 @@ export class AcpChild {
       call.usage = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))(
         JSON.stringify(update),
       )
+
+    if (update.sessionUpdate === "agent_message_chunk") this.progress(call)
+  }
+
+  private progress(call: Call) {
+    const report = call.context.progress
+
+    if (!report || call.progress) return
+
+    // One in-flight frame per call; intermediate deltas coalesce into the latest bounded tail.
+    call.progress = (async () => {
+      while (!call.canceled && this.current === call && !call.context.signal.aborted) {
+        const text = this.capture.redact(call.tail).slice(-16384)
+
+        if (text === call.reported) return
+
+        call.reported = text
+        await report(text).catch(() => {})
+      }
+    })().finally(() => {
+      call.progress = undefined
+    })
   }
 
   private request<A>(pending: Promise<A>, signal: AbortSignal) {

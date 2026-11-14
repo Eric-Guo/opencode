@@ -1,0 +1,9 @@
+{
+  "id": "nexus.dev",
+  "name": "Development controls",
+  "description": "Inspect and control Nexus conversations, inputs, runs, tasks and variants.",
+  "default_enabled": true,
+  "configuration_version": 1,
+  "configuration_schema": { "type": "object", "additionalProperties": false },
+  "defaults": {}
+}
