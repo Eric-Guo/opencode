@@ -38,7 +38,8 @@ export const acpConfiguration = {
       additionalProperties: {
         // Opaque rows are diagnosed independently so one broken agent leaves its siblings available.
         type: ["object", "array"],
-        properties: { env: { type: "object", writeOnly: true } },
+        additionalProperties: true,
+        properties: { env: { type: "object", additionalProperties: { type: "string" }, writeOnly: true } },
       },
     },
   },

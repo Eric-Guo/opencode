@@ -1,0 +1,127 @@
+import { JsonSchema, Schema, SchemaRepresentation } from "effect"
+import type { AnnouncedTool } from "@cybros/agent"
+import { Ajv } from "ajv"
+import { Ajv2020 } from "ajv/dist/2020.js"
+import type { Mcp } from "@opencode/core/mcp/index"
+import { openWrite } from "./extensions"
+import { mcpName, type McpRow } from "./mcp-settings"
+
+export function curateMcp(row: McpRow, listed: readonly Pick<Mcp.Tool, "name" | "description" | "inputSchema">[]) {
+  const tools: { raw: string; definition: AnnouncedTool; bytes: number }[] = []
+  const skipped: { name: string; reason: string }[] = []
+  const names = listed.map((tool) => tool.name)
+  const missing = row.tools[0] === "*" ? [] : row.tools.filter((name) => !names.includes(name))
+
+  if (new Set(names).size !== names.length)
+    return { tools, skipped, fault: "tools/list contains duplicate names", bytes: 0 }
+  if (missing.length)
+    return { tools, skipped, fault: "Allowlisted tools were not listed: " + missing.join(", "), bytes: 0 }
+
+  for (const tool of listed) {
+    if (row.tools[0] !== "*" && !row.tools.includes(tool.name)) {
+      skipped.push({ name: tool.name, reason: "Not in tools allowlist" })
+      continue
+    }
+    if (!tool.description?.trim()) {
+      if (row.tools[0] !== "*") return { tools: [], skipped: [], fault: tool.name + " has no description", bytes: 0 }
+
+      skipped.push({ name: tool.name, reason: "No description" })
+      continue
+    }
+
+    const schema = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.MutableJson))(tool.inputSchema)
+    const valid = validMcpSchema(schema)
+
+    if (!valid) {
+      skipped.push({ name: tool.name, reason: "Invalid object JSON Schema" })
+      continue
+    }
+
+    const name = mcpName(row.key, tool.name)
+    const definition: AnnouncedTool = {
+      name,
+      description: tool.description,
+      input_schema: { ...schema, type: "object" },
+      effect_profile: row.profiles[tool.name] ?? openWrite,
+      timeout_ms: row.timeout,
+      mcp: { server_key: row.key, tool_name: tool.name },
+    }
+
+    tools.push({
+      raw: tool.name,
+      definition,
+      bytes: Buffer.byteLength(JSON.stringify(definition)),
+    })
+  }
+
+  return { tools, skipped, fault: null, bytes: mcpAnnouncementBytes(tools.map((tool) => tool.definition)) }
+}
+
+export function mcpAnnouncementBytes(tools: readonly AnnouncedTool[]) {
+  return Buffer.byteLength(JSON.stringify(tools))
+}
+
+function validMcpSchema(schema: Schema.JsonObject) {
+  if (schema.type !== "object") return false
+
+  try {
+    const compiler =
+      typeof schema.$schema === "string" && schema.$schema.includes("draft-07")
+        ? new Ajv({ strict: false, validateFormats: false })
+        : new Ajv2020({ strict: false, validateFormats: false })
+
+    compiler.compile(schema)
+    SchemaRepresentation.fromJsonSchemaDocument(JsonSchema.fromSchemaDraft2020_12(schema))
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function curateMcpDocuments(
+  row: McpRow,
+  prompts: readonly Mcp.Prompt[],
+  resources: Mcp.ResourceCatalog["resources"],
+) {
+  const documents: { name: string; raw: string; description: string; kind: "prompt" | "resource"; uri?: string }[] = []
+  const skipped: { name: string; reason: string }[] = []
+
+  for (const listing of [
+    ...prompts.map((value) => ({ ...value, kind: "prompt" as const })),
+    ...resources.map((value) => ({ ...value, kind: "resource" as const })),
+  ]) {
+    const name = mcpName(row.key, listing.name, true)
+    const reason = !listing.name
+      ? "No name"
+      : !listing.description?.trim()
+        ? "No description"
+        : Buffer.byteLength(listing.description) > 1024
+          ? "Description exceeds 1024 bytes"
+          : documents.some((document) => document.name === name)
+            ? "Duplicate document name"
+            : listing.kind === "prompt" && listing.arguments?.some((argument) => argument.required)
+              ? "Prompt requires arguments"
+              : listing.kind === "resource" && listing.mimeType && !mcpReadable(listing.mimeType)
+                ? "Unsupported resource media type"
+                : undefined
+
+    if (reason) {
+      skipped.push({ name, reason })
+      continue
+    }
+
+    documents.push({
+      name,
+      raw: listing.name,
+      description: listing.description!,
+      kind: listing.kind,
+      ...(listing.kind === "resource" ? { uri: listing.uri } : {}),
+    })
+  }
+
+  return { documents, skipped }
+}
+
+export function mcpReadable(mime: string) {
+  return /^(?:text\/|image\/)|^application\/(?:(?:[\w.-]+\+)?(?:json|xml|yaml|x-yaml|toml)|pdf)$/i.test(mime)
+}
