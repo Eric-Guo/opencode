@@ -1,3 +1,4 @@
+import { runnerEnvironment } from "./runner-environment"
 import {
   APIError,
   Client,
@@ -12,7 +13,7 @@ import {
 import { RealtimeClient } from "@cybros/agent/realtime"
 import { mkdir, readFile, realpath, stat } from "node:fs/promises"
 import { isAbsolute, join, relative, sep, win32, posix } from "node:path"
-import { setTimeout as delay } from "node:timers/promises"
+import { scheduler } from "node:timers/promises"
 import type { NexusCommand, NexusOperator } from "@opencode/protocol/nexus-command"
 import { Schema } from "effect"
 import { atomic, missing, vault } from "./storage"
@@ -22,6 +23,10 @@ import type { RunnerTool } from "./extensions"
 import { builtinExtensions } from "./builtins"
 import { Configuration } from "./configuration"
 import { ExtensionManager } from "./extension-manager"
+import { Packages } from "./packages"
+import { packageTools } from "./package-tools"
+import { capabilityConfiguration, compactionInstructions } from "./capabilities"
+import { mcpDirectory } from "./preset-mcp"
 import type { Nexus } from "@opencode/schema/nexus"
 import { Checkpoints } from "./checkpoints"
 export type { NexusExtension, RunnerTool, RunnerContext } from "./extensions"
@@ -29,13 +34,17 @@ export type { ExtensionModule, ExtensionAPI } from "./extension-manager"
 export type { ExtensionDescriptor } from "./configuration"
 import { ClaimJournal } from "./claims"
 import { webSite } from "./web"
+import type { ApprovalGrant } from "./approval-grant"
 import { HumanLogin } from "./login"
 import { NexusApplication } from "./application"
 export { NexusApplication } from "./application"
 import type { NexusPreset } from "@opencode/schema/nexus-preset"
 import type { NexusBot } from "@opencode/schema/nexus-bot"
-import { operatorTools, RunnerAdmission, tools } from "./runner"
+import { operatorTools, RunnerAdmission, tools, readEffect } from "./runner"
 import { RunnerInbox } from "./runner-inbox"
+import { EnvironmentChange } from "./environments"
+import { DefaultEnvironment } from "./default-environment"
+import { McpSessions } from "./mcp-sessions"
 
 const ModeValues = Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })
 
@@ -75,14 +84,29 @@ export class NexusRuntime {
   private stop = new AbortController()
   private readonly human: HumanLogin
   private readonly store: CredentialStore
+  private readonly defaultEnvironment: DefaultEnvironment
   private work?: Promise<void>
   private pending?: Promise<Status>
   private settings?: Settings
   private connection?: Connection
   private readonly sites = new Set<string>()
+  private readonly approvals: ApprovalGrant[] = []
   private declaring = Promise.resolve()
   private credentials?: OAuthCredentials
   private extensionManager?: ExtensionManager
+  private packages?: Packages
+  private readonly editorSessions = new McpSessions(
+    () => this.extensionTools(),
+    async (input) => {
+      if (!this.host) throw new Error("Editor MCP requires an OpenCode runtime.")
+      const { mcpSession } = await import("./mcp-session")
+      return mcpSession(input, this.host)
+    },
+    () => this.publish?.() ?? Promise.resolve(),
+    () => this.extensionManager?.list().some((module) => module.id === "nexus.mcp" && module.active) ?? false,
+  )
+  private editorChanges = Promise.resolve()
+  private publish?: () => Promise<void>
   private executor?: RunnerInbox
   private statusValue: Status = { state: "unpaired", origin: "", model: "", directory: "", workspace: "" }
 
@@ -92,6 +116,7 @@ export class NexusRuntime {
   ) {
     this.human = new HumanLogin(join(storage, "human"))
     this.store = vault(join(storage, "agent.json"))
+    this.defaultEnvironment = new DefaultEnvironment(join(storage, "environment.json"), [storage])
   }
 
   status() {
@@ -201,7 +226,7 @@ export class NexusRuntime {
       origin: settings?.origin ?? "",
       model: settings?.model ?? "",
       workspace: settings?.workspace ?? "",
-      directory: settings?.directory ?? "",
+      directory: this.defaultEnvironment.current ?? settings?.directory ?? "",
     }
   }
 
@@ -224,31 +249,59 @@ export class NexusRuntime {
 
   private async run(credentials: OAuthCredentials, settings: Settings, signal: AbortSignal) {
     this.statusValue = this.view("connecting")
+    await this.defaultEnvironment.restore(settings.directory)
+    this.statusValue = this.view("connecting")
     const member = new Client({ baseURL: settings.origin, credentialProvider: credentials.provider("member") })
     const options = { baseURL: settings.origin, credentialProvider: credentials.provider("executor") }
     const executor = new ExecutorClient(options)
     const refresh = (role: "agent" | "runner" = "runner") => [
       ...(role === "runner" ? tools.filter((tool) => this.host || !["bash", "find", "grep"].includes(tool.name)) : []),
-      ...(this.extensionManager?.tools() ?? [])
+      ...this.runtimeTools()
         .filter((tool) => (tool.role ?? "runner") === role)
         .map((tool) => tool.definition),
     ]
     const applicationTools = () =>
-      refresh("agent").map((tool) => ({
-        type: "function" as const,
-        function: { name: tool.name, description: tool.description ?? undefined, parameters: tool.input_schema },
-      }))
+      this.extensionTools()
+        .filter((tool) => tool.role === "agent")
+        .map((entry) => entry.definition)
+        .map((tool) => ({
+          type: "function" as const,
+          function: { name: tool.name, description: tool.description ?? undefined, parameters: tool.input_schema },
+          ...(tool.effect_profile ? { effect_profile: { ...tool.effect_profile } } : {}),
+        }))
+    const configuration = new Configuration(join(this.storage, "configuration.json"))
+    await configuration.restore()
+    this.packages = new Packages(this.storage, configuration, this.host)
+    const documents = (role: "agent" | "runner") =>
+      (this.extensionManager?.documents() ?? [])
+        .filter((document) => document.role === role)
+        .map((document) => ({ name: document.name, description: document.description }))
+    const environment = async () => {
+      const value = await runnerEnvironment(this.defaultEnvironment.root)
+      const description = await this.extensionManager?.describeEnvironment(value)
+      return { ...value, report: [value.report, description].filter(Boolean).join("\n\n") }
+    }
     this.extensionManager = new ExtensionManager(
-      new Configuration(join(this.storage, "configuration.json")),
-      await builtinExtensions(this.host, this.storage),
-      settings.directory,
+      configuration,
+      [
+        ...(await builtinExtensions(this.host, this.storage)),
+        packageTools(this.packages, () => this.extensionManager!),
+        ...(await this.packages.sources()),
+      ],
+      this.defaultEnvironment.root,
       signal,
-      async () => {
+      (this.publish = async () => {
+        if (!this.extensionManager?.list().some((module) => module.id === "nexus.mcp" && module.active))
+          await this.editorSessions.close()
         await executor.announce(
           {
             services: {
-              agent: { tools: refresh("agent") },
-              runner: { tools: [...refresh(), ...operatorTools], environment: { root: settings.directory } },
+              agent: { tools: refresh("agent"), documents: documents("agent") },
+              runner: {
+                tools: [...refresh(), ...operatorTools],
+                documents: documents("runner"),
+                environment: await environment(),
+              },
             },
           },
           { signal },
@@ -258,22 +311,42 @@ export class NexusRuntime {
 
         if (!active) return
 
+        const available = new Set((await member.tools.list({ signal })).map((tool) => tool.canonical_name))
         active.configuration = {
           ...active.configuration,
+          ...capabilityConfiguration(
+            this.extensionManager?.list() ?? [],
+            Toolsets.names("orchestration", "conversation", "history", "memory", "images", "schedules").filter((name) =>
+              available.has(name),
+            ),
+          ),
           runner_tool_names: refresh().map((tool) => tool.name),
           tool_definitions: applicationTools(),
         }
         await member.profile.declareConfiguration(
-          { configuration: { ...active.configuration, approval_rules: this.siteRules() } },
+          {
+            configuration: { ...active.configuration, approval_rules: this.siteRules() },
+            prompt_documents: { summarizer: { content: compactionInstructions } },
+          },
           { signal },
         )
+      }),
+      () => {
+        if (!this.connection) throw new Error("Nexus is disconnected.")
+
+        return this.connection.application
       },
+      (role) => (role === "runner" ? [...tools, ...operatorTools] : []),
     )
     await this.extensionManager.start()
 
     const names = [...refresh(), ...operatorTools].map((tool) => tool.name)
     if (new Set(names).size !== names.length) throw new Error("Nexus extensions must provide unique tool names.")
-    const checkpoints = new Checkpoints(join(this.storage, "checkpoints", settings.identifier), settings.directory)
+    const checkpoints = new Checkpoints(
+      join(this.storage, "checkpoints", settings.identifier),
+      this.defaultEnvironment.root,
+    )
+    await checkpoints.prune()
     const journal = new ClaimJournal(join(this.storage, "claims", settings.identifier))
     const admission = new RunnerAdmission()
     while (!signal.aborted) {
@@ -282,10 +355,11 @@ export class NexusRuntime {
         const announced = await executor.announce(
           {
             services: {
-              agent: { tools: refresh("agent") },
+              agent: { tools: refresh("agent"), documents: documents("agent") },
               runner: {
                 tools: [...availableTools, ...operatorTools],
-                environment: { root: settings.directory },
+                documents: documents("runner"),
+                environment: await environment(),
               },
             },
           },
@@ -358,13 +432,14 @@ export class NexusRuntime {
           default_model: settings.model,
           approval_mode: "ask",
           prompt_mechanism: "default",
-          kernel_tools: kernel,
+          ...capabilityConfiguration(this.extensionManager?.list() ?? [], kernel),
           runner_executor_public_ids: [...new Set([runner, ...candidates.map((row) => row.public_id)])],
           runner_tool_names: availableTools.map((tool) => tool.name),
         }
         const profile = await member.profile.declareConfiguration(
           {
             configuration: { ...configuration, approval_rules: this.siteRules() },
+            prompt_documents: { summarizer: { content: compactionInstructions } },
           },
           { signal },
         )
@@ -384,65 +459,157 @@ export class NexusRuntime {
             member,
             identity,
             () => this.connection?.configuration ?? configuration,
-            () => ({ [identity.runner]: { "opencode.directory": settings.directory } }),
+            () => ({ [identity.runner]: { "opencode.directory": this.defaultEnvironment.root } }),
+            (workspace, conversation, preset) => this.policy(workspace, conversation, preset),
+            (name, value) => this.extensionManager?.emit(name, value) ?? Promise.resolve(),
+            () =>
+              mcpDirectory(
+                member,
+                identity.agent,
+                this.extensionTools()
+                  .filter((tool) => tool.role === "agent")
+                  .map((tool) => tool.definition),
+              ),
+            {
+              author: (draft) => this.extensionManager?.author(draft) ?? Promise.resolve(draft),
+              follow: (value) => this.extensionManager?.follow(value) ?? Promise.resolve(undefined),
+              bindings: (value) => this.extensionManager?.bindings(value) ?? Promise.resolve([]),
+              describeEnvironment: (value) => this.extensionManager?.describeEnvironment(value) ?? Promise.resolve(""),
+            },
+            { grant: (value) => this.grantRule(value), list: () => this.approvals },
+            () =>
+              new RealtimeClient({
+                baseURL: settings.origin,
+                credentialProvider: credentials.provider("member"),
+                timeoutMs: 5000,
+              }),
           ),
         }
+        this.connection.application.environments.configure({
+          root: () => this.defaultEnvironment.root,
+          protectedRoots: [this.storage],
+          hosts: () => this.connection?.application.lifecycle.hostsSnapshot() ?? [],
+          mcp: (workspace, conversation, cwd, servers) =>
+            this.editorMcp("editor.mcp.attach", { workspace, conversation, cwd, servers }),
+        })
+        this.connection.application.runners.configure({
+          storage: join(this.storage, "runner.json"),
+          hosts: () => this.connection?.application.lifecycle.hostsSnapshot() ?? [],
+          refresh: async (ids) => {
+            const active = this.connection
+            if (!active) return
+            active.candidates = new Set([active.identity.runner, ...ids])
+            active.configuration = { ...active.configuration, runner_executor_public_ids: [...active.candidates] }
+            await active.member.profile.declareConfiguration({
+              configuration: { ...active.configuration, approval_rules: this.siteRules() },
+            })
+          },
+        })
         this.statusValue = { ...this.view("ready"), identity }
+        await this.extensionManager?.emit("member.connected", identity)
         const ingress = new AbortController()
-        const token = process.env.OPENCODE_NEXUS_TELEGRAM_TOKEN
-        const chats = process.env.OPENCODE_NEXUS_TELEGRAM_CHATS?.split(",")
-          .map((id) => id.trim())
-          .filter(Boolean)
-        const bot =
-          token && chats?.length
-            ? (async () => {
-                const { telegram } = await import("./telegram")
-                await telegram({
-                  token,
-                  chats,
-                  member,
-                  workspace: workspace.public_id,
-                  agent: identity.agent,
-                  runner,
-                  directory: settings.directory,
-                  file: join(
-                    this.storage,
-                    "telegram-" + settings.identifier + "-" + token.split(":")[0].replace(/[^0-9]/g, "") + ".json",
-                  ),
-                  signal: AbortSignal.any([signal, ingress.signal]),
-                })
-              })()
-            : undefined
+        const following = this.connection.application.until.watch(
+          [identity.agent],
+          AbortSignal.any([signal, ingress.signal]),
+        )
+        const lifecycle = this.connection.application.watch(AbortSignal.any([signal, ingress.signal]))
+        const inbox = this.listen(
+          options,
+          executor,
+          runner,
+          this.defaultEnvironment.root,
+          journal,
+          AbortSignal.any([signal, ingress.signal]),
+          checkpoints,
+          () => this.runtimeTools(),
+          admission,
+        )
         try {
-          const inbox = this.listen(
-            options,
-            executor,
-            runner,
-            settings.directory,
-            journal,
-            AbortSignal.any([signal, ingress.signal]),
-            checkpoints,
-            () => this.extensionManager?.tools() ?? [],
-            admission,
-          )
-          if (bot) {
-            try {
-              await Promise.race([inbox, bot])
-            } finally {
-              ingress.abort()
-              await Promise.allSettled([inbox, bot])
-            }
-          } else await inbox
+          await Promise.race([inbox, following, lifecycle])
         } finally {
           ingress.abort()
+          await Promise.allSettled([inbox, following, lifecycle])
         }
       } catch (cause) {
+        await this.extensionManager?.emit("member.disconnected", {})
         this.connection = undefined
         this.failed(cause)
         if (signal.aborted || (cause instanceof APIError && cause.status === 401)) return
-        await delay(5000, undefined, { signal })
+        await scheduler.wait(5000, { signal })
       }
     }
+  }
+
+  private extensionTools(): RunnerTool[] {
+    const manager = this.extensionManager
+    if (!manager) return []
+    return [
+      ...manager.tools(),
+      ...(["agent", "runner"] as const).flatMap((role): RunnerTool[] =>
+        manager.documents().some((document) => document.role === role)
+          ? [
+              {
+                role,
+                definition: {
+                  name: "skill",
+                  description: "Load a skill document by its announced name.",
+                  effect_profile: readEffect,
+                  input_schema: {
+                    type: "object",
+                    properties: { name: { type: "string" } },
+                    required: ["name"],
+                    additionalProperties: false,
+                  },
+                },
+                async execute(input, context) {
+                  const value = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String }))(input)
+                  if (!manager.documents().some((document) => document.name === value.name && document.role === role))
+                    return { is_error: true, content: "skill_unknown: " + value.name }
+                  return manager.readDocument(value.name, context, role)
+                },
+              },
+            ]
+          : [],
+      ),
+    ]
+  }
+
+  private runtimeTools() {
+    return [...this.extensionTools(), ...this.editorSessions.tools()]
+  }
+
+  private editorMcp(action: string, input: Schema.Json) {
+    const command = Schema.decodeUnknownSync(
+      Schema.Struct({
+        workspace: Schema.String,
+        conversation: Schema.String,
+        cwd: Schema.optional(Schema.String),
+        servers: Schema.optional(Schema.Json),
+      }),
+    )(input)
+    const operation = this.editorChanges.then(async () => {
+      const active = this.connection
+      if (!active || !this.host) throw new Error("Editor MCP requires a connected OpenCode runtime.")
+      const servers = action === "editor.mcp.detach" ? [] : (command.servers ?? [])
+      // Host deletion may already make the conversation unreadable; clearing owns no new authority.
+      if (Array.isArray(servers) && !servers.length)
+        return this.editorSessions.bind({ ...command, directory: command.cwd ?? "", servers, signal: this.stop.signal })
+      const info = await active.member.workspace(command.workspace).conversation(command.conversation).fetch()
+      if (
+        info.side
+          ? !(await active.application.sides.read(command.workspace, command.conversation))
+          : info.answering_user_public_id !== active.identity.agent
+      )
+        throw new Error("Unknown editor conversation.")
+      if (info.archived_at || !command.cwd || !isAbsolute(command.cwd))
+        throw new Error("Editor MCP requires an active conversation and absolute working directory.")
+      return this.editorSessions.bind({ ...command, directory: command.cwd, servers, signal: this.stop.signal })
+    })
+    this.editorChanges = operation.then(
+      () => {},
+      () => {},
+    )
+    return operation
   }
 
   private async listen(
@@ -471,6 +638,16 @@ export class NexusRuntime {
       host: this.host,
       checkpoints,
       protectedRoots: [this.storage],
+      artifacts: join(this.storage, "artifacts"),
+      ports: {
+        read: (workspace, anchor) => this.connection?.application.environments.port(workspace, anchor),
+        drop: (workspace, anchor, port) => this.connection?.application.environments.dropPort(workspace, anchor, port),
+      },
+      result: (row, result) =>
+        this.extensionManager?.toolResult(
+          { workspace: row.workspace_public_id, conversation: row.conversation_public_id, run: row.run_public_id },
+          result,
+        ) ?? Promise.resolve(result),
       wake: () => wake.abort(),
     })
     this.executor = inbox
@@ -484,14 +661,14 @@ export class NexusRuntime {
           if (active.aborted) return
         }
         await socket.reconnect()
-        await delay(5000, undefined, { signal: active })
+        await scheduler.wait(5000, { signal: active })
       }
     })().catch(() => {})
     try {
       while (!active.aborted) {
         wake = new AbortController()
         await inbox.sweep()
-        await delay(5000, undefined, { signal: AbortSignal.any([active, wake.signal]) }).catch(() => {})
+        await scheduler.wait(5000, { signal: AbortSignal.any([active, wake.signal]) }).catch(() => {})
       }
     } finally {
       owner.abort()
@@ -503,14 +680,9 @@ export class NexusRuntime {
 
   runners() {
     if (!this.connection) throw new Error("Nexus is disconnected.")
-    const active = this.connection
-    return active.member.executors
-      .list({ role: "runner" })
-      .then((rows) =>
-        rows
-          .filter((row) => active.candidates.has(row.public_id))
-          .map((row) => ({ id: row.public_id, name: row.display_name || row.public_id })),
-      )
+    return this.connection.application.runners
+      .list()
+      .then((result) => result.runners.map((row) => ({ id: row.public_id, name: row.display_name || row.public_id })))
   }
 
   extensions() {
@@ -528,7 +700,11 @@ export class NexusRuntime {
     if (!active || workspace !== active.identity.workspace) throw new Error("The selected workspace is unavailable.")
     const chat = active.member.workspace(workspace).conversation(conversation)
     const info = await chat.fetch()
-    if (info.answering_user_public_id !== active.identity.agent || info.side || (patch && info.archived_at))
+    if (
+      info.answering_user_public_id !== active.identity.agent ||
+      (info.side && !(await active.application.sides.read(workspace, conversation))) ||
+      (patch && info.archived_at)
+    )
       throw new Error("These conversation settings are unavailable.")
     let after: string | undefined
     do {
@@ -558,11 +734,48 @@ export class NexusRuntime {
     if (!active || !this.settings || workspace !== active.identity.workspace)
       throw new Error("The selected workspace is unavailable.")
     const chat = await active.member.workspace(workspace).conversation(conversation).fetch()
-    if (chat.answering_user_public_id !== active.identity.agent || chat.side || chat.archived_at)
+    if (
+      chat.answering_user_public_id !== active.identity.agent ||
+      (chat.side && !(await active.application.sides.read(workspace, conversation))) ||
+      chat.archived_at
+    )
       throw new Error("This conversation cannot receive input here.")
     const runner = chat.default_runner?.executor_public_id
     const modes = await this.modes(workspace, conversation)
-    const prepared = await active.application.prepare(preset)
+    const captured = await active.application.prepare(preset, { workspace, conversation })
+    const context = await active.application.environments.capture(
+      workspace,
+      conversation,
+      runner ?? active.identity.runner,
+    )
+    const environment = Schema.decodeUnknownSync(
+      Schema.Struct({ root: Schema.String, anchor: Schema.NullOr(Schema.String) }),
+    )(context["opencode.environment"])
+    const editor = environment.anchor
+      ? this.editorSessions.get(JSON.stringify([workspace, environment.anchor]))
+      : undefined
+    const agent_configuration: JsonObject = {
+      ...captured.agent_configuration,
+      ...(editor
+        ? {
+            tool_definitions: [
+              ...Schema.decodeUnknownSync(Schema.mutable(Schema.Array(Schema.MutableJson)))(
+                captured.agent_configuration.tool_definitions ?? [],
+              ),
+              ...editor.tools.map((tool) => ({
+                type: "function",
+                function: {
+                  name: tool.definition.name,
+                  description: tool.definition.description ?? "",
+                  parameters: tool.definition.input_schema ?? { type: "object" },
+                },
+                effect_profile: { ...tool.definition.effect_profile },
+              })),
+            ],
+          }
+        : {}),
+    }
+    const prepared = { ...captured, agent_configuration }
     const assembly = await active.member.tools.assemble({
       conversation_public_id: conversation,
       default_runner_executor_public_id: runner ?? null,
@@ -581,14 +794,23 @@ export class NexusRuntime {
         return []
       return [fn.name]
     })
-    if (!runner) return { ...prepared, tools: selected, directory: null, runner: null }
-    if (runner === active.identity.runner)
-      return { ...prepared, tools: selected, directory: this.settings.directory, runner }
-    const remote = await active.member.executors.fetch(runner)
-    if (!remote.service_roles.includes("runner")) throw new Error("The selected runner is unavailable.")
-    const directory = remote.services.runner?.environment.root
-    if (typeof directory !== "string" || !directory.length) throw new Error("The remote runner has no bound directory.")
-    return { ...prepared, tools: selected, directory, runner }
+    const executor_contexts: Record<string, JsonObject> = {
+      [active.identity.runner]: { "opencode.mcp": { anchor: environment.anchor } },
+      ...(runner ? { [runner]: context } : {}),
+    }
+    if (!runner) return { ...prepared, tools: selected, directory: null, runner: null, executor_contexts }
+    if (
+      runner !== active.identity.runner &&
+      !(await active.member.executors.fetch(runner)).service_roles.includes("runner")
+    )
+      throw new Error("The selected runner is unavailable.")
+    return {
+      ...prepared,
+      tools: selected,
+      directory: environment.root,
+      runner,
+      executor_contexts,
+    }
   }
 
   async operator(input: typeof NexusOperator.Type) {
@@ -654,6 +876,90 @@ export class NexusRuntime {
   async manage(command: typeof NexusCommand.Type, origin?: string, token?: string) {
     if (command.action === "extension.list") return this.extensions()
     if (command.action === "extension.configure") return this.configureExtension(command.change)
+    if (command.action === "extension.call") {
+      if (command.name === "editor.auth.credential")
+        return this.settings ? this.human.memberCredential(this.settings.origin) : null
+      if (command.name === "editor.auth.start") {
+        if (this.statusValue.state === "ready") return { url: await this.login() }
+        if (this.statusValue.pairing) return this.statusValue.pairing
+        if (!this.settings) throw new Error("Configure Nexus with --url and --model before authenticating.")
+        if (this.statusValue.state === "error") throw new Error(this.statusValue.error ?? "Nexus could not connect.")
+        if (this.statusValue.state === "unpaired") await this.pair(this.settings)
+        if (this.statusValue.pairing) return this.statusValue.pairing
+        throw new Error("Nexus is still connecting. Authenticate again when startup completes.")
+      }
+      if (!this.extensionManager) throw new Error("Nexus extensions are not loaded.")
+      if (command.name === "env") {
+        const value = Schema.decodeUnknownSync(
+          Schema.Struct({
+            root: Schema.optional(Schema.NullOr(Schema.String)),
+            clear: Schema.optional(Schema.Boolean),
+          }),
+        )(command.input)
+        if (value.root !== undefined || value.clear) {
+          await this.defaultEnvironment
+            .change(value.clear ? null : value.root!, async (root, persist) => {
+              await this.extensionManager!.setDirectory(root, async () => {
+                await this.publish?.()
+                await persist()
+              })
+              this.executor?.setRoot(root)
+              this.statusValue = { ...this.statusValue, directory: root }
+            })
+            .catch(async (error: unknown) => {
+              await this.publish?.().catch(() => {})
+              throw error
+            })
+        }
+        return { ...(await runnerEnvironment(this.defaultEnvironment.root)), source: this.defaultEnvironment.source }
+      }
+      if (command.name === "packages") {
+        if (!this.packages) throw new Error("Nexus packages are not loaded.")
+        return this.packages.command(command.input, this.extensionManager, this.stop.signal)
+      }
+
+      if (command.name === "editor.mcp.attach" || command.name === "editor.mcp.detach")
+        return this.editorMcp(command.name, command.input)
+      if (["environment.read", "environment.bind", "editor.environment.bind", "environments"].includes(command.name)) {
+        const active = this.connection
+        if (!active) throw new Error("Nexus is disconnected.")
+        if (command.name === "environments") return active.application.environments.list()
+        const value = Schema.decodeUnknownSync(
+          Schema.Struct({
+            workspace: Schema.optional(Schema.String),
+            conversation: Schema.String,
+            runner: Schema.optional(Schema.String),
+            ...EnvironmentChange.fields,
+          }),
+        )(command.input)
+        const workspace = value.workspace ?? active.identity.workspace
+        return command.name === "environment.read"
+          ? active.application.environments.read(workspace, value.conversation, value.runner)
+          : active.application.environments.bind(workspace, value.conversation, value, value.runner)
+      }
+      if (["runners", "runners.use", "set_default_runner"].includes(command.name)) {
+        const active = this.connection
+        if (!active) throw new Error("Nexus is disconnected.")
+        if (command.name === "runners") return active.application.runners.list()
+        const value = Schema.decodeUnknownSync(
+          Schema.Struct({
+            runner: Schema.NullOr(Schema.String),
+            host: Schema.optional(Schema.String),
+            workspace: Schema.optional(Schema.String),
+            kind: Schema.optional(Schema.Literals(["conversation", "run"])),
+          }),
+        )(command.input)
+        if (command.name === "runners.use") return active.application.runners.select(value.runner)
+        if (!value.host) throw new Error("set_default_runner requires a host")
+        return active.application.runners.set(
+          value.workspace ?? active.identity.workspace,
+          value.host,
+          value.runner,
+          value.kind,
+        )
+      }
+      return this.extensionManager.command(command.name, command.input)
+    }
 
     if (command.action.startsWith("acp.")) {
       if (!this.extensionManager) throw new Error("ACP delegation is not loaded.")
@@ -820,12 +1126,31 @@ export class NexusRuntime {
   }
 
   private siteRules() {
-    return [...this.sites].map((site) => ({
-      tool: "web_fetch",
-      path: "url",
-      match: site + "/*",
-      verdict: "allow" as const,
-    }))
+    return [
+      ...this.approvals.map((grant) => grant.rule),
+      ...[...this.sites].map((site) => ({
+        tool: "web_fetch",
+        path: "url",
+        match: site + "/*",
+        verdict: "allow" as const,
+      })),
+    ]
+  }
+
+  private grantRule(grant: ApprovalGrant) {
+    const active = this.connection
+    const pending = this.declaring.then(async () => {
+      if (!active || active !== this.connection) throw new Error("Nexus connection changed.")
+      if (this.approvals.some((value) => JSON.stringify(value.rule) === JSON.stringify(grant.rule))) return
+
+      await active.member.profile.declareConfiguration(
+        { configuration: { ...active.configuration, approval_rules: [...this.siteRules(), grant.rule] } },
+        { signal: this.stop.signal },
+      )
+      this.approvals.push(grant)
+    })
+    this.declaring = pending.catch(() => {})
+    return pending
   }
 
   grant(workspace: string, conversation: string, runID: string, key: string) {
@@ -911,10 +1236,14 @@ export class NexusRuntime {
         )
         .catch(() => {})
     this.sites.clear()
+    this.approvals.length = 0
     await this.human.close()
     await this.pending?.catch(() => {})
     await this.work
     await this.extensionManager?.close()
+    await this.editorChanges
+    await this.editorSessions.close()
+    this.publish = undefined
     this.extensionManager = undefined
     await this.credentials?.drain()
     this.executor = undefined

@@ -156,7 +156,9 @@ type Tab = {
   fresh: boolean
   last: number
   revision: number
-  refs: Map<string, number>
+  actionTimeout: number
+  refs: Map<string, { node: number; session: string }>
+  frames: Map<string, string>
   loaded: Set<string>
   loading: boolean
   closed: boolean
@@ -180,7 +182,7 @@ export class BrowserSession {
   constructor(
     private readonly executable: string,
     private readonly signal: AbortSignal,
-    private readonly options: { idle?: number; callTimeout?: number; now?: () => number } = {},
+    private readonly options: { idle?: number; callTimeout?: number; actionTimeout?: number; now?: () => number } = {},
   ) {
     this.now = options.now ?? Date.now
     this.idle = options.idle ?? 600000
@@ -361,7 +363,9 @@ export class BrowserSession {
         fresh: true,
         last: this.now(),
         revision: 0,
+        actionTimeout: this.options.actionTimeout ?? 10000,
         refs: new Map(),
+        frames: new Map(),
         loaded: new Set(),
         loading: false,
         closed: false,
@@ -372,12 +376,37 @@ export class BrowserSession {
             (frame.method === "Target.targetDestroyed" && frame.params?.targetId === tab.target)
           )
             tab.closed = true
-          if (frame.sessionId !== tab.session) return
+          if (
+            frame.method === "Target.attachedToTarget" &&
+            (frame.sessionId === tab.session || [...tab.frames.values()].includes(frame.sessionId ?? ""))
+          ) {
+            const attached = Schema.decodeUnknownSync(
+              Schema.Struct({
+                sessionId: Schema.String,
+                targetInfo: Schema.Struct({ type: Schema.String, targetId: Schema.String }),
+              }),
+            )(frame.params)
+            if (attached.targetInfo.type === "iframe") {
+              tab.frames.set(attached.targetInfo.targetId, attached.sessionId)
+              void driver
+                .command(
+                  "Target.setAutoAttach",
+                  { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+                  attached.sessionId,
+                )
+                .catch(() => {})
+            }
+          }
+          if (frame.method === "Target.detachedFromTarget" && typeof frame.params?.sessionId === "string")
+            tab.frames.forEach((session, id) => {
+              if (session === frame.params?.sessionId) tab.frames.delete(id)
+            })
+          if (frame.sessionId !== tab.session && ![...tab.frames.values()].includes(frame.sessionId ?? "")) return
           if (frame.method === "Page.frameStartedLoading") tab.loading = true
           if (frame.method === "Page.frameStoppedLoading") tab.loading = false
           if (
             frame.method === "Page.lifecycleEvent" &&
-            frame.params?.name === "DOMContentLoaded" &&
+            frame.params?.name === "load" &&
             typeof frame.params.loaderId === "string"
           )
             tab.loaded.add(frame.params.loaderId)
@@ -387,6 +416,11 @@ export class BrowserSession {
       }
       driver.listeners.add(tab.receive)
       this.tabs.set(owner, tab)
+      await driver.command(
+        "Target.setAutoAttach",
+        { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+        tab.session,
+      )
       await driver.command("Page.enable", {}, tab.session)
       await driver.command("Page.setLifecycleEventsEnabled", { enabled: true }, tab.session)
       if (signal.aborted) {
@@ -427,8 +461,8 @@ export class BrowserSession {
   }
 }
 
-export async function command(tab: Tab, method: string, params: object = {}) {
-  const result = await tab.driver.command(method, params, tab.session)
+export async function command(tab: Tab, method: string, params: object = {}, session = tab.session) {
+  const result = await tab.driver.command(method, params, session)
   if (method === "Page.close") tab.closed = true
   return result
 }
@@ -481,78 +515,123 @@ export async function snapshot(tab: Tab) {
   const header = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String, title: Schema.String }))(
     await evaluate(tab, "({url:location.href,title:document.title})"),
   )
-  const tree = Schema.decodeUnknownSync(Accessibility)(await command(tab, "Accessibility.getFullAXTree"))
+  const frameShape = Schema.Struct({
+    frame: Schema.Struct({ id: Schema.String, url: Schema.String }),
+    childFrames: Schema.optional(Schema.Array(Schema.Record(Schema.String, Schema.MutableJson))),
+  })
+  const frameTree = await command(tab, "Page.getFrameTree")
+  const frames: { id: string; url: string }[] = []
+  const collect = (value: unknown) => {
+    const tree = Schema.decodeUnknownSync(frameShape)(value)
+    frames.push(tree.frame)
+    tree.childFrames?.forEach(collect)
+  }
+  collect(frameTree.frameTree)
+  tab.frames.forEach((_, id) => {
+    if (!frames.some((frame) => frame.id === id)) frames.push({ id, url: "" })
+  })
   tab.refs.clear()
   tab.revision++
-  const rows = new Map(tree.nodes.map((node) => [node.nodeId, node]))
   const lines: string[] = []
-  const walk = (id: string, depth: number) => {
-    const node = rows.get(id)
-    if (!node) return
-    const visible = !node.ignored && !["none", "generic", "InlineTextBox"].includes(node.role?.value ?? "none")
-    if (visible) {
-      const ref = node.backendDOMNodeId ? "e" + tab.revision + "_" + node.backendDOMNodeId : undefined
-      if (ref) tab.refs.set(ref, node.backendDOMNodeId!)
-      lines.push(
-        "  ".repeat(Math.min(depth, 32)) +
-          "- " +
-          node.role?.value +
-          (node.name?.value ? " " + JSON.stringify(node.name.value) : "") +
-          (ref ? " [ref=" + ref + "]" : "") +
-          (node.value?.value === undefined ? "" : " value=" + JSON.stringify(node.value.value)) +
-          (node.properties ?? [])
-            .filter((entry) => ["disabled", "checked", "expanded", "selected", "required"].includes(entry.name))
-            .map((entry) => " [" + entry.name + "=" + entry.value.value + "]")
-            .join(""),
-      )
+  let count = 0
+  for (const frame of frames) {
+    const session = tab.frames.get(frame.id) ?? tab.session
+    const tree = Schema.decodeUnknownSync(Accessibility)(
+      await command(tab, "Accessibility.getFullAXTree", { frameId: frame.id }, session),
+    )
+    if (frame !== frames[0]) lines.push("Frame: " + shorten(frame.url, 512))
+    const rows = new Map(tree.nodes.map((node) => [node.nodeId, node]))
+    const walk = (id: string, depth: number) => {
+      const node = rows.get(id)
+      if (!node) return
+      const visible = !node.ignored && !["none", "generic", "InlineTextBox"].includes(node.role?.value ?? "none")
+      if (visible) {
+        const ref = node.backendDOMNodeId ? "e" + tab.revision + "_" + ++count : undefined
+        if (ref) tab.refs.set(ref, { node: node.backendDOMNodeId!, session })
+        lines.push(
+          "  ".repeat(Math.min(depth, 32)) +
+            "- " +
+            node.role?.value +
+            (node.name?.value ? " " + JSON.stringify(node.name.value) : "") +
+            (ref ? " [ref=" + ref + "]" : "") +
+            (node.value?.value === undefined ? "" : " value=" + JSON.stringify(node.value.value)) +
+            (node.properties ?? [])
+              .filter((entry) => ["disabled", "checked", "expanded", "selected", "required"].includes(entry.name))
+              .map((entry) => " [" + entry.name + "=" + entry.value.value + "]")
+              .join(""),
+        )
+      }
+      node.childIds?.forEach((child) => walk(child, depth + (visible ? 1 : 0)))
     }
-    node.childIds?.forEach((child) => walk(child, depth + (visible ? 1 : 0)))
+    if (tree.nodes[0]) walk(tree.nodes[0].nodeId, 0)
   }
-  if (tree.nodes[0]) walk(tree.nodes[0].nodeId, 0)
-  return (
-    "Page: " + clamp(header.url, 512) + "\nTitle: " + clamp(header.title, 256) + "\n\n" + clamp(lines.join("\n"), 32000)
-  )
+  const title = "Page: " + shorten(header.url, 512) + "\nTitle: " + shorten(header.title, 256) + "\n\n"
+  return title + clamp(lines.join("\n"), 51200 - Buffer.byteLength(title))
 }
 
 export async function act(tab: Tab, ref: string, text?: string, submit = false) {
   if (!/^e\d+_\d+$/.test(ref) || !tab.refs.has(ref))
     throw new Error("Stale or unknown ref. Take a new browser_snapshot and use a ref from that result.")
-  const backendNodeId = tab.refs.get(ref)!
+  const target = tab.refs.get(ref)!
+  const backendNodeId = target.node
+  const send = (method: string, params: object = {}) => command(tab, method, params, target.session)
   const resolved = Schema.decodeUnknownSync(Schema.Struct({ object: Schema.Struct({ objectId: Schema.String }) }))(
-    await command(tab, "DOM.resolveNode", { backendNodeId }),
+    await send("DOM.resolveNode", { backendNodeId }),
   )
   const objectId = resolved.object.objectId
   try {
     const ready = Schema.decodeUnknownSync(Remote)(
-      await command(tab, "Runtime.callFunctionOn", {
+      await send("Runtime.callFunctionOn", {
         objectId,
-        functionDeclaration: "function(){return this.isConnected && !this.disabled && !this.readOnly}",
+        functionDeclaration: `async function(){
+          const deadline=performance.now()+${tab.actionTimeout};let reason='not ready';
+          do {
+            if(!this.isConnected)return 'detached';
+            this.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
+            const first=this.getBoundingClientRect();
+            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            const box=this.getBoundingClientRect(),style=getComputedStyle(this);
+            const x=Math.max(0,Math.min(innerWidth-1,box.x+box.width/2)),y=Math.max(0,Math.min(innerHeight-1,box.y+box.height/2));
+            let hit=this.ownerDocument.elementFromPoint(x,y);
+            while(hit&&hit.shadowRoot&&hit.shadowRoot.elementFromPoint(x,y)!==hit)hit=hit.shadowRoot.elementFromPoint(x,y);
+            reason=this.disabled||this.closest('[inert],[aria-disabled="true"]')?'disabled':
+              ${text !== undefined}&&this.readOnly?'read-only':
+              style.visibility==='hidden'||style.display==='none'||!box.width||!box.height?'not visible':
+              ['x','y','width','height'].some(key=>Math.abs(first[key]-box[key])>1)?'moving':
+              hit!==this&&!this.contains(hit)?'covered by another element':'';
+            if(!reason)return true;
+          } while(performance.now()<deadline);
+          return reason
+        }`,
+        awaitPromise: true,
         returnByValue: true,
       }),
     )
     if (ready.result.value !== true)
-      throw new Error("This element is detached, disabled or read-only. Take a new browser_snapshot.")
+      throw new Error(
+        "This element is " + ready.result.value + ". Take a new browser_snapshot after the page is ready.",
+      )
     if (text !== undefined) {
       const focused = Schema.decodeUnknownSync(Remote)(
-        await command(tab, "Runtime.callFunctionOn", {
+        await send("Runtime.callFunctionOn", {
           objectId,
           functionDeclaration:
-            "function(){this.focus();if(this.isContentEditable){this.textContent='';return}if(!['INPUT','TEXTAREA'].includes(this.tagName))throw Error('Choose an editable field');this.select()}",
+            "function(){this.focus();if(this.isContentEditable){const range=document.createRange();range.selectNodeContents(this);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);return}if(!['INPUT','TEXTAREA'].includes(this.tagName))throw Error('Choose an editable field');this.select()}",
           returnByValue: true,
         }),
       )
       if (focused.exceptionDetails)
         throw new Error(focused.exceptionDetails.exception?.description ?? focused.exceptionDetails.text)
-      await command(tab, "Input.insertText", { text })
+      await send("Input.insertText", { text })
       if (submit) {
-        await command(tab, "Input.dispatchKeyEvent", {
+        await send("Input.dispatchKeyEvent", {
           type: "keyDown",
           key: "Enter",
           code: "Enter",
           windowsVirtualKeyCode: 13,
           text: "\r",
         })
-        await command(tab, "Input.dispatchKeyEvent", {
+        await send("Input.dispatchKeyEvent", {
           type: "keyUp",
           key: "Enter",
           code: "Enter",
@@ -561,28 +640,39 @@ export async function act(tab: Tab, ref: string, text?: string, submit = false) 
       }
       return
     }
-    await command(tab, "DOM.scrollIntoViewIfNeeded", { backendNodeId })
     const box = Schema.decodeUnknownSync(
       Schema.Struct({ model: Schema.Struct({ content: Schema.Array(Schema.Number) }) }),
-    )(await command(tab, "DOM.getBoxModel", { backendNodeId }))
+    )(await send("DOM.getBoxModel", { backendNodeId }))
     const x = (box.model.content[0] + box.model.content[2] + box.model.content[4] + box.model.content[6]) / 4
     const y = (box.model.content[1] + box.model.content[3] + box.model.content[5] + box.model.content[7]) / 4
-    await command(tab, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 })
-    await command(tab, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 })
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 })
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 })
   } finally {
-    await command(tab, "Runtime.releaseObject", { objectId }).catch(() => {})
+    await send("Runtime.releaseObject", { objectId }).catch(() => {})
   }
 }
 
 export function clamp(text: string, bytes: number) {
   const value = Buffer.from(text)
   if (value.length <= bytes) return text
-  const marker = "\n[truncated; use browser_evaluate to read a region]"
-  return (
-    new TextDecoder("utf8", { fatal: false })
-      .decode(value.subarray(0, Math.max(0, bytes - Buffer.byteLength(marker))))
-      .replace(/\ufffd$/, "") + marker
-  )
+  const marker = (omitted: number) =>
+    "\n\n[snapshot truncated: " + omitted + " more bytes; use browser_evaluate to read a region]"
+  const kept = utf8Prefix(value, Math.max(0, bytes - Buffer.byteLength(marker(value.length))))
+  return kept + marker(value.length - Buffer.byteLength(kept))
+}
+
+function shorten(text: string, bytes: number) {
+  const value = Buffer.from(text)
+  if (value.length <= bytes) return text
+  const marker = (omitted: number) => " …(" + omitted + " more bytes)"
+  const kept = utf8Prefix(value, Math.max(0, bytes - Buffer.byteLength(marker(value.length))))
+  return kept + marker(value.length - Buffer.byteLength(kept))
+}
+
+function utf8Prefix(value: Buffer, bytes: number) {
+  let end = Math.min(value.length, bytes)
+  while (end > 0 && (value[end] & 0xc0) === 0x80) end--
+  return value.subarray(0, end).toString()
 }
 
 function abortable<A>(pending: Promise<A>, signal: AbortSignal) {

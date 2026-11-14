@@ -1,10 +1,20 @@
 import { expect, test } from "bun:test"
-import type { OAuthDocument, Workspace } from "@cybros/agent"
-import { mkdtemp, rm } from "node:fs/promises"
+import { Toolsets, type OAuthDocument, type Workspace } from "@cybros/agent"
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NexusRuntime } from "../src/runtime"
 import { atomic } from "../src/storage"
+import { Schema } from "effect"
+
+const Declaration = Schema.Struct({
+  configuration: Schema.Struct({
+    kernel_tools: Schema.Array(Schema.String),
+    image_model: Schema.NullOr(Schema.String),
+    compaction_policy: Schema.Struct({ mode: Schema.String }),
+  }),
+  prompt_documents: Schema.Struct({ summarizer: Schema.Struct({ content: Schema.String }) }),
+})
 
 test.each([
   { name: "another agent's dedicated", dedicated: true, owned: false, create: false },
@@ -13,8 +23,12 @@ test.each([
   { name: "non-dedicated", dedicated: false, owned: false, create: false },
   { name: "automatically created", dedicated: true, owned: true, create: true },
 ])("validates $name workspace before reporting ready", async (fixture) => {
-  const directory = await mkdtemp(join(tmpdir(), "nexus-runtime-"))
-  const runtime = new NexusRuntime(directory)
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "nexus-runtime-")))
+  const storage = join(directory, "storage")
+  const project = join(directory, "project")
+  await Promise.all([mkdir(storage), mkdir(project)])
+  const runtime = new NexusRuntime(storage)
+  const changed = Promise.withResolvers<typeof Declaration.Type>()
   const calls: { path: string; method: string; authorization: string | null; after: string | null; state: string }[] =
     []
   const measured = new Date().toISOString()
@@ -36,7 +50,7 @@ test.each([
   using nexus = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
-    fetch(request) {
+    async fetch(request) {
       const url = new URL(request.url)
       const path = url.pathname
       calls.push({
@@ -65,6 +79,9 @@ test.each([
       if (path === "/agent_api/v1/workspaces" && request.method === "POST")
         return Response.json({ workspace }, { status: 201 })
       if (path === "/agent_api/v1/workspaces") {
+        if (runtime.status().state === "ready")
+          return Response.json({ workspaces: [], pagination: { next_after: null } })
+
         expect(url.searchParams.get("dedicated_to_current_agent")).toBe("true")
         expect(url.searchParams.get("state")).toBe(fixture.state ?? null)
 
@@ -78,9 +95,24 @@ test.each([
           pagination: { next_after: url.searchParams.has("after") ? null : "next-page" },
         })
       }
-      if (path === "/agent_api/v1/tools") return Response.json({ tools: [] })
+      if (path === "/agent_api/v1/tools")
+        return Response.json({
+          tools: Toolsets.names("images", "schedules").map((canonical_name) => ({
+            canonical_name,
+            name: canonical_name,
+            effect_profile: {},
+            definition: {},
+          })),
+        })
       if (path === "/agent_api/v1/executors") return Response.json({ executors: [] })
-      if (path === "/agent_api/v1/profile/configuration")
+      if (path === "/agent_api/v1/profile/configuration") {
+        const payload = Schema.decodeUnknownSync(Declaration)(await request.json())
+        if (
+          payload.configuration?.image_model === "image-fixture" &&
+          payload.configuration?.compaction_policy?.mode === "off" &&
+          !payload.configuration.kernel_tools.some((name: string) => Toolsets.names("schedules").includes(name))
+        )
+          changed.resolve(payload)
         return Response.json({
           member: {
             public_id: "agent",
@@ -94,16 +126,17 @@ test.each([
           configuration: null,
           measured_at: measured,
         })
+      }
       if (path === "/agent_api/v1/executor/inbox") return Response.json({ tasks: [], pagination: { next_after: null } })
 
       return new Response(null, { status: 404 })
     },
   })
   try {
-    await atomic(join(directory, "settings.json"), {
+    await atomic(join(storage, "settings.json"), {
       origin: nexus.url.origin,
       identifier: "opencode.fixture",
-      directory,
+      directory: project,
       workspace: fixture.create ? "" : "workspace",
       model: "model",
     })
@@ -117,13 +150,14 @@ test.each([
       executor_access_token: "fixture-executor",
       expires_at: new Date(Date.now() + 3600_000).toISOString(),
     }
-    await atomic(join(directory, "agent.json"), credentials)
+    await atomic(join(storage, "agent.json"), credentials)
     await runtime.restore()
 
     const deadline = Date.now() + 3000
     while (runtime.status().state === "connecting" && Date.now() < deadline) await Bun.sleep(1)
 
     const ready = !fixture.dedicated || fixture.owned
+    if (ready) expect(runtime.status().error).toBeUndefined()
     expect(runtime.status().state).toBe(ready ? "ready" : "error")
     if (ready) {
       expect(runtime.status().identity).toMatchObject({ agent: "agent", workspace: "workspace" })
@@ -136,6 +170,22 @@ test.each([
         in_flight: 0,
         starting: 0,
       })
+      if (fixture.owned && !fixture.create) {
+        await runtime.configureExtension({
+          id: "nexus.images",
+          operations: [{ op: "set", path: ["model"], value: "image-fixture" }],
+        })
+        await runtime.configureExtension({ id: "nexus.compaction", enabled: false })
+        await runtime.configureExtension({ id: "nexus.schedules", enabled: false })
+        const declaration = await changed.promise
+        expect(declaration.configuration).toMatchObject({
+          image_model: "image-fixture",
+          compaction_policy: { mode: "off" },
+        })
+        expect(declaration.configuration.kernel_tools).toEqual(Toolsets.names("images"))
+        expect(declaration.prompt_documents.summarizer.content).toContain("Goal:")
+        expect(declaration.prompt_documents.summarizer.content).toContain("Open:")
+      }
     } else {
       expect(runtime.status().identity).toBeUndefined()
       expect(runtime.status().error).toBe(
@@ -146,7 +196,11 @@ test.each([
       expect(() => runtime.runners()).toThrow("Nexus is disconnected.")
     }
 
-    expect(calls.filter((call) => call.path === "/agent_api/v1/workspaces" && call.method === "GET")).toEqual(
+    expect(
+      calls.filter(
+        (call) => call.path === "/agent_api/v1/workspaces" && call.method === "GET" && call.state === "connecting",
+      ),
+    ).toEqual(
       fixture.dedicated
         ? [null, "next-page"].map((after) => ({
             path: "/agent_api/v1/workspaces",
