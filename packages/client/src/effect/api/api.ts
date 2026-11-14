@@ -3315,6 +3315,19 @@ export type ExperimentalNexusStatusOutput = {
     | undefined
   readonly pairing?: { readonly code: string; readonly url: string } | undefined
   readonly error?: string | undefined
+  readonly executor?:
+    | {
+        readonly running: boolean
+        readonly in_flight: number
+        readonly starting: number
+        readonly startup_limit: number
+        readonly claimed: number
+        readonly swept: number
+        readonly nudged: number
+        readonly canceled: number
+        readonly issue: { readonly type: string; readonly code: string | null } | null
+      }
+    | undefined
 }
 export type ExperimentalNexusStatusOperation<E = never> = () => Effect.Effect<ExperimentalNexusStatusOutput, E>
 
@@ -3341,6 +3354,19 @@ export type ExperimentalNexusPairOutput = {
     | undefined
   readonly pairing?: { readonly code: string; readonly url: string } | undefined
   readonly error?: string | undefined
+  readonly executor?:
+    | {
+        readonly running: boolean
+        readonly in_flight: number
+        readonly starting: number
+        readonly startup_limit: number
+        readonly claimed: number
+        readonly swept: number
+        readonly nudged: number
+        readonly canceled: number
+        readonly issue: { readonly type: string; readonly code: string | null } | null
+      }
+    | undefined
 }
 export type ExperimentalNexusPairOperation<E = never> = (
   input: ExperimentalNexusPairInput,
@@ -3363,6 +3389,19 @@ export type ExperimentalNexusDisconnectOutput = {
     | undefined
   readonly pairing?: { readonly code: string; readonly url: string } | undefined
   readonly error?: string | undefined
+  readonly executor?:
+    | {
+        readonly running: boolean
+        readonly in_flight: number
+        readonly starting: number
+        readonly startup_limit: number
+        readonly claimed: number
+        readonly swept: number
+        readonly nudged: number
+        readonly canceled: number
+        readonly issue: { readonly type: string; readonly code: string | null } | null
+      }
+    | undefined
 }
 export type ExperimentalNexusDisconnectOperation<E = never> = () => Effect.Effect<ExperimentalNexusDisconnectOutput, E>
 
