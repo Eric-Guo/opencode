@@ -36,11 +36,65 @@ Disabled modules are described without importing their executable code. Legacy
 default-export factories continue to load; their generated IDs are shown in the
 extension list.
 
-Registration stages tools and cleanup handlers before publication. A failed
+Registration stages tools, management commands and cleanup handlers before publication. A failed
 registration releases its resources and leaves working extensions available.
 Running handlers retain their original extension instance until they exit.
 `RunnerTool.resource` declares shared local concurrency; `internalTimeout` opts
 out of claim renewal for a tool with its own hard deadline.
+
+`api.registerCommand(name, handler)` exposes an installation-owned management
+handler. Commands and tools share registration validation and retirement leases;
+a failed candidate publishes neither. Reads and calls use the loaded instance
+immediately.
+
+## ACP delegation
+
+Configure coding agents through `nexus.acp-client`. Each row needs a launch command
+and your description of when the model should use it:
+
+```sh
+opencode nexus configure --json '{"id":"nexus.acp-client","enabled":true,"operations":[{"op":"set","path":["agents"],"value":{"coding-agent":{"command":"/absolute/path/to/agent","args":["--acp"],"description":"Delegate coding tasks in this project","env":{"API_KEY":"${AGENT_API_KEY}"},"permissions":"allow","timeout_ms":600000}}}]}'
+opencode nexus manage --json '{"action":"acp.list"}'
+opencode nexus manage --json '{"action":"acp.probe","agent":"coding-agent","workdir":"/absolute/project"}'
+```
+
+Environment references expand once from the service's environment. Expanded
+values and credential-shaped literal values are redacted from model replies,
+management projections and transcript captures. Children inherit a small process
+environment plus the row's explicit `env`. Invalid rows report diagnostics while
+healthy rows remain available. Legacy command-array rows still work, with their
+existing per-request permission relay. Changes to active ACP settings take effect
+after a service restart. Agent names use lowercase letters, digits and single
+hyphens, up to 32 characters.
+
+`delegate_agent` owns one resident child per workspace, conversation and agent.
+Each call opens a new session unless it supplies a returned `session` ID. A
+continuation keeps its original working directory, even if the runner's directory
+changes. Other conversations cannot reuse that ID. `auth_method` selects an
+agent-managed login method; a sole agent-managed method can be selected
+automatically. Terminal login methods require the agent's own login outside this
+client. `model` selects a value through an advertised model configuration option.
+The client advertises no editor filesystem, terminal or session-MCP facilities.
+Elicitation is declined and surfaced in the result for a subsequent prompt.
+
+Object rows default to `permissions: "allow"`; `"reject"` declines all requests.
+Neither policy grants standing permission. Both ACP permissions and native runner
+claims apply Rho's nine literal refusal rules and protected runtime paths. This
+floor does not confine arbitrary programs: delegated agents run as the service's
+user with their own tools.
+
+Ordinary cancellation sends `session/cancel` and keeps the child. A new prompt
+waits until the previous canceled request has answered; late output stays in the
+transcript and cannot enter the next result. A hard timeout terminates the child
+process group and invalidates its sessions. Captures are private JSONL files,
+bounded to 16 MiB per child, and a successful call publishes a transcript snapshot
+when an upload context is available.
+
+Management uses `acp.sessions`, `acp.logs` and `acp.kill` (the latter two take a
+local `session` ID). Killing any session retires all sessions in that child.
+`acp.release` takes `workspace` and `conversation` and releases that conversation's
+children. Service shutdown releases all children. Automatic conversation-ended
+release and live progress forwarding remain in the ledger.
 
 ## Application policy
 
@@ -139,25 +193,25 @@ The reference is `agents/rho` at Cybros revision
 `31b82029d75d1ed9626b80739e4caca16671b344`. This ledger records remaining work;
 the existing adapter names do not establish complete parity.
 
-| Source                    | Implemented                                                                                                                                                                                                                                                                                | Remaining                                                                                                                                                  |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| rho application           | Pairing, separate credential planes, workspace validation, saved extension activation, shared application admission, frozen retry declarations, input-specific HTTP/fallback following, Human persona operations                                                                           | Until recovery, complete follower/approval handling, memory policy/review, remaining management operations                                                 |
-| rho Presets/roles         | Durable seeded catalog, CRUD/duplicates/defaults, portable JSON, published roles, tool/fallback compilation, conversation-only child memory                                                                                                                                                | Markdown portability, complete MCP reference curation and publication/default conformance                                                                  |
-| rho Bots                  | Named identities, settings, audience narrowing, duplication, durable creation/switch intents, Home validation, history/current/new/resume/fork, captured input submission                                                                                                                  | Complete External requester/peer/Subagent policies, ingress connection ownership, full recovery conformance                                                |
-| rho extension packages    | Descriptors, dependencies, staged registration, schema validation, readiness, cleanup leases, restart-only settings, legacy factory adapter                                                                                                                                                | Managed immutable package install/check/activate/rollback, persistent source selection, complete hook/document/command APIs, per-field startup diagnostics |
-| rho-env executor          | Direct notification claims, bounded startup admission and cursor sweeps, run/task cancellation, persistent resource leases, schema/role/admission gates, renewable claims with delivery headroom, bounded storable results, commit reconciliation/retry, journal recovery, status counters | Captured multi-directory placement, isolation for blocking extension handlers, remaining crash/timeout/platform recovery journeys                          |
-| rho-env files/checkpoints | Basic file/search/shell tools, attachments, partial JSON/Git checkpoint restoration                                                                                                                                                                                                        | SQLite manifest/content store, capture budgets/retention, full media/skill/process/Git review behavior                                                     |
-| rho-env terminal          | OpenCode PTY adapter, TypeScript ICE/DTLS/SCTP transport, permission channel, output resume/gap window, claim-scoped terminal session                                                                                                                                                      | Complete browser-to-PTY reconnect/permission-expiry journeys, configurable ICE/TURN/network settings, remote operator integration                          |
-| rho-codemode              | OpenCode interpreter, frozen tool catalog, awaitable readonly operation handles, complete outcomes, explicit output/resource selection, background ownership receipts                                                                                                                      | Computation-only budgets between waits, complete authoring/model-default validation, all ordering and cancellation conformance cases                       |
-| rho-web-tools             | Bounded fetch, public-address filtering, HTML conversion and attachments                                                                                                                                                                                                                   | Complete redirect/grant/cancellation conformance and CLI fetch                                                                                             |
-| rho-browser               | Shared Chromium context, per-run tabs and serialization, accessibility snapshot refs, readiness probe, idle cleanup, popup ownership, cancellation isolation, actions/evaluation/PNG attachments                                                                                           | Cross-frame/actionability parity, timeout/crash and popup edge-case conformance on all supported platforms                                                 |
-| rho-mcp                   | Selected OpenCode servers, tool execution and media publication                                                                                                                                                                                                                            | Full tool curation, Agent/Runner transport defaults, declaration budgets, prompt/resource documents, lifecycle and OAuth refresh conformance               |
-| rho-acp                   | Basic editor sessions, prompts, questions, permissions and cancellation                                                                                                                                                                                                                    | Authentication, replay/load/resume/configuration, multimodal/editor filesystem/session-MCP and recovery parity                                             |
-| rho-acp-client            | Configured child launch, prompt, one-shot permission relay                                                                                                                                                                                                                                 | Resident conversation sessions, continuation/auth/model configuration, policy floor, transcripts and cancellation lifecycle                                |
-| rho-ingress-telegram      | Allowlisted private chats, attachments, basic controls and persisted pending delivery                                                                                                                                                                                                      | Connections/Bots/groups/topics, durable debounce, access and requester policies, memory/voice and complete delivery recovery                               |
-| rho-t3                    | Host RPC adapter, coding assignment controls, questions and artifacts                                                                                                                                                                                                                      | Owned local service/setup, complete provider selection, persistent handles and uncertain-response reconciliation                                           |
-| rho-dev                   | Runtime management commands                                                                                                                                                                                                                                                                | Development-only conversation inspection/control extension                                                                                                 |
-| rho-webui                 | Replaced by nexus-ui                                                                                                                                                                                                                                                                       | New management screens are outside this port                                                                                                               |
+| Source                    | Implemented                                                                                                                                                                                                                                                                                                      | Remaining                                                                                                                                                  |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rho application           | Pairing, separate credential planes, workspace validation, saved extension activation, shared application admission, frozen retry declarations, input-specific HTTP/fallback following, Human persona operations                                                                                                 | Until recovery, complete follower/approval handling, memory policy/review, remaining management operations                                                 |
+| rho Presets/roles         | Durable seeded catalog, CRUD/duplicates/defaults, portable JSON, published roles, tool/fallback compilation, conversation-only child memory                                                                                                                                                                      | Markdown portability, complete MCP reference curation and publication/default conformance                                                                  |
+| rho Bots                  | Named identities, settings, audience narrowing, duplication, durable creation/switch intents, Home validation, history/current/new/resume/fork, captured input submission                                                                                                                                        | Complete External requester/peer/Subagent policies, ingress connection ownership, full recovery conformance                                                |
+| rho extension packages    | Descriptors, dependencies, staged tool/command registration, schema validation, readiness, cleanup leases, restart-only settings, legacy factory adapter                                                                                                                                                         | Managed immutable package install/check/activate/rollback, persistent source selection, complete hook/document/command APIs, per-field startup diagnostics |
+| rho-env executor          | Direct notification claims, bounded startup admission and cursor sweeps, run/task cancellation, persistent resource leases, schema/role/admission gates, shared refusal floor, renewable claims with delivery headroom, bounded storable results, commit reconciliation/retry, journal recovery, status counters | Captured multi-directory placement, isolation for blocking extension handlers, remaining crash/timeout/platform recovery journeys                          |
+| rho-env files/checkpoints | Basic file/search/shell tools, attachments, partial JSON/Git checkpoint restoration                                                                                                                                                                                                                              | SQLite manifest/content store, capture budgets/retention, full media/skill/process/Git review behavior                                                     |
+| rho-env terminal          | OpenCode PTY adapter, TypeScript ICE/DTLS/SCTP transport, permission channel, output resume/gap window, claim-scoped terminal session                                                                                                                                                                            | Complete browser-to-PTY reconnect/permission-expiry journeys, configurable ICE/TURN/network settings, remote operator integration                          |
+| rho-codemode              | OpenCode interpreter, frozen tool catalog, awaitable readonly operation handles, complete outcomes, explicit output/resource selection, background ownership receipts                                                                                                                                            | Computation-only budgets between waits, complete authoring/model-default validation, all ordering and cancellation conformance cases                       |
+| rho-web-tools             | Bounded fetch, public-address filtering, HTML conversion and attachments                                                                                                                                                                                                                                         | Complete redirect/grant/cancellation conformance and CLI fetch                                                                                             |
+| rho-browser               | Shared Chromium context, per-run tabs and serialization, accessibility snapshot refs, readiness probe, idle cleanup, popup ownership, cancellation isolation, actions/evaluation/PNG attachments                                                                                                                 | Cross-frame/actionability parity, timeout/crash and popup edge-case conformance on all supported platforms                                                 |
+| rho-mcp                   | Selected OpenCode servers, tool execution and media publication                                                                                                                                                                                                                                                  | Full tool curation, Agent/Runner transport defaults, declaration budgets, prompt/resource documents, lifecycle and OAuth refresh conformance               |
+| rho-acp                   | Basic editor sessions, prompts, questions, permissions and cancellation                                                                                                                                                                                                                                          | Authentication, replay/load/resume/configuration, multimodal/editor filesystem/session-MCP and recovery parity                                             |
+| rho-acp-client            | Resident conversation-owned children, explicit continuation and birth workdir, authentication/model selection, row settings/diagnostics, shared permission floor, redacted bounded transcripts, ordinary cancellation quarantine, hard termination, roster/probe/session/log/kill/release commands               | Automatic conversation-ended release, live progress forwarding, complete crash/process-tree/platform lifecycle conformance                                 |
+| rho-ingress-telegram      | Allowlisted private chats, attachments, basic controls and persisted pending delivery                                                                                                                                                                                                                            | Connections/Bots/groups/topics, durable debounce, access and requester policies, memory/voice and complete delivery recovery                               |
+| rho-t3                    | Host RPC adapter, coding assignment controls, questions and artifacts                                                                                                                                                                                                                                            | Owned local service/setup, complete provider selection, persistent handles and uncertain-response reconciliation                                           |
+| rho-dev                   | Runtime management commands                                                                                                                                                                                                                                                                                      | Development-only conversation inspection/control extension                                                                                                 |
+| rho-webui                 | Replaced by nexus-ui                                                                                                                                                                                                                                                                                             | New management screens are outside this port                                                                                                               |
 
 ## Verification
 
@@ -167,6 +221,13 @@ with one startup slot, cancellation across pool replacement, role/placement
 refusals, lost settlement responses, throttled delivery and credential loss.
 `claim-control.test.ts` controls time for renewal and execution/settlement clocks;
 `claim-result.test.ts` verifies storable values and serialized output bounds.
+
+`acp.test.ts` uses real SDK child processes for resident sessions, ownership,
+authentication/model configuration, fixed placement, probe/kill/release,
+permission tracking, delayed approvals, cancellation quarantine and late output,
+deadline termination, startup retirement, migration and redacted transcript
+publication. `runner-policy.test.ts` checks the shared literal refusal floor;
+`executor.test.ts` also checks it at the native claim boundary.
 
 `presets.test.ts`, `bots.test.ts` and `application.test.ts` exercise the actual
 TypeScript SDK over loopback HTTP, including compare-and-swap conflicts, lost
