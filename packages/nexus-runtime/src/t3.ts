@@ -102,12 +102,12 @@ async function rpc(origin: URL, token: string, method: string, payload: object, 
   }
 }
 
-export function t3Tools(endpoint: string): RunnerTool[] {
+export function t3Tools(endpoint: string, credentials?: { token: string; project: string }): RunnerTool[] {
   const origin = new URL(endpoint)
   if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password)
     throw new Error("Invalid T3 URL.")
-  const token = process.env.OPENCODE_NEXUS_T3_TOKEN
-  const project = process.env.OPENCODE_NEXUS_T3_PROJECT
+  const token = credentials?.token ?? process.env.OPENCODE_NEXUS_T3_TOKEN
+  const project = credentials?.project ?? process.env.OPENCODE_NEXUS_T3_PROJECT
   if (!token || !project) throw new Error("Configure the T3 token and project ID.")
   const string = { type: "string" }
   return [

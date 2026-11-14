@@ -590,6 +590,8 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           "schedules",
           "memory",
           "mcp",
+          "extensions",
+          "configure",
         ]).pipe(Argument.withDefault("status")),
         json: Flag.String("json").pipe(Flag.optional),
         after: Flag.String("after").pipe(Flag.optional),

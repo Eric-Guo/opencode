@@ -17,13 +17,19 @@ import { Schema } from "effect"
 import { atomic, missing, vault } from "./storage"
 import type { HostTools } from "./host"
 export { hostTools } from "./host"
-import { loadExtensions, type RunnerTool } from "./extensions"
+import type { RunnerTool } from "./extensions"
+import { builtinExtensions } from "./builtins"
+import { Configuration } from "./configuration"
+import { ExtensionManager } from "./extension-manager"
+import type { Nexus } from "@opencode/schema/nexus"
 import { Checkpoints } from "./checkpoints"
 export type { NexusExtension, RunnerTool, RunnerContext } from "./extensions"
+export type { ExtensionModule, ExtensionAPI } from "./extension-manager"
+export type { ExtensionDescriptor } from "./configuration"
 import { ClaimJournal } from "./claims"
 import { webSite } from "./web"
 import { HumanLogin } from "./login"
-import { readEffect, serveInbox, tools } from "./runner"
+import { readEffect, RunnerAdmission, serveInbox, tools } from "./runner"
 
 const ModeValues = Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })
 
@@ -68,6 +74,7 @@ export class NexusRuntime {
   private readonly sites = new Set<string>()
   private declaring = Promise.resolve()
   private credentials?: OAuthCredentials
+  private extensionManager?: ExtensionManager
   private statusValue: Status = { state: "unpaired", origin: "", model: "", directory: "", workspace: "" }
 
   constructor(
@@ -211,11 +218,48 @@ export class NexusRuntime {
     const member = new Client({ baseURL: settings.origin, credentialProvider: credentials.provider("member") })
     const options = { baseURL: settings.origin, credentialProvider: credentials.provider("executor") }
     const executor = new ExecutorClient(options)
-    const extensions = await loadExtensions(settings.directory, signal, this.host)
-    const availableTools = [
-      ...tools.filter((tool) => this.host || !["bash", "find", "grep"].includes(tool.name)),
-      ...extensions.map((tool) => tool.definition),
+    const refresh = (role: "agent" | "runner" = "runner") => [
+      ...(role === "runner" ? tools.filter((tool) => this.host || !["bash", "find", "grep"].includes(tool.name)) : []),
+      ...(this.extensionManager?.tools() ?? [])
+        .filter((tool) => (tool.role ?? "runner") === role)
+        .map((tool) => tool.definition),
     ]
+    const applicationTools = () =>
+      refresh("agent").map((tool) => ({
+        type: "function" as const,
+        function: { name: tool.name, description: tool.description ?? undefined, parameters: tool.input_schema },
+      }))
+    this.extensionManager = new ExtensionManager(
+      new Configuration(join(this.storage, "configuration.json")),
+      await builtinExtensions(this.host),
+      settings.directory,
+      signal,
+      async () => {
+        await executor.announce(
+          {
+            services: {
+              agent: { tools: refresh("agent") },
+              runner: { tools: [...refresh(), ...hidden], environment: { root: settings.directory } },
+            },
+          },
+          { signal },
+        )
+
+        const active = this.connection
+
+        if (!active) return
+
+        active.configuration = {
+          ...active.configuration,
+          runner_tool_names: refresh().map((tool) => tool.name),
+          tool_definitions: applicationTools(),
+        }
+        await member.profile.declareConfiguration(
+          { configuration: { ...active.configuration, approval_rules: this.siteRules() } },
+          { signal },
+        )
+      },
+    )
     const hidden = [
       { name: "files_bytes", effect_profile: readEffect },
       { name: "checkpoints", effect_profile: readEffect },
@@ -224,16 +268,19 @@ export class NexusRuntime {
         effect_profile: { ...readEffect, kind: "write" as const, destructive: true, idempotency: "none" as const },
       },
     ]
-    const names = [...availableTools, ...hidden].map((tool) => tool.name)
+    await this.extensionManager.start()
+
+    const names = [...refresh(), ...hidden].map((tool) => tool.name)
     if (new Set(names).size !== names.length) throw new Error("Nexus extensions must provide unique tool names.")
     const checkpoints = new Checkpoints(join(this.storage, "checkpoints", settings.identifier), settings.directory)
     const journal = new ClaimJournal(join(this.storage, "claims", settings.identifier))
     while (!signal.aborted) {
       try {
+        const availableTools = refresh()
         const announced = await executor.announce(
           {
             services: {
-              agent: { tools: [] },
+              agent: { tools: refresh("agent") },
               runner: {
                 tools: [...availableTools, ...hidden],
                 environment: { root: settings.directory },
@@ -305,6 +352,7 @@ export class NexusRuntime {
                 )(imports),
               }
             : {}),
+          tool_definitions: applicationTools(),
           default_model: settings.model,
           approval_mode: "ask",
           prompt_mechanism: "default",
@@ -366,7 +414,7 @@ export class NexusRuntime {
             journal,
             AbortSignal.any([signal, ingress.signal]),
             checkpoints,
-            extensions,
+            () => this.extensionManager?.tools() ?? [],
           )
           if (bot) {
             try {
@@ -396,7 +444,7 @@ export class NexusRuntime {
     journal: ClaimJournal,
     signal: AbortSignal,
     checkpoints: Checkpoints,
-    extensions: readonly RunnerTool[],
+    extensions: () => readonly RunnerTool[],
   ) {
     await journal.recover(executor, signal)
     const socket = new RealtimeClient(options)
@@ -416,6 +464,7 @@ export class NexusRuntime {
         await delay(5000, undefined, { signal: active })
       }
     })().catch(() => {})
+    const admission = new RunnerAdmission(() => wake.abort())
     const programs = new Set<Promise<void>>()
     let failure: unknown
     const background = (work: Promise<void>) => {
@@ -430,7 +479,18 @@ export class NexusRuntime {
     try {
       while (!active.aborted) {
         wake = new AbortController()
-        await serveInbox(executor, id, directory, journal, active, background, this.host, checkpoints, extensions)
+        await serveInbox(
+          executor,
+          id,
+          directory,
+          journal,
+          active,
+          background,
+          this.host,
+          checkpoints,
+          extensions(),
+          admission,
+        )
         await delay(5000, undefined, { signal: AbortSignal.any([active, wake.signal]) }).catch(() => {})
       }
       if (failure) throw failure
@@ -452,6 +512,16 @@ export class NexusRuntime {
           .filter((row) => active.candidates.has(row.public_id))
           .map((row) => ({ id: row.public_id, name: row.display_name || row.public_id })),
       )
+  }
+
+  extensions() {
+    return this.extensionManager?.list() ?? []
+  }
+
+  configureExtension(input: Nexus.ExtensionChange) {
+    if (!this.extensionManager) throw new Error("Nexus is disconnected.")
+
+    return this.extensionManager.change(input)
   }
 
   async modes(workspace: string, conversation: string, patch?: { code_mode?: boolean; subagent?: boolean }) {
@@ -580,6 +650,9 @@ export class NexusRuntime {
   }
 
   async manage(command: typeof NexusCommand.Type, origin?: string, token?: string) {
+    if (command.action === "extension.list") return this.extensions()
+    if (command.action === "extension.configure") return this.configureExtension(command.change)
+
     const active = this.connection
     if (!active || !this.settings) throw new Error("Nexus is disconnected.")
     if (token && origin !== this.settings.origin)
@@ -788,6 +861,8 @@ export class NexusRuntime {
     await this.human.close()
     await this.pending?.catch(() => {})
     await this.work
+    await this.extensionManager?.close()
+    this.extensionManager = undefined
     await this.credentials?.drain()
   }
 }

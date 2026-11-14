@@ -1,4 +1,3 @@
-import { setTimeout as delay } from "node:timers/promises"
 import type { HostTools } from "./host"
 import { constants } from "node:fs"
 import { open, readdir, realpath, mkdir, mkdtemp, rm } from "node:fs/promises"
@@ -17,7 +16,39 @@ import type { Checkpoints } from "./checkpoints"
 import type { RunnerContext, RunnerTool } from "./extensions"
 import type { ClaimJournal } from "./claims"
 import { webFetch } from "./web"
+import { ClaimLease, ClaimOperations } from "./claim-control"
 import { destination, mutate, readText } from "./mutation"
+
+export class RunnerAdmission {
+  private resources = new Map<string, { concurrency: number; active: number }>()
+
+  constructor(private readonly wake: () => void = () => {}) {}
+
+  reserve(tool?: RunnerTool) {
+    if (!tool?.resource) return () => {}
+
+    const policy = tool.resource
+
+    if (!Number.isSafeInteger(policy.concurrency) || policy.concurrency < 1)
+      throw new Error("Resource concurrency must be a positive integer.")
+
+    const resource = this.resources.get(policy.name) ?? { concurrency: policy.concurrency, active: 0 }
+
+    if (resource.concurrency !== policy.concurrency) {
+      if (resource.active) throw new Error("Inconsistent concurrency for " + policy.name)
+      resource.concurrency = policy.concurrency
+    }
+    if (resource.active >= resource.concurrency) return
+
+    this.resources.set(policy.name, resource)
+    resource.active++
+
+    return () => {
+      resource.active--
+      this.wake()
+    }
+  }
+}
 
 const pathInput = {
   type: "object",
@@ -116,7 +147,7 @@ export const tools: AnnouncedTool[] = [
   {
     name: "code",
     description:
-      "Run confined JavaScript with params and the tools declared for this input. tools.read and tools.ls return text. Other tools and nexus.ask return the recorded outcome. Return a JSON result.",
+      "Run confined JavaScript with params and the tools declared for this input. Tool calls and nexus helpers return recorded outcome envelopes. Use text(), value() and resource() to select final output.",
     timeout_ms: 600000,
     effect_profile: { ...mutation, effect_scope: "open" },
     input_schema: {
@@ -191,9 +222,7 @@ async function runClaim(
     const task = executor.inboxTask(row.run_public_id, row.task_key)
     const { context } = await task.operations(claimToken, {}, { signal })
     const { runCode } = await import("./code")
-    return {
-      content: await runCode(row.tool_input.code, row.tool_input.params ?? {}, context.tools, operation, signal),
-    }
+    return runCode(row.tool_input.code, row.tool_input.params ?? {}, context.tools, operation, signal)
   }
   if (row.tool_name === "file_import" && claimToken) {
     if (typeof row.tool_input.upload !== "string") throw new Error("Expected a Nexus upload ID.")
@@ -256,6 +285,15 @@ async function runClaim(
       signal,
       publish,
       ask,
+      ...(claimToken
+        ? {
+            realtime: {
+              read: () => executor.inboxTask(row.run_public_id, row.task_key).realtime(claimToken, { signal }),
+              offer: (input) =>
+                executor.inboxTask(row.run_public_id, row.task_key).offerRealtime(claimToken, input, { signal }),
+            },
+          }
+        : {}),
     })
   if (row.tool_name === "checkpoints" && checkpoints && typeof row.tool_input.run_public_id === "string")
     return checkpoints.records(row.tool_input.run_public_id)
@@ -342,117 +380,110 @@ export async function serveInbox(
   host?: HostTools,
   checkpoints?: Checkpoints,
   extensions: readonly RunnerTool[] = [],
+  admission = new RunnerAdmission(),
 ) {
   const addressed = (row: InboxTask) =>
-    row.kind === "tool_call" && row.addressed_to?.role === "runner" && row.addressed_to.executor_public_id === id
+    row.kind === "tool_call" &&
+    ["agent", "runner"].includes(row.addressed_to?.role ?? "") &&
+    row.addressed_to?.executor_public_id === id
   let after: string | undefined
   do {
     const page = await executor.inbox.list({ after }, { signal })
     for (const row of page.items.filter((row) => !row.claimed && addressed(row))) {
+      const release = admission.reserve(extensions.find((tool) => tool.definition.name === row.tool_name))
+
+      if (!release) continue
+
       const task = executor.inboxTask(row.run_public_id, row.task_key)
       const claim = await task.claim({ signal }).catch((error) => {
         if (error instanceof APIError && error.status === 409) return null
+        release()
         throw error
       })
-      if (!claim) continue
-      const finish = async () => {
-        const deadline = claim.deadline_at ? Date.parse(claim.deadline_at) - Date.now() : 30000
-        if (deadline <= 0) return
-        const active = AbortSignal.any([signal, AbortSignal.timeout(Math.min(Math.ceil(deadline), 2147483647))])
-        const binding = claim.task.executor_context?.["opencode.directory"]
-        const valid =
-          addressed(claim.task) &&
-          claim.task.run_public_id === row.run_public_id &&
-          claim.task.task_key === row.task_key &&
-          (binding === root ||
-            (["files_bytes", "checkpoints", "checkpoint_restore"].includes(claim.task.tool_name ?? "") &&
-              binding === undefined &&
-              !claim.task.conversation_public_id))
-        const record = { run: row.run_public_id, task: row.task_key, token: claim.claim_token }
-        await journal.save(record)
-        const watch = new AbortController()
-        const executing = AbortSignal.any([active, watch.signal])
-        // A shell can outlive a Nexus cancellation notification. Recheck its claim while it runs.
-        const monitor = (async () => {
-          while (!executing.aborted) {
-            await delay(750, undefined, { signal: executing })
-            if (!(await task.claimStatus(claim.claim_token, { signal: executing })).active) watch.abort()
-          }
-        })().catch(() => watch.abort())
-        const operation = async (key: string, request: JsonObject) => {
-          const accepted = await task.submit(
-            { claim_token: claim.claim_token, operation: { key, request } },
-            { signal: executing },
-          )
-          if (accepted.refusal) throw new Error(accepted.refusal.message)
-          let position = accepted.position
-          while (!executing.aborted) {
-            const read = await task.observe({ claim_token: claim.claim_token, after: position }, { signal: executing })
-            position = read.position
-            if (read.observation?.key === key) return read.observation.outcome
-            await delay(250, undefined, { signal: executing })
-          }
-          throw new Error("Claim cancelled.")
-        }
-        const ask = async (key: string, prompt: string, options?: string[]) => {
-          const result = await operation(key, {
-            kind: "ask",
-            input: { prompt, ...(options?.length ? { options } : {}) },
-          })
-          if (
-            !result ||
-            typeof result !== "object" ||
-            Array.isArray(result) ||
-            result.status !== "completed" ||
-            result.is_error ||
-            !Array.isArray(result.content)
-          )
-            throw new Error("Question was not answered.")
-          return result.content
-            .flatMap((block) =>
-              block &&
-              typeof block === "object" &&
-              !Array.isArray(block) &&
-              block.type === "text" &&
-              typeof block.text === "string"
-                ? [block.text]
-                : [],
-            )
-            .join("\n")
-        }
-        const result = valid
-          ? await runClaim(
-              executor,
-              claim.task,
-              root,
-              executing,
-              host,
-              checkpoints,
-              extensions,
-              ask,
-              claim.claim_token,
-              operation,
-            ).then(
-              (result) => ({ ...result, outcome: "completed" as const }),
-              (cause) => ({
-                content: cause instanceof Error ? cause.message : "Runner tool failed",
-                outcome: "completed" as const,
-                is_error: true,
-              }),
-            )
-          : { content: "This claim does not match the captured runner directory.", outcome: "failed" as const }
-        watch.abort()
-        await monitor
-        await journal.save({ ...record, result })
-        if (signal.aborted) return
-        if (!active.aborted && (await task.claimStatus(claim.claim_token, { signal: active })).active) {
-          await task.commit({ claim_token: claim.claim_token, ...result }, { signal: active })
-        }
-        await journal.remove(record)
+      if (!claim) {
+        release()
+        continue
       }
-      // Keep consuming child claims while a Code Mode program awaits their recorded outcomes.
-      if (claim.task.tool_name === "code") background(finish())
-      else await finish()
+      const finish = async () => {
+        const extension = extensions.find((tool) => tool.definition.name === claim.task.tool_name)
+        const lease = new ClaimLease(task, claim, signal, !extension?.internalTimeout)
+        const active = lease.signal
+        lease.start()
+        try {
+          const binding = claim.task.executor_context?.["opencode.directory"]
+          const valid =
+            addressed(claim.task) &&
+            claim.task.run_public_id === row.run_public_id &&
+            claim.task.task_key === row.task_key &&
+            (binding === root ||
+              (extension?.role === "agent" && binding === undefined) ||
+              (["files_bytes", "checkpoints", "checkpoint_restore"].includes(claim.task.tool_name ?? "") &&
+                binding === undefined &&
+                !claim.task.conversation_public_id))
+          const record = { run: row.run_public_id, task: row.task_key, token: claim.claim_token }
+          await journal.save(record)
+          const executing = active
+          const operations = new ClaimOperations(task, claim.claim_token, executing)
+          const operation = (key: string, request: JsonObject) => operations.invoke(key, request)
+          const ask = async (key: string, prompt: string, options?: string[]) => {
+            const result = await operation(key, {
+              kind: "ask",
+              input: { prompt, ...(options?.length ? { options } : {}) },
+            })
+            if (
+              !result ||
+              typeof result !== "object" ||
+              Array.isArray(result) ||
+              result.status !== "completed" ||
+              result.is_error ||
+              !Array.isArray(result.content)
+            )
+              throw new Error("Question was not answered.")
+            return result.content
+              .flatMap((block) =>
+                block &&
+                typeof block === "object" &&
+                !Array.isArray(block) &&
+                block.type === "text" &&
+                typeof block.text === "string"
+                  ? [block.text]
+                  : [],
+              )
+              .join("\n")
+          }
+          const result = valid
+            ? await runClaim(
+                executor,
+                claim.task,
+                root,
+                executing,
+                host,
+                checkpoints,
+                extensions,
+                ask,
+                claim.claim_token,
+                operation,
+              ).then(
+                (result) => ({ ...result, outcome: "completed" as const }),
+                (cause) => ({
+                  content: cause instanceof Error ? cause.message : "Runner tool failed",
+                  outcome: "completed" as const,
+                  is_error: true,
+                }),
+              )
+            : { content: "This claim does not match the captured runner directory.", outcome: "failed" as const }
+          await journal.save({ ...record, result })
+          if (signal.aborted) return
+          if (!active.aborted && (await task.claimStatus(claim.claim_token, { signal: active })).active) {
+            await task.commit({ claim_token: claim.claim_token, ...result }, { signal: active })
+          }
+          await journal.remove(record)
+        } finally {
+          await lease.close()
+        }
+      }
+      // Every yielding handler leaves the inbox available to its children and other conversations.
+      background(finish().finally(release))
     }
     after = page.next_after ?? undefined
   } while (after !== undefined)

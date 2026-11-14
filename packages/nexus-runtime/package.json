@@ -31,15 +31,17 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "1.6.0",
     "@cybros/agent": "file:./vendor/cybros-agent-0.1.0.tgz",
-    "@opencode/core": "workspace:*",
     "@opencode/codemode": "workspace:*",
+    "@opencode/core": "workspace:*",
     "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
     "effect": "catalog:",
     "ipaddr.js": "^2.2.0",
+    "werift": "0.27.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@opencode/util": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:"

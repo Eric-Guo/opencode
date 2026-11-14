@@ -315,6 +315,9 @@ import type {
   DebugAgentToolsOutput,
   DebugAgentExecuteToolInput,
   DebugAgentExecuteToolOutput,
+  ExperimentalNexusExtensionsOutput,
+  ExperimentalNexusConfigureExtensionInput,
+  ExperimentalNexusConfigureExtensionOutput,
   ExperimentalNexusStatusOutput,
   ExperimentalNexusPairInput,
   ExperimentalNexusPairOutput,
@@ -1761,6 +1764,29 @@ export function make(options: ClientOptions) {
           ).then((value) => value.data),
       },
       nexus: {
+        extensions: (requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusExtensionsOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/nexus/extensions`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        configureExtension: (input: ExperimentalNexusConfigureExtensionInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalNexusConfigureExtensionOutput>(
+            {
+              method: "PATCH",
+              path: `/api/experimental/nexus/extensions/configuration`,
+              body: { id: input["id"], enabled: input["enabled"], operations: input["operations"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
         status: (requestOptions?: RequestOptions) =>
           request<ExperimentalNexusStatusOutput>(
             {
@@ -3114,6 +3140,10 @@ export function make(options: ClientOptions) {
     },
     /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
     nexus: {
+      /** @deprecated Use `client.experimental.nexus.extensions`. Removed in the next minor. */
+      extensions: client.experimental.nexus.extensions,
+      /** @deprecated Use `client.experimental.nexus.configureExtension`. Removed in the next minor. */
+      configureExtension: client.experimental.nexus.configureExtension,
       /** @deprecated Use `client.experimental.nexus.status`. Removed in the next minor. */
       status: client.experimental.nexus.status,
       /** @deprecated Use `client.experimental.nexus.pair`. Removed in the next minor. */
