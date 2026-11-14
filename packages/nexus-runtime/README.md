@@ -100,6 +100,15 @@ handler. Commands and tools share registration validation and retirement leases;
 a failed candidate publishes neither. Reads and calls use the loaded instance
 immediately.
 
+## ACP editor surface
+
+`opencode nexus acp` exposes Nexus conversations over ACP. `--mode ask|bypass|rules`,
+`--model provider/model` and `--runner EXECUTOR_ID` seed new sessions. Saved model
+and approval choices win on load/resume. The surface advertises built-in commands
+and discovered skills, captures editor roots, and submits through shared runtime
+admission with the signed-in Human credential. Closing the client releases its
+editor filesystem and MCP attachments while accepted work remains owned by Nexus.
+
 ## ACP delegation
 
 Configure coding agents through `nexus.acp-client`. Each row needs a launch command
@@ -174,7 +183,14 @@ Agent admission and recovery. Supply a stable operation `key` for mutations.
 Submission saves the original model, fallbacks, agent configuration, tools and
 executor contexts before posting the input. Retrying that key after an uncertain
 response uses the saved declaration; a changed request with the same key fails.
-Bot input retries retain their original conversation after a switch. The exported
+Bot input retries retain their original conversation after a switch.
+`application.prepare` takes the same fields as `application.submit` and captures
+policy plus `turn.author` output without posting an input. Submit the same key and
+fields to reuse that capture, including after a restart. Human surfaces pass their
+credential through `x-nexus-origin` and `x-nexus-member-token`; admission preserves
+the Human author and rejects reuse by another principal. The UI bridge keeps only
+a request-bound preparation ticket; the runtime owns the captured declaration.
+`application.skills` returns the available skill names and descriptions for ACP. The exported
 application follower recovers the requested input and its fallback chain through
 SDK HTTP replay, independently of realtime delivery. Persona read/write/reset
 uses the separately stored Human platform credential established by `nexus login`.
@@ -345,6 +361,9 @@ hosted by OpenCode's managed service; the Rho web UI is replaced by `nexus-ui`.
 | rho-t3                    | Native service setup, provider catalog and authentication, persistent assignment handles, uncertain launch reconciliation, fork isolation and callbacks                                                                        |
 | rho-dev                   | Source-only development extension and CLI over shared application operations                                                                                                                                                   |
 | rho-webui                 | Replaced by `packages/nexus-ui`                                                                                                                                                                                                |
+
+See [the behavioral correspondence ledger](PARITY.md) for reference contracts,
+production owners, executable evidence and intentional OpenCode substitutions.
 
 ## Capability verification
 

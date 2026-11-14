@@ -1,4 +1,4 @@
-import type { Client, CreateInput, JsonObject, RequestOptions } from "@cybros/agent"
+import { APIError, type Client, type CreateInput, type JsonObject, type RequestOptions } from "@cybros/agent"
 import { Schema } from "effect"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
@@ -95,13 +95,39 @@ export class InputAdmissions {
   ) {
     const body = await this.capture(input, prepare)
 
-    const receipt = await author
-      .workspace(input.workspace)
-      .conversation(input.conversation)
-      .inputs.create(body, { ...options, idempotencyKey: input.key })
-    await this.documents.get(input.key)!.change((state) => ({ ...state!, input: receipt.input.public_id }))
+    const create = (body: CreateInput) =>
+      author
+        .workspace(input.workspace)
+        .conversation(input.conversation)
+        .inputs.create(body, {
+          ...options,
+          idempotencyKey: input.key,
+        })
+    const receipt = await create(body).catch(async (error: unknown) => {
+      if (
+        body.approval_mode !== "ask" ||
+        !(error instanceof APIError) ||
+        !(
+          (error.code === "validation_failed" && error.message.includes("only tightens the declaring profile")) ||
+          error.code === "idempotency_envelope_mismatch"
+        )
+      )
+        throw error
+
+      // A stricter declaring profile refuses ask before accepting an input. Persist the
+      // tightened envelope so retries after a lost rules response use the same bytes.
+      const tightened = await this.documents.get(input.key)!.change((state) => ({
+        ...state!,
+        body: { ...state!.body, approval_mode: "rules" as const },
+      }))
+
+      return create(tightened.body)
+    })
+    const accepted = await this.documents
+      .get(input.key)!
+      .change((state) => ({ ...state!, input: receipt.input.public_id }))
     if (receipt.input.state !== "blocked")
-      void this.submitted?.(input, receipt.input.public_id, body, receipt.replayed).catch(() => {})
+      void this.submitted?.(input, receipt.input.public_id, accepted.body, receipt.replayed).catch(() => {})
     return receipt
   }
 

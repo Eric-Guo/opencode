@@ -36,6 +36,33 @@ type Preparation = {
   executor_contexts?: Record<string, JsonObject>
 }
 
+export type ApplicationInput = {
+  workspace: string
+  conversation: string
+  key: string
+  principal?: string
+  target?: string
+  text: string
+  instructions?: string
+  approval?: "bypass" | "ask" | "rules"
+  deliver_at?: string
+  answering_user_public_id?: string
+  addressed?: boolean
+  deliver_in?: string
+  reasoning_effort?: string
+  reasoning_enabled?: boolean
+  side?: boolean
+  attachments?: readonly string[]
+  until?: { command: string; attempts?: number; directory?: string }
+  model?: string
+  preset?: string
+  delivery?: CreateInput["delivery_mode"]
+  executor_contexts?: Record<string, JsonObject>
+  tools?: readonly string[]
+  prepared?: Awaited<ReturnType<NexusApplication["prepare"]>>
+  preparation?: () => Promise<Preparation>
+}
+
 /** Surface-independent admission and following. Nexus remains the durable execution owner. */
 export class NexusApplication {
   readonly titles: ConversationTitles
@@ -330,45 +357,26 @@ export class NexusApplication {
     return result
   }
 
-  async submit(
-    input: {
-      workspace: string
-      conversation: string
-      key: string
-      text: string
-      instructions?: string
-      approval?: "bypass" | "ask" | "rules"
-      deliver_at?: string
-      answering_user_public_id?: string
-      addressed?: boolean
-      deliver_in?: string
-      reasoning_effort?: string
-      reasoning_enabled?: boolean
-      side?: boolean
-      attachments?: readonly string[]
-      until?: { command: string; attempts?: number; directory?: string }
-      model?: string
-      preset?: string
-      delivery?: CreateInput["delivery_mode"]
-      executor_contexts?: Record<string, JsonObject>
-      tools?: readonly string[]
-      prepared?: Awaited<ReturnType<NexusApplication["prepare"]>>
-      preparation?: () => Promise<Preparation>
-    },
-    author = this.member,
-    options: RequestOptions = {},
-  ) {
+  async submit(input: ApplicationInput, author = this.member, options: RequestOptions = {}) {
     return this.admissions.submit(
-      {
-        ...input,
-        request: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))(
-          JSON.stringify({ ...input, prepared: undefined, preparation: undefined }),
-        ),
-      },
+      this.admissionRequest(input),
       () => this.admit(input, author, options),
       author,
       options,
     )
+  }
+
+  captureInput(input: ApplicationInput, author = this.member, options: RequestOptions = {}) {
+    return this.admissions.capture(this.admissionRequest(input), () => this.admit(input, author, options))
+  }
+
+  private admissionRequest(input: ApplicationInput) {
+    return {
+      ...input,
+      request: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))(
+        JSON.stringify({ ...input, prepared: undefined, preparation: undefined }),
+      ),
+    }
   }
 
   private async admit(input: Parameters<NexusApplication["submit"]>[0], author: Client, options: RequestOptions) {
@@ -587,6 +595,7 @@ export class NexusApplication {
           ? { model: { model: input.model } }
           : {}),
       delivery_mode: input.delivery,
+      expected_steering_run_public_id: input.target,
       executor_contexts,
       ...(acceptance
         ? {
