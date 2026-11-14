@@ -125,6 +125,18 @@ export class HumanLogin {
     return { id: profile.member.public_id, role: profile.member.role }
   }
 
+  async platform(origin: string) {
+    const credentials = await this.credentials(origin)
+
+    if (!credentials) throw new Error("Sign in to Nexus as a Human first.")
+
+    const client = new PlatformClient({ baseURL: origin, credentialProvider: credentials.provider("platform") })
+
+    if ((await client.profile.fetch()).member.kind !== "human") throw new Error("Expected a Human Nexus account.")
+
+    return client
+  }
+
   async logout(origin: string) {
     await this.close()
     const credentials = await this.credentials(origin)
