@@ -90,6 +90,47 @@ test("a claim without a deadline is observed without inventing an execution time
   }
 })
 
+test("unstarted isolated work cannot renew a claim until its worker acknowledges execution", async () => {
+  const fixture = await executorFixture()
+  fixture.add("run", "waiting", "probe")
+  fixture.add("run", "started", "probe")
+  const waitingTask = fixture.client.inboxTask("run", "waiting")
+  const startedTask = fixture.client.inboxTask("run", "started")
+  const waiting = new ClaimLease(
+    waitingTask,
+    await waitingTask.claim(),
+    new AbortController().signal,
+    true,
+    60000,
+    false,
+  )
+  const started = new ClaimLease(
+    startedTask,
+    await startedTask.claim(),
+    new AbortController().signal,
+    true,
+    60000,
+    false,
+  )
+  try {
+    started.executionStarted()
+    setSystemTime(Math.min(waiting.deadlineAt, started.deadlineAt) - 20000)
+    await waiting.maintain()
+    await started.maintain()
+    expect(fixture.calls.filter((call) => call.path.endsWith("/extend")).map((call) => call.path)).toEqual([
+      expect.stringContaining("/started/extend"),
+    ])
+    setSystemTime(waiting.deadlineAt + 1)
+    await waiting.maintain()
+    waiting.executionStarted()
+    expect(waiting.signal.aborted).toBe(true)
+    expect(fixture.calls.filter((call) => call.path.endsWith("/extend"))).toHaveLength(1)
+  } finally {
+    await Promise.all([waiting.close(), started.close()])
+    await fixture.close()
+  }
+})
+
 test("resource permits stay held until real release and wake blocked inbox work", () => {
   const wakes: string[] = []
   const admission = new RunnerAdmission(() => wakes.push("wake"))

@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test"
-import { OutputWindow, RealtimePeer } from "../src/realtime"
+import { OutputWindow, RealtimeLease, RealtimePeer } from "../src/realtime"
 import { browserTools } from "../src/browser"
 import { tmpdir } from "node:os"
 import { Schema } from "effect"
+import { APIError } from "@cybros/agent"
 
 test("terminal output resumes with explicit gaps for uncaptured or evicted bytes", () => {
   const window = new OutputWindow(8)
@@ -17,6 +18,37 @@ test("terminal output resumes with explicit gaps for uncaptured or evicted bytes
   expect(() => window.frame(100)).toThrow("resume")
   window.clear()
   expect(window.frame(14)).toEqual({ type: "gap", from: 14, to: 17 })
+})
+
+test("terminal permission expires from request start and cannot revive a replaced or refused connection", () => {
+  const lease = new RealtimeLease()
+  const snapshot = {
+    status: "active",
+    reason: null,
+    connection_id: "first",
+    offer_sdp: null,
+    answer_sdp: null,
+    max_age_ms: 1000,
+  }
+  lease.begin("first")
+  lease.accept("first", snapshot, performance.now() - 2000)
+  expect(lease.allowed).toBe(false)
+  lease.accept("first", snapshot, performance.now())
+  expect(lease.allowed).toBe(true)
+  expect(lease.remaining).toBeLessThanOrEqual(1000)
+  lease.begin("second")
+  lease.accept("first", snapshot, performance.now())
+  expect(lease.allowed).toBe(false)
+  expect(lease.closed).toBe(false)
+  lease.accept("second", snapshot, performance.now())
+  expect(lease.closed).toBe(true)
+  expect(() => lease.begin("third")).toThrow("closed")
+  const refusal = new RealtimeLease()
+  refusal.begin("first")
+  refusal.accept("first", snapshot, performance.now())
+  refusal.unavailable(new APIError("not claimant", 409, "not_claimant", null, null, null))
+  expect(refusal.closed).toBe(true)
+  expect(refusal.remaining).toBe(0)
 })
 
 // Real ICE/DTLS/SCTP negotiation establishes that no Go or native WebRTC addon is required.
