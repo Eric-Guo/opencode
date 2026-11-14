@@ -324,6 +324,8 @@ import type {
   DebugAgentToolsOutput,
   DebugAgentExecuteToolInput,
   DebugAgentExecuteToolOutput,
+  ExperimentalNexusRunInput,
+  ExperimentalNexusRunOutput,
   ExperimentalNexusExtensionsOutput,
   ExperimentalNexusConfigureExtensionInput,
   ExperimentalNexusConfigureExtensionOutput,
@@ -2061,6 +2063,30 @@ const adaptGroupDebug = (raw: RawClient["server.debug"]) => ({
   agent: { tools: EndpointDebugAgentTools(raw), executeTool: EndpointDebugAgentExecuteTool(raw) },
 })
 
+const EndpointExperimentalNexusRun = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusRunInput) =>
+  preserveStream<ExperimentalNexusRunOutput>()(
+    Stream.unwrap(
+      raw["nexus.run"]({
+        payload: {
+          key: input["key"],
+          prompt: input["prompt"],
+          model: input["model"],
+          runner: input["runner"],
+          agent: input["agent"],
+          instructions: input["instructions"],
+          directory: input["directory"],
+          attachments: input["attachments"],
+          code_mode: input["code_mode"],
+          timeout_ms: input["timeout_ms"],
+          until: input["until"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
+      ),
+    ),
+  )
+
 const EndpointExperimentalNexusExtensions = (raw: RawClient["server.nexus"]) => () =>
   preserveEffect<ExperimentalNexusExtensionsOutput>()(raw["nexus.extensions"]({}).pipe(Effect.mapError(mapClientError)))
 
@@ -2154,12 +2180,13 @@ const EndpointExperimentalNexusGrant = (raw: RawClient["server.nexus"]) => (inpu
 
 const EndpointExperimentalNexusPolicy = (raw: RawClient["server.nexus"]) => (input: ExperimentalNexusPolicyInput) =>
   preserveEffect<ExperimentalNexusPolicyOutput>()(
-    raw["nexus.policy"]({ payload: { workspace: input["workspace"], conversation: input["conversation"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["nexus.policy"]({
+      payload: { workspace: input["workspace"], conversation: input["conversation"], model: input["model"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const adaptGroupExperimentalNexus = (raw: RawClient["server.nexus"]) => ({
+  run: EndpointExperimentalNexusRun(raw),
   extensions: EndpointExperimentalNexusExtensions(raw),
   configureExtension: EndpointExperimentalNexusConfigureExtension(raw),
   status: EndpointExperimentalNexusStatus(raw),
@@ -2408,6 +2435,8 @@ const adaptClient = (raw: RawClient) => {
     },
     /** @deprecated Use `client.experimental.nexus`. Removed in the next minor. */
     nexus: {
+      /** @deprecated Use `client.experimental.nexus.run`. Removed in the next minor. */
+      run: client.experimental.nexus.run,
       /** @deprecated Use `client.experimental.nexus.extensions`. Removed in the next minor. */
       extensions: client.experimental.nexus.extensions,
       /** @deprecated Use `client.experimental.nexus.configureExtension`. Removed in the next minor. */

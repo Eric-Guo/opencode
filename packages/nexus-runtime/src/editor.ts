@@ -32,8 +32,12 @@ type Session = {
   question?: { decision: ExecutionDecision; execution: InputExecution; transcript: EditorTranscript }
 }
 export type EditorOptions = {
+  open?: () => Promise<string>
+  accepted?: (conversation: string, input: string, text: string, model: string, replayed: boolean) => Promise<void>
+
   authentication?: EditorAuthentication
   setEnvironment?: (conversation: string, binding: Session["bridge"] | null) => Promise<void>
+  codeMode?: (conversation: string) => Promise<boolean>
   setCodeMode?: (conversation: string, enabled: boolean) => Promise<void>
   attachMcp?: (input: {
     conversation: string
@@ -47,8 +51,12 @@ export async function editor(
   stream: Stream,
   status: Status,
   token: string,
-  policy: (conversation: string) => Promise<{
+  policy: (
+    conversation: string,
+    model?: string,
+  ) => Promise<{
     tools: readonly string[]
+    instructions?: string
     agent_configuration?: JsonObject
     model?: string
     fallback_models?: readonly string[]
@@ -413,7 +421,7 @@ export async function editor(
         typeof conversation.metadata["opencode.acp.model"] === "string"
           ? conversation.metadata["opencode.acp.model"]
           : undefined,
-      code: conversation.metadata["opencode.acp.code"] !== false,
+      code: options.codeMode ? await options.codeMode(id) : conversation.metadata["opencode.acp.code"] !== false,
       bridge: bridge.attach(id, roots, peer, state.capabilities),
       grants: new Set(),
       mcp: mcp?.tools ?? [],
@@ -515,14 +523,16 @@ export async function editor(
 
       validateServers(params.mcpServers, !!options.attachMcp)
 
-      const result = await nexus.workspace.conversations.create(
-        {
-          answering_user_public_id: nexus.identity!.agent,
-          default_runner_executor_public_id: nexus.identity!.runner,
-          metadata: { "opencode.surface": "acp", "opencode.acp.cwd": roots[0] },
-        },
-        { signal, idempotencyKey: crypto.randomUUID() },
-      )
+      const result = options.open
+        ? { conversation: { public_id: await options.open() } }
+        : await nexus.workspace.conversations.create(
+            {
+              answering_user_public_id: nexus.identity!.agent,
+              default_runner_executor_public_id: nexus.identity!.runner,
+              metadata: { "opencode.surface": "acp", "opencode.acp.cwd": roots[0] },
+            },
+            { signal, idempotencyKey: crypto.randomUUID() },
+          )
       const id = result.conversation.public_id
 
       return { sessionId: id, ...(await attach(id, roots, params.mcpServers, peer, signal, false)) }
@@ -673,11 +683,12 @@ export async function editor(
             : question
               ? question.execution
               : await (async () => {
-                  const choices = await policy(id)
+                  const choices = await policy(id, session.model)
                   const receipt = await chat.inputs.create(
                     {
                       kind: "direct_reply",
                       ...prompt,
+                      instructions: choices.instructions,
                       model: { model: session.model ?? choices.model ?? nexus.status.model },
                       agent_configuration: choices.agent_configuration,
                       ...(choices.fallback_models ? { fallback_models: [...choices.fallback_models] } : {}),
@@ -696,6 +707,15 @@ export async function editor(
                     { signal, idempotencyKey: crypto.randomUUID() },
                   )
 
+                  void options
+                    .accepted?.(
+                      id,
+                      receipt.input.public_id,
+                      prompt.text ?? "",
+                      session.model ?? choices.model ?? nexus.status.model,
+                      receipt.replayed,
+                    )
+                    .catch(() => {})
                   return chat.inputExecution(receipt.input.public_id)
                 })()
 
