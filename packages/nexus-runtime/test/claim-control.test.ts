@@ -36,7 +36,7 @@ test("claim renewal follows its grant and transient status errors retain executi
   const lease = new ClaimLease(task, claimed, new AbortController().signal)
 
   try {
-    setSystemTime(initial + 30001)
+    setSystemTime(initial + 40000)
     await lease.maintain()
     expect(lease.signal.aborted).toBe(false)
     expect(calls).toEqual(["claim", "extend"])

@@ -8,7 +8,7 @@ import { mcpTools, terminalTools, type NexusExtension } from "./extensions"
 import type { ExtensionModule } from "./extension-manager"
 import { missing } from "./storage"
 
-const Browser = Schema.Struct({ executable: Schema.String })
+const Browser = Schema.Struct({ executable: Schema.String, idle_seconds: Schema.optional(Schema.Number) })
 const ACP = Schema.Struct({ agents: Schema.Record(Schema.String, Schema.Array(Schema.String)) })
 const MCP = Schema.Struct({ servers: Schema.Array(Schema.String) })
 const T3 = Schema.Struct({ url: Schema.String, token: Schema.String, project: Schema.String })
@@ -55,7 +55,10 @@ export async function builtinExtensions(host?: HostTools): Promise<ExtensionModu
         restart_only: true,
         configuration_schema: {
           type: "object",
-          properties: { executable: { type: "string" } },
+          properties: {
+            executable: { type: "string" },
+            idle_seconds: { type: "number", exclusiveMinimum: 0, default: 600 },
+          },
           required: ["executable"],
           additionalProperties: false,
         },
@@ -67,8 +70,14 @@ export async function builtinExtensions(host?: HostTools): Promise<ExtensionModu
         if (!configuration.executable) throw new Error("Configure a Chromium executable before enabling Browser.")
 
         const { browserTools } = await import("./browser")
+        const { BrowserSession } = await import("./browser-session")
+        const session = new BrowserSession(configuration.executable, api.signal, {
+          idle: (configuration.idle_seconds ?? 600) * 1000,
+        })
 
-        browserTools(configuration.executable, api.signal).forEach(api.registerTool)
+        api.onShutdown(() => session.close())
+        await session.check()
+        browserTools(configuration.executable, api.signal, session).forEach(api.registerTool)
       },
     },
     {

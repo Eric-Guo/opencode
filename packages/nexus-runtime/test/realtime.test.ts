@@ -77,8 +77,7 @@ test.skipIf(!chromium)(
           },
         )
 
-      return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ value: Schema.String })))(result.content)
-        .value
+      return Schema.decodeUnknownSync(Schema.String)(result.structured_content)
     }
 
     try {

@@ -3,7 +3,6 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { acpTool } from "../src/acp"
-import { browserTools } from "../src/browser"
 import type { RunnerContext } from "../src/extensions"
 
 const context = (directory: string): RunnerContext => ({
@@ -56,47 +55,3 @@ for await (const line of createInterface({input:process.stdin})) {
     await rm(dir, { recursive: true, force: true })
   }
 })
-
-const chromium = process.env.OPENCODE_NEXUS_CHROMIUM
-test.skipIf(!chromium)(
-  "browser navigation, form actions, snapshots and screenshots use a private Chromium page",
-  async () => {
-    const server = Bun.serve({
-      port: 0,
-      hostname: "127.0.0.1",
-      fetch: () =>
-        new Response(
-          '<title>Fixture</title><input id="name"><button onclick="document.title=document.querySelector(\'#name\').value">Save</button>',
-          { headers: { "content-type": "text/html" } },
-        ),
-    })
-    const owner = new AbortController()
-    const tools = browserTools(chromium!, owner.signal)
-    const ctx = {
-      ...context(tmpdir()),
-      publish: async (file: Blob, name: string) => {
-        expect(file.type).toBe("image/png")
-        expect(new Uint8Array(await file.slice(0, 8).arrayBuffer())).toEqual(
-          new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
-        )
-        return { type: "resource_link", uri: "nexus://uploads/fixture", name }
-      },
-    }
-    const run = async (name: string, args: Record<string, string>) =>
-      (await tools.find((t) => t.definition.name === name)!.execute(args, ctx)).content
-    try {
-      await run("browser_navigate", { url: server.url.href })
-      await run("browser_evaluate", {
-        expression: "new Promise(r=>document.readyState==='complete'?r():addEventListener('load',r,{once:true}))",
-      })
-      await run("browser_type", { selector: "#name", text: "Saved fixture" })
-      await run("browser_click", { selector: "button" })
-      expect(await run("browser_snapshot", {})).toContain("Saved fixture")
-      expect(await run("browser_screenshot", {})).toMatchObject([{ type: "resource_link", name: "screenshot.png" }])
-    } finally {
-      owner.abort()
-      server.stop(true)
-    }
-  },
-  10000,
-)

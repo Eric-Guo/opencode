@@ -79,7 +79,7 @@ export const NexusGroup = HttpApiGroup.make("server.nexus").add(
     }),
     success: Schema.Json,
     error,
-  }).annotateMerge(annotations("manage", "Manage Nexus schedules and memory documents")),
+  }).annotateMerge(annotations("manage", "Manage Nexus application inputs, Presets, Bots, persona, schedules and memory")),
   HttpApiEndpoint.get("nexus.catalog", "/api/experimental/nexus/catalog", {
     query: Schema.Struct({
       kind: Schema.Literals(["schedules", "memory", "mcp"]),
@@ -129,6 +129,9 @@ export const NexusGroup = HttpApiGroup.make("server.nexus").add(
       tools: Schema.Array(Schema.String),
       directory: Schema.NullOr(Schema.String),
       runner: Schema.NullOr(Schema.String),
+      agent_configuration: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+      model: Schema.optional(Schema.String),
+      fallback_models: Schema.optional(Schema.Array(Schema.String)),
     }),
     error,
   }).annotateMerge(annotations("policy", "Prepare this conversation's runner tools")),

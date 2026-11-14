@@ -1,5 +1,5 @@
 import { agent, type Stream } from "@agentclientprotocol/sdk"
-import { Client, type ExecutionDecision, type InputExecution } from "@cybros/agent"
+import { Client, type ExecutionDecision, type InputExecution, type JsonObject } from "@cybros/agent"
 import { realpath } from "node:fs/promises"
 import { setTimeout as delay } from "node:timers/promises"
 import type { Status } from "./runtime"
@@ -8,7 +8,12 @@ export async function editor(
   stream: Stream,
   status: Status,
   token: string,
-  policy: (conversation: string) => Promise<{ tools: readonly string[] }>,
+  policy: (conversation: string) => Promise<{
+    tools: readonly string[]
+    agent_configuration?: JsonObject
+    model?: string
+    fallback_models?: readonly string[]
+  }>,
 ) {
   if (status.state !== "ready" || !status.identity)
     throw new Error("Pair OpenCode before starting the Nexus ACP agent.")
@@ -71,7 +76,9 @@ export async function editor(
                 {
                   kind: "direct_reply",
                   text,
-                  model: { model: status.model },
+                  model: { model: choices.model ?? status.model },
+                  agent_configuration: choices.agent_configuration,
+                  ...(choices.fallback_models ? { fallback_models: [...choices.fallback_models] } : {}),
                   approval_mode: "ask",
                   tool_names: [...choices.tools],
                   executor_contexts: { [identity.runner]: { "opencode.directory": status.directory } },

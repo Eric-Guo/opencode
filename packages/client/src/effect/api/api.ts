@@ -3222,6 +3222,249 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | { readonly action: "preset.list" }
+    | {
+        readonly action: "preset.create"
+        readonly value: {
+          readonly name: string
+          readonly description: string
+          readonly configuration: {
+            readonly system_prompt?: string | null | undefined
+            readonly model?: string | null | undefined
+            readonly model_mode?: "default" | "follow" | undefined
+            readonly fallback_models?: ReadonlyArray<string> | null | undefined
+            readonly tools?: ReadonlyArray<string> | null | undefined
+            readonly runner_tool_names?: ReadonlyArray<string> | null | undefined
+            readonly mcp?:
+              | {
+                  readonly disabled_connections: ReadonlyArray<
+                    | { readonly source: "nexus"; readonly connection_public_id: string }
+                    | { readonly source: "executor"; readonly executor_public_id: string; readonly server_key: string }
+                  >
+                  readonly disabled_tools: ReadonlyArray<
+                    | { readonly source: "nexus"; readonly connection_public_id: string; readonly tool_name: string }
+                    | {
+                        readonly source: "executor"
+                        readonly executor_public_id: string
+                        readonly server_key: string
+                        readonly tool_name: string
+                      }
+                  >
+                }
+              | undefined
+            readonly prompt_template?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly approval_mode?: "bypass" | "ask" | "rules" | null | undefined
+            readonly approval_rules?: ReadonlyArray<{ readonly [x: string]: Schema.Json }> | null | undefined
+            readonly compaction_policy?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly lifecycle_hooks?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly memory_context_limit?:
+              | {
+                  readonly bindings: ReadonlyArray<{
+                    readonly name: "conversation" | "workspace" | "user" | "agent" | "speaker"
+                    readonly source: { readonly scope: "conversation" | "workspace" | "user" | "agent" | "speaker" }
+                    readonly access: "read" | "read_write"
+                  }>
+                }
+              | null
+              | undefined
+            readonly conversation_reach?: "workspace" | "subtree" | null | undefined
+          }
+        }
+      }
+    | {
+        readonly action: "preset.replace"
+        readonly id: string
+        readonly value: {
+          readonly name: string
+          readonly description: string
+          readonly configuration: {
+            readonly system_prompt?: string | null | undefined
+            readonly model?: string | null | undefined
+            readonly model_mode?: "default" | "follow" | undefined
+            readonly fallback_models?: ReadonlyArray<string> | null | undefined
+            readonly tools?: ReadonlyArray<string> | null | undefined
+            readonly runner_tool_names?: ReadonlyArray<string> | null | undefined
+            readonly mcp?:
+              | {
+                  readonly disabled_connections: ReadonlyArray<
+                    | { readonly source: "nexus"; readonly connection_public_id: string }
+                    | { readonly source: "executor"; readonly executor_public_id: string; readonly server_key: string }
+                  >
+                  readonly disabled_tools: ReadonlyArray<
+                    | { readonly source: "nexus"; readonly connection_public_id: string; readonly tool_name: string }
+                    | {
+                        readonly source: "executor"
+                        readonly executor_public_id: string
+                        readonly server_key: string
+                        readonly tool_name: string
+                      }
+                  >
+                }
+              | undefined
+            readonly prompt_template?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly approval_mode?: "bypass" | "ask" | "rules" | null | undefined
+            readonly approval_rules?: ReadonlyArray<{ readonly [x: string]: Schema.Json }> | null | undefined
+            readonly compaction_policy?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly lifecycle_hooks?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly memory_context_limit?:
+              | {
+                  readonly bindings: ReadonlyArray<{
+                    readonly name: "conversation" | "workspace" | "user" | "agent" | "speaker"
+                    readonly source: { readonly scope: "conversation" | "workspace" | "user" | "agent" | "speaker" }
+                    readonly access: "read" | "read_write"
+                  }>
+                }
+              | null
+              | undefined
+            readonly conversation_reach?: "workspace" | "subtree" | null | undefined
+          }
+        }
+      }
+    | { readonly action: "preset.duplicate"; readonly id: string; readonly name: string }
+    | {
+        readonly action:
+          | "preset.read"
+          | "preset.remove"
+          | "preset.unpublish"
+          | "preset.select-main"
+          | "preset.select-default-bot"
+          | "preset.export"
+        readonly id: string
+      }
+    | {
+        readonly action: "preset.publish"
+        readonly id: string
+        readonly role: { readonly name: string; readonly description: string }
+      }
+    | {
+        readonly action: "preset.import"
+        readonly value: {
+          readonly name: string
+          readonly description: string
+          readonly configuration: {
+            readonly system_prompt?: string | null | undefined
+            readonly model?: string | null | undefined
+            readonly model_mode?: "default" | "follow" | undefined
+            readonly fallback_models?: ReadonlyArray<string> | null | undefined
+            readonly tools?: ReadonlyArray<string> | null | undefined
+            readonly runner_tool_names?: ReadonlyArray<string> | null | undefined
+            readonly mcp?:
+              | {
+                  readonly disabled_connections: ReadonlyArray<
+                    | { readonly source: "nexus"; readonly connection_public_id: string }
+                    | { readonly source: "executor"; readonly executor_public_id: string; readonly server_key: string }
+                  >
+                  readonly disabled_tools: ReadonlyArray<
+                    | { readonly source: "nexus"; readonly connection_public_id: string; readonly tool_name: string }
+                    | {
+                        readonly source: "executor"
+                        readonly executor_public_id: string
+                        readonly server_key: string
+                        readonly tool_name: string
+                      }
+                  >
+                }
+              | undefined
+            readonly prompt_template?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly approval_mode?: "bypass" | "ask" | "rules" | null | undefined
+            readonly approval_rules?: ReadonlyArray<{ readonly [x: string]: Schema.Json }> | null | undefined
+            readonly compaction_policy?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly lifecycle_hooks?: { readonly [x: string]: Schema.Json } | null | undefined
+            readonly memory_context_limit?:
+              | {
+                  readonly bindings: ReadonlyArray<{
+                    readonly name: "conversation" | "workspace" | "user" | "agent" | "speaker"
+                    readonly source: { readonly scope: "conversation" | "workspace" | "user" | "agent" | "speaker" }
+                    readonly access: "read" | "read_write"
+                  }>
+                }
+              | null
+              | undefined
+            readonly conversation_reach?: "workspace" | "subtree" | null | undefined
+          }
+        }
+      }
+    | { readonly action: "bot.list" }
+    | {
+        readonly action: "bot.create"
+        readonly name: string
+        readonly description: string
+        readonly display_name?: string | undefined
+        readonly settings: {
+          readonly audience?: "owner" | "external" | undefined
+          readonly home_workspace_public_id?: string | null | undefined
+          readonly preset_public_id?: string | undefined
+          readonly welcome_message?: string | null | undefined
+          readonly subagent?: boolean | undefined
+        }
+      }
+    | {
+        readonly action: "bot.configure"
+        readonly id: string
+        readonly settings: {
+          readonly audience?: "owner" | "external" | undefined
+          readonly home_workspace_public_id?: string | null | undefined
+          readonly preset_public_id?: string | undefined
+          readonly welcome_message?: string | null | undefined
+          readonly subagent?: boolean | undefined
+        }
+        readonly display_name?: string | undefined
+        readonly description?: string | undefined
+      }
+    | {
+        readonly action: "bot.duplicate"
+        readonly id: string
+        readonly name: string
+        readonly audience?: "owner" | "external" | undefined
+      }
+    | {
+        readonly action: "bot.submit"
+        readonly id: string
+        readonly workspace: string
+        readonly conversation: string
+        readonly key: string
+        readonly text: string
+        readonly model?: string | undefined
+        readonly speaker?: string | undefined
+      }
+    | { readonly action: "bot.read" | "bot.remove" | "bot.history"; readonly id: string }
+    | { readonly action: "bot.current" | "bot.new"; readonly id: string; readonly key: string }
+    | {
+        readonly action: "bot.resume"
+        readonly id: string
+        readonly key: string
+        readonly conversation: string
+        readonly workspace: string
+      }
+    | {
+        readonly action: "bot.fork"
+        readonly id: string
+        readonly key: string
+        readonly conversation: string
+        readonly workspace: string
+        readonly turn: string
+        readonly variant?: string | undefined
+      }
+    | { readonly action: "persona.read" }
+    | { readonly action: "persona.reset" }
+    | { readonly action: "persona.write"; readonly content: string }
+    | { readonly action: "application.open"; readonly key: string; readonly title?: string | undefined }
+    | {
+        readonly action: "application.submit"
+        readonly key: string
+        readonly workspace: string
+        readonly conversation: string
+        readonly text: string
+        readonly model?: string | undefined
+        readonly preset?: string | undefined
+        readonly delivery?: "queue" | "steer" | "steer_now" | undefined
+      }
+    | {
+        readonly action: "application.result"
+        readonly workspace: string
+        readonly conversation: string
+        readonly input: string
+      }
     | { readonly action: "extension.list" }
     | {
         readonly action: "extension.configure"
@@ -3348,6 +3591,9 @@ export type ExperimentalNexusPolicyOutput = {
   readonly tools: ReadonlyArray<string>
   readonly directory: string | null
   readonly runner: string | null
+  readonly agent_configuration?: { readonly [x: string]: Schema.Json } | undefined
+  readonly model?: string | undefined
+  readonly fallback_models?: ReadonlyArray<string> | undefined
 }
 export type ExperimentalNexusPolicyOperation<E = never> = (
   input: ExperimentalNexusPolicyInput,
