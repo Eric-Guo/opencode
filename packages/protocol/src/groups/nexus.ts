@@ -1,4 +1,5 @@
 import { NexusCommand, NexusOperator } from "../nexus-command.js"
+import { Nexus } from "@opencode/schema/nexus"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { ForbiddenError, InvalidRequestError, ServiceUnavailableError } from "../errors.js"
@@ -33,6 +34,15 @@ const annotations = (name: string, summary: string) =>
   })
 
 export const NexusGroup = HttpApiGroup.make("server.nexus").add(
+  HttpApiEndpoint.get("nexus.extensions", "/api/experimental/nexus/extensions", {
+    success: Schema.Array(Nexus.Extension),
+    error,
+  }).annotateMerge(annotations("extensions", "Inspect Nexus extension configuration and readiness")),
+  HttpApiEndpoint.patch("nexus.configureExtension", "/api/experimental/nexus/extensions/configuration", {
+    payload: Nexus.ExtensionChange,
+    success: Nexus.ConfigurationResult,
+    error,
+  }).annotateMerge(annotations("configureExtension", "Save Nexus extension configuration and schedule activation")),
   HttpApiEndpoint.get("nexus.status", "/api/experimental/nexus/status", { success: Status, error }).annotateMerge(
     annotations("status", "Get the Nexus connection"),
   ),
