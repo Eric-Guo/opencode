@@ -145,3 +145,104 @@ test("Following recovers the requested input from HTTP after missing events and 
     fixture.server.stop(true)
   }
 })
+
+test("Mainline model inheritance follows settled execution while explicit choices and refreshed defaults retain precedence", async () => {
+  const submitted: { key: string; body: JsonObject }[] = []
+  const state = { settled: false, mainline: "provider/fallback", currentDefault: "provider/primary" }
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: conversationFixture() })
+    if (path.endsWith("/turns"))
+      return Response.json({
+        turns: state.settled
+          ? [
+              {
+                public_id: "turn",
+                input_public_id: "first",
+                position: 1,
+                kind: "direct_reply",
+                role: "assistant",
+                status: "completed",
+                visibility: "visible",
+                created_at: "2026-01-01T00:00:00Z",
+                answering_user_public_id: "main",
+                active_variant: {
+                  public_id: "variant",
+                  source: "original",
+                  status: "completed",
+                  run_public_id: "run",
+                  model: { provider_id: "provider", model_ref: "not-the-mainline" },
+                },
+              },
+            ]
+          : [],
+        pagination: { before_position: null, after_position: null },
+      })
+    if (path.endsWith("/runs/run"))
+      return Response.json({
+        run: {
+          public_id: "run",
+          status: "completed",
+          turn: {
+            public_id: "turn",
+            conversation_public_id: "conversation",
+            status: "completed",
+            model: { model: state.mainline },
+          },
+          tasks: [
+            {
+              key: "member",
+              kind: "model_task",
+              lifetime: "turn",
+              wake: "auto",
+              status: "completed",
+              after: [],
+              waiting_on: [],
+              model: { model: "provider/task-only" },
+            },
+          ],
+        },
+      })
+    if (path.endsWith("/inputs") && request.method === "POST") {
+      const body = (await request.json()) as { input: JsonObject }
+      const key = request.headers.get("idempotency-key")!
+      submitted.push({ key, body: body.input })
+      return Response.json({ input: inputFixture({ ...body.input, public_id: key }) }, { status: 202 })
+    }
+  })
+  const open = () =>
+    new NexusApplication(fixture.client, { workspace: "workspace", agent: "main", runner: "runner" }, () => ({
+      default_model: state.currentDefault,
+    }))
+  const input = { workspace: "workspace", conversation: "conversation", text: "Continue" }
+  try {
+    const first = open()
+    const catalog = await first.presets.catalog()
+    const follow = catalog.presets.find((entry) => entry.configuration.model_mode === "follow")!
+    await first.submit({ ...input, key: "first", preset: follow.public_id })
+    expect(submitted.at(-1)?.body.model).toEqual({ model: "provider/primary" })
+    state.settled = true
+    await open().submit({ ...input, key: "settled", preset: follow.public_id })
+    expect(submitted.at(-1)?.body.model).toEqual({ model: "provider/fallback" })
+    state.mainline = "provider/primary"
+    await open().submit({ ...input, key: "task-switch", preset: follow.public_id })
+    expect(submitted.at(-1)?.body.model).toEqual({ model: "provider/primary" })
+    state.currentDefault = "provider/new-default"
+    await open().submit({ ...input, key: "default" })
+    expect(submitted.at(-1)?.body.model).toEqual({ model: "provider/new-default" })
+    const explicit = { ...input, key: "explicit", model: "provider/explicit" }
+    await open().submit(explicit)
+    state.mainline = "provider/fallback"
+    await open().submit({ ...input, key: "explicit-follow", preset: follow.public_id })
+    expect(submitted.at(-1)?.body).toMatchObject({
+      model: { model: "provider/explicit" },
+      model_selection: { source: "explicit", constraint: "route", model: "provider/explicit" },
+    })
+    await open().submit({ ...input, key: "new-choice", model: "provider/new-choice" })
+    await open().submit(explicit)
+    await open().submit({ ...input, key: "after-replay" })
+    expect(submitted.at(-1)?.body.model).toEqual({ model: "provider/new-choice" })
+  } finally {
+    fixture.server.stop(true)
+  }
+})

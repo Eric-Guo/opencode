@@ -1,5 +1,5 @@
 {
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": { "types": ["bun"], "noUnusedLocals": true, "noUncheckedIndexedAccess": false },
-  "include": ["src", "test"]
+  "include": ["src", "dev", "test"]
 }

@@ -201,6 +201,33 @@ test("Bot identities retain settings and recover switches without redirecting ac
     expect(resumed).toMatchObject({ selected: first.selected })
     expect(conversations.get(first.selected.public_id)?.archived_at).toBeNull()
     await expect(reconnected.command({ action: "bot.new", id, key: "resume" })).rejects.toThrow("another Bot command")
+
+    fault.loseConversation = true
+    const move = { action: "bot.workspace" as const, id, key: "move-home", workspace: "workspace-next" }
+
+    await expect(reconnected.command(move)).rejects.toThrow()
+    expect(await reconnected.command({ action: "bot.read", id })).toMatchObject({
+      settings: { home_workspace_public_id: null },
+      current: first.selected,
+    })
+
+    const restarted = new Bots(
+      fixture.client,
+      new Presets(fixture.client),
+      () => ({ default_model: "provider/model" }),
+      "runner",
+    )
+    const moved = await restarted.command(move)
+
+    expect(moved).toMatchObject({ selected: { workspace_public_id: "workspace-next" }, replayed: true })
+    expect(await restarted.command({ action: "bot.read", id })).toMatchObject({
+      settings: { home_workspace_public_id: "workspace-next" },
+      current: { workspace_public_id: "workspace-next" },
+    })
+    expect(conversations.size).toBe(3)
+    await restarted.command(move)
+    expect(conversations.size).toBe(3)
+    await expect(restarted.command({ ...move, workspace: "other" })).rejects.toThrow("another Bot command")
   } finally {
     fixture.server.stop(true)
   }
