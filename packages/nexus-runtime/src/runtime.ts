@@ -1,3 +1,5 @@
+import { executionSnapshot } from "./execution"
+import { RegisteredAgents } from "./registered-agents"
 import { runnerEnvironment } from "./runner-environment"
 import {
   APIError,
@@ -31,7 +33,16 @@ import { mcpDirectory } from "./preset-mcp"
 import type { Nexus } from "@opencode/schema/nexus"
 import { Checkpoints } from "./checkpoints"
 export type { NexusExtension, RunnerTool, RunnerContext } from "./extensions"
-export type { ExtensionModule, ExtensionAPI } from "./extension-manager"
+export type {
+  ExtensionModule,
+  ExtensionAPI,
+  ToolCall,
+  ToolDecision,
+  ToolResult,
+  ExtensionAgent,
+  ExtensionCommand,
+  ConversationServers,
+} from "./extension-manager"
 export type { ExtensionDescriptor } from "./configuration"
 import { ClaimJournal } from "./claims"
 import { webSite } from "./web"
@@ -105,12 +116,17 @@ export class NexusRuntime {
   private readonly editorSessions = new McpSessions(
     () => this.extensionTools(),
     async (input) => {
-      if (!this.host) throw new Error("Editor MCP requires an OpenCode runtime.")
-      const { mcpSession } = await import("./mcp-session")
-      return mcpSession(input, this.host)
+      const registrar = this.extensionManager?.conversationServers()
+      if (!registrar) throw new Error("No conversation MCP registrar is loaded.")
+      const opened = await registrar(input)
+      if (registrar !== this.extensionManager?.conversationServers()) {
+        await opened.close()
+        throw new Error("The conversation MCP registrar was replaced while opening its servers.")
+      }
+      return opened
     },
     () => this.publish?.() ?? Promise.resolve(),
-    () => this.extensionManager?.list().some((module) => module.id === "nexus.mcp" && module.active) ?? false,
+    () => !!this.extensionManager?.conversationServers(),
   )
   private editorChanges = Promise.resolve()
   private publish?: () => Promise<void>
@@ -394,6 +410,7 @@ export class NexusRuntime {
           function: { name: tool.name, description: tool.description ?? undefined, parameters: tool.input_schema },
           ...(tool.effect_profile ? { effect_profile: { ...tool.effect_profile } } : {}),
         }))
+    const registered = new RegisteredAgents(member)
     const configuration = new Configuration(join(this.storage, "configuration.json"))
     await configuration.restore()
     this.packages = new Packages(this.storage, configuration, this.host)
@@ -416,8 +433,7 @@ export class NexusRuntime {
       this.defaultEnvironment.root,
       signal,
       (this.publish = async () => {
-        if (!this.extensionManager?.list().some((module) => module.id === "nexus.mcp" && module.active))
-          await this.editorSessions.close()
+        if (!this.extensionManager?.conversationServers()) await this.editorSessions.close()
         await executor.announce(
           {
             services: {
@@ -472,6 +488,7 @@ export class NexusRuntime {
           },
           { signal },
         )
+        await registered.sync(this.extensionManager?.agents() ?? [], active.configuration)
       }),
       () => {
         if (!this.connection) throw new Error("Nexus is disconnected.")
@@ -622,6 +639,7 @@ export class NexusRuntime {
                   .map((tool) => tool.definition),
               ),
             {
+              agents: () => this.extensionManager?.agents().map((agent) => agent.name) ?? [],
               author: (draft) => this.extensionManager?.author(draft) ?? Promise.resolve(draft),
               follow: (value) => this.extensionManager?.follow(value) ?? Promise.resolve(undefined),
               bindings: (value) => this.extensionManager?.bindings(value) ?? Promise.resolve([]),
@@ -662,6 +680,7 @@ export class NexusRuntime {
             })
           },
         })
+        await registered.sync(this.extensionManager?.agents() ?? [], configuration)
         this.statusValue = { ...this.view("ready"), identity }
         await this.extensionManager?.emit("member.connected", identity)
         const ingress = new AbortController()
@@ -800,11 +819,7 @@ export class NexusRuntime {
         read: (workspace, anchor) => this.connection?.application.environments.port(workspace, anchor),
         drop: (workspace, anchor, port) => this.connection?.application.environments.dropPort(workspace, anchor, port),
       },
-      result: (row, result) =>
-        this.extensionManager?.toolResult(
-          { workspace: row.workspace_public_id, conversation: row.conversation_public_id, run: row.run_public_id },
-          result,
-        ) ?? Promise.resolve(result),
+      hooks: () => this.extensionManager!.captureTools(),
       wake: () => wake.abort(),
     })
     this.executor = inbox
@@ -937,7 +952,6 @@ export class NexusRuntime {
       instructions: this.adaptations?.hints(model ?? captured.model),
     }
     const assembly = await active.member.tools.assemble({
-      conversation_public_id: conversation,
       default_runner_executor_public_id: runner ?? null,
       configuration: prepared.agent_configuration,
     })
@@ -1285,6 +1299,7 @@ export class NexusRuntime {
         .conversation(command.conversation)
         .inputExecution(command.input)
         .recover()
+        .then(executionSnapshot)
     if (command.action === "application.prepare" || command.action === "application.submit") {
       const conversation = await member.workspace(command.workspace).conversation(command.conversation).fetch()
       const bot = conversation.metadata["opencode.bot"]

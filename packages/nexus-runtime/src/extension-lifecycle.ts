@@ -29,6 +29,7 @@ export type TurnGate = {
   cancel?(): Promise<void> | void
 }
 export type ExtensionLifecycle = {
+  agents?(): readonly string[]
   author(draft: TurnDraft): Promise<TurnDraft>
   follow(value: TurnFollow): Promise<TurnGate | undefined>
   bindings(value: { workspace: string; conversation: string }): Promise<JsonObject[]>

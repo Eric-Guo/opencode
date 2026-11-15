@@ -389,3 +389,34 @@ test("configured secrets are redacted from replies and JSONL capture snapshots",
     await fixture.close()
   }
 })
+
+test("delegated tool calls and plans report redacted progress without becoming assistant text", async () => {
+  const fixture = await acpFixture()
+  const client = new AcpClient(
+    { peer: fixture.row({ env: { CREDENTIAL_TOKEN: "fixture-progress-secret" } }) },
+    { storage: fixture.storage },
+  )
+  const progress: string[] = []
+  try {
+    const work = client.tool()!.execute(
+      { agent: "peer", prompt: "progress" },
+      fixture.context({
+        progress: async (text) => {
+          progress.push(text)
+        },
+      }),
+    )
+    await fixture.wait("progress-sent")
+    await eventually(async () => progress.some((text) => text.includes("Plan [redacted]")))
+    expect(progress.some((text) => text.includes("Inspect [redacted]"))).toBe(true)
+    expect(progress.join("\n")).not.toContain("fixture-progress-secret")
+    fixture.release("progress")
+    const result = await work
+    expect(result.content).toContain("finished")
+    expect(result.content).not.toContain("Plan ")
+  } finally {
+    fixture.release("progress")
+    await client.close()
+    await fixture.close()
+  }
+})

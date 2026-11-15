@@ -16306,6 +16306,10 @@
                   "prompt": {
                     "type": "string"
                   },
+                  "workspace": {
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "model": {
                     "type": "string"
                   },
@@ -16425,6 +16429,55 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "commands": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "command_details": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "input_schema": {}
+                          },
+                          "required": ["name"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "agents": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "requires": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "source": {},
+                      "webui": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "string"
+                          },
+                          "entry": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["version", "entry"],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -17460,6 +17513,51 @@
             "application/json": {
               "schema": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["workspace.list"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["workspace.create"]
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "name", "key"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["workspace.use"]
+                      },
+                      "workspace": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "workspace"],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -18803,10 +18901,30 @@
                     "properties": {
                       "action": {
                         "type": "string",
-                        "enum": ["bot.read", "bot.remove", "bot.history"]
+                        "enum": ["bot.read", "bot.remove"]
                       },
                       "id": {
                         "type": "string"
+                      }
+                    },
+                    "required": ["action", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["bot.history"]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "after": {
+                        "type": "string"
+                      },
+                      "archived": {
+                        "type": "boolean"
                       }
                     },
                     "required": ["action", "id"],
@@ -19021,6 +19139,43 @@
                     "properties": {
                       "action": {
                         "type": "string",
+                        "enum": ["application.approve"]
+                      },
+                      "workspace": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "conversation": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "run": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "task": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "always": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action", "workspace", "conversation", "run", "task"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
                         "enum": ["persona.read"]
                       }
                     },
@@ -19058,6 +19213,17 @@
                       "action": {
                         "type": "string",
                         "enum": ["application.open"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "key": {
                         "type": "string",
@@ -19265,6 +19431,104 @@
                     "properties": {
                       "action": {
                         "type": "string",
+                        "enum": ["extension.asset"]
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["action", "id", "version", "path"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["application.operation"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "operation": {}
+                    },
+                    "required": ["action", "operation"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["platform.request"]
+                      },
+                      "principal": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "method": {
+                        "type": "string",
+                        "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+                      },
+                      "body": {
+                        "anyOf": [
+                          {},
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "key": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action", "principal", "path", "method"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["login.device"]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
                         "enum": ["extension.configure"]
                       },
                       "change": {
@@ -19359,7 +19623,94 @@
                     "properties": {
                       "action": {
                         "type": "string",
+                        "enum": ["schedule.list"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "conversation": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "after": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["memory.collections"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
                         "enum": ["schedule.create"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "approval": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "rules", "bypass"]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "conversation": {
                         "type": "string"
@@ -19453,6 +19804,17 @@
                           "schedule.executions"
                         ]
                       },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "conversation": {
                         "type": "string"
                       },
@@ -19470,6 +19832,17 @@
                         "type": "string",
                         "enum": ["schedule.update"]
                       },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "conversation": {
                         "type": "string"
                       },
@@ -19480,6 +19853,27 @@
                         "type": "integer",
                         "minimum": -9007199254740991,
                         "maximum": 9007199254740991
+                      },
+                      "name": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "approval": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "rules", "bypass"]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "prompt": {
                         "type": "string"
@@ -19551,6 +19945,17 @@
                       },
                       "name": {
                         "type": "string"
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     },
                     "required": ["action", "name"],
@@ -19562,6 +19967,17 @@
                       "action": {
                         "type": "string",
                         "enum": ["memory.list", "memory.read", "memory.grep"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "collection": {
                         "type": "string"
@@ -19596,6 +20012,17 @@
                       "action": {
                         "type": "string",
                         "enum": ["memory.write"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "collection": {
                         "type": "string"
@@ -19639,6 +20066,17 @@
                         "type": "string",
                         "enum": ["memory.delete"]
                       },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "collection": {
                         "type": "string"
                       },
@@ -19663,6 +20101,17 @@
                       "action": {
                         "type": "string",
                         "enum": ["memory.archive", "memory.restore"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "collection": {
                         "type": "string"

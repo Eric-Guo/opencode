@@ -62,3 +62,47 @@ test("stdio MCP serializes requests, leaves queued cancellation isolated, and po
     await first
   }
 })
+
+test("HTTP OAuth requests serialize while anonymous HTTP remains concurrent", async () => {
+  const row = mcpSettings({ remote: { transport: "http", url: "https://example.test", tools: ["*"] } }, "/project")
+    .rows[0]
+  const exchange = mcpExchange(
+    { servers: () => Effect.succeed([]), connect: () => Effect.void, disconnect: () => Effect.void },
+    row,
+  )
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const events: string[] = []
+  row.oauth = true
+  const first = exchange(
+    () =>
+      Effect.promise(async () => {
+        events.push("first")
+        entered.resolve()
+        await release.promise
+      }),
+    new AbortController().signal,
+  )
+  await entered.promise
+  const second = exchange(
+    () =>
+      Effect.sync(() => {
+        events.push("second")
+      }),
+    new AbortController().signal,
+  )
+  await Effect.runPromise(Effect.yieldNow)
+  expect(events).toEqual(["first"])
+  row.oauth = false
+  await exchange(
+    () =>
+      Effect.sync(() => {
+        events.push("anonymous")
+      }),
+    new AbortController().signal,
+  )
+  expect(events).toEqual(["first", "anonymous"])
+  release.resolve()
+  await Promise.all([first, second])
+  expect(events).toEqual(["first", "anonymous", "second"])
+})

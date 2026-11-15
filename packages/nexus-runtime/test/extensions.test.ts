@@ -294,3 +294,227 @@ test("restart-only changes persist without replacing active resources", async ()
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test("tool hooks retain their pair across replacement and isolate gates and observer failures", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-tool-hooks-"))
+  const seen: string[] = []
+  const manager = new ExtensionManager(
+    new Configuration(join(directory, "settings.json")),
+    [],
+    directory,
+    new AbortController().signal,
+    async () => {},
+  )
+  const module = (label: string): ExtensionModule => ({
+    descriptor,
+    register(api) {
+      api.onShutdown(() => {
+        seen.push(label + ":closed")
+      })
+      api.on("experimental.tool.call", (call) => {
+        seen.push(label + ":before")
+        if (call.input.veto) return { veto: "refused" }
+        if (call.input.fail) throw new Error("gate failed")
+        return { rewrite: { value: label } }
+      })
+      api.on("experimental.tool.result", (call) => {
+        seen.push(label + ":after")
+        return { ...call.result, content: label }
+      })
+      api.on("experimental.tool.result", () => {
+        throw new Error("observer failed")
+      })
+    },
+  })
+  const call = {
+    tool: definition("probe", "Probe", {}, []),
+    input: {},
+    context: {
+      directory,
+      workspace: "w",
+      conversation: "c",
+      run: "r",
+      task: "t",
+      signal: new AbortController().signal,
+    },
+  }
+  try {
+    await manager.start()
+    await manager.replace(module("old"), {
+      enabled: true,
+      configuration: descriptor.defaults,
+      source: { kind: "package" },
+    })
+    const captured = manager.captureTools()
+    expect(await captured.before(call)).toEqual({ input: { value: "old" } })
+    await manager.replace(module("new"), {
+      enabled: true,
+      configuration: descriptor.defaults,
+      source: { kind: "package" },
+    })
+    expect(seen).not.toContain("old:closed")
+    expect(
+      await captured.after({ ...call, result: { content: "original", metadata: { checkpoint: "kept" } } }),
+    ).toEqual({ content: "old", metadata: { checkpoint: "kept" } })
+    captured.release()
+    const next = manager.captureTools()
+    expect(await next.before(call)).toEqual({ input: { value: "new" } })
+    expect(await next.before({ ...call, input: { veto: true } })).toEqual({ veto: "refused" })
+    expect(await next.before({ ...call, input: { fail: true } })).toMatchObject({
+      veto: expect.stringContaining("blocked by fixture"),
+    })
+    next.release()
+    expect(seen.filter((entry) => entry.endsWith(":before") || entry.endsWith(":after"))).toEqual([
+      "old:before",
+      "old:after",
+      "new:before",
+      "new:before",
+      "new:before",
+    ])
+  } finally {
+    await manager.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("staged startup, backgrounds, agents, commands and MCP registrars share publication and retirement", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-registrations-"))
+  const running = Promise.withResolvers<void>()
+  const stopped = Promise.withResolvers<void>()
+  const events: string[] = []
+  const manager = new ExtensionManager(
+    new Configuration(join(directory, "settings.json")),
+    [],
+    directory,
+    new AbortController().signal,
+    async () => {},
+  )
+  const module: ExtensionModule = {
+    descriptor,
+    register(api) {
+      api.onStartup(() => {
+        events.push("startup")
+      })
+      api.background("poller", async (signal) => {
+        expect(manager.agents()).toHaveLength(1)
+        running.resolve()
+        await new Promise<void>((resolve) =>
+          signal.addEventListener(
+            "abort",
+            () => {
+              stopped.resolve()
+              resolve()
+            },
+            { once: true },
+          ),
+        )
+      })
+      api.registerAgent({ name: "room", description: "Shared room", system_prompt: "Help", configuration: {} })
+      api.registerCommand("fixture.echo", async (input) => input, {
+        description: "Echo",
+        input_schema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+      })
+      api.registerConversationServers(async () => ({
+        tools: [],
+        issues: [],
+        close: async () => {
+          events.push("servers:closed")
+        },
+      }))
+    },
+  }
+  try {
+    await manager.start()
+    await manager.replace(module, { enabled: true, configuration: descriptor.defaults, source: { kind: "package" } })
+    await running.promise
+    expect(events).toEqual(["startup"])
+    expect(manager.list()[0].command_details).toEqual([
+      { name: "fixture.echo", description: "Echo", input_schema: expect.anything() },
+    ])
+    await expect(manager.command("fixture.echo", {})).rejects.toThrow()
+    expect(await manager.command("fixture.echo", { text: "ok" })).toEqual({ text: "ok" })
+    expect(manager.conversationServers()).toBeFunction()
+    await manager.conversationServers()!({
+      workspace: "w",
+      conversation: "c",
+      directory,
+      servers: [],
+      signal: new AbortController().signal,
+    })
+    await expect(
+      manager.replace(
+        {
+          descriptor: { ...descriptor, id: "duplicate" },
+          register(api) {
+            api.registerConversationServers(async () => ({ tools: [], issues: [], close: async () => {} }))
+          },
+        },
+        { enabled: true, configuration: descriptor.defaults, source: { kind: "package" } },
+      ),
+    ).rejects.toThrow("registrar")
+    await manager
+      .replace(
+        {
+          descriptor,
+          register(api) {
+            api.registerAgent({ name: "partial", description: "Partial", system_prompt: "", configuration: {} })
+            api.onStartup(() => {
+              throw new Error("startup failed")
+            })
+          },
+        },
+        { enabled: true, configuration: descriptor.defaults, source: { kind: "package" } },
+      )
+      .then(
+        () => {
+          throw new Error("expected failure")
+        },
+        () => {},
+      )
+    expect(manager.agents().map((agent) => agent.name)).toEqual(["room"])
+    await manager.change({ id: descriptor.id, enabled: false })
+    await stopped.promise
+    expect(events).toEqual(["startup", "servers:closed"])
+    expect(manager.agents()).toEqual([])
+    expect(manager.conversationServers()).toBeUndefined()
+  } finally {
+    await manager.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("an active extension can require restart based on its selected configuration", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-restart-only-"))
+  const registrations: number[] = []
+  const manager = new ExtensionManager(
+    new Configuration(join(directory, "settings.json")),
+    [
+      {
+        descriptor,
+        register(api) {
+          api.restartOnly()
+          registrations.push(Number(api.configuration.count))
+          api.registerCommand("fixture.count", async () => api.configuration.count)
+        },
+      },
+    ],
+    directory,
+    new AbortController().signal,
+    async () => {},
+  )
+  try {
+    await manager.start()
+    expect(manager.list()[0].restart_required).toBe(false)
+    expect(
+      await manager.change({ id: descriptor.id, operations: [{ op: "set", path: ["count"], value: 2 }] }),
+    ).toMatchObject({ saved: true, restart_required: true })
+    expect(manager.list()[0].restart_required).toBe(true)
+    expect(await manager.command("fixture.count", {})).toBe(1)
+    await manager.change({ id: descriptor.id, enabled: false })
+    expect(manager.list()[0].active).toBe(true)
+    expect(registrations).toEqual([1])
+  } finally {
+    await manager.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
