@@ -12,8 +12,16 @@ import { approvalGrant } from "./approval-grant"
 import { SkillOperation, skillOperation } from "./operation-skills"
 import type { NexusApplication } from "./application"
 
-const Conversation = { conversation: Schema.NonEmptyString, addressed: Schema.optional(Schema.Boolean) }
-const Run = { run: Schema.NonEmptyString, addressed: Schema.optional(Schema.Boolean) }
+const Conversation = {
+  workspace: Schema.optional(Schema.NonEmptyString),
+  conversation: Schema.NonEmptyString,
+  addressed: Schema.optional(Schema.Boolean),
+}
+const Run = {
+  workspace: Schema.optional(Schema.NonEmptyString),
+  run: Schema.NonEmptyString,
+  addressed: Schema.optional(Schema.Boolean),
+}
 const Page = { after: Schema.optional(Schema.String) }
 const Turn = { ...Conversation, turn: Schema.NonEmptyString }
 const Task = { ...Run, task: Schema.NonEmptyString }
@@ -26,6 +34,7 @@ export const Operation = Schema.Union([
   Schema.Struct({ action: Schema.Literal("adaptations"), model: Schema.optional(Schema.String) }),
   Schema.Struct({
     action: Schema.Literal("target"),
+    workspace: Schema.optional(Schema.NonEmptyString),
     host: Schema.NonEmptyString,
     addressed: Schema.optional(Schema.Boolean),
     host_type: Schema.optional(Schema.Literals(["conversation", "run"])),
@@ -46,6 +55,7 @@ export const Operation = Schema.Union([
   Schema.Struct({ action: Schema.Literal("models") }),
   Schema.Struct({
     action: Schema.Literal("open"),
+    workspace: Schema.optional(Schema.NonEmptyString),
     ...Key,
     title: Schema.optional(Schema.String),
     runner: Schema.optional(Schema.String),
@@ -286,7 +296,8 @@ export class Operations {
 
   async command(value: unknown, options: RequestOptions = {}) {
     const input = Schema.decodeUnknownSync(Operation)(value)
-    const workspace = this.member.workspace(this.identity.workspace)
+    const selected = "workspace" in input ? (input.workspace ?? this.identity.workspace) : this.identity.workspace
+    const workspace = this.member.workspace(selected)
 
     if (input.action === "identity") return this.identity
     if (input.action === "followers") {
@@ -345,7 +356,7 @@ export class Operations {
           : undefined
 
         return {
-          workspace: this.identity.workspace,
+          workspace: selected,
           conversation: input.host,
           turn: turn ?? null,
           variant: variant?.public_id ?? null,
@@ -363,7 +374,7 @@ export class Operations {
         throw new Error("This run belongs to another agent's conversation.")
 
       return {
-        workspace: this.identity.workspace,
+        workspace: selected,
         conversation: run.turn?.conversation_public_id ?? null,
         turn: run.turn?.public_id ?? null,
         variant: null,
@@ -490,13 +501,13 @@ export class Operations {
         throw new Error("This conversation belongs to another agent.")
 
       if (input.action === "attach") {
-        this.application.lifecycle.adopt(this.identity.workspace, input.conversation)
+        this.application.lifecycle.adopt(selected, input.conversation)
         return info
       }
       if (input.action === "conversation")
-        return { ...info, ingresses: await this.application.bindings(this.identity.workspace, input.conversation) }
+        return { ...info, ingresses: await this.application.bindings(selected, input.conversation) }
       if (input.action === "say")
-        return this.application.submit({ ...input, workspace: this.identity.workspace }, this.member, options)
+        return this.application.submit({ ...input, workspace: selected }, this.member, options)
       if (input.action === "result") {
         if (input.input) return chat.inputExecution(input.input).recover(options)
 
@@ -562,11 +573,10 @@ export class Operations {
         const result = input.action === "archive" ? await chat.archive(options) : await chat.delete(options)
 
         await this.application.notify(input.action === "archive" ? "conversation.archived" : "conversation.ended", {
-          workspace: this.identity.workspace,
+          workspace: selected,
           conversation: input.conversation,
         })
-        if (input.action === "delete")
-          await this.application.lifecycle.ended(this.identity.workspace, input.conversation)
+        if (input.action === "delete") await this.application.lifecycle.ended(selected, input.conversation)
         return result
       }
       if (input.action === "unarchive") return chat.unarchive(options)
