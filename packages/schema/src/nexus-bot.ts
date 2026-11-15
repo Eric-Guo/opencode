@@ -57,7 +57,13 @@ export const Command = Schema.Union([
     deliver_at: Schema.String.pipe(optional),
     expected_steering_run_public_id: Schema.String.pipe(optional),
   }),
-  Schema.Struct({ action: Schema.Literals(["bot.read", "bot.remove", "bot.history"]), id: Schema.String }),
+  Schema.Struct({ action: Schema.Literals(["bot.read", "bot.remove"]), id: Schema.String }),
+  Schema.Struct({
+    action: Schema.Literal("bot.history"),
+    id: Schema.String,
+    after: Schema.String.pipe(optional),
+    archived: Schema.Boolean.pipe(optional),
+  }),
   Schema.Struct({ action: Schema.Literals(["bot.current", "bot.new"]), id: Schema.String, key: Schema.NonEmptyString }),
   Schema.Struct({
     action: Schema.Literal("bot.workspace"),
