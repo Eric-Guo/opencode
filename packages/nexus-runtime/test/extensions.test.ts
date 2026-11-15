@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { Schema } from "effect"
 import { Configuration } from "../src/configuration"
 import { ExtensionManager, type ExtensionModule } from "../src/extension-manager"
 import { definition } from "../src/extensions"
@@ -125,6 +126,7 @@ test("configuration serializes writes, validates before saving, restores and red
 
     await manager.start()
     expect(manager.list()[0].configuration).toEqual({ token: "[saved]", count: 3 })
+    expect(Schema.decodeUnknownSync(Schema.Json)(manager.list())).toEqual(manager.list())
     expect(JSON.stringify(manager.list())).not.toContain("secret")
     await manager.close()
   } finally {
