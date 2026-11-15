@@ -179,6 +179,15 @@ class ExtensionWorker {
       application: this.api.application,
       configure: this.api.configure,
       announced: this.api.announced,
+      registerWebUI: async (root) => {
+        const key = "webui"
+        if (this.registered && this.contributions.get(key) !== root)
+          throw new Error("The replacement extension changed its UI directory.")
+        seen.add(key)
+        if (this.registered) return
+        this.contributions.set(key, root)
+        await this.api.registerWebUI(root)
+      },
       registerTool: (tool: RunnerTool) => {
         const key = "tool:" + (tool.role ?? "runner") + ":" + tool.definition.name
         const metadata = {
