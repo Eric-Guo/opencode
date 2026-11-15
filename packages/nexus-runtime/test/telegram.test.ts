@@ -888,3 +888,64 @@ test("Telegram checks model availability before changing future-input selection"
   )
   expect(peer.saved().model).toBe("provider/available")
 })
+
+test("Telegram conversation history commands find sessions beyond the first API page", async () => {
+  const pages: string[] = []
+  const store = storeFixture(async (request) => {
+    const url = new URL(request.url)
+    if (url.pathname.endsWith("/profile/agents"))
+      return Response.json({
+        agents: [
+          {
+            public_id: bot,
+            name: "bot-fixture",
+            scope: "instance",
+            derived_from_public_id: "main",
+            handle: "bot-fixture",
+            description: "Bot",
+            agent_identifier: "bot-fixture",
+            steward_public_id: "owner",
+            kind: "agent",
+            configuration: {
+              tool_definitions: [],
+              kernel_tools: [],
+              runner_executor_public_ids: [],
+              mcp_tools: [],
+              fallback_models: [],
+            },
+          },
+        ],
+      })
+    if (url.pathname.endsWith("/conversations")) {
+      pages.push(url.searchParams.get("after") ?? "first")
+      return Response.json({
+        conversations: url.searchParams.has("after")
+          ? [conversationFixture({ public_id: "later", title: "Later session" })]
+          : Array.from({ length: 10 }, (_, index) =>
+              conversationFixture({ public_id: "early-" + index, title: "Earlier session" }),
+            ),
+        pagination: { next_after: url.searchParams.has("after") ? null : "next" },
+      })
+    }
+  })
+  try {
+    const application = new NexusApplication(
+      store.client,
+      { agent: "main", runner: "runner", workspace: "workspace" },
+      () => ({}),
+    )
+    const { telegramConversationCommand } = await import("../src/telegram-commands")
+    const result = await telegramConversationCommand("sessions", "2", {
+      application,
+      bot,
+      current: null,
+      owner: true,
+      key: "history",
+      signal: new AbortController().signal,
+    })
+    expect(result).toContain("Later session")
+    expect(pages).toEqual(["first", "next"])
+  } finally {
+    store.server.stop(true)
+  }
+})

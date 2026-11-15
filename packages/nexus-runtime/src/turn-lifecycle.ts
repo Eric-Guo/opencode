@@ -1,3 +1,4 @@
+import { executionSnapshot } from "./execution"
 import { APIError, type Client, type JsonObject, type Turn } from "@cybros/agent"
 import { Schema } from "effect"
 import { setTimeout } from "node:timers/promises"
@@ -142,6 +143,7 @@ export class TurnLifecycle {
           .conversation(host.conversation)
           .execution({ turn_public_id: turn.public_id, variant_public_id: variant.public_id, run_public_id: run })
           .recover({ signal })
+          .then(executionSnapshot)
         if (snapshot)
           await Promise.resolve(gate.reconsider({ ...host, turn: turn.public_id, run, notes, snapshot, signal })).catch(
             (error: unknown) => {
