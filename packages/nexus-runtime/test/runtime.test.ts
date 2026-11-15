@@ -355,6 +355,15 @@ test.each([
         expect(calls.filter((call) => call.path.endsWith("/approve")).map((call) => call.authorization)).toEqual(
           Array(4).fill("Bearer human"),
         )
+        approval.agent = "other"
+        expect(await runtime.modes("workspace", "conversation")).toMatchObject({
+          available: false,
+          code_mode_available: false,
+        })
+        expect(await runtime.manage({ ...command, always: false }, nexus.url.origin, "human")).toMatchObject({
+          status: "completed",
+        })
+        approval.agent = "agent"
         approval.alias = null
         approval.tool = "bash"
         approval.target = { kind: "builtin" }
