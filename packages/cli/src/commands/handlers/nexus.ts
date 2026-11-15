@@ -244,7 +244,7 @@ export default Runtime.handler(
                 },
               })
             },
-            codeMode: async (conversation) => (await nexus.modes({ workspace: workspace(), conversation })).code_mode,
+            modePolicy: async (conversation) => nexus.modes({ workspace: workspace(), conversation }),
             setCodeMode: async (conversation, enabled) => {
               await nexus.modes({ workspace: workspace(), conversation, patch: { code_mode: enabled } })
             },

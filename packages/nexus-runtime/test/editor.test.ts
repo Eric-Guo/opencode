@@ -100,7 +100,7 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
         })
       if (path.endsWith("/models"))
         return Response.json({
-          models: [{ ref: "model", provider: "fixture", workload: "chat", available: true, visible: true }],
+          models: [{ ref: "model", provider: "fixture", workload: "text_generation", available: true, visible: true }],
         })
       if (path.endsWith("/conversations") && request.method === "POST") {
         metadata.value = ((await request.json()) as { conversation: { metadata: JsonObject } }).conversation.metadata
