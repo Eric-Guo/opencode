@@ -41,6 +41,10 @@ export const Extension = Schema.Struct({
   configuration: Schema.Record(Schema.String, Schema.Json),
   diagnostics: Schema.Array(Schema.String),
   tools: Schema.Array(Schema.String),
+  commands: Schema.Array(Schema.String).pipe(optional),
+  requires: Schema.Array(Schema.String).pipe(optional),
+  source: Schema.Json.pipe(optional),
+  webui: Schema.Struct({ version: Schema.String, entry: Schema.String }).pipe(optional),
 })
 export interface Extension extends Schema.Schema.Type<typeof Extension> {}
 
