@@ -24,12 +24,52 @@ test("code preserves false, zero and explicit null and buffers selected text", a
   })
 })
 
+test.each([false, 0, null])("code prints an observed tool result once while retaining structured %j", async (value) => {
+  const token = crypto.randomUUID()
+  const calls: JsonObject[] = []
+
+  const result = await run(
+    `const result = await tools.read({path:"receipt.txt"}); text(JSON.stringify(result)); return params.value;`,
+    { value },
+    declarations,
+    async (_, request) => {
+      calls.push(request)
+
+      return {
+        status: "completed",
+        is_error: false,
+        output: token,
+        content: [{ type: "text", text: token }],
+        structured_content: null,
+      }
+    },
+    signal,
+  )
+
+  expect(calls).toEqual([{ kind: "tool", name: "read", input: { path: "receipt.txt" } }])
+  expect(result.content).toEqual([
+    {
+      type: "text",
+      text: JSON.stringify({
+        status: "completed",
+        is_error: false,
+        output: token,
+        content: [{ type: "text", text: token }],
+        structured_content: null,
+      }),
+    },
+  ])
+  expect(result.structured_content).toBe(value)
+})
+
 test("code returns explicit operation handles and preserves tool error envelopes", async () => {
   const result = await run(
     `
 const work = await nexus.start({kind:"tool",name:"read",input:{path:"missing"}});
 text(work.operation_key);
-return await nexus.wait(work);
+const result = await nexus.wait(work);
+text(JSON.stringify(result));
+return result;
 `,
     {},
     declarations,
@@ -38,6 +78,10 @@ return await nexus.wait(work);
   )
 
   expect(result.content[0].text).toBe("op_0")
+  expect(result.content[1]).toEqual({
+    type: "text",
+    text: '{"status":"completed","is_error":true,"structured_content":null,"content":[]}',
+  })
   expect(result.structured_content).toEqual({
     status: "completed",
     is_error: true,
