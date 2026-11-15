@@ -34,6 +34,11 @@ test("PKCE login binds its state to the loopback callback and restores a separat
         })
       }
       if (path === "/oauth/revoke") return new Response(null)
+      if (path === "/api/v1/admin/model_providers") {
+        expect(request.headers.get("authorization")).toBe("Bearer fixture-human")
+        expect(request.headers.get("idempotency-key")).toBe("operation")
+        return Response.json({ model_providers: [] })
+      }
       return new Response(null, { status: 404 })
     },
   })
@@ -57,6 +62,20 @@ test("PKCE login binds its state to the loopback callback and restores a separat
     const restored = new HumanLogin(directory)
     expect(await restored.account(nexus.url.origin)).toEqual({ id: "human", role: "member" })
     expect(authorizations).toEqual(["Bearer fixture-human"])
+    await expect(
+      restored.request(nexus.url.origin, { principal: "other", path: "/api/v1/admin/model_providers", method: "GET" }),
+    ).rejects.toThrow("this Human")
+    await expect(
+      restored.request(nexus.url.origin, { principal: "human", path: "/api/v1/%2e%2e/private", method: "GET" }),
+    ).rejects.toThrow("resource")
+    expect(
+      await restored.request(nexus.url.origin, {
+        principal: "human",
+        path: "/api/v1/admin/model_providers",
+        method: "GET",
+        key: "operation",
+      }),
+    ).toEqual({ model_providers: [] })
     expect(await restored.account("http://localhost:1")).toBeNull()
     await restored.logout(nexus.url.origin)
     expect(await restored.account(nexus.url.origin)).toBeNull()
