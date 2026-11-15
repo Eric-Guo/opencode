@@ -11,6 +11,109 @@ import descriptor from "../dev/extension.json"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture, inputFixture } from "./fixture/conversation"
 
+test("terminal runs capture placement, ask for approval and return before the shell exits", async () => {
+  const requests: { path: string; method: string; body?: unknown; key: string | null }[] = []
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+
+    requests.push({
+      path,
+      method: request.method,
+      body: request.body ? await request.json() : undefined,
+      key: request.headers.get("idempotency-key"),
+    })
+
+    if (path.endsWith("/profile"))
+      return Response.json({
+        member: { public_id: "main", kind: "agent", handle: "main", role: "member" },
+        credential: { plane: "member" },
+        measured_at: "now",
+        configuration: {
+          tool_definitions: [],
+          kernel_tools: [],
+          runner_executor_public_ids: ["runner"],
+          mcp_tools: [],
+          fallback_models: [],
+          approval_rules: [],
+        },
+      })
+    if (path.endsWith("/executors"))
+      return Response.json({
+        executors: [
+          {
+            public_id: "runner",
+            kind: "agent",
+            status: "active",
+            service_roles: ["runner"],
+            presence: "connected",
+            services: {
+              runner: {
+                environment: { root: "/project" },
+                tools: [{ name: "terminal", effect_profile: {} }],
+                documents: [],
+              },
+            },
+          },
+        ],
+      })
+    if (path.endsWith("/runs"))
+      return Response.json(
+        {
+          run: { public_id: "terminal-run", status: "pending" },
+          receipt: { accepted_task_keys: ["terminal"], steps: [], resolution_tokens: {} },
+        },
+        { status: 201 },
+      )
+    if (path.endsWith("/runs/terminal-run/start"))
+      return Response.json({ error: { code: "not_startable" } }, { status: 409 })
+
+    return Response.json({ error: { code: "unexpected_request" } }, { status: 400 })
+  })
+  const application = new NexusApplication(
+    fixture.client,
+    { workspace: "default", agent: "main", runner: "runner" },
+    () => ({}),
+  )
+
+  try {
+    expect(
+      await application.operations.command({
+        action: "terminal.open",
+        workspace: "selected",
+        runner: "runner",
+        key: "one",
+      }),
+    ).toEqual({ run: "terminal-run", task: "terminal" })
+    expect(requests.find((row) => row.path.endsWith("/runs"))).toEqual({
+      path: "/agent_api/v1/workspaces/selected/runs",
+      method: "POST",
+      key: "one",
+      body: {
+        run: {
+          steps: [
+            {
+              tool: {
+                name: "terminal",
+                key: "terminal",
+                input: {},
+                route: { kind: "runner", runner_executor_public_id: "runner" },
+                executor_context: { "opencode.environment": { root: "/project", directories: [], anchor: null } },
+              },
+            },
+          ],
+          approval_mode: "ask",
+          prompt_mechanism: "raw",
+          default_runner_executor_public_id: "runner",
+          approval_rules: [],
+        },
+      },
+    })
+    expect(requests.at(-1)?.path).toBe("/agent_api/v1/workspaces/selected/runs/terminal-run/start")
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
 test("development controls use the connected application, exact run identities and the agent ownership boundary", async () => {
   const requests: { path: string; method: string; body?: unknown }[] = []
   const directory = await mkdtemp(join(tmpdir(), "nexus-dev-"))
