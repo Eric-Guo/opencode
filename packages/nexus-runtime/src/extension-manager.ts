@@ -433,6 +433,7 @@ export class ExtensionManager {
       const active = this.active.get(descriptor.id)
       const selected = this.selection(module)
       const status = active?.status() ?? { ready: false, issues: [] }
+      const source = this.configuration.saved(descriptor.id)?.source
 
       return {
         id: descriptor.id,
@@ -464,8 +465,8 @@ export class ExtensionManager {
         command_details: [...(active?.commandInfo ?? [])].map(([name, options]) => ({ name, ...options })),
         agents: active?.agents.map((agent) => agent.name) ?? [],
         requires: [...(descriptor.requires ?? [])],
-        source: this.configuration.saved(descriptor.id)?.source,
-        webui: active?.webui ? { version: active.webui.version, entry: "index.js" } : undefined,
+        ...(source === undefined ? {} : { source }),
+        ...(active?.webui ? { webui: { version: active.webui.version, entry: "index.js" } } : {}),
       }
     })
   }
