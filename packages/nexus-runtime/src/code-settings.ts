@@ -7,8 +7,11 @@ approvals and task results are owned by Nexus. is_error is a result value;
 recorded refusals reject. Nexus helper errors expose error.refusal; native tool errors carry a message. Direct filesystem, network and process
 access are unavailable. Use declared tools for those operations.
 Prefer an explicit return; otherwise the final expression is the structured result.
-text(string) and console.log select visible text; value(json) selects structured output;
-resource(block) forwards a resource_link observed in this invocation.
+text(string) and console.log select model-visible text. Returned JSON and value(json)
+are UI-only structured output and are never rendered to the model. Print results the
+model needs with text(JSON.stringify(result)); keep the result instead of repeating
+a successful tool call just to display it. resource(block) forwards a resource_link
+observed in this invocation.
 Use Promise.all or Promise.allSettled for independent work. Pending attached work is
 interrupted when the program ends. The wall-clock budget is ten minutes, including waits.
 nexus.model(input), nexus.ask(input), nexus.steps(input), nexus.replace(input),

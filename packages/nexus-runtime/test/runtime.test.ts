@@ -17,6 +17,21 @@ const Declaration = Schema.Struct({
   prompt_documents: Schema.optional(Schema.Struct({ summarizer: Schema.Struct({ content: Schema.String }) })),
 })
 
+const Announcement = Schema.Struct({
+  services: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      tools: Schema.Array(
+        Schema.Struct({
+          name: Schema.String,
+          description: Schema.optional(Schema.String),
+          input_schema: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+        }),
+      ),
+    }),
+  ),
+})
+
 test.each([
   { name: "another agent's dedicated", dedicated: true, owned: false, create: false },
   { name: "another agent's archived dedicated", dedicated: true, owned: false, create: false, state: "archived" },
@@ -59,6 +74,7 @@ test.each([
     target: approval.target,
   })
   const scheduleWrites: JsonObject[] = []
+  const announcements: (typeof Announcement.Type)[] = []
   const measured = new Date().toISOString()
   const preset = {
     public_id: "presets",
@@ -117,7 +133,11 @@ test.each([
           measured_at: measured,
         })
       }
-      if (path === "/agent_api/v1/executor" || path === "/agent_api/v1/executor/announcement")
+
+      if (path === "/agent_api/v1/executor" || path === "/agent_api/v1/executor/announcement") {
+        if (path.endsWith("/announcement"))
+          announcements.push(Schema.decodeUnknownSync(Announcement)(await request.json()))
+
         return Response.json({
           executor: {
             public_id: "runner",
@@ -130,6 +150,7 @@ test.each([
           },
           measured_at: measured,
         })
+      }
 
       if (path === "/agent_api/v1/workspaces/workspace") return Response.json({ workspace })
       if (path === "/agent_api/v1/workspaces" && request.method === "POST")
@@ -308,6 +329,13 @@ test.each([
     if (ready) expect(runtime.status().error).toBeUndefined()
     expect(runtime.status().state).toBe(ready ? "ready" : "error")
     if (ready) {
+      const code = announcements.flatMap((row) => row.services.runner?.tools ?? []).find((tool) => tool.name === "code")
+
+      expect(code?.input_schema?.$id).toBe("urn:opencode:nexus:codemode:1")
+      expect(code?.description).toContain("text(string) and console.log select model-visible text.")
+      expect(code?.description).toContain("are UI-only structured output and are never rendered to the model.")
+      expect(code?.description).toContain("text(JSON.stringify(result))")
+      expect(code?.description).toMatch(/instead of repeating\s+a successful tool call just to display it/)
       expect(runtime.status().identity).toMatchObject({ agent: "agent", workspace: "workspace" })
       expect(runtime.status().error).toBeUndefined()
       expect(await runtime.policy("workspace", "conversation")).toMatchObject({ tools: [], runner: null })
