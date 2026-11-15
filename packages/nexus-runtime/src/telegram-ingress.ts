@@ -1,3 +1,4 @@
+import { executionSnapshot } from "./execution"
 import { createHash } from "node:crypto"
 import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
@@ -377,7 +378,9 @@ export class TelegramIngress {
         await finish()
         return
       }
-      const snapshot = await telegramExecution(this.application(), work).recover({ signal: this.signal })
+      const snapshot = await telegramExecution(this.application(), work)
+        .recover({ signal: this.signal })
+        .then(executionSnapshot)
       if (!snapshot || snapshot.terminal || snapshot.execution.run_public_id !== work.draft.run) {
         await finish()
         return
@@ -997,7 +1000,7 @@ export class TelegramIngress {
 
   private async follow(id: string, binding: TelegramBinding, document: StateDocument, work: TelegramWork) {
     const execution = telegramExecution(this.application(), work)
-    const snapshot = await execution.recover({ signal: this.signal })
+    const snapshot = await execution.recover({ signal: this.signal }).then(executionSnapshot)
     if (snapshot) {
       const run =
         snapshot.execution.run_public_id && !snapshot.terminal
@@ -1408,7 +1411,7 @@ export class TelegramIngress {
       const work = state.work.find((row) => row.input === argument)
       if (!work || (!owner && work.requester !== update.requester)) return "Unknown or unavailable task ID."
       const execution = telegramExecution(this.application(), work)
-      const snapshot = await execution.recover({ signal: this.signal })
+      const snapshot = await execution.recover({ signal: this.signal }).then(executionSnapshot)
       return (
         "Task " +
         work.input +
@@ -1460,7 +1463,9 @@ export class TelegramIngress {
       if (!work || !route) return "Use /deliver TASK_ID with an exact destination from /destinations."
       if (work.report)
         return "Parent reports retain their original destination. Select the independent worker's task ID to export its own result."
-      const snapshot = await telegramExecution(this.application(), work).recover({ signal: this.signal })
+      const snapshot = await telegramExecution(this.application(), work)
+        .recover({ signal: this.signal })
+        .then(executionSnapshot)
       const files =
         snapshot?.status === "completed"
           ? await publishedArtifacts(
@@ -1692,7 +1697,9 @@ export class TelegramIngress {
         return "Unknown or unavailable task. Reply to your request or supply its task ID."
       const scope = this.application().client.workspace(work.target.workspace)
       const chat = scope.conversation(work.target.conversation)
-      const snapshot = await telegramExecution(this.application(), work).recover({ signal: this.signal })
+      const snapshot = await telegramExecution(this.application(), work)
+        .recover({ signal: this.signal })
+        .then(executionSnapshot)
       const run = snapshot?.execution.run_public_id
       if (!run) return "This task has not started. Use /queue for waiting requests."
       if (action === "transcript") {
@@ -1740,7 +1747,7 @@ export class TelegramIngress {
       const work = state.work.find((work) => work.input === selected.input)
       if (!work) return "The original request is no longer available."
       const execution = telegramExecution(this.application(), work)
-      await execution.recover({ signal: this.signal })
+      await execution.recover({ signal: this.signal }).then(executionSnapshot)
       const decision = (await execution.decisions({ signal: this.signal })).find(
         (row) => row.detail.task.key === selected.task,
       )
@@ -1813,7 +1820,7 @@ export class TelegramIngress {
       if (!work) return choices.length ? "Reply to a specific request to stop its work." : "No active request to stop."
       const chat = this.application().client.workspace(work.target.workspace).conversation(work.target.conversation)
       const execution = telegramExecution(this.application(), work)
-      const snapshot = await execution.recover({ signal: this.signal })
+      const snapshot = await execution.recover({ signal: this.signal }).then(executionSnapshot)
       if (snapshot?.execution.run_public_id)
         await this.application()
           .client.workspace(work.target.workspace)

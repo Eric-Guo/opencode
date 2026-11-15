@@ -42,6 +42,14 @@ export const Extension = Schema.Struct({
   diagnostics: Schema.Array(Schema.String),
   tools: Schema.Array(Schema.String),
   commands: Schema.Array(Schema.String).pipe(optional),
+  command_details: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      description: Schema.String.pipe(optional),
+      input_schema: Schema.Json.pipe(optional),
+    }),
+  ).pipe(optional),
+  agents: Schema.Array(Schema.String).pipe(optional),
   requires: Schema.Array(Schema.String).pipe(optional),
   source: Schema.Json.pipe(optional),
   webui: Schema.Struct({ version: Schema.String, entry: Schema.String }).pipe(optional),

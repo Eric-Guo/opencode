@@ -112,13 +112,14 @@ it.live("session MCP uses public names and replacement cancels an accepted block
             signal: new AbortController().signal,
           },
         )
+        void running.catch(() => {})
         await accepted.promise
         const replacement = await table.bind({
           ...input,
           servers: [{ ...input.servers[0], url: server.url.href + "replacement" }],
         })
         expect(replacement.tools).toEqual(first.tools)
-        expect(await running).toMatchObject({ is_error: true })
+        await expect(running).rejects.toThrow()
         expect(events).toEqual(["initialize", "accepted", "initialize"])
         await table.bind({ ...input, servers: [] })
         expect(table.tools()).toEqual([])
@@ -181,6 +182,7 @@ it.live("MCP login publishes a previously unavailable catalog while unchanged se
         },
       })
       const published = Promise.withResolvers<void>()
+      const publication = { notify: published.resolve }
       const manager = new ExtensionManager(
         new Configuration(join(directory, "configuration.json")),
         [
@@ -210,7 +212,7 @@ it.live("MCP login publishes a previously unavailable catalog while unchanged se
         directory,
         new AbortController().signal,
         async () => {
-          published.resolve()
+          publication.notify()
         },
       )
       try {
@@ -259,8 +261,154 @@ it.live("MCP login publishes a previously unavailable catalog while unchanged se
         ])
         expect(starts.stable).toBe(1)
         expect(starts.protected).toBeGreaterThanOrEqual(1)
+        const beforeProbe = starts.protected
+        expect(await manager.command("mcp.probe", { server: "protected" })).toMatchObject({ status: "connected" })
+        expect(starts.protected).toBe(beforeProbe + 1)
+        expect(manager.tools().map((tool) => tool.definition.name)).toEqual([
+          "mcp__protected__read",
+          "mcp__stable__read",
+        ])
+        const disabled = Promise.withResolvers<void>()
+        publication.notify = () => {
+          if (!manager.tools().some((tool) => tool.definition.name === "mcp__protected__read")) disabled.resolve()
+        }
+        await manager.command("mcp.disable", { server: "protected" })
+        await disabled.promise
+        const disabledRow = (await Effect.runPromiseWith(context)(mcp.servers())).find((row) =>
+          row.name.startsWith("nexus-protected-"),
+        )!
+        expect(disabledRow.integrationID).toBe(integrationID)
+        const enabled = Promise.withResolvers<void>()
+        publication.notify = () => {
+          if (manager.tools().some((tool) => tool.definition.name === "mcp__protected__read")) enabled.resolve()
+        }
+        await manager.command("mcp.enable", { server: "protected" })
+        await enabled.promise
+        const enabledRow = (await Effect.runPromiseWith(context)(mcp.servers())).find((row) =>
+          row.name.startsWith("nexus-protected-"),
+        )!
+        expect(enabledRow.integrationID).toBe(integrationID)
+        expect(starts.stable).toBe(1)
       } finally {
         await manager.close()
+        await rm(directory, { recursive: true, force: true })
+      }
+    })
+  }),
+)
+
+it.live("MCP tool failures retain their two axes and disabled-server probes open a scoped connection", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    yield* Effect.promise(async () => {
+      const calls: string[] = []
+      const server = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        async fetch(request) {
+          if (request.method !== "POST") return new Response(null, { status: request.method === "DELETE" ? 204 : 405 })
+          const message = (await request.json()) as {
+            id?: number
+            method: string
+            params?: { arguments?: { mode?: string } }
+          }
+          calls.push(message.method)
+          const mode = message.params?.arguments?.mode
+          if (message.method === "tools/call" && mode === "transport") return new Response(null, { status: 503 })
+          if (message.method === "tools/call" && ["arguments", "refused"].includes(mode ?? ""))
+            return Response.json({
+              jsonrpc: "2.0",
+              id: message.id,
+              error: { code: mode === "arguments" ? -32602 : -32603, message: "fixture-private-secret refusal" },
+            })
+          const result =
+            message.method === "initialize"
+              ? {
+                  protocolVersion: "2024-11-05",
+                  capabilities: { tools: {} },
+                  serverInfo: { name: "fixture", version: "1" },
+                }
+              : message.method === "tools/list"
+                ? { tools: [{ name: "probe", description: "Probe", inputSchema: { type: "object" } }] }
+                : { isError: mode === "tool", content: [{ type: "text", text: "returned answer" }] }
+          return message.id === undefined
+            ? new Response(null, { status: 202 })
+            : Response.json({ jsonrpc: "2.0", id: message.id, result })
+        },
+      })
+      const directory = await mkdtemp(join(tmpdir(), "nexus-mcp-errors-"))
+      const manager = new ExtensionManager(
+        new Configuration(join(directory, "configuration.json")),
+        [
+          {
+            descriptor: {
+              id: "fixture.mcp",
+              name: "MCP",
+              description: "MCP",
+              default_enabled: true,
+              configuration_version: 1,
+              configuration_schema: mcpConfiguration,
+              defaults: {
+                servers: {
+                  active: {
+                    transport: "http",
+                    url: server.url.href,
+                    tools: ["*"],
+                    headers: { Authorization: "fixture-private-secret" },
+                  },
+                  parked: {
+                    transport: "http",
+                    url: server.url.href,
+                    tools: ["*"],
+                    enabled: false,
+                    headers: { Authorization: "fixture-private-secret" },
+                  },
+                },
+              },
+            },
+            register: (api) =>
+              activateMcp(api, {
+                mcp: async () => mcp,
+                integration: async () => {
+                  throw new Error("Static bearer has no OAuth owner")
+                },
+              }),
+          },
+        ],
+        directory,
+        new AbortController().signal,
+        async () => {},
+      )
+      try {
+        await manager.start()
+        const tool = manager.tools().find((tool) => tool.definition.name === "mcp__active__probe")!
+        const context = {
+          workspace: "w",
+          conversation: "c",
+          run: "r",
+          task: "t",
+          directory,
+          signal: new AbortController().signal,
+        }
+        expect(await tool.execute({ mode: "tool" }, context)).toMatchObject({ is_error: true })
+        const invalid = await tool.execute({ mode: "arguments" }, context)
+        expect(invalid).toMatchObject({
+          is_error: true,
+          content: [{ type: "text", text: expect.stringContaining("[redacted]") }],
+        })
+        await expect(tool.execute({ mode: "refused" }, context)).rejects.toThrow("[redacted]")
+        await expect(tool.execute({ mode: "transport" }, context)).rejects.toThrow()
+        expect(manager.tools().some((tool) => tool.definition.name === "mcp__parked__probe")).toBe(false)
+        const before = calls.filter((method) => method === "initialize").length
+        expect(await manager.command("mcp.probe", { server: "parked" })).toMatchObject({
+          status: "connected",
+          tools: [{ name: "mcp__parked__probe" }],
+        })
+        expect(calls.filter((method) => method === "initialize").length).toBeGreaterThan(before)
+        expect(manager.tools().some((tool) => tool.definition.name === "mcp__parked__probe")).toBe(false)
+      } finally {
+        await manager.close()
+        server.stop(true)
         await rm(directory, { recursive: true, force: true })
       }
     })

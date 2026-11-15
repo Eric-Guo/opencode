@@ -1,3 +1,4 @@
+import { executionSnapshot } from "./execution"
 import { NexusRun } from "@opencode/schema/nexus-run"
 import { Schema } from "effect"
 import type { NexusApplication } from "./application"
@@ -44,6 +45,9 @@ export async function* runPrompt(
         workspace,
         conversation: state.conversation,
         text: input.prompt,
+        ...(opened.conversation.answering_user_public_id !== application.identity.agent
+          ? { addressed: true, answering_user_public_id: opened.conversation.answering_user_public_id }
+          : {}),
         model: input.model,
         instructions: input.instructions,
         attachments: input.attachments ? [...input.attachments] : undefined,
@@ -58,7 +62,7 @@ export async function* runPrompt(
     const denied = new Set<string>()
     let previous = ""
     while (!active.aborted) {
-      const snapshot = await execution.recover({ signal: active })
+      const snapshot = await execution.recover({ signal: active }).then(executionSnapshot)
       if (execution.blocked_reason) {
         state.reason = execution.blocked_reason
         break
