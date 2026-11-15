@@ -2,9 +2,10 @@ import { expect, test } from "bun:test"
 import { Client, type JsonObject, type StoreEntry } from "@cybros/agent"
 import { NexusApplication } from "../src/application"
 import { sideLeads } from "../src/sides"
+import { Operations } from "../src/operations"
 import { conversationFixture, inputFixture } from "./fixture/conversation"
 
-function fixture() {
+function fixture(identityWorkspace = "workspace") {
   const stores = new Map<string, Map<string, StoreEntry>>()
   const conversations = new Map<string, JsonObject>([
     [
@@ -83,7 +84,11 @@ function fixture() {
         rows.set(id, row)
         return Response.json({ store_entry: row })
       }
-      if (path.endsWith("/tools/assembly")) return Response.json({ tool_definitions: tools, environment: {} })
+      if (path.endsWith("/tools/assembly")) {
+        const body = (await request.json()) as JsonObject
+        expect(body.configuration === undefined || body.conversation_public_id === undefined).toBe(true)
+        return Response.json({ tool_definitions: tools, environment: {} })
+      }
       if (path.endsWith("/workspaces")) return Response.json({ workspaces: [], pagination: { next_after: null } })
       if (path.endsWith("/conversations"))
         return Response.json({
@@ -142,7 +147,7 @@ function fixture() {
   const open = () => {
     const app = new NexusApplication(
       new Client({ baseURL: server.url.origin, credential: "fixture" }),
-      { agent: "main", runner: "runner", workspace: "workspace" },
+      { agent: "main", runner: "runner", workspace: identityWorkspace },
       () => ({ default_model: "provider/original" }),
       undefined,
       async () => ({ model: "provider/original", agent_configuration: {}, fallback_models: [] }),
@@ -259,15 +264,13 @@ test("An owned foreign side preserves its answerer's write declaration and still
 
 test("Sides inherit the parent's selected model from durable admissions after restart", async () => {
   using peer = fixture()
-  await peer
-    .open()
-    .submit({
-      workspace: "workspace",
-      conversation: "parent",
-      key: "selected",
-      text: "Use the selected model",
-      model: "provider/selected",
-    })
+  await peer.open().submit({
+    workspace: "workspace",
+    conversation: "parent",
+    key: "selected",
+    text: "Use the selected model",
+    model: "provider/selected",
+  })
   const app = peer.open()
   const side = await app.openSide({ parent: "parent", key: "fork" })
   await app.submit({
@@ -292,4 +295,20 @@ test("Sides inherit the parent's selected model from durable admissions after re
   await restored.submit(request)
   expect(peer.inputs.at(-1)).toEqual(frozen)
   expect(await restored.sides.read("workspace", side.conversation.public_id)).toMatchObject({ model: "provider/next" })
+})
+
+test.each(["context", "command"])("Side operations retain the workspace selected by their %s", async (selection) => {
+  using peer = fixture("different")
+  const app = peer.open()
+  const operations = new Operations(app.client, app, {
+    ...app.identity,
+    workspace: selection === "context" ? "workspace" : "different",
+  })
+  const opened = await operations.command({
+    action: "side",
+    conversation: "parent",
+    key: "scoped-side",
+    ...(selection === "command" ? { workspace: "workspace" } : {}),
+  })
+  expect(opened).toMatchObject({ parent: { public_id: "parent" }, conversation: { workspace_public_id: "workspace" } })
 })

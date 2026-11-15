@@ -7,6 +7,7 @@ export async function addressedAgent(
   own: string,
   address: string,
   options: RequestOptions = {},
+  registered: readonly string[] = [],
 ) {
   if (address === own) return own
   const scope = client.workspace(workspace)
@@ -16,10 +17,14 @@ export async function addressedAgent(
   if (!principal || principal.kind !== "agent")
     throw new Error("The addressee must name a member agent of this workspace.")
   if (principal.public_id === own) return own
-  if ((await scope.fetch(options)).dedicated)
+  const local = await client.profile.agents.list(options)
+  if (
+    (await scope.fetch(options)).dedicated &&
+    !local.some((agent) => agent.public_id === principal.public_id && registered.includes(agent.name))
+  )
     throw new Error("A dedicated workspace can only address its paired agent.")
   if (
-    (await client.profile.agents.list(options)).some(
+    local.some(
       (row) =>
         row.public_id === principal.public_id &&
         row.derived_from_public_id === own &&

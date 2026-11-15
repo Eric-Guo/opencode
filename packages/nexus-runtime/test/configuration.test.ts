@@ -98,3 +98,24 @@ test("startup quarantines invalid fields while retaining siblings, sparse intent
     group: { low: 1, high: 2 },
   })
 })
+
+test("open configuration records retain inherited fields through sparse edits", () => {
+  const schema = {
+    type: "object",
+    additionalProperties: { type: "object", additionalProperties: true },
+  }
+  expect(
+    configurationFields(
+      schema,
+      { first: { enabled: false } },
+      {
+        first: { enabled: true, transport: "http", tools: ["*"] },
+        second: { transport: "stdio" },
+      },
+    ),
+  ).toEqual({
+    value: { first: { enabled: false, transport: "http", tools: ["*"] }, second: { transport: "stdio" } },
+    overrides: { first: { enabled: false } },
+    diagnostics: [],
+  })
+})

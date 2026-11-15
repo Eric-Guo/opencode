@@ -213,3 +213,101 @@ test("concurrent operations receive their own out-of-order observations and reco
   ])
   expect(events.filter((entry) => entry.key === "first")).toHaveLength(1)
 })
+
+test("paused native questions retain their request, recover cursor drift and reuse durable answers", async () => {
+  const trace: OperationEvent[] = []
+  const submissions: unknown[] = []
+  const reads: number[] = []
+  const paused = Promise.withResolvers<void>()
+  const owner = new AbortController()
+  using server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname
+      if (path.endsWith("/operations") && request.method === "POST") {
+        const body = (await request.json()) as { operation: { key: string; request: Record<string, string> } }
+        submissions.push(body)
+        if (submissions.length === 1) {
+          paused.resolve()
+          return Response.json({ error: { code: "execution_paused" } }, { status: 409 })
+        }
+        const event: OperationEvent = {
+          type: "operation",
+          key: body.operation.key,
+          request: body.operation.request,
+          receipt: { task_keys: ["question"] },
+          position: 1,
+          refusal: null,
+          outcome: null,
+        }
+        trace.push(event)
+        return Response.json({ operation: event })
+      }
+      if (path.endsWith("/observation")) {
+        reads.push(((await request.json()) as { after: number }).after)
+        trace.push({
+          type: "observation",
+          key: "question",
+          position: 2,
+          request: null,
+          receipt: null,
+          refusal: null,
+          outcome: { status: "completed", content: [{ type: "text", text: "accept" }] },
+        })
+        return Response.json({ error: { code: "operation_position_changed" } }, { status: 409 })
+      }
+      return Response.json({
+        operations: {
+          context: { tools: [], model_defaults: {}, environment: null },
+          trace,
+          position: trace.length,
+          next_after: null,
+        },
+      })
+    },
+  })
+  const task = new ExecutorClient({ baseURL: server.url.origin, credential: "executor" }).inboxTask("run", "parent")
+  const request = { kind: "ask", input: { prompt: "Continue?" } }
+  const operations = new ClaimOperations(task, "original-claim", owner.signal)
+  const waiting = operations.question("question", request)
+  await paused.promise
+  expect(await waiting).toEqual({ status: "completed", content: [{ type: "text", text: "accept" }] })
+  expect(submissions).toHaveLength(2)
+  expect(submissions[0]).toEqual(submissions[1])
+  expect(reads).toEqual([0])
+  expect(await new ClaimOperations(task, "new-claim", owner.signal).question("question", request)).toEqual({
+    status: "completed",
+    content: [{ type: "text", text: "accept" }],
+  })
+  await expect(operations.question("question", { kind: "ask", input: { prompt: "Changed" } })).rejects.toThrow(
+    "differs",
+  )
+  expect(submissions).toHaveLength(2)
+  owner.abort()
+})
+
+test("cancellation during a paused submit prevents another send", async () => {
+  const owner = new AbortController()
+  const paused = Promise.withResolvers<void>()
+  const requests: unknown[] = []
+  using server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      requests.push(await request.json())
+      paused.resolve()
+      return Response.json({ error: { code: "execution_paused" } }, { status: 409 })
+    },
+  })
+  const task = new ExecutorClient({ baseURL: server.url.origin, credential: "executor" }).inboxTask("run", "parent")
+  const work = new ClaimOperations(task, "claim", owner.signal).invoke("operation", {
+    kind: "ask",
+    input: { prompt: "Continue?" },
+  })
+  void work.catch(() => {})
+  await paused.promise
+  owner.abort(new Error("stopped"))
+  await expect(work).rejects.toThrow("stopped")
+  expect(requests).toHaveLength(1)
+})
