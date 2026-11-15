@@ -1,4 +1,24 @@
-export const codeBinding = "urn:cybros:rho:codemode:javascript:1"
+export const codeBinding = "urn:opencode:nexus:codemode:1"
 
-export const codeInstructions =
-  'Write an ordinary JavaScript async function body, without Markdown fences.\nParameters are immutable JSON in params. Call tools[name](arguments) to request\na declared tool. For example, with read declared:\nconst result = await tools.read({path: "README.md"}); text(result.output ?? "");\nAwait the complete outcome envelope: is_error is a value,\nwhile a recorded bridge refusal rejects and exposes error.refusal.\nUse Promise.all for independent work. Promise.race does not cancel losers.\nSettle every operation before returning. text(string) selects final text;\nvalue(json) or a returned JSON value selects structured output; resource({uri,\nname, mimeType?}) selects a resource reference already authorized by its owner.\nIntermediate outcomes stay out of the final result unless explicitly selected.\nThere is no filesystem, network, module loader, clock or randomness in this VM.\nnexus.model(input), nexus.ask(input), nexus.steps(input), nexus.replace(input),\nnexus.cancel(input), nexus.join(input) and nexus.background(input) request host\noperations. Their Promise has a readonly operation_key for referring to it.\nUse nexus.model({prompt, model?, tools?}) for model work and nexus.ask({prompt,\noptions?, multi?}) for a question. nexus.steps(steps) atomically accepts public\nsteps such as {tool:{name,input,key}} or {model:{prompt,key,after,results}}.\nFan out with {parallel:[stepOrSequence,...]}; a sequence is an array of\nsteps. It waits for all by default. To race, add until:"any"|k, optionally\nlosers:"cancel"|"run_out" and key. A model\'s results:[key,...] includes\noutputs; after:[key,...] only waits. Read a race\'s key for its selected results.\nnexus.replace({operation_key,tasks,steps}) replaces only unstarted authored task\nkeys. nexus.cancel({operation_key,tasks?}) requests settled cancellation.\nnexus.join({operations:[operation_key],until:"all"|"any"|number,losers?}) uses\nlosers:"cancel" or "run_out". nexus.background({operation_key,lifetime?,wake?})\nexplicitly transfers existing work; {steps,lifetime,wake} launches background\nsteps. lifetime is "conversation" or "turn"; wake is "auto" or "passive".'
+export const codeInstructions = `Run a program in OpenCode Code Mode's confined JavaScript interpreter.
+Use supported JavaScript syntax, no Markdown fences. params holds copied JSON input.
+Call tools[name](input) using exact names from the frozen catalog. External effects,
+approvals and task results are owned by Nexus. is_error is a result value;
+recorded refusals reject. Nexus helper errors expose error.refusal; native tool errors carry a message. Direct filesystem, network and process
+access are unavailable. Use declared tools for those operations.
+Prefer an explicit return; otherwise the final expression is the structured result.
+text(string) and console.log select visible text; value(json) selects structured output;
+resource(block) forwards a resource_link observed in this invocation.
+Use Promise.all or Promise.allSettled for independent work. Pending attached work is
+interrupted when the program ends. The wall-clock budget is ten minutes, including waits.
+nexus.model(input), nexus.ask(input), nexus.steps(input), nexus.replace(input),
+nexus.cancel(input), nexus.join(input) and nexus.background(input) request Nexus operations.
+For an immediate operation handle use:
+const work = await nexus.start({kind:"model",input:{prompt:"Inspect the project"}});
+const result = await nexus.wait(work);
+The handle has operation_key; ordinary tool Promises have no operation_key.
+To continue work after returning, await nexus.background({operation_key:work.operation_key,
+lifetime:"conversation",wake:"auto"}). Only a successful ownership-transfer receipt
+releases the obligation to wait. nexus.steps accepts public step arrays, including
+{tool:{name,input,key}}, {model:{prompt,key,after,results}} and {parallel:[...]}.
+Nested tools and models may only use the frozen catalog. No source is replayed after loss.`
