@@ -508,6 +508,7 @@ export class NexusRuntime {
           { signal },
         )
         const runner = announced.executor.public_id
+        settings = this.settings ?? settings
         const workspace = settings.workspace
           ? await member.workspaces.fetch(settings.workspace, { signal })
           : (
@@ -853,7 +854,7 @@ export class NexusRuntime {
 
   async modes(workspace: string, conversation: string, patch?: { code_mode?: boolean; subagent?: boolean }) {
     const active = this.connection
-    if (!active || workspace !== active.identity.workspace) throw new Error("The selected workspace is unavailable.")
+    if (!active) throw new Error("The selected workspace is unavailable.")
     const chat = active.member.workspace(workspace).conversation(conversation)
     const info = await chat.fetch()
     if (
@@ -887,8 +888,7 @@ export class NexusRuntime {
 
   async policy(workspace: string, conversation: string, preset?: string, model?: string) {
     const active = this.connection
-    if (!active || !this.settings || workspace !== active.identity.workspace)
-      throw new Error("The selected workspace is unavailable.")
+    if (!active || !this.settings) throw new Error("The selected workspace is unavailable.")
     const chat = await active.member.workspace(workspace).conversation(conversation).fetch()
     if (
       chat.answering_user_public_id !== active.identity.agent ||
@@ -989,7 +989,7 @@ export class NexusRuntime {
 
   async operator(input: typeof NexusOperator.Type) {
     const active = this.connection
-    if (!active || input.workspace !== active.identity.workspace) throw new Error("Unknown paired workspace.")
+    if (!active) throw new Error("Unknown paired workspace.")
     const workspace = active.member.workspace(input.workspace)
     const chat = await workspace.conversation(input.conversation).fetch()
     if (chat.side || chat.answering_user_public_id !== active.identity.agent || !active.candidates.has(input.runner))
@@ -1066,6 +1066,18 @@ export class NexusRuntime {
     }
     if (command.action === "connection.import") return this.importKeys(command)
     if (command.action === "extension.list") return this.extensions()
+    if (command.action === "extension.asset") {
+      if (!this.extensionManager) throw new Error("Nexus extensions are not loaded.")
+      return this.extensionManager.asset(command.id, command.version, command.path)
+    }
+    if (command.action === "login.device") {
+      if (!this.settings) throw new Error("Configure a Nexus origin first.")
+      return this.human.device(this.settings.origin, this.settings.identifier)
+    }
+    if (command.action === "platform.request") {
+      if (!this.settings) throw new Error("Configure a Nexus origin first.")
+      return this.human.request(this.settings.origin, command)
+    }
     if (command.action === "extension.configure") return this.configureExtension(command.change)
     if (command.action === "extension.call") {
       if (command.name === "application.upload") {
@@ -1171,6 +1183,22 @@ export class NexusRuntime {
 
     const active = this.connection
     if (!active || !this.settings) throw new Error("Nexus is disconnected.")
+    if (command.action === "workspace.list")
+      return { items: await active.application.workspaces.list(), selected: active.identity.workspace }
+    if (command.action === "workspace.create")
+      return active.member.workspaces.create(
+        { name: command.name, access_mode: "private" },
+        { idempotencyKey: command.key },
+      )
+    if (command.action === "workspace.use") {
+      const workspace = await active.application.workspaces.require(command.workspace)
+      await atomic(join(this.storage, "settings.json"), { ...this.settings, workspace: workspace.public_id })
+      this.settings = { ...this.settings, workspace: workspace.public_id }
+      active.identity.workspace = workspace.public_id
+      active.identity.workspaceName = workspace.name
+      this.statusValue = { ...this.statusValue, workspace: workspace.public_id, identity: { ...active.identity } }
+      return workspace
+    }
     if (command.action.startsWith("preset.")) return active.application.presets.command(command as NexusPreset.Command)
     if (command.action.startsWith("bot.") && command.action !== "bot.submit")
       return active.application.bots.command(command as NexusBot.Command)
@@ -1193,13 +1221,14 @@ export class NexusRuntime {
     if (principal && principal.kind !== "human") throw new Error("Use a Human member token.")
     if (command.action === "application.approve") {
       if (!principal) throw new Error("A Human member token is required.")
-      if (command.workspace !== active.identity.workspace) throw new Error("Unknown Nexus workspace.")
 
       const space = member.workspace(command.workspace)
       const [chat, run] = await Promise.all([
         space.conversation(command.conversation).fetch(),
         space.run(command.run).fetch(),
       ])
+
+      if (chat.workspace_public_id !== command.workspace) throw new Error("Unknown Nexus workspace.")
 
       if (
         chat.archived_at ||
@@ -1210,12 +1239,20 @@ export class NexusRuntime {
 
       return new Operations(member, active.application, active.identity).command({
         action: "approve",
+        workspace: command.workspace,
         run: command.run,
         task: command.task,
         always: command.always,
       })
     }
     if (command.action === "bot.submit") return active.application.bots.submit(command, member)
+    if (command.action === "application.operation") {
+      const operation = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(command.operation)
+      return new Operations(member, active.application, {
+        ...active.identity,
+        workspace: command.workspace ?? active.identity.workspace,
+      }).command(operation)
+    }
     if (command.action === "application.skills") {
       const catalog = Schema.decodeUnknownSync(
         Schema.Struct({
@@ -1249,6 +1286,26 @@ export class NexusRuntime {
         .inputExecution(command.input)
         .recover()
     if (command.action === "application.prepare" || command.action === "application.submit") {
+      const conversation = await member.workspace(command.workspace).conversation(command.conversation).fetch()
+      const bot = conversation.metadata["opencode.bot"]
+      if (typeof bot === "string") {
+        const input = {
+          action: "bot.submit" as const,
+          id: bot,
+          key: command.key,
+          workspace: command.workspace,
+          conversation: command.conversation,
+          text: command.text,
+          model: command.model,
+          delivery: command.delivery,
+          expected_steering_run_public_id: command.target,
+        }
+        if (command.action === "application.prepare") {
+          await active.application.bots.capture(input, member)
+          return null
+        }
+        return active.application.bots.submit(input, member)
+      }
       const input = {
         ...command,
         action: "application.submit" as const,
@@ -1263,7 +1320,14 @@ export class NexusRuntime {
       return active.application.submit(input, member)
     }
 
-    const workspace = member.workspace(active.identity.workspace)
+    const selected =
+      "workspace" in command ? (command.workspace ?? active.identity.workspace) : active.identity.workspace
+    const workspace = member.workspace(selected)
+    if (command.action === "schedule.list")
+      return command.conversation
+        ? workspace.conversation(command.conversation).schedules.list({ after: command.after })
+        : workspace.schedules.list({ after: command.after })
+    if (command.action === "memory.collections") return workspace.memoryCollections.list()
     if ("conversation" in command) {
       const chat = workspace.conversation(command.conversation)
       const info = await chat.fetch()
@@ -1271,7 +1335,7 @@ export class NexusRuntime {
         throw new Error("Unknown active agent conversation.")
       const schedules = chat.schedules
       if (command.action === "schedule.create") {
-        const policy = await this.policy(active.identity.workspace, command.conversation)
+        const policy = await this.policy(selected, command.conversation)
         return (
           await schedules.create(
             {
@@ -1279,11 +1343,9 @@ export class NexusRuntime {
               name: command.name,
               rule: command.rule,
               answering_user_public_id: active.identity.agent,
-              approval_mode: "ask",
+              approval_mode: command.approval ?? "ask",
               tool_names: policy.tools,
-              ...(policy.runner && policy.directory
-                ? { executor_contexts: { [policy.runner]: { "opencode.directory": policy.directory } } }
-                : {}),
+              executor_contexts: policy.executor_contexts,
             },
             { idempotencyKey: command.key },
           )
@@ -1293,6 +1355,8 @@ export class NexusRuntime {
       if (command.action === "schedule.update")
         return schedules.update(command.id, {
           expected_lock_version: command.version,
+          name: command.name,
+          approval_mode: command.approval,
           rule: command.rule,
           prompt: command.prompt,
         })
@@ -1307,7 +1371,7 @@ export class NexusRuntime {
     if (command.action === "memory.create") return collections.create({ name: command.name })
     if (!("collection" in command)) throw new Error("Unknown Nexus command.")
     const collection = await collections.fetch(command.collection)
-    if (collection.scope !== "workspace" || collection.owner_public_id !== active.identity.workspace)
+    if (collection.scope !== "workspace" || collection.owner_public_id !== selected)
       throw new Error("Select a memory collection from the paired workspace.")
     if (command.action === "memory.archive")
       return collections.archive(command.collection, { lock_version: command.version })
@@ -1404,8 +1468,7 @@ export class NexusRuntime {
     const active = this.connection
     const signal = this.stop.signal
     const pending = this.declaring.then(async () => {
-      if (!active || active !== this.connection || workspace !== active.identity.workspace)
-        throw new Error("Nexus connection changed.")
+      if (!active || active !== this.connection) throw new Error("Nexus connection changed.")
       const space = active.member.workspace(workspace)
       const run = space.run(runID)
       const [chat, data, detail] = await Promise.all([
@@ -1442,7 +1505,7 @@ export class NexusRuntime {
   }
 
   async login() {
-    if (!this.settings || !this.connection) throw new Error("Connect the Nexus agent before signing in.")
+    if (!this.settings) throw new Error("Configure a Nexus origin before signing in.")
     return this.human.start(this.settings.origin, this.settings.identifier)
   }
 
