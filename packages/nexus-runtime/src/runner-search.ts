@@ -1,3 +1,4 @@
+import { ToolInputError } from "./tool-error"
 import { lstat, open } from "node:fs/promises"
 import { basename, relative } from "node:path"
 import { Schema } from "effect"
@@ -28,10 +29,10 @@ export async function runnerSearch(
   const info = await lstat(path)
   const limit = args.limit ?? (name === "grep" ? 100 : 1000)
   if (name === "find") {
-    if (!info.isDirectory()) throw new Error("Expected a search directory.")
+    if (!info.isDirectory()) throw new ToolInputError("Expected a search directory.")
     return findFiles(path, args.pattern, limit, signal)
   }
-  if (limit > 500) throw new Error("Grep limit must not exceed 500.")
+  if (limit > 500) throw new ToolInputError("Grep limit must not exceed 500.")
   const result = await grepMatches(path, { ...args, glob: args.glob ?? args.include }, limit, signal)
   if ("error" in result) return { is_error: true, content: result.error }
   const matches = result.matches
