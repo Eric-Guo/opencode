@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { JsonValue } from "@cybros/agent"
+import type { JsonValue, JsonObject } from "@cybros/agent"
 import { runCode } from "../src/code"
 import { codeBinding } from "../src/code-settings"
 import { OperationRefused } from "../src/claim-control"
@@ -11,27 +11,21 @@ const signal = new AbortController().signal
 test("code preserves false, zero and explicit null and buffers selected text", async () => {
   for (const value of [false, 0, null]) {
     expect(
-      await runCode(
-        'text("visible"); value("old"); return params.value',
-        { value },
-        [binding],
-        async () => null,
-        signal,
-      ),
+      await run('text("visible"); value("old"); return params.value', { value }, [binding], async () => null, signal),
     ).toEqual({
       content: [{ type: "text", text: "visible" }],
       structured_content: value,
     })
   }
 
-  expect(await runCode("value(false)", {}, [binding], async () => null, signal)).toEqual({
+  expect(await run("value(false)", {}, [binding], async () => null, signal)).toEqual({
     content: [],
     structured_content: false,
   })
 })
 
 test("code supplies an immediate readonly operation key and preserves tool error envelopes", async () => {
-  const result = await runCode(
+  const result = await run(
     `
 const work = tools.read({path:"missing"});
 text(work.operation_key);
@@ -54,7 +48,7 @@ return await work;
 })
 
 test("code exposes recorded refusals and rejects resources it did not observe", async () => {
-  const result = await runCode(
+  const result = await run(
     `
 try { await tools.read({path:"missing"}); } catch (error) { return error.refusal; }
 `,
@@ -68,7 +62,7 @@ try { await tools.read({path:"missing"}); } catch (error) { return error.refusal
 
   expect(result.structured_content).toEqual({ code: "denied", message: "Not allowed" })
   await expect(
-    runCode(
+    run(
       'resource({type:"resource_link",uri:"nexus://uploads/unknown",name:"unknown"})',
       {},
       [binding],
@@ -80,7 +74,7 @@ try { await tools.read({path:"missing"}); } catch (error) { return error.refusal
 
 test("code forwards observed captures and accepts array step authoring", async () => {
   const capture = { type: "resource_link", uri: "nexus://uploads/image", name: "image.png", mimeType: "image/png" }
-  const result = await runCode(
+  const result = await run(
     `
 const result = await nexus.steps([{tool:{key:"image",name:"read",input:{path:"image.png"}}}]);
 resource(result.content[0]);
@@ -102,16 +96,10 @@ resource(result.content[0]);
 
 test("code refuses unjoined operations but ownership receipts permit background work", async () => {
   await expect(
-    runCode(
-      'tools.read({path:"pending"}); text("not delivered")',
-      {},
-      declarations,
-      () => new Promise(() => {}),
-      signal,
-    ),
+    run('tools.read({path:"pending"}); text("not delivered")', {}, declarations, () => new Promise(() => {}), signal),
   ).rejects.toThrow("unjoined")
 
-  const result = await runCode(
+  const result = await run(
     `
 const work = tools.read({path:"pending"});
 await nexus.background({operation_key:work.operation_key,lifetime:"conversation",wake:"auto"});
@@ -134,7 +122,7 @@ text("Working");
 
 test("flat declarations, MCP code names and model defaults share one frozen callable catalog", async () => {
   const calls: unknown[] = []
-  const result = await runCode(
+  const result = await run(
     `
 await tools.code({});
 await tools.read({});
@@ -183,7 +171,7 @@ test("nested authoring rejects undeclared tools before accepting any operation",
     'await nexus.replace({steps:[{tool:{name:"missing",input:{}}}]})',
   ])
     await expect(
-      runCode(
+      run(
         source,
         {},
         declarations,
@@ -199,9 +187,9 @@ test("nested authoring rejects undeclared tools before accepting any operation",
 })
 
 test("code validates its binding and keeps ambient capabilities and JSON coercion unavailable", async () => {
-  await expect(runCode("return 1", {}, [], async () => null, signal)).rejects.toThrow("unsupported_binding")
+  await expect(run("return 1", {}, [], async () => null, signal)).rejects.toThrow("unsupported_binding")
   await expect(
-    runCode(
+    run(
       "return 1",
       {},
       [{ ...binding, function: { name: "code", parameters: { $id: "old" } } }],
@@ -211,7 +199,7 @@ test("code validates its binding and keeps ambient capabilities and JSON coercio
   ).rejects.toThrow("unsupported_binding")
   expect(
     (
-      await runCode(
+      await run(
         "return [typeof Date,typeof Intl,typeof require,typeof bridge,typeof copy]",
         {},
         [binding],
@@ -228,12 +216,12 @@ test("code validates its binding and keeps ambient capabilities and JSON coercio
     "return {toJSON:()=>1}",
     "return new Array(2)",
   ])
-    await expect(runCode(source, {}, [binding], async () => null, signal)).rejects.toThrow()
+    await expect(run(source, {}, [binding], async () => null, signal)).rejects.toThrow()
 })
 
 test("isolated JavaScript preserves native promises and rejects accessors without invoking them", async () => {
   const calls: string[] = []
-  const result = await runCode(
+  const result = await run(
     `
 class Answer { constructor() { this.value = 42 } }
 const work = tools.read({});
@@ -259,7 +247,7 @@ return {native, answer:new Answer().value};
     "JSON properties require string keys",
     "Host control is unavailable to source",
   ])
-  await expect(runCode("return new Promise(()=>{})", {}, [binding], async () => null, signal)).rejects.toThrow(
+  await expect(run("return new Promise(()=>{})", {}, [binding], async () => null, signal)).rejects.toThrow(
     "stalled_promise",
   )
 })
@@ -269,11 +257,11 @@ test("isolated JavaScript interrupts CPU and microtask loops and bounds its own 
     "while(true){}",
     "await new Promise(()=>{ const next=()=>Promise.resolve().then(next); next() })",
   ])
-    await expect(runCode(source, {}, [binding], async () => null, signal, {}, { computeMs: 20 })).rejects.toThrow(
+    await expect(run(source, {}, [binding], async () => null, signal, {}, { computeMs: 20 })).rejects.toThrow(
       "execution_limit",
     )
   await expect(
-    runCode(
+    run(
       "const rows=[]; for(let i=0;i<1000000;i++) rows.push({index:i}); return rows.length",
       {},
       [binding],
@@ -283,13 +271,13 @@ test("isolated JavaScript interrupts CPU and microtask loops and bounds its own 
       { heapBytes: 8 * 1024 * 1024 },
     ),
   ).rejects.toThrow(/memory|heap/)
-  expect((await runCode("return 42", {}, [binding], async () => null, signal)).structured_content).toBe(42)
+  expect((await run("return 42", {}, [binding], async () => null, signal)).structured_content).toBe(42)
 })
 
 test("pending request and observation limits reject data before it crosses the next boundary", async () => {
   const calls: string[] = []
   await expect(
-    runCode(
+    run(
       "tools.read({text:params}); tools.read({text:params}); await new Promise(()=>{})",
       "a".repeat(600000),
       declarations,
@@ -302,7 +290,7 @@ test("pending request and observation limits reject data before it crosses the n
   ).rejects.toThrow("pending requests")
   expect(calls).toEqual([])
   await expect(
-    runCode("return await tools.read({})", {}, declarations, async () => ({ text: "x".repeat(8388608) }), signal),
+    run("return await tools.read({})", {}, declarations, async () => ({ text: "x".repeat(8388608) }), signal),
   ).rejects.toThrow("events exceed")
 })
 
@@ -310,7 +298,7 @@ test("cancellation releases a waiting isolated invocation without waiting for it
   const controller = new AbortController()
   const accepted = Promise.withResolvers<void>()
   const outcome = Promise.withResolvers<JsonValue>()
-  const program = runCode(
+  const program = run(
     "return await tools.read({})",
     {},
     declarations,
@@ -324,4 +312,102 @@ test("cancellation releases a waiting isolated invocation without waiting for it
   controller.abort(new Error("canceled code"))
   await expect(program).rejects.toThrow("canceled code")
   outcome.resolve(null)
+})
+
+function run(
+  source: string,
+  params: JsonValue,
+  declarations: JsonValue[],
+  operation: (key: string, request: JsonObject) => Promise<JsonValue>,
+  signal: AbortSignal,
+  defaults: JsonObject = {},
+  limits = {},
+) {
+  return runCode(
+    source,
+    params,
+    declarations,
+    async (key, request) => ({
+      event: { type: "operation", key, request, receipt: {}, position: 1, refusal: null, outcome: null },
+      outcome: Promise.resolve().then(() => operation(key, request)),
+    }),
+    signal,
+    defaults,
+    limits,
+  )
+}
+
+test("host transport failures escape source catch and actual acceptance mismatches stop the VM", async () => {
+  await expect(
+    run(
+      'try { await tools.read({}); } catch { return "hidden" }',
+      {},
+      declarations,
+      async () => {
+        throw new Error("transport lost")
+      },
+      signal,
+    ),
+  ).rejects.toThrow("transport lost")
+  await expect(
+    runCode(
+      'return await tools.read({path:"original"})',
+      {},
+      declarations,
+      async (key) => ({
+        event: {
+          type: "operation",
+          key,
+          request: { kind: "tool", name: "read", input: { path: "changed" } },
+          receipt: {},
+          position: 1,
+          refusal: null,
+          outcome: null,
+        },
+        outcome: Promise.resolve(null),
+      }),
+      signal,
+    ),
+  ).rejects.toThrow("Accepted operation differs")
+})
+
+test("Code Mode observes recorded completion order even while a later acceptance is pending", async () => {
+  const first = Promise.withResolvers<JsonValue>()
+  const second = Promise.withResolvers<JsonValue>()
+  const ready = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const program = runCode(
+    `
+const first = tools.read({index:1});
+const second = tools.read({index:2});
+const third = tools.read({index:3});
+text(String(await Promise.race([first, second])));
+await Promise.all([first, second, third]);
+`,
+    {},
+    declarations,
+    async (key, request) => {
+      if (
+        request.input &&
+        typeof request.input === "object" &&
+        !Array.isArray(request.input) &&
+        request.input.index === 3
+      ) {
+        ready.resolve()
+        await release.promise
+      }
+      return {
+        event: { type: "operation", key, request, receipt: {}, position: 1, refusal: null, outcome: null },
+        outcome: key === "op_0" ? first.promise : key === "op_1" ? second.promise : Promise.resolve(null),
+      }
+    },
+    signal,
+  )
+  await ready.promise
+  second.resolve("second")
+  await Promise.resolve()
+  first.resolve("first")
+  await Promise.resolve()
+  release.resolve()
+  expect((await program).content).toEqual([{ type: "text", text: "second" }])
 })

@@ -1,6 +1,6 @@
 import type { JsonObject, JsonValue } from "@cybros/agent"
 import { Schema } from "effect"
-import { OperationRefused } from "./claim-control"
+import { OperationRefused, type CodeOperation } from "./claim-control"
 import { codeBinding } from "./code-settings"
 import { codeDriver } from "./code-driver"
 
@@ -43,7 +43,7 @@ export async function runCode(
   source: string,
   params: JsonValue,
   declarations: JsonValue[],
-  operation: (key: string, request: JsonObject) => Promise<JsonValue>,
+  operation: CodeOperation,
   signal: AbortSignal,
   defaults: JsonObject = {},
   limits: { computeMs?: number; heapBytes?: number } = {},
@@ -122,7 +122,8 @@ export async function runCode(
     evaluate(
       `JSON.stringify(__nexus_codemode(${JSON.stringify(capability)},${JSON.stringify(command)},${JSON.stringify(value)}))`,
     )
-  const pending = new Map<string, Promise<JsonObject>>()
+  const observations: JsonObject[] = []
+  const ready = { next: Promise.withResolvers<void>() }
   const resources = new Map<string, JsonObject>()
   const aborted = Promise.withResolvers<never>()
   const cancel = () => aborted.reject(signal.reason)
@@ -159,44 +160,45 @@ export async function runCode(
       // Accept the entire issued batch before supplying any observation, including immediately settled tools.
       if (snapshot.requests.length) {
         for (const request of snapshot.requests) {
-          invoke("event", { type: "operation", key: request.key, request: request.request, receipt: {} })
-          const operationRequest =
-            request.request.kind === "steps" && Array.isArray(request.request.input)
-              ? { ...request.request, input: { steps: request.request.input } }
-              : request.request
-          pending.set(
-            request.key,
-            Promise.resolve()
-              .then(() => operation(request.key, operationRequest))
-              .then(
-                (outcome): JsonObject => {
-                  if (outcome && typeof outcome === "object" && !Array.isArray(outcome)) {
-                    for (const block of Array.isArray(outcome.content) ? outcome.content : []) {
-                      if (block && typeof block === "object" && !Array.isArray(block) && block.type === "resource_link")
-                        resources.set(String(block.uri), block)
-                    }
-                  }
-                  return { type: "observation", key: request.key, outcome }
-                },
-                (error: unknown): JsonObject => ({
-                  type: "observation",
-                  key: request.key,
-                  refusal:
-                    error instanceof OperationRefused
-                      ? error.refusal
-                      : {
-                          code: "operation_failed",
-                          message: error instanceof Error ? error.message : "Operation failed.",
-                        },
-                }),
-              ),
+          const accepted = await Promise.race([operation(request.key, request.request), aborted.promise])
+          const event = accepted.event
+          if (event.type !== "operation" || !event.request || !!event.receipt === !!event.refusal)
+            throw new Error("host_event_error: Operation needs its actual request and one receipt or refusal.")
+          invoke("event", {
+            type: "operation",
+            key: event.key,
+            request: event.request,
+            ...(event.refusal ? { refusal: { ...event.refusal } } : { receipt: event.receipt }),
+          })
+          const outcome = accepted.outcome.then(
+            (outcome): JsonObject => {
+              if (outcome && typeof outcome === "object" && !Array.isArray(outcome)) {
+                for (const block of Array.isArray(outcome.content) ? outcome.content : []) {
+                  if (block && typeof block === "object" && !Array.isArray(block) && block.type === "resource_link")
+                    resources.set(String(block.uri), block)
+                }
+              }
+              return { type: "observation", key: request.key, outcome }
+            },
+            (error: unknown): JsonObject => {
+              if (!(error instanceof OperationRefused)) throw error
+              return { type: "observation", key: request.key, refusal: error.refusal }
+            },
           )
+          void outcome
+            .then((event) => {
+              observations.push(event)
+              ready.next.resolve()
+            })
+            .catch((error: unknown) => aborted.reject(error))
         }
         continue
       }
-      const event = await Promise.race([...pending.values(), aborted.promise])
+      if (!observations.length) await Promise.race([ready.next.promise, aborted.promise])
+      const event = observations.shift()
+      if (!observations.length) ready.next = Promise.withResolvers<void>()
+      if (!event) continue
       if (Buffer.byteLength(JSON.stringify([event])) > 8388608) throw new Error("Operation events exceed 8 MiB.")
-      pending.delete(String(event.key))
       invoke("event", event)
     }
   } finally {
