@@ -55,6 +55,9 @@ terminalTest(
             realtime: {
               read: async () => state.value,
               offer: async (input) => {
+                expect(input.connection_id).toMatch(
+                  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+                )
                 state.value = { ...state.value, connection_id: input.connection_id, offer_sdp: input.sdp }
                 offered.resolve(input.sdp)
                 return state.value
