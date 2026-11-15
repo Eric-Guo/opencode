@@ -15,6 +15,8 @@ import { availableParallelism } from "node:os"
 import { JsonSchema, Schema, SchemaRepresentation } from "effect"
 import type { HostTools } from "./host"
 import type { Checkpoints } from "./checkpoints"
+import type { ExtensionManager } from "./extension-manager"
+import type { RunnerContext } from "./extensions"
 import type { RunnerTool } from "./extensions"
 import type { EditorBinding } from "./editor-bridge"
 import type { ClaimJournal } from "./claims"
@@ -66,6 +68,7 @@ export class RunnerInbox {
       protectedRoots?: readonly string[]
       artifacts?: string
       startupLimit?: number
+      hooks?: () => ReturnType<ExtensionManager["captureTools"]>
       result?(row: InboxTask, result: Omit<CommitTask, "claim_token">): Promise<Omit<CommitTask, "claim_token">>
       ports?: {
         read(workspace: string, anchor: string): EditorBinding | undefined
@@ -337,15 +340,7 @@ export class RunnerInbox {
       return { outcome: "failed", content: "Tool admission changed before execution; retry this call." }
     if (!definition)
       return { outcome: "failed", content: "This runner no longer serves the claimed tool on this role." }
-    if (this.valid(definition, row.tool_input)) {
-      const reason = runnerRefusal(row.tool_name ?? "", row.tool_input, root, this.options.protectedRoots)
-      return reason ? { outcome: "completed", is_error: true, content: reason } : undefined
-    }
-    return {
-      outcome: "completed",
-      is_error: true,
-      content: "invalid_tool_arguments: the arguments do not match this tool's declared schema.",
-    }
+    return undefined
   }
 
   private async placement(row: InboxTask, extension: RunnerTool | undefined) {
@@ -416,9 +411,12 @@ export class RunnerInbox {
     if (signal.aborted) return interrupted(signal.reason)
     const task = this.options.executor.inboxTask(claim.task.run_public_id, claim.task.task_key)
     const operations = new ClaimOperations(task, claim.claim_token, signal)
-    const operation = (key: string, request: JsonObject) => operations.invoke(key, request)
+    const operation = (key: string, request: JsonObject) => operations.submit(key, request)
     const ask = async (key: string, prompt: string, options?: string[]) => {
-      const result = await operation(key, { kind: "ask", input: { prompt, ...(options?.length ? { options } : {}) } })
+      const result = await operations.question(key, {
+        kind: "ask",
+        input: { prompt, ...(options?.length ? { options } : {}) },
+      })
       if (
         !result ||
         typeof result !== "object" ||
@@ -441,43 +439,69 @@ export class RunnerInbox {
         .join("\n")
     }
     const checkpoints = this.options.checkpoints?.forRoot(root, this.options.protectedRoots)
-    const call = () =>
-      runClaim(
-        this.options.executor,
-        claim.task,
-        root,
-        signal,
-        this.options.host,
-        checkpoints,
-        extensions,
-        ask,
-        claim.claim_token,
-        operation,
-        this.options.protectedRoots,
-        this.options.artifacts
-          ? join(this.options.artifacts, createHash("sha256").update(root).digest("hex").slice(0, 16))
-          : undefined,
-        this.options.ports,
-        executionStarted
-          ? { executionStarted, started, workerRetired: (reason) => owned.cancel.abort(reason) }
-          : undefined,
-      )
-    const running = (
-      checkpoints &&
+    const hooks = this.options.hooks?.()
+    const context: RunnerContext = {
+      directory: root,
+      workspace: claim.task.workspace_public_id,
+      conversation: claim.task.conversation_public_id,
+      run: claim.task.run_public_id,
+      task: claim.task.task_key,
+      signal,
+      ask,
+      started,
+      executionStarted,
+      workerRetired: (reason) => owned.cancel.abort(reason),
+    }
+    const invoke = async () => {
+      const gated = await hooks?.before({ tool: definition, input: claim.task.tool_input, context })
+      signal.throwIfAborted()
+      if (gated && "veto" in gated) return { is_error: true, content: gated.veto }
+      const input = gated?.input ?? claim.task.tool_input
+      if (!this.valid(definition, input))
+        return {
+          is_error: true,
+          content: "invalid_tool_arguments: the arguments do not match this tool's declared schema.",
+        }
+      const reason = runnerRefusal(definition.name, input, root, this.options.protectedRoots)
+      if (reason) return { is_error: true, content: reason }
+      const call = () =>
+        runClaim(
+          this.options.executor,
+          { ...claim.task, tool_input: input },
+          root,
+          signal,
+          this.options.host,
+          checkpoints,
+          extensions.map((tool) => hooks?.tools.find((entry) => entry.definition === tool.definition) ?? tool),
+          ask,
+          claim.claim_token,
+          operation,
+          this.options.protectedRoots,
+          this.options.artifacts
+            ? join(this.options.artifacts, createHash("sha256").update(root).digest("hex").slice(0, 16))
+            : undefined,
+          this.options.ports,
+          executionStarted
+            ? { executionStarted, started, workerRetired: (reason) => owned.cancel.abort(reason) }
+            : undefined,
+        )
+      const result = await (checkpoints &&
       definition.effect_profile?.kind === "write" &&
       !["checkpoint_restore", "checkpoints"].includes(definition.name)
-        ? checkpoints.observe(claim.task.run_public_id, claim.task.task_key, claim.task.tool_input, signal, call)
-        : call()
+        ? checkpoints.observe(claim.task.run_public_id, claim.task.task_key, input, signal, call)
+        : call())
+      return hooks
+        ? hooks.after({ tool: definition, input, context, result })
+        : (this.options.result?.(claim.task, result) ?? result)
+    }
+    const running = invoke().then(
+      (result): ClaimResult => ({ ...result, outcome: "completed" }),
+      (error: unknown): ClaimResult =>
+        signal.aborted
+          ? interrupted(signal.reason)
+          : { outcome: "failed", content: error instanceof Error ? error.message : "The tool could not run." },
     )
-      .then((result) => this.options.result?.(claim.task, result) ?? result)
-      .then(
-        (result): ClaimResult => ({ ...result, outcome: "completed" }),
-        (error: unknown): ClaimResult =>
-          signal.aborted
-            ? interrupted(signal.reason)
-            : { outcome: "failed", content: error instanceof Error ? error.message : "The tool could not run." },
-      )
-    owned.work = running.then(() => {})
+    owned.work = running.finally(() => hooks?.release()).then(() => {})
     // The synchronous prefix has reached its first wait; child tasks can now reserve startup capacity.
     if (!executionStarted) started()
     return new Promise<ClaimResult>((resolve) => {
