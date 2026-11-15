@@ -52,6 +52,7 @@ export default Runtime.handler(
             {
               key: crypto.randomUUID(),
               prompt,
+              workspace: Option.getOrUndefined(input.workspace),
               model: Option.getOrUndefined(input.model),
               runner: Option.getOrUndefined(input.runner),
               agent: Option.getOrUndefined(input.agent),

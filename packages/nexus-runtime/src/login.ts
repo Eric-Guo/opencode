@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:http"
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import { vault } from "./storage"
+import { Schema } from "effect"
 
 export class HumanLogin {
   private listener?: Server
@@ -11,14 +12,76 @@ export class HumanLogin {
   private callback?: Promise<void>
   private identity?: { origin: string; credentials: OAuthCredentials }
   private cancel?: AbortController
+  private devicePending?: Promise<void>
+  private deviceState?: { url: string; code: string; error?: string }
 
   constructor(private readonly directory: string) {}
+
+  async device(origin: string, identifier: string) {
+    if (this.devicePending) return this.deviceState!
+    if (this.pending || (await this.account(origin))) throw new Error("A Nexus sign-in is already active.")
+
+    const authority = new ApplicationOAuth({ baseURL: origin })
+    const authorization = await authority.requestDeviceAuthorization({ agent_identifier: identifier }, "login")
+    this.cancel = new AbortController()
+    this.deviceState = { url: authorization.verification_uri_complete, code: authorization.user_code }
+    this.devicePending = authority
+      .awaitCredentials(authorization, { signal: this.cancel.signal })
+      .then(async (grant) => {
+        if (!grant.platform_access_token || grant.agent || grant.runner || !grant.user)
+          throw new Error("Unexpected Nexus login authority.")
+        await mkdir(this.directory, { recursive: true, mode: 0o700 })
+        this.identity = {
+          origin,
+          credentials: await OAuthCredentials.issue({ authority, credentials: grant, store: this.store(origin) }),
+        }
+      })
+      .catch((error: unknown) => {
+        if (this.deviceState) this.deviceState.error = error instanceof Error ? error.message : "Nexus sign-in failed."
+      })
+      .finally(() => {
+        this.devicePending = undefined
+      })
+    return this.deviceState
+  }
+
+  async request(
+    origin: string,
+    input: { principal: string; path: string; method: string; body?: Schema.Json; key?: string },
+  ) {
+    const path = decodeURIComponent(input.path.split("?")[0])
+    if (
+      !path.startsWith("/api/v1/") ||
+      path.includes("\\") ||
+      path.split("/").some((part) => part === "." || part === "..") ||
+      input.path.includes("#")
+    )
+      throw new Error("Name a Nexus /api/v1 resource.")
+    const account = await this.account(origin)
+    if (!account || account.id !== input.principal) throw new Error("Sign in with this Human's Nexus account first.")
+    const credentials = await this.credentials(origin)
+    const response = await fetch(origin + input.path, {
+      method: input.method,
+      redirect: "error",
+      signal: AbortSignal.timeout(120_000),
+      headers: {
+        authorization: "Bearer " + (await credentials!.provider("platform")()),
+        "content-type": "application/json",
+        ...(input.key ? { "idempotency-key": input.key } : {}),
+      },
+      body: input.body === undefined ? undefined : JSON.stringify(input.body),
+    })
+    const text = await response.text()
+    if (!response.ok) throw new Error("Nexus platform request failed (" + response.status + "): " + text.slice(0, 2000))
+    return text ? Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(text) : null
+  }
 
   private store(origin: string) {
     return vault(join(this.directory, createHash("sha256").update(origin).digest("hex") + ".json"))
   }
 
   start(origin: string, identifier: string) {
+    if (this.devicePending) return Promise.reject(new Error("Device sign-in is already active."))
     if (this.pending) return this.pending
     this.cancel = new AbortController()
     this.pending = this.listen(origin, identifier, this.cancel.signal).catch((error) => {
@@ -152,6 +215,7 @@ export class HumanLogin {
 
   async close() {
     this.cancel?.abort()
+    await this.devicePending
     await this.pending?.catch(() => {})
     this.listener?.close()
     await this.callback
