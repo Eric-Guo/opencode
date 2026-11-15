@@ -118,6 +118,9 @@ export async function mcpSession(
         async configure() {
           throw new Error("Editor MCP attachments are managed by the editor.")
         },
+        async registerWebUI() {
+          throw new Error("Editor MCP cannot register browser modules.")
+        },
         registerTool(tool) {
           tools.push({
             ...tool,

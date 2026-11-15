@@ -2193,6 +2193,7 @@ const EndpointExperimentalNexusRun = (raw: RawClient["server.nexus"]) => (input:
         payload: {
           key: input["key"],
           prompt: input["prompt"],
+          workspace: input["workspace"],
           model: input["model"],
           runner: input["runner"],
           agent: input["agent"],
