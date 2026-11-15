@@ -5540,6 +5540,14 @@ export type ExperimentalNexusManageInput = {
         readonly replayed: boolean
       }
     | { readonly action: "application.skills" }
+    | {
+        readonly action: "application.approve"
+        readonly workspace: string
+        readonly conversation: string
+        readonly run: string
+        readonly task: string
+        readonly always?: boolean | null
+      }
     | { readonly action: "persona.read" }
     | { readonly action: "persona.reset" }
     | { readonly action: "persona.write"; readonly content: string }
