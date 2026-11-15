@@ -226,6 +226,13 @@ export const Operation = Schema.Union([
     action: Schema.Literals(["task", "abandon", "task.cancel", "task.compact", "request"]),
     ...Task,
   }),
+  Schema.Struct({ action: Schema.Literal("terminal.realtime"), ...Task }),
+  Schema.Struct({
+    action: Schema.Literal("terminal.answer"),
+    ...Task,
+    connection_id: Schema.NonEmptyString,
+    sdp: Schema.NonEmptyString,
+  }),
   Schema.Struct({
     action: Schema.Literal("approve"),
     ...Task,
@@ -749,6 +756,15 @@ export class Operations {
 
       if ("task" in input) {
         const task = run.task(input.task)
+
+        if (input.action === "terminal.realtime" || input.action === "terminal.answer") {
+          if (!info.tasks.some((row) => row.key === input.task && row.tool_name === "terminal"))
+            throw new Error("Unknown terminal task.")
+
+          return input.action === "terminal.realtime"
+            ? task.realtime(options)
+            : task.answerRealtime({ connection_id: input.connection_id, sdp: input.sdp }, options)
+        }
 
         if (input.action === "task") return task.fetch(options)
         if (input.action === "approve") {
