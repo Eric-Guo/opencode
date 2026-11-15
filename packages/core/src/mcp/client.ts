@@ -344,6 +344,8 @@ export interface ConnectOptions {
   readonly roots?: boolean
   /** False ignores server list-change notifications and does not subscribe to catalogs. */
   readonly listChanged?: boolean
+  /** Omit server-controlled error details when the consumer owns credential redaction. */
+  readonly redactErrors?: boolean
   /** Experimental: declares MCP Events, a beta extension, and exposes `Connection.events` for a 2026-07-28 server that offers them. */
   readonly events?: boolean
 }
@@ -357,6 +359,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const server = options.server
   const config = options.config
   const elicitation = options.elicitation
+  const diagnostic = (error: unknown) => (options.redactErrors ? "[redacted]" : describe(error))
   // The SDK takes list-changed handlers at construction, but consumers register after connect. On a
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
   const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
@@ -401,7 +404,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         Schedule.while(({ input, now, duration }) =>
           !isTransient(input) || now + Duration.toMillis(duration) >= deadline
             ? Effect.succeed(false)
-            : Effect.logWarning(`retrying ${what}`, { server, error: describe(input) }).pipe(Effect.as(true)),
+            : Effect.logWarning(`retrying ${what}`, { server, error: diagnostic(input) }).pipe(Effect.as(true)),
         ),
       ),
     )
@@ -438,7 +441,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     client.onerror = (error) => {
       if (error.name === "AbortError") return
       lastError = describe(error)
-      runFork(Effect.logWarning("mcp transport error", { server, error: lastError }))
+      runFork(Effect.logWarning("mcp transport error", { server, error: diagnostic(lastError) }))
     }
     if (options.roots !== false)
       client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(options.directory).href }] }))
@@ -512,11 +515,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const failure = (error: unknown) => {
     // A tool call that relists first can fail with the list's already mapped expiry.
     if (error instanceof SessionExpiredError) return error
+    if (error instanceof ProtocolError) return Object.assign(new Error(explain(error)), { code: error.code })
     const mapped =
-      error instanceof ProtocolError ||
-      error instanceof OAuthError ||
-      error instanceof UnauthorizedError ||
-      error instanceof InsufficientScopeError
+      error instanceof OAuthError || error instanceof UnauthorizedError || error instanceof InsufficientScopeError
         ? new Error(explain(error))
         : new TransportError({ server, message: explain(error) })
 
@@ -563,7 +564,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       )
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-    const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
+    const fetch = yield* McpOAuth.loggedFetch({
+      server,
+      directory: options.directory,
+      redactErrors: options.redactErrors,
+    })
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
@@ -621,7 +626,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
               orElse: () => Effect.fail(new Error(`Timed out after ${TERMINATE_TIMEOUT}ms`)),
             }),
             Effect.tapError((error) =>
-              Effect.logWarning("failed to terminate MCP session", { server, error: error.message }),
+              Effect.logWarning("failed to terminate MCP session", { server, error: diagnostic(error) }),
             ),
             Effect.ignore,
           )
@@ -633,13 +638,13 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
       Effect.tryPromise({ try: run, catch: failure }).pipe(
-        Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
+        Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: diagnostic(error) })),
       )
     // Listing is read-only, so a transient failure is safe to retry.
     const list = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
       retrying(what, Effect.tryPromise({ try: run, catch: (error) => error })).pipe(
         Effect.mapError(failure),
-        Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
+        Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: diagnostic(error) })),
       )
     // The SDK answers a list for an unadvertised capability with a console.debug line plus an empty
     // result, so refreshing a tools-only server prints to stdout on every catalog load. Negotiate
@@ -786,7 +791,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                             : failure(error),
                       ),
                       Effect.tapError((error) =>
-                        Effect.logWarning("failed to stream MCP events", { server, error: error.message }),
+                        Effect.logWarning("failed to stream MCP events", { server, error: diagnostic(error) }),
                       ),
                       Effect.matchEffect({
                         onFailure: (error) => Queue.fail(queue, error),
@@ -860,7 +865,8 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                 for (const tool of tools) listed.set(tool.name, tool)
                 return Effect.forEach(
                   skipped,
-                  (entry) => Effect.logWarning("skipping invalid MCP tool", { server, ...entry }),
+                  (entry) =>
+                    Effect.logWarning("skipping invalid MCP tool", { server, ...(options.redactErrors ? {} : entry) }),
                   { discard: true },
                 ).pipe(Effect.as(tools))
               }),
@@ -933,7 +939,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
             () => connection.tools().pipe(Effect.andThen(call)),
           ),
           Effect.mapError(failure),
-          Effect.tapError((error) => Effect.logWarning("failed to call MCP tool", { server, error: error.message })),
+          Effect.tapError((error) =>
+            Effect.logWarning("failed to call MCP tool", { server, error: diagnostic(error) }),
+          ),
           Effect.map(toCallToolResult),
         )
       },

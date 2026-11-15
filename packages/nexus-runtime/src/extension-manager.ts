@@ -1,3 +1,4 @@
+import type { mcpSession } from "./mcp-session"
 import { JsonSchema, Schema, SchemaRepresentation } from "effect"
 import { WebUIModule } from "./webui-module"
 import type { Nexus } from "@opencode/schema/nexus"
@@ -20,6 +21,19 @@ export type ExtensionDocument = {
   load(context: RunnerContext): Promise<Omit<CommitTask, "claim_token">>
 }
 
+export type ToolCall = { tool: AnnouncedTool; input: JsonObject; context: RunnerContext }
+export type ToolDecision = { rewrite: JsonObject } | { veto: string } | void
+export type ToolResult = ToolCall & { result: Omit<CommitTask, "claim_token"> }
+export type ExtensionCommand = { description?: string; input_schema?: JsonObject }
+export type ExtensionAgent = {
+  name: string
+  description: string
+  display_name?: string
+  system_prompt: string
+  configuration: JsonObject & { default_model?: string | null }
+}
+export type ConversationServers = (input: Parameters<typeof mcpSession>[0]) => ReturnType<typeof mcpSession>
+
 export type ExtensionAPI = {
   directory: string
   signal: AbortSignal
@@ -29,9 +43,23 @@ export type ExtensionAPI = {
   configure(operations: Nexus.ExtensionChange["operations"]): Promise<Nexus.ConfigurationResult>
   registerWebUI(root: string): Promise<void>
   registerTool(tool: RunnerTool): void
-  registerCommand(name: string, handler: (input: Schema.Json) => Promise<Schema.Json>): void
+  registerCommand(name: string, handler: (input: Schema.Json) => Promise<Schema.Json>, options?: ExtensionCommand): void
+  registerAgent(agent: ExtensionAgent): void
+  registerConversationServers(handler: ConversationServers): void
+  restartOnly(): void
+  onStartup(start: () => Promise<void> | void): void
+  background(name: string, run: (signal: AbortSignal) => Promise<void>): void
   registerDocument(document: ExtensionDocument): void
-  on(event: string, handler: (payload: Schema.Json) => Promise<unknown> | unknown): void
+  on<E extends string>(
+    event: E,
+    handler: (
+      payload: E extends "experimental.tool.call"
+        ? ToolCall
+        : E extends "experimental.tool.result"
+          ? ToolResult
+          : Schema.Json,
+    ) => Promise<unknown> | unknown,
+  ): void
   onShutdown(close: () => Promise<void> | void): void
   onToolResult(handler: ToolResultHandler): void
   describeStatus(status: () => { ready: boolean; issues: string[] }): void
@@ -44,9 +72,15 @@ export type ExtensionModule = {
 type Active = {
   webui?: WebUIModule
   tools: RunnerTool[]
+  leasedTools: RunnerTool[]
   commands: Map<string, (input: Schema.Json) => Promise<Schema.Json>>
   documents: ExtensionDocument[]
-  hooks: Map<string, Array<(payload: Schema.Json) => Promise<unknown>>>
+  hooks: Map<string, Array<(payload: unknown) => Promise<unknown>>>
+  commandInfo: Map<string, ExtensionCommand>
+  agents: ExtensionAgent[]
+  servers?: ConversationServers
+  restartOnly: boolean
+  acquire(): () => void
   environments: Array<(environment: JsonObject) => Promise<string | undefined>>
   results: ToolResultHandler[]
   configuration: Record<string, Schema.Json>
@@ -54,9 +88,29 @@ type Active = {
   close(): Promise<void>
 }
 type ToolResultHandler = (
-  context: Pick<RunnerContext, "workspace" | "conversation" | "run">,
+  context: Pick<RunnerContext, "workspace" | "conversation" | "run"> & Partial<RunnerContext>,
   result: Omit<CommitTask, "claim_token">,
 ) => Promise<Omit<CommitTask, "claim_token">> | Omit<CommitTask, "claim_token">
+
+const ToolAnswer = Schema.Struct({
+  content: Schema.optional(Schema.MutableJson),
+  is_error: Schema.optional(Schema.Boolean),
+  structured_content: Schema.optional(Schema.MutableJson),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
+  outcome: Schema.optional(Schema.Literals(["completed", "failed"])),
+  title: Schema.optional(Schema.String),
+  result_type: Schema.optional(Schema.String),
+})
+const AgentDefinition = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{1,31}$/)),
+  description: Schema.NonEmptyString,
+  display_name: Schema.optional(Schema.String),
+  system_prompt: Schema.String,
+  configuration: Schema.StructWithRest(
+    Schema.Struct({ default_model: Schema.optional(Schema.NullOr(Schema.String)) }),
+    [Schema.Record(Schema.String, Schema.MutableJson)],
+  ),
+})
 
 /** Registration is staged; failed candidates never replace a working extension. */
 export class ExtensionManager {
@@ -128,15 +182,94 @@ export class ExtensionManager {
     return pending
   }
 
+  agents() {
+    return [...this.active.values()].flatMap((state) => state.agents)
+  }
+
+  conversationServers() {
+    return [...this.active.values()].find((state) => state.servers)?.servers
+  }
+
+  captureTools() {
+    const states = [...this.active.entries()]
+    const releases = states.map(([, state]) => state.acquire())
+    return {
+      tools: states.flatMap(([, state]) => state.leasedTools),
+      before: async (call: ToolCall): Promise<{ input: JsonObject } | { veto: string }> => {
+        let input = call.input
+        for (const [id, state] of states) {
+          for (const handler of state.hooks.get("experimental.tool.call") ?? []) {
+            const answer = await Promise.resolve()
+              .then(() => handler({ ...call, input }))
+              .catch((error: unknown) => {
+                call.context.signal.throwIfAborted()
+                this.diagnostics.set(id, [error instanceof Error ? error.message : "Tool hook failed."])
+                return { veto: "blocked by " + id + ": tool hook failed" }
+              })
+            call.context.signal.throwIfAborted()
+            if (answer === undefined || answer === null) continue
+            const decision = Schema.decodeUnknownOption(
+              Schema.Union([
+                Schema.Struct({ veto: Schema.String }),
+                Schema.Struct({ rewrite: Schema.Record(Schema.String, Schema.MutableJson) }),
+              ]),
+            )(answer)
+            if (decision._tag === "None") return { veto: "blocked by " + id + ": invalid tool hook decision" }
+            if ("veto" in decision.value) return { veto: decision.value.veto }
+            input = decision.value.rewrite
+          }
+        }
+        return { input }
+      },
+      after: async (call: ToolResult): Promise<Omit<CommitTask, "claim_token">> => {
+        let result = call.result
+        for (const [id, state] of states) {
+          const handlers = [
+            ...(state.hooks.get("experimental.tool.result") ?? []).map((handler) => () => handler({ ...call, result })),
+            ...state.results.map((handler) => () => handler(call.context, result)),
+          ]
+          for (const handler of handlers) {
+            const answer = await Promise.resolve()
+              .then(handler)
+              .catch((error: unknown) => {
+                call.context.signal.throwIfAborted()
+                this.diagnostics.set(id, [error instanceof Error ? error.message : "Result hook failed."])
+              })
+            call.context.signal.throwIfAborted()
+            const parsed = Schema.decodeUnknownOption(ToolAnswer)(answer)
+            if (parsed._tag === "Some") result = parsed.value
+          }
+        }
+        return result
+      },
+      release: () => releases.toReversed().forEach((release) => release()),
+    }
+  }
+
   async toolResult(
     context: Pick<RunnerContext, "workspace" | "conversation" | "run">,
     initial: Omit<CommitTask, "claim_token">,
   ) {
+    const states = [...this.active.entries()]
+    const releases = states.map(([, state]) => state.acquire())
     let result = initial
-    for (const state of this.active.values()) {
-      for (const handler of state.results) result = await handler(context, result)
+    try {
+      for (const [id, state] of states) {
+        for (const handler of state.results) {
+          const answer = await Promise.resolve()
+            .then(() => handler(context, result))
+            .catch((error: unknown) => {
+              this.signal.throwIfAborted()
+              this.diagnostics.set(id, [error instanceof Error ? error.message : "Result hook failed."])
+            })
+          const parsed = Schema.decodeUnknownOption(ToolAnswer)(answer)
+          if (parsed._tag === "Some") result = parsed.value
+        }
+      }
+      return result
+    } finally {
+      releases.toReversed().forEach((release) => release())
     }
-    return result
   }
 
   replace(
@@ -152,7 +285,10 @@ export class ExtensionManager {
 
       validateConfiguration(module.descriptor, selection.configuration)
 
-      if (module.descriptor.restart_only && this.active.has(module.descriptor.id)) {
+      if (
+        (module.descriptor.restart_only || this.active.get(module.descriptor.id)?.restartOnly) &&
+        this.active.has(module.descriptor.id)
+      ) {
         await this.configuration.replace(module.descriptor, selection)
         this.modules = this.modules.filter((entry) => entry.descriptor.id !== module.descriptor.id).concat(module)
         this.restart.add(module.descriptor.id)
@@ -310,7 +446,7 @@ export class ExtensionManager {
         ready: !!active && status.ready,
         restart_required:
           this.restart.has(descriptor.id) ||
-          (!!descriptor.restart_only &&
+          (!!(descriptor.restart_only || active?.restartOnly) &&
             (selected.enabled !== !!active ||
               JSON.stringify(selected.configuration) !==
                 JSON.stringify(active?.configuration ?? selected.configuration))),
@@ -324,6 +460,8 @@ export class ExtensionManager {
         ],
         tools: active?.tools.map((tool) => tool.definition.name) ?? [],
         commands: [...(active?.commands.keys() ?? [])],
+        command_details: [...(active?.commandInfo ?? [])].map(([name, options]) => ({ name, ...options })),
+        agents: active?.agents.map((agent) => agent.name) ?? [],
         requires: [...(descriptor.requires ?? [])],
         source: this.configuration.saved(descriptor.id)?.source,
         webui: active?.webui ? { version: active.webui.version, entry: "index.js" } : undefined,
@@ -350,7 +488,7 @@ export class ExtensionManager {
       await this.configuration.change(module.descriptor, input)
       void this.emit("configuration.changed", { id: input.id, ...this.configuration.selection(module.descriptor) })
 
-      if (module.descriptor.restart_only && this.active.has(input.id))
+      if ((module.descriptor.restart_only || this.active.get(input.id)?.restartOnly) && this.active.has(input.id))
         return { saved: true, applied: false, published: false, restart_required: true }
 
       // HTTP configuration writes admit activation; status reads always return what is loaded now.
@@ -409,23 +547,44 @@ export class ExtensionManager {
 
     const owner = new AbortController()
     const tools: RunnerTool[] = []
+    const leasedTools: RunnerTool[] = []
     const commands = new Map<string, (input: Schema.Json) => Promise<Schema.Json>>()
     const documents: ExtensionDocument[] = []
-    const hooks = new Map<string, Array<(payload: Schema.Json) => Promise<unknown>>>()
+    const hooks = new Map<string, Array<(payload: unknown) => Promise<unknown>>>()
+    const commandInfo = new Map<string, ExtensionCommand>()
+    const agents: ExtensionAgent[] = []
+    const registrar: { open?: ConversationServers } = {}
+    const startup: Array<() => Promise<void> | void> = []
+    const backgrounds = new Map<string, (signal: AbortSignal) => Promise<void>>()
+    const activity = new AbortController()
+    const backgroundWork = new Set<Promise<void>>()
     const environments: Array<(environment: JsonObject) => Promise<string | undefined>> = []
     const results: ToolResultHandler[] = []
     const cleanup: Array<() => Promise<void> | void> = []
     const ui: { module?: WebUIModule } = {}
     const status = { read: () => ({ ready: true, issues: [] as string[] }) }
-    const lifecycle = { committed: false, retired: false, leases: 0, finish: () => {} }
+    const lifecycle = { restartOnly: false, committed: false, retired: false, leases: 0, finish: () => {} }
     const drained = new Promise<void>((resolve) => {
       lifecycle.finish = resolve
     })
     const close = async () => {
       lifecycle.retired = true
+      activity.abort()
+      await Promise.allSettled(backgroundWork)
       if (lifecycle.leases) await drained
       owner.abort()
       await Promise.allSettled(cleanup.toReversed().map((handler) => Promise.resolve().then(handler)))
+    }
+    const acquire = () => {
+      if (lifecycle.retired) throw new Error("The extension owning this handler has retired.")
+      lifecycle.leases++
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        lifecycle.leases--
+        if (lifecycle.retired && !lifecycle.leases) lifecycle.finish()
+      }
     }
     const use = async <A>(handler: () => Promise<A>) => {
       if (lifecycle.retired) throw new Error("The extension owning this handler has retired.")
@@ -466,6 +625,7 @@ export class ExtensionManager {
             JsonSchema.fromSchemaDraft2020_12(tool.definition.input_schema ?? { type: "object" }),
           )
 
+          leasedTools.push(tool)
           tools.push({
             ...tool,
             execute: async (value, context: RunnerContext) => {
@@ -474,11 +634,76 @@ export class ExtensionManager {
             },
           })
         },
-        registerCommand: (name, handler) => {
+        registerCommand: (name, handler, options = {}) => {
           if (lifecycle.committed) throw new Error("Extension registration has finished.")
           if (!/^[a-z][a-z0-9.-]{0,63}$/.test(name) || commands.has(name))
             throw new Error("Invalid or duplicate extension command: " + name)
-          commands.set(name, (input) => use(() => handler(input)))
+          const validator = options.input_schema
+            ? Schema.make<Schema.Codec<unknown>>(
+                SchemaRepresentation.fromJsonSchemaDocument(JsonSchema.fromSchemaDraft2020_12(options.input_schema))
+                  .ast,
+              )
+            : undefined
+          commandInfo.set(name, options)
+          commands.set(name, (input) =>
+            use(() => {
+              if (validator) Schema.decodeUnknownSync(validator)(input)
+              return handler(input)
+            }),
+          )
+        },
+        registerAgent: (agent) => {
+          if (lifecycle.committed) throw new Error("Extension registration has finished.")
+          const parsed = Schema.decodeUnknownSync(AgentDefinition)(agent)
+          if (parsed.name.startsWith("bot-")) throw new Error("Extension agents cannot use the reserved bot- prefix.")
+          if (agents.some((row) => row.name === parsed.name))
+            throw new Error("Duplicate extension agent: " + parsed.name)
+          agents.push(parsed)
+        },
+        registerConversationServers: (handler) => {
+          if (lifecycle.committed || registrar.open)
+            throw new Error("Conversation server registration has finished or is duplicated.")
+          registrar.open = async (input) => {
+            const release = acquire()
+            try {
+              const signal = AbortSignal.any([input.signal, activity.signal])
+              const opened = await handler({ ...input, signal })
+              const state: { closing?: Promise<void> } = {}
+              const close = () =>
+                (state.closing ??= Promise.resolve()
+                  .then(() => opened.close())
+                  .finally(() => {
+                    signal.removeEventListener("abort", abort)
+                    release()
+                  }))
+              const abort = () => {
+                void close().catch(() => {})
+              }
+              signal.addEventListener("abort", abort, { once: true })
+              if (signal.aborted) {
+                await close()
+                signal.throwIfAborted()
+              }
+              return { ...opened, close }
+            } catch (error) {
+              // Opening failed before a set could own the registration lease.
+              release()
+              throw error
+            }
+          }
+        },
+        restartOnly: () => {
+          if (lifecycle.committed) throw new Error("Extension registration has finished.")
+          lifecycle.restartOnly = true
+        },
+        onStartup: (handler) => {
+          if (lifecycle.committed) throw new Error("Extension registration has finished.")
+          startup.push(handler)
+        },
+        background: (name, handler) => {
+          if (lifecycle.committed || backgrounds.has(name))
+            throw new Error("Background registration has finished or is duplicated.")
+          backgrounds.set(name, handler)
         },
         registerDocument: (document) => {
           if (lifecycle.committed) throw new Error("Extension registration has finished.")
@@ -493,9 +718,9 @@ export class ExtensionManager {
 
           hooks.set(event, [
             ...(hooks.get(event) ?? []),
-            (payload) =>
-              use(async () => {
-                const answer = await handler(payload)
+            (payload) => {
+              const call = async () => {
+                const answer = await (handler as (payload: unknown) => unknown)(payload)
                 if (event !== "turn.follow" || !isTurnGate(answer)) return answer
                 lifecycle.leases++
                 let released = false
@@ -513,7 +738,9 @@ export class ExtensionManager {
                     }
                   },
                 } satisfies TurnGate
-              }),
+              }
+              return event.startsWith("experimental.tool.") ? call() : use(call)
+            },
           ])
         },
         onShutdown: (handler) => {
@@ -522,7 +749,7 @@ export class ExtensionManager {
         },
         onToolResult: (handler) => {
           if (lifecycle.committed) throw new Error("Extension registration has finished.")
-          results.push((context, result) => use(() => Promise.resolve(handler(context, result))))
+          results.push((context, result) => Promise.resolve(handler(context, result)))
         },
         describeStatus: (read) => {
           status.read = read
@@ -592,14 +819,32 @@ export class ExtensionManager {
       throw new Error("Duplicate extension document.")
     }
 
+    const siblings = [...this.active.entries()].filter(([key]) => key !== id).map(([, state]) => state)
+    if (
+      (registrar.open && siblings.some((state) => state.servers)) ||
+      agents.some((agent) => siblings.some((state) => state.agents.some((row) => row.name === agent.name)))
+    ) {
+      await close()
+      throw new Error("Duplicate extension agent or conversation server registrar.")
+    }
+    await Promise.all(startup.map((handler) => Promise.resolve().then(handler))).catch(async (error: unknown) => {
+      await close()
+      throw error
+    })
     this.active.set(id, {
       webui: ui.module,
       tools,
+      leasedTools,
       commands,
       documents,
       hooks,
       environments,
       results,
+      commandInfo,
+      agents,
+      servers: registrar.open,
+      acquire,
+      restartOnly: lifecycle.restartOnly,
       configuration: selected.configuration,
       status: () => status.read(),
       close,
@@ -612,6 +857,18 @@ export class ExtensionManager {
       throw error
     })
     this.diagnostics.delete(id)
+    for (const [name, handler] of backgrounds) {
+      const running = Promise.resolve()
+        .then(() => handler(AbortSignal.any([this.signal, activity.signal])))
+        .catch((error: unknown) => {
+          if (!activity.signal.aborted)
+            this.diagnostics.set(id, [
+              name + ": " + (error instanceof Error ? error.message : "Background activity failed."),
+            ])
+        })
+      backgroundWork.add(running)
+      void running.finally(() => backgroundWork.delete(running))
+    }
     if (this.connection !== undefined) {
       const connected = this.connection
       void Promise.allSettled((hooks.get("member.connected") ?? []).map((handler) => handler(connected))).then(

@@ -44,26 +44,25 @@ export type McpRow = {
   timeout: number
   profiles: Readonly<Record<string, typeof Profile.Type>>
   secrets: string[]
+  oauth?: boolean
+  credentialKey?: string
 }
 
 export const mcpConfiguration = {
   type: "object",
   properties: {
     servers: {
-      anyOf: [
-        { type: "array", items: { type: "string" }, uniqueItems: true },
-        {
-          type: "object",
-          additionalProperties: {
-            type: "object",
-            additionalProperties: true,
-            properties: {
-              env: { type: "object", additionalProperties: { type: "string" }, writeOnly: true },
-              headers: { type: "object", additionalProperties: { type: "string" }, writeOnly: true },
-            },
-          },
+      type: ["object", "array"],
+      items: { type: "string" },
+      uniqueItems: true,
+      additionalProperties: {
+        type: "object",
+        additionalProperties: true,
+        properties: {
+          env: { type: "object", additionalProperties: { type: "string" }, writeOnly: true },
+          headers: { type: "object", additionalProperties: { type: "string" }, writeOnly: true },
         },
-      ],
+      },
     },
   },
   required: ["servers"],
@@ -216,6 +215,15 @@ export function mcpSettings(
       // Scoped transforms can coexist during a staged settings replacement. Identical rows reuse the connection.
       server: "nexus-" + key + "-" + createHash("sha256").update(JSON.stringify(config)).digest("hex").slice(0, 12),
       config,
+      // Keep the shipped enabled-row credential key when a disabled mount is configured or probed.
+      credentialKey:
+        "nexus-" +
+        key +
+        "-" +
+        createHash("sha256")
+          .update(JSON.stringify({ ...config, disabled: false }))
+          .digest("hex")
+          .slice(0, 12),
       transport: row.transport,
       role: row.serves ?? (row.transport === "http" ? "agent" : "runner"),
       enabled: row.enabled ?? true,

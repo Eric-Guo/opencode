@@ -143,3 +143,123 @@ browser modes. Native module interfaces use TypeScript and OpenCode's scoped bri
 Rho JavaScript modules need an adapter to this API. Provider and deployment actions
 remain subject to Nexus Human permissions. OpenCode installation updates remain
 owned by the desktop updater or `opencode upgrade`.
+
+## Executor and extension contract completion
+
+The correspondence includes reusable extension behavior as well as shipped tools.
+The runtime remains a managed OpenCode Agent plus Local Runner; standalone
+executor-only and tool-provider processes are outside this product topology.
+`rho-webui` remains owned by `packages/nexus-ui` and is outside this runtime change.
+
+| Reference contract                                                                                                                                                                                               | TypeScript owner and executable evidence                                                                                                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rho-env/test/runner_execution_test.rb`, `runner_configuration_test.rb`, `extensions_test.rb`: ordered argument rewrites/vetoes, post-rewrite validation, observer failure and captured hook ownership           | `extension-manager.ts`, `runner-inbox.ts`, `worker-extension.ts`; `extensions`, `executor`, `worker-extension` tests exercise local and worker hooks, retirement and durable results                                                                |
+| `rho-env/test/claim_questions_test.rb`, `claim_orchestration_test.rb`: paused submission, exact question reuse, uncertain acceptance and observation cursor recovery                                             | `claim-control.ts`; `claim-control` tests retain the same request and claim, reject changed requests, recover recorded observations and stop sends on cancellation                                                                                  |
+| `rho-codemode/test/runtime_test.rb`, `claim_bridge_test.rb`: real acceptance receipts, host failures outside source, one live VM and no source reconstruction                                                    | `code.ts`, `code-driver.ts`, `runner.ts`; `code`, `executor` tests verify receipt mismatch refusal, uncaught host failure, supported bindings, observed resources and nested child execution                                                        |
+| `rho/test/extensions/agent_registration_test.rb`, `extensions_test.rb`, `extension_replacement_test.rb`: staged startup, owned backgrounds, registered identities, commands and conversation server registration | `extension-manager.ts`, `registered-agents.ts`, `runtime.ts`; `extensions`, `registered-agents`, `worker-extension` tests cover failed publication, cancellation, ownership after uncertain declarations and restart, model inheritance and removal |
+| `rho-browser/test/session_popups_test.rb`: popup ownership and cancellation                                                                                                                                      | `browser-session.ts`; the real Chromium cancellation fixture discards `window.open()`'s non-JSON return value before testing interruption and popup reclamation                                                                                     |
+
+New tool hooks are `experimental.tool.call` and `experimental.tool.result`.
+The existing `onToolResult` registration remains supported in the same captured
+execution pipeline. Call gates fail closed as completed tool errors; failed result
+observers preserve the preceding answer. Placement resolves before hooks, rewritten
+arguments pass the declared schema and refusal floor before effects, and checkpoint
+capture sees those rewritten arguments. Hook and tool owners stay leased through
+actual execution and postprocessing even when cancellation ends the caller's wait.
+
+OpenCode's authenticated `extension.call` operation and `nexus manage` command
+replace Rho's extension-specific HTTP routes and Thor command/flag registration.
+Command descriptions and optional input schemas are published in extension
+inventory. TypeScript extensions register autonomous work with `background`,
+initialization with `onStartup`, named definitions with `registerAgent`, and editor
+server factories with `registerConversationServers`. Exactly one conversation MCP
+registrar may be active. Removing its owner closes its sets and prevents late
+publication. Background activities stop on retirement before resource cleanup.
+Registered definitions inherit the request model when they omit `default_model`,
+retain application ownership across restart, and cannot use the editable Bot prefix.
+No Ruby source or local Cybros checkout is required in production or CI.
+
+Validation of this completion used the full local conformance gate, package build,
+both TypeScript checkers, generated Protocol/client checks, focused CLI/Server tests,
+and the repository check. An authenticated smoke check against local Nexus also
+created and removed a temporary named definition with the production TypeScript
+registration owner, verifying inherited model selection. Its temporary identity and
+ownership ledger were removed; no model request was submitted.
+
+## Second behavioral review
+
+The second pass rechecked every executable non-WebUI package against the same
+reference revision, including reusable extension behavior. `rho-runner` still has
+no tracked implementation. The confirmed gaps and regression evidence are:
+
+- `rho-mcp` (`connection_test.rb`, `commands_test.rb`, `oauth/connection_test.rb`):
+  explicit tool errors and JSON-RPC invalid-argument refusals remain tool results;
+  transport failures, other protocol errors and cancellation fail the task. HTTP
+  OAuth calls serialize alongside stdio calls, while anonymous/static HTTP calls
+  remain concurrent. Probes use a separate scoped connection, including disabled
+  rows, without refreshing or invalidating stored OAuth credentials. Enable/disable
+  preserves credential identity and unrelated live connections. Sparse row edits
+  retain inherited transport settings. Scoped Core logs omit server-controlled
+  error details, while model-facing errors use the runtime's credential redactor.
+  `mcp`, `mcp-exchange`, `mcp-session`, `configuration` and Core `mcp-oauth` tests
+  exercise these paths through real local servers and credential storage.
+- `rho-t3` (`lib/rho/t3.rb`): local native ownership marks the active extension
+  restart-only; remote service configuration remains replaceable. Extensions can
+  call `restartOnly()` during registration. `extensions` and the production Node
+  `worker-extension` fixture verify persistence without replacing active resources
+  and propagation across the worker bridge.
+- `rho-browser` (`session_test.rb`): evaluate invokes function expressions, including
+  async functions, as well as evaluating ordinary expressions. The Chromium-backed
+  `browser` suite exercises arrow, function and async function forms.
+- `rho-acp-client` (`lib/rho/acp-client/call.rb`): delegated tool-call updates and plans
+  contribute bounded, redacted progress without becoming final assistant text.
+  `acp` exercises this with a real child process.
+- `rho-ingress-telegram` (`session_workflow_test.rb`): sessions, resume, archive/restore
+  lookup and search enumerate all Bot-history pages. `telegram` verifies the second
+  command page through the real application and a paginated Nexus fixture.
+
+The remaining owners (`rho`, `rho-env`, `rho-codemode`, `rho-web-tools`, `rho-acp`
+and `rho-dev`) retain their existing contract coverage in the full conformance gate.
+
+This pass passed 283 runtime conformance tests across 66 files with real Chromium
+and WebRTC, 174 Core MCP regression tests across four files, both package TypeScript
+checkers and the runtime build. The repository-wide `bun run check` passed with its
+existing 227 advisory warnings and zero errors.
+
+## Live Nexus end-to-end verification
+
+A source-built OpenCode server with separate storage and a temporary Agent ran
+against `http://localhost:3000`, using `deepseek/deepseek-flash` for real model
+execution. The existing installed runtime and its pairing were left in place.
+The live journeys covered normal and registered-Agent runs, restored credentials
+and declarations, Code Mode with native file writes/reads, extension rewrite,
+result and veto hooks, Until acceptance steps, cross-workspace Side conversations,
+cancellation of a running bash process, unattended approvals and questions, MCP
+probe/toggle/execution and Chromium function evaluation. A planned ACP step used
+a real child process; both redacted tool and plan tails were observed through
+Nexus's WebSocket progress feed before the task completed. MCP and ACP peers were
+local fixtures; live Telegram and T3 accounts were outside this run.
+
+The live server exposed and this pass fixed these boundary differences:
+
+- Candidate tool assembly sends configuration without a conversation selector;
+  inherited Side assembly selects the conversation without replacing its configuration.
+- Assembled input authoring places instructions in an inline developer lead;
+  Nexus's raw-only `instructions` field is omitted, including after durable replay.
+- One-shot runs explicitly address the Agent selected when opening the conversation.
+- Side operations carry the selected workspace through to the application owner.
+- Execution projections recognize attention independently of Run status, so active
+  Runs waiting for questions or approval do not make unattended clients hang.
+- Claim progress coalesces text tails and observes Nexus's 250 ms publication
+  cadence; cancellation or a refused publication stops subsequent frames.
+
+Regression coverage exercises real SDK requests, durable admission retries,
+selected-workspace Side creation, running-state decisions and paced HTTP progress.
+The final conformance run passed 291 tests across 67 files, including Chromium and
+WebRTC; both TypeScript checkers and the runtime build passed.
+
+Cleanup removed the temporary Agent, deleted its ten scratch workspaces, revoked
+both Agent keys and the temporary Human session, and removed the private test
+storage. The original installed runtime still reported ready with its original
+Agent identity. The repository-wide `bun run check` passed with 227 existing
+warnings and zero errors.
