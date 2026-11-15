@@ -66,7 +66,9 @@ export async function terminalSession(
       }
       if (failures) await setTimeout(Math.max(retryAfter, 1000 * 2 ** Math.min(failures - 1, 3)), undefined, { signal })
       retryAfter = 0
-      const id = crypto.randomUUID()
+      // Nexus signaling requires UUIDv7 connection IDs.
+      const timestamp = Date.now().toString(16).padStart(12, "0")
+      const id = timestamp.slice(0, 8) + "-" + timestamp.slice(8) + "-7" + crypto.randomUUID().slice(15)
       try {
         peer = await RealtimePeer.create({ ...options, relay })
         const sdp = await peer.offer()
