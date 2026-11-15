@@ -3598,6 +3598,8 @@ export type ExperimentalNexusManageInput = {
       }
     | {
         readonly action: "application.prepare" | "application.submit"
+        readonly addressed?: boolean | undefined
+        readonly answering_user_public_id?: string | undefined
         readonly key: string
         readonly workspace: string
         readonly conversation: string
