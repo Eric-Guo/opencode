@@ -5797,6 +5797,8 @@ export type ExperimentalNexusManageInput = {
       }
     | {
         readonly action: "application.prepare" | "application.submit"
+        readonly addressed?: boolean | null
+        readonly answering_user_public_id?: string | null
         readonly key: string
         readonly workspace: string
         readonly conversation: string
