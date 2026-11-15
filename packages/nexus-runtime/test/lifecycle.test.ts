@@ -178,7 +178,13 @@ test("Until authoring and hook notes survive lost admission without re-authoring
       })
     if (path.endsWith("/turns"))
       return Response.json({ turns: [], pagination: { before_position: null, after_position: null } })
-    if (path.endsWith("/tools/assembly")) return Response.json({ tool_definitions: [], environment: {} })
+    if (path.endsWith("/tools/assembly")) {
+      const body = (await request.json()) as JsonObject
+      expect(body.configuration).toBeDefined()
+      expect(body.conversation_public_id).toBeUndefined()
+      expect(body.default_runner_executor_public_id).toBe("runner")
+      return Response.json({ tool_definitions: [], environment: {} })
+    }
     if (path.endsWith("/inputs") && request.method === "POST") {
       posts.push(((await request.json()) as { input: JsonObject }).input)
       if (state.lose) {
@@ -260,7 +266,12 @@ test("Until authoring and hook notes survive lost admission without re-authoring
     expect(state.author).toBe(1)
     expect(posts[1]).toEqual(posts[0])
     expect(posts[1].steps).toHaveLength(2)
-    expect(posts[1].instructions).toContain("Captured author lead")
+    expect(posts[1]).not.toHaveProperty("instructions")
+    expect(posts[1].inline).toContainEqual({
+      role: "developer",
+      position: "lead",
+      text: expect.stringContaining("Captured author lead"),
+    })
     const current = fixture.entries.get(saved.public_id)!
     expect(current.value).toHaveProperty("run", "original-run")
     expect(current.value).toHaveProperty("policy.seed.instructions", expect.stringContaining("Original system prompt"))

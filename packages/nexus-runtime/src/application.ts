@@ -1,3 +1,4 @@
+import { executionSnapshot } from "./execution"
 import type {
   AgentConfigurationInput,
   Client,
@@ -301,8 +302,13 @@ export class NexusApplication {
     const workspace = input.workspace ?? this.identity.workspace
     if (input.workspace) await this.workspaces.require(workspace, options)
     const recipient = input.agent
-      ? await addressedAgent(this.member, workspace, this.identity.agent, input.agent, options)
+      ? await addressedAgent(this.member, workspace, this.identity.agent, input.agent, options, this.hooks?.agents?.())
       : this.identity.agent
+    const registered =
+      recipient !== this.identity.agent &&
+      (await this.member.profile.agents.list(options)).some(
+        (agent) => agent.public_id === recipient && this.hooks?.agents?.().includes(agent.name),
+      )
     const own = input.restricted
       ? (await this.member.workspace(workspace).principals(options)).find(
           (row) => row.public_id === this.identity.agent,
@@ -313,7 +319,7 @@ export class NexusApplication {
         answering_user_public_id: recipient,
         default_runner_executor_public_id:
           input.runner === undefined
-            ? recipient === this.identity.agent
+            ? recipient === this.identity.agent || registered
               ? await this.runners.default()
               : null
             : input.runner,
@@ -394,13 +400,36 @@ export class NexusApplication {
           this.identity.agent,
           input.answering_user_public_id ?? conversation.answering_user_public_id,
           options,
+          this.hooks?.agents?.(),
         )
       : undefined
     if (recipient && recipient !== this.identity.agent && !side) {
       if (conversation.archived_at || conversation.side)
         throw new Error("This conversation cannot receive addressed input.")
       if (input.until) throw new Error("Acceptance checks require this runtime's own agent.")
-      return foreignInput(input, recipient)
+      const registered = (await this.member.profile.agents.list(options)).find(
+        (agent) => agent.public_id === recipient && this.hooks?.agents?.().includes(agent.name),
+      )
+      return foreignInput(
+        {
+          ...input,
+          ...(registered && !input.model && !registered.configuration.default_model
+            ? { model: this.base().default_model ?? undefined }
+            : {}),
+          ...(registered && conversation.default_runner
+            ? {
+                executor_contexts: {
+                  [conversation.default_runner.executor_public_id]: await this.environments.capture(
+                    input.workspace,
+                    input.conversation,
+                    conversation.default_runner.executor_public_id,
+                  ),
+                },
+              }
+            : {}),
+        },
+        recipient,
+      )
     }
     if (side && input.until) throw new Error("Acceptance-check work must start in a new main conversation.")
     if (
@@ -448,9 +477,10 @@ export class NexusApplication {
           if (foreignSide && side.tools === "write") return input.tools
           const assembly = await this.member.tools.assemble(
             {
-              conversation_public_id: input.conversation,
+              ...(inherited
+                ? { conversation_public_id: input.conversation }
+                : { configuration: prepared.agent_configuration }),
               default_runner_executor_public_id: conversation.default_runner?.executor_public_id ?? null,
-              ...(!inherited ? { configuration: prepared.agent_configuration } : {}),
             },
             options,
           )
@@ -515,7 +545,6 @@ export class NexusApplication {
             throw new Error("Start acceptance-check work in a new conversation.")
           const assembly = await this.member.tools.assemble(
             {
-              conversation_public_id: input.conversation,
               default_runner_executor_public_id: runner,
               configuration: prepared.agent_configuration,
             },
@@ -627,7 +656,7 @@ export class NexusApplication {
     let previous = ""
 
     while (!options.signal?.aborted) {
-      const snapshot = await execution.recover(options)
+      const snapshot = await execution.recover(options).then(executionSnapshot)
 
       if (execution.blocked_reason) throw new Error("Input blocked: " + execution.blocked_reason)
       if (snapshot && JSON.stringify(snapshot) !== previous) {

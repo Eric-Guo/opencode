@@ -67,6 +67,15 @@ const publicAPI = rpc.root.api;
 transpile = rpc.root.transpile;
 const api = {
   ...publicAPI,
+  on(event, handler) {
+    publicAPI.on(event, payload => {
+      if (!event.startsWith("experimental.tool.")) return handler(payload);
+      payload.context.executionStarted?.();
+      const result = handler(payload);
+      payload.context.started?.();
+      return result;
+    });
+  },
   registerTool(tool) {
     publicAPI.registerTool({ ...tool, execute(input, context) {
       context.executionStarted?.();
@@ -211,13 +220,47 @@ class ExtensionWorker {
             }),
         )
       },
-      registerCommand: (name, handler) => {
+      registerCommand: (name, handler, options) => {
         const key = "command:" + name
-        register(key, name, handler as Handler, () =>
+        register(key, { name, options }, handler as Handler, () =>
           this.api.registerCommand(
             name,
             (input) => invoke(key, [input], this.api.signal) as ReturnType<typeof handler>,
+            options,
           ),
+        )
+      },
+      registerAgent: (agent) => {
+        register(
+          "agent:" + agent.name,
+          agent,
+          () => {},
+          () => this.api.registerAgent(agent),
+        )
+      },
+      registerConversationServers: (handler) => {
+        register("servers", "servers", handler as Handler, () =>
+          this.api.registerConversationServers(
+            (input) => invoke("servers", [input], input.signal) as ReturnType<typeof handler>,
+          ),
+        )
+      },
+      restartOnly: () => {
+        register(
+          "restart-only",
+          true,
+          () => {},
+          () => this.api.restartOnly(),
+        )
+      },
+      onStartup: (handler) => {
+        const key = "startup:" + sequence++
+        register(key, key, handler, () => this.api.onStartup(() => invoke(key, [], this.api.signal) as Promise<void>))
+      },
+      background: (name, handler) => {
+        const key = "background:" + name
+        register(key, name, handler as Handler, () =>
+          this.api.background(name, (signal) => invoke(key, [signal], signal) as Promise<void>),
         )
       },
       registerDocument: (document: ExtensionDocument) => {
@@ -236,7 +279,12 @@ class ExtensionWorker {
       on: (event, handler) => {
         const key = "hook:" + event + ":" + sequence++
         register(key, event, handler as Handler, () =>
-          this.api.on(event, (value) => invoke(key, [value], this.api.signal)),
+          this.api.on(event, (value) => {
+            const context = event.startsWith("experimental.tool.")
+              ? (value as { context: RunnerContext }).context
+              : undefined
+            return invoke(key, [value], context?.signal ?? this.api.signal, context?.workerRetired)
+          }),
         )
       },
       onShutdown: (handler) => {
@@ -257,7 +305,10 @@ class ExtensionWorker {
         const key = "result:" + sequence++
         register(key, key, handler as Handler, () =>
           this.api.onToolResult(
-            (context, result) => invoke(key, [context, result], this.api.signal) as ReturnType<typeof handler>,
+            (context, result) =>
+              invoke(key, [context, result], context.signal ?? this.api.signal, context.workerRetired) as ReturnType<
+                typeof handler
+              >,
           ),
         )
       },

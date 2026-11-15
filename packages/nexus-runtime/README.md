@@ -100,6 +100,48 @@ handler. Commands and tools share registration validation and retirement leases;
 a failed candidate publishes neither. Reads and calls use the loaded instance
 immediately.
 
+### Extension execution hooks and owned activities
+
+Extensions can gate or rewrite executor calls and observe their results:
+
+```ts
+export function register(api) {
+  api.on("experimental.tool.call", ({ tool, input, context }) => {
+    if (tool.name === "write" && input.path === "protected.txt") return { veto: "This file is protected." }
+  })
+  api.on("experimental.tool.result", ({ result }) => result)
+  api.onStartup(async () => {
+    /* initialize resources before publication */
+  })
+  api.background("poller", async (signal) => {
+    /* run until the signal is aborted */
+  })
+}
+```
+
+A call hook returns `{ rewrite: arguments }`, `{ veto: reason }`, or no decision.
+Hooks run in registration order. Rewritten arguments are validated and checked
+against the existing refusal policy before execution and checkpoint capture. Vetoes
+and call-hook exceptions become completed tool errors. Result-hook exceptions leave
+the preceding result available to later observers. `onToolResult` remains supported.
+The execution retains its original hooks and resources through actual completion,
+including cancellation and extension replacement. Worker hooks receive the same task
+signal, placement and context as the tool.
+
+`registerCommand(name, handler, { description, input_schema })` optionally publishes
+usage metadata and validates command input. Commands use `nexus manage` and the
+existing authenticated `extension.call` API. `registerAgent({ name, description,
+system_prompt, configuration })` publishes an extension-owned named identity;
+omitting `configuration.default_model` inherits the request model. These identities
+are separate from editable Bots and imported Presets. The `bot-` prefix is reserved.
+`registerConversationServers(handler)` installs the single active editor-MCP factory
+using the existing session attachment contract. Its returned sets close with the
+owning registration. Initialization failure publishes none of the staged contributions;
+autonomous activities start after publication and stop when their owner retires.
+`restartOnly()` marks an active registration as requiring a service restart for
+configuration changes or disablement. Local native T3 ownership uses this facility;
+remote T3 connections remain replaceable.
+
 ## ACP editor surface
 
 `opencode nexus acp` exposes Nexus conversations over ACP. `--mode ask|bypass|rules`,
