@@ -5593,6 +5593,7 @@ export type ExperimentalNexusManageInput = {
       }
     | { readonly action: "extension.list" }
     | { readonly action: "extension.asset"; readonly id: string; readonly version: string; readonly path: string }
+    | { readonly action: "application.defaults" }
     | { readonly action: "application.operation"; readonly workspace?: string | null; readonly operation: JsonValue }
     | {
         readonly action: "platform.request"
@@ -5624,6 +5625,7 @@ export type ExperimentalNexusManageInput = {
     | { readonly action: "memory.collections"; readonly workspace?: string | null }
     | {
         readonly action: "schedule.create"
+        readonly model?: string | null
         readonly workspace?: string | null
         readonly approval?: "ask" | "rules" | "bypass" | null
         readonly conversation: string
@@ -5636,19 +5638,21 @@ export type ExperimentalNexusManageInput = {
           | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
       }
     | {
-        readonly action:
-          | "schedule.pause"
-          | "schedule.resume"
-          | "schedule.cancel"
-          | "schedule.run"
-          | "schedule.read"
-          | "schedule.executions"
+        readonly action: "schedule.pause" | "schedule.resume" | "schedule.cancel" | "schedule.run" | "schedule.read"
         readonly workspace?: string | null
         readonly conversation: string
         readonly id: string
       }
     | {
+        readonly action: "schedule.executions"
+        readonly workspace?: string | null
+        readonly conversation: string
+        readonly id: string
+        readonly after?: string | null
+      }
+    | {
         readonly action: "schedule.update"
+        readonly model?: string | null
         readonly workspace?: string | null
         readonly conversation: string
         readonly id: string
