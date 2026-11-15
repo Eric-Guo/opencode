@@ -4,8 +4,23 @@ import { NexusApplication } from "../src/application"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture, inputFixture } from "./fixture/conversation"
 
-for (const status of ["completed", "failed", "canceled", "blocked", "pending", "hold", "ask", "approval"])
-  test("one-shot run correlates its input and returns " + status, async () => {
+for (const scenario of [
+  "completed",
+  "failed",
+  "canceled",
+  "blocked",
+  "pending",
+  "hold",
+  "ask",
+  "approval",
+  "addressed",
+  "running-approval",
+  "running-ask",
+])
+  test("one-shot run correlates its input and returns " + scenario, async () => {
+    const status =
+      scenario === "addressed" ? "completed" : scenario.startsWith("running-") ? scenario.slice(8) : scenario
+    const conversation = conversationFixture(scenario === "addressed" ? { answering_user_public_id: "peer" } : {})
     const control = { canceled: 0, denied: 0 }
     const task = {
       key: "decision",
@@ -20,12 +35,42 @@ for (const status of ["completed", "failed", "canceled", "blocked", "pending", "
     }
     const fixture = storeFixture(async (request) => {
       const path = new URL(request.url).pathname
+      if (path.endsWith("/principals"))
+        return Response.json({
+          principals: [{ public_id: "peer", kind: "agent", handle: "peer", display_name: "Peer" }],
+        })
+      if (path.endsWith("/workspaces/workspace"))
+        return Response.json({
+          workspace: {
+            public_id: "workspace",
+            name: "Workspace",
+            dedicated: false,
+            access_mode: "private",
+            state: "active",
+            lock_version: 0,
+            archived_at: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            metadata: {},
+            tool_provider_overrides: {},
+            owner: { public_id: "human", display_name: "Human" },
+            creator: { public_id: "main", display_name: "Main", kind: "agent" },
+          },
+        })
+      if (path.endsWith("/profile/agents")) return Response.json({ agents: [] })
       if (path.endsWith("/conversations") && request.method === "POST")
-        return Response.json({ conversation: conversationFixture() }, { status: 201 })
-      if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: conversationFixture() })
+        return Response.json({ conversation }, { status: 201 })
+      if (path.endsWith("/conversations/conversation")) return Response.json({ conversation })
       if (path.endsWith("/executors")) return Response.json({ executors: [] })
-      if (path.endsWith("/inputs") && request.method === "POST")
+      if (path.endsWith("/inputs") && request.method === "POST") {
+        const body = (await request.json()) as { input: Record<string, unknown> }
+        expect(body.input).not.toHaveProperty("instructions")
+        if (scenario === "addressed") {
+          expect(body.input.answering_user_public_id).toBe("peer")
+          expect(body.input).not.toHaveProperty("agent_configuration")
+        }
         return Response.json({ input: inputFixture() }, { status: 202 })
+      }
       if (path.endsWith("/events"))
         return Response.json({
           events:
@@ -88,6 +133,15 @@ for (const status of ["completed", "failed", "canceled", "blocked", "pending", "
                 : ["ask", "approval"].includes(status)
                   ? "needs_attention"
                   : "running",
+            ...(scenario.startsWith("running-") && !control.denied
+              ? {
+                  status: "running",
+                  attention: {
+                    reason: status === "ask" ? "awaiting_input" : "approval_required",
+                    blocked_task_keys: [],
+                  },
+                }
+              : {}),
             tasks: ["ask", "approval"].includes(status) && !control.denied ? [task] : [],
           },
         })
@@ -113,7 +167,12 @@ for (const status of ["completed", "failed", "canceled", "blocked", "pending", "
       const events = await Array.fromAsync(
         runPrompt(
           app,
-          { key: "key", prompt: "Do work", ...(status === "pending" ? { timeout_ms: 30 } : {}) },
+          {
+            key: "key",
+            prompt: "Do work",
+            ...(scenario === "addressed" ? { agent: "peer" } : {}),
+            ...(status === "pending" ? { timeout_ms: 30 } : {}),
+          },
           new AbortController().signal,
         ),
       )

@@ -1,3 +1,4 @@
+import { executionSnapshot } from "./execution"
 import { readFile } from "node:fs/promises"
 import { setTimeout as delay } from "node:timers/promises"
 import { createHash } from "node:crypto"
@@ -155,7 +156,7 @@ export async function telegram(
             const execution = pending && chat.inputExecution(pending.input)
             const decision =
               execution &&
-              (await execution.recover({ signal }), await execution.decisions({ signal })).find(
+              (await execution.recover({ signal }).then(executionSnapshot), await execution.decisions({ signal })).find(
                 (item) => item.detail.task.key === pending.attention,
               )
             if (!decision)
@@ -247,7 +248,7 @@ export async function telegram(
       }
       for (const item of state.pending) {
         const execution = scope.conversation(item.conversation).inputExecution(item.input)
-        const snapshot = await execution.recover({ signal })
+        const snapshot = await execution.recover({ signal }).then(executionSnapshot)
         if (execution.blocked_reason || snapshot?.terminal) {
           await send(
             item.chat,

@@ -165,9 +165,12 @@ test("code can call only the captured catalog and routes file work through Nexus
     "return await tools.read({path:params.path})",
     { path: "readme.txt" },
     declarations,
-    async (_, request) => {
+    async (key, request) => {
       calls.push(request)
-      return { status: "completed", content: [{ type: "text", text: "Nexus fixture" }] }
+      return {
+        event: { type: "operation", key, request, receipt: {}, position: 1, refusal: null, outcome: null },
+        outcome: Promise.resolve({ status: "completed", content: [{ type: "text", text: "Nexus fixture" }] }),
+      }
     },
     signal,
   )
@@ -177,7 +180,15 @@ test("code can call only the captured catalog and routes file work through Nexus
   })
   expect(calls).toEqual([{ kind: "tool", name: "read", input: { path: "readme.txt" } }])
   await expect(
-    runCode('return await tools.code({code:"return 1"})', {}, declarations, async () => null, signal),
+    runCode(
+      'return await tools.code({code:"return 1"})',
+      {},
+      declarations,
+      async () => {
+        throw new Error("must not call")
+      },
+      signal,
+    ),
   ).rejects.toThrow()
 })
 

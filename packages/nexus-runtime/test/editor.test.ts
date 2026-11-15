@@ -306,7 +306,7 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     ).rejects.toBeDefined()
     expect(submitted).toHaveLength(1)
     expect(submitted[0]).toMatchObject({
-      instructions: "Authored ACP instructions",
+      inline: [{ role: "developer", position: "lead", text: "Authored ACP instructions" }],
       model: { model: "launch-model" },
       approval_mode: "bypass",
     })

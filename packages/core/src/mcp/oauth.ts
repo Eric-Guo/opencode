@@ -52,7 +52,11 @@ const rejections = new Set<string>([
   OAuthErrorCode.UnauthorizedClient,
 ])
 
-export const loggedFetch = (fields: { readonly server: string; readonly directory?: string }) =>
+export const loggedFetch = (fields: {
+  readonly server: string
+  readonly directory?: string
+  readonly redactErrors?: boolean
+}) =>
   Effect.gen(function* () {
     const run = Effect.runPromiseWith(yield* Effect.context())
     const fetch = yield* FetchHttpClient.Fetch
@@ -75,7 +79,7 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
             yield* Effect.logWarning("mcp oauth request rejected", {
               ...result,
               error: error?.code,
-              message: error?.message,
+              message: fields.redactErrors ? undefined : error?.message,
             })
           }
           if (operation && response.ok) {
@@ -89,7 +93,7 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
           Effect.onError((cause) => {
             if (init?.signal?.aborted) return Effect.logDebug("mcp http request aborted")
             return Effect.logWarning("mcp http request failed", {
-              errors: ErrorSummary.from(Cause.squash(cause)),
+              errors: fields.redactErrors ? "[redacted]" : ErrorSummary.from(Cause.squash(cause)),
               durationMs: Date.now() - started,
             })
           }),
@@ -329,13 +333,19 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   readonly server: string
   readonly config: typeof ConfigMCP.Remote.Type
   readonly credential: Credential.Info | undefined
+  readonly readOnly?: boolean
+  readonly redactErrors?: boolean
 }): Effect.fn.Return<AuthProvider, never, Credential.Service> {
   const found = input.credential
   // Without onUnauthorized the transport answers a 401 with UnauthorizedError.
   if (found?.value.type !== "oauth") return { token: async () => undefined }
+  if (input.readOnly) {
+    const access = found.value.access
+    return { token: async () => access }
+  }
   const id = found.id
   const credentials = yield* Credential.Service
-  const fetchFn = yield* loggedFetch({ server: input.server })
+  const fetchFn = yield* loggedFetch({ server: input.server, redactErrors: input.redactErrors })
   const run = Effect.runPromiseWith(yield* Effect.context())
   const read = credentials.get(id).pipe(Effect.map((row) => (row?.value.type === "oauth" ? row.value : undefined)))
   const refresh = (stale: (current: Credential.OAuth, now: number) => boolean, resourceMetadataUrl?: URL) =>
@@ -345,9 +355,10 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
         exchange({ config: input.config, fetchFn, current, resourceMetadataUrl }).pipe(
           Effect.tapError((error) =>
             error instanceof RefreshRejected
-              ? Effect.logWarning("mcp oauth credential invalidated", { credentialID: id, reason: error.message }).pipe(
-                  Effect.andThen(credentials.remove(id)),
-                )
+              ? Effect.logWarning("mcp oauth credential invalidated", {
+                  credentialID: id,
+                  reason: input.redactErrors ? "[redacted]" : error.message,
+                }).pipe(Effect.andThen(credentials.remove(id)))
               : Effect.void,
           ),
         ),

@@ -2,7 +2,7 @@ import { Cause, Effect, Semaphore } from "effect"
 import type { Mcp } from "@opencode/core/mcp/index"
 import type { McpRow } from "./mcp-settings"
 
-/** One stdio reader at a time; HTTP requests keep their independent streams. */
+/** Stdio readers and HTTP OAuth owners serialize; anonymous/static HTTP keeps independent streams. */
 export function mcpExchange(mcp: Pick<Mcp.Interface, "servers" | "connect" | "disconnect">, row: McpRow) {
   const lock = Semaphore.makeUnsafe(1)
 
@@ -30,7 +30,9 @@ export function mcpExchange(mcp: Pick<Mcp.Interface, "servers" | "connect" | "di
     })
 
     const result = await Effect.runPromise(
-      (row.transport === "stdio" ? exchange.pipe(lock.withPermit) : exchange).pipe(Effect.timeout(row.timeout)),
+      (row.transport === "stdio" || row.oauth ? exchange.pipe(lock.withPermit) : exchange).pipe(
+        Effect.timeout(row.timeout),
+      ),
       { signal },
     )
 

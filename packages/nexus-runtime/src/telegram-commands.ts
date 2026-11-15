@@ -5,6 +5,7 @@ import type { StoreDocument } from "./document"
 import type { TelegramState, TelegramWork } from "./telegram-state"
 
 const Page = Schema.Struct({
+  next_after: Schema.optional(Schema.NullOr(Schema.String)),
   items: Schema.Array(
     Schema.Struct({
       public_id: Schema.String,
@@ -39,9 +40,7 @@ export async function telegramConversationCommand(
   if (action === "sessions") {
     const page = Number(argument || "1")
     if (!Number.isInteger(page) || page < 1) return "Use /sessions PAGE with a positive page number."
-    const rows = Schema.decodeUnknownSync(Page)(
-      await application.bots.command({ action: "bot.history", id: context.bot }),
-    ).items
+    const rows = await botHistory(application, context.bot)
     return (
       rows
         .slice((page - 1) * 10, page * 10)
@@ -51,9 +50,7 @@ export async function telegramConversationCommand(
   }
   if (action === "resume" && !argument.includes(" ")) {
     if (!context.owner) return "Only the Bot owner can change the shared conversation."
-    const row = Schema.decodeUnknownSync(Page)(
-      await application.bots.command({ action: "bot.history", id: context.bot }),
-    ).items.find((row) => row.public_id === argument)
+    const row = (await botHistory(application, context.bot)).find((row) => row.public_id === argument)
     if (!row) return "Choose a saved conversation ID from /sessions."
     await application.bots.command({
       action: "bot.resume",
@@ -91,9 +88,7 @@ export async function telegramConversationCommand(
   if (mutating && !context.owner) return "Only the Bot owner can change the shared conversation."
   const locator =
     argument && ["archive", "restore"].includes(action)
-      ? Schema.decodeUnknownSync(Page)(
-          await application.bots.command({ action: "bot.history", id: context.bot }),
-        ).items.find((row) => row.public_id === argument)
+      ? (await botHistory(application, context.bot)).find((row) => row.public_id === argument)
       : context.current
   if (!locator) return "Choose a saved conversation ID from /sessions."
   const scope = application.client.workspace(locator.workspace_public_id).conversation(locator.public_id)
@@ -126,9 +121,7 @@ export async function telegramConversationCommand(
     )
   if (action === "search") {
     if (!argument) return "Use /search TEXT or /search next."
-    const history = Schema.decodeUnknownSync(Page)(
-      await application.bots.command({ action: "bot.history", id: context.bot }),
-    ).items
+    const history = await botHistory(application, context.bot)
     const key = context.tracking ? context.tracking.route.chat + ":" + context.tracking.route.topic : "current"
     const saved =
       argument === "next"
@@ -346,4 +339,17 @@ export async function telegramMemoryCommand(
       options,
     )
   return "Memory " + action + " completed: " + fields.path
+}
+
+async function botHistory(application: NexusApplication, bot: string) {
+  const items: Array<(typeof Page.Type.items)[number]> = []
+  let after: string | undefined
+  do {
+    const page = Schema.decodeUnknownSync(Page)(
+      await application.bots.command({ action: "bot.history", id: bot, ...(after ? { after } : {}) }),
+    )
+    items.push(...page.items)
+    after = page.next_after ?? undefined
+  } while (after)
+  return items
 }
