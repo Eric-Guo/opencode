@@ -196,6 +196,24 @@ export default Runtime.handler(
               Schema.decodeUnknownSync(
                 Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.String })),
               )(await nexus.manage({ payload: { action: "application.skills" } })),
+            approve: async (approval, signal) => {
+              const token = await authentication.credential()
+
+              if (!token) throw new Error("A Human member token is required.")
+
+              return Schema.decodeUnknownSync(
+                Schema.Struct({ grant: Schema.optional(Schema.Struct({ refused: Schema.optional(Schema.String) })) }),
+              )(
+                await nexus.manage(
+                  {
+                    payload: { action: "application.approve", workspace: workspace(), ...approval },
+                    "x-nexus-origin": current.status.origin,
+                    "x-nexus-member-token": token,
+                  },
+                  { signal },
+                ),
+              )
+            },
             setEnvironment: async (conversation, binding) => {
               await nexus.manage({
                 payload: {
