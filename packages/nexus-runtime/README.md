@@ -109,6 +109,19 @@ and discovered skills, captures editor roots, and submits through shared runtime
 admission with the signed-in Human credential. Closing the client releases its
 editor filesystem and MCP attachments while accepted work remains owned by Nexus.
 
+ACP history preserves message roles, omits compaction summaries and renders a
+Side's parent reference as one labelled context chunk. Load and resume can recover
+held work after restart even when no active-turn pointer remains; inherited history
+never becomes a retry or abandon target.
+
+Persistent approvals use the shared runtime grant owner through
+`application.approve` on the experimental management API. Native `web_fetch`
+approvals retain the literal site until the service restarts; command, path and
+remote MCP callable scopes use the same rules as development controls. The task is
+approved with the signed-in Human credential. If retaining its grant fails, the
+editor reports that separately from the successful one-time approval. Cancelling a
+permission card leaves the task undecided; cancelling the session stops its work.
+
 ## ACP delegation
 
 Configure coding agents through `nexus.acp-client`. Each row needs a launch command
@@ -380,7 +393,7 @@ use OpenCode's existing commands. The Rho WebUI is replaced by `nexus-ui`.
 | `rho-web-tools`        | bounded DNS-pinned fetch and publication                                                     | `web` tests                                                                                                                                                    |
 | `rho-browser`          | Chromium session and browser tools                                                           | `browser` tests with real Chromium                                                                                                                             |
 | `rho-mcp`              | OpenCode transport adapter, curation, documents and OAuth                                    | `mcp`, `mcp-exchange`, `mcp-session`, `mcp-sessions`, `captured-mcp` tests                                                                                     |
-| `rho-acp`              | editor sessions, auth, environment bridge and replay                                         | `editor`, `editor-auth`, plus Nexus UI bridge reply tests                                                                                                      |
+| `rho-acp`              | editor sessions, auth, environment bridge and replay                                         | `editor`, `editor-replay`, `editor-permissions`, `editor-auth`, plus Nexus UI bridge reply tests                                                               |
 | `rho-acp-client`       | resident child delegation and permission policy                                              | `acp`, `adapters`, `runner-policy` tests                                                                                                                       |
 | `rho-ingress-telegram` | connections, ingress, scheduling and exact worker delivery                                   | `telegram`, `telegram-workers`, `telegram-cross-bot`, `telegram-render`, `telegram-transport` tests                                                            |
 | `rho-t3`               | authenticated RPC, native service and assignment ownership                                   | `t3` tests                                                                                                                                                     |
