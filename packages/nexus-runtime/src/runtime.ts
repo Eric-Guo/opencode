@@ -38,6 +38,7 @@ import { webSite } from "./web"
 import type { ApprovalGrant } from "./approval-grant"
 import { HumanLogin } from "./login"
 import { NexusApplication } from "./application"
+import { Operations } from "./operations"
 export { NexusApplication } from "./application"
 import type { NexusPreset } from "@opencode/schema/nexus-preset"
 import type { NexusBot } from "@opencode/schema/nexus-bot"
@@ -1190,6 +1191,30 @@ export class NexusRuntime {
     const member = token ? new Client({ baseURL: this.settings.origin, credential: token }) : active.member
     const principal = token ? (await member.profile.fetch()).member : undefined
     if (principal && principal.kind !== "human") throw new Error("Use a Human member token.")
+    if (command.action === "application.approve") {
+      if (!principal) throw new Error("A Human member token is required.")
+      if (command.workspace !== active.identity.workspace) throw new Error("Unknown Nexus workspace.")
+
+      const space = member.workspace(command.workspace)
+      const [chat, run] = await Promise.all([
+        space.conversation(command.conversation).fetch(),
+        space.run(command.run).fetch(),
+      ])
+
+      if (
+        chat.archived_at ||
+        chat.answering_user_public_id !== active.identity.agent ||
+        run.turn?.conversation_public_id !== command.conversation
+      )
+        throw new Error("The held task does not belong to this agent conversation.")
+
+      return new Operations(member, active.application, active.identity).command({
+        action: "approve",
+        run: command.run,
+        task: command.task,
+        always: command.always,
+      })
+    }
     if (command.action === "bot.submit") return active.application.bots.submit(command, member)
     if (command.action === "application.skills") {
       const catalog = Schema.decodeUnknownSync(
