@@ -5167,6 +5167,7 @@ export type DebugAgentExecuteToolOutput = { location: LocationPublicRef; data: A
 export type ExperimentalNexusRunInput = {
   readonly key: string
   readonly prompt: string
+  readonly workspace?: string | undefined
   readonly model?: string | undefined
   readonly runner?: string | null | undefined
   readonly agent?: string | undefined
@@ -5193,6 +5194,10 @@ export type ExperimentalNexusExtensionsOutput = Array<{
   configuration: { [x: string]: JsonValue }
   diagnostics: Array<string>
   tools: Array<string>
+  commands?: Array<string>
+  requires?: Array<string>
+  source?: JsonValue
+  webui?: { version: string; entry: string }
 }>
 
 export type ExperimentalNexusConfigureExtensionInput = {
@@ -5278,6 +5283,9 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | { readonly action: "workspace.list" }
+    | { readonly action: "workspace.create"; readonly name: string; readonly key: string }
+    | { readonly action: "workspace.use"; readonly workspace: string }
     | { readonly action: "settings.read" }
     | {
         readonly action: "settings.update"
@@ -5507,7 +5515,8 @@ export type ExperimentalNexusManageInput = {
         readonly deliver_at?: string
         readonly expected_steering_run_public_id?: string
       }
-    | { readonly action: "bot.read" | "bot.remove" | "bot.history"; readonly id: string }
+    | { readonly action: "bot.read" | "bot.remove"; readonly id: string }
+    | { readonly action: "bot.history"; readonly id: string; readonly after?: string; readonly archived?: boolean }
     | { readonly action: "bot.current" | "bot.new"; readonly id: string; readonly key: string }
     | { readonly action: "bot.workspace"; readonly id: string; readonly key: string; readonly workspace: string }
     | {
@@ -5553,6 +5562,7 @@ export type ExperimentalNexusManageInput = {
     | { readonly action: "persona.write"; readonly content: string }
     | {
         readonly action: "application.open"
+        readonly workspace?: string | null
         readonly key: string
         readonly title?: string | null
         readonly runner?: string | null | null
@@ -5583,6 +5593,17 @@ export type ExperimentalNexusManageInput = {
         readonly input: string
       }
     | { readonly action: "extension.list" }
+    | { readonly action: "extension.asset"; readonly id: string; readonly version: string; readonly path: string }
+    | { readonly action: "application.operation"; readonly workspace?: string | null; readonly operation: JsonValue }
+    | {
+        readonly action: "platform.request"
+        readonly principal: string
+        readonly path: string
+        readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+        readonly body?: JsonValue | null
+        readonly key?: string | null
+      }
+    | { readonly action: "login.device" }
     | {
         readonly action: "extension.configure"
         readonly change: {
@@ -5596,7 +5617,16 @@ export type ExperimentalNexusManageInput = {
       }
     | { readonly action: "extension.call"; readonly name: string; readonly input: JsonValue }
     | {
+        readonly action: "schedule.list"
+        readonly workspace?: string | null
+        readonly conversation?: string | null
+        readonly after?: string | null
+      }
+    | { readonly action: "memory.collections"; readonly workspace?: string | null }
+    | {
         readonly action: "schedule.create"
+        readonly workspace?: string | null
+        readonly approval?: "ask" | "rules" | "bypass" | null
         readonly conversation: string
         readonly key: string
         readonly prompt: string
@@ -5614,29 +5644,35 @@ export type ExperimentalNexusManageInput = {
           | "schedule.run"
           | "schedule.read"
           | "schedule.executions"
+        readonly workspace?: string | null
         readonly conversation: string
         readonly id: string
       }
     | {
         readonly action: "schedule.update"
+        readonly workspace?: string | null
         readonly conversation: string
         readonly id: string
         readonly version: number
+        readonly name?: string | null
+        readonly approval?: "ask" | "rules" | "bypass" | null
         readonly prompt: string
         readonly rule:
           | { readonly kind: "once"; readonly run_at: string }
           | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
           | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
       }
-    | { readonly action: "memory.create"; readonly name: string }
+    | { readonly action: "memory.create"; readonly name: string; readonly workspace?: string | null }
     | {
         readonly action: "memory.list" | "memory.read" | "memory.grep"
+        readonly workspace?: string | null
         readonly collection: string
         readonly path?: string | null
         readonly pattern?: string | null
       }
     | {
         readonly action: "memory.write"
+        readonly workspace?: string | null
         readonly collection: string
         readonly path: string
         readonly content: string
@@ -5645,12 +5681,18 @@ export type ExperimentalNexusManageInput = {
       }
     | {
         readonly action: "memory.delete"
+        readonly workspace?: string | null
         readonly collection: string
         readonly path: string
         readonly id: string
         readonly version: number
       }
-    | { readonly action: "memory.archive" | "memory.restore"; readonly collection: string; readonly version: number }
+    | {
+        readonly action: "memory.archive" | "memory.restore"
+        readonly workspace?: string | null
+        readonly collection: string
+        readonly version: number
+      }
 }
 
 export type ExperimentalNexusManageOutput = JsonValue
