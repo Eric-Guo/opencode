@@ -296,27 +296,45 @@ export class AcpChild {
     if (!call || call.canceled || notification.sessionId !== call.session.remote) return
     const update = notification.update
     if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
-      if (call.message != null && call.message !== update.messageId && call.text && !call.text.endsWith("\n"))
+      if (call.message != null && call.message !== update.messageId && call.text && !call.text.endsWith("\n")) {
         call.text += "\n"
+        call.tail += "\n"
+      }
       call.message = update.messageId
       call.text = (call.text + update.content.text).slice(0, 65536)
       call.tail = (call.tail + update.content.text).slice(-65536)
     }
     if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
       const previous = call.session.tools.get(update.toolCallId)
-      call.session.tools.set(update.toolCallId, {
+      const tracked = {
         ...previous,
         ...Object.fromEntries(Object.entries(update).filter(([, value]) => value != null)),
         toolCallId: update.toolCallId,
-      })
+        status: update.status ?? previous?.status ?? "pending",
+      }
+      call.session.tools.set(update.toolCallId, tracked)
       if (update.sessionUpdate === "tool_call") call.calls++
+      call.tail = (
+        call.tail +
+        "\n" +
+        [tracked.kind, tracked.title, tracked.status].filter(Boolean).join(": ") +
+        "\n"
+      ).slice(-65536)
     }
+    if (update.sessionUpdate === "plan")
+      call.tail = (
+        call.tail +
+        "\n" +
+        update.entries.map((entry) => entry.status + ": " + entry.content).join("\n") +
+        "\n"
+      ).slice(-65536)
     if (update.sessionUpdate === "usage_update")
       call.usage = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))(
         JSON.stringify(update),
       )
 
-    if (update.sessionUpdate === "agent_message_chunk") this.progress(call)
+    if (["agent_message_chunk", "tool_call", "tool_call_update", "plan"].includes(update.sessionUpdate))
+      this.progress(call)
   }
 
   private progress(call: Call) {

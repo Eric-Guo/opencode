@@ -85,6 +85,7 @@ export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.Tool
   server: ServerName,
   tool: Schema.String,
   message: Schema.String,
+  code: Schema.optional(Schema.Number),
 }) {}
 
 const unavailable = (server: ServerName, status: Status) => {
@@ -419,7 +420,7 @@ export const layer = (options?: Options) =>
         const suffix =
           "mcp_" +
           createHash("sha1")
-            .update(name + "\u0000" + remote.url)
+            .update((entry.clientOptions?.credentialKey ?? name) + "\u0000" + remote.url)
             .digest("hex")
             .slice(0, 16)
         const integrationID = Integration.ID.make(suffix)
@@ -476,7 +477,13 @@ export const layer = (options?: Options) =>
       ) {
         if (entry.config.type !== "remote" || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-        return yield* McpOAuth.connectProvider({ server: name, config: entry.config, credential }).pipe(
+        return yield* McpOAuth.connectProvider({
+          server: name,
+          config: entry.config,
+          credential,
+          readOnly: entry.clientOptions?.readOnlyCredentials,
+          redactErrors: entry.clientOptions?.redactErrors,
+        }).pipe(
           Effect.provideService(Credential.Service, credentials),
           Effect.provideService(FetchHttpClient.Fetch, fetch),
         )
@@ -633,7 +640,10 @@ export const layer = (options?: Options) =>
               failed: (failure) =>
                 Effect.gen(function* () {
                   entry.status = failure
-                  yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
+                  yield* Effect.logWarning("mcp connect failed", {
+                    server: name,
+                    status: clientOptions?.redactErrors ? entry.status.status : entry.status,
+                  })
                   yield* bus.publish(McpEvent.StatusChanged, { server: name })
                 }),
               // Every start runs under the server lock, so the attempt read here is the one it began.
@@ -1007,6 +1017,7 @@ export const layer = (options?: Options) =>
                 new ToolCallError({
                   server,
                   tool: input.name,
+                  ...("code" in error && typeof error.code === "number" ? { code: error.code } : {}),
                   message: `MCP tool "${input.name}" on ${owner} "${server}" failed: ${error.message}`,
                 }),
             )

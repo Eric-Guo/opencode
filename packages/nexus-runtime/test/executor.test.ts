@@ -2,6 +2,8 @@ import { expect, test } from "bun:test"
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { JsonObject } from "@cybros/agent"
+import { ExtensionManager } from "../src/extension-manager"
+import { Configuration } from "../src/configuration"
 import { RunnerAdmission } from "../src/runner"
 import { RunnerInbox } from "../src/runner-inbox"
 import { definition, type RunnerContext, type RunnerTool } from "../src/extensions"
@@ -24,7 +26,13 @@ const canceled = (run: string, task: string) => ({
 function inbox(
   fixture: Awaited<ReturnType<typeof executorFixture>>,
   tools: RunnerTool[],
-  options: { admission?: RunnerAdmission; startupLimit?: number; wake?: () => void; protectedRoots?: string[] } = {},
+  options: {
+    admission?: RunnerAdmission
+    startupLimit?: number
+    wake?: () => void
+    protectedRoots?: string[]
+    hooks?: () => ReturnType<ExtensionManager["captureTools"]>
+  } = {},
 ) {
   return new RunnerInbox({
     executor: fixture.client,
@@ -37,6 +45,7 @@ function inbox(
     startupLimit: options.startupLimit ?? 8,
     wake: options.wake ?? (() => {}),
     protectedRoots: options.protectedRoots,
+    hooks: options.hooks,
   })
 }
 
@@ -434,7 +443,14 @@ test("Code Mode and its native file child complete with one startup slot and no 
       fixture.add("run", "child", "read", { tool_input: body.operation.request.input })
       runner.notify(nudge("run", "child", "read"))
       return Response.json({
-        operation: { type: "operation", position: 1, key: operation.key, receipt: { accepted: true }, outcome: null },
+        operation: {
+          type: "operation",
+          position: 1,
+          key: operation.key,
+          request: body.operation.request,
+          receipt: { accepted: true },
+          outcome: null,
+        },
       })
     }
     if (path.endsWith("/parent/observation")) {
@@ -712,6 +728,111 @@ test("captured editor reads and edits preserve unsaved buffers and do not fall b
     await runner.drain()
     expect(fixture.results.get(JSON.stringify(["run", "closed"]))?.is_error).toBe(true)
     expect(await readFile(path, "utf8")).toBe("disk")
+  } finally {
+    await runner.close()
+    await fixture.close()
+  }
+})
+
+test("executor validates rewritten arguments, skips vetoed effects and applies result hooks before durable settlement", async () => {
+  const fixture = await executorFixture()
+  const calls: string[] = []
+  const manager = new ExtensionManager(
+    new Configuration(join(fixture.directory, "configuration.json")),
+    [
+      {
+        descriptor: {
+          id: "fixture",
+          name: "Fixture",
+          description: "Tool hooks",
+          default_enabled: true,
+          configuration_version: 1,
+          configuration_schema: { type: "object" },
+          defaults: {},
+        },
+        register(api) {
+          api.registerTool({
+            definition: definition("probe", "Probe", { value: { type: "string" } }, ["value"]),
+            async execute(input) {
+              calls.push(String(input.value))
+              return { content: "effect:" + input.value }
+            },
+          })
+          api.on("experimental.tool.call", (call) => {
+            if (call.context.task === "veto") return { veto: "no effects" }
+            if (call.context.task === "invalid") return { rewrite: { value: 42 } }
+            return { rewrite: { value: "rewritten" } }
+          })
+          api.on("experimental.tool.result", (call) => ({ ...call.result, content: call.result.content + ":observed" }))
+          api.on("experimental.tool.result", () => {
+            throw new Error("observer failure")
+          })
+        },
+      },
+    ],
+    fixture.directory,
+    new AbortController().signal,
+    async () => {},
+  )
+  await manager.start()
+  const runner = inbox(fixture, manager.tools(), { hooks: () => manager.captureTools() })
+  for (const key of ["rewrite", "veto", "invalid"]) fixture.add("run", key, "probe", { tool_input: {} })
+  try {
+    for (const key of ["rewrite", "veto", "invalid"]) runner.notify(nudge("run", key, "probe"))
+    await runner.drain()
+    expect(calls).toEqual(["rewritten"])
+    expect(fixture.commits.find((row) => row.task === "rewrite")!.body).toMatchObject({
+      outcome: "completed",
+      content: "effect:rewritten:observed",
+    })
+    expect(fixture.commits.find((row) => row.task === "veto")!.body).toMatchObject({
+      outcome: "completed",
+      is_error: true,
+      content: "no effects",
+    })
+    expect(fixture.commits.find((row) => row.task === "invalid")!.body).toMatchObject({
+      outcome: "completed",
+      is_error: true,
+      content: expect.stringContaining("invalid_tool_arguments"),
+    })
+  } finally {
+    await runner.close()
+    await manager.close()
+    await fixture.close()
+  }
+})
+
+test("a new Code Mode VM cannot reconstruct a claim with existing operation history", async () => {
+  const fixture = await executorFixture()
+  const runner = inbox(fixture, [])
+  fixture.add("run", "parent", "code", { tool_input: { code: 'text("source ran")' } })
+  fixture.control.route = async (request) => {
+    if (!new URL(request.url).pathname.endsWith("/operations")) return
+    expect(request.method).toBe("GET")
+    return Response.json({
+      operations: {
+        context: { tools: [], model_defaults: {}, environment: null },
+        trace: [
+          {
+            type: "operation",
+            key: "old",
+            request: { kind: "tool", name: "read", input: {} },
+            receipt: {},
+            position: 1,
+          },
+        ],
+        position: 1,
+        next_after: null,
+      },
+    })
+  }
+  try {
+    runner.notify(nudge("run", "parent", "code"))
+    await runner.drain()
+    expect(fixture.commits[0].body).toMatchObject({
+      outcome: "failed",
+      content: expect.stringContaining("previous execution state is unavailable"),
+    })
   } finally {
     await runner.close()
     await fixture.close()
