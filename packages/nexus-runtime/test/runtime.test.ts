@@ -58,6 +58,7 @@ test.each([
     tool_input: approval.input,
     target: approval.target,
   })
+  const scheduleWrites: JsonObject[] = []
   const measured = new Date().toISOString()
   const preset = {
     public_id: "presets",
@@ -192,6 +193,29 @@ test.each([
         })
       if (path.endsWith("/tasks/call")) return Response.json({ task: task() })
       if (path.endsWith("/tasks/call/approve")) return Response.json({ task: { ...task(), status: "completed" } })
+      if (path.endsWith("/schedules/job/executions"))
+        return Response.json({ executions: [], pagination: { next_after: null, last_cursor: null } })
+      if (path.endsWith("/conversations/conversation/schedules") || path.endsWith("/schedules/job")) {
+        const body = Schema.decodeUnknownSync(
+          Schema.Struct({ schedule: Schema.Record(Schema.String, Schema.MutableJson) }),
+        )(await request.json())
+        scheduleWrites.push(body.schedule)
+        return Response.json(
+          {
+            schedule: {
+              public_id: "job",
+              workspace_public_id: "workspace",
+              conversation_public_id: "conversation",
+              prompt: "Review",
+              rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
+              status: "active",
+              lock_version: 0,
+              model: { model: "provider/selected" },
+            },
+          },
+          { status: request.method === "POST" ? 201 : 200 },
+        )
+      }
       if (path === "/agent_api/v1/profile/configuration") {
         if (approval.refuseDeclaration)
           return Response.json(
@@ -296,6 +320,50 @@ test.each([
         starting: 0,
       })
       if ("apiKey" in fixture) {
+        await runtime.manage({
+          action: "schedule.create",
+          workspace: "workspace",
+          conversation: "conversation",
+          key: "schedule-create",
+          prompt: "Review",
+          model: "provider/selected",
+          rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
+        })
+        await runtime.manage({
+          action: "schedule.update",
+          workspace: "workspace",
+          conversation: "conversation",
+          id: "job",
+          version: 0,
+          prompt: "Review",
+          model: "provider/updated",
+          rule: { kind: "once", run_at: "2030-01-01T00:00:00Z" },
+        })
+        await runtime.manage({
+          action: "schedule.executions",
+          workspace: "workspace",
+          conversation: "conversation",
+          id: "job",
+          after: "next-execution",
+        })
+        expect(scheduleWrites.map((write) => write.model)).toEqual([
+          { model: "provider/selected" },
+          { model: "provider/updated" },
+        ])
+        expect(calls.find((call) => call.path.endsWith("/schedules/job/executions"))?.after).toBe("next-execution")
+      }
+      if ("apiKey" in fixture) {
+        await runtime.manage({ action: "settings.update", patch: { subagent_default: false } })
+        await runtime.configureExtension({
+          id: "nexus.codemode",
+          operations: [{ op: "set", path: ["default"], value: "off" }],
+        })
+        expect(await runtime.manage({ action: "application.defaults" })).toMatchObject({
+          code_mode: false,
+          subagent: false,
+          available: true,
+          code_mode_available: true,
+        })
         const command = {
           action: "application.approve",
           workspace: "workspace",

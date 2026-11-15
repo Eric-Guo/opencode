@@ -97,6 +97,7 @@ export const NexusCommand = Schema.Union([
     version: Schema.NonEmptyString,
     path: Schema.NonEmptyString,
   }),
+  Schema.Struct({ action: Schema.Literal("application.defaults") }),
   Schema.Struct({
     action: Schema.Literal("application.operation"),
     workspace: Schema.optional(Schema.NonEmptyString),
@@ -126,6 +127,7 @@ export const NexusCommand = Schema.Union([
   Schema.Struct({ action: Schema.Literal("memory.collections"), workspace: Schema.optional(Schema.NonEmptyString) }),
   Schema.Struct({
     action: Schema.Literal("schedule.create"),
+    model: Schema.optional(Schema.NonEmptyString),
     workspace: Schema.optional(Schema.NonEmptyString),
     approval: Schema.optional(Schema.Literals(["ask", "rules", "bypass"])),
     conversation: Schema.String,
@@ -135,20 +137,21 @@ export const NexusCommand = Schema.Union([
     rule: Rule,
   }),
   Schema.Struct({
-    action: Schema.Literals([
-      "schedule.pause",
-      "schedule.resume",
-      "schedule.cancel",
-      "schedule.run",
-      "schedule.read",
-      "schedule.executions",
-    ]),
+    action: Schema.Literals(["schedule.pause", "schedule.resume", "schedule.cancel", "schedule.run", "schedule.read"]),
     workspace: Schema.optional(Schema.NonEmptyString),
     conversation: Schema.String,
     id: Schema.String,
   }),
   Schema.Struct({
+    action: Schema.Literal("schedule.executions"),
+    workspace: Schema.optional(Schema.NonEmptyString),
+    conversation: Schema.String,
+    id: Schema.String,
+    after: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
     action: Schema.Literal("schedule.update"),
+    model: Schema.optional(Schema.NonEmptyString),
     workspace: Schema.optional(Schema.NonEmptyString),
     conversation: Schema.String,
     id: Schema.String,
