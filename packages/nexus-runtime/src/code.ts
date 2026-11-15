@@ -1,17 +1,21 @@
 import type { JsonObject, JsonValue } from "@cybros/agent"
-import { Schema } from "effect"
+import { CodeMode, Extension, Tool } from "@opencode/codemode"
+import { Effect, Schema } from "effect"
+import { compileToolSchema, toolInputRefusal } from "./tool-schema"
+import { isDeepStrictEqual } from "node:util"
 import { OperationRefused, type CodeOperation } from "./claim-control"
 import { codeBinding } from "./code-settings"
-import { codeDriver } from "./code-driver"
 
 const Declaration = Schema.Struct({
   name: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
   canonical: Schema.optional(Schema.String),
   input_schema: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
   parameters: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
   function: Schema.optional(
     Schema.Struct({
       name: Schema.String,
+      description: Schema.optional(Schema.String),
       canonical: Schema.optional(Schema.String),
       parameters: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
     }),
@@ -19,26 +23,8 @@ const Declaration = Schema.Struct({
   route: Schema.optional(Schema.Struct({ kind: Schema.String, tool_name: Schema.optional(Schema.String) })),
 })
 const Input = Schema.Record(Schema.String, Schema.MutableJson)
-const Output = Schema.Struct({
-  content: Schema.Array(Input),
-  structured_content: Schema.optional(Schema.MutableJson),
-})
 
-const Snapshot = Schema.Struct({
-  status: Schema.Literals(["request", "observe", "finished", "failed"]),
-  requests: Schema.Array(Schema.Struct({ key: Schema.String, request: Input })),
-  pending: Schema.Array(Schema.String),
-  result: Schema.NullOr(Output),
-  error: Schema.NullOr(Schema.Struct({ code: Schema.String, message: Schema.String })),
-})
-
-async function engine() {
-  const { newQuickJSWASMModuleFromVariant } = await import("quickjs-emscripten-core")
-  return newQuickJSWASMModuleFromVariant(import("@jitl/quickjs-singlefile-cjs-release-sync"))
-}
-const shared: { engine?: ReturnType<typeof engine> } = {}
-
-/** Each invocation owns an isolated heap. Host work never runs inside its computation budget. */
+/** Native OpenCode language semantics; Nexus remains the owner of every accepted operation. */
 export async function runCode(
   source: string,
   params: JsonValue,
@@ -46,18 +32,14 @@ export async function runCode(
   operation: CodeOperation,
   signal: AbortSignal,
   defaults: JsonObject = {},
-  limits: { computeMs?: number; heapBytes?: number } = {},
+  limits: CodeMode.ExecutionLimits = {},
 ) {
-  const computeMs = limits.computeMs ?? 1000
-  const heapBytes = limits.heapBytes ?? 64 * 1024 * 1024
-  if (![computeMs, heapBytes].every((value) => Number.isSafeInteger(value) && value > 0))
-    throw new Error("Computation and heap limits must be positive integers.")
   if (Buffer.byteLength(source) > 262144) throw new Error("Code source exceeds 256 KiB.")
   if (Buffer.byteLength(JSON.stringify({ source, params, declarations, defaults })) > 8388608)
     throw new Error("Code context exceeds 8 MiB.")
 
   const bindings: Array<Schema.Json | undefined> = []
-  const names = declarations.flatMap((entry) => {
+  const catalog = declarations.flatMap((entry) => {
     const declared = Schema.decodeUnknownOption(Declaration)(entry)
     if (declared._tag === "None") return []
     const row = declared.value
@@ -69,8 +51,17 @@ export async function runCode(
       return []
     }
     if (!name) throw new Error("Invalid tool declaration.")
-    return [name]
+    const schema = row.function?.parameters ?? row.parameters ?? row.input_schema
+    return [
+      {
+        name,
+        description: row.function?.description ?? row.description ?? name,
+        input: (schema ?? { type: "object" }) as Tool.JsonSchema,
+        validator: compileToolSchema(schema ?? { type: "object" }),
+      },
+    ]
   })
+  const names = catalog.map((entry) => entry.name)
   if (!bindings.length || bindings.some((binding) => binding !== codeBinding))
     throw new Error(
       "unsupported_binding: The frozen code binding is unsupported; create new work with the current declaration.",
@@ -78,132 +69,206 @@ export async function runCode(
   if (new Set(names).size !== names.length) throw new Error("Duplicate tool names in the frozen catalog.")
 
   signal.throwIfAborted()
-  const runtime = (await (shared.engine ??= engine())).newRuntime()
-  runtime.setMemoryLimit(heapBytes)
-  const context = runtime.newContext()
-  const budget = { deadline: 0, interrupted: false }
-  runtime.setInterruptHandler(() => {
-    budget.interrupted = signal.aborted || performance.now() > budget.deadline
-    return budget.interrupted
-  })
-  const evaluate = (code: string) => {
-    signal.throwIfAborted()
-    budget.deadline = performance.now() + computeMs
-    budget.interrupted = false
-    const result = context.evalCode(code)
-    if (result.error) {
-      const error = context.dump(result.error)
-      result.error.dispose()
-      signal.throwIfAborted()
-      if (budget.interrupted) throw new Error("execution_limit: JavaScript execution exceeded its time limit")
-      throw new Error("host_event_error: " + JSON.stringify(error))
-    }
-    try {
-      while (runtime.hasPendingJob()) {
-        signal.throwIfAborted()
-        if (performance.now() > budget.deadline)
-          throw new Error("execution_limit: JavaScript execution exceeded its time limit")
-        const jobs = runtime.executePendingJobs(1)
-        if (jobs.error) {
-          const error = context.dump(jobs.error)
-          jobs.error.dispose()
-          throw new Error("host_event_error: " + JSON.stringify(error))
-        }
-      }
-      signal.throwIfAborted()
-      if (budget.interrupted) throw new Error("execution_limit: JavaScript execution exceeded its time limit")
-      return context.typeof(result.value) === "string" ? context.getString(result.value) : "null"
-    } finally {
-      result.value.dispose()
-    }
-  }
-  const capability = crypto.randomUUID() + crypto.randomUUID()
-  const invoke = (command: string, value: JsonValue = null) =>
-    evaluate(
-      `JSON.stringify(__nexus_codemode(${JSON.stringify(capability)},${JSON.stringify(command)},${JSON.stringify(value)}))`,
-    )
-  const observations: JsonObject[] = []
-  const ready = { next: Promise.withResolvers<void>() }
+  const owner = new AbortController()
+  const active = AbortSignal.any([signal, owner.signal])
+  const state: { next: number; failure?: unknown } = { next: 0 }
+  const content: JsonObject[] = []
   const resources = new Map<string, JsonObject>()
-  const aborted = Promise.withResolvers<never>()
-  const cancel = () => aborted.reject(signal.reason)
-  signal.addEventListener("abort", cancel, { once: true })
-  // The race is observed even when cancellation happens during evaluation rather than a host wait.
-  void aborted.promise.catch(() => {})
-
-  try {
-    evaluate(codeDriver)
-    invoke("start", { source, params, tools: names.map((name) => ({ name })), model_defaults: defaults })
-    while (true) {
-      const encoded = invoke("snapshot")
-      if (Buffer.byteLength(encoded) > 1048576) throw new Error("Code output or pending requests exceeds 1 MiB.")
-      const snapshot = Schema.decodeUnknownSync(Schema.fromJsonString(Snapshot))(encoded)
-      if (snapshot.status === "failed") throw new Error(snapshot.error!.code + ": " + snapshot.error!.message)
-      if (snapshot.status === "finished") {
-        const output = snapshot.result!
-        for (const block of output.content) {
-          if (block.type !== "resource_link") continue
-          const observed = typeof block.uri === "string" ? resources.get(block.uri) : undefined
-          if (
-            !observed ||
-            Object.entries(block).some(
-              ([key, value]) => key !== "type" && JSON.stringify(observed[key]) !== JSON.stringify(value),
+  const accepting = new Set<Promise<unknown>>()
+  const pending = new Map<string, { outcome: Promise<JsonValue>; settled: boolean; released: boolean }>()
+  const modelTools = Array.isArray(defaults.tools)
+    ? defaults.tools.filter((name): name is string => typeof name === "string" && names.includes(name))
+    : names
+  const start = async (value: unknown) => {
+    active.throwIfAborted()
+    const request = prepareOperation(Schema.decodeUnknownSync(Input)(value), names, modelTools)
+    if (Buffer.byteLength(JSON.stringify(request)) > 1048576) throw new Error("Operation request exceeds 1 MiB.")
+    const key = "op_" + state.next++
+    const acceptance = operation(key, request).catch((error: unknown) => {
+      state.failure = error
+      owner.abort(error)
+      throw error
+    })
+    accepting.add(acceptance)
+    const accepted = await acceptance.finally(() => accepting.delete(acceptance))
+    if (
+      accepted.event.type !== "operation" ||
+      accepted.event.key !== key ||
+      !isDeepStrictEqual(accepted.event.request, request) ||
+      !!accepted.event.receipt === !!accepted.event.refusal
+    ) {
+      const error = new Error("Accepted operation differs from the pending request or has no receipt/refusal.")
+      state.failure = error
+      owner.abort(error)
+      throw error
+    }
+    const entry = { outcome: Promise.resolve<JsonValue>(null), settled: false, released: false }
+    entry.outcome = accepted.outcome
+      .then((outcome) => {
+        entry.settled = true
+        if (Buffer.byteLength(JSON.stringify(outcome)) > 8388608) throw new Error("Operation events exceed 8 MiB.")
+        if (outcome && typeof outcome === "object" && !Array.isArray(outcome)) {
+          for (const block of Array.isArray(outcome.content) ? outcome.content : []) {
+            if (block && typeof block === "object" && !Array.isArray(block) && block.type === "resource_link")
+              resources.set(String(block.uri), block)
+          }
+          if (request.kind === "background" && outcome.status === "completed" && !outcome.is_error)
+            for (const released of Array.isArray(outcome.released_operations) ? outcome.released_operations : []) {
+              const target = typeof released === "string" ? pending.get(released) : undefined
+              if (!target) throw new Error("Background receipt names an unknown operation.")
+              target.released = true
+            }
+        }
+        return outcome
+      })
+      .catch((error: unknown) => {
+        entry.settled = true
+        if (!(error instanceof OperationRefused)) {
+          state.failure = error
+          owner.abort(error)
+        }
+        throw error
+      })
+    void entry.outcome.catch(() => {})
+    pending.set(key, entry)
+    return { operation_key: key }
+  }
+  const wait = (value: unknown) => {
+    const input = Schema.decodeUnknownSync(Schema.Struct({ operation_key: Schema.String }))(value)
+    const entry = pending.get(input.operation_key)
+    if (!entry) throw new Error("Unknown operation: " + input.operation_key)
+    return entry.outcome
+  }
+  const invoke = async (request: JsonObject) => wait(await start(request))
+  const runtime = CodeMode.make({
+    tools: Object.fromEntries(
+      catalog.map((entry) => [
+        entry.name,
+        Tool.make({
+          description: entry.description,
+          input: entry.input,
+          output: Schema.MutableJson,
+          execute: (input) =>
+            Effect.tryPromise({
+              try: () => {
+                const args = Schema.decodeUnknownSync(Input)(input)
+                const invalid = toolInputRefusal(entry.validator, args)
+                if (invalid) throw new Error("InvalidToolInput: " + invalid)
+                return invoke({ kind: "tool", name: entry.name, input: args })
+              },
+              catch: (error) => error,
+            }),
+        }),
+      ]),
+    ),
+    extensions: [
+      Extension.make({
+        name: "nexus",
+        globals: {
+          nexus: {
+            start,
+            wait: Extension.async(wait),
+            ...Object.fromEntries(
+              ["model", "ask", "steps", "replace", "cancel", "join", "background"].map((kind) => [
+                kind,
+                async (input: JsonValue = {}) => invoke({ kind, input }),
+              ]),
+            ),
+          },
+          text(value: unknown) {
+            content.push({ type: "text", text: Schema.decodeUnknownSync(Schema.String)(value) })
+            if (Buffer.byteLength(JSON.stringify(content)) > 1048576) throw new Error("Code output exceeds 1 MiB.")
+          },
+          value(output: unknown) {
+            return Schema.decodeUnknownSync(Schema.MutableJson)(output)
+          },
+          resource(value: unknown) {
+            const block = Schema.decodeUnknownSync(Input)(value)
+            const observed = typeof block.uri === "string" ? resources.get(block.uri) : undefined
+            if (
+              !observed ||
+              Object.entries(block).some(([key, value]) => key !== "type" && !isDeepStrictEqual(observed[key], value))
             )
-          )
-            throw new Error("Resource was not observed by this invocation.")
-        }
-        return {
-          content: output.content.map((block) => ({ ...block })),
-          ...(output.structured_content === undefined ? {} : { structured_content: output.structured_content }),
-        }
-      }
-      // Accept the entire issued batch before supplying any observation, including immediately settled tools.
-      if (snapshot.requests.length) {
-        for (const request of snapshot.requests) {
-          const accepted = await Promise.race([operation(request.key, request.request), aborted.promise])
-          const event = accepted.event
-          if (event.type !== "operation" || !event.request || !!event.receipt === !!event.refusal)
-            throw new Error("host_event_error: Operation needs its actual request and one receipt or refusal.")
-          invoke("event", {
-            type: "operation",
-            key: event.key,
-            request: event.request,
-            ...(event.refusal ? { refusal: { ...event.refusal } } : { receipt: event.receipt }),
-          })
-          const outcome = accepted.outcome.then(
-            (outcome): JsonObject => {
-              if (outcome && typeof outcome === "object" && !Array.isArray(outcome)) {
-                for (const block of Array.isArray(outcome.content) ? outcome.content : []) {
-                  if (block && typeof block === "object" && !Array.isArray(block) && block.type === "resource_link")
-                    resources.set(String(block.uri), block)
-                }
-              }
-              return { type: "observation", key: request.key, outcome }
+              throw new Error("Resource was not observed by this invocation.")
+            content.push({ ...block, type: "resource_link" })
+          },
+        },
+      }),
+    ],
+    limits: { timeoutMs: 600000, maxOutputBytes: 1048576, ...limits },
+  })
+  try {
+    const result = await Effect.runPromise(runtime.execute(source, { params }), { signal: active }).catch(
+      (error: unknown) => {
+        if (state.failure) throw state.failure
+        signal.throwIfAborted()
+        throw error
+      },
+    )
+    if (state.failure) throw state.failure
+    if (!result.ok) throw new Error(result.error.kind + ": " + result.error.message)
+    return {
+      content: [...content, ...(result.logs ?? []).map((text) => ({ type: "text", text }))],
+      structured_content: Schema.decodeUnknownSync(Schema.MutableJson)(result.value),
+      ...(result.truncated || result.warnings?.length
+        ? {
+            metadata: {
+              ...(result.truncated ? { truncated: true } : {}),
+              ...(result.warnings?.length
+                ? { warnings: result.warnings.map((warning) => ({ kind: warning.kind, message: warning.message })) }
+                : {}),
             },
-            (error: unknown): JsonObject => {
-              if (!(error instanceof OperationRefused)) throw error
-              return { type: "observation", key: request.key, refusal: error.refusal }
-            },
-          )
-          void outcome
-            .then((event) => {
-              observations.push(event)
-              ready.next.resolve()
-            })
-            .catch((error: unknown) => aborted.reject(error))
-        }
-        continue
-      }
-      if (!observations.length) await Promise.race([ready.next.promise, aborted.promise])
-      const event = observations.shift()
-      if (!observations.length) ready.next = Promise.withResolvers<void>()
-      if (!event) continue
-      if (Buffer.byteLength(JSON.stringify([event])) > 8388608) throw new Error("Operation events exceed 8 MiB.")
-      invoke("event", event)
+          }
+        : {}),
     }
   } finally {
-    signal.removeEventListener("abort", cancel)
-    context.dispose()
-    runtime.dispose()
+    if (!signal.aborted) await Promise.allSettled([...accepting])
+    // Ending the interpreter interrupts local waits. Cancel only work still owned by this invocation.
+    if (!signal.aborted && !state.failure)
+      await Promise.all(
+        [...pending]
+          .filter(([, entry]) => !entry.settled && !entry.released)
+          .map(([key]) => operation("op_" + state.next++, { kind: "cancel", input: { operation_key: key } })),
+      )
+    owner.abort()
   }
+}
+
+function prepareOperation(request: JsonObject, names: string[], modelTools: string[]): JsonObject {
+  const model = (value: JsonValue | undefined) => {
+    const input = Schema.decodeUnknownSync(Input)(value)
+    const tools =
+      input.tools === undefined ? modelTools : Schema.decodeUnknownSync(Schema.Array(Schema.String))(input.tools)
+    if (tools.some((name) => !names.includes(name))) throw new Error("Tool is outside this program's callable catalog.")
+    return { ...input, tools: [...tools] }
+  }
+  const steps = (value: JsonValue): JsonValue => {
+    if (!Array.isArray(value)) return value
+    return value.map((value): JsonValue => {
+      if (Array.isArray(value)) return steps(value)
+      const step = Schema.decodeUnknownSync(Input)(value)
+      if (step.tool !== undefined) {
+        const tool = Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String }))(step.tool)
+        if (!names.includes(tool.name)) throw new Error("Tool is outside this program's callable catalog.")
+      }
+      return {
+        ...step,
+        ...(step.model === undefined ? {} : { model: model(step.model) }),
+        ...(step.parallel === undefined ? {} : { parallel: steps(step.parallel) }),
+      }
+    })
+  }
+  if (request.kind === "tool") {
+    if (typeof request.name !== "string" || !names.includes(request.name))
+      throw new Error("Tool is outside this program's callable catalog.")
+    return request
+  }
+  if (request.kind === "model") return { ...request, input: model(request.input) }
+  if (["steps", "replace", "background"].includes(String(request.kind))) {
+    const input = Array.isArray(request.input)
+      ? { steps: request.input }
+      : Schema.decodeUnknownSync(Input)(request.input)
+    return { ...request, input: { ...input, ...(input.steps === undefined ? {} : { steps: steps(input.steps) }) } }
+  }
+  return request
 }

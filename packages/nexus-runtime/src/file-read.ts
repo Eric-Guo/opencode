@@ -1,3 +1,4 @@
+import { ToolInputError } from "./tool-error"
 import { constants } from "node:fs"
 import { open, realpath } from "node:fs/promises"
 import { homedir } from "node:os"
@@ -24,7 +25,7 @@ export async function readablePath(root: string, path: string) {
 export async function readWindow(path: string, signal: AbortSignal, offset = 1, limit?: number) {
   const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK)
   try {
-    if (!(await file.stat()).isFile()) throw new Error("Expected a regular file.")
+    if (!(await file.stat()).isFile()) throw new ToolInputError("Expected a regular file.")
     return await scanWindow(
       (async function* () {
         const chunk = Buffer.alloc(16384)
@@ -45,7 +46,7 @@ export async function readWindow(path: string, signal: AbortSignal, offset = 1, 
 }
 
 export function readEditorWindow(content: string, signal: AbortSignal, offset = 1, limit = 2000) {
-  if (!content && offset > 1) throw new Error(`Offset ${offset} is beyond end of file.`)
+  if (!content && offset > 1) throw new ToolInputError(`Offset ${offset} is beyond end of file.`)
   return scanWindow(
     (async function* () {
       yield Buffer.from(content)
@@ -67,7 +68,7 @@ async function scanWindow(
 ) {
   const start = Math.max(1, offset)
   if (!Number.isSafeInteger(start) || (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)))
-    throw new Error("Read offset and limit must be integers; limit must be positive.")
+    throw new ToolInputError("Read offset and limit must be integers; limit must be positive.")
   const lines: string[] = []
   const maximum = 50 * 1024
   let line = 1
@@ -122,7 +123,7 @@ async function scanWindow(
     }
   }
   if (!seen || !ended) finish()
-  if (start > total) throw new Error(`Offset ${start} is beyond end of file (${total} lines total).`)
+  if (start > total) throw new ToolInputError(`Offset ${start} is beyond end of file (${total} lines total).`)
   const from = editorOffset ?? start
   const next = from + lines.length
   const content =

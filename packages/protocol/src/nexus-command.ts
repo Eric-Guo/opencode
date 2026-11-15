@@ -63,6 +63,8 @@ export const NexusCommand = Schema.Union([
   }),
   Schema.Struct({
     action: Schema.Literals(["application.prepare", "application.submit"]),
+    addressed: Schema.optional(Schema.Boolean),
+    answering_user_public_id: Schema.optional(Schema.String),
     key: Schema.NonEmptyString,
     workspace: Schema.String,
     conversation: Schema.String,

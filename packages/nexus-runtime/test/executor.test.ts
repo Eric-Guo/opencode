@@ -56,7 +56,7 @@ test("realtime claims one authoritative task without a list, deduplicates hints,
   const inputs: unknown[] = []
   const runner = inbox(fixture, [
     {
-      definition: definition("probe", "Fixture", { value: { type: "string" } }, ["value"]),
+      definition: definition("probe", "Fixture", { value: { type: "string", pattern: "^from Nexus$" } }, ["value"]),
       async execute(input) {
         inputs.push(input)
         started.resolve()
@@ -419,7 +419,7 @@ test("Code Mode and its native file child complete with one startup slot and no 
             context: {
               tools: [
                 {
-                  function: { name: "code", parameters: { $id: "urn:cybros:rho:codemode:javascript:1" } },
+                  function: { name: "code", parameters: { $id: "urn:opencode:nexus:codemode:1" } },
                   canonical: "code",
                 },
                 { function: { name: "read" }, route: { kind: "runner", tool_name: "read" } },
@@ -669,7 +669,7 @@ test("claims execute their captured alternate root, report owned progress, and p
       },
     ])
     expect(fixture.results.get(JSON.stringify(["run", "guard"]))?.is_error).toBe(true)
-    expect(fixture.results.get(JSON.stringify(["run", "bytes"]))?.outcome).toBe("failed")
+    expect(fixture.results.get(JSON.stringify(["run", "bytes"]))?.is_error).toBe(true)
     expect(await readFile(join(protectedRoot, "secret"), "utf8")).toBe("unchanged")
   } finally {
     await runner.close()
@@ -833,6 +833,100 @@ test("a new Code Mode VM cannot reconstruct a claim with existing operation hist
       outcome: "failed",
       content: expect.stringContaining("previous execution state is unavailable"),
     })
+  } finally {
+    await runner.close()
+    await fixture.close()
+  }
+})
+
+test("native filesystem refusals settle as tool errors so callers can correct them", async () => {
+  const fixture = await executorFixture()
+  const runner = inbox(fixture, [], { startupLimit: 16 })
+  await writeFile(join(fixture.directory, "text"), "repeat repeat")
+  await writeFile(join(fixture.directory, "binary"), Buffer.from([255]))
+  const calls: { name: string; input: JsonObject; message: string }[] = [
+    { name: "read", input: { path: "missing" }, message: "ENOENT" },
+    { name: "read", input: { path: "." }, message: "regular" },
+    { name: "read", input: { path: "text", offset: 5 }, message: "beyond end" },
+    { name: "ls", input: { path: "text" }, message: "ENOTDIR" },
+    { name: "grep", input: { path: "missing", pattern: "x" }, message: "ENOENT" },
+    { name: "find", input: { path: "text", pattern: "*" }, message: "directory" },
+    { name: "write", input: { path: ".", content: "x" }, message: "regular" },
+    { name: "edit", input: { path: "missing", edits: [{ oldText: "a", newText: "b" }] }, message: "missing" },
+    { name: "edit", input: { path: "text", edits: [{ oldText: "repeat", newText: "x" }] }, message: "exactly once" },
+    { name: "edit", input: { path: "binary", edits: [{ oldText: "a", newText: "b" }] }, message: "encoded data" },
+    { name: "files_bytes", input: { path: "." }, message: "regular" },
+  ]
+  calls.forEach((call, index) => fixture.add("run", String(index), call.name, { tool_input: call.input }))
+  try {
+    await runner.sweep()
+    await runner.drain()
+    calls.forEach((call, index) =>
+      expect(fixture.results.get(JSON.stringify(["run", String(index)]))).toMatchObject({
+        outcome: "completed",
+        is_error: true,
+        content: expect.stringContaining(call.message),
+      }),
+    )
+    expect(await readFile(join(fixture.directory, "text"), "utf8")).toBe("repeat repeat")
+  } finally {
+    await runner.close()
+    await fixture.close()
+  }
+})
+
+test("environment independent tools execute without captured placement and still validate arguments", async () => {
+  const fixture = await executorFixture()
+  const seen: string[] = []
+  const runner = inbox(
+    fixture,
+    [false, true].map((required) => ({
+      environmentRequired: required,
+      definition: {
+        ...definition(required ? "local" : "remote", "Probe", {}, []),
+        input_schema: {
+          type: "object",
+          properties: {
+            value: { type: "string", pattern: "^valid$" },
+            flag: { type: "boolean" },
+            token: { type: "string" },
+          },
+          required: ["value"],
+          additionalProperties: false,
+          if: { properties: { flag: { const: true } }, required: ["flag"] },
+          then: { required: ["token"] },
+        },
+      },
+      async execute(_, context) {
+        seen.push(context.directory)
+        return { content: "executed" }
+      },
+    })),
+  )
+  fixture.add("run", "remote", "remote", { executor_context: {}, tool_input: { value: "valid" } })
+  fixture.add("run", "invalid", "remote", { executor_context: {}, tool_input: { value: "wrong" } })
+  fixture.add("run", "extra", "remote", { executor_context: {}, tool_input: { value: "valid", extra: true } })
+  fixture.add("run", "conditional", "remote", { executor_context: {}, tool_input: { value: "valid", flag: true } })
+  fixture.add("run", "local", "local", { executor_context: {}, tool_input: { value: "valid" } })
+  try {
+    await runner.sweep()
+    await runner.drain()
+    expect(seen).toEqual([fixture.directory])
+    expect(fixture.results.get(JSON.stringify(["run", "remote"]))?.content).toBe("executed")
+    expect(fixture.results.get(JSON.stringify(["run", "invalid"]))).toMatchObject({
+      outcome: "completed",
+      is_error: true,
+    })
+    expect(fixture.results.get(JSON.stringify(["run", "extra"]))).toMatchObject({
+      outcome: "completed",
+      is_error: true,
+    })
+    expect(fixture.results.get(JSON.stringify(["run", "conditional"]))).toMatchObject({
+      outcome: "completed",
+      is_error: true,
+      content: expect.stringContaining("token"),
+    })
+    expect(fixture.results.get(JSON.stringify(["run", "local"]))?.outcome).toBe("failed")
   } finally {
     await runner.close()
     await fixture.close()
