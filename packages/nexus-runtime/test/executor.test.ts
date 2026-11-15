@@ -398,14 +398,16 @@ test("lost settlement responses reconcile, throttled results stay durable, and r
   }
 })
 
-test("Code Mode and its native file child complete with one startup slot and no polling", async () => {
+test("Code Mode prints one native child result and retains structured false with one startup slot", async () => {
   const fixture = await executorFixture()
   const runner = inbox(fixture, [], { startupLimit: 1 })
   const child = Promise.withResolvers<JsonObject>()
   const operation = { key: "" }
   await Bun.write(fixture.directory + "/child.txt", "native child bytes")
   fixture.add("run", "parent", "code", {
-    tool_input: { code: 'const result = await tools.read({path:"child.txt"}); text(result.content[0].text)' },
+    tool_input: {
+      code: 'const result = await tools.read({path:"child.txt"}); text(JSON.stringify(result)); return false',
+    },
   })
   fixture.control.committed = (_, task, body) => {
     if (task === "child") child.resolve(body)
@@ -468,12 +470,22 @@ test("Code Mode and its native file child complete with one startup slot and no 
   }
   try {
     runner.notify(nudge("run", "parent", "code"))
+    runner.notify(nudge("run", "parent", "code"))
     await runner.drain()
     expect(fixture.commits.map((entry) => entry.task)).toEqual(["child", "parent"])
     expect(fixture.commits[1].body).toMatchObject({
       outcome: "completed",
-      content: [{ type: "text", text: "native child bytes" }],
+      content: [
+        {
+          type: "text",
+          text: '{"status":"completed","is_error":false,"content":[{"type":"text","text":"native child bytes"}]}',
+        },
+      ],
+      structured_content: false,
     })
+    expect(
+      fixture.calls.filter((call) => call.method === "POST" && call.path.endsWith("/parent/operations")),
+    ).toHaveLength(1)
     expect(fixture.calls.some((call) => call.path.endsWith("/inbox"))).toBe(false)
   } finally {
     child.resolve({ content: "canceled" })
