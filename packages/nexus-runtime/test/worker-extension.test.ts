@@ -42,6 +42,7 @@ test("the minified Node loader transforms external TypeScript and preserves SDK 
     import { NotFound } from "@cybros/agent"
     import { Answer, Box } from "./helper.js"
     export function register(api) {
+      api.restartOnly()
       api.describeStatus(() => ({ ready: true, issues: [] }))
       api.registerCommand("check", async () => {
         let missing = false
@@ -63,16 +64,19 @@ test("the minified Node loader transforms external TypeScript and preserves SDK 
     const commands = new Map()
     const closures = []
     let closed = false
+    let restartOnly = false
     await workerRegistration(fileURLToPath(new URL("./extension.ts", import.meta.url)))({
       directory: process.cwd(), signal: new AbortController().signal,
       configuration: { marker: "node-production" },
       application: () => ({ missing() { return Promise.reject(new NotFound("missing")) }, closed() { closed = true } }),
       configure() { throw new Error("unused") },
+      restartOnly() { restartOnly = true },
       registerCommand(name, handler) { commands.set(name, handler) },
       registerTool() {}, registerDocument() {}, on() {}, onToolResult() {}, describeStatus() {}, describeEnvironment() {},
       onShutdown(callback) { closures.push(callback) },
     })
     try {
+      assert.equal(restartOnly, true)
       assert.deepEqual(await commands.get("check")({}), { value: 42, missing: true, configured: "node-production" })
     } finally {
       for (const close of closures) await close()
@@ -308,6 +312,79 @@ test("initial status is covered by the registration deadline", async () => {
     await manager.start()
     expect(manager.list()[0]).toMatchObject({ active: false, ready: false })
     expect(manager.list()[0].diagnostics.join(" ")).toContain("timed out")
+  } finally {
+    await manager.close()
+  }
+})
+
+test("worker registrations carry typed tool hooks, startup, commands and agent contributions", async () => {
+  await using directory = await tmpdir()
+  const entry = join(directory.path, "extension.ts")
+  await writeFile(
+    entry,
+    `
+    let started = false;
+    export function register(api) {
+      api.onStartup(() => { started = true });
+      api.background("poller", signal => new Promise(resolve => {
+        if (signal.aborted) return resolve();
+        signal.addEventListener("abort", resolve, { once: true });
+      }));
+      api.registerConversationServers(async () => ({ tools: [], issues: [], close: async () => {} }));
+      api.registerAgent({ name: "worker-room", description: "Worker room", system_prompt: "Help", configuration: {} });
+      api.registerCommand("worker.echo", async input => ({ ...input, started }), { description: "Echo", input_schema: { type: "object" } });
+      api.on("experimental.tool.call", call => ({ rewrite: { text: call.context.task } }));
+      api.on("experimental.tool.result", call => ({ ...call.result, content: call.input.text + ":worker" }));
+    }
+  `,
+  )
+  const manager = new ExtensionManager(
+    new Configuration(join(directory.path, "settings.json")),
+    [
+      {
+        descriptor,
+        register: workerRegistration(entry),
+      },
+    ],
+    directory.path,
+    new AbortController().signal,
+    async () => {},
+  )
+  try {
+    await manager.start()
+    expect(manager.list()[0].ready).toBe(true)
+    expect(await manager.command("worker.echo", { value: 42 })).toEqual({ value: 42, started: true })
+    expect(manager.agents().map((agent) => agent.name)).toEqual(["worker-room"])
+    const servers = await manager.conversationServers()!({
+      workspace: "w",
+      conversation: "c",
+      directory: directory.path,
+      servers: [],
+      signal: new AbortController().signal,
+    })
+    expect(servers.tools).toEqual([])
+    await servers.close()
+    const hooks = manager.captureTools()
+    const call = {
+      tool: definition("probe", "Probe", {}, []),
+      input: {},
+      context: {
+        directory: directory.path,
+        workspace: "w",
+        conversation: "c",
+        run: "r",
+        task: "task",
+        signal: new AbortController().signal,
+      },
+    }
+    try {
+      expect(await hooks.before(call)).toEqual({ input: { text: "task" } })
+      expect(await hooks.after({ ...call, input: { text: "task" }, result: { content: "original" } })).toEqual({
+        content: "task:worker",
+      })
+    } finally {
+      hooks.release()
+    }
   } finally {
     await manager.close()
   }

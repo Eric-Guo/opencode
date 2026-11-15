@@ -6,6 +6,7 @@ import {
   type JsonValue,
   type OperationEvent,
 } from "@cybros/agent"
+import { isDeepStrictEqual } from "node:util"
 import { scheduler } from "node:timers/promises"
 
 type Task = ReturnType<ExecutorClient["inboxTask"]>
@@ -91,7 +92,6 @@ export class ClaimLease {
         },
         (error: unknown) => {
           this.statusAt = Date.now() + Math.max(5000, retryDelay(error))
-          if (error instanceof APIError && error.status === 401) this.owner.abort(error)
           if (error instanceof APIError && (error.status === 404 || error.code === "not_claimant"))
             this.owner.abort(new ClaimInterrupted("Nexus claim is no longer owned by this runner."))
         },
@@ -162,7 +162,10 @@ export class OperationRefused extends Error {
   }
 }
 
-/** A single observation cursor distributes every recorded settlement to its actual operation. */
+export type AcceptedOperation = { event: OperationEvent; outcome: Promise<JsonValue> }
+export type CodeOperation = (key: string, request: JsonObject) => Promise<AcceptedOperation>
+
+/** One live invocation owns its receipts and observation cursor; source is never replayed. */
 export class ClaimOperations {
   private pending = new Map<string, ReturnType<typeof Promise.withResolvers<JsonValue>>>()
   private outcomes = new Map<string, OperationEvent>()
@@ -176,89 +179,113 @@ export class ClaimOperations {
   ) {}
 
   async invoke(key: string, request: JsonObject) {
-    if (this.pending.has(key) || this.outcomes.has(key)) throw new Error("Operation key already used: " + key)
-
-    const pending = Promise.withResolvers<JsonValue>()
-
-    this.pending.set(key, pending)
-    // Attach rejection before the observation pump can deliver a refusal.
-    void pending.promise.catch(() => {})
-
-    await this.task
-      .submit({ claim_token: this.token, operation: { key, request } }, { signal: this.signal })
-      .catch(async (error: unknown) => {
-        const receipt = await this.receipt(key)
-
-        if (receipt) return receipt
-        throw error
-      })
-      .then((accepted) => {
-        if (accepted.refusal) throw new OperationRefused(accepted.refusal)
-        this.reading ??= this.read().finally(() => {
-          this.reading = undefined
-        })
-      })
-      .catch((error: unknown) => {
-        this.pending.delete(key)
-        pending.reject(error)
-      })
-
-    return pending.promise
+    return (await this.submit(key, request)).outcome
   }
 
-  private async receipt(key: string) {
-    let after = 0
+  async question(key: string, request: JsonObject) {
+    const trace = await this.history()
+    const known = trace.find((event) => event.type === "operation" && event.key === key)
+    if (!known) return this.invoke(key, request)
+    this.match(known, key, request)
+    const observed = trace.find((event) => event.type === "observation" && event.key === key)
+    if (observed?.refusal) throw new OperationRefused(observed.refusal)
+    if (observed) return observed.outcome
+    return this.wait(known).outcome
+  }
 
-    while (!this.signal.aborted) {
+  async submit(key: string, request: JsonObject): Promise<AcceptedOperation> {
+    this.signal.throwIfAborted()
+    if (this.pending.has(key) || this.outcomes.has(key)) throw new Error("Operation key already used: " + key)
+    const event = await this.accept(key, request)
+    this.match(event, key, request)
+    return this.wait(event)
+  }
+
+  private wait(event: OperationEvent): AcceptedOperation {
+    const pending = Promise.withResolvers<JsonValue>()
+    void pending.promise.catch(() => {})
+    this.pending.set(event.key, pending)
+    const observed = this.outcomes.get(event.key)
+    if (observed) this.deliver(observed)
+    this.pump()
+    return { event, outcome: pending.promise }
+  }
+
+  private pump() {
+    if (this.reading || !this.pending.size) return
+    this.reading = this.read().finally(() => {
+      this.reading = undefined
+      this.pump()
+    })
+  }
+
+  private async accept(key: string, request: JsonObject): Promise<OperationEvent> {
+    this.signal.throwIfAborted()
+    return this.task
+      .submit({ claim_token: this.token, operation: { key, request } }, { signal: this.signal })
+      .catch(async (error: unknown) => {
+        this.signal.throwIfAborted()
+        if (error instanceof APIError && error.code === "execution_paused") {
+          await scheduler.wait(250, { signal: this.signal })
+          return this.accept(key, request)
+        }
+        if (error instanceof APIError && error.status < 500) throw error
+        const event = (await this.history()).find((event) => event.type === "operation" && event.key === key)
+        if (event) return event
+        throw error
+      })
+  }
+
+  private match(event: OperationEvent, key: string, request: JsonObject) {
+    if (event.type !== "operation" || event.key !== key || !isDeepStrictEqual(event.request, request))
+      throw new Error("Accepted operation differs from the pending request.")
+  }
+
+  private async history(after = 0) {
+    const trace: OperationEvent[] = []
+    while (true) {
+      this.signal.throwIfAborted()
       const page = await this.task.operations(this.token, { after }, { signal: this.signal })
-
-      for (const event of page.trace) {
-        if (event.type === "observation") this.deliver(event)
-      }
-
-      const receipt = page.trace.find((event) => event.type === "operation" && event.key === key)
-
-      if (receipt) return receipt
-      if (page.next_after === null) return
-
+      trace.push(...page.trace)
+      if (page.next_after === null) return trace
       after = page.next_after
     }
   }
 
   private deliver(event: OperationEvent) {
     this.outcomes.set(event.key, event)
-
     const pending = this.pending.get(event.key)
-
     if (!pending) return
-
     this.pending.delete(event.key)
-
     if (event.refusal) pending.reject(new OperationRefused(event.refusal))
     else pending.resolve(event.outcome)
   }
 
   private async read() {
     try {
-      while (this.pending.size && !this.signal.aborted) {
+      while (this.pending.size) {
+        this.signal.throwIfAborted()
         const result = await this.task
           .observe({ claim_token: this.token, after: this.position }, { signal: this.signal })
           .catch(async (error: unknown) => {
-            if (error instanceof APIError && error.status < 500 && error.status !== 429) throw error
-
-            await scheduler.wait(retryDelay(error), { signal: this.signal })
-            return undefined
+            this.signal.throwIfAborted()
+            if (error instanceof APIError && error.status === 429) {
+              await scheduler.wait(retryDelay(error), { signal: this.signal })
+              return
+            }
+            if (error instanceof APIError && error.code !== "operation_position_changed") throw error
+            const trace = await this.history(this.position)
+            if (!trace.length) throw error
+            for (const event of trace) {
+              this.position = Math.max(this.position, event.position)
+              if (event.type === "observation") this.deliver(event)
+            }
           })
-
         if (!result) continue
-
         this.position = result.position
-
         if (result.observation) this.deliver(result.observation)
         else await scheduler.wait(250, { signal: this.signal })
       }
-
-      this.signal.throwIfAborted()
     } catch (error) {
       for (const pending of this.pending.values()) pending.reject(error)
       this.pending.clear()

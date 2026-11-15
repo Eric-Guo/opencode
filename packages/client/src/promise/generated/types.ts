@@ -5312,6 +5312,8 @@ export type ExperimentalNexusExtensionsOutput = Array<{
   diagnostics: Array<string>
   tools: Array<string>
   commands?: Array<string>
+  command_details?: Array<{ name: string; description?: string; input_schema?: JsonValue }>
+  agents?: Array<string>
   requires?: Array<string>
   source?: JsonValue
   webui?: { version: string; entry: string }

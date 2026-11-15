@@ -108,6 +108,12 @@ test.skipIf(!chromium)(
           })
         ).content,
       ).toContain("[too deep]")
+      for (const expression of [
+        "() => document.title",
+        "function () { return document.title }",
+        "async () => document.title",
+      ])
+        expect((await run("browser_evaluate", { expression })).structured_content).toBe("Saved fixture")
       const shot = await run("browser_screenshot")
       expect(shot.content).toMatchObject([
         { type: "text", text: expect.stringContaining("Saved a screenshot") },
@@ -195,7 +201,7 @@ test.skipIf(!chromium)(
       })
       const started = Promise.withResolvers<void>()
       const interrupted = browser.run("work", canceled.signal, async (tab) => {
-        await evaluate(tab, "window.open('about:blank')")
+        await evaluate(tab, "void window.open('about:blank')")
         started.resolve()
         await evaluate(tab, "new Promise(()=>{})")
       })

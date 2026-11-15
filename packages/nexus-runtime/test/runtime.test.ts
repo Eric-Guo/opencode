@@ -59,6 +59,19 @@ test.each([
     target: approval.target,
   })
   const measured = new Date().toISOString()
+  const preset = {
+    public_id: "presets",
+    namespace: "opencode.presets",
+    key: "catalog",
+    lock_version: 0,
+    created_at: measured,
+    updated_at: measured,
+    value: {
+      presets: [{ public_id: "main-preset", name: "Main", description: "Main", role: null, configuration: {} }],
+      main_preset_public_id: "main-preset",
+      default_bot_preset_public_id: "main-preset",
+    },
+  }
   const workspace: Workspace = {
     public_id: "workspace",
     name: "Workspace",
@@ -137,6 +150,13 @@ test.each([
           pagination: { next_after: url.searchParams.has("after") ? null : "next-page" },
         })
       }
+      if (path === "/agent_api/v1/tools/assembly") {
+        const body = (await request.json()) as JsonObject
+        expect(body.configuration).toBeDefined()
+        expect(body.conversation_public_id).toBeUndefined()
+        expect(body.default_runner_executor_public_id).toBeNull()
+        return Response.json({ tool_definitions: [], environment: {} })
+      }
       if (path === "/agent_api/v1/tools")
         return Response.json({
           tools: Toolsets.names("images", "schedules").map((canonical_name) => ({
@@ -146,6 +166,12 @@ test.each([
             definition: {},
           })),
         })
+      if (path === "/agent_api/v1/profile/store_entries")
+        return Response.json({ store_entries: [preset], pagination: { next_after: null } })
+      if (path === "/agent_api/v1/profile/store_entries/presets") return Response.json({ store_entry: preset })
+      if (path.endsWith("/store_entries")) return Response.json({ store_entries: [], pagination: { next_after: null } })
+      if (path === "/agent_api/v1/mcp_connections")
+        return Response.json({ mcp_connections: [], pagination: { next_after: null } })
       if (path === "/agent_api/v1/executors") return Response.json({ executors: [] })
       if (path.endsWith("/conversations/conversation"))
         return Response.json({
@@ -260,6 +286,7 @@ test.each([
     if (ready) {
       expect(runtime.status().identity).toMatchObject({ agent: "agent", workspace: "workspace" })
       expect(runtime.status().error).toBeUndefined()
+      expect(await runtime.policy("workspace", "conversation")).toMatchObject({ tools: [], runner: null })
       expect(runtime.status().executor).toMatchObject({
         running: true,
         claimed: 0,

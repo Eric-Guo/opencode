@@ -75,6 +75,7 @@ export function configurationFields(
     for (const key of new Set([...Object.keys(properties), ...Object.keys(input), ...Object.keys(inherited)])) {
       const child = Object.hasOwn(properties, key) ? properties[key] : schema.additionalProperties
       if (child === true) {
+        if (inherited[key] !== undefined) value[key] = inherited[key]
         if (record[key] !== undefined) value[key] = overrides[key] = record[key]
         continue
       }
