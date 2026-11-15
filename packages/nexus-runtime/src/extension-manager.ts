@@ -1,4 +1,5 @@
 import { JsonSchema, Schema, SchemaRepresentation } from "effect"
+import { WebUIModule } from "./webui-module"
 import type { Nexus } from "@opencode/schema/nexus"
 import {
   Configuration,
@@ -26,6 +27,7 @@ export type ExtensionAPI = {
   application(): NexusApplication
   announced?(role: "agent" | "runner"): AnnouncedTool[]
   configure(operations: Nexus.ExtensionChange["operations"]): Promise<Nexus.ConfigurationResult>
+  registerWebUI(root: string): Promise<void>
   registerTool(tool: RunnerTool): void
   registerCommand(name: string, handler: (input: Schema.Json) => Promise<Schema.Json>): void
   registerDocument(document: ExtensionDocument): void
@@ -40,6 +42,7 @@ export type ExtensionModule = {
   register(api: ExtensionAPI): Promise<void> | void
 }
 type Active = {
+  webui?: WebUIModule
   tools: RunnerTool[]
   commands: Map<string, (input: Schema.Json) => Promise<Schema.Json>>
   documents: ExtensionDocument[]
@@ -281,6 +284,12 @@ export class ExtensionManager {
     return handler(input)
   }
 
+  async asset(id: string, version: string, path: string) {
+    const module = this.active.get(id)?.webui
+    if (!module || module.version !== version) throw new Error("This extension UI is no longer active.")
+    return module.read(path)
+  }
+
   list(): Nexus.Extension[] {
     return this.modules.map((module) => {
       const descriptor = module.descriptor
@@ -314,6 +323,10 @@ export class ExtensionManager {
           ...status.issues,
         ],
         tools: active?.tools.map((tool) => tool.definition.name) ?? [],
+        commands: [...(active?.commands.keys() ?? [])],
+        requires: [...(descriptor.requires ?? [])],
+        source: this.configuration.saved(descriptor.id)?.source,
+        webui: active?.webui ? { version: active.webui.version, entry: "index.js" } : undefined,
       }
     })
   }
@@ -402,6 +415,7 @@ export class ExtensionManager {
     const environments: Array<(environment: JsonObject) => Promise<string | undefined>> = []
     const results: ToolResultHandler[] = []
     const cleanup: Array<() => Promise<void> | void> = []
+    const ui: { module?: WebUIModule } = {}
     const status = { read: () => ({ ready: true, issues: [] as string[] }) }
     const lifecycle = { committed: false, retired: false, leases: 0, finish: () => {} }
     const drained = new Promise<void>((resolve) => {
@@ -439,6 +453,13 @@ export class ExtensionManager {
             .map((tool) => tool.definition),
         ],
         configure: (operations) => this.change({ id, operations }),
+        registerWebUI: async (root) => {
+          if (lifecycle.committed || ui.module)
+            throw new Error("Extension UI registration has finished or is duplicated.")
+          const module = await WebUIModule.open(root)
+          if (lifecycle.committed || ui.module) throw new Error("Await registerWebUI during extension registration.")
+          ui.module = module
+        },
         registerTool: (tool) => {
           if (lifecycle.committed) throw new Error("Extension registration has finished.")
           SchemaRepresentation.fromJsonSchemaDocument(
@@ -572,6 +593,7 @@ export class ExtensionManager {
     }
 
     this.active.set(id, {
+      webui: ui.module,
       tools,
       commands,
       documents,
