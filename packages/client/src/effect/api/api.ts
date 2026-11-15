@@ -3334,6 +3334,7 @@ export interface DebugApi<E = never> {
 export type ExperimentalNexusRunInput = {
   readonly key: string
   readonly prompt: string
+  readonly workspace?: string | undefined
   readonly model?: string | undefined
   readonly runner?: string | null | undefined
   readonly agent?: string | undefined
@@ -3362,6 +3363,10 @@ export type ExperimentalNexusExtensionsOutput = ReadonlyArray<{
   readonly configuration: { readonly [x: string]: Schema.Json }
   readonly diagnostics: ReadonlyArray<string>
   readonly tools: ReadonlyArray<string>
+  readonly commands?: ReadonlyArray<string> | undefined
+  readonly requires?: ReadonlyArray<string> | undefined
+  readonly source?: Schema.Json | undefined
+  readonly webui?: { readonly version: string; readonly entry: string } | undefined
 }>
 export type ExperimentalNexusExtensionsOperation<E = never> = () => Effect.Effect<ExperimentalNexusExtensionsOutput, E>
 
@@ -3519,6 +3524,9 @@ export type ExperimentalNexusManageInput = {
   readonly "x-nexus-origin"?: string | undefined
   readonly "x-nexus-member-token"?: string | undefined
   readonly payload:
+    | { readonly action: "workspace.list" }
+    | { readonly action: "workspace.create"; readonly name: string; readonly key: string }
+    | { readonly action: "workspace.use"; readonly workspace: string }
     | { readonly action: "settings.read" }
     | {
         readonly action: "settings.update"
@@ -3763,7 +3771,13 @@ export type ExperimentalNexusManageInput = {
         readonly deliver_at?: string | undefined
         readonly expected_steering_run_public_id?: string | undefined
       }
-    | { readonly action: "bot.read" | "bot.remove" | "bot.history"; readonly id: string }
+    | { readonly action: "bot.read" | "bot.remove"; readonly id: string }
+    | {
+        readonly action: "bot.history"
+        readonly id: string
+        readonly after?: string | undefined
+        readonly archived?: boolean | undefined
+      }
     | { readonly action: "bot.current" | "bot.new"; readonly id: string; readonly key: string }
     | { readonly action: "bot.workspace"; readonly id: string; readonly key: string; readonly workspace: string }
     | {
@@ -3809,6 +3823,7 @@ export type ExperimentalNexusManageInput = {
     | { readonly action: "persona.write"; readonly content: string }
     | {
         readonly action: "application.open"
+        readonly workspace?: string | undefined
         readonly key: string
         readonly title?: string | undefined
         readonly runner?: string | null | undefined
@@ -3841,6 +3856,21 @@ export type ExperimentalNexusManageInput = {
         readonly input: string
       }
     | { readonly action: "extension.list" }
+    | { readonly action: "extension.asset"; readonly id: string; readonly version: string; readonly path: string }
+    | {
+        readonly action: "application.operation"
+        readonly workspace?: string | undefined
+        readonly operation: Schema.Json
+      }
+    | {
+        readonly action: "platform.request"
+        readonly principal: string
+        readonly path: string
+        readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+        readonly body?: Schema.Json | undefined
+        readonly key?: string | undefined
+      }
+    | { readonly action: "login.device" }
     | {
         readonly action: "extension.configure"
         readonly change: {
@@ -3860,7 +3890,16 @@ export type ExperimentalNexusManageInput = {
       }
     | { readonly action: "extension.call"; readonly name: string; readonly input: Schema.Json }
     | {
+        readonly action: "schedule.list"
+        readonly workspace?: string | undefined
+        readonly conversation?: string | undefined
+        readonly after?: string | undefined
+      }
+    | { readonly action: "memory.collections"; readonly workspace?: string | undefined }
+    | {
         readonly action: "schedule.create"
+        readonly workspace?: string | undefined
+        readonly approval?: "ask" | "rules" | "bypass" | undefined
         readonly conversation: string
         readonly key: string
         readonly prompt: string
@@ -3878,29 +3917,35 @@ export type ExperimentalNexusManageInput = {
           | "schedule.run"
           | "schedule.read"
           | "schedule.executions"
+        readonly workspace?: string | undefined
         readonly conversation: string
         readonly id: string
       }
     | {
         readonly action: "schedule.update"
+        readonly workspace?: string | undefined
         readonly conversation: string
         readonly id: string
         readonly version: number
+        readonly name?: string | undefined
+        readonly approval?: "ask" | "rules" | "bypass" | undefined
         readonly prompt: string
         readonly rule:
           | { readonly kind: "once"; readonly run_at: string }
           | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
           | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
       }
-    | { readonly action: "memory.create"; readonly name: string }
+    | { readonly action: "memory.create"; readonly name: string; readonly workspace?: string | undefined }
     | {
         readonly action: "memory.list" | "memory.read" | "memory.grep"
+        readonly workspace?: string | undefined
         readonly collection: string
         readonly path?: string | undefined
         readonly pattern?: string | undefined
       }
     | {
         readonly action: "memory.write"
+        readonly workspace?: string | undefined
         readonly collection: string
         readonly path: string
         readonly content: string
@@ -3909,12 +3954,18 @@ export type ExperimentalNexusManageInput = {
       }
     | {
         readonly action: "memory.delete"
+        readonly workspace?: string | undefined
         readonly collection: string
         readonly path: string
         readonly id: string
         readonly version: number
       }
-    | { readonly action: "memory.archive" | "memory.restore"; readonly collection: string; readonly version: number }
+    | {
+        readonly action: "memory.archive" | "memory.restore"
+        readonly workspace?: string | undefined
+        readonly collection: string
+        readonly version: number
+      }
 }
 export type ExperimentalNexusManageOutput = Schema.Json
 export type ExperimentalNexusManageOperation<E = never> = (

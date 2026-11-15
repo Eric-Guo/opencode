@@ -123,7 +123,8 @@ export class Bots {
     }
     if (command.action === "bot.history")
       return this.member.conversations.list({
-        archived: true,
+        archived: command.archived ?? true,
+        after: command.after,
         metadata_key: "opencode.bot",
         metadata_value: agent.public_id,
       })
