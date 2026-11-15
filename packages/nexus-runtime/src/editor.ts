@@ -10,14 +10,21 @@ import {
   type SessionConfigOption,
   type Stream,
 } from "@agentclientprotocol/sdk"
-import { Client, type ExecutionDecision, type InputExecution, type JsonObject, type Model } from "@cybros/agent"
+import {
+  Client,
+  type ExecutionDecision,
+  type InputExecution,
+  type JsonObject,
+  type Model,
+  type Turn,
+} from "@cybros/agent"
 import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
 import type { Status } from "./runtime"
 import { authenticateEditor, type EditorAuthentication } from "./editor-auth"
 import { editorBridge, editorRoots } from "./editor-bridge"
 import { EditorTranscript } from "./editor-follow"
-import { replayEditorHistory } from "./editor-replay"
+import { readEditorHistory } from "./editor-replay"
 
 type Mode = "bypass" | "ask" | "rules"
 type Session = {
@@ -26,7 +33,6 @@ type Session = {
   model?: string
   code: boolean
   bridge: ReturnType<Awaited<ReturnType<typeof editorBridge>>["attach"]>
-  grants: Set<string>
   mcp: readonly string[]
   last?: { execution: InputExecution; transcript: EditorTranscript }
   question?: { decision: ExecutionDecision; execution: InputExecution; transcript: EditorTranscript }
@@ -46,6 +52,10 @@ export type EditorOptions = {
     signal: AbortSignal,
   ) => Promise<string>
   skills?: () => Promise<readonly { name: string; description: string }[]>
+  approve?: (
+    input: { conversation: string; run: string; task: string; always: boolean },
+    signal: AbortSignal,
+  ) => Promise<{ grant?: { refused?: string } }>
 
   authentication?: EditorAuthentication
   setEnvironment?: (conversation: string, binding: Session["bridge"] | null) => Promise<void>
@@ -118,6 +128,23 @@ export async function editor(stream: Stream, status: Status, token: string, opti
         .task(task)
         .fetch({ signal: pending.get(id)?.signal }),
     )
+  const remember = (id: string, session: Session, turn: Turn | undefined, peer: AgentContext) => {
+    if (!turn || turn.role !== "assistant" || turn.reference || turn.inherited || turn.kind === "compaction_summary")
+      return
+
+    const variant = turn.running_variant ?? turn.active_variant
+
+    if (!variant?.run_public_id) return
+
+    session.last = {
+      execution: nexus.workspace.conversation(id).execution({
+        turn_public_id: turn.public_id,
+        variant_public_id: variant.public_id,
+        run_public_id: variant.run_public_id,
+      }),
+      transcript: projection(id, peer),
+    }
+  }
   const catchUp = async (
     execution: InputExecution,
     moved: (snapshot: NonNullable<InputExecution["snapshot"]>) => boolean,
@@ -155,6 +182,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     const streaming = new AbortController()
     const watchers: Promise<void>[] = []
     const runs = new Set<string>()
+    const dismissed = new Set<string>()
 
     try {
       while (!signal.aborted) {
@@ -274,35 +302,69 @@ export async function editor(stream: Stream, status: Status, token: string, opti
             }
 
             const task = decision.detail.task
-            const grant = JSON.stringify([task.tool_name, decision.detail.tool_input])
+            const key = snapshot.execution.run_public_id + ":" + task.key
 
-            if (session.grants.has(grant)) {
-              await decision.task.approve({ signal })
-              continue
-            }
+            if (dismissed.has(key)) continue
 
-            const response = await peer.request(
-              "session/request_permission",
-              {
-                sessionId: id,
-                toolCall: {
-                  toolCallId: snapshot.execution.run_public_id + ":" + task.key,
-                  title: task.tool_name ?? task.key,
-                  rawInput: decision.detail.tool_input,
+            const response = await peer
+              .request(
+                "session/request_permission",
+                {
+                  sessionId: id,
+                  toolCall: {
+                    toolCallId: snapshot.execution.run_public_id + ":" + task.key,
+                    title: task.tool_name ?? task.key,
+                    rawInput: decision.detail.tool_input,
+                  },
+                  options: [
+                    { optionId: "approve", name: "Allow once", kind: "allow_once" },
+                    ...(options.approve
+                      ? [
+                          {
+                            optionId: "always",
+                            name:
+                              task.tool_name === "web_fetch" && task.target?.kind !== "mcp"
+                                ? "Allow this site until OpenCode restarts"
+                                : "Allow this call's scope until OpenCode restarts",
+                            kind: "allow_always" as const,
+                          },
+                        ]
+                      : []),
+                    { optionId: "deny", name: "Deny", kind: "reject_once" },
+                  ],
                 },
-                options: [
-                  { optionId: "approve", name: "Allow once", kind: "allow_once" },
-                  { optionId: "always", name: "Allow for this session", kind: "allow_always" },
-                  { optionId: "deny", name: "Deny", kind: "reject_once" },
-                ],
-              },
-              { cancellationSignal: signal },
-            )
+                { cancellationSignal: signal },
+              )
+              .catch(async (error: unknown) => {
+                signal.throwIfAborted()
+                // A client that abandons its permission request has declined this call.
+                await decision.task.deny("The editor client went away.", { signal })
+                if (error instanceof RequestError && error.code === -32800) return
+
+                throw error
+              })
 
             if (signal.aborted) break
+            if (!response) continue
+            if (response.outcome.outcome === "cancelled") {
+              dismissed.add(key)
+              continue
+            }
             if (response.outcome.outcome === "selected" && ["approve", "always"].includes(response.outcome.optionId)) {
-              if (response.outcome.optionId === "always") session.grants.add(grant)
-              await decision.task.approve({ signal })
+              if (options.approve) {
+                const result = await options.approve(
+                  {
+                    conversation: id,
+                    run: snapshot.execution.run_public_id,
+                    task: task.key,
+                    always: response.outcome.optionId === "always",
+                  },
+                  signal,
+                )
+
+                if (result.grant?.refused)
+                  await transcript.question("Approved this call. The grant could not be saved: " + result.grant.refused)
+              } else await decision.task.approve({ signal })
             } else await decision.task.deny(undefined, { signal })
           }
 
@@ -419,36 +481,31 @@ export async function editor(stream: Stream, status: Status, token: string, opti
           : undefined,
       code: options.codeMode ? await options.codeMode(id) : conversation.metadata["opencode.acp.code"] !== false,
       bridge: bridge.attach(id, roots, peer, state.capabilities),
-      grants: new Set(),
       mcp: mcp?.tools ?? [],
     }
 
     await options.setEnvironment?.(id, session.bridge)
     sessions.set(id, session)
-    if (replay) await replayEditorHistory(nexus.workspace, id, peer, signal)
-    if (conversation.active_turn_public_id) {
-      const deck = await nexus.workspace.conversation(id).turns.variants(conversation.active_turn_public_id, { signal })
-      const variant = deck.items.find((variant) => variant.active)
+    remember(
+      id,
+      session,
+      replay
+        ? await readEditorHistory(nexus.workspace, id, signal, peer)
+        : conversation.active_turn_public_id
+          ? await nexus.workspace
+              .conversation(id)
+              .turns.fetch(conversation.active_turn_public_id, undefined, { signal })
+          : undefined,
+      peer,
+    )
+    if (session.last) {
+      const decision = (await session.last.execution.decisions({ signal })).find((decision) => decision.kind === "ask")
 
-      if (variant?.run_public_id) {
-        session.last = {
-          execution: nexus.workspace.conversation(id).execution({
-            turn_public_id: conversation.active_turn_public_id,
-            variant_public_id: variant.public_id,
-            run_public_id: variant.run_public_id,
-          }),
-          transcript: projection(id, peer),
+      if (decision)
+        session.question = {
+          decision,
+          ...session.last,
         }
-        const decision = (await nexus.workspace.run(variant.run_public_id).decisions({ signal })).find(
-          (decision) => decision.kind === "ask",
-        )
-
-        if (decision)
-          session.question = {
-            decision,
-            ...session.last,
-          }
-      }
     }
 
     await peer.notify("session/update", {
@@ -643,7 +700,10 @@ export async function editor(stream: Stream, status: Status, token: string, opti
 
       pending.get(params.sessionId)?.abort()
       sessions.get(params.sessionId)!.question = undefined
-      await nexus.workspace.conversation(params.sessionId).cancel()
+      await nexus.workspace
+        .conversation(params.sessionId)
+        .cancel()
+        .catch(() => {})
     })
     .onRequest("session/prompt", async (ctx) => {
       const id = ctx.params.sessionId
@@ -664,6 +724,8 @@ export async function editor(stream: Stream, status: Status, token: string, opti
           return { stopReason: "end_turn" as const }
         }
         if (command === "retry" || command === "abandon") {
+          if (!session.last) remember(id, session, await readEditorHistory(nexus.workspace, id, signal), ctx.client)
+
           const snapshot = await session.last?.execution.recover({ signal })
           const runID = snapshot?.execution.run_public_id
 
