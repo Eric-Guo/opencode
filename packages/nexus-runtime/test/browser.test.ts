@@ -94,6 +94,20 @@ test.skipIf(!chromium)(
           .structured_content,
       ).toBe("Second tab")
       expect((await run("browser_snapshot")).content).toContain("Title: Saved fixture")
+      expect(
+        (await run("browser_evaluate", { expression: "[NaN,Infinity,-Infinity,{value:NaN}]" })).structured_content,
+      ).toEqual([null, null, null, { value: null }])
+      expect(
+        (await run("browser_evaluate", { expression: "(()=>{const node={};node.self=node;return node})()" }))
+          .structured_content,
+      ).toEqual({ self: "[circular]" })
+      expect(
+        (
+          await run("browser_evaluate", {
+            expression: "(()=>{const root={};let node=root;for(let i=0;i<70;i++)node=node.next={};return root})()",
+          })
+        ).content,
+      ).toContain("[too deep]")
       const shot = await run("browser_screenshot")
       expect(shot.content).toMatchObject([
         { type: "text", text: expect.stringContaining("Saved a screenshot") },

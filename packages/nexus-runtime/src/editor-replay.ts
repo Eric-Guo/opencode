@@ -1,17 +1,20 @@
 import type { AgentContext } from "@agentclientprotocol/sdk"
-import type { Client, ConversationHistoryTurn, ThreadRow } from "@cybros/agent"
+import type { Client, ConversationHistoryTurn, ThreadRow, Turn } from "@cybros/agent"
 import { EditorTranscript } from "./editor-follow"
 
-export async function replayEditorHistory(
+export async function readEditorHistory(
   workspace: ReturnType<Client["workspace"]>,
   id: string,
-  peer: AgentContext,
   signal: AbortSignal,
+  peer?: AgentContext,
 ) {
   const chat = workspace.conversation(id)
   const turns = new Map<number, ConversationHistoryTurn>()
   const page = { before: undefined as number | undefined }
-  const projection = new EditorTranscript(id, peer, (run, task) => workspace.run(run).task(task).fetch({ signal }))
+  const projection = peer
+    ? new EditorTranscript(id, peer, (run, task) => workspace.run(run).task(task).fetch({ signal }))
+    : undefined
+  const latest: { turn?: Turn } = {}
 
   do {
     const history = await chat.history({ before_position: page.before, limit: 100 }, { signal })
@@ -23,13 +26,15 @@ export async function replayEditorHistory(
   } while (!signal.aborted)
 
   for (const turn of [...turns.values()].sort((a, b) => a.position - b.position)) {
+    signal.throwIfAborted()
+    if (turn.kind === "compaction_summary") continue
+
     const detail = await chat.turns.fetch(turn.public_id, undefined, { signal })
+
+    if (detail.role === "assistant" && !detail.reference && !detail.inherited) latest.turn = detail
+    if (!peer) continue
+
     const variant = detail.active_variant
-    const reference = detail.reference
-      ? "[Parent reference" +
-        (detail.sender_conversation_public_id ? " from " + detail.sender_conversation_public_id : "") +
-        "]\n"
-      : ""
     const text = async (field: "prompt" | "content", fallback: string | null) => {
       if (!turn.truncated || !variant) return fallback
 
@@ -53,18 +58,34 @@ export async function replayEditorHistory(
 
       return content.join("")
     }
-    const prompt = await text("prompt", turn.prompt)
+    if (detail.reference) {
+      const content = await text("content", turn.content)
+
+      if (content)
+        await peer.notify("session/update", {
+          sessionId: id,
+          update: {
+            sessionUpdate: "user_message_chunk",
+            messageId: turn.public_id + ":reference",
+            content: { type: "text", text: "Parent conversation reference snapshot (context only):\n\n" + content },
+          },
+        })
+      continue
+    }
+    if (!["user", "assistant"].includes(detail.role)) continue
+
+    const prompt = detail.role === "assistant" ? await text("prompt", turn.prompt) : null
 
     if (prompt)
       await peer.notify("session/update", {
         sessionId: id,
         update: {
-          sessionUpdate: reference ? "agent_message_chunk" : "user_message_chunk",
-          messageId: turn.public_id + ":user",
-          content: { type: "text", text: reference + prompt },
+          sessionUpdate: "user_message_chunk",
+          messageId: turn.public_id + ":0",
+          content: { type: "text", text: prompt },
         },
       })
-    if (variant?.run_public_id && !reference) {
+    if (detail.role === "assistant" && variant?.run_public_id) {
       const rounds: ThreadRow[][] = []
       const cursor = { before: undefined as string | undefined }
 
@@ -80,7 +101,7 @@ export async function replayEditorHistory(
       } while (!signal.aborted)
 
       for (const round of rounds.flat().filter((round) => round.mainline))
-        for (const call of round.calls.items) await projection.call(variant.run_public_id, call)
+        for (const call of round.calls.items) await projection!.call(variant.run_public_id, call)
     }
 
     const content = await text("content", turn.content)
@@ -89,10 +110,12 @@ export async function replayEditorHistory(
       await peer.notify("session/update", {
         sessionId: id,
         update: {
-          sessionUpdate: "agent_message_chunk",
+          sessionUpdate: detail.role === "user" ? "user_message_chunk" : "agent_message_chunk",
           messageId: turn.public_id + ":0",
-          content: { type: "text", text: reference + content },
+          content: { type: "text", text: content },
         },
       })
   }
+
+  return latest.turn
 }

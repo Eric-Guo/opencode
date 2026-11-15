@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test"
-import { Toolsets, type CredentialDocument, type Workspace } from "@cybros/agent"
+import { Toolsets, type CredentialDocument, type Workspace, type JsonObject } from "@cybros/agent"
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NexusRuntime } from "../src/runtime"
 import { atomic } from "../src/storage"
 import { Schema } from "effect"
+import { conversationFixture } from "./fixture/conversation"
 
 const Declaration = Schema.Struct({
   configuration: Schema.Struct({
@@ -13,7 +14,7 @@ const Declaration = Schema.Struct({
     image_model: Schema.NullOr(Schema.String),
     compaction_policy: Schema.Struct({ mode: Schema.String }),
   }),
-  prompt_documents: Schema.Struct({ summarizer: Schema.Struct({ content: Schema.String }) }),
+  prompt_documents: Schema.optional(Schema.Struct({ summarizer: Schema.Struct({ content: Schema.String }) })),
 })
 
 test.each([
@@ -33,6 +34,29 @@ test.each([
   const changed = Promise.withResolvers<typeof Declaration.Type>()
   const calls: { path: string; method: string; authorization: string | null; after: string | null; state: string }[] =
     []
+  const approval = {
+    conversation: "conversation",
+    agent: "agent",
+    archived: false,
+    refuseDeclaration: false,
+    tool: "web_fetch",
+    alias: null as string | null,
+    input: { url: "HTTPS://Example.com:00443/guide" } as JsonObject,
+    target: { kind: "builtin" } as JsonObject,
+  }
+  const task = () => ({
+    key: "call",
+    kind: "tool_task",
+    status: "needs_approval",
+    lifetime: "foreground",
+    wake: "immediate",
+    after: [],
+    waiting_on: [],
+    tool_name: approval.tool,
+    tool_alias: approval.alias,
+    tool_input: approval.input,
+    target: approval.target,
+  })
   const measured = new Date().toISOString()
   const workspace: Workspace = {
     public_id: "workspace",
@@ -68,7 +92,12 @@ test.each([
         if (request.headers.get("authorization") === "Bearer invalid")
           return Response.json({ error: { code: "invalid_token" } }, { status: 401 })
         return Response.json({
-          member: { public_id: "agent", handle: "opencode", kind: "agent", role: "member" },
+          member: {
+            public_id: request.headers.get("authorization") === "Bearer human" ? "human" : "agent",
+            handle: "opencode",
+            kind: request.headers.get("authorization") === "Bearer human" ? "human" : "agent",
+            role: "member",
+          },
           credential: { plane: "member", expires_at: null },
           measured_at: measured,
         })
@@ -117,7 +146,30 @@ test.each([
           })),
         })
       if (path === "/agent_api/v1/executors") return Response.json({ executors: [] })
+      if (path.endsWith("/conversations/conversation"))
+        return Response.json({
+          conversation: conversationFixture({
+            answering_user_public_id: approval.agent,
+            archived_at: approval.archived ? measured : null,
+          }),
+        })
+      if (path.endsWith("/runs/run"))
+        return Response.json({
+          run: {
+            public_id: "run",
+            status: "needs_attention",
+            turn: { conversation_public_id: approval.conversation, status: "running" },
+            tasks: [task()],
+          },
+        })
+      if (path.endsWith("/tasks/call")) return Response.json({ task: task() })
+      if (path.endsWith("/tasks/call/approve")) return Response.json({ task: { ...task(), status: "completed" } })
       if (path === "/agent_api/v1/profile/configuration") {
+        if (approval.refuseDeclaration)
+          return Response.json(
+            { error: { code: "invalid_configuration", message: "Fixture refused declaration" } },
+            { status: 400 },
+          )
         const payload = Schema.decodeUnknownSync(Declaration)(await request.json())
         if (
           payload.configuration?.image_model === "image-fixture" &&
@@ -214,6 +266,80 @@ test.each([
         in_flight: 0,
         starting: 0,
       })
+      if ("apiKey" in fixture) {
+        const command = {
+          action: "application.approve",
+          workspace: "workspace",
+          conversation: "conversation",
+          run: "run",
+          task: "call",
+          always: true,
+        } as const
+        await expect(runtime.manage(command)).rejects.toThrow("Human member token")
+        await expect(runtime.manage(command, "https://other.example", "human")).rejects.toThrow("paired Nexus origin")
+        await expect(runtime.manage({ ...command, workspace: "other" }, nexus.url.origin, "human")).rejects.toThrow(
+          "workspace",
+        )
+        await expect(runtime.manage(command, nexus.url.origin, "fixture-member")).rejects.toThrow("Human member token")
+        approval.conversation = "other"
+        await expect(runtime.manage(command, nexus.url.origin, "human")).rejects.toThrow("does not belong")
+        approval.conversation = "conversation"
+        approval.agent = "other"
+        await expect(runtime.manage(command, nexus.url.origin, "human")).rejects.toThrow("does not belong")
+        approval.agent = "agent"
+        approval.archived = true
+        await expect(runtime.manage(command, nexus.url.origin, "human")).rejects.toThrow("does not belong")
+        approval.archived = false
+        expect(calls.filter((call) => call.path.endsWith("/approve"))).toHaveLength(0)
+        for (const row of [
+          {
+            tool: "web_fetch",
+            input: { url: "HTTPS://Example.com:00443/guide" },
+            target: { kind: "builtin" },
+            rule: { tool: "web_fetch", path: "url", match: "HTTPS://Example.com:00443/*", verdict: "allow" },
+          },
+          {
+            tool: "bash",
+            input: { command: "bun test" },
+            target: { kind: "builtin" },
+            rule: { tool: "bash", path: "command", match: "bun test", verdict: "allow" },
+          },
+          {
+            tool: "write",
+            input: { path: "/project/result.txt" },
+            target: { kind: "builtin" },
+            rule: { tool: "write", path: "path", match: "/project/result.txt", verdict: "allow" },
+          },
+          {
+            tool: "web_fetch",
+            input: { url: "https://remote.example/" },
+            target: { kind: "mcp" },
+            alias: "remote_docs",
+            rule: { tool: "remote_docs", verdict: "allow" },
+          },
+        ]) {
+          Object.assign(approval, row)
+          expect(await runtime.manage(command, nexus.url.origin, "human")).toMatchObject({
+            grant: { rule: row.rule, conversation: "conversation" },
+          })
+        }
+        expect(calls.filter((call) => call.path.endsWith("/approve")).map((call) => call.authorization)).toEqual(
+          Array(4).fill("Bearer human"),
+        )
+        approval.alias = null
+        approval.tool = "bash"
+        approval.target = { kind: "builtin" }
+        approval.input = { command: "bun run build" }
+        approval.refuseDeclaration = true
+        expect(await runtime.manage(command, nexus.url.origin, "human")).toMatchObject({
+          task: { status: "completed" },
+          grant: { refused: expect.any(String) },
+        })
+        approval.refuseDeclaration = false
+        expect(await runtime.manage({ ...command, always: false }, nexus.url.origin, "human")).toMatchObject({
+          status: "completed",
+        })
+      }
       if (fixture.owned && !fixture.create) {
         await runtime.configureExtension({
           id: "nexus.images",
@@ -227,8 +353,8 @@ test.each([
           compaction_policy: { mode: "off" },
         })
         expect(declaration.configuration.kernel_tools).toEqual(Toolsets.names("images"))
-        expect(declaration.prompt_documents.summarizer.content).toContain("Goal:")
-        expect(declaration.prompt_documents.summarizer.content).toContain("Open:")
+        expect(declaration.prompt_documents?.summarizer.content).toContain("Goal:")
+        expect(declaration.prompt_documents?.summarizer.content).toContain("Open:")
       }
     } else {
       expect(runtime.status().identity).toBeUndefined()
