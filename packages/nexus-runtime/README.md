@@ -378,7 +378,9 @@ claim operations and approval policy; there is no direct filesystem or network
 capability. `text(string)` and `console.log` select visible output, `value(json)`
 returns a structured value, and `resource(block)` forwards an observed resource.
 An explicit return or the final expression supplies structured output, including
-null, false and zero. Native tool failures expose their message; Nexus helper
+null, false and zero. Structured output is UI-only and is never rendered to the model;
+use `text(JSON.stringify(result))` for results the model needs to read. Keep a successful
+result instead of repeating the tool call just to display it. Native tool failures expose their message; Nexus helper
 refusals also expose `error.refusal`. Host transport failures terminate execution.
 
 Ordinary tool Promises have no `operation_key`. Use an explicit handle when work
