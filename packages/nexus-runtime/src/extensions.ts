@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { Effect, Schedule, Schema } from "effect"
 import type { AnnouncedTool, CommitTask, JsonObject, TaskRealtime } from "@cybros/agent"
 import type { HostTools } from "./host"
+import type { Orchestration } from "./orchestration"
 import type { RealtimeOptions } from "./realtime"
 
 export type RunnerContext = {
@@ -19,6 +20,7 @@ export type RunnerContext = {
   publish?: (file: Blob, name: string) => Promise<JsonObject>
   progress?: (text: string) => Promise<void>
   processProgress?: (frame: { process_id: string; lines?: string[]; exit?: number | null }) => Promise<void>
+  orchestration?: Orchestration
   ask?: (key: string, prompt: string, options?: string[]) => Promise<string>
   realtime?: {
     read(): Promise<TaskRealtime>
@@ -27,7 +29,9 @@ export type RunnerContext = {
 }
 export type RunnerTool = {
   definition: AnnouncedTool
-  role?: "agent" | "runner"
+  role?: "agent" | "runner" | "tool_provider"
+  /** Opt out of captured placement for tools that do not access local directories. */
+  environmentRequired?: boolean
   resource?: { name: string; concurrency: number }
   internalTimeout?: boolean
   isolated?: boolean
