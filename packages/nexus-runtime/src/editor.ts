@@ -33,6 +33,9 @@ type Session = {
   mode: Mode
   model?: string
   code: boolean
+  codeAvailable: boolean
+  own: boolean
+  local: boolean
   bridge: ReturnType<Awaited<ReturnType<typeof editorBridge>>["attach"]>
   mcp: readonly string[]
   last?: { execution: InputExecution; transcript: EditorTranscript }
@@ -49,6 +52,8 @@ export type EditorOptions = {
       attachments?: readonly string[]
       model?: string
       approval: Mode
+      addressed?: boolean
+      answering_user_public_id?: string
     },
     signal: AbortSignal,
   ) => Promise<string>
@@ -60,6 +65,9 @@ export type EditorOptions = {
 
   authentication?: EditorAuthentication
   setEnvironment?: (conversation: string, binding: Session["bridge"] | null) => Promise<void>
+  modePolicy?: (
+    conversation: string,
+  ) => Promise<{ available?: boolean; code_mode_available?: boolean; code_mode: boolean }>
   codeMode?: (conversation: string) => Promise<boolean>
   setCodeMode?: (conversation: string, enabled: boolean) => Promise<void>
   attachMcp?: (input: {
@@ -111,7 +119,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       throw RequestError.authRequired(undefined, "A Human member token is required.")
 
     await nexus.workspace.fetch({ signal })
-    state.models = await nexus.client.models.list({ workload: "chat" }, { signal })
+    state.models = await nexus.client.models.list({ workload: "text_generation" }, { signal })
     state.authenticated = true
   }
 
@@ -319,7 +327,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
                   },
                   options: [
                     { optionId: "approve", name: "Allow once", kind: "allow_once" },
-                    ...(options.approve
+                    ...(options.approve && session.own
                       ? [
                           {
                             optionId: "always",
@@ -351,7 +359,11 @@ export async function editor(stream: Stream, status: Status, token: string, opti
               dismissed.add(key)
               continue
             }
-            if (response.outcome.outcome === "selected" && ["approve", "always"].includes(response.outcome.optionId)) {
+            if (
+              response.outcome.outcome === "selected" &&
+              (response.outcome.optionId === "approve" ||
+                (session.own && options.approve && response.outcome.optionId === "always"))
+            ) {
               if (options.approve) {
                 const result = await options.approve(
                   {
@@ -436,7 +448,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
         ]),
       ].map((value) => ({ value, name: value })),
     },
-    ...(options.setCodeMode
+    ...(options.setCodeMode && session.codeAvailable
       ? [
           {
             id: "code_mode",
@@ -463,29 +475,39 @@ export async function editor(stream: Stream, status: Status, token: string, opti
 
     const conversation = await nexus.workspace.conversation(id).fetch({ signal })
 
-    if (conversation.answering_user_public_id !== nexus.identity?.agent || conversation.archived_at)
-      throw RequestError.resourceNotFound(id)
+    if (conversation.archived_at) throw RequestError.resourceNotFound(id)
     if (
       typeof conversation.metadata["opencode.acp.cwd"] === "string" &&
       conversation.metadata["opencode.acp.cwd"] !== roots[0]
     )
       throw RequestError.invalidParams(undefined, "The session working directory cannot be changed.")
 
+    const own = conversation.answering_user_public_id === nexus.identity?.agent
+    const local = conversation.default_runner?.executor_public_id === nexus.identity?.runner
+    const policy = own
+      ? await options.modePolicy?.(id)
+      : { available: false, code_mode_available: false, code_mode: false }
     const saved = conversation.metadata["opencode.acp.mode"]
-    const mcp = await options.attachMcp?.({ conversation: id, cwd: roots[0], servers })
+    const mcp = local ? await options.attachMcp?.({ conversation: id, cwd: roots[0], servers }) : undefined
     const session: Session = {
       roots,
+      own,
+      local,
+      codeAvailable:
+        own && (policy ? policy.available === true && policy.code_mode_available === true : !!options.setCodeMode),
       mode: saved === "bypass" || saved === "rules" ? saved : "ask",
       model:
         typeof conversation.metadata["opencode.acp.model"] === "string"
           ? conversation.metadata["opencode.acp.model"]
           : undefined,
-      code: options.codeMode ? await options.codeMode(id) : conversation.metadata["opencode.acp.code"] !== false,
+      code:
+        policy?.code_mode ??
+        (options.codeMode ? await options.codeMode(id) : conversation.metadata["opencode.acp.code"] !== false),
       bridge: bridge.attach(id, roots, peer, state.capabilities),
       mcp: mcp?.tools ?? [],
     }
 
-    await options.setEnvironment?.(id, session.bridge)
+    if (local) await options.setEnvironment?.(id, session.bridge)
     sessions.set(id, session)
     remember(
       id,
@@ -528,7 +550,9 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     return {
       modes: { currentModeId: session.mode, availableModes: modes },
       configOptions: config(session),
-      ...(mcp?.issues.length ? { _meta: { "opencode.mcp.issues": mcp.issues } } : {}),
+      ...(mcp?.issues.length || (!local && servers.length)
+        ? { _meta: { "opencode.mcp.issues": mcp?.issues ?? ["Editor MCP attachments require this machine’s runner."] } }
+        : {}),
     }
   }
   const save = async (id: string, patch: JsonObject, signal: AbortSignal) => {
@@ -632,12 +656,12 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       )
     })
     .onRequest("session/close", async ({ params }) => {
-      requireSession(params.sessionId)
+      const session = requireSession(params.sessionId)
       pending.get(params.sessionId)?.abort()
       sessions.delete(params.sessionId)
       bridge.release(params.sessionId)
-      await options.detachMcp?.(params.sessionId)
-      await options.setEnvironment?.(params.sessionId, null)
+      if (session.local) await options.detachMcp?.(params.sessionId)
+      if (session.local) await options.setEnvironment?.(params.sessionId, null)
       return {}
     })
     .onRequest("session/set_mode", async ({ params, signal, client: peer }) => {
@@ -665,7 +689,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
         await save(params.sessionId, { "opencode.acp.mode": params.value }, signal)
         session.mode = params.value as Mode
       } else if (params.configId === "model" && typeof params.value === "string") {
-        const models = await nexus.client.models.list({ workload: "chat" }, { signal })
+        const models = await nexus.client.models.list({ workload: "text_generation" }, { signal })
 
         if (
           params.value !== nexus.status.model &&
@@ -679,6 +703,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       } else if (
         params.configId === "code_mode" &&
         options.setCodeMode &&
+        session.codeAvailable &&
         ["on", "off", true, false].includes(params.value)
       ) {
         const enabled = params.value === true || params.value === "on"
@@ -765,6 +790,12 @@ export async function editor(stream: Stream, status: Status, token: string, opti
                       ...prompt,
                       model: session.model,
                       approval: session.mode,
+                      ...(!session.own
+                        ? {
+                            addressed: true,
+                            answering_user_public_id: (await chat.fetch({ signal })).answering_user_public_id,
+                          }
+                        : {}),
                     },
                     signal,
                   )
@@ -797,7 +828,9 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     await bridge.close()
     await Promise.allSettled(background)
     await Promise.allSettled(
-      [...sessions.keys()].flatMap((id) => [options.detachMcp?.(id), options.setEnvironment?.(id, null)]),
+      [...sessions]
+        .filter(([, session]) => session.local)
+        .flatMap(([id]) => [options.detachMcp?.(id), options.setEnvironment?.(id, null)]),
     )
   }
 }

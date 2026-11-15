@@ -27,21 +27,21 @@ export function runnerRefusal(name: string, input: JsonObject, cwd: string, prot
     if (found) return "Refused: " + found[1] + "."
     if (roots.some((root) => command.includes(root))) return "Refused: the command names protected runtime state."
   }
-  if (["write", "edit"].includes(name) && typeof input.path === "string") {
-    const path = resolve(
-      cwd,
-      input.path === "~"
-        ? homedir()
-        : input.path.startsWith("~/")
-          ? resolve(homedir(), input.path.slice(2))
-          : input.path,
-    )
-    if (
-      roots.some((root) => {
-        const from = relative(root, path)
-        return !isAbsolute(from) && from !== ".." && !from.startsWith(".." + sep)
-      })
-    )
-      return "Refused: the path is inside protected runtime state."
-  }
+  if (
+    ["write", "edit"].includes(name) &&
+    typeof input.path === "string" &&
+    protectedPath(input.path, cwd, protectedRoots)
+  )
+    return "Refused: the path is inside protected runtime state."
+}
+
+export function protectedPath(path: string, cwd: string, protectedRoots: readonly string[] = []) {
+  const selected = resolve(
+    cwd,
+    path === "~" ? homedir() : path.startsWith("~/") ? resolve(homedir(), path.slice(2)) : path,
+  )
+  return [fileURLToPath(new URL("../", import.meta.url)), ...protectedRoots].some((root) => {
+    const from = relative(root, selected)
+    return !isAbsolute(from) && from !== ".." && !from.startsWith(".." + sep)
+  })
 }

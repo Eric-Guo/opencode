@@ -202,6 +202,7 @@ class ExtensionWorker {
         const metadata = {
           definition: tool.definition,
           role: tool.role,
+          environmentRequired: tool.environmentRequired,
           resource: tool.resource,
           internalTimeout: tool.internalTimeout,
         }
