@@ -89,7 +89,11 @@ test("MCP curation treats stale explicit lists atomically and keeps verbatim des
     {
       name: "read",
       description: "  Precise\nserver instructions  ",
-      inputSchema: { type: "object" as const, properties: {} },
+      inputSchema: {
+        type: "object" as const,
+        properties: { path: { type: "string", pattern: "^/" } },
+        dependentRequired: { path: ["revision"] },
+      },
     },
     { name: "blank", description: " ", inputSchema: { type: "object" as const } },
     {

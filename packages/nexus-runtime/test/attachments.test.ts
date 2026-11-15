@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { readdir, writeFile } from "node:fs/promises"
+import { mkdir, readdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { createHash } from "node:crypto"
 import { Schema } from "effect"
@@ -93,6 +93,45 @@ test("attachments transfer whole large media, keep imports outside project files
       { type: "image/png", hash: createHash("sha256").update(bytes).digest("hex") },
       { type: "application/pdf", hash: createHash("sha256").update(bytes).digest("hex") },
     ])
+  } finally {
+    await fixture.close()
+  }
+})
+
+test("operator file capture preserves media type and metadata for paths outside the captured root", async () => {
+  const fixture = await executorFixture()
+  const root = join(fixture.directory, "project")
+  const path = join(fixture.directory, "capture.png")
+  await mkdir(root)
+  await writeFile(path, "image bytes")
+  const uploaded: string[] = []
+  fixture.control.route = async (request) => {
+    if (!new URL(request.url).pathname.endsWith("/executor/uploads")) return
+    const file = (await request.formData()).get("upload[file]")
+    if (!(file instanceof File)) throw new Error("Expected a file")
+    uploaded.push(await file.text())
+    return Response.json(
+      {
+        upload: {
+          public_id: crypto.randomUUID(),
+          filename: file.name,
+          content_type: file.type,
+          byte_size: file.size,
+          created_at: new Date().toISOString(),
+        },
+      },
+      { status: 201 },
+    )
+  }
+  try {
+    const row = fixture.add("run", "bytes", "files_bytes", { tool_input: { path: "../capture.png" } })
+    expect(await runClaim(fixture.client, row, root, new AbortController().signal)).toMatchObject({
+      content: [
+        { type: "text", text: `${path} (image/png, 11 bytes)` },
+        { type: "resource_link", name: "capture.png", mimeType: "image/png", size: 11 },
+      ],
+    })
+    expect(uploaded).toEqual(["image bytes"])
   } finally {
     await fixture.close()
   }

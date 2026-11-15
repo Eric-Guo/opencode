@@ -1,7 +1,6 @@
-import { JsonSchema, Schema, SchemaRepresentation } from "effect"
+import { Schema } from "effect"
 import type { AnnouncedTool } from "@cybros/agent"
-import { Ajv } from "ajv"
-import { Ajv2020 } from "ajv/dist/2020.js"
+import { compileToolSchema } from "./tool-schema"
 import type { Mcp } from "@opencode/core/mcp/index"
 import { openWrite } from "./extensions"
 import { mcpName, type McpRow } from "./mcp-settings"
@@ -65,13 +64,7 @@ function validMcpSchema(schema: Schema.JsonObject) {
   if (schema.type !== "object") return false
 
   try {
-    const compiler =
-      typeof schema.$schema === "string" && schema.$schema.includes("draft-07")
-        ? new Ajv({ strict: false, validateFormats: false })
-        : new Ajv2020({ strict: false, validateFormats: false })
-
-    compiler.compile(schema)
-    SchemaRepresentation.fromJsonSchemaDocument(JsonSchema.fromSchemaDraft2020_12(schema))
+    compileToolSchema(schema)
     return true
   } catch {
     return false
