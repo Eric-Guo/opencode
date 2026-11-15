@@ -155,3 +155,46 @@ member-plane bytes and media type, and native Code Mode results. A frozen catalo
 with conditional schemas also drove a real Code Mode child tool operation to
 completion. All temporary workspaces and Agents were removed; both temporary
 credential planes were verified rejected with HTTP 401 and private files deleted.
+
+## Joint runtime and WebUI review
+
+The joint review traced the Rho package contracts through `packages/nexus-ui` and the
+managed OpenCode service. New UI chats now leave their title to `ConversationTitles`
+instead of storing the first prompt as a manual title. The UI also rereads selected
+conversation state every three seconds, matching the reference's HTTP recovery path:
+idle metadata and access changes need no transcript event. Navigation, teardown and
+authoritative access loss stop those reads, and drafts survive a refusal.
+
+Code Mode's frozen declaration now states the existing output contract explicitly:
+returned JSON and `value()` are UI-only; `text()` and `console.log` are model-visible.
+It directs the model to print a retained result instead of repeating a successful
+effect just to display it. The native Code Mode regression exercises both output
+channels for the same completed child tool result, including its error flag and null.
+Execution still uses OpenCode Code Mode and Nexus's existing operation/approval owners.
+
+Validation passed: 304 runtime conformance tests with real Chromium/WebRTC, 362 UI
+unit tests, 54 browser component tests, both packages' TypeScript checks and builds,
+and root `bun run check`. Against Nexus at `http://localhost:3000`, the development UI
+and managed service exercised automatic titles, idle access revocation, native Code
+Mode/bounded bash calls and approvals, file publication and byte-verified download,
+disabled/custom/automatic memory selection, and a real scheduled execution with its
+history link. Real terminal output, reload/reattachment and Stop also passed.
+Temporary workspaces, schedules and terminal tasks were cleaned up; the managed
+service pairing, Agent and default workspace were preserved. Disabled external
+integrations remain covered by the conformance suite's local HTTP, RPC and process fixtures.
+After the managed service was rebuilt and restarted, a live UI request verified
+the updated declaration in the model's durable tool-discovery results. The model
+used native Code Mode to run one approved bash effect, printed its observed output,
+and retained literal `false` as structured output. Both a scratch execution counter
+and the durable task records confirmed exactly one bash execution. The following
+sealed model request contained the unpredictable printed token, and the UI answer
+returned that token and survived reload. The temporary workspace and scratch files
+were removed; pairing, the Agent and the default workspace were preserved. No
+additional runtime change was needed for this verification.
+
+Automated regressions cover this contract in `test/runtime.test.ts` (the published
+declaration), `test/code.test.ts` (one observed child result printed alongside
+structured false, zero or null), and `test/executor.test.ts` (one native child
+operation and durable structured false despite duplicate work notifications).
+The Nexus UI browser regression covers approval, printed output, sealed-request
+inspection and reload without submitting another input or approval.
