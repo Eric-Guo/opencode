@@ -6,6 +6,7 @@ import { optional } from "./schema.js"
 export const Input = Schema.Struct({
   key: Schema.NonEmptyString,
   prompt: Schema.String,
+  workspace: Schema.NonEmptyString.pipe(optional),
   model: Schema.String.pipe(optional),
   runner: Schema.NullOr(Schema.String).pipe(optional),
   agent: Schema.String.pipe(optional),

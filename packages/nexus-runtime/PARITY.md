@@ -11,10 +11,10 @@ need neither that checkout nor Ruby.
 | Reference contracts                                                                                    | TypeScript owner                                                                                                        | Behavioral evidence                                                                                                                                                                                                                                                                                                                          |
 | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rho`: shared Core conversation operations, daemon authoring hooks, input execution and recovery       | `application.ts`, `admission.ts`, `operations.ts`, `turn-lifecycle.ts`, `sides.ts`                                      | `application.test.ts`, `lifecycle.test.ts`, `operations.test.ts`, `sides.test.ts`: frozen admissions, fail-closed authors, lost responses, restart, explicit model inheritance, exact input/fallback recovery, retained lifecycle owners                                                                                                     |
-| `rho`: identity, API keys, Human login, configuration, adaptations and conversation titles             | `runtime.ts`, `login.ts`, `settings.ts`, `adaptations.ts`, `conversation-titles.ts`                                     | `runtime.test.ts`, `login.test.ts`, `configuration.test.ts`, `adaptations.test.ts`, `conversation-titles.test.ts`: credential separation, candidate validation, private persistence, field fallback, model spellings, one title attempt and manual-title precedence                                                                          |
+| `rho`: identity, API keys, Human login, configuration, adaptations and conversation titles             | `runtime.ts`, `login.ts`, `settings.ts`, `workspaces.ts`, `adaptations.ts`, `conversation-titles.ts`                    | `runtime.test.ts`, `login.test.ts`, `configuration.test.ts`, `adaptations.test.ts`, `conversation-titles.test.ts`: credential separation, candidate validation, private persistence, field fallback, model spellings, one title attempt and manual-title precedence                                                                          |
 | `rho`: Presets, role declarations, Bot policy and switching                                            | `presets.ts`, `bots.ts`, `bot-policy.ts`, `mutation.ts`                                                                 | `presets.test.ts`, `bots.test.ts`, `policy.test.ts`: compare-and-swap, portable definitions, lost committed responses, archived prior roots, external audience restrictions and requester identity                                                                                                                                           |
 | `rho`: memory review/policy, Until, instructions and process ownership                                 | `memory-review.ts`, `memory-policy.ts`, `until.ts`, `conventions.ts`, `processes.ts`                                    | `memory-review.test.ts`, `until.test.ts`, `conventions.test.ts`, `processes.test.ts`: captured revisions, private review forks, acceptance graph recovery, bounded instructions and conversation-owned process retirement                                                                                                                    |
-| `rho`: extension registration, settings changes and managed packages                                   | `extension-manager.ts`, `configuration.ts`, `packages.ts`, `worker-extension.ts`, `extension-rpc.ts`                    | `extensions.test.ts`, `packages.test.ts`, `worker-extension.test.ts`, `extension-rpc-lifetime.test.ts`: inert disabled code, staged publication, failed-candidate cleanup, retained handler leases, immutable versions, rollback, worker cancellation and remote-reference release                                                           |
+| `rho`: extension registration, settings changes and managed packages                                   | `extension-manager.ts`, `configuration.ts`, `packages.ts`, `worker-extension.ts`, `extension-rpc.ts`, `webui-module.ts` | `extensions.test.ts`, `packages.test.ts`, `worker-extension.test.ts`, `extension-rpc-lifetime.test.ts`: inert disabled code, staged publication, failed-candidate cleanup, retained handler leases, immutable versions, rollback, worker cancellation and remote-reference release                                                           |
 | `rho-env`: executor inbox, authoritative claims, admission, orchestration, cancellation and settlement | `runner-inbox.ts`, `runner.ts`, `claim-control.ts`, `claim-result.ts`, `claims.ts`                                      | `executor.test.ts`, `claim-control.test.ts`, `claim-result.test.ts`, `claims.test.ts`: push/HTTP recovery, bounded startup/resources, nested child progress, placement/refusal checks, renewal, canceled-handler ownership and durable settlement without rerunning effects                                                                  |
 | `rho-env`: filesystem tools, attachments, checkpoints, environments, skills and terminal transport     | `file-read.ts`, `runner-search.ts`, `checkpoint-store.ts`, `environments.ts`, `skills.ts`, `terminal.ts`, `realtime.ts` | `runner.test.ts`, `runner-search.test.ts`, `attachments.test.ts`, `checkpoint-store.test.ts`, `environments.test.ts`, `skills.test.ts`, `terminal.test.ts`, `realtime.test.ts`: complete media transfer, protected roots, fuzzy edits, durable undo, captured roots, skill precedence, real PTYs, WebRTC reconnect and bounded output replay |
 
@@ -54,8 +54,7 @@ suites exercise the OpenCode implementation rather than executing Ruby.
 
 Local evidence names use the `.test.ts` suffix. `rho-webui` belongs to
 `packages/nexus-ui`; its bridge's `server` suite verifies runtime admission,
-Human access checks and reply tickets. This correspondence does not expand the
-compact UI's documented product constraints.
+Human access checks and reply tickets. The UI keeps host-controlled document titles and model-management policy. It now allows explicit expansion beyond the initial nine-dialog window.
 
 ACP replay emits a Side reference once as labelled user context, skips summaries
 and preserves user/assistant roles across pages. Load remembers the latest owned
@@ -106,10 +105,41 @@ of the other server's connection.
 Run `bun run test:conformance` with `OPENCODE_NEXUS_CHROMIUM` pointing at an isolated
 Chromium executable. This exercises the production owners with local HTTP,
 WebSocket, MCP and child-process fixtures, including real Chromium and WebRTC.
-The Nexus UI bridge has its own `server` suite; the CLI and Server adapters have
+The Nexus UI bridge has its own `server` suite and fixture-driven browser journeys for management, module lifecycle and chat; the CLI and Server adapters have
 package-local `nexus.test.ts` suites. CI's runtime conformance job installs Chromium.
 
 These checks establish local behavior. Live account provisioning and live Nexus,
 Telegram and T3 deployment interoperability require isolated integration identities;
 the automated gate makes no changes to those accounts. They do not establish
 byte-for-byte Ruby implementation equivalence or identical CLI/configuration names.
+
+## Added native surface correspondence
+
+- `Workspaces` enumerates active dedicated and shared workspaces with pagination.
+  Explicit selections are checked before conversation creation; changing the default
+  persists the preference without moving existing conversations. `workspaces.test.ts`
+  covers later pages, inactive workspaces and foreign dedication.
+- CLI run requests capture their workspace through execution and cancellation.
+  Human management operations and UI scopes retain their explicit workspace.
+- Schedules capture the selected Ask/Rules/Bypass policy and complete executor
+  contexts. Edits use the schedule's lock version; Ask remains the default.
+- Human login supports both loopback PKCE and device authorization. Platform
+  administration uses the stored Human credential and checks the requested
+  principal. `login.test.ts` covers principal separation and path confinement.
+- Extension registration can declare an asset directory with `await
+api.registerWebUI(absoluteDirectory)`. Managed manifests can declare a relative
+  `webui` directory. Publication is staged with the extension; an opaque version
+  changes at activation, and disabled or replaced versions stop serving assets.
+  `webui-module.test.ts` covers traversal, symlinks and retirement.
+- `packages/nexus-ui/src/management` owns the Rho WebUI counterparts: workspace
+  selection, Bot setup and conversations, Presets/roles, schedules, schema-driven
+  plugin settings, immutable package activation, Telegram/MCP/T3 controls, persona
+  and memory review, provider administration, deployment progress and terminals.
+  Terminal viewers use the runner-owned PTY, permission DataChannel and byte cursor;
+  detaching a viewer does not replay input or create another shell.
+
+The desktop/service authentication boundary replaces Rho's standalone open/password
+browser modes. Native module interfaces use TypeScript and OpenCode's scoped bridge;
+Rho JavaScript modules need an adapter to this API. Provider and deployment actions
+remain subject to Nexus Human permissions. OpenCode installation updates remain
+owned by the desktop updater or `opencode upgrade`.

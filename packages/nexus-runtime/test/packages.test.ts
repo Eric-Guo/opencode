@@ -35,6 +35,7 @@ test("managed versions stay inert until activation, rollback restores configurat
   const manifest = {
     name: "fixture",
     id: "fixture",
+    webui: "webui",
     state_schema: "v1",
     default_enabled: false,
     configuration_schema: {
@@ -47,6 +48,8 @@ test("managed versions stay inert until activation, rollback restores configurat
   }
   try {
     await mkdir(source)
+    await mkdir(join(source, "webui"))
+    await Bun.write(join(source, "webui", "index.js"), "export function register() {}")
     await Bun.write(join(source, "nexus-extension.json"), JSON.stringify(manifest))
     await Bun.write(
       join(source, "extension.ts"),
@@ -76,6 +79,8 @@ test("managed versions stay inert until activation, rollback restores configurat
       ),
     ).not.toHaveProperty("is_error")
     expect(await manager.command("fixture.read", {})).toBe("original")
+    const ui = manager.list().find((row) => row.id === "fixture")!.webui!
+    expect((await manager.asset("fixture", ui.version, ui.entry)).mime).toBe("text/javascript")
     await Bun.write(
       join(source, "extension.ts"),
       'export function register(api) { api.registerCommand("fixture.read", async () => "updated:" + api.configuration.message) }',

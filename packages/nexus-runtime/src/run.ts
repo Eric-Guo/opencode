@@ -17,6 +17,7 @@ export async function* runPrompt(
   const live = { run: "", bytes: 0 }
   const state = {
     conversation: "",
+    workspace: input.workspace ?? application.identity.workspace,
     turn: null as string | null,
     run: null as string | null,
     denied: 0,
@@ -27,11 +28,12 @@ export async function* runPrompt(
   }
   try {
     const opened = await application.open(
-      { key: input.key + ":open", runner: input.runner, agent: input.agent },
+      { key: input.key + ":open", workspace: input.workspace, runner: input.runner, agent: input.agent },
       { signal: active },
     )
     state.conversation = opened.conversation.public_id
     const workspace = opened.conversation.workspace_public_id
+    state.workspace = workspace
     const chat = application.client.workspace(workspace).conversation(state.conversation)
     if (input.code_mode !== undefined)
       await application.setModes(workspace, state.conversation, { code_mode: input.code_mode })
@@ -152,7 +154,7 @@ export async function* runPrompt(
     await Promise.allSettled(streams.map((stream) => stream.close()))
     if (state.conversation && active.aborted)
       await application.client
-        .workspace(application.identity.workspace)
+        .workspace(state.workspace)
         .conversation(state.conversation)
         .cancel({ signal: AbortSignal.timeout(5000) })
         .catch(() => {})
