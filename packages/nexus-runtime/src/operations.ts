@@ -76,6 +76,12 @@ export const Operation = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("prompt.show"), slot: Schema.optional(Schema.String) }),
   Schema.Struct({
+    action: Schema.Literal("terminal.open"),
+    workspace: Schema.optional(Schema.NonEmptyString),
+    ...Key,
+    runner: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
     action: Schema.Literal("call_tool"),
     ...Key,
     runner: Schema.NonEmptyString,
@@ -416,7 +422,7 @@ export class Operations {
       input.action === "skill.push"
     )
       return skillOperation(this.member, this.identity.workspace, input, options)
-    if (input.action === "call_tool") {
+    if (input.action === "call_tool" || input.action === "terminal.open") {
       const rules = Schema.decodeUnknownSync(
         Schema.Array(
           Schema.Struct({
@@ -436,10 +442,10 @@ export class Operations {
           steps: [
             {
               tool: {
-                name: input.tool,
-                key: "call_tool",
-                input: input.input ?? {},
-                timeout_ms: input.timeout ?? 30000,
+                name: input.action === "terminal.open" ? "terminal" : input.tool,
+                key: input.action === "terminal.open" ? "terminal" : "call_tool",
+                input: input.action === "terminal.open" ? {} : (input.input ?? {}),
+                ...(input.action === "call_tool" ? { timeout_ms: input.timeout ?? 30000 } : {}),
                 route: { kind: "runner", runner_executor_public_id: input.runner },
                 ...(runner.root
                   ? {
@@ -451,7 +457,7 @@ export class Operations {
               },
             },
           ],
-          approval_mode: "bypass",
+          approval_mode: input.action === "terminal.open" ? "ask" : "bypass",
           prompt_mechanism: "raw",
           default_runner_executor_public_id: input.runner,
           approval_rules: rules.map((rule) => ({ ...rule, origin: "author" as const })),
@@ -462,6 +468,8 @@ export class Operations {
       await run.start(options).catch((error: unknown) => {
         if (!(error instanceof Conflict && error.code === "not_startable")) throw error
       })
+      if (input.action === "terminal.open") return { run: created.run.public_id, task: "terminal" }
+
       const info = await run.fetch(options)
       return run.waitForToolResult({ ...options, patienceMs: (input.timeout ?? 30000) + 5000 }).then(
         async (task) => {
