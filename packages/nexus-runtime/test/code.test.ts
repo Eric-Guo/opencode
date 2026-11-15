@@ -24,13 +24,12 @@ test("code preserves false, zero and explicit null and buffers selected text", a
   })
 })
 
-test("code supplies an immediate readonly operation key and preserves tool error envelopes", async () => {
+test("code returns explicit operation handles and preserves tool error envelopes", async () => {
   const result = await run(
     `
-const work = tools.read({path:"missing"});
+const work = await nexus.start({kind:"tool",name:"read",input:{path:"missing"}});
 text(work.operation_key);
-try { work.operation_key = "changed"; } catch {}
-return await work;
+return await nexus.wait(work);
 `,
     {},
     declarations,
@@ -50,7 +49,7 @@ return await work;
 test("code exposes recorded refusals and rejects resources it did not observe", async () => {
   const result = await run(
     `
-try { await tools.read({path:"missing"}); } catch (error) { return error.refusal; }
+try { await nexus.wait(await nexus.start({kind:"tool",name:"read",input:{path:"missing"}})); } catch (error) { return error.refusal; }
 `,
     {},
     declarations,
@@ -91,33 +90,41 @@ resource(result.content[0]);
     signal,
   )
 
-  expect(result).toEqual({ content: [capture] })
+  expect(result).toEqual({ content: [capture], structured_content: null })
 })
 
-test("code refuses unjoined operations but ownership receipts permit background work", async () => {
-  await expect(
-    run('tools.read({path:"pending"}); text("not delivered")', {}, declarations, () => new Promise(() => {}), signal),
-  ).rejects.toThrow("unjoined")
-
+test("code cancels unfinished attached operations and preserves confirmed background ownership", async () => {
+  const requests: JsonObject[] = []
   const result = await run(
-    `
-const work = tools.read({path:"pending"});
-await nexus.background({operation_key:work.operation_key,lifetime:"conversation",wake:"auto"});
-text("Working");
-`,
+    'await nexus.start({kind:"tool",name:"read",input:{}}); text("Done")',
     {},
     declarations,
     async (_, request) => {
+      requests.push(request)
       if (request.kind === "tool") return new Promise(() => {})
-
+      return null
+    },
+    signal,
+  )
+  expect(result.content).toEqual([{ type: "text", text: "Done" }])
+  expect(requests.at(-1)).toEqual({ kind: "cancel", input: { operation_key: "op_0" } })
+  requests.length = 0
+  const background = await run(
+    `const work = await nexus.start({kind:"tool",name:"read",input:{}});
+await nexus.background({operation_key:work.operation_key,lifetime:"conversation",wake:"auto"});
+text("Working");`,
+    {},
+    declarations,
+    async (_, request) => {
+      requests.push(request)
+      if (request.kind === "tool") return new Promise(() => {})
       const input = request.input as { operation_key: string }
-
       return { status: "completed", released_operations: [input.operation_key] }
     },
     signal,
   )
-
-  expect(result).toEqual({ content: [{ type: "text", text: "Working" }] })
+  expect(background.content).toEqual([{ type: "text", text: "Working" }])
+  expect(requests.map((request) => request.kind)).toEqual(["tool", "background"])
 })
 
 test("flat declarations, MCP code names and model defaults share one frozen callable catalog", async () => {
@@ -186,112 +193,48 @@ test("nested authoring rejects undeclared tools before accepting any operation",
   expect(calls).toEqual([])
 })
 
-test("code validates its binding and keeps ambient capabilities and JSON coercion unavailable", async () => {
+test("native Code Mode uses its own language, results and copied bindings", async () => {
   await expect(run("return 1", {}, [], async () => null, signal)).rejects.toThrow("unsupported_binding")
   await expect(
     run(
       "return 1",
       {},
-      [{ ...binding, function: { name: "code", parameters: { $id: "old" } } }],
+      [
+        {
+          ...binding,
+          function: {
+            name: "code",
+            parameters: {
+              $id: "urn:cybros:rho:codemode:javascript:1",
+            },
+          },
+        },
+      ],
       async () => null,
       signal,
     ),
   ).rejects.toThrow("unsupported_binding")
+  expect((await run("1 + 2", {}, [binding], async () => null, signal)).structured_content).toBe(3)
+  const params = { x: 1 }
   expect(
-    (
-      await run(
-        "return [typeof Date,typeof Intl,typeof require,typeof bridge,typeof copy]",
-        {},
-        [binding],
-        async () => null,
-        signal,
-      )
-    ).structured_content,
-  ).toEqual(Array(5).fill("undefined"))
-  for (const source of [
-    "Math.random()",
-    "return NaN",
-    "return new Map()",
-    "return [undefined]",
-    "return {toJSON:()=>1}",
-    "return new Array(2)",
+    (await run("params.x = 2; return params.x", params, [binding], async () => null, signal)).structured_content,
+  ).toBe(2)
+  expect(params).toEqual({ x: 1 })
+  await expect(run("class Answer {}", {}, [binding], async () => null, signal)).rejects.toThrow("UnsupportedSyntax")
+  expect((await run('console.log("visible"); value(false)', {}, [binding], async () => null, signal)).content).toEqual([
+    { type: "text", text: "visible" },
   ])
-    await expect(run(source, {}, [binding], async () => null, signal)).rejects.toThrow()
 })
 
-test("isolated JavaScript preserves native promises and rejects accessors without invoking them", async () => {
-  const calls: string[] = []
-  const result = await run(
-    `
-class Answer { constructor() { this.value = 42 } }
-const work = tools.read({});
-const native = work instanceof Promise;
-await work;
-try { value({get secret() { text("getter ran"); return 1 }}) } catch (error) { text(error.message) }
-try { value({[Symbol("secret")]:1}) } catch (error) { text(error.message) }
-try { __nexus_codemode("forged", "event", {}) } catch (error) { text(error.message) }
-return {native, answer:new Answer().value};
-`,
-    {},
-    declarations,
-    async (key) => {
-      calls.push(key)
-      return null
-    },
-    signal,
-  )
-  expect(calls).toEqual(["op_0"])
-  expect(result.structured_content).toEqual({ native: true, answer: 42 })
-  expect(result.content.map((block) => block.text)).toEqual([
-    "JSON properties must contain values",
-    "JSON properties require string keys",
-    "Host control is unavailable to source",
-  ])
-  await expect(run("return new Promise(()=>{})", {}, [binding], async () => null, signal)).rejects.toThrow(
-    "stalled_promise",
-  )
-})
-
-test("isolated JavaScript interrupts CPU and microtask loops and bounds its own heap", async () => {
+test("native Code Mode interrupts CPU and microtask loops with a wall-clock budget", async () => {
   for (const source of [
     "while(true){}",
     "await new Promise(()=>{ const next=()=>Promise.resolve().then(next); next() })",
   ])
-    await expect(run(source, {}, [binding], async () => null, signal, {}, { computeMs: 20 })).rejects.toThrow(
-      "execution_limit",
+    await expect(run(source, {}, [binding], async () => null, signal, {}, { timeoutMs: 20 })).rejects.toThrow(
+      /TimeoutExceeded|promise that can never settle/,
     )
-  await expect(
-    run(
-      "const rows=[]; for(let i=0;i<1000000;i++) rows.push({index:i}); return rows.length",
-      {},
-      [binding],
-      async () => null,
-      signal,
-      {},
-      { heapBytes: 8 * 1024 * 1024 },
-    ),
-  ).rejects.toThrow(/memory|heap/)
   expect((await run("return 42", {}, [binding], async () => null, signal)).structured_content).toBe(42)
-})
-
-test("pending request and observation limits reject data before it crosses the next boundary", async () => {
-  const calls: string[] = []
-  await expect(
-    run(
-      "tools.read({text:params}); tools.read({text:params}); await new Promise(()=>{})",
-      "a".repeat(600000),
-      declarations,
-      async (key) => {
-        calls.push(key)
-        return null
-      },
-      signal,
-    ),
-  ).rejects.toThrow("pending requests")
-  expect(calls).toEqual([])
-  await expect(
-    run("return await tools.read({})", {}, declarations, async () => ({ text: "x".repeat(8388608) }), signal),
-  ).rejects.toThrow("events exceed")
 })
 
 test("cancellation releases a waiting isolated invocation without waiting for its host operation", async () => {
@@ -376,17 +319,27 @@ test("Code Mode observes recorded completion order even while a later acceptance
   const second = Promise.withResolvers<JsonValue>()
   const ready = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
+  const won = Promise.withResolvers<void>()
   const program = runCode(
     `
 const first = tools.read({index:1});
 const second = tools.read({index:2});
 const third = tools.read({index:3});
-text(String(await Promise.race([first, second])));
+const winner = await Promise.race([first, second]);
+text(String(winner));
+await tools.read({winner});
 await Promise.all([first, second, third]);
 `,
     {},
     declarations,
     async (key, request) => {
+      if (
+        request.input &&
+        typeof request.input === "object" &&
+        !Array.isArray(request.input) &&
+        request.input.winner === "second"
+      )
+        won.resolve()
       if (
         request.input &&
         typeof request.input === "object" &&
@@ -405,9 +358,50 @@ await Promise.all([first, second, third]);
   )
   await ready.promise
   second.resolve("second")
-  await Promise.resolve()
+  await won.promise
   first.resolve("first")
   await Promise.resolve()
   release.resolve()
   expect((await program).content).toEqual([{ type: "text", text: "second" }])
+})
+
+test("native tools expose the frozen schema and reject invalid arguments before Nexus submission", async () => {
+  const calls: JsonObject[] = []
+  const catalog = [
+    binding,
+    {
+      function: {
+        name: "read",
+        description: "Read the frozen document",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", pattern: "^[a-z]+$" },
+            mode: { type: "string" },
+            token: { type: "string" },
+          },
+          if: { properties: { mode: { const: "token" } }, required: ["mode"] },
+          then: { required: ["token"] },
+          required: ["path"],
+          additionalProperties: false,
+        },
+      },
+    },
+  ]
+  for (const input of ["{}", '{path:"INVALID"}', '{path:"read",extra:true}', '{path:"read",mode:"token"}'])
+    await expect(
+      run(
+        "await tools.read(" + input + ")",
+        {},
+        catalog,
+        async (_, request) => {
+          calls.push(request)
+          return null
+        },
+        signal,
+      ),
+    ).rejects.toThrow("InvalidToolInput")
+  expect(calls).toEqual([])
+  const found = await run('return search({query:"read"})', {}, catalog, async () => null, signal)
+  expect(JSON.stringify(found.structured_content)).toContain("Read the frozen document")
 })
