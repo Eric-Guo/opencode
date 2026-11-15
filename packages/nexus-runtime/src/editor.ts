@@ -1,3 +1,4 @@
+import { executionSnapshot } from "./execution"
 export { authenticateEditorTerminal } from "./editor-auth"
 
 import {
@@ -153,7 +154,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     const deadline = performance.now() + 5000
 
     while (!signal.aborted) {
-      const snapshot = await execution.recover({ signal })
+      const snapshot = await execution.recover({ signal }).then(executionSnapshot)
 
       if (!snapshot || moved(snapshot) || performance.now() >= deadline) return
 
@@ -186,7 +187,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
 
     try {
       while (!signal.aborted) {
-        const snapshot = await execution.recover({ signal })
+        const snapshot = await execution.recover({ signal }).then(executionSnapshot)
 
         if (execution.blocked_reason) throw new RequestError(-32603, execution.blocked_reason)
         if (snapshot) transcript.execution(snapshot.execution)
@@ -726,7 +727,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
         if (command === "retry" || command === "abandon") {
           if (!session.last) remember(id, session, await readEditorHistory(nexus.workspace, id, signal), ctx.client)
 
-          const snapshot = await session.last?.execution.recover({ signal })
+          const snapshot = await session.last?.execution.recover({ signal }).then(executionSnapshot)
           const runID = snapshot?.execution.run_public_id
 
           if (!runID) throw new RequestError(-32603, "There is no holding task in this editor session.")

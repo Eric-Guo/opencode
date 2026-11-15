@@ -99,6 +99,14 @@ const app = agent({name:"Fixture"})
     await emit(choices.join(",")+" "+ask.action+" "+code);
     return {stopReason:"end_turn"};
   }
+  if(prompt==="progress") {
+    await ctx.client.notify("session/update", {sessionId:id,update:{sessionUpdate:"tool_call",toolCallId:"progress",title:"Inspect "+process.env.CREDENTIAL_TOKEN,kind:"execute",status:"in_progress"}});
+    await ctx.client.notify("session/update", {sessionId:id,update:{sessionUpdate:"plan",entries:[{content:"Plan "+process.env.CREDENTIAL_TOKEN,priority:"medium",status:"in_progress"}]}});
+    await report("progress-sent");
+    await gate("progress");
+    await emit("finished");
+    return {stopReason:"end_turn"};
+  }
   if(prompt==="secret") await emit("credential: "+process.env.CREDENTIAL_TOKEN);
   else await emit(JSON.stringify({pid:process.pid,session:id,cwd:sessions.get(id).cwd,model:sessions.get(id).model,prompt}));
   return {stopReason:"end_turn"};

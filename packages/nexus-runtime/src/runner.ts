@@ -1,3 +1,5 @@
+import { claimProgress } from "./claim-progress"
+import type { CodeOperation } from "./claim-control"
 import { bashOutput } from "./bash-output"
 import { listDirectory } from "./runner-list"
 import { codeBinding, codeInstructions } from "./code-settings"
@@ -12,7 +14,6 @@ import {
   type ExecutorClient,
   type InboxTask,
   type JsonObject,
-  type JsonValue,
 } from "@cybros/agent"
 
 import type { Checkpoints } from "./checkpoints"
@@ -300,7 +301,7 @@ export async function runClaim(
   extensions: readonly RunnerTool[] = [],
   ask?: RunnerContext["ask"],
   claimToken?: string,
-  operation?: (key: string, request: JsonObject) => Promise<JsonValue>,
+  operation?: CodeOperation,
   protectedRoots?: readonly string[],
   artifactsDirectory?: string,
   ports?: {
@@ -312,7 +313,11 @@ export async function runClaim(
   if (row.tool_name === "code" && claimToken && operation) {
     if (typeof row.tool_input.code !== "string") throw new Error("Expected JavaScript source.")
     const task = executor.inboxTask(row.run_public_id, row.task_key)
-    const { context } = await task.operations(claimToken, {}, { signal })
+    const { context, trace } = await task.operations(claimToken, {}, { signal })
+    if (trace.length)
+      throw new Error(
+        "The previous execution state is unavailable; inspect its accepted work before starting a new invocation.",
+      )
     const { runCode } = await import("./code")
     return runCode(
       row.tool_input.code,
@@ -397,6 +402,21 @@ export async function runClaim(
       size: file.byte_size,
     }
   }
+  const progress = claimToken
+    ? claimProgress(
+        (text) =>
+          executor.reportProgress(
+            {
+              run_public_id: row.run_public_id,
+              task_key: row.task_key,
+              claim_token: claimToken,
+              text_tail: text,
+            },
+            { signal },
+          ),
+        signal,
+      )
+    : undefined
   const captured = row.executor_context?.["opencode.environment"] ?? row.executor_context?.["rho.environment"]
   const attachment = row.executor_context?.["opencode.mcp"] ?? captured
   const anchor =
@@ -425,16 +445,7 @@ export async function runClaim(
               offer: (input) =>
                 executor.inboxTask(row.run_public_id, row.task_key).offerRealtime(claimToken, input, { signal }),
             },
-            progress: (text: string) =>
-              executor.reportProgress(
-                {
-                  run_public_id: row.run_public_id,
-                  task_key: row.task_key,
-                  claim_token: claimToken,
-                  text_tail: text,
-                },
-                { signal },
-              ),
+            progress,
             processProgress: (frame: { process_id: string; lines?: string[]; exit?: number | null }) =>
               executor.reportProgress(
                 {
@@ -585,19 +596,7 @@ export async function runClaim(
     const timeout = typeof row.tool_input.timeout === "number" ? row.tool_input.timeout : 30
     if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 540)
       throw new Error("Timeout must be between 0 and 540 seconds.")
-    const output = await host.shell(
-      workdir,
-      row.tool_input.command,
-      signal,
-      timeout * 1000,
-      claimToken
-        ? (text) =>
-            executor.reportProgress(
-              { run_public_id: row.run_public_id, task_key: row.task_key, claim_token: claimToken, text_tail: text },
-              { signal },
-            )
-        : undefined,
-    )
+    const output = await host.shell(workdir, row.tool_input.command, signal, timeout * 1000, progress)
     const rendered = await bashOutput(output.file, signal, artifactsDirectory)
     const timedOut = output.structured_content.status === "timeout"
     const status = timedOut

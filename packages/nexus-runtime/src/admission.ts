@@ -44,7 +44,11 @@ const Admission = Schema.Struct({
     inline: Schema.optional(
       Schema.mutable(
         Schema.Array(
-          Schema.Struct({ role: Schema.Literal("user"), position: Schema.Literal("tail"), text: Schema.String }),
+          Schema.Struct({
+            role: Schema.Literals(["user", "developer"]),
+            position: Schema.Literals(["lead", "tail"]),
+            text: Schema.String,
+          }),
         ),
       ),
     ),
@@ -234,7 +238,7 @@ export class InputAdmissions {
   private async author(input: CreateInput & { admission_notes?: JsonObject }) {
     const body = Schema.decodeUnknownSync(Schema.fromJsonString(Admission.fields.body))(JSON.stringify(input))
     if (!this.lifecycle || body.kind !== "direct_reply" || input.admission_notes?.["nexus.addressed"])
-      return { body, notes: input.admission_notes ?? {} }
+      return { body: assembledInput(body), notes: input.admission_notes ?? {} }
     const environment = body.executor_contexts ?? {}
     const description = input.admission_notes?.["nexus.side"]
       ? ""
@@ -252,12 +256,22 @@ export class InputAdmissions {
       }),
     )
     return {
-      body: Schema.decodeUnknownSync(Admission.fields.body)({
-        ...draft.body,
-        ...(draft.lead ? { instructions: draft.lead } : {}),
-        ...(draft.steps ? { steps: draft.steps } : {}),
-      }),
+      body: assembledInput(
+        Schema.decodeUnknownSync(Admission.fields.body)({
+          ...draft.body,
+          ...(draft.steps ? { steps: draft.steps } : {}),
+        }),
+        draft.lead,
+      ),
       notes: draft.notes,
     }
   }
+}
+
+// Nexus reserves `instructions` for raw inputs; assembled requests carry authored leads inline.
+function assembledInput(body: typeof Admission.Type.body, lead = body.instructions) {
+  const result = { ...body }
+  delete result.instructions
+  if (lead) result.inline = [{ role: "developer", position: "lead", text: lead }, ...(body.inline ?? [])]
+  return result
 }
