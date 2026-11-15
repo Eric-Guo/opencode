@@ -43,6 +43,7 @@ const Manifest = Schema.Struct({
   requires: Schema.optional(Schema.Array(Name)),
   configuration_migrations: Schema.optional(Schema.String),
   entry: Schema.optional(Schema.String),
+  webui: Schema.optional(Schema.String),
 })
 const Command = Schema.Union([
   Schema.Struct({ action: Schema.Literal("package.list") }),
@@ -340,6 +341,7 @@ export class Packages {
       async register(api) {
         await dependencies(manifest.directory, manifest.document.dependencies ?? {})
         const { workerRegistration } = await import("./worker-extension")
+        if (manifest.document.webui) await api.registerWebUI(inside(manifest.directory, manifest.document.webui))
         await workerRegistration(manifest.entry)(api)
       },
     }

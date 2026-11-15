@@ -35,6 +35,7 @@ test.each([
   const calls: { path: string; method: string; authorization: string | null; after: string | null; state: string }[] =
     []
   const approval = {
+    workspace: "workspace",
     conversation: "conversation",
     agent: "agent",
     archived: false,
@@ -149,6 +150,7 @@ test.each([
       if (path.endsWith("/conversations/conversation"))
         return Response.json({
           conversation: conversationFixture({
+            workspace_public_id: approval.workspace,
             answering_user_public_id: approval.agent,
             archived_at: approval.archived ? measured : null,
           }),
@@ -339,6 +341,13 @@ test.each([
         expect(await runtime.manage({ ...command, always: false }, nexus.url.origin, "human")).toMatchObject({
           status: "completed",
         })
+        approval.workspace = "second-workspace"
+        expect(
+          await runtime.manage({ ...command, workspace: approval.workspace, always: false }, nexus.url.origin, "human"),
+        ).toMatchObject({ status: "completed" })
+        expect(calls.filter((call) => call.path.endsWith("/approve")).at(-1)?.path).toBe(
+          "/agent_api/v1/workspaces/second-workspace/runs/run/tasks/call/approve",
+        )
       }
       if (fixture.owned && !fixture.create) {
         await runtime.configureExtension({

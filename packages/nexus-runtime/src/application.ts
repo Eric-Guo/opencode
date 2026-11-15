@@ -25,6 +25,7 @@ import { SideConversations, sideLeads, sideReadTools } from "./sides"
 import { StoreDocument } from "./document"
 import { ConversationTitles } from "./conversation-titles"
 import { Runners } from "./runners"
+import { Workspaces } from "./workspaces"
 import type { ExtensionLifecycle } from "./extension-lifecycle"
 
 type Preparation = {
@@ -75,6 +76,7 @@ export class NexusApplication {
   readonly environments: Environments
   readonly sides: SideConversations
   readonly runners: Runners
+  readonly workspaces: Workspaces
   private readonly admissions: InputAdmissions
 
   constructor(
@@ -99,6 +101,7 @@ export class NexusApplication {
     this.titles = new ConversationTitles(member, () => this.defaults().title_model)
     this.environments = new Environments(member, identity)
     this.runners = new Runners(member, identity.runner)
+    this.workspaces = new Workspaces(member)
     this.operations = new Operations(member, this, identity)
     this.admissions = new InputAdmissions(
       member,
@@ -296,6 +299,7 @@ export class NexusApplication {
     options: RequestOptions = {},
   ) {
     const workspace = input.workspace ?? this.identity.workspace
+    if (input.workspace) await this.workspaces.require(workspace, options)
     const recipient = input.agent
       ? await addressedAgent(this.member, workspace, this.identity.agent, input.agent, options)
       : this.identity.agent
