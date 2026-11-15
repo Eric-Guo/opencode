@@ -66,6 +66,35 @@ test("terminal runs capture placement, ask for approval and return before the sh
       )
     if (path.endsWith("/runs/terminal-run/start"))
       return Response.json({ error: { code: "not_startable" } }, { status: 409 })
+    if (path.endsWith("/runs/terminal-run") || path.endsWith("/runs/not-terminal"))
+      return Response.json({
+        run: {
+          public_id: path.endsWith("/not-terminal") ? "not-terminal" : "terminal-run",
+          status: "running",
+          tasks: [
+            {
+              key: "terminal",
+              kind: "tool_task",
+              status: "dispatched",
+              tool_name: path.endsWith("/not-terminal") ? "bash" : "terminal",
+              lifetime: "conversation",
+              wake: "auto",
+              visibility: "collapsed",
+            },
+          ],
+        },
+      })
+    if (path.endsWith("/tasks/terminal/realtime"))
+      return Response.json({
+        realtime: {
+          status: request.method === "PUT" ? "active" : "waiting",
+          reason: null,
+          connection_id: "connection",
+          offer_sdp: "offer",
+          answer_sdp: request.method === "PUT" ? "answer" : null,
+          max_age_ms: request.method === "PUT" ? 1000 : 0,
+        },
+      })
 
     return Response.json({ error: { code: "unexpected_request" } }, { status: 400 })
   })
@@ -109,6 +138,28 @@ test("terminal runs capture placement, ask for approval and return before the sh
       },
     })
     expect(requests.at(-1)?.path).toBe("/agent_api/v1/workspaces/selected/runs/terminal-run/start")
+    const target = { workspace: "selected", run: "terminal-run", task: "terminal" }
+
+    expect(await application.operations.command({ action: "terminal.realtime", ...target })).toMatchObject({
+      status: "waiting",
+      offer_sdp: "offer",
+    })
+    expect(
+      await application.operations.command({
+        action: "terminal.answer",
+        ...target,
+        connection_id: "connection",
+        sdp: "answer",
+      }),
+    ).toMatchObject({ status: "active", answer_sdp: "answer" })
+    expect(requests.at(-1)).toMatchObject({
+      path: "/agent_api/v1/workspaces/selected/runs/terminal-run/tasks/terminal/realtime",
+      method: "PUT",
+      body: { connection_id: "connection", sdp: "answer" },
+    })
+    await expect(
+      application.operations.command({ action: "terminal.realtime", ...target, run: "not-terminal" }),
+    ).rejects.toThrow("Unknown terminal task")
   } finally {
     fixture.server.stop(true)
   }
