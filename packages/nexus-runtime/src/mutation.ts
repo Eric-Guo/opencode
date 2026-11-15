@@ -1,3 +1,4 @@
+import { ToolInputError } from "./tool-error"
 import { fileDiff } from "@opencode/core/tool/plugin/file-diff"
 import { constants } from "node:fs"
 import { lstat, mkdir, open, realpath, rename, rm, stat } from "node:fs/promises"
@@ -38,17 +39,20 @@ export async function mutate(
   restoreMode?: number,
 ) {
   signal.throwIfAborted()
-  const request = name === "edit" ? Schema.decodeUnknownSync(Edit)(input) : Schema.decodeUnknownSync(Write)(input)
+  const decoded = Schema.decodeUnknownOption(name === "edit" ? Edit : Write)(input)
+  if (decoded._tag === "None")
+    throw new ToolInputError("invalid_tool_arguments: expected a path and valid file changes.")
+  const request = decoded.value
   const path = await destination(root, request.path)
   const operation = (mutations.get(path) ?? Promise.resolve()).then(async () => {
     signal.throwIfAborted()
-    if (path === root) throw new Error("Expected a regular file.")
+    if (path === root) throw new ToolInputError("Expected a regular file.")
     const info = await stat(path).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined
       throw error
     })
-    if (info && !info.isFile()) throw new Error("Select a regular text file.")
-    if (!info && name === "edit") throw new Error("Cannot edit a missing file.")
+    if (info && !info.isFile()) throw new ToolInputError("Select a regular text file.")
+    if (!info && name === "edit") throw new ToolInputError("Cannot edit a missing file.")
     const before = info ? await readText(path, signal) : ""
     const after = "edits" in request ? replace(before, request.edits) : request.content
     const file = relative(root, path)
@@ -106,7 +110,7 @@ export async function readText(path: string, signal: AbortSignal) {
   const handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK)
   try {
     const info = await handle.stat()
-    if (!info.isFile()) throw new Error("Expected a regular file.")
+    if (!info.isFile()) throw new ToolInputError("Expected a regular file.")
     signal.throwIfAborted()
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await handle.readFile({ signal }))
   } finally {
@@ -142,12 +146,14 @@ function replace(raw: string, edits: readonly { oldText: string; newText: string
       const check = normalize(edit.oldText)
       const start = base.indexOf(needle)
       if (!check || start < 0 || normalized.split(check).length !== 2)
-        throw new Error("Each edit must match exactly once in the original file, including normalized equivalents.")
+        throw new ToolInputError(
+          "Each edit must match exactly once in the original file, including normalized equivalents.",
+        )
       return { start, end: start + needle.length, text: edit.newText }
     })
     .sort((a, b) => a.start - b.start)
   if (matches.some((match, index) => index > 0 && match.start < matches[index - 1].end))
-    throw new Error("Edits overlap.")
+    throw new ToolInputError("Edits overlap.")
   const apply = (text: string, selected: typeof matches, offset = 0) =>
     selected
       .toReversed()
@@ -164,12 +170,13 @@ function replace(raw: string, edits: readonly { oldText: string; newText: string
       offset += line.length
       return { start, end: offset }
     })
-    if (originalLines.length !== spans.length) throw new Error("Cannot preserve unchanged lines after normalization.")
+    if (originalLines.length !== spans.length)
+      throw new ToolInputError("Cannot preserve unchanged lines after normalization.")
     const groups: { first: number; last: number; matches: typeof matches }[] = []
     for (const match of matches) {
       const first = spans.findIndex((line) => match.start >= line.start && match.start < line.end)
       const last = spans.findIndex((line) => match.end > line.start && match.end <= line.end)
-      if (first < 0 || last < 0) throw new Error("Replacement lies outside the original content.")
+      if (first < 0 || last < 0) throw new ToolInputError("Replacement lies outside the original content.")
       const previous = groups.at(-1)
       if (previous && first <= previous.last) {
         previous.last = Math.max(previous.last, last)
@@ -188,7 +195,7 @@ function replace(raw: string, edits: readonly { oldText: string; newText: string
         .join("") + originalLines.slice(cursor).join("")
     )
   })()
-  if (result === original) throw new Error("The edits would not change the file.")
+  if (result === original) throw new ToolInputError("The edits would not change the file.")
   const ending = raw.indexOf("\n") > 0 && raw[raw.indexOf("\n") - 1] === "\r" ? "\r\n" : "\n"
   return bom + result.replace(/\n/g, ending)
 }
@@ -201,7 +208,10 @@ export async function mutateEditor(
   signal: AbortSignal,
   editor: { read(path: string): Promise<string>; write(path: string, content: string): Promise<void> },
 ) {
-  const request = name === "edit" ? Schema.decodeUnknownSync(Edit)(input) : Schema.decodeUnknownSync(Write)(input)
+  const decoded = Schema.decodeUnknownOption(name === "edit" ? Edit : Write)(input)
+  if (decoded._tag === "None")
+    throw new ToolInputError("invalid_tool_arguments: expected a path and valid file changes.")
+  const request = decoded.value
   const path = resolvePath(root, request.path)
   const operation = (mutations.get(path) ?? Promise.resolve()).then(async () => {
     signal.throwIfAborted()

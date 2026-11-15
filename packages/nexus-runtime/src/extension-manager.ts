@@ -1,5 +1,6 @@
 import type { mcpSession } from "./mcp-session"
-import { JsonSchema, Schema, SchemaRepresentation } from "effect"
+import { Schema } from "effect"
+import { compileToolSchema, toolInputRefusal } from "./tool-schema"
 import { WebUIModule } from "./webui-module"
 import type { Nexus } from "@opencode/schema/nexus"
 import {
@@ -17,7 +18,7 @@ import { TurnDraft, TurnRefusal, isTurnGate, type TurnFollow, type TurnGate } fr
 export type ExtensionDocument = {
   name: string
   description: string
-  role: "agent" | "runner"
+  role: "agent" | "runner" | "tool_provider"
   load(context: RunnerContext): Promise<Omit<CommitTask, "claim_token">>
 }
 
@@ -39,7 +40,7 @@ export type ExtensionAPI = {
   signal: AbortSignal
   configuration: Record<string, Schema.Json>
   application(): NexusApplication
-  announced?(role: "agent" | "runner"): AnnouncedTool[]
+  announced?(role: "agent" | "runner" | "tool_provider"): AnnouncedTool[]
   configure(operations: Nexus.ExtensionChange["operations"]): Promise<Nexus.ConfigurationResult>
   registerWebUI(root: string): Promise<void>
   registerTool(tool: RunnerTool): void
@@ -130,7 +131,7 @@ export class ExtensionManager {
     private readonly application: () => NexusApplication = () => {
       throw new Error("The Nexus application is disconnected.")
     },
-    private readonly baseTools: (role: "agent" | "runner") => readonly AnnouncedTool[] = () => [],
+    private readonly baseTools: (role: "agent" | "runner" | "tool_provider") => readonly AnnouncedTool[] = () => [],
   ) {
     if (new Set(modules.map((module) => module.descriptor.id)).size !== modules.length)
       throw new Error("Duplicate Nexus extension IDs.")
@@ -315,7 +316,7 @@ export class ExtensionManager {
     return [...this.active.values()].flatMap((state) => state.documents)
   }
 
-  async readDocument(name: string, context: RunnerContext, role?: "agent" | "runner") {
+  async readDocument(name: string, context: RunnerContext, role?: "agent" | "runner" | "tool_provider") {
     const document = this.documents().find((document) => document.name === name && (!role || role === document.role))
 
     if (!document) throw new Error("This extension document is not loaded: " + name)
@@ -621,9 +622,9 @@ export class ExtensionManager {
         },
         registerTool: (tool) => {
           if (lifecycle.committed) throw new Error("Extension registration has finished.")
-          SchemaRepresentation.fromJsonSchemaDocument(
-            JsonSchema.fromSchemaDraft2020_12(tool.definition.input_schema ?? { type: "object" }),
-          )
+          if (tool.environmentRequired !== undefined && typeof tool.environmentRequired !== "boolean")
+            throw new Error("Tool environmentRequired must be a boolean.")
+          compileToolSchema(tool.definition.input_schema ?? { type: "object" })
 
           leasedTools.push(tool)
           tools.push({
@@ -638,16 +639,12 @@ export class ExtensionManager {
           if (lifecycle.committed) throw new Error("Extension registration has finished.")
           if (!/^[a-z][a-z0-9.-]{0,63}$/.test(name) || commands.has(name))
             throw new Error("Invalid or duplicate extension command: " + name)
-          const validator = options.input_schema
-            ? Schema.make<Schema.Codec<unknown>>(
-                SchemaRepresentation.fromJsonSchemaDocument(JsonSchema.fromSchemaDraft2020_12(options.input_schema))
-                  .ast,
-              )
-            : undefined
+          const validator = options.input_schema ? compileToolSchema(options.input_schema) : undefined
           commandInfo.set(name, options)
           commands.set(name, (input) =>
             use(() => {
-              if (validator) Schema.decodeUnknownSync(validator)(input)
+              const invalid = validator && toolInputRefusal(validator, input)
+              if (invalid) throw new Error(invalid)
               return handler(input)
             }),
           )

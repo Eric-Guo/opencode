@@ -1,3 +1,4 @@
+import { ToolInputError } from "./tool-error"
 import { readdir, stat } from "node:fs/promises"
 import { join } from "node:path"
 import type { CommitTask, JsonObject } from "@cybros/agent"
@@ -10,7 +11,7 @@ export async function listDirectory(
 ): Promise<Omit<CommitTask, "claim_token">> {
   const path = await readablePath(root, typeof input.path === "string" ? input.path : ".")
   const limit = typeof input.limit === "number" ? input.limit : 500
-  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("Listing limit must be a positive integer.")
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new ToolInputError("Listing limit must be a positive integer.")
   const entries = (await readdir(path)).sort((a, b) => {
     signal.throwIfAborted()
     return a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0
