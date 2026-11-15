@@ -3364,6 +3364,14 @@ export type ExperimentalNexusExtensionsOutput = ReadonlyArray<{
   readonly diagnostics: ReadonlyArray<string>
   readonly tools: ReadonlyArray<string>
   readonly commands?: ReadonlyArray<string> | undefined
+  readonly command_details?:
+    | ReadonlyArray<{
+        readonly name: string
+        readonly description?: string | undefined
+        readonly input_schema?: Schema.Json | undefined
+      }>
+    | undefined
+  readonly agents?: ReadonlyArray<string> | undefined
   readonly requires?: ReadonlyArray<string> | undefined
   readonly source?: Schema.Json | undefined
   readonly webui?: { readonly version: string; readonly entry: string } | undefined

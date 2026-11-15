@@ -804,6 +804,36 @@ describe("MCP OAuth connections", () => {
       expect(await stored(processes.second)).toEqual({ access: "a2", refresh: "r2" })
     })
 
+    test("read-only probes use the saved token without refreshing or invalidating credentials", async () => {
+      const as = issuerServer()
+      await using processes = await setup(as.url, {
+        expires: Date.now() + 10_000,
+        metadata: { discovery: as.discovery },
+      })
+      try {
+        const provider = await processes.first.runPromise(
+          Credential.Service.use((credentials) =>
+            credentials.get(id).pipe(
+              Effect.flatMap((credential) =>
+                McpOAuth.connectProvider({
+                  server: "probe",
+                  config: remote(as.url),
+                  credential,
+                  readOnly: true,
+                }),
+              ),
+            ),
+          ),
+        )
+        expect(await provider.token()).toBe("a1")
+        expect(provider.onUnauthorized).toBeUndefined()
+        expect(as.state.sent).toEqual([])
+        expect(await stored(processes.second)).toEqual({ access: "a1", refresh: "r1" })
+      } finally {
+        as.server.stop(true)
+      }
+    })
+
     test("sends the current token when the refresh fails", async () => {
       const as = issuerServer()
       as.state.token = "unavailable"

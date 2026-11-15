@@ -1,3 +1,4 @@
+import { executionSnapshot } from "./execution"
 import { Schema } from "effect"
 import {
   APIError,
@@ -117,6 +118,7 @@ export const Operation = Schema.Union([
   Schema.Struct({ action: Schema.Literal("events"), ...Conversation, ...Page }),
   Schema.Struct({
     action: Schema.Literal("side"),
+    workspace: Schema.optional(Schema.NonEmptyString),
     conversation: Schema.optional(Schema.NonEmptyString),
     ...Key,
     tools: Schema.optional(Schema.Literals(["read", "write"])),
@@ -491,7 +493,10 @@ export class Operations {
       )
 
     if (input.action === "side")
-      return this.application.openSide({ key: input.key, parent: input.conversation, tools: input.tools }, options)
+      return this.application.openSide(
+        { key: input.key, parent: input.conversation, workspace: selected, tools: input.tools },
+        options,
+      )
 
     if ("conversation" in input) {
       const chat = workspace.conversation(input.conversation)
@@ -509,7 +514,7 @@ export class Operations {
       if (input.action === "say")
         return this.application.submit({ ...input, workspace: selected }, this.member, options)
       if (input.action === "result") {
-        if (input.input) return chat.inputExecution(input.input).recover(options)
+        if (input.input) return chat.inputExecution(input.input).recover(options).then(executionSnapshot)
 
         const turn = info.active_turn_public_id ?? (await chat.turns.list({ limit: 1 }, options)).items[0]?.public_id
         if (!turn) return null
@@ -523,6 +528,7 @@ export class Operations {
             run_public_id: variant.run_public_id,
           })
           .recover(options)
+          .then(executionSnapshot)
       }
       if (input.action === "events") return chat.events({ after: input.after }, options)
       if (input.action === "cost")

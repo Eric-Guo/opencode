@@ -97,6 +97,7 @@ export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.Tool
   server: ServerName,
   tool: Schema.String,
   message: Schema.String,
+  code: Schema.optional(Schema.Number),
 }) {}
 
 type Offline = Exclude<Status, { readonly status: "connected" }>
@@ -655,7 +656,7 @@ export const layer = (options?: Options) =>
         const suffix =
           "mcp_" +
           createHash("sha1")
-            .update(name + "\u0000" + target.config.url)
+            .update((entry.clientOptions?.credentialKey ?? name) + "\u0000" + target.config.url)
             .digest("hex")
             .slice(0, 16)
         const integrationID = Integration.ID.make(suffix)
@@ -713,7 +714,13 @@ export const layer = (options?: Options) =>
         const target = remoteTarget(entry)
         if (!target || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-        return yield* McpOAuth.connectProvider({ server: name, target, credential }).pipe(
+        return yield* McpOAuth.connectProvider({
+          server: name,
+          target,
+          credential,
+          readOnly: entry.clientOptions?.readOnlyCredentials,
+          redactErrors: entry.clientOptions?.redactErrors,
+        }).pipe(
           Effect.provideService(Credential.Service, credentials),
           Effect.provideService(FetchHttpClient.Fetch, fetch),
         )

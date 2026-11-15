@@ -45,6 +45,12 @@ export interface Events {
 
 /** Scoped consumer policy; it never changes persisted server configuration. */
 export interface ClientOptions {
+  /** Stable credential owner when scoped registration names change across enablement. */
+  readonly credentialKey?: string
+  /** Use the saved token without refreshing or invalidating it, for diagnostic probes. */
+  readonly readOnlyCredentials?: boolean
+  /** Omit server-controlled error details when the consumer owns credential redaction. */
+  readonly redactErrors?: boolean
   readonly roots?: boolean
   readonly elicitation?: boolean
   readonly listChanged?: boolean
@@ -292,6 +298,7 @@ export function make(input: Input): Connection {
               elicitation: input.clientOptions?.elicitation === false ? undefined : input.elicitation,
               roots: input.clientOptions?.roots ?? !input.shared,
               listChanged: input.clientOptions?.listChanged,
+              redactErrors: input.clientOptions?.redactErrors,
               events: input.clientOptions?.events ?? true,
             }).pipe(
               Effect.flatMap(
@@ -337,7 +344,6 @@ export function make(input: Input): Connection {
             : { status: "failed", error: error instanceof Error ? error.message : String(error) },
           error instanceof McpError.ConnectError && error.answered === true,
         )
-
       }
       const opened = result.value
       switch (opened._tag) {

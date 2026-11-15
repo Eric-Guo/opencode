@@ -46,6 +46,7 @@ export async function activateMcp(
     const integration = await host.integration(api.directory)
     const active = await Effect.runPromise(integration.connection.active(server.integrationID))
     const value = active && (await Effect.runPromise(integration.connection.resolve(active)))
+    row.oauth = value?.type === "oauth"
     const current = value?.type === "oauth" ? [value.access, value.refresh] : value?.type === "key" ? [value.key] : []
     const tokens = [...new Set([...current, ...(credentials.get(row.server) ?? [])])]
       .filter((value) => Buffer.byteLength(value) >= 8)
@@ -67,6 +68,8 @@ export async function activateMcp(
       mcp
         .transform((editor) => {
           editor.set(row.server, config, {
+            credentialKey: row.credentialKey,
+            redactErrors: true,
             roots: false,
             elicitation: false,
             listChanged: false,
@@ -174,7 +177,17 @@ export async function activateMcp(
           try {
             await refreshSecrets(row)
             const response = await exchange(
-              (onSessionRenewed) => mcp.callTool({ server: row.server, name: tool.raw, args: input, onSessionRenewed }),
+              (onSessionRenewed) =>
+                mcp.callTool({ server: row.server, name: tool.raw, args: input, onSessionRenewed }).pipe(
+                  Effect.catchTag("MCP.ToolCallError", (error) =>
+                    error.code === -32602
+                      ? Effect.succeed({
+                          isError: true,
+                          content: [{ type: "text" as const, text: "The server refused the call: " + error.message }],
+                        })
+                      : Effect.fail(error),
+                  ),
+                ),
               context.signal,
             )
 
@@ -185,7 +198,8 @@ export async function activateMcp(
             return result
           } catch (error) {
             await refreshSecrets(row).catch(() => {})
-            return { is_error: true, content: mcpRedact(error instanceof Error ? error.message : String(error), row) }
+            context.signal.throwIfAborted()
+            throw new Error(mcpRedact(error instanceof Error ? error.message : String(error), row))
           }
         },
       })
@@ -296,7 +310,81 @@ export async function activateMcp(
 
     if (!report) throw new Error("Unknown MCP server: " + command.server)
 
-    return report
+    const row = settings.rows.find((row) => row.key === command.server)
+    if (!row?.config) return report
+    const scope = await Effect.runPromise(Scope.make())
+    const name = row.server + "-probe-" + crypto.randomUUID()
+    try {
+      await Effect.runPromise(
+        mcp
+          .transform((editor) => {
+            editor.set(
+              name,
+              { ...row.config!, disabled: false },
+              {
+                credentialKey: row.credentialKey,
+                redactErrors: true,
+                readOnlyCredentials: true,
+                roots: false,
+                elicitation: false,
+                listChanged: false,
+                reconnectOnFailure: true,
+              },
+            )
+          })
+          .pipe(Scope.provide(scope)),
+        { signal: api.signal },
+      )
+      const servers = await Effect.runPromise(
+        mcp.servers().pipe(
+          Effect.repeat({
+            until: (servers) => servers.some((server) => server.name === name && server.status.status !== "pending"),
+            schedule: Schedule.spaced("25 millis").pipe(
+              Schedule.upTo({ duration: row.config.timeout?.startup ?? 30000 }),
+            ),
+          }),
+        ),
+        { signal: api.signal },
+      )
+      await refreshSecrets(row).catch(() => {})
+      const server = servers.find((server) => server.name === name)
+      if (server?.status.status !== "connected")
+        return {
+          ...report,
+          status: "down",
+          issue:
+            server && "error" in server.status ? mcpRedact(server.status.error, row) : "MCP probe did not connect.",
+        }
+      const [tools, prompts, resources] = await Promise.all([
+        Effect.runPromise(mcp.tools(), { signal: api.signal }),
+        Effect.runPromise(mcp.prompts(), { signal: api.signal }),
+        Effect.runPromise(mcp.resources({ server: name }), { signal: api.signal }),
+      ])
+      const curated = curateMcp(
+        row,
+        tools.filter((tool) => tool.server === name),
+      )
+      const documents = curateMcpDocuments(
+        row,
+        prompts.filter((prompt) => prompt.server === name),
+        resources.resources,
+      )
+      return Schema.decodeUnknownSync(Schema.MutableJson)({
+        server: row.key,
+        transport: row.transport,
+        serves: row.role,
+        status: curated.fault ? "down" : "connected",
+        ...(curated.fault ? { issue: curated.fault } : {}),
+        tools: curated.tools.map((tool) => ({ name: tool.definition.name, raw_name: tool.raw, bytes: tool.bytes })),
+        bytes: curated.bytes,
+        skipped: curated.skipped,
+        documents: documents.documents,
+        skipped_documents: documents.skipped,
+        templates: resources.templates,
+      })
+    } finally {
+      await Effect.runPromise(Scope.close(scope, Exit.void))
+    }
   })
   for (const action of ["enable", "disable"] as const)
     api.registerCommand("mcp." + action, async (input) => {
