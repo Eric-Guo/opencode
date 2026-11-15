@@ -10,7 +10,7 @@ import type { TaskRealtime } from "@cybros/agent"
 import { tmpdir } from "node:os"
 import { location } from "../../core/test/fixture/location"
 import { testEffect } from "../../core/test/lib/effect"
-import { terminalSession } from "../src/terminal"
+import { terminalTools } from "../src/extensions"
 import { RealtimePeer } from "../src/realtime"
 
 const it = testEffect(
@@ -43,11 +43,11 @@ terminalTest(
             max_age_ms: 1000,
           },
         }
-        const work = terminalSession(
-          { pty: async () => pty },
+        const work = terminalTools(tmpdir(), owner.signal, { pty: async () => pty })[0]!.execute(
+          {},
           {
             workspace: "workspace",
-            conversation: "conversation",
+            conversation: null,
             run: "run",
             task: "terminal",
             directory: tmpdir(),
@@ -89,7 +89,7 @@ terminalTest(
             JSON.stringify({
               type: "input",
               id: 1,
-            data: Buffer.from("printf 'NEXUS_%s_OK\\n' TERMINAL\n").toString("base64"),
+              data: Buffer.from("printf 'NEXUS_%s_OK\\n' TERMINAL\n").toString("base64"),
             }),
           )
 
