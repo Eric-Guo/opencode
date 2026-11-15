@@ -1,3 +1,4 @@
+import { executionSnapshot } from "./execution"
 import { APIError, type Client, type CreateInput } from "@cybros/agent"
 import { Schema } from "effect"
 import { setTimeout } from "node:timers/promises"
@@ -81,7 +82,7 @@ export class ConversationTitles {
       )
       const execution = side.inputExecution(accepted.input.public_id)
       while (!signal.aborted) {
-        const snapshot = await execution.recover({ signal })
+        const snapshot = await execution.recover({ signal }).then(executionSnapshot)
         if (execution.blocked_reason) return
         if (snapshot?.terminal) {
           if (snapshot.status !== "completed") return

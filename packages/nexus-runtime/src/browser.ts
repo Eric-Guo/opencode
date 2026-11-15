@@ -142,7 +142,10 @@ export function browserTools(
                 const output=Array.isArray(value)?value.map(item=>clean(item,depth+1)):Object.fromEntries(Object.entries(value).map(([key,item])=>[key,clean(item,depth+1)]));
                 seen.delete(value);return output;
               };
-              return JSON.stringify(clean(await (0,eval)(${JSON.stringify(args.expression)})))??'null';
+              const source=${JSON.stringify(args.expression)};
+              const expression=/^\\s*(?:async\\s+)?function\\b/.test(source)?'('+source+')':source;
+              const result=await (0,eval)(expression);
+              return JSON.stringify(clean(typeof result==='function'?await result():result))??'null';
             })()`,
             )
             if (typeof value !== "string") throw new Error("Page evaluation returned no JSON.")
