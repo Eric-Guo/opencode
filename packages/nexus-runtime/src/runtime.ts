@@ -54,7 +54,7 @@ export { NexusApplication } from "./application"
 import type { NexusPreset } from "@opencode/schema/nexus-preset"
 import type { NexusBot } from "@opencode/schema/nexus-bot"
 import { operatorTools, RunnerAdmission, tools, readEffect } from "./runner"
-import { RunnerInbox } from "./runner-inbox"
+import { NexusExecutor } from "./executor"
 import { EnvironmentChange } from "./environments"
 import { DefaultEnvironment } from "./default-environment"
 import type { NexusRun } from "@opencode/schema/nexus-run"
@@ -130,7 +130,7 @@ export class NexusRuntime {
   )
   private editorChanges = Promise.resolve()
   private publish?: () => Promise<void>
-  private executor?: RunnerInbox
+  private executor?: NexusExecutor
   private statusValue: Status = { state: "unpaired", origin: "", model: "", directory: "", workspace: "" }
 
   constructor(
@@ -774,7 +774,8 @@ export class NexusRuntime {
       if (
         info.side
           ? !(await active.application.sides.read(command.workspace, command.conversation))
-          : info.answering_user_public_id !== active.identity.agent
+          : info.answering_user_public_id !== active.identity.agent &&
+            info.default_runner?.executor_public_id !== active.identity.runner
       )
         throw new Error("Unknown editor conversation.")
       if (info.archived_at || !command.cwd || !isAbsolute(command.cwd))
@@ -799,54 +800,31 @@ export class NexusRuntime {
     extensions: () => readonly RunnerTool[],
     admission: RunnerAdmission,
   ) {
-    const socket = new RealtimeClient(options)
-    const owner = new AbortController()
-    const active = AbortSignal.any([signal, owner.signal])
-    let wake = new AbortController()
-    const inbox = new RunnerInbox({
+    const inbox = new NexusExecutor({
       executor,
       id,
       root: directory,
+      storage: this.storage,
       journal,
-      signal: active,
+      signal,
       extensions,
       admission,
       host: this.host,
       checkpoints,
       protectedRoots: [this.storage],
       artifacts: join(this.storage, "artifacts"),
+      realtime: new RealtimeClient(options),
       ports: {
         read: (workspace, anchor) => this.connection?.application.environments.port(workspace, anchor),
         drop: (workspace, anchor, port) => this.connection?.application.environments.dropPort(workspace, anchor, port),
       },
       hooks: () => this.extensionManager!.captureTools(),
-      wake: () => wake.abort(),
     })
     this.executor = inbox
-    const notifications = (async () => {
-      while (!active.aborted) {
-        try {
-          const subscription = await socket.executorInbox({ signal: active })
-          wake.abort()
-          for await (const event of subscription) inbox.notify(event)
-        } catch {
-          if (active.aborted) return
-        }
-        await socket.reconnect()
-        await scheduler.wait(5000, { signal: active })
-      }
-    })().catch(() => {})
     try {
-      while (!active.aborted) {
-        wake = new AbortController()
-        await inbox.sweep()
-        await scheduler.wait(5000, { signal: AbortSignal.any([active, wake.signal]) }).catch(() => {})
-      }
+      await inbox.start()
     } finally {
-      owner.abort()
       await inbox.close()
-      await socket.close()
-      await notifications
     }
   }
 
@@ -872,11 +850,11 @@ export class NexusRuntime {
     if (!active) throw new Error("The selected workspace is unavailable.")
     const chat = active.member.workspace(workspace).conversation(conversation)
     const info = await chat.fetch()
-    if (
-      info.answering_user_public_id !== active.identity.agent ||
-      (info.side && !(await active.application.sides.read(workspace, conversation))) ||
-      (patch && info.archived_at)
-    )
+    if (info.answering_user_public_id !== active.identity.agent) {
+      if (patch) throw new Error("These conversation settings are unavailable.")
+      return { code_mode: false, subagent: false, available: false, code_mode_available: false }
+    }
+    if ((info.side && !(await active.application.sides.read(workspace, conversation))) || (patch && info.archived_at))
       throw new Error("These conversation settings are unavailable.")
     let after: string | undefined
     do {
@@ -1246,13 +1224,14 @@ export class NexusRuntime {
 
       if (
         chat.archived_at ||
-        chat.answering_user_public_id !== active.identity.agent ||
+        (command.always && chat.answering_user_public_id !== active.identity.agent) ||
         run.turn?.conversation_public_id !== command.conversation
       )
         throw new Error("The held task does not belong to this agent conversation.")
 
       return new Operations(member, active.application, active.identity).command({
         action: "approve",
+        addressed: chat.answering_user_public_id !== active.identity.agent,
         workspace: command.workspace,
         run: command.run,
         task: command.task,
@@ -1325,6 +1304,17 @@ export class NexusRuntime {
         ...command,
         action: "application.submit" as const,
         principal: principal?.public_id,
+        ...(command.addressed && conversation.default_runner?.executor_public_id === active.identity.runner
+          ? {
+              executor_contexts: {
+                [active.identity.runner]: await active.application.environments.capture(
+                  command.workspace,
+                  command.conversation,
+                  active.identity.runner,
+                ),
+              },
+            }
+          : {}),
         preparation: () => this.policy(command.workspace, command.conversation, command.preset, command.model),
       }
 
