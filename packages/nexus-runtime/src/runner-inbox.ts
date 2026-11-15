@@ -12,7 +12,9 @@ import { constants } from "node:fs"
 import { isAbsolute, join, relative, sep } from "node:path"
 import { createHash } from "node:crypto"
 import { availableParallelism } from "node:os"
-import { JsonSchema, Schema, SchemaRepresentation } from "effect"
+import { Schema } from "effect"
+import type { ValidateFunction } from "ajv"
+import { compileToolSchema, toolInputRefusal } from "./tool-schema"
 import type { HostTools } from "./host"
 import type { Checkpoints } from "./checkpoints"
 import type { ExtensionManager } from "./extension-manager"
@@ -20,7 +22,8 @@ import type { RunnerContext } from "./extensions"
 import type { RunnerTool } from "./extensions"
 import type { EditorBinding } from "./editor-bridge"
 import type { ClaimJournal } from "./claims"
-import { ClaimDeadline, ClaimInterrupted, ClaimLease, ClaimOperations } from "./claim-control"
+import { ClaimDeadline, ClaimInterrupted, ClaimLease } from "./claim-control"
+import { claimOrchestration } from "./orchestration"
 import { runnerRefusal } from "./runner-policy"
 import { claimResult, type ClaimResult } from "./claim-result"
 import { operatorTools, RunnerAdmission, runClaim, tools } from "./runner"
@@ -42,7 +45,7 @@ type OwnedTask = { cancel: AbortController; started: boolean; work?: Promise<voi
 export class RunnerInbox {
   private readonly running = new Map<string, OwnedTask>()
   private readonly programs = new Set<Promise<void>>()
-  private readonly validators = new WeakMap<AnnouncedTool, Schema.Codec<unknown>>()
+  private readonly validators = new WeakMap<AnnouncedTool, ValidateFunction<unknown>>()
   private readonly unsubscribe: () => void
   private readonly capacity: number
   private starting = 0
@@ -67,6 +70,9 @@ export class RunnerInbox {
       checkpoints?: Checkpoints
       protectedRoots?: readonly string[]
       artifacts?: string
+      roles?: readonly ("agent" | "runner" | "tool_provider")[]
+      placement?: "fixed" | "captured"
+      builtin?: boolean
       startupLimit?: number
       hooks?: () => ReturnType<ExtensionManager["captureTools"]>
       result?(row: InboxTask, result: Omit<CommitTask, "claim_token">): Promise<Omit<CommitTask, "claim_token">>
@@ -159,8 +165,9 @@ export class RunnerInbox {
   private addressed(row: InboxTask) {
     return (
       row.kind === "tool_call" &&
-      ["agent", "runner"].includes(row.addressed_to?.role ?? "") &&
-      row.addressed_to?.executor_public_id === this.options.id
+      (this.options.roles ?? ["agent", "runner"]).some((role) => role === row.addressed_to?.role) &&
+      (row.addressed_to?.executor_public_id === this.options.id ||
+        (row.addressed_to?.role === "tool_provider" && row.addressed_to.executor_public_id === null))
     )
   }
 
@@ -187,7 +194,7 @@ export class RunnerInbox {
   private async take(hint: Hint) {
     const key = JSON.stringify([hint.run_public_id, hint.task_key])
     if (this.stopped || this.options.signal.aborted || this.failure || this.running.has(key)) return
-    if (!["agent", "runner"].includes(hint.role ?? "")) {
+    if (!(this.options.roles ?? ["agent", "runner"]).some((role) => role === hint.role)) {
       this.options.wake()
       return
     }
@@ -272,7 +279,7 @@ export class RunnerInbox {
     )
     const definition =
       extension?.definition ??
-      (claim.task.addressed_to?.role === "runner"
+      (claim.task.addressed_to?.role === "runner" && this.options.builtin !== false
         ? [...tools, ...operatorTools].find((tool) => tool.name === claim.task.tool_name)
         : undefined)
     const lease = new ClaimLease(
@@ -344,6 +351,7 @@ export class RunnerInbox {
   }
 
   private async placement(row: InboxTask, extension: RunnerTool | undefined) {
+    if (this.options.placement === "fixed") return this.options.root
     const environment = row.executor_context?.["opencode.environment"] ?? row.executor_context?.["rho.environment"]
     const captured =
       environment === undefined
@@ -358,7 +366,8 @@ export class RunnerInbox {
     const binding = captured?.root ?? row.executor_context?.["opencode.directory"]
     if (
       binding === undefined &&
-      (extension?.role === "agent" ||
+      (extension?.environmentRequired === false ||
+        extension?.role === "agent" ||
         (["files_bytes", "checkpoints", "checkpoint_restore", "git_review"].includes(row.tool_name ?? "") &&
           !row.conversation_public_id))
     )
@@ -386,16 +395,11 @@ export class RunnerInbox {
     return roots[0]
   }
 
-  private valid(definition: AnnouncedTool, input: JsonObject) {
-    const schema =
-      this.validators.get(definition) ??
-      Schema.make<Schema.Codec<unknown>>(
-        SchemaRepresentation.fromJsonSchemaDocument(
-          JsonSchema.fromSchemaDraft2020_12(definition.input_schema ?? { type: "object" }),
-        ).ast,
-      )
-    this.validators.set(definition, schema)
-    return Schema.decodeUnknownOption(schema)(input)._tag === "Some"
+  private validation(definition: AnnouncedTool, input: JsonObject) {
+    const validator =
+      this.validators.get(definition) ?? compileToolSchema(definition.input_schema ?? { type: "object" })
+    this.validators.set(definition, validator)
+    return toolInputRefusal(validator, input)
   }
 
   private async execute(
@@ -410,13 +414,9 @@ export class RunnerInbox {
   ): Promise<ClaimResult> {
     if (signal.aborted) return interrupted(signal.reason)
     const task = this.options.executor.inboxTask(claim.task.run_public_id, claim.task.task_key)
-    const operations = new ClaimOperations(task, claim.claim_token, signal)
-    const operation = (key: string, request: JsonObject) => operations.submit(key, request)
+    const orchestration = claimOrchestration(task, claim.claim_token, signal)
     const ask = async (key: string, prompt: string, options?: string[]) => {
-      const result = await operations.question(key, {
-        kind: "ask",
-        input: { prompt, ...(options?.length ? { options } : {}) },
-      })
+      const result = await orchestration.ask(key, prompt, options)
       if (
         !result ||
         typeof result !== "object" ||
@@ -448,6 +448,7 @@ export class RunnerInbox {
       task: claim.task.task_key,
       signal,
       ask,
+      orchestration,
       started,
       executionStarted,
       workerRetired: (reason) => owned.cancel.abort(reason),
@@ -457,11 +458,8 @@ export class RunnerInbox {
       signal.throwIfAborted()
       if (gated && "veto" in gated) return { is_error: true, content: gated.veto }
       const input = gated?.input ?? claim.task.tool_input
-      if (!this.valid(definition, input))
-        return {
-          is_error: true,
-          content: "invalid_tool_arguments: the arguments do not match this tool's declared schema.",
-        }
+      const invalid = this.validation(definition, input)
+      if (invalid) return { is_error: true, content: invalid }
       const reason = runnerRefusal(definition.name, input, root, this.options.protectedRoots)
       if (reason) return { is_error: true, content: reason }
       const call = () =>
@@ -475,7 +473,7 @@ export class RunnerInbox {
           extensions.map((tool) => hooks?.tools.find((entry) => entry.definition === tool.definition) ?? tool),
           ask,
           claim.claim_token,
-          operation,
+          undefined,
           this.options.protectedRoots,
           this.options.artifacts
             ? join(this.options.artifacts, createHash("sha256").update(root).digest("hex").slice(0, 16))
@@ -484,6 +482,7 @@ export class RunnerInbox {
           executionStarted
             ? { executionStarted, started, workerRetired: (reason) => owned.cancel.abort(reason) }
             : undefined,
+          orchestration,
         )
       const result = await (checkpoints &&
       definition.effect_profile?.kind === "write" &&

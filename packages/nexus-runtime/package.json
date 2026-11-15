@@ -17,7 +17,8 @@
   "exports": {
     ".": "./src/runtime.ts",
     "./editor": "./src/editor.ts",
-    "./run": "./src/run.ts"
+    "./run": "./src/run.ts",
+    "./experimental/executor": "./src/executor.ts"
   },
   "scripts": {
     "build": "bun run script/build.ts",
@@ -33,7 +34,7 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "1.6.0",
     "@cybros/agent": "file:./vendor/cybros-agent-0.1.0.tgz",
-    "@jitl/quickjs-singlefile-cjs-release-sync": "0.32.0",
+    "@opencode/codemode": "workspace:*",
     "@opencode/core": "workspace:*",
     "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
@@ -45,7 +46,6 @@
     "htmlparser2": "8.0.2",
     "ipaddr.js": "^2.2.0",
     "marked": "catalog:",
-    "quickjs-emscripten-core": "0.32.0",
     "semver": "catalog:",
     "typescript": "catalog:",
     "werift": "0.27.0",

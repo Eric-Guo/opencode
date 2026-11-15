@@ -412,7 +412,13 @@ test("staged startup, backgrounds, agents, commands and MCP registrars share pub
       api.registerAgent({ name: "room", description: "Shared room", system_prompt: "Help", configuration: {} })
       api.registerCommand("fixture.echo", async (input) => input, {
         description: "Echo",
-        input_schema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+        input_schema: {
+          type: "object",
+          properties: { text: { type: "string", pattern: "^ok$" } },
+          required: ["text"],
+          additionalProperties: false,
+          not: { properties: { text: { const: "blocked" } }, required: ["text"] },
+        },
       })
       api.registerConversationServers(async () => ({
         tools: [],
@@ -432,6 +438,8 @@ test("staged startup, backgrounds, agents, commands and MCP registrars share pub
       { name: "fixture.echo", description: "Echo", input_schema: expect.anything() },
     ])
     await expect(manager.command("fixture.echo", {})).rejects.toThrow()
+    await expect(manager.command("fixture.echo", { text: "invalid" })).rejects.toThrow()
+    await expect(manager.command("fixture.echo", { text: "ok", extra: true })).rejects.toThrow()
     expect(await manager.command("fixture.echo", { text: "ok" })).toEqual({ text: "ok" })
     expect(manager.conversationServers()).toBeFunction()
     await manager.conversationServers()!({

@@ -85,7 +85,12 @@ Registration stages tools, management commands and cleanup handlers before publi
 registration releases its resources and leaves working extensions available.
 Running handlers retain their original extension instance until they exit.
 `RunnerTool.resource` declares shared local concurrency; `internalTimeout` opts
-out of claim renewal for a tool with its own hard deadline.
+out of claim renewal for a tool with its own hard deadline. Set
+`environmentRequired: false` for a tool that does not access local directories;
+it can execute without captured placement. Tools and management commands enforce
+their JSON Schemas, including patterns, conditional requirements and unknown-field
+rules, without coercing or discarding arguments. MCP discovery and native Code
+Mode use the same validator.
 
 Custom and managed modules execute in replaceable workers. A blocked synchronous
 handler cannot block the service's claim clocks. Cancellation first reaches the
@@ -362,17 +367,61 @@ disabling it closes its editor attachments. Runner discovery, selection and chan
 installation's default directory affect future work, while admitted tasks and
 managed processes keep their captured placement.
 
-Code Mode preserves Rho's JavaScript binding ID. Each invocation uses an isolated
-QuickJS heap with ordinary JavaScript functions, classes and Promises. It has no
-ambient filesystem, network, clock or randomness. The host accepts each issued
-operation batch before delivering observations, and only host-observed resources
-can enter the final envelope. Child operations must settle or transfer ownership
-through an accepted background receipt.
+Code Mode uses `@opencode/codemode` with binding `urn:opencode:nexus:codemode:1`.
+It uses OpenCode's supported JavaScript subset, copied bindings, native Promise
+scheduling, diagnostics and final-expression results. Classes and full JavaScript
+compatibility are not promised. The old Rho JavaScript binding is refused before
+effects; create new work with the current declaration after upgrading.
 
-The limits are 256 KiB of source, 8 MiB of context or incoming events, 1 MiB of
-output/pending requests, a 64 MiB heap and one second of computation per VM
-invocation. Host waits do not spend the computation budget. The embedded WASM
-variant bundles into the Node service without a separate asset file.
+Only frozen declarations are callable. Every child tool runs through Nexus's
+claim operations and approval policy; there is no direct filesystem or network
+capability. `text(string)` and `console.log` select visible output, `value(json)`
+returns a structured value, and `resource(block)` forwards an observed resource.
+An explicit return or the final expression supplies structured output, including
+null, false and zero. Native tool failures expose their message; Nexus helper
+refusals also expose `error.refusal`. Host transport failures terminate execution.
+
+Ordinary tool Promises have no `operation_key`. Use an explicit handle when work
+needs cancellation, joining, replacement or background ownership:
+
+```javascript
+const work = await nexus.start({ kind: "model", input: { prompt: "Inspect the project" } })
+await nexus.background({ operation_key: work.operation_key, lifetime: "conversation", wake: "auto" })
+text("The result will arrive when ready.")
+```
+
+`nexus.wait(work)` waits for an explicit handle. The model, ask, steps, replace,
+cancel, join and background helpers remain available. Only a confirmed background
+transfer releases ownership. Unfinished attached operations are cancelled when the
+program ends; accepted effects are never replayed after losing the interpreter.
+Source is bounded to 256 KiB, context/events to 8 MiB and output to 1 MiB. Native
+execution has a ten-minute wall-clock budget, including waits, and uses OpenCode's
+structural limits rather than a separate engine heap limit.
+
+## Reusable executor API
+
+`@opencode/nexus-runtime/experimental/executor` exports `NexusExecutor`,
+`ExecutorOptions`, `RunnerAdmission`, `ClaimJournal`, and the runner/orchestration
+types. This API is experimental and may change without compatibility guarantees.
+A host supplies its SDK `ExecutorClient`, executor `id`, `storage`, `root`, and
+`extensions: () => RunnerTool[]`; optional host services provide shell and PTY work.
+No Human credential or managed application is required.
+
+`start()` follows HTTP recovery and optional SDK `realtime` hints until shutdown;
+it returns the lifetime Promise. `notify`, `sweep`, `drain`, `snapshot`, `setRoot`
+and idempotent `close` are available for host integration. The host announces its
+catalog through the SDK before starting. `roles` selects agent, runner and/or
+tool_provider; provider pool rows can have a null executor target. `placement`
+is captured by default; fixed placement uses the host's root. `builtin: false`
+restricts execution to supplied extension tools. Multiple owners may share an
+admission object and retain resource permits through actual handler completion.
+
+Tool and worker contexts receive `orchestration.start(key, request)`, `wait(handle)`,
+`ask(key, prompt, options?)`, and `run({code, params?})`. These capabilities retain
+the current claim, frozen declarations and cancellation signal without exposing
+credentials. `run` uses native OpenCode Code Mode and refuses reconstruction of
+an invocation with existing operation history. The managed runtime uses this same
+executor owner.
 
 ## Development controls
 
@@ -406,7 +455,7 @@ hosted by OpenCode's managed service; the Rho web UI is replaced by `nexus-ui`.
 | rho-env executor          | Authoritative claims, startup admission, resources, cancellation, captured placement, refusal floor, renewal and settlement recovery                                                                                           |
 | rho-env files/checkpoints | Streaming reads and attachments, fuzzy edits, bounded search, SQLite content-addressed checkpoints, restore/undo, retention, Git review and skill discovery                                                                    |
 | rho-env terminal          | OpenCode PTY ownership, TypeScript ICE/DTLS/SCTP, permission expiry, reconnect and output replay, configurable ICE/TURN/network settings                                                                                       |
-| rho-codemode              | Isolated JavaScript binding, exact operation ordering and ownership receipts, immutable JSON values, explicit output/resource selection, CPU/heap/data budgets                                                                 |
+| rho-codemode              | Native OpenCode Code Mode, frozen Nexus operations and background receipts, copied JSON bindings, explicit output/resource selection, native execution limits                                                                  |
 | rho-web-tools             | DNS-pinned bounded fetch, authority grants, redirect policy, charset/decompression handling, Markdown/media publication and operator fetch                                                                                     |
 | rho-browser               | Private Chromium, per-run tabs, cross-frame accessibility refs, actionability checks, popup ownership, screenshots, cancellation and idle cleanup                                                                              |
 | rho-mcp                   | Scoped OpenCode transports, per-role defaults, tool curation/budgets, prompt/resource documents, OAuth and narrow client capabilities                                                                                          |
@@ -431,7 +480,7 @@ use OpenCode's existing commands. The Rho WebUI is replaced by `nexus-ui`.
 | ---------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rho`                  | runtime, application, settings, adaptations, titles, Presets/Bots, extensions, memory, Until | `runtime`, `application`, `adaptations`, `conversation-titles`, `run`, `presets`, `bots`, `lifecycle`, `packages`, `memory-review`, `until` tests              |
 | `rho-env`              | runner inbox/claims, files/search, checkpoints, processes, skills, terminal                  | `executor`, `claim-control`, `claim-result`, `runner`, `attachments`, `runner-search`, `checkpoint-store`, `processes`, `skills`, `terminal`, `realtime` tests |
-| `rho-codemode`         | isolated QuickJS and frozen operation bridge                                                 | `code`, `executor` tests                                                                                                                                       |
+| `rho-codemode`         | native OpenCode Code Mode and frozen operation bridge                                        | `code`, `executor` tests                                                                                                                                       |
 | `rho-web-tools`        | bounded DNS-pinned fetch and publication                                                     | `web` tests                                                                                                                                                    |
 | `rho-browser`          | Chromium session and browser tools                                                           | `browser` tests with real Chromium                                                                                                                             |
 | `rho-mcp`              | OpenCode transport adapter, curation, documents and OAuth                                    | `mcp`, `mcp-exchange`, `mcp-session`, `mcp-sessions`, `captured-mcp` tests                                                                                     |
