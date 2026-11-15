@@ -331,10 +331,11 @@ test("prepared Human inputs retain authored policy through restart and never adm
     expect(state.authored).toBe(1)
     expect(posts).toHaveLength(2)
     expect(posts[1]).toEqual(posts[0])
+    expect(posts[0].body).not.toHaveProperty("instructions")
     expect(posts[0]).toMatchObject({
       authorization: "Bearer human",
       body: {
-        instructions: "Captured author",
+        inline: [{ role: "developer", position: "lead", text: "Captured author" }],
         model: { model: "provider/original" },
         fallback_models: ["provider/fallback"],
         tool_names: ["read"],

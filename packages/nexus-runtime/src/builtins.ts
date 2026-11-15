@@ -180,6 +180,7 @@ export async function builtinExtensions(host?: HostTools, storage?: string): Pro
       },
       async register(api) {
         if (!storage) throw new Error("T3 requires runtime storage.")
+        if (api.configuration.server === "local") api.restartOnly()
         const { T3Client } = await import("./t3")
         const client = new T3Client(api.configuration, {
           application: api.application,
@@ -302,6 +303,8 @@ export async function builtinExtensions(host?: HostTools, storage?: string): Pro
 
         const { activateMcp } = await import("./mcp")
 
+        const { mcpSession } = await import("./mcp-session")
+        api.registerConversationServers((input) => mcpSession(input, host))
         await activateMcp(api, host)
       },
     },
