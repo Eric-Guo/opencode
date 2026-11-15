@@ -149,6 +149,11 @@ export async function mcpSession(
             },
           })
         },
+        registerAgent() {},
+        registerConversationServers() {},
+        restartOnly() {},
+        onStartup() {},
+        background() {},
         registerCommand() {},
         registerDocument() {},
         on() {},

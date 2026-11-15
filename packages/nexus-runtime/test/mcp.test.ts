@@ -44,6 +44,15 @@ test("MCP settings isolate faults, expand credentials once and default the trans
   expect(() => mcpSettings({ valid: [] }, "/project")).toThrow()
   expect(mcpSettings(["existing"], "/project").rows[0]).toMatchObject({ server: "existing", transport: "opencode" })
   expect(mcpSettings(["existing"], "/project").rows[0].config).toBeUndefined()
+  const enabled = mcpSettings({ docs: { transport: "http", url: "https://example.test", tools: ["*"] } }, "/project")
+    .rows[0]
+  const disabled = mcpSettings(
+    { docs: { transport: "http", url: "https://example.test", tools: ["*"], enabled: false } },
+    "/project",
+  ).rows[0]
+  expect(disabled.server).not.toBe(enabled.server)
+  expect(disabled.credentialKey).toBe(enabled.server)
+  expect(enabled.credentialKey).toBe(enabled.server)
 })
 
 test("MCP public naming preserves simple names and separates normalization collisions", () => {

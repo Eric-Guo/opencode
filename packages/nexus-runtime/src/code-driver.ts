@@ -103,7 +103,10 @@ export const codeDriver = `// Only the host controller can accept operations or 
 
   function prepare(request) {
     if (request.kind === "model") model(request.input);
-    else if (request.kind === "steps") steps(Array.isArray(request.input) ? request.input : request.input?.steps);
+    else if (request.kind === "steps") {
+      if (Array.isArray(request.input)) request.input = { steps: request.input };
+      steps(request.input?.steps);
+    }
     else if (request.kind === "replace" || request.kind === "background") steps(request.input?.steps);
     return request;
   }
