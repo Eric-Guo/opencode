@@ -1040,6 +1040,8 @@ export class NexusRuntime {
   }
 
   async manage(command: typeof NexusCommand.Type, origin?: string, token?: string) {
+    if (command.action === "application.defaults")
+      return { ...this.conversationDefaults(), available: true, code_mode_available: this.codeModeEnabled() }
     if (command.action === "settings.read") {
       await this.applicationSettings.restore()
       return this.applicationSettings.read()
@@ -1347,6 +1349,7 @@ export class NexusRuntime {
               prompt: command.prompt,
               name: command.name,
               rule: command.rule,
+              ...(command.model ? { model: { model: command.model } } : {}),
               answering_user_public_id: active.identity.agent,
               approval_mode: command.approval ?? "ask",
               tool_names: policy.tools,
@@ -1361,6 +1364,7 @@ export class NexusRuntime {
         return schedules.update(command.id, {
           expected_lock_version: command.version,
           name: command.name,
+          ...(command.model ? { model: { model: command.model } } : {}),
           approval_mode: command.approval,
           rule: command.rule,
           prompt: command.prompt,
@@ -1370,7 +1374,8 @@ export class NexusRuntime {
       if (command.action === "schedule.resume") return schedules.resume(command.id)
       if (command.action === "schedule.cancel") return schedules.cancel(command.id)
       if (command.action === "schedule.run") return schedules.run(command.id)
-      return schedules.executions(command.id)
+      if (command.action === "schedule.executions") return schedules.executions(command.id, { after: command.after })
+      throw new Error("Unknown schedule command.")
     }
     const collections = workspace.memoryCollections
     if (command.action === "memory.create") return collections.create({ name: command.name })
