@@ -67,7 +67,7 @@ const string = { type: "string" }
 export function terminalTools(
   _directory: string,
   signal: AbortSignal,
-  host: HostTools,
+  host: Pick<HostTools, "pty">,
   options: RealtimeOptions = {},
 ): RunnerTool[] {
   const ptys = new Map<
@@ -95,12 +95,13 @@ export function terminalTools(
         [],
       ),
       async execute(input, ctx) {
-        if (!ctx.conversation) throw new Error("A conversation must own the terminal.")
         if (input.action === undefined) {
           const { terminalSession } = await import("./terminal")
 
           return terminalSession(host, ctx, options)
         }
+        if (!ctx.conversation) throw new Error("A conversation must own the terminal.")
+
         const owner = JSON.stringify([ctx.workspace, ctx.conversation])
         if (input.action === "open") {
           const pty = await host.pty(ctx.directory)
