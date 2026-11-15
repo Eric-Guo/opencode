@@ -350,8 +350,10 @@ export async function activateMcp(
       if (!method) throw new Error("This MCP server has no OAuth login method.")
 
       return Schema.decodeUnknownSync(Schema.Json)(
-        await Effect.runPromise(
-          integration.oauth.connect({ integrationID: server.integrationID, methodID: method.id }),
+        Schema.encodeSync(Integration.Attempt)(
+          await Effect.runPromise(
+            integration.oauth.connect({ integrationID: server.integrationID, methodID: method.id }),
+          ),
         ),
       )
     })
