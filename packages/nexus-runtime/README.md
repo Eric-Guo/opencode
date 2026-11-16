@@ -376,9 +376,11 @@ effects; create new work with the current declaration after upgrading.
 Only frozen declarations are callable. Every child tool runs through Nexus's
 claim operations and approval policy; there is no direct filesystem or network
 capability. `text(string)` and `console.log` select visible output, `value(json)`
-returns a structured value, and `resource(block)` forwards an observed resource.
-An explicit return or the final expression supplies structured output, including
-null, false and zero. Structured output is UI-only and is never rendered to the model;
+retains a structured selection, and `resource(block)` forwards an observed resource.
+Text, console lines and resources keep their call order. A defined explicit return
+or final expression overrides the selection, including null, false and zero;
+an undefined result leaves the last `value()` selection intact. Structured output
+is visible in Nexus UI task inspection and is never rendered to the model;
 use `text(JSON.stringify(result))` for results the model needs to read. Keep a successful
 result instead of repeating the tool call just to display it. Native tool failures expose their message; Nexus helper
 refusals also expose `error.refusal`. Host transport failures terminate execution.
@@ -447,7 +449,7 @@ rendering or binary bytes to stdout and its status to stderr.
 ## Rho correspondence
 
 The reference is `agents/rho` at Cybros revision
-`31b82029d75d1ed9626b80739e4caca16671b344`. These are TypeScript implementations
+`ef798b1d6828b984a4a02b6dfc8aba34003d7d69`. These are TypeScript implementations
 hosted by OpenCode's managed service; the Rho web UI is replaced by `nexus-ui`.
 
 | Reference                 | TypeScript implementation and contracts                                                                                                                                                                                        |

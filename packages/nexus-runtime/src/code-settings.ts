@@ -7,6 +7,8 @@ approvals and task results are owned by Nexus. is_error is a result value;
 recorded refusals reject. Nexus helper errors expose error.refusal; native tool errors carry a message. Direct filesystem, network and process
 access are unavailable. Use declared tools for those operations.
 Prefer an explicit return; otherwise the final expression is the structured result.
+value(json) retains a selection when that result is undefined; a defined result,
+including null, overrides it. Text, console lines and resources retain call order.
 text(string) and console.log select model-visible text. Returned JSON and value(json)
 are UI-only structured output and are never rendered to the model. Print results the
 model needs with text(JSON.stringify(result)); keep the result instead of repeating
