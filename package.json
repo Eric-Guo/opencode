@@ -177,6 +177,7 @@
     "@modelcontextprotocol/client@2.4.0": "patches/@modelcontextprotocol%2Fclient@2.4.0.patch",
     "@babel/core@7.29.7": "patches/@babel%2Fcore@7.29.7.patch",
     "@kobalte/core@0.13.13": "patches/@kobalte%2Fcore@0.13.13.patch",
+    "effect@4.1.0": "patches/effect@4.1.0.patch",
     "bun-pty@0.4.11": "patches/bun-pty@0.4.11.patch"
   }
 }
