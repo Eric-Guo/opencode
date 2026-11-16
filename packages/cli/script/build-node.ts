@@ -18,6 +18,7 @@ import { verifyArtifact } from "./verify-artifact"
 import { NativeArch } from "../../../script/native-arch"
 import { bundledModelsSnapshot } from "../../core/script/models-snapshot"
 import { collectFiles } from "./files"
+import { ssoKey } from "./sso-key"
 
 const NODE_VERSION = "26.13.1"
 const dir = path.resolve(import.meta.dirname, "..")
@@ -34,6 +35,7 @@ const bundleOnly = process.argv.includes("--bundle-only") || sidecarOnly
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
 const appArchiveOnly = process.argv.includes("--app-archive-only")
+const sigmaKey = appArchiveOnly ? undefined : ssoKey()
 const highlights = Script.preview ? undefined : embed(process.env.OPENCODE_RELEASE_NOTES)
 const requestedArchive = process.env.OPENCODE_APP_ARCHIVE
 const archivePath = requestedArchive ? path.resolve(dir, requestedArchive) : undefined
@@ -74,7 +76,9 @@ if (appArchiveOnly) {
   process.exit(0)
 }
 const modelsSnapshot = await bundledModelsSnapshot()
-const appArchive = archivePath ? await Bun.file(archivePath).bytes() : await buildAppArchive(Script.channel, Script.version)
+const appArchive = archivePath
+  ? await Bun.file(archivePath).bytes()
+  : await buildAppArchive(Script.channel, Script.version)
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
   !sidecarOnly &&
@@ -117,6 +121,7 @@ for (const target of targets) {
     modelsSnapshot,
     assetHash,
     target,
+    sigmaKey,
   }
   await copyNodeAssets(assets)
   await writeFile(path.join("dist-node", "assets", appArchiveAsset), appArchive)
