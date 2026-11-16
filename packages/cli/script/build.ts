@@ -15,8 +15,10 @@ import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
 import { NativeArch } from "../../../script/native-arch"
 import { bundledModelsSnapshot, modelsSnapshotPlugin } from "../../core/script/models-snapshot"
+import { ssoKey } from "./sso-key"
 
 const dir = path.resolve(import.meta.dirname, "..")
+const sigmaKey = ssoKey()
 const binary = "opencode"
 const outdir = path.resolve(
   dir,
@@ -222,7 +224,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       windows: {},
     },
     define: {
-      SIGMA_AES_128_ECB_KEY: JSON.stringify(process.env.SIGMA_AES_128_ECB_KEY) ?? "undefined",
+      SIGMA_AES_128_ECB_KEY: JSON.stringify(sigmaKey),
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_CLI_NAME: "'opencode'",
       OPENCODE_CHANNEL: `'${Script.channel}'`,
