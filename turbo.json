@@ -44,6 +44,7 @@
     },
     "build": {
       "dependsOn": ["transit"],
+      "env": ["SIGMA_AES_128_ECB_KEY"],
       "outputs": ["dist/**"]
     },
     // Workspace packages export their sources, so tests never wait for a dependency's build; the build job in
