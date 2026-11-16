@@ -242,6 +242,7 @@ describe("suspend", () => {
   test("a run suspended while idle-awaiting between calls resumes from state and from bytes", async () => {
     const code = `
       const log = ["before"]
+      console.log("before suspend")
       const a = await tools.step({ value: 20 })
       const started = Date.now()
       while (Date.now() - started < 300) await Promise.resolve()
@@ -255,15 +256,24 @@ describe("suspend", () => {
     expect(suspendedOf(await Effect.runPromise(run.result))).toBe(suspended)
 
     for (const state of [suspended.state, CodeMode.toBytes(suspended.state)] as const) {
+      const lines: string[] = []
       const outcome = await Effect.runPromise(
-        background(CodeMode.make({ tools: { step: step.tool } }).resume(state)).result,
+        background(
+          CodeMode.make({
+            tools: { step: step.tool },
+            onConsole: (line) => {
+              lines.push(line)
+            },
+          }).resume(state),
+        ).result,
       )
       expect(outcome).toEqual({
         ok: true,
         value: { log: ["before", "after 42"], total: 42 },
-        logs: ["resumed"],
+        logs: ["before suspend", "resumed"],
         toolCalls: [{ name: "step" }, { name: "step" }],
       })
+      expect(lines).toEqual(["resumed"])
     }
   })
 
