@@ -115,6 +115,11 @@ Tool arguments cross into the host the way extension arguments do, as copies (pl
 getters are: each runs once, before the host function does, and its value crosses as data; a property with only a setter
 is left out. A promise or function inside an argument fails the call: await it, or pass its data.
 
+`onConsole(line)` observes each natively formatted console line synchronously, before result truncation. Hosts can
+use it to order console lines with their extension output; `Result.logs` remains available. The observer also sees
+lines from programs that later fail, so a host requiring successful final output must buffer them. A resumed runtime
+supplies its own observer; restoring a snapshot does not replay earlier lines.
+
 ### Suspending and resuming a run
 
 `CodeMode.make` returns a `CodeMode.Runtime`, which can also run a program step by step:
@@ -346,6 +351,7 @@ type Result =
   | {
       readonly ok: true
       readonly value: CodeMode.DataValue
+      readonly valueAbsent?: true
       readonly warnings?: ReadonlyArray<CodeMode.Diagnostic>
       readonly logs?: ReadonlyArray<string>
       readonly truncated?: boolean
@@ -363,6 +369,9 @@ type Result =
 `value` is JSON-safe. `warnings` are non-fatal diagnostics, `logs` contain program console output, and `truncated`
 indicates that retained output was cut by `maxOutputBytes`. `toolCalls` retains admitted calls in order, including after
 failure.
+
+An undefined completion has `value: null` and `valueAbsent: true`. An explicit JSON null has `value: null` without
+that marker. This lets a host retain its own selected output when a program completes without a value.
 
 Diagnostic kinds:
 
