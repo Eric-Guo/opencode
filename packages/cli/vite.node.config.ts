@@ -331,6 +331,7 @@ export type NodeBuildInput = {
   readonly modelsSnapshot?: string
   readonly assetHash: string
   readonly target: NodeTarget
+  readonly sigmaKey?: string
   readonly sharedPluginRuntime?: boolean
 }
 
@@ -355,7 +356,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
     resolve,
     esbuild: { jsx: "automatic" },
     define: {
-      SIGMA_AES_128_ECB_KEY: JSON.stringify(process.env.SIGMA_AES_128_ECB_KEY) ?? "undefined",
+      SIGMA_AES_128_ECB_KEY: JSON.stringify(input.sigmaKey) ?? "undefined",
       OPENCODE_VERSION: JSON.stringify(input.version),
       OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
@@ -395,4 +396,5 @@ export default mainConfig({
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
+  sigmaKey: process.env.SIGMA_AES_128_ECB_KEY,
 })
