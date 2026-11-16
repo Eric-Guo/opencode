@@ -71,8 +71,15 @@ export async function runCode(
   signal.throwIfAborted()
   const owner = new AbortController()
   const active = AbortSignal.any([signal, owner.signal])
-  const state: { next: number; failure?: unknown } = { next: 0 }
+  const state: { next: number; failure?: unknown; selected?: JsonValue } = { next: 0 }
   const content: JsonObject[] = []
+  const outputLimit = Math.min(limits.maxOutputBytes ?? 1048576, 1048576)
+  const append = (block: JsonObject) => {
+    if (Buffer.byteLength(JSON.stringify([...content, block])) > outputLimit)
+      throw new Error("Code output exceeds its byte limit.")
+
+    content.push(block)
+  }
   const resources = new Map<string, JsonObject>()
   const accepting = new Set<Promise<unknown>>()
   const pending = new Map<string, { outcome: Promise<JsonValue>; settled: boolean; released: boolean }>()
@@ -141,6 +148,7 @@ export async function runCode(
   }
   const invoke = async (request: JsonObject) => wait(await start(request))
   const runtime = CodeMode.make({
+    onConsole: (text) => append({ type: "text", text }),
     tools: Object.fromEntries(
       catalog.map((entry) => [
         entry.name,
@@ -176,11 +184,14 @@ export async function runCode(
             ),
           },
           text(value: unknown) {
-            content.push({ type: "text", text: Schema.decodeUnknownSync(Schema.String)(value) })
-            if (Buffer.byteLength(JSON.stringify(content)) > 1048576) throw new Error("Code output exceeds 1 MiB.")
+            append({ type: "text", text: Schema.decodeUnknownSync(Schema.String)(value) })
           },
           value(output: unknown) {
-            return Schema.decodeUnknownSync(Schema.MutableJson)(output)
+            const selected = Schema.decodeUnknownSync(Schema.MutableJson)(output)
+            if (Buffer.byteLength(JSON.stringify(selected)) > outputLimit)
+              throw new Error("Code output exceeds its byte limit.")
+
+            state.selected = selected
           },
           resource(value: unknown) {
             const block = Schema.decodeUnknownSync(Input)(value)
@@ -190,7 +201,7 @@ export async function runCode(
               Object.entries(block).some(([key, value]) => key !== "type" && !isDeepStrictEqual(observed[key], value))
             )
               throw new Error("Resource was not observed by this invocation.")
-            content.push({ ...block, type: "resource_link" })
+            append({ ...block, type: "resource_link" })
           },
         },
       }),
@@ -207,9 +218,11 @@ export async function runCode(
     )
     if (state.failure) throw state.failure
     if (!result.ok) throw new Error(result.error.kind + ": " + result.error.message)
-    return {
-      content: [...content, ...(result.logs ?? []).map((text) => ({ type: "text", text }))],
-      structured_content: Schema.decodeUnknownSync(Schema.MutableJson)(result.value),
+    const output = {
+      content,
+      structured_content: result.valueAbsent
+        ? (state.selected ?? null)
+        : Schema.decodeUnknownSync(Schema.MutableJson)(result.value),
       ...(result.truncated || result.warnings?.length
         ? {
             metadata: {
@@ -221,6 +234,9 @@ export async function runCode(
           }
         : {}),
     }
+    if (Buffer.byteLength(JSON.stringify(output)) > outputLimit) throw new Error("Code output exceeds its byte limit.")
+
+    return output
   } finally {
     if (!signal.aborted) await Promise.allSettled([...accepting])
     // Ending the interpreter interrupts local waits. Cancel only work still owned by this invocation.

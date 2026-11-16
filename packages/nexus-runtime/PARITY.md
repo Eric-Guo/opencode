@@ -1,10 +1,14 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`31b82029d75d1ed9626b80739e4caca16671b344`. Paths in the first column are relative
+`ef798b1d6828b984a4a02b6dfc8aba34003d7d69`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
+
+The current reference differs from the previous baseline
+`31b82029d75d1ed9626b80739e4caca16671b344` only in Ruby dependency locks and
+`rho-env` gem dependencies. Its production source and reference tests are unchanged.
 
 ## Application and executor
 
@@ -67,6 +71,14 @@ Local evidence names use the `.test.ts` suffix. `rho-webui` belongs to
   Supported syntax, copied values, native tool errors, final-expression results,
   interruption and structural limits follow OpenCode. Full Rho source compatibility
   and its heap/computation limits are intentional differences.
+- Output selection preserves Rho's `value()` contract: a later undefined result
+  retains the last selection; a defined return or native final expression overrides
+  it, including explicit null. Text, native console lines and observed resource
+  links keep their invocation order and remain buffered until successful completion.
+  Nexus UI task inspection retains structured false, zero and null without adding
+  them to the model-visible text. `CodeMode.Success.valueAbsent` distinguishes an
+  undefined completion from JSON null; the optional synchronous `onConsole` host
+  observer preserves native formatting and is supplied again on snapshot resume.
 - Nexus helpers preserve frozen tool restrictions, child model subsets, operation
   receipts, questions, observations, observed resources and background ownership.
   Explicit `nexus.start`/`nexus.wait` handles replace Promise-attached operation keys.
@@ -198,3 +210,28 @@ structured false, zero or null), and `test/executor.test.ts` (one native child
 operation and durable structured false despite duplicate work notifications).
 The Nexus UI browser regression covers approval, printed output, sealed-request
 inspection and reload without submitting another input or approval.
+
+## Current alignment review
+
+The current inventory retains production TypeScript owners and executable evidence
+for all eleven non-WebUI packages listed above. `rho-webui` remains owned by
+`packages/nexus-ui`; the empty `rho-runner` directory introduces no additional runtime.
+The existing native service, shell, MCP/OAuth, filesystem, snapshot, PTY and approval
+owners remain the integration boundaries.
+
+The output regressions now cover selection after later text/console/resource calls,
+copied selections, explicit null versus undefined completion, repeated selections,
+combined output bounds, cancellation/failure and clean subsequent invocations.
+The executor test runs one native child and settles structured false despite
+duplicate notifications. The UI bridge and browser tests retain false, zero and null
+in task inspection alongside ordered text, across approval and reload.
+
+Validation passed: 309 runtime conformance tests with real Chromium/WebRTC, 1,643
+Code Mode tests, 403 UI unit tests and 64 browser component tests. Code Mode's
+snapshot round-trip mode passed 1,642 tests with one existing mode-specific skip;
+the resume regression verifies observer replacement without replaying old console
+lines. Package type checks/builds and root `bun run check` passed. Root lint retains
+227 existing advisory warnings and zero errors. One unchanged attachment-menu focus
+test failed in the first browser run, then passed three isolated repeats and the
+complete browser rerun. External account interoperability remains covered here by
+local fixtures; this review did not change live service pairing or account state.
