@@ -3,12 +3,96 @@ import path from "node:path"
 import { rename, rm } from "node:fs/promises"
 import { brotliCompressSync } from "node:zlib"
 import { pathToFileURL } from "node:url"
+import { createCipheriv } from "node:crypto"
 import { build } from "vite"
 import { appArchiveAsset, mainConfig, payloadAssetsPlugin, rawTextPlugin } from "../vite.node.config"
 import { sidecarConfig } from "../vite.sidecar.config"
 import { nodeTarget } from "../src/node/target"
 import { AppArchive } from "../src/app-archive"
 import { tmpdir } from "./fixture/tmpdir"
+
+test.each(["build", "build-node"])("%s rejects a missing SSO key before replacing existing output", async (script) => {
+  await using temporary = await tmpdir()
+  await Bun.write(path.join(temporary.path, "previous.txt"), "previous build")
+
+  const child = Bun.spawn({
+    cmd: [
+      process.execPath,
+      "--no-env-file",
+      path.resolve(import.meta.dirname, `../script/${script}.ts`),
+      `--outdir=${temporary.path}`,
+    ],
+    env: { ...process.env, SIGMA_AES_128_ECB_KEY: undefined },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const error = await new Response(child.stderr).text()
+
+  expect(await child.exited).not.toBe(0)
+  expect(error).toContain("SIGMA_AES_128_ECB_KEY must contain exactly 16 UTF-8 bytes in the build environment")
+  expect(await Bun.file(path.join(temporary.path, "previous.txt")).text()).toBe("previous build")
+})
+
+test.each(["cli", "sidecar"])(
+  "embeds the SSO key in the %s without requiring a runtime environment key",
+  async (target) => {
+    await using temporary = await tmpdir()
+    const key = "0123456789abcdef"
+    const cipher = createCipheriv("aes-128-ecb", Buffer.from(key), null)
+    const data =
+      cipher.update(JSON.stringify({ chinese_name: "测试用户", opencode_api_key: "sso-test-key" }), "utf8", "base64") +
+      cipher.final("base64")
+    const entry = path.join(temporary.path, "entry.mjs")
+    await Bun.write(
+      entry,
+      `export { ensureSsoUsername } from ${JSON.stringify(path.resolve(import.meta.dirname, "../../thape/src/sso.ts"))}`,
+    )
+    const config = (target === "cli" ? mainConfig : sidecarConfig)({
+      version: "test",
+      channel: "test",
+      assetHash: "test",
+      target: nodeTarget(process.platform, process.arch),
+      sigmaKey: key,
+    })
+    const outDir = path.join(temporary.path, "built")
+    await build({
+      configFile: false,
+      logLevel: "silent",
+      define: config.define,
+      ssr: { noExternal: true },
+      build: {
+        ssr: entry,
+        outDir,
+        rollupOptions: { output: { format: "esm", entryFileNames: "index.mjs" } },
+      },
+    })
+    const child = Bun.spawn({
+      cmd: [
+        "node",
+        "--input-type=module",
+        "--eval",
+        `import assert from "node:assert/strict"
+assert.equal(process.env.SIGMA_AES_128_ECB_KEY, undefined)
+const sso = await import(${JSON.stringify(pathToFileURL(path.join(outDir, "index.mjs")).href)})
+process.env.THAPE_SSO_BEARER_API_KEY = "test-token"
+await sso.ensureSsoUsername(() => Promise.resolve(Response.json({data: ${JSON.stringify(data)}})))
+assert.equal(process.env.THAPE_SSO_USER_NAME, "测试用户")
+assert.equal(process.env.OPENCODE_API_KEY, "sso-test-key")`,
+      ],
+      env: {
+        ...process.env,
+        SIGMA_AES_128_ECB_KEY: undefined,
+        THAPE_SSO_USER_NAME: undefined,
+        OPENCODE_API_KEY: undefined,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const error = await new Response(child.stderr).text()
+
+    expect(await child.exited, error).toBe(0)
+  },
+)
 
 test.each(["cli", "sidecar"])("bundles the selected release catalog in the %s", async (target) => {
   await using temporary = await tmpdir()
