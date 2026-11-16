@@ -17,6 +17,7 @@ export function sidecarConfig(input: NodeBuildInput): UserConfig {
     plugins: [rawTextPlugin(input.modelsSnapshot), runtimeRequirePlugin(), fffNodePlugin()],
     resolve,
     define: {
+      SIGMA_AES_128_ECB_KEY: JSON.stringify(process.env.SIGMA_AES_128_ECB_KEY) ?? "undefined",
       OPENCODE_VERSION: JSON.stringify(input.version),
       OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
