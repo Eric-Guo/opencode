@@ -1,10 +1,29 @@
 export * as ThapeSso from "./sso.js"
 
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { createDecipheriv } from "node:crypto"
 import { Observability } from "@opencode/util/observability"
 import { KimiEnvironment } from "@opencode/util/kimi-environment"
 
+declare const SIGMA_AES_128_ECB_KEY: string | undefined
+
 const SSO_SIGMA_URL = "https://sso.thape.com.cn/api/sigma_agents.json"
+const SsoResponse = Schema.Struct({ data: Schema.String })
+const SsoUserInfo = Schema.fromJsonString(
+  Schema.Struct({
+    chinese_name: Schema.optional(Schema.NullOr(Schema.String)),
+    email: Schema.optional(Schema.NullOr(Schema.String)),
+    clerk_code: Schema.optional(Schema.NullOr(Schema.String)),
+    opencode_api_key: Schema.optional(Schema.NullOr(Schema.String)),
+    kimi_api_keys: Schema.optional(Schema.Unknown),
+    siliconflow_cn_api_key: Schema.optional(Schema.NullOr(Schema.String)),
+    moonshot_api_key: Schema.optional(Schema.NullOr(Schema.String)),
+    exa_api_key: Schema.optional(Schema.NullOr(Schema.String)),
+    cerebras_api_key: Schema.optional(Schema.NullOr(Schema.String)),
+    vipai_api_key: Schema.optional(Schema.NullOr(Schema.String)),
+    hide_agents: Schema.optional(Schema.Unknown),
+  }),
+)
 const bun = globalThis as typeof globalThis & { Bun?: { env: Record<string, string | undefined> } }
 let hideAgents: string[] = []
 let loaded = false
@@ -99,24 +118,20 @@ export async function ensureSsoUsername(request: (url: string, init: RequestInit
 
   const payload = await response
     .json()
-    .then(
-      (value) =>
-        value as {
-          chinese_name: string
-          email: string
-          clerk_code: string
-          opencode_api_key: string
-          kimi_api_keys: unknown
-          siliconflow_cn_api_key: string
-          moonshot_api_key: string
-          exa_api_key: string
-          cerebras_api_key: string
-          vipai_api_key: string
-          hide_agents: string[]
-        },
-    )
-    .catch(async (error) => {
-      await log(Effect.logWarning("SSO username response JSON parse failed", { error }))
+    .then((value: unknown) => {
+      const encrypted = Schema.decodeUnknownSync(SsoResponse)(value)
+      const key =
+        typeof SIGMA_AES_128_ECB_KEY === "string" ? SIGMA_AES_128_ECB_KEY : runtimeEnv("SIGMA_AES_128_ECB_KEY")
+      if (!key) throw new Error("SIGMA_AES_128_ECB_KEY is not set")
+
+      // Ruby's AesEncryptDecrypt uses PKCS#7 padding and line-wrapped Base64.
+      const decipher = createDecipheriv("aes-128-ecb", Buffer.from(key, "utf8"), null)
+      return Schema.decodeUnknownSync(SsoUserInfo)(
+        decipher.update(encrypted.data, "base64", "utf8") + decipher.final("utf8"),
+      )
+    })
+    .catch(async () => {
+      await log(Effect.logWarning("SSO username response decryption or JSON decoding failed"))
       return undefined
     })
   if (!payload) return
@@ -131,8 +146,8 @@ export async function ensureSsoUsername(request: (url: string, init: RequestInit
   KimiEnvironment.names().forEach(deleteRuntimeEnv)
   kimiKeys.forEach((key, index) => setRuntimeEnv(KimiEnvironment.name(index), key))
   if (payload.moonshot_api_key) setRuntimeEnv("DOC_MOONSHOT_API_KEY", payload.moonshot_api_key)
-  setRuntimeEnv("THAPE_SSO_USER_NAME", payload.chinese_name || payload.email)
-  setRuntimeEnv("THAPE_SSO_CLERK_CODE", payload.clerk_code)
+  setRuntimeEnv("THAPE_SSO_USER_NAME", payload.chinese_name || payload.email || "")
+  setRuntimeEnv("THAPE_SSO_CLERK_CODE", payload.clerk_code ?? "")
   setRuntimeEnv("OPENCODE_ENABLE_EXA", "true")
   setRuntimeEnv("OPENCODE_ENABLE_OPENTELEMETRY", "false")
 
@@ -142,8 +157,8 @@ export async function ensureSsoUsername(request: (url: string, init: RequestInit
   }
 
   setRuntimeEnv("OPENCODE_API_KEY", payload.opencode_api_key)
-  setRuntimeEnv("SILICONFLOW_CN_API_KEY", payload.siliconflow_cn_api_key)
-  setRuntimeEnv("EXA_API_KEY", payload.exa_api_key)
-  setRuntimeEnv("CEREBRAS_API_KEY", payload.cerebras_api_key)
-  setRuntimeEnv("VIPAI_API_KEY", payload.vipai_api_key)
+  setRuntimeEnv("SILICONFLOW_CN_API_KEY", payload.siliconflow_cn_api_key ?? "")
+  setRuntimeEnv("EXA_API_KEY", payload.exa_api_key ?? "")
+  setRuntimeEnv("CEREBRAS_API_KEY", payload.cerebras_api_key ?? "")
+  setRuntimeEnv("VIPAI_API_KEY", payload.vipai_api_key ?? "")
 }
