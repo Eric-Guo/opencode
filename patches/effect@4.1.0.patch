@@ -1,0 +1,30 @@
+diff --git a/dist/internal/effect.js b/dist/internal/effect.js
+index 44751aaed6c5385248c52785dee49c598b92373d..0bfc480650af1275030604108d627e7a330028ab 100644
+--- a/dist/internal/effect.js
++++ b/dist/internal/effect.js
+@@ -448,7 +448,9 @@ export class FiberImpl {
+     }
+     this._stack.length = 0;
+     this._children = undefined;
+-    this.context = Context.empty();
++    // Release context-derived caches too; completed fibers can outlive their callers.
++    // setContext replaces the shared cache without changing failure annotations.
++    this.setContext(Context.empty());
+   }
+   runLoop(effect) {
+     const prevFiber = globalThis[currentFiberTypeId];
+diff --git a/src/internal/effect.ts b/src/internal/effect.ts
+index 5887c2b25b10ceca4313bdc3cb8e4c54207f6d42..f8b1511778123e165221cf3fdc5b3eb6b0d380e1 100644
+--- a/src/internal/effect.ts
++++ b/src/internal/effect.ts
+@@ -660,7 +660,9 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
+     }
+     this._stack.length = 0
+     this._children = undefined
+-    this.context = Context.empty()
++    // Release context-derived caches too; completed fibers can outlive their callers.
++    // setContext replaces the shared cache without changing failure annotations.
++    this.setContext(Context.empty())
+   }
+   runLoop(effect: Primitive): Exit.Exit<A, E> | Yield {
+     const prevFiber = (globalThis as any)[currentFiberTypeId]
