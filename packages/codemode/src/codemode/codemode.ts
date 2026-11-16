@@ -86,6 +86,8 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   extensions?: Extensions
   /** Resource limits enforced on each execution. Time counts active time only, across every resume of a run. */
   limits?: ExecutionLimits
+  /** Observes each formatted console line synchronously, before result truncation. */
+  onConsole?: (line: string) => void
 }
 
 /** The Effect environment an execution needs: what the tools and the extensions' Effect globals require. */
@@ -140,6 +142,8 @@ const ToolCallSchema = Schema.Struct({ name: Schema.String })
 export const Success = Schema.Struct({
   ok: Schema.Literal(true),
   value: Schema.Json,
+  /** The program produced undefined; value remains null for JSON compatibility. */
+  valueAbsent: Schema.optionalKey(Schema.Literal(true)),
   warnings: Schema.optionalKey(Schema.Array(Diagnostic)),
   logs: Schema.optionalKey(Schema.Array(Schema.String)),
   truncated: Schema.optionalKey(Schema.Boolean),
@@ -263,6 +267,7 @@ export function make<
     if (known !== undefined) return known
     // The tools' and extensions' environment, which the language runtime can't infer through them.
     const made = Language.make({
+      onConsole: options.onConsole,
       globals: (run) => ({
         ...ToolRuntime.globals(prepared, hooks, run, limits.maxToolCalls),
         ...Object.fromEntries(
