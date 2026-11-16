@@ -18,7 +18,9 @@ export const consoleGlobal = <R>(ctx: Interpreter<R>) => {
         name,
         0,
         (_, args) => {
-          ctx.logs.push(formatConsoleMessage(name, args))
+          const line = formatConsoleMessage(name, args)
+          ctx.logs.push(line)
+          ctx.onConsole?.(line)
           return undefined
         },
       ],

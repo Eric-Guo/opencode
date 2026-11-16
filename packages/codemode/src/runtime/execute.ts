@@ -30,6 +30,7 @@ export type Setup<R> = {
   readonly prepared: ToolRuntime.Prepared<R>
   readonly limits: ResolvedExecutionLimits
   readonly hooks: ToolRuntime.Hooks<R>
+  readonly onConsole?: ((line: string) => void) | undefined
   /** The host's globals, made again for a restored run; see `Interpreter`. */
   readonly globals?: Globals<R> | undefined
   /** Whether the host globals can hand the program values with no data form (extensions can). */
@@ -125,6 +126,7 @@ const instantiate = <R>(setup: Setup<R>, bindings?: Globals<R>): Interpreter<R> 
     tools: ToolRuntime.make(setup.prepared, setup.limits.maxToolCalls, setup.hooks),
     builtins: createBuiltins(),
     logs: [],
+    onConsole: setup.onConsole,
     globals: setup.globals,
     bindings,
   })
@@ -215,7 +217,7 @@ export class Running<R> {
     const toolCalls = () => self.ctx.tools.calls
     const failed = (error: Diagnostic): Result => ({ ok: false, error, ...logged(), toolCalls: toolCalls() })
     // Set only after copy-out so timeouts cannot report invalid values as completed.
-    let returned: { value: DataValue; warnings: () => Array<Diagnostic> } | undefined
+    let returned: { value: DataValue; valueAbsent?: true; warnings: () => Array<Diagnostic> } | undefined
 
     const base = Effect.gen(function* () {
       const driver = self.driver
@@ -226,14 +228,16 @@ export class Running<R> {
       self.finished = true
       if (!outcome.ok) return failed(normalizeError(outcome.error))
       const result = (outcome.value as DataValue | undefined) ?? null
+      const absent = outcome.value === undefined ? { valueAbsent: true as const } : {}
       const vm = self.ctx.vm
-      returned = { value: result, warnings: () => vm.diagnostics() }
+      returned = { value: result, ...absent, warnings: () => vm.diagnostics() }
       // Host work the program left running is interrupted, not awaited.
       yield* driver.interrupt()
       const warnings = vm.diagnostics()
       return {
         ok: true,
         value: result,
+        ...absent,
         ...(warnings.length > 0 ? { warnings } : {}),
         ...logged(),
         toolCalls: toolCalls(),
@@ -257,6 +261,7 @@ export class Running<R> {
                   return {
                     ok: true,
                     value: returned.value,
+                    ...(returned.valueAbsent ? { valueAbsent: true } : {}),
                     warnings: [
                       {
                         kind: "TimeoutExceeded",
@@ -487,6 +492,14 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   const warningsPart = keptWarnings.length > 0 ? { warnings: keptWarnings } : {}
   const logsPart = kept.length > 0 ? { logs: kept } : {}
   return result.ok
-    ? { ok: true, value, ...warningsPart, ...logsPart, truncated: true, toolCalls: result.toolCalls }
+    ? {
+        ok: true,
+        value,
+        ...(result.valueAbsent ? { valueAbsent: true } : {}),
+        ...warningsPart,
+        ...logsPart,
+        truncated: true,
+        toolCalls: result.toolCalls,
+      }
     : { ok: false, error: result.error, ...logsPart, truncated: true, toolCalls: result.toolCalls }
 }
