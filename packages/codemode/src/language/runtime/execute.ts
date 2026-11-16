@@ -29,6 +29,7 @@ export type Result =
   | {
       readonly ok: true
       readonly value: Json
+      readonly valueAbsent?: true
       readonly warnings?: ReadonlyArray<Diagnostic>
       readonly logs?: ReadonlyArray<string>
       readonly truncated?: boolean
@@ -71,6 +72,7 @@ type Globals<R> = (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value
 /** How a runtime runs programs: its limits and host globals, shared by every run it starts. */
 export type Setup<R> = {
   readonly limits: Limits
+  readonly onConsole?: ((line: string) => void) | undefined
   readonly translate?: Required<Translate> | undefined
   /** Each run's host globals (see `Host`): made when it starts, and again for a restored run. */
   readonly globals?: ((run: Run) => Readonly<Record<string, unknown>>) | undefined
@@ -170,6 +172,7 @@ const instantiate = <R>(setup: Setup<R>, run: Run, bindings?: Readonly<Record<st
     builtins: createBuiltins(),
     logs: [],
     modules: setup.modules,
+    onConsole: setup.onConsole,
     globals: (ctx) => [
       ...(setup.programGlobals?.(ctx) ?? []),
       ...(setup.globals === undefined ? [] : hostGlobals(ctx, setup.globals(run), setup.translate)),
@@ -269,7 +272,7 @@ export class Running<R> {
     const metadata = () => self.run_.metadata
     const failed = (error: Diagnostic): Result => ({ ok: false, error, ...logged(), metadata: metadata() })
     // Set only after copy-out so timeouts cannot report invalid values as completed.
-    let returned: { value: Json; warnings: () => Array<Diagnostic> } | undefined
+    let returned: { value: Json; valueAbsent?: true; warnings: () => Array<Diagnostic> } | undefined
 
     const base = Effect.gen(function* () {
       const driver = self.driver
@@ -280,14 +283,16 @@ export class Running<R> {
       self.finished = true
       if (!outcome.ok) return failed(normalizeError(outcome.error))
       const result = (outcome.value as Json | undefined) ?? null
+      const absent = outcome.value === undefined ? { valueAbsent: true as const } : {}
       const vm = self.ctx.vm
-      returned = { value: result, warnings: () => vm.diagnostics() }
+      returned = { value: result, ...absent, warnings: () => vm.diagnostics() }
       // Host work the program left running is interrupted, not awaited.
       yield* driver.interrupt()
       const warnings = vm.diagnostics()
       return {
         ok: true,
         value: result,
+        ...absent,
         ...(warnings.length > 0 ? { warnings } : {}),
         ...logged(),
         metadata: metadata(),
@@ -311,6 +316,7 @@ export class Running<R> {
                   return {
                     ok: true,
                     value: returned.value,
+                    ...(returned.valueAbsent ? { valueAbsent: true } : {}),
                     warnings: [
                       {
                         kind: "TimeoutExceeded",
@@ -540,6 +546,14 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   const warningsPart = keptWarnings.length > 0 ? { warnings: keptWarnings } : {}
   const logsPart = kept.length > 0 ? { logs: kept } : {}
   return result.ok
-    ? { ok: true, value, ...warningsPart, ...logsPart, truncated: true, metadata: result.metadata }
+    ? {
+        ok: true,
+        value,
+        ...(result.valueAbsent ? { valueAbsent: true } : {}),
+        ...warningsPart,
+        ...logsPart,
+        truncated: true,
+        metadata: result.metadata,
+      }
     : { ok: false, error: result.error, ...logsPart, truncated: true, metadata: result.metadata }
 }
