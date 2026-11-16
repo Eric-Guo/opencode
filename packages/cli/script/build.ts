@@ -222,6 +222,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       windows: {},
     },
     define: {
+      SIGMA_AES_128_ECB_KEY: JSON.stringify(process.env.SIGMA_AES_128_ECB_KEY) ?? "undefined",
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_CLI_NAME: "'opencode'",
       OPENCODE_CHANNEL: `'${Script.channel}'`,
