@@ -396,6 +396,48 @@ describe("CodeMode call hooks", () => {
 })
 
 describe("CodeMode console capture", () => {
+  test("observes formatted console lines synchronously among extension calls", async () => {
+    const events: string[] = []
+    const runtime = CodeMode.make({
+      onConsole: (line) => events.push(line),
+      extensions: [
+        Extension.make({
+          name: "output",
+          globals: {
+            mark: (label: string) => {
+              events.push(label)
+            },
+          },
+        }),
+      ],
+    })
+    const result = await Effect.runPromise(
+      runtime.execute('mark("first"); console.log("second", {ok:true}); mark("third"); return null'),
+    )
+
+    expect(events).toEqual(["first", 'second {"ok":true}', "third"])
+    expect(result).toMatchObject({ ok: true, value: null, logs: ['second {"ok":true}'] })
+    await Effect.runPromise(runtime.execute('console.warn("fourth"); return null'))
+    expect(events).toEqual(["first", 'second {"ok":true}', "third", "[warn] fourth"])
+  })
+
+  test("distinguishes an absent result from explicit null across the JSON boundary", async () => {
+    for (const code of [
+      "return undefined",
+      'console.log("done")',
+      "const done = true",
+      "await Promise.resolve(undefined)",
+    ]) {
+      const result = await Effect.runPromise(CodeMode.execute({ code }))
+
+      expect(result).toMatchObject({ ok: true, value: null, valueAbsent: true })
+      expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toEqual(result)
+    }
+
+    for (const code of ["return null", "null", "await Promise.resolve(null)"])
+      expect(await Effect.runPromise(CodeMode.execute({ code }))).toEqual({ ok: true, value: null, toolCalls: [] })
+  })
+
   test("captures console output as bounded result logs", async () => {
     const result = await Effect.runPromise(
       CodeMode.execute({
@@ -410,6 +452,7 @@ describe("CodeMode console capture", () => {
     expect(result).toStrictEqual({
       ok: true,
       value: null,
+      valueAbsent: true,
       logs: ['Thread info: {"name":"Demo","count":2}', "[warn] careful"],
       toolCalls: [],
     })
@@ -1363,13 +1406,13 @@ describe("CodeMode public contract", () => {
   test("does not implicitly return expressions nested in control flow", async () => {
     const result = await Effect.runPromise(CodeMode.execute({ code: `if (true) { 2 }` }))
 
-    expect(result).toStrictEqual({ ok: true, value: null, toolCalls: [] })
+    expect(result).toStrictEqual({ ok: true, value: null, valueAbsent: true, toolCalls: [] })
   })
 
   test("returns null when the final top-level statement is not an expression", async () => {
     const result = await Effect.runPromise(CodeMode.execute({ code: `1; const value = 2` }))
 
-    expect(result).toStrictEqual({ ok: true, value: null, toolCalls: [] })
+    expect(result).toStrictEqual({ ok: true, value: null, valueAbsent: true, toolCalls: [] })
   })
 
   test("rejects invalid configuration and search limits", async () => {

@@ -22,6 +22,8 @@ export type NamespaceHandler = {
 export class Interpreter<R> {
   readonly builtins: Builtins
   readonly logs: Array<string>
+  /** Host observer supplied again by the resuming runtime, never stored in snapshots. */
+  readonly onConsole?: ((line: string) => void) | undefined
   /** Runs program code, and keeps the job queue, promises, and host calls the program waits on. */
   readonly vm: Vm
   /** Names for this runtime's intrinsics, taken before any program code can change a built-in. */
@@ -45,6 +47,7 @@ export class Interpreter<R> {
     readonly logs?: Array<string>
     /** Module names that load a global, beyond its own name; see `Runtime.Options`. */
     readonly modules?: Readonly<Record<string, string>> | undefined
+    readonly onConsole?: ((line: string) => void) | undefined
     /** The host's globals (extensions, a test harness): made again, the same way, when a saved run is restored. */
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
     /** Data bound for this program, part of its saved state; host globals of the same name win. */
@@ -53,6 +56,7 @@ export class Interpreter<R> {
     this.builtins = options.builtins
     this.logs = options.logs ?? []
     this.moduleGlobals = options.modules ?? {}
+    this.onConsole = options.onConsole
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     this.globalScope = new Map<string, Binding>([["this", { value: undefined }]])
     // Everything made from here to the host globals is an intrinsic, with a static id (see `IntrinsicNames`).

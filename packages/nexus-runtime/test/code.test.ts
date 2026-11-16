@@ -24,6 +24,103 @@ test("code preserves false, zero and explicit null and buffers selected text", a
   })
 })
 
+test.each([false, 0, null])("code retains selected %j through later output and tool calls", async (value) => {
+  const capture = { type: "resource_link", uri: "nexus://uploads/report", name: "report.md" }
+  const result = await run(
+    `value("old"); value(params.value); text("first");
+const result = await tools.read({path:"report.md"});
+console.log("second", {ok:true}); resource(result.content[0]); text("third");`,
+    { value },
+    declarations,
+    async () => ({ status: "completed", content: [capture] }),
+    signal,
+  )
+
+  expect(result).toEqual({
+    content: [
+      { type: "text", text: "first" },
+      { type: "text", text: 'second {"ok":true}' },
+      capture,
+      { type: "text", text: "third" },
+    ],
+    structured_content: value,
+  })
+})
+
+test("code return and final expressions override value selections without confusing null with undefined", async () => {
+  for (const source of ["value(false); return null", "value(false); null", "value(false); await Promise.resolve(null)"])
+    expect((await run(source, {}, [binding], async () => null, signal)).structured_content).toBeNull()
+
+  for (const source of ["value(false); return", "value(false); undefined", "value(false); const done = true"])
+    expect((await run(source, {}, [binding], async () => null, signal)).structured_content).toBe(false)
+
+  expect((await run('text("alone")', {}, [binding], async () => null, signal)).structured_content).toBeNull()
+  expect((await run("value(1); 2", {}, [binding], async () => null, signal)).structured_content).toBe(2)
+  expect(
+    (
+      await run(
+        'const selected = {ok:true}; value(selected); selected.ok = false; text("done")',
+        {},
+        [binding],
+        async () => null,
+        signal,
+      )
+    ).structured_content,
+  ).toEqual({ ok: true })
+})
+
+test("selected output stays bounded and failed or canceled programs publish no buffered output", async () => {
+  for (const source of ['value(params.large); text("done")', "console.log(params.large)", "text(params.large)"])
+    await expect(
+      run(source, { large: "x".repeat(128) }, [binding], async () => null, signal, {}, { maxOutputBytes: 64 }),
+    ).rejects.toThrow("Code output exceeds")
+
+  await expect(
+    run(
+      "value(params.part); text(params.part)",
+      { part: "x".repeat(48) },
+      [binding],
+      async () => null,
+      signal,
+      {},
+      { maxOutputBytes: 128 },
+    ),
+  ).rejects.toThrow("Code output exceeds")
+
+  await expect(
+    run(
+      'value(false); text("hidden"); console.log("hidden too"); throw new Error("failed")',
+      {},
+      [binding],
+      async () => null,
+      signal,
+    ),
+  ).rejects.toThrow("failed")
+
+  const canceled = new AbortController()
+  const started = Promise.withResolvers<void>()
+  const outcome = Promise.withResolvers<JsonValue>()
+  const program = run(
+    'value(false); text("hidden"); await tools.read({})',
+    {},
+    declarations,
+    async () => {
+      started.resolve()
+      return outcome.promise
+    },
+    canceled.signal,
+  )
+
+  await started.promise
+  canceled.abort(new Error("stopped"))
+  await expect(program).rejects.toThrow("stopped")
+  outcome.resolve(null)
+  expect(await run('console.log("fresh")', {}, [binding], async () => null, signal)).toEqual({
+    content: [{ type: "text", text: "fresh" }],
+    structured_content: null,
+  })
+})
+
 test.each([false, 0, null])("code prints an observed tool result once while retaining structured %j", async (value) => {
   const token = crypto.randomUUID()
   const calls: JsonObject[] = []

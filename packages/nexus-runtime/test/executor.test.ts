@@ -406,7 +406,7 @@ test("Code Mode prints one native child result and retains structured false with
   await Bun.write(fixture.directory + "/child.txt", "native child bytes")
   fixture.add("run", "parent", "code", {
     tool_input: {
-      code: 'const result = await tools.read({path:"child.txt"}); text(JSON.stringify(result)); return false',
+      code: 'const result = await tools.read({path:"child.txt"}); value(false); text("before"); console.log(JSON.stringify(result)); text("after");',
     },
   })
   fixture.control.committed = (_, task, body) => {
@@ -476,10 +476,12 @@ test("Code Mode prints one native child result and retains structured false with
     expect(fixture.commits[1].body).toMatchObject({
       outcome: "completed",
       content: [
+        { type: "text", text: "before" },
         {
           type: "text",
           text: '{"status":"completed","is_error":false,"content":[{"type":"text","text":"native child bytes"}]}',
         },
+        { type: "text", text: "after" },
       ],
       structured_content: false,
     })
