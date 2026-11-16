@@ -26,6 +26,9 @@
     "typecheck:tsc": "tsc --noEmit",
     "test": "bun test"
   },
+  "bundledDependencies": [
+    "psychoscript"
+  ],
   "dependencies": {
     "acorn": "8.15.0",
     "effect": "catalog:",

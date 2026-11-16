@@ -1,0 +1,161 @@
+diff --git a/dist/runtime/execute.d.ts b/dist/runtime/execute.d.ts
+index 797d97e..41723cf 100644
+--- a/dist/runtime/execute.d.ts
++++ b/dist/runtime/execute.d.ts
+@@ -44,6 +44,7 @@ export declare const checkMaxBytes: (maxBytes: number | undefined) => void;
+ export type Result = {
+     readonly ok: true;
+     readonly value: Json;
++    readonly valueAbsent?: true;
+     readonly warnings?: ReadonlyArray<Diagnostic>;
+     readonly logs?: ReadonlyArray<string>;
+     readonly truncated?: boolean;
+@@ -79,6 +80,7 @@ type Globals<R> = (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value
+ /** How a runtime runs programs: its limits and host globals, shared by every run it starts. */
+ export type Setup<R> = {
+     readonly limits: Limits;
++    readonly onConsole?: ((line: string) => void) | undefined;
+     readonly translate?: Required<Translate> | undefined;
+     /** Turns what a plain host function (one inside a result, or among the globals) returned into a value, a Promise or `HostWork`. */
+     readonly adapt?: ((value: unknown, call: Call) => unknown) | undefined;
+diff --git a/dist/runtime/execute.js b/dist/runtime/execute.js
+index a625d69..e3c198e 100644
+--- a/dist/runtime/execute.js
++++ b/dist/runtime/execute.js
+@@ -135,6 +135,7 @@ const instantiate = (setup, run, bindings) => {
+         builtins: createBuiltins(),
+         logs: [],
+         modules: setup.modules,
++        onConsole: setup.onConsole,
+         globals: (ctx) => [
+             ...(setup.programGlobals?.(ctx) ?? []),
+             ...(setup.globals === undefined ? [] : hostGlobals(ctx, setup.globals(run), setup.translate, setup.adapt)),
+@@ -254,15 +255,15 @@ export class Running {
+                 this.finished = true;
+                 if (!outcome.ok)
+                     return failed(normalizeError(outcome.error));
+-                const result = outcome.value ?? null;
++                const result = outcome.value === undefined ? { value: null, valueAbsent: true } : { value: outcome.value };
+                 const vm = this.ctx.vm;
+-                returned = { value: result, warnings: () => vm.diagnostics() };
++                returned = { result, warnings: () => vm.diagnostics() };
+                 // Host work the program left running is interrupted, not awaited.
+                 await driver.interrupt();
+                 const warnings = vm.diagnostics();
+                 return {
+                     ok: true,
+-                    value: result,
++                    ...result,
+                     ...(warnings.length > 0 ? { warnings } : {}),
+                     ...logged(),
+                     metadata: metadata(),
+@@ -282,7 +283,7 @@ export class Running {
+             // Keep the timeout warning first so truncation preserves it.
+             return {
+                 ok: true,
+-                value: returned.value,
++                ...returned.result,
+                 warnings: [
+                     {
+                         kind: "TimeoutExceeded",
+@@ -532,6 +533,6 @@ const boundOutput = (result, maxOutputBytes) => {
+     const warningsPart = keptWarnings.length > 0 ? { warnings: keptWarnings } : {};
+     const logsPart = kept.length > 0 ? { logs: kept } : {};
+     return result.ok
+-        ? { ok: true, value, ...warningsPart, ...logsPart, truncated: true, metadata: result.metadata }
++        ? { ok: true, value, ...(result.valueAbsent ? { valueAbsent: true } : {}), ...warningsPart, ...logsPart, truncated: true, metadata: result.metadata }
+         : { ok: false, error: result.error, ...logsPart, truncated: true, metadata: result.metadata };
+ };
+diff --git a/dist/runtime/interpreter.d.ts b/dist/runtime/interpreter.d.ts
+index c6243ae..2cb869b 100644
+--- a/dist/runtime/interpreter.d.ts
++++ b/dist/runtime/interpreter.d.ts
+@@ -18,6 +18,7 @@ export type NamespaceHandler = {
+ export declare class Interpreter<R> {
+     readonly builtins: Builtins;
+     readonly logs: Array<string>;
++    readonly onConsole?: ((line: string) => void) | undefined;
+     /** Runs program code, and keeps the job queue, promises, and host calls the program waits on. */
+     readonly vm: Vm;
+     /** Names for this runtime's intrinsics, taken before any program code can change a built-in. */
+@@ -40,6 +41,7 @@ export declare class Interpreter<R> {
+     constructor(options: {
+         readonly builtins: Builtins;
+         readonly logs?: Array<string>;
++        readonly onConsole?: ((line: string) => void) | undefined;
+         /** Module names that load a global, beyond its own name; see `Runtime.Options`. */
+         readonly modules?: Readonly<Record<string, string>> | undefined;
+         /** The host's globals (extensions, a test harness): made again, the same way, when a saved run is restored. */
+diff --git a/dist/runtime/interpreter.js b/dist/runtime/interpreter.js
+index 501f287..81adf3b 100644
+--- a/dist/runtime/interpreter.js
++++ b/dist/runtime/interpreter.js
+@@ -9,6 +9,7 @@ import { Prelude } from "../prelude/prelude.js";
+ export class Interpreter {
+     builtins;
+     logs;
++    onConsole;
+     /** Runs program code, and keeps the job queue, promises, and host calls the program waits on. */
+     vm;
+     /** Names for this runtime's intrinsics, taken before any program code can change a built-in. */
+@@ -31,6 +32,7 @@ export class Interpreter {
+     constructor(options) {
+         this.builtins = options.builtins;
+         this.logs = options.logs ?? [];
++        this.onConsole = options.onConsole;
+         this.moduleGlobals = options.modules ?? {};
+         // Program code has no receiver: top-level `this` is undefined, as in a module.
+         this.globalScope = new Map([["this", { value: undefined }]]);
+diff --git a/dist/runtime/options.d.ts b/dist/runtime/options.d.ts
+index 808790b..6e56792 100644
+--- a/dist/runtime/options.d.ts
++++ b/dist/runtime/options.d.ts
+@@ -39,6 +39,8 @@ export type Options<G extends Globals = Globals> = {
+     readonly modules?: Readonly<Record<string, string>> | undefined;
+     /** Budgets every run gets; none by default. */
+     readonly limits?: Limits | undefined;
++    /** Observes each formatted console line before output truncation. */
++    readonly onConsole?: ((line: string) => void) | undefined;
+     /** How host calls receive program functions and promises inside arguments; both fail the call by default. */
+     readonly translate?: Translate | undefined;
+ };
+diff --git a/dist/runtime/options.js b/dist/runtime/options.js
+index 926d8af..8f23a39 100644
+--- a/dist/runtime/options.js
++++ b/dist/runtime/options.js
+@@ -5,6 +5,7 @@ export const makeSetup = (options) => ({
+         maxOutputBytes: validateLimit("maxOutputBytes", options.limits?.maxOutputBytes, 0),
+     },
+     globals: options.globals,
++    onConsole: options.onConsole,
+     modules: options.modules,
+     translate: {
+         functions: options.translate?.functions ?? "error",
+diff --git a/dist/snapshot/codec.js b/dist/snapshot/codec.js
+index ea1c7f6..03f7d6c 100644
+--- a/dist/snapshot/codec.js
++++ b/dist/snapshot/codec.js
+@@ -151,7 +151,7 @@ const builtinSpecs = () => [
+         ctor: Interpreter,
+         anchor: "ctx",
+         fields: ["logs", "globalScope", "modules", "namespaces", "protector"],
+-        skip: ["builtins", "vm", "intrinsics", "hosts", "hostNamespaces", "moduleGlobals", "sources", "prelude"],
++        skip: ["builtins", "vm", "intrinsics", "hosts", "hostNamespaces", "moduleGlobals", "sources", "prelude", "onConsole"],
+     },
+ ];
+ let builtins;
+diff --git a/dist/stdlib/console.js b/dist/stdlib/console.js
+index 9b3946e..9d87031 100644
+--- a/dist/stdlib/console.js
++++ b/dist/stdlib/console.js
+@@ -10,7 +10,9 @@ export const consoleGlobal = (ctx) => {
+         name,
+         0,
+         (_, args) => {
+-            ctx.logs.push(formatConsoleMessage(name, args));
++            const line = formatConsoleMessage(name, args);
++            ctx.logs.push(line);
++            ctx.onConsole?.(line);
+             return undefined;
+         },
+     ]));
