@@ -192,6 +192,35 @@ const suspendBetweenCalls = async (
 }
 
 describe("suspend", () => {
+  test("a resumed program reports only new lines to its console observer", async () => {
+    const read = idempotentManual()
+    const tools = { read: read.tool }
+    const run = background(
+      CodeMode.make({ tools }).program(`
+      console.log("before suspend")
+      await tools.read({ value: 1 })
+      console.log("resumed")
+      return 42
+    `),
+    )
+    await read.called()
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+
+    for (const state of [suspended.state, CodeMode.toBytes(suspended.state)]) {
+      const lines: string[] = []
+      read.reset()
+      const resumed = background(CodeMode.make({ tools, onConsole: (line) => lines.push(line) }).resume(state))
+      await read.called()
+      read.attempts.at(-1)!.answer(1)
+      expect(await Effect.runPromise(resumed.result)).toMatchObject({
+        ok: true,
+        value: 42,
+        logs: ["before suspend", "resumed"],
+      })
+      expect(lines).toEqual(["resumed"])
+    }
+  })
+
   test("a suspend fails while a tool, search, or an extension call is running, and the run goes on", async () => {
     const slow = manual()
     const searching = latch()
