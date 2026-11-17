@@ -9,8 +9,9 @@ const supervisor = `
 trap ':' TERM INT
 (
   trap - TERM INT
+  if [ "$2" != separate ]; then exec 2>&1; fi
   exec /bin/bash -c "$1" 3<&- 4>&-
-) <&0 2>&1 &
+) <&0 &
 child=$!
 printf 'pid %s\\n' "$child" >&4
 exec 0</dev/null 1>/dev/null 2>/dev/null
@@ -29,6 +30,7 @@ kill -KILL -- -$$
 export class OwnedProcess extends EventEmitter {
   readonly child: ChildProcess
   readonly output: Readable
+  readonly stderr: Readable | null
   readonly exited: Promise<void>
   readonly started: Promise<void>
   pid = 0
@@ -38,19 +40,29 @@ export class OwnedProcess extends EventEmitter {
   private released = false
   private killed = false
 
-  constructor(command: string, directory: string, environment: NodeJS.ProcessEnv = process.env) {
+  constructor(
+    command: string,
+    directory: string,
+    environment: NodeJS.ProcessEnv = process.env,
+    separateStderr = false,
+  ) {
     super()
     if (process.platform === "win32") throw new Error("Managed processes require a POSIX process-group host.")
-    this.child = spawn("/bin/bash", ["-c", supervisor, "nexus-process", command], {
-      cwd: directory,
-      env: environment,
-      detached: true,
-      stdio: ["pipe", "pipe", "ignore", "pipe", "pipe"],
-    })
+    this.child = spawn(
+      "/bin/bash",
+      ["-c", supervisor, "nexus-process", command, separateStderr ? "separate" : "combined"],
+      {
+        cwd: directory,
+        env: environment,
+        detached: true,
+        stdio: ["pipe", "pipe", separateStderr ? "pipe" : "ignore", "pipe", "pipe"],
+      },
+    )
     const output = this.child.stdout
     const status = this.child.stdio[4]
     if (!output || !(status instanceof Readable)) throw new Error("Could not open the process supervisor pipes.")
     this.output = output
+    this.stderr = this.child.stderr
     this.exited = new Promise((resolve) => {
       this.child.once("exit", () => {
         this.released = true

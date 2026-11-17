@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process"
+import { searchProcess } from "./search-process"
 import { Schema } from "effect"
+import { dirname } from "node:path"
 
 const Event = Schema.Struct({
   type: Schema.String,
@@ -20,8 +21,15 @@ export async function grepMatches(
   signal: AbortSignal,
 ) {
   signal.throwIfAborted()
-  const child = spawn(
-    "rg",
+  const executable = Bun.which("rg", { PATH: process.env.PATH })
+  if (!executable)
+    return {
+      error:
+        "ripgrep (rg) was not found on PATH. Install ripgrep (e.g. brew install ripgrep or apt install ripgrep) to use grep",
+    }
+
+  const child = await searchProcess(
+    executable,
     [
       "--json",
       "--line-number",
@@ -34,28 +42,17 @@ export async function grepMatches(
       input.pattern,
       path,
     ],
-    { stdio: ["ignore", "pipe", "pipe"], signal, windowsHide: true },
+    dirname(path),
+    signal,
+    10,
   )
-  const ended = new Promise<{ status: number | null; error?: Error }>((resolve) => {
-    child.once("error", (error) => resolve({ status: null, error }))
-    child.once("close", (status) => resolve({ status }))
-  })
-  let stderr = Buffer.alloc(0)
-  child.stderr.on("data", (chunk: Buffer) => {
-    stderr = Buffer.concat([stderr, chunk]).subarray(-8192)
-  })
   const matches: { path: string; line: number; text?: string }[] = []
   let count = 0
   let oversized = 0
-  let prefix = Buffer.alloc(0)
-  let overflow = false
-  const consume = (chunk: Buffer, complete: boolean) => {
-    if (prefix.length + chunk.length > 51200) overflow = true
-    if (!overflow) prefix = Buffer.concat([prefix, chunk])
-    if (!complete) return
-    if (overflow) oversized++
-    if (!overflow) {
-      const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Event))(prefix.toString())
+  for await (const record of child.records()) {
+    if (record.overflow) oversized++
+    if (!record.overflow) {
+      const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Event))(record.content.toString())
       if (decoded._tag === "Some" && decoded.value.type === "match") {
         count++
         const data = decoded.value.data
@@ -63,40 +60,12 @@ export async function grepMatches(
           matches.push({ path: data.path.text, line: data.line_number, text: data.lines?.text })
       }
     }
-    prefix = Buffer.alloc(0)
-    overflow = false
+    if (count >= limit) break
   }
-  try {
-    for await (const chunk of child.stdout) {
-      signal.throwIfAborted()
-      const bytes = Buffer.from(chunk)
-      let at = 0
-      while (at < bytes.length && count < limit) {
-        const newline = bytes.indexOf(10, at)
-        consume(bytes.subarray(at, newline < 0 ? bytes.length : newline + 1), newline >= 0)
-        at = newline < 0 ? bytes.length : newline + 1
-      }
-      if (count >= limit) {
-        child.kill()
-        break
-      }
-    }
-    if (count < limit && (prefix.length || overflow)) consume(Buffer.alloc(0), true)
-    const outcome = await ended
-    signal.throwIfAborted()
-    if (outcome.error || (count < limit && outcome.status !== 0 && outcome.status !== 1)) {
-      if (outcome.error && "code" in outcome.error && outcome.error.code === "ENOENT")
-        return {
-          error:
-            "ripgrep (rg) was not found on PATH. Install ripgrep (e.g. brew install ripgrep or apt install ripgrep) to use grep",
-        }
-      return {
-        error: stderr.toString().trim() || outcome.error?.message || "ripgrep exited with code " + outcome.status,
-      }
-    }
-    return { matches, count, oversized, limitReached: count >= limit }
-  } finally {
-    child.kill()
-    await ended
-  }
+  const outcome = await child.result
+  signal.throwIfAborted()
+  if (count < limit && outcome.status !== 0 && outcome.status !== 1)
+    return { error: outcome.stderr || "ripgrep exited with code " + outcome.status }
+
+  return { matches, count, oversized, limitReached: count >= limit }
 }
