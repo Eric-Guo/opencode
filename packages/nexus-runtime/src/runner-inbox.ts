@@ -1,5 +1,11 @@
 import {
   APIError,
+  AuthorizationLost,
+  CancelledError,
+  MalformedResponse,
+  NotDurable,
+  TimeoutError,
+  TransportError,
   type AnnouncedTool,
   type ClaimedTask,
   type CommitTask,
@@ -132,6 +138,7 @@ export class RunnerInbox {
     if (this.failure) throw this.failure
     if (this.stopped || this.options.signal.aborted) return
     this.counts.swept++
+    const issue = this.issue
     try {
       const errors = await this.options.journal.recover(this.options.executor, this.options.signal, this.running)
       errors.forEach((error) => this.failed(error))
@@ -146,6 +153,8 @@ export class RunnerInbox {
           .map((row) => this.take({ ...row, role: row.addressed_to!.role })),
       )
       if (this.after) this.options.wake()
+      // Retire only an older issue after clean recovery, without hiding a new or still-owned failure.
+      if (this.issue === issue && !this.running.size) this.issue = null
     } catch (error) {
       this.failed(error)
     }
@@ -189,7 +198,7 @@ export class RunnerInbox {
 
   private failed(error: unknown) {
     this.issue = {
-      type: error instanceof Error ? error.name : "RunnerError",
+      type: failureType(error),
       code: error instanceof APIError ? error.code : null,
     }
     if (error instanceof APIError && error.status === 401) {
@@ -536,4 +545,19 @@ function interrupted(reason: unknown): ClaimResult {
           "The tool timed out. Cancellation was requested; its external effects may be incomplete. Check them before retrying.",
       }
     : { outcome: "failed", content: reason instanceof Error ? reason.message : "The tool was interrupted." }
+}
+
+// SDK errors inherit Error.name. Explicit labels also survive executable minification.
+function failureType(error: unknown) {
+  return (
+    Object.entries({
+      APIError,
+      AuthorizationLost,
+      CancelledError,
+      MalformedResponse,
+      NotDurable,
+      TimeoutError,
+      TransportError,
+    }).find(([, type]) => error instanceof type)?.[0] ?? (error instanceof Error ? error.name : "RunnerError")
+  )
 }
