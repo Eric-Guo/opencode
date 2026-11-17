@@ -31,6 +31,8 @@ import { packageTools } from "./package-tools"
 import { capabilityConfiguration, compactionInstructions } from "./capabilities"
 import { mcpDirectory } from "./preset-mcp"
 import type { Nexus } from "@opencode/schema/nexus"
+import { executionConfiguration } from "./execution-settings"
+import type { BuiltinPolicy } from "./runner-inbox"
 import { Checkpoints } from "./checkpoints"
 export type { NexusExtension, RunnerTool, RunnerContext } from "./extensions"
 export type {
@@ -389,18 +391,41 @@ export class NexusRuntime {
     const member = new Client({ baseURL: settings.origin, credentialProvider: credentials.provider("member") })
     const options = { baseURL: settings.origin, credentialProvider: async () => credentials.provider("executor")() }
     const executor = new ExecutorClient(options)
-    const refresh = (role: "agent" | "runner" = "runner") => [
-      ...(role === "runner"
-        ? tools.filter(
-            (tool) =>
-              (this.host || !["bash", "find", "grep"].includes(tool.name)) &&
-              (tool.name !== "code" || this.codeModeEnabled()),
-          )
-        : []),
-      ...this.runtimeTools()
-        .filter((tool) => (tool.role ?? "runner") === role)
-        .map((tool) => tool.definition),
-    ]
+    const refresh = (role: "agent" | "runner" = "runner") => {
+      const policy = executionConfiguration(this.extensionManager?.list() ?? [])
+      return [
+        ...(role === "runner"
+          ? tools.filter(
+              (tool) =>
+                (this.host || !["bash", "find", "grep"].includes(tool.name)) &&
+                (tool.name === "code" ? this.codeModeEnabled() : policy.coding),
+            )
+          : []),
+        ...this.runtimeTools()
+          .filter((tool) => (tool.role ?? "runner") === role)
+          .map((tool) => tool.definition),
+      ]
+    }
+    const operators = () => {
+      const policy = executionConfiguration(this.extensionManager?.list() ?? [])
+      return operatorTools.filter((tool) =>
+        ["checkpoints", "checkpoint_restore"].includes(tool.name) ? !!policy.checkpoints : policy.coding,
+      )
+    }
+    const builtins = (): BuiltinPolicy => {
+      const policy = executionConfiguration(this.extensionManager?.list() ?? [])
+      return {
+        tools: [...refresh(), ...operators()],
+        bashTimeoutSeconds: policy.bashTimeoutSeconds,
+        checkpoints: policy.checkpoints
+          ? new Checkpoints(
+              join(this.storage, "checkpoints", settings.identifier),
+              this.defaultEnvironment.root,
+              policy.checkpoints,
+            )
+          : undefined,
+      }
+    }
     const applicationTools = () =>
       this.extensionTools()
         .filter((tool) => tool.role === "agent")
@@ -439,7 +464,7 @@ export class NexusRuntime {
             services: {
               agent: { tools: refresh("agent"), documents: documents("agent") },
               runner: {
-                tools: [...refresh(), ...operatorTools],
+                tools: [...refresh(), ...operators()],
                 documents: documents("runner"),
                 environment: await environment(),
               },
@@ -447,6 +472,8 @@ export class NexusRuntime {
           },
           { signal },
         )
+
+        await builtins().checkpoints?.prune()
 
         const active = this.connection
 
@@ -499,13 +526,9 @@ export class NexusRuntime {
     )
     await this.extensionManager.start()
 
-    const names = [...refresh(), ...operatorTools].map((tool) => tool.name)
+    const names = [...refresh(), ...operators()].map((tool) => tool.name)
     if (new Set(names).size !== names.length) throw new Error("Nexus extensions must provide unique tool names.")
-    const checkpoints = new Checkpoints(
-      join(this.storage, "checkpoints", settings.identifier),
-      this.defaultEnvironment.root,
-    )
-    await checkpoints.prune()
+    await builtins().checkpoints?.prune()
     const journal = new ClaimJournal(join(this.storage, "claims", settings.identifier))
     const admission = new RunnerAdmission()
     while (!signal.aborted) {
@@ -516,7 +539,7 @@ export class NexusRuntime {
             services: {
               agent: { tools: refresh("agent"), documents: documents("agent") },
               runner: {
-                tools: [...availableTools, ...operatorTools],
+                tools: [...availableTools, ...operators()],
                 documents: documents("runner"),
                 environment: await environment(),
               },
@@ -655,6 +678,7 @@ export class NexusRuntime {
             () => ({
               ...this.conversationDefaults(),
               title_model: this.applicationSettings.read().conversation_title_model,
+              bash_timeout_seconds: executionConfiguration(this.extensionManager?.list() ?? []).bashTimeoutSeconds,
               hints: (model) => this.adaptations?.hints(model) ?? "",
               adaptations: (model) => this.adaptations?.facts(model) ?? {},
             }),
@@ -696,7 +720,7 @@ export class NexusRuntime {
           this.defaultEnvironment.root,
           journal,
           AbortSignal.any([signal, ingress.signal]),
-          checkpoints,
+          builtins,
           () => this.runtimeTools(),
           admission,
         )
@@ -796,7 +820,7 @@ export class NexusRuntime {
     directory: string,
     journal: ClaimJournal,
     signal: AbortSignal,
-    checkpoints: Checkpoints,
+    builtins: () => BuiltinPolicy,
     extensions: () => readonly RunnerTool[],
     admission: RunnerAdmission,
   ) {
@@ -810,7 +834,7 @@ export class NexusRuntime {
       extensions,
       admission,
       host: this.host,
-      checkpoints,
+      builtins,
       protectedRoots: [this.storage],
       artifacts: join(this.storage, "artifacts"),
       realtime: new RealtimeClient(options),
