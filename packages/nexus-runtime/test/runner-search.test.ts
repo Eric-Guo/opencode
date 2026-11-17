@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { runnerSearch } from "../src/runner-search"
 
 test("native runner search supports glob paths, literal case-insensitive matching, context and limits", async () => {
@@ -222,3 +223,58 @@ async function readPid(root: string) {
     await Bun.sleep(5)
   }
 }
+
+test("minified search dispatch runs in Node without Bun globals", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "nexus-node-search-")))
+  try {
+    await writeFile(join(root, "plain.txt"), "needle\n")
+    const build = await Bun.build({
+      entrypoints: [fileURLToPath(new URL("../src/runner-search.ts", import.meta.url))],
+      outdir: root,
+      naming: "[name].mjs",
+      target: "node",
+      format: "esm",
+      minify: true,
+    })
+    expect(build.success).toBe(true)
+    await writeFile(
+      join(root, "smoke.mjs"),
+      `
+      import assert from "node:assert/strict"
+      import { runnerSearch } from "./runner-search.mjs"
+      assert.equal(typeof Bun, "undefined")
+      const original = process.env.PATH
+      process.env.PATH = ${JSON.stringify(root)}
+      for (const name of ["find", "grep"]) {
+        const missing = await runnerSearch(${JSON.stringify(root)}, name, {pattern:"needle"}, new AbortController().signal)
+        assert.equal(missing.is_error, true)
+        assert.match(missing.content, /not found/)
+      }
+      process.env.PATH = original
+      if (${!!(Bun.which("fd") || Bun.which("fdfind"))}) {
+        const found = await runnerSearch(${JSON.stringify(root)}, "find", {pattern:"plain.txt"}, new AbortController().signal)
+        assert.equal(found.content, "plain.txt")
+      }
+      if (${!!Bun.which("rg")}) {
+        const found = await runnerSearch(${JSON.stringify(root)}, "grep", {path:"plain.txt",pattern:"needle"}, new AbortController().signal)
+        assert.match(found.content, /plain.txt:1: needle/)
+      }
+      console.log("Node search passed")
+    `,
+    )
+    await using child = Bun.spawn([Bun.which("node") ?? "node", join(root, "smoke.mjs")], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    expect(stderr).not.toContain("Error:")
+    expect(code).toBe(0)
+    expect(stdout).toContain("Node search passed")
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
