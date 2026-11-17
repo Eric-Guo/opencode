@@ -35,6 +35,7 @@ function fixture(group = true) {
   const inputs: { key: string; body: JsonObject; conversation: string }[] = []
   const requests: string[] = []
   const schedules: { key: string; body: JsonObject; path: string }[] = []
+  const scheduleEdits: JsonObject[] = []
   const service = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
     requests.push(path)
@@ -94,6 +95,19 @@ function fixture(group = true) {
         },
         { status: 201 },
       )
+    }
+    if (path.endsWith("/schedules/job")) {
+      if (request.method === "PATCH") scheduleEdits.push(((await request.json()) as { schedule: JsonObject }).schedule)
+      return Response.json({
+        schedule: {
+          ...schedules.at(-1)?.body,
+          ...scheduleEdits.at(-1),
+          public_id: "job",
+          workspace_public_id: "workspace",
+          status: "active",
+          lock_version: scheduleEdits.length,
+        },
+      })
     }
     if (path.endsWith("/schedules/job/pause"))
       return Response.json({
@@ -379,6 +393,7 @@ function fixture(group = true) {
     inputs,
     requests,
     schedules,
+    scheduleEdits,
     state,
     config,
     current,
@@ -629,6 +644,23 @@ test("Telegram scheduling resolves the saved clock and requires explicit absolut
   })
   expect(() => telegramTime("at 2026-11-15T09:00:00", now)).toThrow("UTC offset")
   expect(() => telegramRule("every 0s Impossible", now)).toThrow("positive")
+})
+
+test("Telegram time arguments match the reference grammar without discarding trailing text", () => {
+  expect(telegramTime("in 0s", now)).toBe(new Date(now).toISOString())
+  expect(telegramTime("at 2026-11-17T09:30:00+0800", now)).toBe("2026-11-17T01:30:00.000Z")
+  for (const text of ["in 1m ignored", "now ignored", "at 2026-11-17T09:30Z", "at 2026-11-17T09:30:00Z ignored"])
+    expect(() => telegramTime(text, now)).toThrow()
+})
+
+test("Telegram scheduled prompts retain newlines and spacing through ingress", async () => {
+  using peer = fixture()
+  await peer.open().ingest(connection, message(1, "/job create every 1m First line\n  second  line"), now)
+  expect(peer.schedules[0].body.prompt).toBe("First line\n  second  line")
+  await peer.open().ingest(connection, message(2, "/job edit job prompt Updated\n  second  line"), now + 1)
+  expect(peer.scheduleEdits[0]).toEqual({ prompt: "Updated\n  second  line", expected_lock_version: 0 })
+  await peer.open().ingest(connection, message(3, "/job pause job ignored"), now + 2)
+  expect(peer.requests.filter((path) => path.endsWith("/schedules/job/pause"))).toEqual([])
 })
 
 test("Telegram reminders freeze the due time before admission and survive restart", async () => {
