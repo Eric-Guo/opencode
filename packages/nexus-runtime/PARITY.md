@@ -12,9 +12,10 @@ gem dependency metadata. Its production source and reference tests are unchanged
 
 The November 17, 2026 reviews rechecked the eleven executable non-WebUI packages
 against their production TypeScript owners and local conformance evidence. The
-latest pass corrected search result framing, output budgeting, subprocess cleanup
-and nullable skill names. The complete runtime gate passes 333 tests across 69
-files with real headless Chromium, PTY and WebRTC transports. Details and live
+latest passes corrected search result framing, output budgeting, subprocess cleanup,
+nullable skill names and portable executable lookup. The complete runtime gate passes
+334 tests across 69 files, including a minified Node search regression and real headless
+Chromium, PTY and WebRTC transports. Details and live
 verification are recorded in the final sections below.
 
 ## Application and executor
@@ -583,3 +584,32 @@ and CI require neither Ruby nor the reference checkout. Optional integrations
 remain covered by local transport peers; this pass does not claim external
 Telegram/T3 account interoperability. Applying these source fixes to the installed
 managed service requires rebuilding/restarting it.
+
+## Installed Node service verification, November 17, 2026
+
+The rebuilt service at revision `aa0c896aeef35e632f670c4a7444f0ab3b8db948`
+exposed a portability regression that the earlier Bun-hosted source checks did not
+exercise: find and grep used `Bun.which`, but the installed Node service has no Bun
+global. Real find and grep tasks were claimed by the existing managed runner and
+settled as failed with `Bun is not defined`. This prevents verification of search framing,
+budgets and cancellation on that installed revision.
+
+Both owners now use OpenCode Core's existing portable `util/which` implementation,
+including fd/fdfind fallback and the current process PATH. The regression in
+`runner-search.test.ts` bundles/minifies the production dispatcher and runs it in
+a real Node child without Bun globals. It checks missing executables and, when
+installed, successful fd/rg calls. It failed before the fix, passed afterward and
+passed ten repeats. Full verification passed 334 runtime conformance tests, both
+runtime type checkers, the runtime build and root `bun run check` (227 existing
+advisory warnings, zero errors).
+
+The installed service independently accepted a temporary project skill with
+`name: null` and published its name through `application.skills` after reactivation
+of the skills extension. Removing the fixture and reactivating restored the exact
+original skill catalog. Temporary workspaces and the skill fixture were removed;
+the original pairing, default directory and extension enablement were retained.
+The managed service remains ready with no in-flight work or executor issue.
+
+The portable lookup fix is source-only until the next rebuild/restart. The search
+checks above must be repeated against that executable; the earlier source-runtime
+success is not evidence that the installed revision passes them.
