@@ -13,8 +13,9 @@ gem dependency metadata. Its production source and reference tests are unchanged
 The November 17, 2026 reviews rechecked the eleven executable non-WebUI packages
 against their production TypeScript owners and local conformance evidence. The
 latest passes corrected search result framing, output budgeting, subprocess cleanup,
-nullable skill names and portable executable lookup. The complete runtime gate passes
-334 tests across 69 files, including a minified Node search regression and real headless
+nullable skill names, portable executable lookup and editor filesystem failures.
+The complete runtime gate passes 352 tests across 70 files, including editor response
+and interruption regressions, a minified Node search regression and real headless
 Chromium, PTY and WebRTC transports. Details and live
 verification are recorded in the final sections below.
 
@@ -29,6 +30,7 @@ verification are recorded in the final sections below.
 | `rho`: extension registration, settings changes and managed packages                                   | `extension-manager.ts`, `configuration.ts`, `packages.ts`, `worker-extension.ts`, `extension-rpc.ts`, `webui-module.ts` | `extensions.test.ts`, `packages.test.ts`, `worker-extension.test.ts`, `extension-rpc-lifetime.test.ts`: inert disabled code, staged publication, failed-candidate cleanup, retained handler leases, immutable versions, rollback, worker cancellation and remote-reference release                                                           |
 | `rho-env`: executor inbox, authoritative claims, admission, orchestration, cancellation and settlement | `runner-inbox.ts`, `runner.ts`, `claim-control.ts`, `claim-result.ts`, `claims.ts`                                      | `executor.test.ts`, `claim-control.test.ts`, `claim-result.test.ts`, `claims.test.ts`: push/HTTP recovery, bounded startup/resources, nested child progress, placement/refusal checks, renewal, canceled-handler ownership and durable settlement without rerunning effects                                                                  |
 | `rho-env`: filesystem tools, attachments, checkpoints, environments, skills and terminal transport     | `file-read.ts`, `runner-search.ts`, `checkpoint-store.ts`, `environments.ts`, `skills.ts`, `terminal.ts`, `realtime.ts` | `runner.test.ts`, `runner-search.test.ts`, `attachments.test.ts`, `checkpoint-store.test.ts`, `environments.test.ts`, `skills.test.ts`, `terminal.test.ts`, `realtime.test.ts`: complete media transfer, protected roots, fuzzy edits, durable undo, captured roots, skill precedence, real PTYs, WebRTC reconnect and bounded output replay |
+| `rho-env`: editor filesystem routing, response validation and failure mapping                          | `runner.ts`, `editor-bridge.ts`, `environments.ts`                                                                      | `editor-filesystem.test.ts`, `executor.test.ts`, `editor.test.ts`, `environments.test.ts`: unsaved buffers, paged reads, missing buffers, EOF, client refusals, broken bindings, malformed acknowledgements, interrupted settlement and disk preservation |
 
 ## Extensions and peer surfaces
 
@@ -53,7 +55,7 @@ suites exercise the OpenCode implementation rather than executing Ruby.
 | Package                | Reference anchors beneath its `test/` directory                                                                                                                      | Local evidence beneath `test/`                                                                |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `rho`                  | `api_key_connection_test.rb`, `host_follower_test.rb`, `execution_policy_test.rb`, `package_activation_test.rb`, `memory_review_test.rb`, `until_test.rb`            | `runtime`, `application`, `lifecycle`, `packages`, `memory-review`, `until`                   |
-| `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `files_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb` | `executor`, `claims`, `runner`, `checkpoint-store`, `terminal`, `realtime`                    |
+| `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `fs_port_test.rb`, `tools/read_test.rb`, `tools/write_test.rb`, `tools/edit_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb` | `executor`, `claims`, `runner`, `editor-filesystem`, `checkpoint-store`, `terminal`, `realtime` |
 | `rho-codemode`         | `code_test.rb`, `runtime_test.rb`, `claim_bridge_test.rb`                                                                                                            | `code`, `executor`                                                                            |
 | `rho-web-tools`        | `client_test.rb`, `render_test.rb`, `commands_test.rb`                                                                                                               | `web`, `policy`, `dev`                                                                        |
 | `rho-browser`          | `tools_test.rb`, `session_test.rb`, `session_idle_test.rb`, `session_popups_test.rb`                                                                                 | `browser` with real Chromium                                                                  |
@@ -613,3 +615,106 @@ The managed service remains ready with no in-flight work or executor issue.
 The portable lookup fix is source-only until the next rebuild/restart. The search
 checks above must be repeated against that executable; the earlier source-runtime
 success is not evidence that the installed revision passes them.
+
+## Editor filesystem contract completion, November 17, 2026
+
+The reference remains `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6`. This pass
+rechecked the eleven non-WebUI packages through their registration/dispatch owners
+and the contract evidence above: application admission and extension lifetimes;
+executor claims, files and terminals; frozen native Code Mode operations; web and
+browser ownership; MCP curation, transports and documents; both ACP directions;
+Telegram routing/delivery; T3 assignments; and source-only development controls.
+The documented native OpenCode substitutions remain accepted. Optional integration
+evidence uses controlled peers over real transports; it does not establish external
+Telegram/T3 account interoperability. `rho-webui` continues to belong to
+`packages/nexus-ui`, and `rho-runner` contains no tracked implementation.
+
+The existing gate passed before this pass but omitted editor failure contracts in
+`rho-env/test/fs_port_test.rb`, `rho-env/test/tools/read_test.rb`,
+`rho-env/test/tools/write_test.rb`, `rho-env/test/tools/edit_test.rb` and the
+application's `lib/rho/extensions/environment/fs_port.rb`:
+
+- A timeout fell back to disk without retiring the live binding. Plain server errors,
+  bearer refusals, malformed JSON and malformed read responses did not follow the
+  unavailable-editor path. The shared filesystem request boundary now validates
+  responses, classifies these failures and drops only its matching binding. Read
+  and write requests have 30- and 60-second deadlines, including body consumption.
+- An editor write returning JSON null was reported as successful. Writes now require
+  an acknowledgement object using the existing native shape. Unavailable or malformed
+  responses during writes or either half of an edit report an error without writing
+  to disk or replaying the mutation. A missing buffer still permits disk access for
+  that call, except after an edit has attempted its buffer write.
+- A failed disk fallback discarded the editor notice. The notice now survives with
+  the disk error, while ordinary reads retain exactly one notice. Client refusals
+  name the editor and typed EOF errors use the requested offset. Structured editor
+  root refusals remain refusals.
+- Editor cancellation was completed as a tool error. It now propagates through the
+  existing claim interruption type to failed settlement; an already-aborted execution
+  retains its own reason. Cancellation leaves the binding available for later work.
+
+`editor-filesystem.test.ts` covers these cases through the production `RunnerInbox`
+and real loopback HTTP, including durable outcomes, unsaved buffers and pagination,
+no repeated mutation, binding replacement, disk preservation and execution aborts.
+Sixteen new cases failed before implementation; the two existing-behavior cases
+already passed. All eighteen cases passed ten repeats after the fixes. The existing
+executor and ACP bridge suites also pass. The README now points to this document
+for its reference revision rather than maintaining a stale independent baseline.
+
+Validation passed 352 runtime conformance tests across 70 files with isolated
+headless Chromium, PTYs and WebRTC, both runtime type checkers and the runtime build,
+two CLI adapter tests, one Server/generated-client adapter test, all 76 Nexus UI
+server/bridge tests and root `bun run check`. Root lint retains 227 existing advisory
+warnings and zero errors. The portable search lookup change committed during this
+work remains included in the combined validation.
+
+Live development Nexus verification used a temporary source runtime and Agent.
+Durable tasks read unsaved editor content, refused a malformed write acknowledgement
+without changing disk, retired the binding, and read disk on the following call
+without contacting the retired editor. A reported editor timeout returned one
+notice plus disk content and removed the live binding; editor cancellation settled
+as failed work. Temporary workspaces, the Agent, both credential planes and scratch
+files were removed; the two credentials were verified rejected with HTTP 401.
+
+The installed managed service independently completed a Human-approved native
+Code Mode call that ran bash once, printed an unpredictable UUID, retained structured
+false and published a file whose downloaded bytes matched the UUID. The execution
+counter confirmed one bash call. Stop canceled a separate claimed native bash task.
+Temporary resources were removed and its pairing, Agent and default workspace were
+preserved; it remained ready with no in-flight work or executor issue. The editor
+fixes were verified from source and require a managed-service rebuild/restart to
+reach the installed executable.
+No public Protocol, HttpApi, SDK or configuration surface changed; no new flag or
+Ruby dependency was introduced.
+
+## Rebuilt editor filesystem live verification, November 17, 2026
+
+The rebuilt managed service (`0.0.0-dev-202611171542`, PID 47954) passed 21 grouped
+checks across 36 durable tasks against development Nexus at `http://localhost:3000`.
+Tasks were claimed by the installed service's existing Runner. The checks used an
+isolated workspace, scratch files and a controlled loopback editor; the service's
+process, pairing, Agent, Runner, default workspace and directory remained unchanged.
+
+- Valid reads, writes and edits used unsaved buffers without changing disk; paging
+  and both typed and empty-buffer EOF responses preserved their contracts.
+- Reported timeouts, plain HTTP 503, bearer refusal, malformed refusal/JSON/read
+  responses and null reads retired the matching binding. Reads returned one notice
+  plus disk content; the following call skipped the retired editor. Missing disk
+  files retained the editor notice alongside the filesystem error.
+- Null and array write acknowledgements, and malformed responses during either
+  half of an edit, refused completion without changing disk or replaying writes.
+  Missing buffers permitted per-call disk fallback, while an edit's write-half
+  not-found response never wrote disk. Structured root refusals retained the binding
+  and named the editor.
+- Editor cancellation during reads, writes and either half of an edit settled as
+  failed work, retaining the binding and leaving disk unchanged.
+- Two stalled response bodies exercised the actual 30-second read and 60-second
+  write deadlines concurrently. The read retired its binding and returned disk
+  content; the write retired its binding and reported an error without changing
+  disk. Both finished within the 61-second observation window.
+
+A separate Human-approved model workflow on the same installed service used native
+Code Mode to run bash exactly once, print an unpredictable UUID, retain structured
+false and publish/download a file with matching bytes. Temporary workspaces and
+files were removed. The service remained ready with zero in-flight tasks and no
+executor issue. This verifies the editor fixes in the installed executable and
+supersedes the earlier source-only deployment limitation.
