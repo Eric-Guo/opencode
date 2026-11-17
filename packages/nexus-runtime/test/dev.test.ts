@@ -357,6 +357,7 @@ test("development live streams use daemon credentials, carry transcript frames a
 
 test("skill publication carries the observed revision and never retries a conflicting replacement", async () => {
   const writes: unknown[] = []
+  const reads: string[] = []
   const fixture = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
     if (path.endsWith("/memory_collections"))
@@ -378,7 +379,10 @@ test("skill publication carries the observed revision and never retries a confli
         ],
         pagination: { next_after: null },
       })
-    if (path.endsWith("/documents/show"))
+    if (path.endsWith("/documents/show")) {
+      const body = (await request.json()) as { memory: { path: string } }
+
+      reads.push(body.memory.path)
       return Response.json({
         memory: {
           collection_public_id: "collection",
@@ -390,6 +394,7 @@ test("skill publication carries the observed revision and never retries a confli
           written_at: "now",
         },
       })
+    }
     if (path.endsWith("/documents")) {
       writes.push(await request.json())
       return Response.json({ error: { code: "stale_object" } }, { status: 409 })
@@ -401,6 +406,20 @@ test("skill publication carries the observed revision and never retries a confli
     () => ({}),
   )
   try {
+    for (const action of ["skill.show", "skill.remove", "skill.push"] as const)
+      await expect(
+        application.operations.command({
+          action,
+          scope: "agent",
+          name: "a" + "-a".repeat(32),
+          ...(action === "skill.push" ? { description: "Too long", content: "Body" } : {}),
+        }),
+      ).rejects.toThrow("Invalid skill name")
+
+    expect(reads).toEqual([])
+    expect(writes).toEqual([])
+    await application.operations.command({ action: "skill.show", scope: "agent", name: "a-".repeat(31) + "aa" })
+    expect(reads).toEqual(["skills/" + "a-".repeat(31) + "aa"])
     await expect(
       application.operations.command({
         action: "skill.push",
