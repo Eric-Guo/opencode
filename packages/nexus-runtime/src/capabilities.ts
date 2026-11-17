@@ -1,3 +1,4 @@
+import { executionConfiguration } from "./execution-settings"
 import { Toolsets } from "@cybros/agent"
 import type { Nexus } from "@opencode/schema/nexus"
 import type { ExtensionModule } from "./extension-manager"
@@ -73,6 +74,7 @@ export function capabilityConfiguration(extensions: Nexus.Extension[], kernel: s
           ...(typeof compaction.configuration.model === "string" ? { model: compaction.configuration.model } : {}),
         }
       : { mode: "off" },
+    lifecycle_hooks: executionConfiguration(extensions).lifecycle_hooks,
     image_model: images && typeof images.configuration.model === "string" ? images.configuration.model : null,
   }
 }
