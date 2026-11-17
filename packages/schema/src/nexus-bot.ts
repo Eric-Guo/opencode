@@ -3,6 +3,9 @@ export * as NexusBot from "./nexus-bot.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 
+// Named-agent handles allow 32 characters, including the runtime's "bot-" prefix.
+const Name = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,27}$/))
+
 export const Settings = Schema.Struct({
   audience: Schema.Literals(["owner", "external"]),
   home_workspace_public_id: Schema.NullOr(Schema.String),
@@ -24,7 +27,7 @@ export const Command = Schema.Union([
   Schema.Struct({ action: Schema.Literal("bot.list") }),
   Schema.Struct({
     action: Schema.Literal("bot.create"),
-    name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/)),
+    name: Name,
     description: Schema.NonEmptyString,
     display_name: Schema.String.pipe(optional),
     settings: Patch,
@@ -39,7 +42,7 @@ export const Command = Schema.Union([
   Schema.Struct({
     action: Schema.Literal("bot.duplicate"),
     id: Schema.String,
-    name: Schema.String,
+    name: Name,
     audience: Schema.Literals(["owner", "external"]).pipe(optional),
   }),
   Schema.Struct({
