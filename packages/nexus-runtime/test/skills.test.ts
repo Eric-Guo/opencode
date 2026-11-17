@@ -33,6 +33,14 @@ test("skill scanning keeps source precedence, validates frontmatter and exposes 
       "First instruction\nSecond instruction",
     )
     expect(catalog.skipped.some((entry) => entry.reason.includes("already announced"))).toBe(true)
+    for (const name of ["name: null\n", "", "name: review\n"]) {
+      await writeFile(path, "---\n" + name + "description: Review code\n---\nBody")
+      expect((await readSkill(path)).name).toBe("review")
+    }
+    for (const name of ["different", "42", "false", "[]", "{}"]) {
+      await writeFile(path, "---\nname: " + name + "\ndescription: Review code\n---\nBody")
+      await expect(readSkill(path)).rejects.toThrow("Skill name must match")
+    }
     await writeFile(path, "---\ndescription: &unsafe [*unsafe]\n---\nBody")
     await expect(readSkill(path)).rejects.toThrow()
   } finally {
