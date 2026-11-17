@@ -327,7 +327,10 @@ requires the operator to reconnect.
 
 `opencode nexus status` and `GET /api/experimental/nexus/status` include an
 `executor` snapshot: `running`, `in_flight`, `starting`, `startup_limit`, `claimed`,
-`swept`, `nudged`, `canceled` and the latest `issue` type/code. In-flight ownership
+`swept`, `nudged`, `canceled` and the latest unresolved `issue` type/code. SDK
+failures use stable class labels rather than their inherited `Error` name. A clean
+idle recovery sweep clears an older issue; new failures and failures retained by
+active handlers or unreconciled journal records remain visible. In-flight ownership
 includes canceled handlers that still retain a resource. Comparing `nudged` with
 `swept` distinguishes a working realtime path from recovery polling alone.
 
