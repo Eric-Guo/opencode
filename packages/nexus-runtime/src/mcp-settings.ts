@@ -246,7 +246,7 @@ export function mcpName(server: string, raw: string, document = false) {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
-    : plain.replace(/[^a-zA-Z0-9_-]/g, "_")
+    : plain.replace(/[^a-zA-Z0-9_-]/gu, "_")
 
   if (plain === normalized && plain.length <= 64) return plain
 
