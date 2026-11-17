@@ -44,8 +44,7 @@ export async function mutate(
     throw new ToolInputError("invalid_tool_arguments: expected a path and valid file changes.")
   const request = decoded.value
   const path = await destination(root, request.path)
-  const operation = (mutations.get(path) ?? Promise.resolve()).then(async () => {
-    signal.throwIfAborted()
+  return withMutation(path, signal, async () => {
     if (path === root) throw new ToolInputError("Expected a regular file.")
     const info = await stat(path).catch((error: unknown) => {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined
@@ -95,15 +94,29 @@ export async function mutate(
       },
     }
   })
-  const completed = operation.then(
-    () => {},
-    () => {},
-  )
-  mutations.set(path, completed)
-  void completed.then(() => {
-    if (mutations.get(path) === completed) mutations.delete(path)
+}
+
+function withMutation<T>(path: string, signal: AbortSignal, action: () => Promise<T>): Promise<T> {
+  signal.throwIfAborted()
+
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason)
+    signal.addEventListener("abort", abort, { once: true })
+
+    const operation = (mutations.get(path) ?? Promise.resolve()).then(() => {
+      // Only waiting is interruptible here: an active mutation owns the path until it exits.
+      signal.removeEventListener("abort", abort)
+      signal.throwIfAborted()
+      return action()
+    })
+    const completed = operation.then(resolve, reject)
+
+    // A canceled waiter still chains later writers behind the actual holder.
+    mutations.set(path, completed)
+    void completed.then(() => {
+      if (mutations.get(path) === completed) mutations.delete(path)
+    })
   })
-  return operation
 }
 
 export async function readText(path: string, signal: AbortSignal) {
@@ -208,25 +221,16 @@ export async function mutateEditor(
   signal: AbortSignal,
   editor: { read(path: string): Promise<string>; write(path: string, content: string): Promise<void> },
 ) {
+  signal.throwIfAborted()
   const decoded = Schema.decodeUnknownOption(name === "edit" ? Edit : Write)(input)
   if (decoded._tag === "None")
     throw new ToolInputError("invalid_tool_arguments: expected a path and valid file changes.")
   const request = decoded.value
   const path = resolvePath(root, request.path)
-  const operation = (mutations.get(path) ?? Promise.resolve()).then(async () => {
-    signal.throwIfAborted()
+  return withMutation(await destination(root, request.path), signal, async () => {
     const after = "edits" in request ? replace(await editor.read(path), request.edits) : request.content
     signal.throwIfAborted()
     await editor.write(path, after)
     return { content: "Wrote " + Buffer.byteLength(after) + " bytes to " + path }
   })
-  const completed = operation.then(
-    () => {},
-    () => {},
-  )
-  mutations.set(path, completed)
-  void completed.then(() => {
-    if (mutations.get(path) === completed) mutations.delete(path)
-  })
-  return operation
 }
