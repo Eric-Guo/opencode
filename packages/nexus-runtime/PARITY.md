@@ -1,14 +1,14 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`ef798b1d6828b984a4a02b6dfc8aba34003d7d69`. Paths in the first column are relative
+`f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
 
 The current reference differs from the previous baseline
 `31b82029d75d1ed9626b80739e4caca16671b344` only in Ruby dependency locks and
-`rho-env` gem dependencies. Its production source and reference tests are unchanged.
+gem dependency metadata. Its production source and reference tests are unchanged.
 
 ## Application and executor
 
@@ -332,3 +332,80 @@ module appended to the live inventory; no package was installed on the service.
 Temporary schedules, Bot, workspace, profile records and scratch files were removed.
 Plugin configuration values were restored, optional integrations remained disabled,
 and service pairing, Agent, default workspace and runner directory were unchanged.
+
+
+## Built-in execution settings alignment
+
+The current checkout's production source and reference tests remain unchanged.
+The package mapping above still covers all eleven executable non-WebUI packages;
+`rho-webui` is implemented by `packages/nexus-ui`, and `rho-runner` has no tracked
+source. The review found configuration behavior missing from otherwise working
+execution owners:
+
+- `rho.coding` maps to `nexus.coding`, including enablement and the configurable
+  120-second bash default (1–540 seconds). Explicit call timeouts win. Native bash
+  now opts out of claim renewal, matching its reference internal clamp.
+- `rho.checkpoints` maps to `nexus.checkpoints`. Retention, file/tree budgets and
+  capture deadlines feed the existing SQLite store, including alternate captured
+  roots. Disabling it stops capture and checkpoint dispatch while preserving history.
+- `rho.lifecycle_hooks` maps to `nexus.lifecycle-hooks`. Complete optional hook groups
+  publish through existing application declarations; Nexus executes Agent-service
+  hooks. Preset overrides and captured admissions keep their existing owners.
+- Until reads the configured bash timeout for new plans and recovery gates. Submitted
+  checks keep their recorded timeout. Configuration refreshes remove disabled coding
+  and checkpoint tools from announcements and declarations as well as native dispatch.
+
+`execution-settings.ts` owns these descriptors and their typed runtime projection.
+`runner-inbox.ts` captures built-in policy before claiming so a running handler
+retains its original timeout and checkpoint options. The experimental executor's
+optional `builtins` policy callback leaves existing custom hosts compatible.
+
+The UI's existing Plugins form presents these settings; atomic hook groups use its
+JSON editor. Browser coverage saves and resets settings, reloads persisted hooks,
+rejects malformed JSON and checks draft isolation between plugins. Existing UI
+edits were preserved, including the keyed form remount fix.
+
+Validation passed 316 runtime conformance tests with real Chromium/PTYs/WebRTC,
+both runtime type checkers and build, 403 UI unit tests, 70 browser tests, UI type
+check/build, CLI/Server Nexus adapter tests, Protocol identifier checks and root
+`bun run check`. Existing lint and UI build advisories remain. No public HTTP or
+Protocol shape changed, so client regeneration was unnecessary.
+
+
+Live validation used a temporary source runtime and Agent against development
+Nexus. Native Code Mode printed an unpredictable bash token, retained structured
+false and returned the token to the model; a scratch counter confirmed one effect.
+Both that call and the Until check reached OpenCode's native shell with the saved
+42-second timeout. An explicit five-second call overrode it. Nexus executed the
+Agent-service lifecycle hook, checkpoint restore removed the generated file, and
+disabled coding/checkpoint tools disappeared from the executor announcement.
+A separate Ask rule held bash until the existing Human credential approved it.
+Temporary workspaces and the Agent were removed, and its credentials were verified
+rejected. The installed service was not restarted. The new settings browser case
+also passed ten repeats with two workers.
+
+
+## Rebuilt managed-service verification
+
+Live verification against development Nexus after rebuilding and restarting the
+installed service confirmed all three settings descriptors and their defaults.
+The production Plugins UI saved a two-second bash default and retained it after
+reload. Native bash enforced that limit; an explicit five-second limit and Human
+approval completed a longer command. An active call retained its original timeout
+when the default changed, and a short claim expired without bash renewing it.
+
+Checkpoint checks exercised configured file/tree budgets, a captured temporary
+root, restore, and disablement without new captures. Coding disablement removed
+its announcements and Nexus refused a new call with `tool_not_served`; Code Mode
+remained available. A temporary agent-role MCP tool verified lifecycle-hook JSON
+save/reload and actual `turn_start` execution for the tested conversation. The
+managed model called bash once through Code Mode, printed its output and retained
+structured false. Until's recorded input used the configured five-second timeout,
+and the completed answer survived browser reload. Five invalid settings edits
+were rejected without changing the saved configuration.
+
+All settings, pairing and defaults were restored; test workspaces and local scratch
+resources were removed. No service restart was required during verification. The
+executor retained the generic last-error marker already present before the first
+check; direct HTTP inbox reads and live dispatch worked throughout. That snapshot
+contains no error detail or timestamp, so its original cause was not established.
