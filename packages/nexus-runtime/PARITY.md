@@ -10,12 +10,12 @@ The current reference differs from the previous baseline
 `31b82029d75d1ed9626b80739e4caca16671b344` only in Ruby dependency locks and
 gem dependency metadata. Its production source and reference tests are unchanged.
 
-The November 17, 2026 review rechecked the eleven executable non-WebUI packages
-against their production TypeScript owners and local conformance evidence. It
-corrected Unicode title truncation and the operator skill-name length boundary.
-The complete runtime gate passes 320 tests across 69 files with real headless
-Chromium, PTY and WebRTC transports. Details and live verification are recorded
-in the final section below.
+The November 17, 2026 reviews rechecked the eleven executable non-WebUI packages
+against their production TypeScript owners and local conformance evidence. The
+latest pass corrected search result framing, output budgeting, subprocess cleanup
+and nullable skill names. The complete runtime gate passes 333 tests across 69
+files with real headless Chromium, PTY and WebRTC transports. Details and live
+verification are recorded in the final sections below.
 
 ## Application and executor
 
@@ -522,3 +522,64 @@ native substitutions remain intentional. `rho-webui` remains owned by
 or tests and contributes no separate application. Optional external accounts were
 represented by local peers in the conformance gate; this review does not claim
 external Telegram/T3 account interoperability or identical Ruby language semantics.
+
+## Search and skill contract follow-up, November 17, 2026
+
+The reference checkout still matches `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6`.
+The package inventory and the production registration/dispatch owners above cover
+`rho`, `rho-env`, `rho-codemode`, `rho-web-tools`, `rho-browser`, `rho-mcp`,
+`rho-acp`, `rho-acp-client`, `rho-ingress-telegram`, `rho-t3` and `rho-dev`.
+The established native substitutions remain intentional. `rho-webui` continues
+to use the separate Nexus UI parity document; `rho-runner` remains empty.
+
+The existing 320-test gate passed before this pass, but did not protect four
+reference behaviors in `rho-env`:
+
+- `test/tools/find_test.rb` requires one reversible display record for a filename
+  containing a newline. `runner-find.ts` now JSON-escapes display paths and includes
+  exact emitted paths in `structured_content.paths` when escaping is needed.
+  Trailing whitespace and directory suffixes remain intact.
+- The same reference suite budgets the rendered relative paths, rather than fd's
+  absolute stdout. A root longer than 600 bytes previously reduced 100 short
+  results to 73 while displaying less than 1 KiB. Streaming NUL records now retain
+  all 100 and apply the 50 KiB display cap after relativizing/escaping. Result-limit
+  and truncation details follow Rho; existing TypeScript boolean flags remain.
+- `test/tools/find_test.rb` and `test/tools/grep_test.rb` require process-group
+  cleanup on normal/error exits, result limits and cancellation, plus bounded
+  records/stderr and cancellation despite detached pipe holders. `search-process.ts`
+  now shares those responsibilities between fd and rg, reusing `OwnedProcess` on
+  POSIX with separate stderr capture. Existing process consumers retain combined
+  output. Windows retains native child handling; the POSIX ownership cases are
+  tested on POSIX. A completed stdout stream waits for the leader's recorded exit
+  before cleanup, preserving the actual status.
+- `lib/rho/env/skills.rb` treats a null frontmatter name as omitted. `skills.ts`
+  now accepts it while still refusing mismatched names and non-string values.
+
+`runner-search.test.ts` exercises these contracts through real fd/rg and controlled
+local child executables; `skills.test.ts` exercises the production parser. The
+initial regressions failed before implementation. Both focused files passed ten
+repeats; the additional detached-stderr cases also passed ten repeats.
+
+Validation passed 333 runtime conformance tests across 69 files with real Chromium,
+PTY and WebRTC, both runtime type checkers, the runtime build, two CLI adapter
+tests, one Server/generated-client adapter test, all 76 Nexus UI bridge/server
+tests, and root `bun run check` (227 existing advisory warnings, zero errors).
+
+Live verification against development Nexus used a temporary source runtime and
+Agent. Durable tasks retained escaped filenames and exact structured paths,
+returned all 100 short filenames under a long root, and returned grep matches.
+Native Code Mode invoked find and one Human-approved native bash call, printed
+their results, and retained structured `false`. A skill with `name: null` was
+parsed, published to workspace memory, read back and removed.
+Stopping a live standalone grep Run canceled its task, retired the source
+executor's handler and killed the wrapper's descendant. Temporary workspaces,
+the Agent, shell captures, private credentials and scratch files were removed;
+both temporary credential planes were verified rejected with HTTP 401. The
+installed service retained its original Agent/workspace and remained ready with
+no in-flight work or executor issue. Neither service was restarted.
+
+No public Protocol, HttpApi, configuration key or feature flag changed. Production
+and CI require neither Ruby nor the reference checkout. Optional integrations
+remain covered by local transport peers; this pass does not claim external
+Telegram/T3 account interoperability. Applying these source fixes to the installed
+managed service requires rebuilding/restarting it.
