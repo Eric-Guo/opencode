@@ -63,6 +63,8 @@ test("MCP public naming preserves simple names and separates normalization colli
   expect(mcpName("docs", "a.b")).not.toBe(mcpName("docs", "a b"))
   expect(mcpName("docs", "x".repeat(100))).toHaveLength(64)
   expect(mcpName("docs", "x".repeat(100), true)).toHaveLength(64)
+  expect(mcpName("docs", "read😀notes")).toBe("mcp__docs__read_notes_6c6a75c05cde")
+  expect(mcpName("docs", "read😀notes", true)).toBe("docs-read-notes-6c6a75c05cde")
 })
 
 test("MCP curation treats stale explicit lists atomically and keeps verbatim descriptions and operator profiles", () => {
