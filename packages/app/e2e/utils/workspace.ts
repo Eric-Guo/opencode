@@ -157,6 +157,8 @@ export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { dr
   await page.getByRole("option", { name: /^New worktree/ }).click()
   await expect(newSessionBaseBranch(page)).toBeVisible()
   await expect(editor).toBeEditable()
+  // Closing the worktree dialog returns focus on a frame; finish that before opening another picker.
+  await expect(editor).toBeFocused()
 
   return { ...workspace, draftID, editor, worktree, calls, worktreeRequests, creates, prompts }
 }
