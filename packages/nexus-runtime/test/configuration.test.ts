@@ -119,3 +119,59 @@ test("open configuration records retain inherited fields through sparse edits", 
     diagnostics: [],
   })
 })
+
+test("execution settings persist sparse edits, reject invalid hooks atomically and restore defaults", async () => {
+  const { Configuration } = await import("../src/configuration")
+  const { executionExtensions } = await import("../src/execution-settings")
+  const { mkdtemp, rm } = await import("node:fs/promises")
+  const { tmpdir } = await import("node:os")
+  const { join } = await import("node:path")
+  const directory = await mkdtemp(join(tmpdir(), "nexus-execution-settings-"))
+  const configuration = new Configuration(join(directory, "configuration.json"))
+  const descriptors = executionExtensions().map((module) => module.descriptor)
+  const coding = descriptors.find((row) => row.id === "nexus.coding")!
+  const checkpoints = descriptors.find((row) => row.id === "nexus.checkpoints")!
+  const hooks = descriptors.find((row) => row.id === "nexus.lifecycle-hooks")!
+  try {
+    expect(configuration.selection(coding).configuration).toEqual({ bash_timeout_seconds: 120 })
+    await configuration.change(coding, {
+      id: coding.id,
+      operations: [{ op: "set", path: ["bash_timeout_seconds"], value: 42 }],
+    })
+    await configuration.change(checkpoints, {
+      id: checkpoints.id,
+      enabled: false,
+      operations: [{ op: "set", path: ["max_tree_bytes"], value: 512 }],
+    })
+    const value = { tool: "verify", timeout_ms: 30000, max_continuations: 2 }
+    await configuration.change(hooks, {
+      id: hooks.id,
+      operations: [{ op: "set", path: ["stop"], value }],
+    })
+    for (const invalid of [{ ...value, timeout_ms: 300001 }, { ...value, max_continuations: 21 }, { tool: "verify" }])
+      await expect(
+        configuration.change(hooks, {
+          id: hooks.id,
+          operations: [{ op: "set", path: ["stop"], value: invalid }],
+        }),
+      ).rejects.toThrow("Invalid configuration edit")
+    const restored = new Configuration(join(directory, "configuration.json"))
+    await restored.restore()
+    expect(restored.selection(coding).configuration).toEqual({ bash_timeout_seconds: 42 })
+    expect(restored.selection(checkpoints)).toMatchObject({ enabled: false, configuration: { max_tree_bytes: 512 } })
+    expect(restored.selection(hooks).configuration).toEqual({ stop: value })
+    await restored.change(coding, { id: coding.id, operations: [{ op: "unset", path: ["bash_timeout_seconds"] }] })
+    expect(restored.selection(coding).configuration).toEqual({ bash_timeout_seconds: 120 })
+    expect(configurationFields(coding.configuration_schema, { bash_timeout_seconds: 0 }).value).toEqual({
+      bash_timeout_seconds: 120,
+    })
+    expect(
+      configurationFields(hooks.configuration_schema, {
+        stop: { tool: "verify" },
+        turn_start: { tool: "verify", timeout_ms: 1 },
+      }).value,
+    ).toEqual({ turn_start: { tool: "verify", timeout_ms: 1 } })
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
