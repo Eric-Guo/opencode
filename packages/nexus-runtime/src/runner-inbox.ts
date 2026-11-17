@@ -39,6 +39,12 @@ const Notification = Schema.Struct({
     role: Schema.optional(Schema.NullOr(Schema.String)),
   }),
 })
+export type BuiltinPolicy = {
+  tools: readonly AnnouncedTool[]
+  bashTimeoutSeconds: number
+  checkpoints?: Checkpoints
+}
+
 type OwnedTask = { cancel: AbortController; started: boolean; work?: Promise<void> }
 
 /** Both entrances claim the authoritative row; realtime carries no executable arguments. */
@@ -72,6 +78,7 @@ export class RunnerInbox {
       artifacts?: string
       roles?: readonly ("agent" | "runner" | "tool_provider")[]
       placement?: "fixed" | "captured"
+      builtins?: () => BuiltinPolicy
       builtin?: boolean
       startupLimit?: number
       hooks?: () => ReturnType<ExtensionManager["captureTools"]>
@@ -199,6 +206,7 @@ export class RunnerInbox {
       return
     }
     const extensions = this.options.extensions()
+    const builtins = this.options.builtins?.()
     if (!hint.tool_name && extensions.some((tool) => tool.resource)) {
       this.options.wake()
       return
@@ -247,7 +255,7 @@ export class RunnerInbox {
       }
       this.counts.claimed++
       this.track(
-        this.finish(hint, claim, reserved, extensions, owned, started).finally(() => {
+        this.finish(hint, claim, reserved, extensions, owned, started, builtins).finally(() => {
           started()
           // A canceled, non-cooperative handler still owns its local resource until its actual exit.
           void Promise.resolve(owned.work).then(() => {
@@ -271,6 +279,7 @@ export class RunnerInbox {
     extensions: readonly RunnerTool[],
     owned: OwnedTask,
     started: () => void,
+    builtins?: BuiltinPolicy,
   ) {
     const task = this.options.executor.inboxTask(hint.run_public_id, hint.task_key)
     const extension = extensions.find(
@@ -280,13 +289,13 @@ export class RunnerInbox {
     const definition =
       extension?.definition ??
       (claim.task.addressed_to?.role === "runner" && this.options.builtin !== false
-        ? [...tools, ...operatorTools].find((tool) => tool.name === claim.task.tool_name)
+        ? (builtins?.tools ?? [...tools, ...operatorTools]).find((tool) => tool.name === claim.task.tool_name)
         : undefined)
     const lease = new ClaimLease(
       task,
       claim,
       this.options.signal,
-      !extension?.internalTimeout,
+      !(extension ? extension.internalTimeout : definition?.name === "bash"),
       definition?.timeout_ms,
       !extension?.isolated,
     )
@@ -306,6 +315,7 @@ export class RunnerInbox {
           started,
           root!,
           definition!,
+          builtins,
           extension?.isolated ? () => lease.executionStarted() : undefined,
         ))
       await lease.finishExecution()
@@ -410,6 +420,7 @@ export class RunnerInbox {
     started: () => void,
     root: string,
     definition: AnnouncedTool,
+    builtins: BuiltinPolicy | undefined,
     executionStarted?: () => void,
   ): Promise<ClaimResult> {
     if (signal.aborted) return interrupted(signal.reason)
@@ -438,7 +449,10 @@ export class RunnerInbox {
         )
         .join("\n")
     }
-    const checkpoints = this.options.checkpoints?.forRoot(root, this.options.protectedRoots)
+    const checkpoints = (builtins ? builtins.checkpoints : this.options.checkpoints)?.forRoot(
+      root,
+      this.options.protectedRoots,
+    )
     const hooks = this.options.hooks?.()
     const context: RunnerContext = {
       directory: root,
@@ -483,6 +497,7 @@ export class RunnerInbox {
             ? { executionStarted, started, workerRetired: (reason) => owned.cancel.abort(reason) }
             : undefined,
           orchestration,
+          builtins?.bashTimeoutSeconds,
         )
       const result = await (checkpoints &&
       definition.effect_profile?.kind === "write" &&
