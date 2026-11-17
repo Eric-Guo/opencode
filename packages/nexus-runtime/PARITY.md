@@ -300,3 +300,35 @@ passed three isolated repeats. This pass used local protocol/browser fixtures an
 did not restart or mutate either running service. No public Protocol/HttpApi,
 dependency, configuration key or endpoint changed; client regeneration was not
 needed.
+
+## Live verification after rebuilding the service
+
+The rebuilt managed service was verified against Nexus at `http://localhost:3000`
+with an isolated development Nexus UI. A conversation bound to a separate scratch
+directory downloaded its exact file bytes through the service operator; parent,
+hidden and outside-root paths were refused. A live model answer linked the file,
+and the production UI preview/download returned the same bytes before and after
+reload, without changing the runner default directory.
+
+Live plugin configuration writes verified nullable text as an unset operation,
+restored its runtime default and survived reload. The disabled MCP extension's
+saved dynamic URL entry remained visible alongside declared fields, accepted an
+edit and retained it after reload. Switching from one plugin to another exposed
+an additional UI issue: its heading changed while the previous form and draft
+remained mounted. The UI now keys the form by the selected extension ID, retaining
+same-plugin drafts during inventory refresh. The new
+browser regression failed before the fix and passed three repeats afterward.
+The live cross-plugin configuration workflow then passed, including refresh with
+an unsaved draft.
+
+The production Telegram command parser created and edited real Nexus schedules
+with exact multiline prompts, accepted a colonless UTC offset and refused malformed
+controls without mutating the job. Paused state and the exact prompt survived UI
+reload. Telegram transport was not connected: parser calls used a temporary owner
+Bot without an external requester. Browser-module failure/refresh/disable/re-enable
+and replacement were checked in the production UI using a browser-only controlled
+module appended to the live inventory; no package was installed on the service.
+
+Temporary schedules, Bot, workspace, profile records and scratch files were removed.
+Plugin configuration values were restored, optional integrations remained disabled,
+and service pairing, Agent, default workspace and runner directory were unchanged.
