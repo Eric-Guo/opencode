@@ -17,7 +17,7 @@ export async function readSkill(path: string) {
   )
   const name = basename(dirname(path))
   if (name.length > 64 || !/^[a-z0-9](?:-?[a-z0-9])*$/.test(name)) throw new Error("Invalid skill directory name.")
-  if (fields.name !== undefined && (typeof fields.name !== "string" || fields.name.trim() !== name))
+  if (fields.name != null && (typeof fields.name !== "string" || fields.name.trim() !== name))
     throw new Error("Skill name must match its directory.")
   if (
     typeof fields.description !== "string" ||
