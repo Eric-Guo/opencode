@@ -27,6 +27,8 @@ New untitled Main and Bot conversations get one background title attempt after t
 first accepted reply input. `conversation_title_model` is `follow_current` by default,
 a model reference, or `null` to disable. Manual titles win. Temporary title Sides are
 removed after completion, failure, timeout, or shutdown.
+Title generation uses the first 4,000 Unicode characters of the input and retains
+at most 255 Unicode characters of the first title line, preserving complete emoji.
 
 ```sh
 opencode nexus run "Inspect this project" --output-format json
