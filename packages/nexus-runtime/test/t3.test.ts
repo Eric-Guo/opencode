@@ -210,6 +210,8 @@ test("T3 catalog resolves explicit aliases without provider or model fallback", 
   })
   expect(catalog.select("Codex", "Code").model).toBe("code")
   expect(catalog.select("Claude").model).toBe("review")
+  expect(catalog.select(" Codex ", " Code ").model).toBe("code")
+  expect(catalog.select(" Claude ", " ").model).toBe("review")
   expect(() => catalog.select()).toThrow("Choose one")
   expect(() => catalog.select("Codex", "review")).toThrow("unambiguous")
   expect(JSON.stringify(catalog.report())).not.toContain("native-codex")

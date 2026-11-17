@@ -213,25 +213,56 @@ inspection and reload without submitting another input or approval.
 
 ## Current alignment review
 
-The current inventory retains production TypeScript owners and executable evidence
-for all eleven non-WebUI packages listed above. `rho-webui` remains owned by
-`packages/nexus-ui`; the empty `rho-runner` directory introduces no additional runtime.
-The existing native service, shell, MCP/OAuth, filesystem, snapshot, PTY and approval
-owners remain the integration boundaries.
+The review retains the production owners above for all eleven executable non-WebUI
+packages. It follows registration through dispatch, results and retirement against
+the reference code and contract tests. `rho-webui` remains owned by `packages/nexus-ui`;
+the empty `rho-runner` directory introduces no additional executable package.
 
-The output regressions now cover selection after later text/console/resource calls,
-copied selections, explicit null versus undefined completion, repeated selections,
-combined output bounds, cancellation/failure and clean subsequent invocations.
-The executor test runs one native child and settles structured false despite
-duplicate notifications. The UI bridge and browser tests retain false, zero and null
-in task inspection alongside ordered text, across approval and reload.
+Four differences were reproduced and corrected in the existing owners:
 
-Validation passed: 309 runtime conformance tests with real Chromium/WebRTC, 1,643
-Code Mode tests, 403 UI unit tests and 64 browser component tests. Code Mode's
-snapshot round-trip mode passed 1,642 tests with one existing mode-specific skip;
-the resume regression verifies observer replacement without replaying old console
-lines. Package type checks/builds and root `bun run check` passed. Root lint retains
-227 existing advisory warnings and zero errors. One unchanged attachment-menu focus
-test failed in the first browser run, then passed three isolated repeats and the
-complete browser rerun. External account interoperability remains covered here by
-local fixtures; this review did not change live service pairing or account state.
+- `rho-acp-client`'s `Policy.command_text` falls back to the permission title when
+  the raw command is absent or empty. `acp-policy.ts` now does the same for empty
+  strings and arrays, retaining the shared refusal floor even when the row allows
+  child actions. `runner-policy.test.ts` exercises the actual decision with a
+  tracked execution call and an empty command in its permission request.
+- `rho-mcp`'s `Naming.tool` replaces each non-ASCII character once.
+  `mcp-settings.ts` now normalizes Unicode code points rather than UTF-16 halves.
+  The `mcp.test.ts` vectors were checked against the reference implementation,
+  including its SHA-256 suffix. Raw remote names and document naming stay intact.
+- `rho-t3`'s `Catalog.select` trims agent and model choices before selection.
+  `t3-catalog.ts` now accepts those choices and treats a blank model as the provider
+  default. `t3.test.ts` retains unavailable and ambiguous-choice refusals.
+- Live Bot creation exposed a handle mismatch: the `bot-` prefix and stable name
+  must fit Nexus's 32-character handle route. The public creation and duplication
+  schemas now accept at most 28 characters; the UI enforces that limit and reserves
+  space for its duplicate suffix. Schema and browser regressions cover the boundary.
+
+The Bot command validation is the only public contract change. Client generation
+was run from `packages/client`; the generated TypeScript shape remains a string.
+These fixes add no endpoint, configuration key or dependency. Native Code Mode,
+MCP/OAuth, shell, filesystem, snapshot and PTY facilities retain their existing
+owners. The existing `nexus_runtime` flag guards the integration.
+
+Validation passed 310 runtime conformance tests across 69 files with real Chromium,
+PTY and WebRTC, both runtime TypeScript checkers and the runtime build. The CLI/Server
+Nexus adapter tests and Protocol experimental-identifier test passed. The UI passed
+403 unit tests, 65 browser tests, its type check and build; all 107 Schema tests and
+the Schema official TypeScript check passed. Root `bun run check`
+passed with the existing advisory-warning backlog. The recorded-review browser test
+now clicks the shared component's line-number gutter to open its comment editor;
+the corrected case also passed three isolated repeats.
+
+Local Nexus acceptance verified runner file reads/edits, artifact publication and a
+matching Human download, OpenCode bash dispatch, automatic/custom/disabled memory
+bindings, runtime schedule creation/pause/resume/cancellation, and Bot Home Workspace,
+Preset, conversation and duplication behavior at the 28-character boundary.
+
+A model-driven native Code Mode execution ran one approved bash effect, printed an
+unpredictable UUID and retained structured false. The next sealed model request
+contained the UUID, the UI answer survived reload, and a scratch counter confirmed
+one bash execution. A real terminal used the production browser WebRTC transport;
+reload/reattachment retained output and a shell variable, and Stop settled its task.
+Temporary Bots, Presets, workspaces, terminal tasks and files were removed through
+the public APIs, preserving service pairing and defaults without a service restart.
+Telegram, T3 and external ACP account interoperability remains covered by local
+protocol fixtures.
