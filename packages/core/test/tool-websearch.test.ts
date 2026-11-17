@@ -549,10 +549,7 @@ describe("WebSearchTool registration", () => {
         }),
       ).toEqual({
         status: "completed",
-        output: {
-          provider: "exa",
-          results: [{ url: "https://example.com/exa", title: "Exa result", content: "fallback", time: {} }],
-        },
+        output: [{ url: "https://example.com/exa", title: "Exa result", content: "fallback" }],
         content: [{ type: "text", text: "## [Exa result](https://example.com/exa)\n\nfallback" }],
         metadata: { provider: "exa" },
       })
