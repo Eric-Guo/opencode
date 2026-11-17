@@ -1027,3 +1027,90 @@ test("built-in policy changes gate dispatch and checkpoint capture while running
     await fixture.close()
   }
 })
+
+test("recovered inbox failures clear their issue and SDK faults retain a useful credential-free type", async () => {
+  const fixture = await executorFixture()
+  const runner = inbox(fixture, [])
+  const state = { response: "malformed" }
+  fixture.control.route = async (request) => {
+    if (!new URL(request.url).pathname.endsWith("/inbox")) return
+    if (state.response === "malformed") return new Response("private-credential-not-json")
+    if (state.response === "unavailable")
+      return Response.json({ error: { code: "unavailable", message: "private-credential-in-error" } }, { status: 503 })
+  }
+  try {
+    await runner.sweep()
+    expect(runner.snapshot().issue).toEqual({ type: "MalformedResponse", code: null })
+    expect(JSON.stringify(runner.snapshot())).not.toContain("private-credential")
+    state.response = "unavailable"
+    await runner.sweep()
+    expect(runner.snapshot().issue).toEqual({ type: "APIError", code: "unavailable" })
+    state.response = "healthy"
+    await runner.sweep()
+    expect(runner.snapshot().issue).toBeNull()
+    expect(runner.snapshot().running).toBe(true)
+  } finally {
+    await runner.close()
+    await fixture.close()
+  }
+})
+
+test("a successful inbox read cannot clear a new claim failure or a still-running handler's issue", async () => {
+  const fixture = await executorFixture()
+  const gate = Promise.withResolvers<void>()
+  const started = Promise.withResolvers<void>()
+  const runner = inbox(fixture, [
+    {
+      definition: definition("probe", "Fixture", {}, []),
+      async execute() {
+        started.resolve()
+        await gate.promise
+        return { content: "done" }
+      },
+    },
+  ])
+  const fault = { refuse: true }
+  fixture.control.refuseClaim = () =>
+    fault.refuse ? Response.json({ error: { code: "unavailable" } }, { status: 503 }) : undefined
+  fixture.add("run", "call", "probe")
+  try {
+    await runner.sweep()
+    expect(runner.snapshot().issue?.code).toBe("unavailable")
+    fault.refuse = false
+    await runner.sweep()
+    await started.promise
+    expect(runner.snapshot().issue?.code).toBe("unavailable")
+    gate.resolve()
+    await runner.drain()
+    await runner.sweep()
+    expect(runner.snapshot().issue).toBeNull()
+  } finally {
+    gate.resolve()
+    await runner.close()
+    await fixture.close()
+  }
+})
+
+test("unresolved journal recovery remains visible until its saved claim is reconciled", async () => {
+  const fixture = await executorFixture()
+  const runner = inbox(fixture, [])
+  const state = { malformed: true }
+  fixture.control.route = async (request) => {
+    if (!new URL(request.url).pathname.endsWith("/claim")) return
+    return state.malformed ? new Response("not-json") : Response.json({ claim: { active: false } })
+  }
+  await fixture.journal.save({ run: "run", task: "saved", token: "private-claim-token" })
+  try {
+    await runner.sweep()
+    await runner.sweep()
+    expect(runner.snapshot().issue).toEqual({ type: "MalformedResponse", code: null })
+    expect(await fixture.pending()).toHaveLength(1)
+    state.malformed = false
+    await runner.sweep()
+    expect(runner.snapshot().issue).toBeNull()
+    expect(await fixture.pending()).toEqual([])
+  } finally {
+    await runner.close()
+    await fixture.close()
+  }
+})
