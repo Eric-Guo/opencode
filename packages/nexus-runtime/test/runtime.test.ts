@@ -44,7 +44,8 @@ test.each([
   const directory = await realpath(await mkdtemp(join(tmpdir(), "nexus-runtime-")))
   const storage = join(directory, "storage")
   const project = join(directory, "project")
-  await Promise.all([mkdir(storage), mkdir(project)])
+  const bound = join(project, "conversation")
+  await Promise.all([mkdir(storage), mkdir(bound, { recursive: true })])
   const runtime = new NexusRuntime(storage)
   const changed = Promise.withResolvers<typeof Declaration.Type>()
   const calls: { path: string; method: string; authorization: string | null; after: string | null; state: string }[] =
@@ -74,6 +75,7 @@ test.each([
     target: approval.target,
   })
   const scheduleWrites: JsonObject[] = []
+  const downloads = { bound: false, paths: [] as string[] }
   const announcements: (typeof Announcement.Type)[] = []
   const measured = new Date().toISOString()
   const preset = {
@@ -88,6 +90,15 @@ test.each([
       main_preset_public_id: "main-preset",
       default_bot_preset_public_id: "main-preset",
     },
+  }
+  const binding = {
+    public_id: "binding",
+    namespace: "rho.environment",
+    key: "binding/runner",
+    lock_version: 0,
+    created_at: measured,
+    updated_at: measured,
+    value: { root: bound, directories: [], anchor: "conversation" },
   }
   const workspace: Workspace = {
     public_id: "workspace",
@@ -191,17 +202,62 @@ test.each([
       if (path === "/agent_api/v1/profile/store_entries")
         return Response.json({ store_entries: [preset], pagination: { next_after: null } })
       if (path === "/agent_api/v1/profile/store_entries/presets") return Response.json({ store_entry: preset })
-      if (path.endsWith("/store_entries")) return Response.json({ store_entries: [], pagination: { next_after: null } })
+      if (path.endsWith("/store_entries/binding")) return Response.json({ store_entry: binding })
+      if (path.endsWith("/store_entries"))
+        return Response.json({ store_entries: downloads.bound ? [binding] : [], pagination: { next_after: null } })
       if (path === "/agent_api/v1/mcp_connections")
         return Response.json({ mcp_connections: [], pagination: { next_after: null } })
       if (path === "/agent_api/v1/executors") return Response.json({ executors: [] })
+      if (path === "/agent_api/v1/executors/runner")
+        return Response.json({
+          executor: {
+            public_id: "runner",
+            kind: "agent",
+            status: "active",
+            presence: "connected",
+            service_roles: ["runner"],
+            services: { runner: { environment: { root: project }, tools: [], documents: [] } },
+          },
+        })
       if (path.endsWith("/conversations/conversation"))
         return Response.json({
           conversation: conversationFixture({
             workspace_public_id: approval.workspace,
             answering_user_public_id: approval.agent,
             archived_at: approval.archived ? measured : null,
+            default_runner: downloads.bound ? { executor_public_id: "runner", presence: "connected" } : null,
           }),
+        })
+      if (path.endsWith("/runs") && request.method === "POST") {
+        const body = Schema.decodeUnknownSync(
+          Schema.Struct({
+            run: Schema.Struct({
+              steps: Schema.Array(
+                Schema.Struct({ tool: Schema.Struct({ input: Schema.Struct({ path: Schema.String }) }) }),
+              ),
+            }),
+          }),
+        )(await request.json())
+        downloads.paths.push(body.run.steps[0]!.tool.input.path)
+        return Response.json(
+          {
+            run: { public_id: "download", status: "pending" },
+            receipt: { accepted_task_keys: ["call_tool"], steps: [], resolution_tokens: {} },
+          },
+          { status: 201 },
+        )
+      }
+      if (path.endsWith("/runs/download/start"))
+        return Response.json({ error: { code: "not_startable" } }, { status: 409 })
+      if (path.endsWith("/runs/download/tasks/call_tool"))
+        return Response.json({
+          task: {
+            ...task(),
+            key: "call_tool",
+            status: "completed",
+            tool_name: "files_bytes",
+            content: [{ type: "resource_link", uri: "nexus://uploads/download", name: "notes.md" }],
+          },
         })
       if (path.endsWith("/runs/run"))
         return Response.json({
@@ -348,6 +404,24 @@ test.each([
         starting: 0,
       })
       if ("apiKey" in fixture) {
+        downloads.bound = true
+        const download = {
+          workspace: "workspace",
+          conversation: "conversation",
+          runner: "runner",
+          receipt: "download",
+          operation: { tool: "files_bytes", path: "./notes.md" },
+        } as const
+
+        expect(await runtime.operator(download)).toEqual({ upload: "download" })
+        expect(downloads.paths).toEqual([join(bound, "notes.md")])
+        for (const path of ["../notes.md", ".private/notes.md", join(project, "notes.md")])
+          await expect(runtime.operator({ ...download, operation: { tool: "files_bytes", path } })).rejects.toThrow(
+            "visible file",
+          )
+        expect(downloads.paths).toHaveLength(1)
+        downloads.bound = false
+
         await runtime.manage({
           action: "schedule.create",
           workspace: "workspace",
