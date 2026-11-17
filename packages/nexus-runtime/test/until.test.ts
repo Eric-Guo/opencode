@@ -187,6 +187,7 @@ test("Until graph readiness waits for parked holds and all business work, includ
       executor_context: policy.seed.executor_contexts.runner,
       on_failure: "absorb",
       timeout_ms: 600000,
+      input: { timeout: 120 },
     },
   })
   expect(untilSteps(policy)[1]).toMatchObject({ ask: { key: "hold-1", indefinite: true } })
@@ -338,6 +339,20 @@ test("Until restart recovery proves the original materialization and scans past 
     expect(await new Until(fixture.client, "another-owner").recover(candidate)).toBeUndefined()
     expect(await restarted.recover({ ...candidate, public_id: "different-run" })).toBeUndefined()
     expect(state.appended).toBe(1)
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
+test("new Until plans read the current shell timeout without rewriting an earlier plan", () => {
+  const fixture = storeFixture()
+  const settings = { timeout: 42 }
+  const until = new Until(fixture.client, "agent", () => settings.timeout)
+  try {
+    const first = until.plan(policy)
+    settings.timeout = 60
+    expect(first.steps[0]).toMatchObject({ tool: { input: { timeout: 42 } } })
+    expect(until.plan(policy).steps[0]).toMatchObject({ tool: { input: { timeout: 60 } } })
   } finally {
     fixture.server.stop(true)
   }
