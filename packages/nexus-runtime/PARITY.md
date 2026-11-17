@@ -409,3 +409,41 @@ resources were removed. No service restart was required during verification. The
 executor retained the generic last-error marker already present before the first
 check; direct HTTP inbox reads and live dispatch worked throughout. That snapshot
 contains no error detail or timestamp, so its original cause was not established.
+
+
+## Executor issue recovery
+
+The generic executor marker was reproducible as a status defect: the SDK's error
+classes inherit `Error.name`, and a successful recovery sweep previously never
+cleared the saved issue. A malformed inbox response reproduced exactly
+`{type: "Error", code: null}`; an HTTP 503 remained recorded after the next healthy
+sweep. These reproductions identify the diagnostic defects, not the exact original
+exception from the installed process, whose message was discarded. Startup Nexus
+logs showed successful inbox responses and no current journal failure remained.
+
+`RunnerInbox` now classifies SDK failures with stable labels that survive executable
+minification. Only a clean idle sweep retires an older issue. A newly reported claim
+failure, a handler that still owns work, an unreconciled journal or fatal authority
+loss cannot be hidden by that recovery. Status still excludes response bodies,
+credentials and exception messages; no public Protocol shape changed.
+
+All three regressions failed before the fix. Validation passed 319 runtime
+conformance tests, both runtime type checkers, the runtime build and root
+`bun run check`. A minified diagnostic executor against live Nexus simulated one
+malformed response, reported `MalformedResponse`, then cleared the issue after a
+successful HTTP sweep. It claimed no tasks and changed no live credentials,
+pairing or configuration. The installed service needs rebuilding/restarting to
+apply this source change; its historical marker was not modified in place.
+
+After the subsequent rebuild/restart, live verification exercised the installed
+managed service itself against development Nexus. A temporary recovery record
+with an invalid HTTP header produced `TransportError`; a malformed JSON recovery
+record produced `SchemaError`. Each issue remained visible across two further
+sweeps while its fault persisted, then became `null` on the first healthy idle
+sweep after removing the record. The executor stayed running throughout.
+
+A subsequent native bash task completed through the same runner and returned its
+unique output token, leaving no in-flight work or issue. The test workspace,
+scratch directory, recovery records and test checkpoint store were removed.
+Pairing and saved settings were unchanged, and verification did not restart the
+service or interrupt Nexus.
