@@ -266,3 +266,37 @@ Temporary Bots, Presets, workspaces, terminal tasks and files were removed throu
 the public APIs, preserving service pairing and defaults without a service restart.
 Telegram, T3 and external ACP account interoperability remains covered by local
 protocol fixtures.
+
+## Additional behavioral pass
+
+A second pass against the same Rho revision reproduced and corrected the following
+differences in the existing runtime and WebUI owners:
+
+- Telegram schedule creation and prompt edits preserve internal newlines and
+  spacing, as `ScheduleCommands` does. Time expressions consume the complete
+  argument, require seconds in offset timestamps, accept colonless UTC offsets
+  and allow `in 0s` for immediate rescheduling. Repeating intervals remain
+  positive. Controls reject unexpected text after their job ID. The ingress
+  regression covers create, edit and a malformed pause without sending it.
+- Answer-file downloads resolve relative paths against the conversation's stored
+  environment, matching `Extensions::Ops::Files.conversation_root`, rather than
+  the runner's global default. The UI passes the displayed relative path to the
+  runtime, which owns resolution and confinement. The actual runtime operator
+  regression uses different default and bound directories, checks the submitted
+  tool path and rejects parent, hidden and outside-root paths before submission.
+- Failed browser module registration rolls back contributions and retains the
+  failed version across inventory refreshes. Disable/re-enable or a version
+  change permits another attempt, matching the reference module host. Disposal
+  also removes the failure diagnostic.
+- Plugin forms unset a blank nullable text field rather than storing explicit
+  null, matching the reference form's default semantics. Maps show saved dynamic
+  entries alongside declared properties, so existing entries remain editable.
+
+Each regression failed before its fix. Validation passed 312 runtime conformance
+tests across 69 files with real Chromium and WebRTC, both runtime TypeScript
+checkers and the runtime build, 403 UI unit tests and 68 browser component tests,
+the UI type check/build and root `bun run check`. The three new browser cases also
+passed three isolated repeats. This pass used local protocol/browser fixtures and
+did not restart or mutate either running service. No public Protocol/HttpApi,
+dependency, configuration key or endpoint changed; client regeneration was not
+needed.
