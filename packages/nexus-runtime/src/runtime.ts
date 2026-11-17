@@ -990,8 +990,12 @@ export class NexusRuntime {
     const args = await (async (): Promise<JsonObject> => {
       if (operation.tool === "files_bytes") {
         if (chat.default_runner?.executor_public_id !== input.runner) throw new Error("The runner binding changed.")
-        const root = (await active.member.executors.fetch(input.runner)).services.runner?.environment.root
-        if (typeof root !== "string" || !root) throw new Error("Unknown runner directory.")
+        const environment = await active.application.environments.read(
+          input.workspace,
+          input.conversation,
+          input.runner,
+        )
+        const root = environment.root
         const paths = /^[a-z]:[\\/]|^\\\\/i.test(root) ? win32 : posix
         const path = paths.resolve(root, operation.path)
         const rel = paths.relative(root, path)
