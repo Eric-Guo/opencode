@@ -308,6 +308,7 @@ export async function runClaim(
   },
   startup?: Pick<RunnerContext, "executionStarted" | "started" | "workerRetired">,
   orchestration?: RunnerContext["orchestration"],
+  bashTimeoutSeconds = 120,
 ): Promise<Omit<CommitTask, "claim_token">> {
   try {
     if (row.tool_name === "code" && orchestration) {
@@ -600,7 +601,7 @@ export async function runClaim(
         typeof row.tool_input.workdir === "string" && row.tool_input.workdir
           ? await readablePath(root, row.tool_input.workdir)
           : root
-      const timeout = typeof row.tool_input.timeout === "number" ? row.tool_input.timeout : 30
+      const timeout = typeof row.tool_input.timeout === "number" ? row.tool_input.timeout : bashTimeoutSeconds
       if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 540)
         throw new ToolInputError("Timeout must be between 0 and 540 seconds.")
       const output = await host.shell(workdir, row.tool_input.command, signal, timeout * 1000, progress)

@@ -311,3 +311,21 @@ test("cancellation during a paused submit prevents another send", async () => {
   await expect(work).rejects.toThrow("stopped")
   expect(requests).toHaveLength(1)
 })
+
+test("internally timed tools retain the claim deadline without requesting renewal", async () => {
+  const fixture = await executorFixture()
+  fixture.add("run", "bash", "bash")
+  const task = fixture.client.inboxTask("run", "bash")
+  const claim = await task.claim()
+  const lease = new ClaimLease(task, claim, new AbortController().signal, false)
+  try {
+    setSystemTime(Date.now() + 35000)
+    await lease.maintain()
+    expect(lease.executionSignal.aborted).toBe(false)
+    expect(fixture.calls.some((call) => call.path.endsWith("/extend"))).toBe(false)
+    expect(lease.deadlineAt).toBe(Date.parse(claim.deadline_at!))
+  } finally {
+    await lease.close()
+    await fixture.close()
+  }
+})
