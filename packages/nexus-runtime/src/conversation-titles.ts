@@ -43,7 +43,8 @@ export class ConversationTitles {
     const choice = this.model()
     const model = choice === "follow_current" ? body.model?.model : choice
     if (!model || !body.text?.trim() || info.title) return
-    await this.generate(target, input, body.text.slice(0, 4000), model)
+    // Rho's character limits count code points; UTF-16 slicing can split an emoji.
+    await this.generate(target, input, Array.from(body.text).slice(0, 4000).join(""), model)
   }
 
   async close() {
@@ -86,7 +87,9 @@ export class ConversationTitles {
         if (execution.blocked_reason) return
         if (snapshot?.terminal) {
           if (snapshot.status !== "completed") return
-          const title = snapshot.content?.trim().split(/\r?\n/)[0].replace(/^"|"$/g, "").trim().slice(0, 255)
+          const title = Array.from(snapshot.content?.trim().split(/\r?\n/)[0].replace(/^"|"$/g, "").trim() ?? "")
+            .slice(0, 255)
+            .join("")
           if (!title) return
           for (const attempt of [0, 1]) {
             const current = await chat.fetch({ signal })
