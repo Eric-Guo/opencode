@@ -15,6 +15,7 @@ import { memoryReviewExtension } from "./memory-review-extension"
 import { skillsExtension } from "./skills"
 import { processesExtension } from "./processes"
 import { conventionsExtension } from "./conventions"
+import { executionExtensions } from "./execution-settings"
 import { capabilityExtensions } from "./capabilities"
 
 const Browser = Schema.Struct({ executable: Schema.String, idle_seconds: Schema.optional(Schema.Number) })
@@ -54,6 +55,7 @@ export async function builtinExtensions(host?: HostTools, storage?: string): Pro
       },
       register() {},
     },
+    ...executionExtensions(),
     memoryReviewExtension(),
     skillsExtension(),
     ...(storage ? [processesExtension(storage)] : []),

@@ -78,7 +78,7 @@ export function untilKey(run: string, attempt: number, step = "check") {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`
 }
 
-export function untilSteps(policy: UntilPolicy, attempt = 1, timeoutSeconds = 300): Step[] {
+export function untilSteps(policy: UntilPolicy, attempt = 1, timeoutSeconds = 120): Step[] {
   return [
     Steps.tool({
       name: "bash",
@@ -130,7 +130,7 @@ export class UntilGate {
   constructor(
     readonly policy: UntilPolicy,
     readonly run: string,
-    private readonly timeoutSeconds = 300,
+    private readonly timeoutSeconds = 120,
   ) {}
 
   get done() {
@@ -228,7 +228,7 @@ export class Until {
   constructor(
     private readonly client: Client,
     private readonly owner: string,
-    private readonly timeoutSeconds = 300,
+    private readonly timeoutSeconds: number | (() => number) = 120,
   ) {}
 
   async prepare(workspace: string, conversation: string, policy: UntilPolicy) {
@@ -241,7 +241,11 @@ export class Until {
     const value = untilPolicy(policy)
     return {
       instructions: untilParagraph(value),
-      steps: untilSteps(value, 1, this.timeoutSeconds),
+      steps: untilSteps(
+        value,
+        1,
+        typeof this.timeoutSeconds === "function" ? this.timeoutSeconds() : this.timeoutSeconds,
+      ),
       admission_notes: { "nexus.until": Schema.decodeUnknownSync(Policy)(value) },
     }
   }
@@ -323,7 +327,12 @@ export class Until {
       if (bound.run !== candidate.public_id) return
     }
     const active =
-      this.gates.get(candidate.public_id)?.gate ?? new UntilGate(policy, candidate.public_id, this.timeoutSeconds)
+      this.gates.get(candidate.public_id)?.gate ??
+      new UntilGate(
+        policy,
+        candidate.public_id,
+        typeof this.timeoutSeconds === "function" ? this.timeoutSeconds() : this.timeoutSeconds,
+      )
     this.gates.set(candidate.public_id, { workspace: candidate.workspace_public_id, gate: active })
     await active.reconsider(context, signal)
     if (active.done) this.gates.delete(candidate.public_id)
