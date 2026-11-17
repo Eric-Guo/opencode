@@ -95,6 +95,7 @@ export class NexusApplication {
       code_mode: boolean
       subagent: boolean
       title_model: string | null
+      bash_timeout_seconds?: number
       hints?: (model: string) => string
       adaptations?: (model?: string) => JsonObject
     } = () => ({ code_mode: true, subagent: true, title_model: null }),
@@ -131,7 +132,7 @@ export class NexusApplication {
       (model) => this.defaults().hints?.(model) ?? "",
     )
     this.memoryReviews = new MemoryReviews(member, identity.agent, event)
-    this.until = new Until(member, identity.agent)
+    this.until = new Until(member, identity.agent, () => this.defaults().bash_timeout_seconds ?? 120)
     this.lifecycle = new TurnLifecycle(member, identity.agent, this.admissions, hooks, (name, value) =>
       this.notify(name, value),
     )
