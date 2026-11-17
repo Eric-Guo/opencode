@@ -946,3 +946,84 @@ test("environment independent tools execute without captured placement and still
     await fixture.close()
   }
 })
+
+test("built-in policy changes gate dispatch and checkpoint capture while running calls retain their policy", async () => {
+  const { Checkpoints } = await import("../src/checkpoints")
+  const { tools, operatorTools } = await import("../src/runner")
+  const fixture = await executorFixture()
+  const captured = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const history = new Checkpoints(join(fixture.directory, "history"), join(fixture.directory, "project"), {
+    maxFileBytes: 4,
+    maxTreeBytes: 100,
+    retentionDays: 2,
+  })
+  const root = join(fixture.directory, "bound")
+  await mkdir(root)
+  await writeFile(join(root, "large"), "too large for this capture")
+  const state = { enabled: true }
+  const runner = new RunnerInbox({
+    executor: fixture.client,
+    id: "executor",
+    root: fixture.directory,
+    journal: fixture.journal,
+    signal: new AbortController().signal,
+    admission: new RunnerAdmission(),
+    wake() {},
+    extensions: () => [
+      {
+        definition: definition("held", "A held write", {}, []),
+        async execute() {
+          captured.resolve()
+          await release.promise
+          return { content: "finished" }
+        },
+      },
+    ],
+    builtins: () => ({
+      tools: state.enabled ? [...tools, ...operatorTools] : [],
+      bashTimeoutSeconds: 42,
+      checkpoints: state.enabled ? history : undefined,
+    }),
+  })
+  const add = (key: string, tool: string, tool_input: JsonObject = {}) =>
+    fixture.add("run-" + key, key, tool, {
+      executor_context: { "opencode.environment": { root } },
+      tool_input,
+    })
+  try {
+    add("held", "held")
+    runner.notify(nudge("run-held", "held", "held"))
+    await captured.promise
+    state.enabled = false
+    release.resolve()
+    await runner.drain()
+    expect(fixture.commits[0].body.metadata).toMatchObject({ checkpoint: { hash: expect.any(String) } })
+    for (const tool of ["read", "write", "checkpoints", "checkpoint_restore"]) {
+      add(tool, tool, tool === "write" ? { path: "blocked", content: "no" } : { path: "large" })
+      runner.notify(nudge("run-" + tool, tool, tool))
+    }
+    await runner.drain()
+    expect(fixture.commits.slice(1).every((row) => row.body.outcome === "failed")).toBe(true)
+    expect(await Bun.file(join(root, "blocked")).exists()).toBe(false)
+    add("uncaptured", "held")
+    runner.notify(nudge("run-uncaptured", "uncaptured", "held"))
+    await runner.drain()
+    expect(fixture.commits.at(-1)!.body.metadata).toBeUndefined()
+    state.enabled = true
+    add("enabled-write", "write", { path: "small", content: "yes" })
+    runner.notify(nudge("run-enabled-write", "enabled-write", "write"))
+    await runner.drain()
+    expect(await Bun.file(join(root, "small")).text()).toBe("yes")
+    const records = await history.forRoot(root).records("run-held")
+    expect(records.structured_content.records).toHaveLength(1)
+    expect(
+      (await history.forRoot(root).query({ run_public_id: "run-held" }, new AbortController().signal)).content,
+    ).toContain("large")
+    expect(await history.prune(Date.now() + 3 * 86400000)).toBe(2)
+  } finally {
+    release.resolve()
+    await runner.close()
+    await fixture.close()
+  }
+})

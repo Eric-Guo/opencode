@@ -11,6 +11,8 @@ import { conversationFixture } from "./fixture/conversation"
 const Declaration = Schema.Struct({
   configuration: Schema.Struct({
     kernel_tools: Schema.Array(Schema.String),
+    runner_tool_names: Schema.Array(Schema.String),
+    lifecycle_hooks: Schema.Record(Schema.String, Schema.MutableJson),
     image_model: Schema.NullOr(Schema.String),
     compaction_policy: Schema.Struct({ mode: Schema.String }),
   }),
@@ -48,6 +50,7 @@ test.each([
   await Promise.all([mkdir(storage), mkdir(bound, { recursive: true })])
   const runtime = new NexusRuntime(storage)
   const changed = Promise.withResolvers<typeof Declaration.Type>()
+  const declarations: (typeof Declaration.Type)[] = []
   const calls: { path: string; method: string; authorization: string | null; after: string | null; state: string }[] =
     []
   const approval = {
@@ -300,6 +303,7 @@ test.each([
             { status: 400 },
           )
         const payload = Schema.decodeUnknownSync(Declaration)(await request.json())
+        declarations.push(payload)
         if (
           payload.configuration?.image_model === "image-fixture" &&
           payload.configuration?.compaction_policy?.mode === "off" &&
@@ -570,6 +574,26 @@ test.each([
         expect(declaration.configuration.kernel_tools).toEqual(Toolsets.names("images"))
         expect(declaration.prompt_documents?.summarizer.content).toContain("Goal:")
         expect(declaration.prompt_documents?.summarizer.content).toContain("Open:")
+        const hooks = { turn_start: { tool: "verify", timeout_ms: 30000 } }
+        await runtime.configureExtension({
+          id: "nexus.lifecycle-hooks",
+          operations: [{ op: "set", path: ["turn_start"], value: hooks.turn_start }],
+        })
+        await published(
+          () => JSON.stringify(declarations.at(-1)?.configuration.lifecycle_hooks) === JSON.stringify(hooks),
+        )
+        await runtime.configureExtension({ id: "nexus.coding", enabled: false })
+        await runtime.configureExtension({ id: "nexus.checkpoints", enabled: false })
+        await published(
+          () => !announcements.at(-1)?.services.runner.tools.some((tool) => tool.name === "checkpoint_restore"),
+        )
+        expect(announcements.at(-1)?.services.runner.tools.map((tool) => tool.name)).not.toContain("read")
+        await published(() => !declarations.at(-1)?.configuration.runner_tool_names.includes("read"))
+        expect(declarations.at(-1)?.configuration.runner_tool_names).toContain("code")
+        await runtime.configureExtension({ id: "nexus.coding", enabled: true })
+        await runtime.configureExtension({ id: "nexus.lifecycle-hooks", enabled: false })
+        await published(() => JSON.stringify(declarations.at(-1)?.configuration.lifecycle_hooks) === "{}")
+        expect(declarations.at(-1)?.configuration.runner_tool_names).toContain("read")
       }
     } else {
       expect(runtime.status().identity).toBeUndefined()
@@ -607,3 +631,9 @@ test.each([
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+async function published(ready: () => boolean) {
+  const deadline = Date.now() + 4000
+  while (!ready() && Date.now() < deadline) await Bun.sleep(1)
+  expect(ready()).toBe(true)
+}

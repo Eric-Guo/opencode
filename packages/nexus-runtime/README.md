@@ -73,6 +73,25 @@ live in the runtime's private `configuration.json`, separately from pairing and
 Human login credentials. Existing adapter environment variables provide initial
 defaults; saved settings take precedence.
 
+Built-in execution settings use the same extension configuration:
+
+- `nexus.coding` controls filesystem and shell tools. `bash_timeout_seconds` defaults
+  to 120 and accepts integers from 1 through 540; an explicit call timeout wins.
+  Until acceptance checks use this setting when authored or recovered. Bash retains
+  its native hard timeout and does not renew its claim.
+- `nexus.checkpoints` controls automatic captures and checkpoint operations.
+  `retention_days`, `max_file_bytes`, `max_tree_bytes`, and `capture_timeout_seconds`
+  default to 7, 2097152, 268435456, and 30. Disablement preserves saved history.
+- `nexus.lifecycle-hooks` publishes optional `turn_start`, `pre_compact`, `post_compact`,
+  and `stop` groups to Nexus. Each names an Agent-service tool and `timeout_ms`
+  (1–300000); Stop also supplies `max_continuations` (0–20). Configure each group
+  as a complete JSON object. An empty configuration installs no hooks. Preset hook
+  overrides continue to apply.
+
+These extensions default to enabled. Changes affect subsequent calls and declarations;
+active handlers retain their captured settings and already admitted work retains its
+recorded declaration. Code Mode and project skills have their own enablement controls.
+
 Custom TypeScript/JavaScript modules selected through `OPENCODE_NEXUS_EXTENSIONS`
 can export `register(api)` and supply a sibling JSON descriptor. The descriptor
 contains `id`, `name`, `description`, `default_enabled`, `configuration_version`,
