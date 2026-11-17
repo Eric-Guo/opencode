@@ -1,6 +1,7 @@
 import { lstat } from "node:fs/promises"
 import { dirname, join, relative } from "node:path"
 import { searchProcess } from "./search-process"
+import { which } from "@opencode/core/util/which"
 
 export async function findFiles(path: string, glob: string, limit: number, signal: AbortSignal) {
   let parent = path
@@ -32,7 +33,7 @@ export async function findFiles(path: string, glob: string, limit: number, signa
     pattern,
     path,
   ]
-  const executable = Bun.which("fd", { PATH: process.env.PATH }) ?? Bun.which("fdfind", { PATH: process.env.PATH })
+  const executable = which("fd") ?? which("fdfind")
   if (!executable)
     return { is_error: true, content: "fd not found on PATH (looked for fd, fdfind). Install fd to use find." }
 
