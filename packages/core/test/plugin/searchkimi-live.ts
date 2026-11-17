@@ -5,6 +5,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Bus } from "@opencode/core/bus"
 import { Form } from "@opencode/core/form"
 import { Image } from "@opencode/core/image"
@@ -33,7 +34,7 @@ const webSearchToolNode = makeLocationNode({
       yield* registerToolPlugin(WebSearchTool.Plugin, { websearch: webSearchHost(websearch) })
     }),
   ),
-  deps: [Tool.node, Permission.node, WebSearch.node, Form.node],
+  deps: [Tool.node, Permission.node, WebSearch.node, Form.node, Config.node, Flag.node],
 })
 
 const layer = Layer.mergeAll(
