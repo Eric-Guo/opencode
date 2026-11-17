@@ -182,6 +182,13 @@ Side's parent reference as one labelled context chunk. Load and resume can recov
 held work after restart even when no active-turn pointer remains; inherited history
 never becomes a retry or abandon target.
 
+Editor filesystem requests validate their responses and have a 30-second read or
+60-second write deadline. An unavailable editor retires its matching live binding;
+reads fall back to disk with a notice, including when the disk read also fails.
+Writes and edits report an error without falling back after an uncertain response.
+A missing buffer permits disk access for that call, except after an edit has already
+read the buffer and attempted its write. Editor cancellation interrupts the task.
+
 Persistent approvals use the shared runtime grant owner through
 `application.approve` on the experimental management API. Native `web_fetch`
 approvals retain the literal site until the service restarts; command, path and
@@ -472,8 +479,8 @@ rendering or binary bytes to stdout and its status to stderr.
 
 ## Rho correspondence
 
-The reference is `agents/rho` at Cybros revision
-`ef798b1d6828b984a4a02b6dfc8aba34003d7d69`. These are TypeScript implementations
+The reference baseline, contract anchors, accepted native differences and verification
+evidence are recorded in [PARITY.md](./PARITY.md). These are TypeScript implementations
 hosted by OpenCode's managed service; the Rho web UI is replaced by `nexus-ui`.
 
 | Reference                 | TypeScript implementation and contracts                                                                                                                                                                                        |
