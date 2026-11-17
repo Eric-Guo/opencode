@@ -18981,6 +18981,26 @@
                         "type": "string",
                         "enum": ["application.prepare", "application.submit"]
                       },
+                      "addressed": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "answering_user_public_id": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "key": {
                         "type": "string",
                         "minLength": 1
@@ -19165,6 +19185,17 @@
                       }
                     },
                     "required": ["action", "id", "version", "path"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["application.defaults"]
+                      }
+                    },
+                    "required": ["action"],
                     "additionalProperties": false
                   },
                   {
@@ -19408,6 +19439,17 @@
                         "type": "string",
                         "enum": ["schedule.create"]
                       },
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "workspace": {
                         "anyOf": [
                           {
@@ -19518,8 +19560,7 @@
                           "schedule.resume",
                           "schedule.cancel",
                           "schedule.run",
-                          "schedule.read",
-                          "schedule.executions"
+                          "schedule.read"
                         ]
                       },
                       "workspace": {
@@ -19548,7 +19589,56 @@
                     "properties": {
                       "action": {
                         "type": "string",
+                        "enum": ["schedule.executions"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "conversation": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "after": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action", "conversation", "id"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
                         "enum": ["schedule.update"]
+                      },
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "workspace": {
                         "anyOf": [
