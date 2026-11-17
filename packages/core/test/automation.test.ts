@@ -262,6 +262,7 @@ const it = testEffect(
     ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
+      Session.node.replace(Session.configured({ createDirectories: false })),
       SessionExecution.node.replace(execution),
       LocationServiceMap.node.replace(locations),
     ],
