@@ -27,11 +27,11 @@ export async function acpPermission(
     raw.command,
   )
   const command =
-    decodedCommand._tag === "Some"
+    (decodedCommand._tag === "Some"
       ? typeof decodedCommand.value === "string"
         ? decodedCommand.value
         : decodedCommand.value.join(" ")
-      : call.title
+      : undefined) || call.title
   const path = Schema.decodeUnknownOption(Schema.String)(raw.path)
   const paths = [
     ...new Set([...(call.locations?.map((entry) => entry.path) ?? []), ...(path._tag === "Some" ? [path.value] : [])]),
