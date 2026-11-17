@@ -1,6 +1,6 @@
 import { claimProgress } from "./claim-progress"
 import { FSUtil } from "@opencode/util/fs-util"
-import type { CodeOperation } from "./claim-control"
+import { ClaimInterrupted, type CodeOperation } from "./claim-control"
 import { bashOutput } from "./bash-output"
 import { listDirectory } from "./runner-list"
 import { codeBinding, codeInstructions } from "./code-settings"
@@ -310,6 +310,8 @@ export async function runClaim(
   orchestration?: RunnerContext["orchestration"],
   bashTimeoutSeconds = 120,
 ): Promise<Omit<CommitTask, "claim_token">> {
+  let editorNotice: string | undefined
+
   try {
     if (row.tool_name === "code" && orchestration) {
       if (typeof row.tool_input.code !== "string") throw new Error("Expected Code Mode source.")
@@ -483,85 +485,55 @@ export async function runClaim(
       })
         ? binding
         : undefined
-    const editorRequest = async (operation: "read" | "write", input: JsonObject) => {
-      if (!editor) throw new Error("Editor filesystem is unavailable.")
-      const response = await fetch(editor.url + "/fs/" + operation, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + editor.token },
-        body: JSON.stringify({ session: editor.session, ...input }),
-        signal,
-        redirect: "error",
-      }).catch((error: unknown) => {
-        signal.throwIfAborted()
+    const filesystem =
+      editor &&
+      editorFilesystem(editor, signal, () => {
         if (anchor) ports?.drop(row.workspace_public_id, anchor, editor)
-        throw new EditorFailure("unavailable", operation, error instanceof Error ? error.message : String(error))
       })
-      if (!response.ok) {
-        const message = await response.text()
-        const parsed = Schema.decodeUnknownOption(
-          Schema.fromJsonString(
-            Schema.Struct({ error: Schema.Struct({ code: Schema.String, message: Schema.String }) }),
-          ),
-        )(message)
-        if (anchor && parsed._tag === "Some" && ["closed", "unavailable"].includes(parsed.value.error.code))
-          ports?.drop(row.workspace_public_id, anchor, editor)
-        throw new EditorFailure(
-          parsed._tag === "Some" ? parsed.value.error.code : "editor_refused",
-          operation,
-          parsed._tag === "Some" ? parsed.value.error.message : message.slice(0, 2048),
-        )
-      }
-      return response.json()
-    }
-    let editorNotice: string | undefined
     if (
       row.tool_name === "read" &&
+      filesystem &&
       editor?.read &&
       typeof row.tool_input.path === "string" &&
       !/\.(png|jpe?g|gif|webp|bmp|pdf)$/i.test(row.tool_input.path)
     ) {
       const offset = typeof row.tool_input.offset === "number" ? Math.max(1, row.tool_input.offset) : 1
       const limit = typeof row.tool_input.limit === "number" ? row.tool_input.limit : 2000
-      const result = await editorRequest("read", {
-        path: resolvePath(root, row.tool_input.path),
-        line: offset,
-        limit: limit + 1,
-      }).catch((error: unknown) => {
-        signal.throwIfAborted()
-        if (!(error instanceof EditorFailure)) throw error
-        return error
-      })
-      if (!(result instanceof EditorFailure))
-        return await readEditorWindow(
-          Schema.decodeUnknownSync(Schema.Struct({ content: Schema.String }))(result).content,
-          signal,
-          offset,
-          limit,
-        )
-      if (!["not_found", "unavailable", "closed", "timeout"].includes(result.code))
-        return { is_error: true, content: "Editor: " + result.message }
+      const result = await filesystem
+        .read(resolvePath(root, row.tool_input.path), offset, limit + 1)
+        .catch((error: unknown) => {
+          signal.throwIfAborted()
+          if (!(error instanceof EditorFailure)) throw error
+          return error
+        })
+      if (!(result instanceof EditorFailure)) return await readEditorWindow(result, signal, offset, limit)
+      if (result.code === "beyond_eof") return { is_error: true, content: `Offset ${offset} is beyond end of file.` }
+      if (!["not_found", "unavailable"].includes(result.code))
+        return { is_error: true, content: (editor.client ?? "The editor") + ": " + result.message }
       if (result.code !== "not_found")
-        editorNotice = "[Editor did not answer the read (" + result.message + "); read from disk.]"
+        editorNotice =
+          "[" + (editor.client ?? "The editor") + " did not answer the read (" + result.message + "); read from disk.]"
     }
-    if ((row.tool_name === "write" && editor?.write) || (row.tool_name === "edit" && editor?.read && editor.write)) {
+    if (
+      filesystem &&
+      ((row.tool_name === "write" && editor?.write) || (row.tool_name === "edit" && editor?.read && editor.write))
+    ) {
       const path = typeof row.tool_input.path === "string" ? await destination(root, row.tool_input.path) : ""
       const refusal = runnerRefusal(row.tool_name, { ...row.tool_input, path }, root, protectedRoots)
       if (refusal) return { is_error: true, content: refusal }
-      const result = await mutateEditor(root, row.tool_name, row.tool_input, signal, {
-        read: async (path) =>
-          Schema.decodeUnknownSync(Schema.Struct({ content: Schema.String }))(await editorRequest("read", { path }))
-            .content,
-        write: async (path, content) => {
-          await editorRequest("write", { path, content })
+      const result = await mutateEditor(root, row.tool_name, row.tool_input, signal, filesystem).catch(
+        (error: unknown) => {
+          signal.throwIfAborted()
+          if (!(error instanceof EditorFailure)) throw error
+          return error
         },
-      }).catch((error: unknown) => {
-        signal.throwIfAborted()
-        if (!(error instanceof EditorFailure)) throw error
-        return error
-      })
+      )
       if (!(result instanceof EditorFailure)) return result
       if (result.code !== "not_found" || (row.tool_name === "edit" && result.operation === "write"))
-        return { is_error: true, content: "Editor did not confirm the " + row.tool_name + ": " + result.message }
+        return {
+          is_error: true,
+          content: (editor.client ?? "The editor") + " did not confirm the " + row.tool_name + ": " + result.message,
+        }
     }
     if (row.tool_name === "ls") return await listDirectory(root, row.tool_input, signal)
     if (row.tool_name === "git_review") return await gitReview(root, row.tool_input, signal)
@@ -709,7 +681,9 @@ export async function runClaim(
     }
   } catch (error) {
     if (extensions.some((tool) => tool.definition.name === row.tool_name)) throw error
-    return toolFailure(error, signal)
+
+    const result = toolFailure(error, signal)
+    return { ...result, content: editorNotice ? editorNotice + "\n\n" + result.content : result.content }
   }
 }
 
@@ -720,5 +694,80 @@ class EditorFailure extends Error {
     message: string,
   ) {
     super(message)
+  }
+}
+
+function editorFilesystem(editor: EditorBinding, signal: AbortSignal, drop: () => void) {
+  const request = async <S extends Schema.Decoder<unknown>>(
+    operation: "read" | "write",
+    input: JsonObject,
+    schema: S,
+  ) => {
+    try {
+      const response = await fetch(editor.url + "/fs/" + operation, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + editor.token },
+        body: JSON.stringify({ session: editor.session, ...input }),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(operation === "read" ? 30000 : 60000)]),
+        redirect: "error",
+      })
+      const message = await response.text()
+
+      signal.throwIfAborted()
+      if (response.status === 200) {
+        const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(schema))(message)
+        if (parsed._tag === "Some") return parsed.value
+
+        throw new EditorFailure("unavailable", operation, "Malformed editor " + operation + " response.")
+      }
+      const parsed = Schema.decodeUnknownOption(
+        Schema.fromJsonString(Schema.Struct({ error: Schema.Struct({ code: Schema.String, message: Schema.String }) })),
+      )(message)
+      // A structured root refusal is the editor's word; a bearer refusal or a broken response is a dead port.
+      if (response.status === 401 || response.status < 400 || response.status >= 500 || parsed._tag === "None")
+        throw new EditorFailure(
+          "unavailable",
+          operation,
+          parsed._tag === "Some" ? parsed.value.error.message : `Editor returned HTTP ${response.status}.`,
+        )
+      if (parsed.value.error.code === "cancelled")
+        throw new ClaimInterrupted(
+          (editor.client ?? "The editor") + " cancelled the request: " + parsed.value.error.message,
+        )
+
+      throw new EditorFailure(
+        ["closed", "timeout", "unavailable"].includes(parsed.value.error.code)
+          ? "unavailable"
+          : parsed.value.error.code,
+        operation,
+        parsed.value.error.message,
+      )
+    } catch (error) {
+      signal.throwIfAborted()
+      if (error instanceof ClaimInterrupted) throw error
+
+      const failure =
+        error instanceof EditorFailure
+          ? error
+          : new EditorFailure("unavailable", operation, error instanceof Error ? error.message : String(error))
+      if (failure.code === "unavailable") drop()
+
+      throw failure
+    }
+  }
+
+  return {
+    async read(path: string, line?: number, limit?: number) {
+      return (
+        await request(
+          "read",
+          { path, ...(line === undefined ? {} : { line }), ...(limit === undefined ? {} : { limit }) },
+          Schema.Struct({ content: Schema.String }),
+        )
+      ).content
+    },
+    async write(path: string, content: string) {
+      await request("write", { path, content }, Schema.Record(Schema.String, Schema.MutableJson))
+    },
   }
 }
