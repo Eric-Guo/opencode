@@ -14,8 +14,8 @@ The November 17, 2026 reviews rechecked the eleven executable non-WebUI packages
 against their production TypeScript owners and local conformance evidence. The
 latest passes corrected search result framing, output budgeting, subprocess cleanup,
 nullable skill names, portable executable lookup and editor filesystem failures.
-The complete runtime gate passes 352 tests across 70 files, including editor response
-and interruption regressions, a minified Node search regression and real headless
+The complete runtime gate passes 358 tests across 71 files, including file-mutation
+queue, editor response and interruption regressions, a minified Node search regression and real headless
 Chromium, PTY and WebRTC transports. Details and live
 verification are recorded in the final sections below.
 
@@ -29,7 +29,7 @@ verification are recorded in the final sections below.
 | `rho`: memory review/policy, Until, instructions and process ownership                                 | `memory-review.ts`, `memory-policy.ts`, `until.ts`, `conventions.ts`, `processes.ts`                                    | `memory-review.test.ts`, `until.test.ts`, `conventions.test.ts`, `processes.test.ts`: captured revisions, private review forks, acceptance graph recovery, bounded instructions and conversation-owned process retirement                                                                                                                    |
 | `rho`: extension registration, settings changes and managed packages                                   | `extension-manager.ts`, `configuration.ts`, `packages.ts`, `worker-extension.ts`, `extension-rpc.ts`, `webui-module.ts` | `extensions.test.ts`, `packages.test.ts`, `worker-extension.test.ts`, `extension-rpc-lifetime.test.ts`: inert disabled code, staged publication, failed-candidate cleanup, retained handler leases, immutable versions, rollback, worker cancellation and remote-reference release                                                           |
 | `rho-env`: executor inbox, authoritative claims, admission, orchestration, cancellation and settlement | `runner-inbox.ts`, `runner.ts`, `claim-control.ts`, `claim-result.ts`, `claims.ts`                                      | `executor.test.ts`, `claim-control.test.ts`, `claim-result.test.ts`, `claims.test.ts`: push/HTTP recovery, bounded startup/resources, nested child progress, placement/refusal checks, renewal, canceled-handler ownership and durable settlement without rerunning effects                                                                  |
-| `rho-env`: filesystem tools, attachments, checkpoints, environments, skills and terminal transport     | `file-read.ts`, `runner-search.ts`, `checkpoint-store.ts`, `environments.ts`, `skills.ts`, `terminal.ts`, `realtime.ts` | `runner.test.ts`, `runner-search.test.ts`, `attachments.test.ts`, `checkpoint-store.test.ts`, `environments.test.ts`, `skills.test.ts`, `terminal.test.ts`, `realtime.test.ts`: complete media transfer, protected roots, fuzzy edits, durable undo, captured roots, skill precedence, real PTYs, WebRTC reconnect and bounded output replay |
+| `rho-env`: filesystem tools, attachments, checkpoints, environments, skills and terminal transport     | `file-read.ts`, `mutation.ts`, `runner-search.ts`, `checkpoint-store.ts`, `environments.ts`, `skills.ts`, `terminal.ts`, `realtime.ts` | `runner.test.ts`, `mutation.test.ts`, `runner-search.test.ts`, `attachments.test.ts`, `checkpoint-store.test.ts`, `environments.test.ts`, `skills.test.ts`, `terminal.test.ts`, `realtime.test.ts`: complete media transfer, protected roots, fuzzy edits, durable undo, captured roots, skill precedence, real PTYs, WebRTC reconnect and bounded output replay |
 | `rho-env`: editor filesystem routing, response validation and failure mapping                          | `runner.ts`, `editor-bridge.ts`, `environments.ts`                                                                      | `editor-filesystem.test.ts`, `executor.test.ts`, `editor.test.ts`, `environments.test.ts`: unsaved buffers, paged reads, missing buffers, EOF, client refusals, broken bindings, malformed acknowledgements, interrupted settlement and disk preservation |
 
 ## Extensions and peer surfaces
@@ -55,7 +55,7 @@ suites exercise the OpenCode implementation rather than executing Ruby.
 | Package                | Reference anchors beneath its `test/` directory                                                                                                                      | Local evidence beneath `test/`                                                                |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `rho`                  | `api_key_connection_test.rb`, `host_follower_test.rb`, `execution_policy_test.rb`, `package_activation_test.rb`, `memory_review_test.rb`, `until_test.rb`            | `runtime`, `application`, `lifecycle`, `packages`, `memory-review`, `until`                   |
-| `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `fs_port_test.rb`, `tools/read_test.rb`, `tools/write_test.rb`, `tools/edit_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb` | `executor`, `claims`, `runner`, `editor-filesystem`, `checkpoint-store`, `terminal`, `realtime` |
+| `rho-env`              | `runner_execution_test.rb`, `claim_orchestration_test.rb`, `cancellation_recovery_test.rb`, `fs_port_test.rb`, `tools/read_test.rb`, `tools/write_test.rb`, `tools/edit_test.rb`, `checkpoints/store_test.rb`, `webrtc_transport_test.rb` | `executor`, `claims`, `runner`, `mutation`, `editor-filesystem`, `checkpoint-store`, `terminal`, `realtime` |
 | `rho-codemode`         | `code_test.rb`, `runtime_test.rb`, `claim_bridge_test.rb`                                                                                                            | `code`, `executor`                                                                            |
 | `rho-web-tools`        | `client_test.rb`, `render_test.rb`, `commands_test.rb`                                                                                                               | `web`, `policy`, `dev`                                                                        |
 | `rho-browser`          | `tools_test.rb`, `session_test.rb`, `session_idle_test.rb`, `session_popups_test.rb`                                                                                 | `browser` with real Chromium                                                                  |
@@ -718,3 +718,65 @@ false and publish/download a file with matching bytes. Temporary workspaces and
 files were removed. The service remained ready with zero in-flight tasks and no
 executor issue. This verifies the editor fixes in the installed executable and
 supersedes the earlier source-only deployment limitation.
+
+## File mutation queue review, November 18, 2026
+
+The reference remains `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6`. The package
+inventory and registration/dispatch review retain the TypeScript owners above for
+all eleven executable non-WebUI packages: application/admission and extensions;
+executor files, processes, checkpoints and terminals; native Code Mode; web and
+browser tools; MCP catalogs, documents and transports; both ACP directions;
+Telegram routing/delivery; T3 assignments; and source-only development controls.
+The documented native OpenCode substitutions remain in effect. `rho-webui` stays
+with `packages/nexus-ui`, and `rho-runner` has no tracked executable implementation.
+
+`rho-env/lib/rho/env/file_mutation_queue.rb`, `tools/write.rb`, `tools/edit.rb`
+and `test/toolsets_test.rb` establish that same-file mutations serialize across
+captured roots and symlink aliases, including files below missing parents, while
+different files remain independent. Waiting for a file must remain cancelable.
+Review reproduced two gaps in `mutation.ts` despite the passing baseline gate:
+
+- Disk and editor mutations checked cancellation only after the preceding writer
+  exited. Their shared queue now rejects a canceled waiter with its original abort
+  reason immediately, without invoking its action. Later writers still wait for
+  the actual holder. An active mutation retains its lock until its action exits.
+- Editor mutations used lexical paths as queue keys. They now use the same
+  canonical destination resolver as disk mutations. Editor requests retain their
+  original absolute paths. Concurrent edits through aliases preserve both changes,
+  including unsaved files below missing directories, without changing disk files.
+
+`mutation.test.ts` covers cancellation for disk/editor waiters, abort reasons,
+failure recovery, independent paths and active-editor ownership after cancellation.
+`editor-filesystem.test.ts` exercises alias edits through production `runClaim`
+and real loopback HTTP, plus cancellation and handler release through `RunnerInbox`.
+Four new cases failed against the original implementation; the active-ownership
+and runner-cancellation checks already passed. Both focused suites passed ten
+repeats after the changes.
+
+Validation passed 358 runtime conformance tests across 71 files with isolated
+headless Chromium, PTYs and WebRTC, both runtime type checkers, the runtime build,
+two CLI adapter tests, one Server/generated-client adapter test, all 76 Nexus UI
+server/bridge tests and root `bun run check`. Root lint retains existing advisory
+warnings and no errors, with no warnings in the changed runtime files. Optional
+integrations use controlled HTTP/RPC/process peers over real transports; external
+Telegram/T3 account interoperability is outside this gate.
+
+Live development Nexus checks used a temporary source runtime and Agent. Durable
+tasks serialized two edits through symlink aliases for existing and missing nested
+files, preserved the editor request paths and left disk unchanged. Stop canceled
+a queued writer and released its handler while another task still held the file;
+the canceled writer never reached the editor. Temporary workspaces, the Agent,
+credentials and scratch files were removed, and both temporary credential planes
+were verified rejected with HTTP 401.
+
+The installed `48250ef8` service separately completed a Human-approved native
+Code Mode workflow: exactly one bash execution printed an unpredictable UUID,
+retained structured false and published a file with matching downloaded bytes.
+Stop also canceled a claimed native bash task through an Agent-owned application
+operation. Direct Human-authored standalone dispatch to that Runner was refused
+with `runner_not_eligible`, preserving the credential boundary. Temporary
+workspaces and files were removed; the managed service remained ready with zero
+in-flight tasks, no executor issue and its original pairing and default workspace.
+
+These fixes require rebuilding the installed managed service. No public Protocol,
+HttpApi, SDK, configuration or storage format changed, and no new flag is needed.
