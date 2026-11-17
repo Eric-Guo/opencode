@@ -1,6 +1,7 @@
 import { searchProcess } from "./search-process"
 import { Schema } from "effect"
 import { dirname } from "node:path"
+import { which } from "@opencode/core/util/which"
 
 const Event = Schema.Struct({
   type: Schema.String,
@@ -21,7 +22,7 @@ export async function grepMatches(
   signal: AbortSignal,
 ) {
   signal.throwIfAborted()
-  const executable = Bun.which("rg", { PATH: process.env.PATH })
+  const executable = which("rg")
   if (!executable)
     return {
       error:
