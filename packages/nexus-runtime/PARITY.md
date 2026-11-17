@@ -10,6 +10,13 @@ The current reference differs from the previous baseline
 `31b82029d75d1ed9626b80739e4caca16671b344` only in Ruby dependency locks and
 gem dependency metadata. Its production source and reference tests are unchanged.
 
+The November 17, 2026 review rechecked the eleven executable non-WebUI packages
+against their production TypeScript owners and local conformance evidence. It
+corrected Unicode title truncation and the operator skill-name length boundary.
+The complete runtime gate passes 320 tests across 69 files with real headless
+Chromium, PTY and WebRTC transports. Details and live verification are recorded
+in the final section below.
+
 ## Application and executor
 
 | Reference contracts                                                                                    | TypeScript owner                                                                                                        | Behavioral evidence                                                                                                                                                                                                                                                                                                                          |
@@ -107,6 +114,8 @@ Local evidence names use the `.test.ts` suffix. `rho-webui` belongs to
 `bun run test:conformance` requires `OPENCODE_NEXUS_CHROMIUM` pointing at an isolated
 Chromium executable. It exercises the production owners with local HTTP/WebSocket,
 MCP, OAuth, ACP/T3 child fixtures, real browser, PTY and WebRTC transports.
+On macOS, the Playwright `chrome-headless-shell` executable also satisfies this
+gate and avoids the full Chrome application's display-process startup dependency.
 
 The native migration has focused regression coverage in `code`, `executor`,
 `executor-library`, `editor-policy`, `editor-permissions` and `runtime`. These cover
@@ -447,3 +456,69 @@ unique output token, leaving no in-flight work or issue. The test workspace,
 scratch directory, recovery records and test checkpoint store were removed.
 Pairing and saved settings were unchanged, and verification did not restart the
 service or interrupt Nexus.
+
+## Non-WebUI contract review, November 17, 2026
+
+The reference remains `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6`.
+The package inventory, production registration/dispatch paths and reference
+contracts were checked against the owners and tests in the tables above:
+
+- `rho`: application admission/recovery, credentials, configuration, Presets/Bots,
+  memory, Until, conventions, titles and staged extension/package ownership.
+- `rho-env`: authoritative inbox claims, renewal and cancellation, placement,
+  filesystem/shell output, attachments, checkpoints, skills, processes and terminals.
+- `rho-codemode`: frozen declarations, argument validation, native operations,
+  observation ordering, ownership transfer and selected/printed output.
+- `rho-web-tools` and `rho-browser`: fetch/address/redirect policy and captures;
+  readiness, per-run tabs, frame references, actions, idle and popup cleanup.
+- `rho-mcp`: naming, schema curation, budgets, documents, transport cancellation,
+  OAuth publication and editor-scoped mounts through OpenCode's MCP owner.
+- `rho-acp` and `rho-acp-client`: session/authentication, prompt conversion,
+  replay and held-work recovery, editor attachments, delegation policy and children.
+- `rho-ingress-telegram`: settings, routing/access, frozen admission, debounce,
+  uncertain delivery, media/voice, schedules, participation and worker ownership.
+- `rho-t3` and `rho-dev`: native catalogs/assignment ownership and reconciliation;
+  source-only commands, scoped operations, stream cursors and approval grants.
+
+Two boundary differences were reproduced and corrected:
+
+- Rho's `ConversationTitles::INPUT_CHARACTERS` and `TITLE_CHARACTERS` count
+  Unicode characters. `conversation-titles.ts` now retains 4,000 input code points
+  and 255 title code points. UTF-16 slicing previously split an emoji at either
+  limit, producing an unpaired surrogate. `conversation-titles.test.ts` exercises
+  both limits through the production title owner, retaining one-attempt and Side
+  cleanup behavior.
+- Rho's `Env::Skills::NAME_MAX_LENGTH` is 64. The repeated optional hyphen in the
+  operator's former regular expression allowed a 65-character name. The shared
+  `skillOperation` boundary now enforces the total length for show, push and remove
+  before collection lookup. `dev.test.ts` checks all three refusals, an accepted
+  64-character name and the existing stale-revision refusal without mutation replay.
+
+Both regressions failed before the fixes. The two affected test files passed ten
+repeats afterward. Full validation passed 320 runtime tests across 69 files with
+real headless Chromium, PTY and WebRTC, both runtime type checkers, the runtime
+build, two CLI adapter tests, one Server/generated-client adapter test, all 76
+Nexus UI server/bridge tests and root `bun run check`. The root lint gate retains
+the existing advisory-warning backlog with zero errors.
+
+Live checks used development Nexus at `http://localhost:3000`, the existing
+standalone UI's server-side Human credential and an isolated workspace. The source
+title owner submitted an input whose 4,000th character was an emoji, generated a
+title, retained one durable attempt and removed its temporary Side. A 255-character
+title ending in an emoji persisted and read back exactly. Source skill operations
+refused a 65-character name and pushed/read/removed a 64-character workspace skill.
+
+The running managed service separately completed a Human-approved native Code
+Mode call. Bash generated an unpredictable UUID, printed it for the model and ran
+exactly once, as confirmed by a scratch counter. The answer included that UUID and
+task inspection retained structured `false`. The temporary workspace and files
+were deleted; service pairing, the default workspace and Agent were preserved.
+Neither service was restarted. The two source fixes require a subsequent managed
+service rebuild/restart to reach its installed executable.
+
+No Protocol, HttpApi, configuration key or feature flag changed. The established
+native substitutions remain intentional. `rho-webui` remains owned by
+`packages/nexus-ui` and its parity document; `rho-runner` has no reference source
+or tests and contributes no separate application. Optional external accounts were
+represented by local peers in the conformance gate; this review does not claim
+external Telegram/T3 account interoperability or identical Ruby language semantics.
