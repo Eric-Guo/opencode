@@ -60,29 +60,31 @@ export class T3Catalog {
     }))
   }
 
-  select(agent?: string, model?: string) {
+  select(agent = "", model = "") {
+    const name = agent.trim()
+    const requested = model.trim()
     const choices = this.providers.filter((provider) =>
-      agent
+      name
         ? [
             provider.name,
             provider.harness,
             provider.driver,
             ...(provider.driver === "claudeAgent" ? ["Claude"] : []),
-          ].some((name) => name.toLowerCase() === agent.toLowerCase())
+          ].some((candidate) => candidate.toLowerCase() === name.toLowerCase())
         : !provider.reason,
     )
     if (choices.length !== 1) throw new Error("Choose one available coding agent with coding_work action=agents.")
     const provider = choices[0]
     if (provider.reason) throw new Error(provider.name + " is " + provider.reason + ".")
-    const exact = provider.models.filter((row) => row.slug === model)
-    const named = provider.models.filter((row) => row.name.toLowerCase() === model?.toLowerCase())
-    const models = !model
+    const exact = provider.models.filter((row) => row.slug === requested)
+    const named = provider.models.filter((row) => row.name.toLowerCase() === requested.toLowerCase())
+    const models = !requested
       ? [preferred(provider.models)].filter((row) => row !== undefined)
       : exact.length
         ? exact
         : named.length
           ? named
-          : provider.models.filter((row) => row.aliases?.some((name) => name.toLowerCase() === model.toLowerCase()))
+          : provider.models.filter((row) => row.aliases?.some((name) => name.toLowerCase() === requested.toLowerCase()))
     if (models.length !== 1) throw new Error("Choose an available, unambiguous model for " + provider.name + ".")
     return { instanceId: provider.instanceId, agent: provider.name, harness: provider.harness, model: models[0].slug }
   }
