@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { join } from "node:path"
+import { symlink } from "node:fs/promises"
+import { scheduler } from "node:timers/promises"
 import type { JsonObject } from "@cybros/agent"
 import type { EditorBinding } from "../src/editor-bridge"
 import { RunnerAdmission, runClaim } from "../src/runner"
@@ -164,6 +166,110 @@ test("an aborted execution retains its reason when the editor cancels", async ()
   ).rejects.toBe(reason)
 })
 
+test("canceling a queued editor task releases its handler while another task holds the file", async () => {
+  await using fixture = await filesystemFixture()
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+
+  fixture.control.reply = async (request) => {
+    const input = Schema.decodeUnknownSync(Schema.Struct({ content: Schema.String }))(await request.json())
+    if (input.content !== "first") return Response.json({})
+
+    entered.resolve()
+    await release.promise
+    return Response.json({})
+  }
+
+  const first = fixture.call("write", { path: "file", content: "first" })
+
+  await entered.promise
+
+  const second = fixture.row("write", { path: "file", content: "canceled" })
+
+  try {
+    await fixture.runner.sweep()
+    await runClaim(
+      fixture.client,
+      { ...second, tool_input: { path: "other", content: "independent" } },
+      fixture.directory,
+      new AbortController().signal,
+    )
+    fixture.runner.notify({ event: { type: "work_canceled", run_public_id: "run", task_key: second.task_key } })
+
+    const deadline = Date.now() + 3000
+    while (fixture.runner.snapshot().in_flight !== 1) {
+      if (Date.now() >= deadline) throw new Error("Canceled editor handler did not release while the file was held.")
+      await scheduler.yield()
+    }
+
+    expect(fixture.results.get(JSON.stringify(["run", second.task_key]))).toMatchObject({ outcome: "failed" })
+    expect(fixture.requests).toEqual(["/fs/write", "/fs/write"])
+    expect(await Bun.file(join(fixture.directory, "file")).text()).toBe("disk")
+  } finally {
+    release.resolve()
+    await first
+  }
+})
+
+test.each(["file", "missing/child/file"])(
+  "editor edits serialize symlink aliases of %s and preserve request paths",
+  async (path) => {
+    await using fixture = await filesystemFixture()
+    await symlink(fixture.directory, join(fixture.directory, "alias"), "junction")
+
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const paths: string[] = []
+    const buffer = { content: "alpha beta" }
+
+    fixture.control.reply = async (request) => {
+      const input = Schema.decodeUnknownSync(
+        Schema.Struct({ path: Schema.String, content: Schema.optional(Schema.String) }),
+      )(await request.json())
+
+      paths.push(input.path)
+      if (input.content !== undefined) {
+        buffer.content = input.content
+        return Response.json({})
+      }
+
+      const content = buffer.content
+      if (paths.length === 1) {
+        entered.resolve()
+        await release.promise
+      }
+
+      return Response.json({ content })
+    }
+
+    const call = (tool: string, input: JsonObject) =>
+      runClaim(fixture.client, fixture.row(tool, input), fixture.directory, new AbortController().signal)
+    const first = call("edit", { path, edits: [{ oldText: "alpha", newText: "ALPHA" }] })
+
+    await entered.promise
+
+    const second = call("edit", { path: "alias/" + path, edits: [{ oldText: "beta", newText: "BETA" }] })
+
+    try {
+      // Complete independent filesystem work while the first editor read is held.
+      await call("write", { path: "other", content: "independent" })
+    } finally {
+      release.resolve()
+      await Promise.all([first, second])
+    }
+
+    expect(buffer.content).toBe("ALPHA BETA")
+    expect(paths.filter((value) => value.endsWith(path))).toEqual([
+      join(fixture.directory, path),
+      join(fixture.directory, path),
+      join(fixture.directory, "alias", path),
+      join(fixture.directory, "alias", path),
+    ])
+    expect(await Bun.file(join(fixture.directory, "file")).text()).toBe("disk")
+    expect(fixture.dropped).toHaveLength(0)
+  },
+)
+
 async function filesystemFixture() {
   const fixture = await executorFixture()
   const binding: EditorBinding = {
@@ -223,6 +329,7 @@ async function filesystemFixture() {
     control,
     requests,
     dropped,
+    runner,
     row,
     async call(tool: string, input: JsonObject) {
       const task = row(tool, input)
