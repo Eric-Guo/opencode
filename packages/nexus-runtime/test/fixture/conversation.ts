@@ -50,3 +50,17 @@ export function inputFixture(fields: JsonObject = {}): JsonObject {
     ...fields,
   }
 }
+
+export function turnFixture(position: number, fields: JsonObject = {}): JsonObject {
+  return {
+    public_id: "turn-" + position,
+    position,
+    kind: "message",
+    role: "user",
+    status: "completed",
+    visibility: "visible",
+    answering_user_public_id: "main",
+    created_at: "2026-01-01T00:00:00Z",
+    ...fields,
+  }
+}
