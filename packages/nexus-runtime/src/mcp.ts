@@ -31,6 +31,7 @@ export async function activateMcp(
 ) {
   const mcp = await host.mcp(api.directory)
   const scope = await Effect.runPromise(Scope.make())
+  const skippedSchemas: string[] = []
   const issues = settings.faults.map((fault) => fault.key + ": " + fault.issue)
   const reports: Record<string, Schema.Json>[] = settings.faults.map((fault) => ({
     server: fault.key,
@@ -62,7 +63,7 @@ export async function activateMcp(
   }
 
   api.onShutdown(() => Effect.runPromise(Scope.close(scope, Exit.void)))
-  api.describeStatus(() => ({ ready: !issues.length, issues: [...issues] }))
+  api.describeStatus(() => ({ ready: !issues.length, issues: [...issues, ...skippedSchemas] }))
   const registrations = new Map<string, Effect.Effect<void>>()
   for (const row of settings.rows) {
     if (!row.config) continue
@@ -111,10 +112,7 @@ export async function activateMcp(
     { signal: api.signal },
   )
 
-  const [servers, listed] = await Promise.all([
-    Effect.runPromise(mcp.servers(), { signal: api.signal }),
-    Effect.runPromise(mcp.tools(), { signal: api.signal }),
-  ])
+  const servers = await Effect.runPromise(mcp.servers(), { signal: api.signal })
   const budgets = { ...ledger }
 
   for (const row of settings.rows) {
@@ -141,10 +139,7 @@ export async function activateMcp(
       continue
     }
 
-    const curated = curateMcp(
-      row,
-      listed.filter((tool) => tool.server === row.server),
-    )
+    const curated = curateMcp(row, await Effect.runPromise(mcp.advertisedTools(row.server), { signal: api.signal }))
     const entries = [...budgets[row.role], ...curated.tools.map((tool) => tool.definition)]
     const fault =
       curated.fault ??
@@ -152,6 +147,9 @@ export async function activateMcp(
 
     report.bytes = curated.bytes
     report.skipped = curated.skipped
+    for (const tool of curated.skipped)
+      if (tool.reason === "Invalid object JSON Schema")
+        skippedSchemas.push(row.key + ": " + tool.name + ": " + tool.reason)
     if (fault) {
       report.status = "down"
       report.issue = mcpRedact(fault, row)
@@ -365,14 +363,11 @@ export async function activateMcp(
             server && "error" in server.status ? mcpRedact(server.status.error, row) : "MCP probe did not connect.",
         }
       const [tools, prompts, resources] = await Promise.all([
-        Effect.runPromise(mcp.tools(), { signal: api.signal }),
+        Effect.runPromise(mcp.advertisedTools(name), { signal: api.signal }),
         Effect.runPromise(mcp.serverPrompts({ server: name }), { signal: api.signal }),
         Effect.runPromise(mcp.resources({ server: name }), { signal: api.signal }),
       ])
-      const curated = curateMcp(
-        row,
-        tools.filter((tool) => tool.server === name),
-      )
+      const curated = curateMcp(row, tools)
       const documents = curateMcpDocuments(row, prompts, resources.resources)
       return Schema.decodeUnknownSync(Schema.MutableJson)({
         server: row.key,

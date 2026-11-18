@@ -11,10 +11,12 @@ ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
 The reference revision after that production change updates Ruby lockfiles.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The latest review covered conversation memory, Telegram
-queue controls, T3 model selection and browser deadlines. The runtime gate passes
-376 tests across 72 files, including Chromium, PTY and WebRTC. The final
-sections record the behavioral changes and live verification.
+contract tests below. The latest review covers Agent credential renewal, executor
+artifacts, MCP declarations, browser input and development CLI transcripts. The
+runtime gate passes 382 tests across 73 files, including Chromium, PTY and WebRTC.
+The [runtime parity verification](#agent-renewal-executor-artifacts-mcp-browser-and-development-cli)
+records the fixture and live results. The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md)
+tracks `rho-webui` in `packages/nexus-ui`.
 
 ## Application and executor
 
@@ -1067,3 +1069,47 @@ rescheduled the selected input and canceled the other one. The isolated
 Chromium suite passed five tests covering browser failures, deadlines,
 cancellation and tab ownership. Scratch workspaces and conversations
 were removed, and the elected service remained ready.
+
+
+## Agent renewal, executor artifacts, MCP, browser and development CLI
+
+Reviewed against Rho `d15b55bdd`, starting from OpenCode `2572998b64ab`.
+
+| Reference contract under `agents/rho` | TypeScript behavior and regression |
+| --- | --- |
+| `rho/lib/rho/renewal.rb` and `rho/lib/rho/daemon/{maintenance,lineage}.rb` | `renewal.ts` and `runtime.ts` check paired Agent OAuth credentials on startup and hourly, with a seven-day lead. Member and executor share the SDK rotation and a five-minute verification window for resource 401s. A successful rotation rebinds sockets and keeps the active executor. An unpublished rotation retains the live pair for SDK persistence. Lost authority retires the Agent and exposes pairing again. `runtime.test.ts` holds an accepted download across rotation, then exercises loss and re-pairing. `renewal.test.ts` covers publication recovery, concurrent refusals on both planes and socket authentication after rotation. The API-key and Human login suites exercise their separate owners. |
+| `rho-env/lib/rho/env/tools/file_import.rb` and `rho-env/test/claim_attachments_test.rb` | `executor.ts` gives managed and reusable executors the same `storage/artifacts/<root hash>` default. `executor-library.test.ts` drives two HTTP claims with separate storage and project directories, checks an explicit artifact override and verifies the original file after a short second download. |
+| `rho-mcp/lib/rho/mcp/curation.rb` and `rho-mcp/test/curation_test.rb` | Core exposes the original tool declarations alongside its normalized catalog. `mcp-session.test.ts` exercises a loopback HTTP peer that advertises `required: "path"`. Configured servers, imports by existing OpenCode server name, probes and editor mounts report the skipped tool. The valid sibling remains callable. Native OpenCode callers retain their normalized schema. |
+| `rho-browser/test/tools_test.rb` | `browser-session.ts` checks visibility, effective enabled state and editability for fill. Clicks retain pointer hit-testing. `browser.test.ts` fills a covered input in isolated Chromium and verifies that a disabled fieldset and a read-only input receive no submission. |
+| `rho-dev/lib/rho/dev/inspect.rb`, `rho-dev/test/dev_commands/inspection_test.rb` and `rho/lib/rho/cli/reporting.rb` | `dev/cli.ts` takes the installed channel’s elected URL and uses the SDK to verify its registration and private credential, including when the CLI configuration directory has a different password. `dev/terminal.ts` rejects branch-follow combinations before discovery, passes the initial page cursor and folds rounds, calls and progress with the SDK `ThreadAccumulator`. `dev.test.ts` runs the source CLI as a subprocess against an authenticated loopback service, checks mainline output and tests cost-limit and context-overflow guidance for unresolved model tasks. |
+
+### Fixture and package verification
+
+The runtime conformance gate passed **382 tests across 73 files** with isolated
+Chromium, PTY and WebRTC. It exercised the six other owners through native Code
+Mode child operations and approvals, web fetch rendering and captures, ACP editor
+admission and replay, delegated ACP PDF forwarding and cancellation, Telegram
+routing and durable delivery, and T3 assignment recovery. Optional transport
+tests used local peers. The native Code Mode suite passed **1,694 tests across
+46 files**. The affected Core MCP and integration suites passed **222 tests
+across 11 files**. Both runtime type checkers, the runtime build
+and root `bun run check` passed.
+
+### Live development Nexus
+
+- A runtime from the changed checkout paired a temporary Agent to
+  `http://localhost:3000` and obtained a new workspace. Advancing its clock to
+  seven days before expiry rotated both tokens through Nexus. The persisted
+  rotation advanced once, the Agent, runner and workspace identities matched,
+  and authenticated runner discovery and the development worker succeeded.
+- A managed service started from the source checkout mounted and probed a
+  loopback MCP server. Nexus advertised its valid tool, the probe reported the
+  malformed sibling, and an actual Nexus executor claim returned the peer's text.
+- The source CLI used the installed `opencode` executable and private
+  authentication to list the scratch runner and followers on an isolated service
+  with `nexus.dev` enabled. Its transcript follower read the completed mainline
+  round of a real model run. The elected service also answered authenticated
+  discovery and reported that its source-only extension was unloaded.
+- The scratch credentials were revoked, the test workspaces and Agents were
+  retired, and the isolated services were stopped. The elected service remained
+  ready on its existing pairing.
