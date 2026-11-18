@@ -99,13 +99,14 @@ describe("ThapeSsoProtection", () => {
                         models: {
                           "gpt-6-astra": { disabled: scenario.disabled },
                           "gpt-6.1-sol": { disabled: false },
+                          "gpt-6.2-sol": {},
                           "gpt-image-2": {},
                           "gemini-3.1-flash-image": {},
                         },
                       },
                       other: {
                         package: "@opencode/ai/providers/openai-compatible",
-                        models: { "gpt-6-astra": {}, "gpt-6.1-sol": {} },
+                        models: { "gpt-6-astra": {}, "gpt-6.1-sol": {}, "gpt-6.2-sol": {} },
                       },
                     },
                   }),
@@ -119,10 +120,12 @@ describe("ThapeSsoProtection", () => {
 
           expect(available.includes("vipai/gpt-6-astra")).toBe(scenario.allowed && !scenario.disabled)
           expect(available.includes("vipai/gpt-6.1-sol")).toBe(scenario.allowed)
+          expect(available.includes("vipai/gpt-6.2-sol")).toBe(scenario.allowed)
           expect(available).toContain("vipai/gpt-image-2")
           expect(available).toContain("vipai/gemini-3.1-flash-image")
           expect(available).toContain("other/gpt-6-astra")
           expect(available).toContain("other/gpt-6.1-sol")
+          expect(available).toContain("other/gpt-6.2-sol")
 
           const model = yield* models.get(Provider.ID.make("vipai"), Model.ID.make("gpt-6.1-sol"))
 
