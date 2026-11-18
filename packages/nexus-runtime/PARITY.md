@@ -932,3 +932,41 @@ The installed OpenCode service at `07241c7d0aa` independently verified one
 bash execution, matching downloaded bytes and structured `false`. Temporary
 workspaces, Bots, source Agents, MCP captures and local files were cleaned up.
 Telegram and T3 verification used local protocol peers.
+
+## Rebuilt installed-service verification, November 18, 2026
+
+### Live development Nexus
+
+The rebuilt OpenCode service and installed CLI (`v0.0.0-dev-202611180443`)
+ran these checks against `http://localhost:3000`. The web and MCP checks
+used loopback protocol peers with real Nexus runs and uploads.
+
+- Bot history paginated across active and archived conversations and honored
+  both explicit archive filters. Repeating a resume operation returned the
+  original receipt.
+- Keyless abandon selected the unresolved failure and skipped the absorbed
+  failure. A subsequent keyless retry reported that no unresolved task
+  remained.
+- MCP discovered prompts and resources through the connected peer. Tool,
+  prompt, and resource results each produced a local PDF and a Nexus upload
+  that matched the fixture bytes. An empty text result exposed its structured
+  content in the output as well as in the structured result.
+- The web operator and runner reported the cross-site destination at the
+  redirect hop limit. The operator output included the omitted byte count
+  for an overlong destination.
+- The installed one-shot CLI reported an unattended bash denial and returned
+  the `model_switches` and `refusals` fields. The denied command did not write
+  its scratch file. A separate Human-approved Code Mode request executed
+  bash exactly once and retained structured `false` in the durable result.
+
+The service remained ready with its original pairing and default workspace.
+The temporary MCP and web settings were restored. Scratch workspaces, Bots,
+captures, and local files were cleaned up.
+
+### Fixture coverage
+
+The focused suites passed 48 tests. `telegram.test.ts` exercised session
+paging and resume recovery across an ingress restart. `run.test.ts` covered
+a refused unattended denial and model-switch replay across a transient event
+read failure. `operations.test.ts` covered the cost-limit exception and
+ambiguous task repair. The earlier T3 verification used a local protocol peer.
