@@ -227,7 +227,21 @@ await runtime.close()
 
   const sdk = archives.get("@opencode/sdk")
   if (!sdk) throw new Error("Packed SDK archive was not created")
-  await $`npm install --ignore-scripts --no-audit --no-fund --package-lock=false ${sdk} wrangler@4.110.0`.cwd(consumer)
+
+  const install = (options: string[] = []) =>
+    $`npm install --ignore-scripts --no-audit --no-fund --package-lock=false --color=false ${options} ${sdk} wrangler@4.110.0`.cwd(
+      consumer,
+    )
+  await install().catch((error: unknown) => {
+    // npm's request retries can miss a reset after a tarball response has started.
+    if (!(error instanceof $.ShellError) || !/^npm (?:error|ERR!) code ECONNRESET$/m.test(error.stderr.toString())) {
+      throw error
+    }
+
+    console.warn("Packed SDK npm install lost its connection (ECONNRESET). Retrying once.")
+    return install(["--prefer-offline"])
+  })
+
   const runtimes = (await $`npm ls effect --all --parseable`.cwd(consumer).text()).trim().split("\n")
   if (runtimes.length !== 1) {
     throw new Error(`Packed SDK consumer resolved multiple Effect runtimes:\n${runtimes.join("\n")}`)
