@@ -420,3 +420,47 @@ test("delegated tool calls and plans report redacted progress without becoming a
     await fixture.close()
   }
 })
+
+test("delegation bounds UTF-8 answer and progress while publishing omitted output", async () => {
+  const fixture = await acpFixture()
+  const client = new AcpClient({ peer: fixture.row() }, { storage: fixture.storage })
+  const tool = client.tool()!
+  const progress: string[] = []
+  const transcripts: string[] = []
+  const context = fixture.context({
+    progress: async (text) => {
+      progress.push(text)
+    },
+    publish: async (blob, name) => {
+      transcripts.push(await blob.text())
+      return { type: "resource_link", uri: "nexus://uploads/transcript", name }
+    },
+  })
+
+  try {
+    const bytes = await tool.execute({ agent: "peer", prompt: "output-bytes" }, context)
+    expect(bytes.is_error).toBe(false)
+    expect(bytes.content).toMatchObject([
+      {
+        type: "text",
+        text: expect.stringMatching(/^First line\n\n\[ACP answer truncated\. See the attached transcript\.\]/),
+      },
+      { type: "resource_link" },
+    ])
+    expect(transcripts[0]).toContain("語".repeat(25000))
+    expect(progress).toContain("final progress")
+    expect(progress.every((text) => Buffer.byteLength(text) <= 4096 && !text.includes("�"))).toBe(true)
+
+    const lines = await tool.execute({ agent: "peer", prompt: "output-lines" }, context)
+    expect(lines.is_error).toBe(false)
+    expect(lines.content).toMatchObject([
+      { type: "text", text: expect.stringContaining("entry\n".repeat(1999) + "entry\n\n[ACP answer truncated.") },
+      { type: "resource_link" },
+    ])
+    expect(JSON.stringify(lines.content)).not.toContain("omitted last line")
+    expect(transcripts[1]).toContain("omitted last line")
+  } finally {
+    await client.close()
+    await fixture.close()
+  }
+})
