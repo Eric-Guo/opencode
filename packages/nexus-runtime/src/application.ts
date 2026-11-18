@@ -1,3 +1,4 @@
+import { TURN_POSITION_CEILING } from "./history"
 import { executionSnapshot } from "./execution"
 import type {
   AgentConfigurationInput,
@@ -246,7 +247,7 @@ export class NexusApplication {
     do {
       const page = await scope
         .conversation(conversation)
-        .turns.list({ before_position: before, limit: 100, include_hidden: true })
+        .turns.list({ before_position: before ?? TURN_POSITION_CEILING, limit: 100, include_hidden: true })
         .catch(() => undefined)
       if (!page) return
       const turn = page.items

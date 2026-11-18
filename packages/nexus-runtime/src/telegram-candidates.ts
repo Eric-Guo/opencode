@@ -15,29 +15,47 @@ export async function telegramCandidates(
       if (error instanceof APIError && [403, 404, 410].includes(error.status)) return null
       throw error
     })
-    const variant = deck?.items.find((row) =>
-      watch.variant ? row.public_id === watch.variant : !watch.known.includes(row.public_id),
-    )
+    const regeneration =
+      deck && watch.operation === "regenerate"
+        ? await chat.turns.regenerationReceipt(watch.id, { signal }).catch((error: unknown) => {
+            if (error instanceof APIError && [403, 404, 410].includes(error.status)) return null
+            throw error
+          })
+        : null
+    const matches = deck?.items.filter((row) => {
+      if (watch.operation === "regenerate")
+        return regeneration?.turn_public_id === watch.turn && row.public_id === regeneration.variant.public_id
+      if (watch.operation === "activate") return row.active && row.public_id === watch.variant
+      if (watch.variant) return row.public_id === watch.variant
+      if (watch.known.includes(row.public_id)) return false
+      return watch.operation !== "edit" || (row.source === "edit" && row.origin_variant_public_id === watch.previous)
+    })
+    const variant = matches?.length === 1 ? matches[0] : undefined
     if (deck && !variant) continue
+
     await document.change((state) => {
-      const work: TelegramWork | undefined = variant
-        ? {
-            id: "candidate:" + variant.public_id,
-            route: watch.route,
-            target: watch.target,
-            requester: watch.requester,
-            speaker: watch.speaker,
-            source: [],
-            input: variant.public_id,
-            voice: false,
-            candidate: true,
-            execution: {
-              turn_public_id: watch.turn,
-              variant_public_id: variant.public_id,
-              run_public_id: variant.run_public_id,
-            },
-          }
-        : undefined
+      const saved = state!.candidates?.find((row) => row.id === watch.id)
+      if (!saved || saved.variant !== watch.variant || saved.operation !== watch.operation) return state!
+
+      const work: TelegramWork | undefined =
+        variant && variant.public_id !== watch.previous
+          ? {
+              id: "candidate:" + variant.public_id,
+              route: watch.route,
+              target: watch.target,
+              requester: watch.requester,
+              speaker: watch.speaker,
+              source: [],
+              input: variant.public_id,
+              voice: false,
+              candidate: true,
+              execution: {
+                turn_public_id: watch.turn,
+                variant_public_id: variant.public_id,
+                run_public_id: variant.run_public_id,
+              },
+            }
+          : undefined
       return {
         ...state!,
         candidates: state!.candidates!.filter((row) => row.id !== watch.id),
