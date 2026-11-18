@@ -168,17 +168,27 @@ it.live("MCP login publishes a previously unavailable catalog while unchanged se
         hostname: "127.0.0.1",
         port: 0,
         async fetch(request) {
-          const name = new URL(request.url).pathname === "/protected" ? "protected" : "stable"
+          const name = new URL(request.url).pathname.slice(1)
           if (name === "protected" && request.headers.get("authorization") !== "Bearer fixture-access")
             return new Response(null, { status: 401, headers: { "www-authenticate": "Bearer" } })
           if (request.method !== "POST") return new Response(null, { status: request.method === "DELETE" ? 204 : 405 })
           const message = Schema.decodeUnknownSync(
             Schema.Struct({ id: Schema.optional(Schema.Union([Schema.String, Schema.Number])), method: Schema.String }),
           )(await request.json())
-          if (message.method === "initialize") starts[name]++
+          if (message.method === "initialize" && (name === "protected" || name === "stable")) starts[name]++
+          if ((name === "resources" || name === "prompts") && message.method === name + "/list")
+            return Response.json({
+              jsonrpc: "2.0",
+              id: message.id,
+              error: { code: -32603, message: name + " failed: fixture-private-header" },
+            })
           const result =
             message.method === "initialize"
-              ? { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name, version: "1" } }
+              ? {
+                  protocolVersion: "2024-11-05",
+                  capabilities: { tools: {}, ...(["resources", "prompts"].includes(name) ? { [name]: {} } : {}) },
+                  serverInfo: { name, version: "1" },
+                }
               : message.method === "tools/list"
                 ? { tools: [{ name: "read", description: "Read " + name, inputSchema: { type: "object" } }] }
                 : { content: [{ type: "text", text: name }] }
@@ -202,6 +212,17 @@ it.live("MCP login publishes a previously unavailable catalog while unchanged se
               configuration_schema: mcpConfiguration,
               defaults: {
                 servers: {
+                  ...Object.fromEntries(
+                    ["resources", "prompts"].map((name) => [
+                      name,
+                      {
+                        transport: "http",
+                        url: server.url.origin + "/" + name,
+                        headers: { Authorization: "fixture-private-header" },
+                        tools: ["*"],
+                      },
+                    ]),
+                  ),
                   protected: { transport: "http", url: server.url.origin + "/protected", tools: ["*"] },
                   stable: {
                     transport: "http",
@@ -224,6 +245,18 @@ it.live("MCP login publishes a previously unavailable catalog while unchanged se
       try {
         await manager.start()
         expect(manager.tools().map((tool) => tool.definition.name)).toEqual(["mcp__stable__read"])
+        const reports = await manager.command("mcp.list", {})
+        for (const name of ["resources", "prompts"]) {
+          const failed = { server: name, status: "down", issue: expect.any(String) }
+          expect(reports).toContainEqual(expect.objectContaining(failed))
+          expect(await manager.command("mcp.probe", { server: name })).toMatchObject(failed)
+          expect(
+            (await Effect.runPromiseWith(context)(mcp.servers())).some((row) =>
+              row.name.startsWith("nexus-" + name + "-"),
+            ),
+          ).toBe(false)
+        }
+        expect(JSON.stringify(reports)).not.toContain("fixture-private-header")
         const protectedRow = (await Effect.runPromiseWith(context)(mcp.servers())).find((row) =>
           row.name.startsWith("nexus-protected-"),
         )!

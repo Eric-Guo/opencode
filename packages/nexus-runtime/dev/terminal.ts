@@ -86,9 +86,23 @@ const flags = [
   "read",
   "write",
 ] as const
+const inputOptions = [
+  "instructions",
+  "approval",
+  "until",
+  "attempts",
+  "at",
+  "in",
+  "now",
+  "mode",
+  "effort",
+  "reasoning-enabled",
+  "to",
+] as const
+
 export const developmentHelp = `Nexus development controls (source checkout only)
-  do TEXT                 open a conversation and submit its first input
-  say HOST TEXT           submit or schedule another input (--mode steer|queue|steer_now)
+  do [TEXT]               open a conversation, optionally with text or attachments
+  say HOST [TEXT]         submit or schedule another input (--mode steer|queue|steer_now)
   followers | runs | providers | models | adaptations | rules
   attach HOST | watch HOST | follow HOST | result HOST
   transcript HOST [--before CURSOR] [--limit N] [--follow | --prefix KEY]
@@ -388,7 +402,13 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
   if (parsed.verb === "do" || parsed.verb === "say") {
     const text = parsed.args.slice(parsed.verb === "do" ? 0 : 1).join(" ")
     if (parsed.values.also?.length && !parsed.text("dir")) throw new Error("--also requires --dir.")
-    if (!text.trim() && parsed.verb === "say") throw new Error("say requires prompt text.")
+    const hasInput = !!text.trim() || !!parsed.values.attach?.length
+    if (!hasInput) {
+      if (parsed.verb === "say") throw new Error("say requires prompt text or attachments.")
+      const fields = inputOptions.filter((field) => parsed.values[field] !== undefined)
+      if (fields.length)
+        throw new Error("Give prompt text or attachments with " + fields.map((field) => "--" + field).join(", ") + ".")
+    }
     const scheduled = !!parsed.text("at") || !!parsed.text("in")
     const delivery =
       parsed.text("mode") ?? (parsed.verb === "say" && !parsed.values.attach?.length && !scheduled ? "steer" : "queue")
@@ -408,6 +428,7 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
               runner: parsed.text("runner"),
               agent: parsed.text("agent"),
               restricted: parsed.values.restricted === true,
+              model: hasInput ? undefined : parsed.text("model"),
               title: parsed.text("title"),
             }),
           )
@@ -451,7 +472,7 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
         root: resolve(parsed.text("dir")!),
         directories: (parsed.values.also ?? []).map((path) => resolve(path)),
       })
-    if (!text.trim()) {
+    if (!hasInput) {
       print({ conversation: id })
       return 0
     }
@@ -485,15 +506,15 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
           : {}),
       }),
     )
-    const input = Schema.decodeUnknownSync(Schema.String)(object(submitted.input).public_id)
+    const receipt = object(submitted.input)
+    const input = Schema.decodeUnknownSync(Schema.String)(receipt.public_id)
+    if (receipt.state === "blocked") {
+      print(clean({ conversation: id, input, status: "blocked", blocked_reason: receipt.blocked_reason }))
+      return 0
+    }
     const started = performance.now()
     let snapshot = await call("result", { conversation: id, input })
-    while (
-      snapshot === null &&
-      !scheduled &&
-      object(submitted.input).state !== "blocked" &&
-      performance.now() - started < 30000
-    ) {
+    while (snapshot === null && !scheduled && performance.now() - started < 30000) {
       await setTimeout(250, undefined, { signal: terminal.signal })
       snapshot = await call("result", { conversation: id, input })
     }

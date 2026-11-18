@@ -309,7 +309,7 @@ test.skipIf(!chromium)(
             ? "<label>Frame field<input></label><button onclick=\"this.textContent='Frame clicked'\">Frame action</button>"
             : '<button style="position:absolute;left:0;top:0;width:150px;height:40px">Covered</button><div style="position:absolute;left:0;top:0;width:150px;height:40px;z-index:2">Overlay</div><input aria-label="Covered field" style="position:absolute;left:0;top:0;width:150px"><fieldset disabled><input aria-label="Disabled field"></fieldset><input aria-label="Locked field" readonly><script>let enters=0;document.addEventListener("keydown",e=>{if(e.key==="Enter") document.title=(++enters)+":"+e.target.value})</script><iframe style="margin-top:70px" src="/frame"></iframe><iframe src="' +
               server.url.href.replace("127.0.0.1", "localhost") +
-              'frame"></iframe>'
+              'frame"></iframe><button style="position:fixed;left:0;bottom:0;width:4000px" onclick="this.textContent=String(Number(this.dataset.clicks||0)+1);this.dataset.clicks=this.textContent">Oversized action</button>'
         return new Response(html, { headers: { "Content-Type": "text/html" } })
       },
     })
@@ -357,6 +357,8 @@ test.skipIf(!chromium)(
       const other = await run("browser_click", { ref: refs(same.content, 'button "Frame action"')[0] })
       expect(other.is_error).not.toBe(true)
       expect(refs(other.content, 'button "Frame clicked"')).toHaveLength(2)
+      const oversized = await run("browser_click", { ref: refs(other.content, 'button "Oversized action"')[0] })
+      expect(refs(oversized.content, 'button "1"')).toHaveLength(1)
     } finally {
       owner.abort()
       await browser.close()
