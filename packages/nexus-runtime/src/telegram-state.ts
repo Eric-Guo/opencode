@@ -1,8 +1,20 @@
 import { Schema } from "effect"
 import { NexusBot } from "@opencode/schema/nexus-bot"
 
+import { TelegramRawUpdate } from "./telegram-update"
+
 export const TelegramConnectionState = Schema.Struct({
   offset: Schema.Int,
+  pending: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        bot: Schema.String,
+        exact: Schema.Boolean,
+        update: TelegramRawUpdate,
+        received_at: Schema.Number,
+      }),
+    ),
+  ),
   retry: Schema.optional(Schema.Number),
   identity: Schema.NullOr(Schema.Struct({ id: Schema.String, username: Schema.String })),
 })
