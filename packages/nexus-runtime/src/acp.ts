@@ -13,6 +13,7 @@ import { NexusAcp } from "@opencode/schema/nexus-acp"
 const Input = Schema.Struct({
   agent: Schema.String,
   prompt: Schema.String,
+  attachments: Schema.optional(Schema.Array(Schema.String)),
   session: Schema.optional(Schema.String),
   workdir: Schema.optional(Schema.String),
 })
@@ -65,11 +66,17 @@ export class AcpClient {
       definition: {
         ...definition(
           "delegate_agent",
-          "Delegate a complete task to a configured coding agent with its own tools and model. The agent has no parent conversation context. Its commands and edits run as this runner's user, subject to the local refusal floor. The result's session ID continues that session. Agents:\n" +
+          "Delegate a complete task to a configured coding agent with its own tools and model. Give the full context in the prompt and select any PDFs to forward with attachments. Its commands and edits run as this runner's user, subject to the local refusal floor. The result's session ID continues that session. Agents:\n" +
             agents.map((agent) => "- " + agent.name + ": " + this.safe(agent.description, agent)).join("\n"),
           {
             agent: { type: "string", enum: agents.map((agent) => agent.name) },
             prompt: { type: "string" },
+            attachments: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Nexus attachment references or upload UUIDs for PDFs to forward in order. Each PDF can be up to 16 MiB. The agent must support embedded context.",
+            },
             session: { type: "string", description: "Continue this conversation's existing delegated session." },
             workdir: {
               type: "string",
@@ -232,7 +239,7 @@ export class AcpClient {
           child.sessions.set(session.id, session)
           this.sessions.set(session.id, { child, session })
         }
-        return child.prompt(selected.value!, input.prompt, context, signal)
+        return child.prompt(selected.value!, input.prompt, input.attachments ?? [], context, signal)
       })
       const session = selected.value!
       const transcript = await child.capture.read().catch(() => "")

@@ -43,6 +43,7 @@ export async function acpFixture() {
     `
 import { agent, ndJsonStream, RequestError } from ${JSON.stringify(import.meta.resolve("@agentclientprotocol/sdk"))};
 import { Readable, Writable } from "node:stream";
+import { createHash } from "node:crypto";
 const url = process.argv[2];
 const report = (event, fields={}) => fetch(url+"/event", {method:"POST",body:JSON.stringify({event,pid:process.pid,...fields})});
 const gate = name => fetch(url+"/"+name);
@@ -53,7 +54,7 @@ const app = agent({name:"Fixture"})
 .onRequest("initialize", async ({params}) => {
   await report("initialize", {capabilities:params.clientCapabilities});
   if(process.env.STARTUP_GATE) await gate("startup-"+process.pid);
-  return {protocolVersion:1,agentCapabilities:{},agentInfo:{name:"Fixture",version:"1"},authMethods:process.env.TERMINAL_AUTH ? [{id:"terminal-login",name:"Terminal",type:"terminal"}] : [{id:"login",name:"Login"}]};
+  return {protocolVersion:1,agentCapabilities:process.env.EMBEDDED_CONTEXT ? {promptCapabilities:{embeddedContext:true}} : {},agentInfo:{name:"Fixture",version:"1"},authMethods:process.env.TERMINAL_AUTH ? [{id:"terminal-login",name:"Terminal",type:"terminal"}] : [{id:"login",name:"Login"}]};
 })
 .onRequest("authenticate", async ({params}) => { authenticated=true;await report("authenticate",{method:params.methodId});return {}; })
 .onRequest("session/new", async ({params}) => {
@@ -70,6 +71,10 @@ const app = agent({name:"Fixture"})
   const id=ctx.params.sessionId;
   const prompt=ctx.params.prompt.map(part=>part.type==="text"?part.text:"").join("");
   await report("prompt",{prompt,session:id});
+  if(ctx.params.prompt.length>1) await report("attachments", {resources:ctx.params.prompt.slice(1).map(block => {
+    const bytes = Buffer.from(block.resource.blob, "base64");
+    return {uri:block.resource.uri, mimeType:block.resource.mimeType, sha256:createHash("sha256").update(bytes).digest("hex")};
+  })});
   const emit = text => ctx.client.notify("session/update",{sessionId:id,update:{sessionUpdate:"agent_message_chunk",content:{type:"text",text}}});
   if(prompt==="output-bytes"||prompt==="output-lines"){
     await emit(prompt==="output-bytes" ? "First line\\n"+"語".repeat(25000)+"\\nfinal progress" : "entry\\n".repeat(2000)+"omitted last line");

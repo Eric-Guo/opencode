@@ -177,6 +177,10 @@ and discovered skills, captures editor roots, and submits through shared runtime
 admission with the signed-in Human credential. Closing the client releases its
 editor filesystem and MCP attachments while accepted work remains owned by Nexus.
 
+New prompts can carry a PDF as an embedded ACP resource with MIME type
+`application/pdf` and a base64 `blob` of up to 16 MiB decoded. ACP returns
+invalid params when a surface command or held answer includes a PDF.
+
 ACP history preserves message roles, omits compaction summaries and renders a
 Side's parent reference as one labelled context chunk. Load and resume can recover
 held work after restart even when no active-turn pointer remains; inherited history
@@ -224,6 +228,13 @@ changes. Other conversations cannot reuse that ID. `auth_method` selects an
 agent-managed login method; a sole agent-managed method can be selected
 automatically. Terminal login methods require the agent's own login outside this
 client. `model` selects a value through an advertised model configuration option.
+
+Pass `attachments` to `delegate_agent` to forward selected PDFs in order.
+Use Nexus attachment URIs or upload UUIDs readable by the current executor
+claim. The child must advertise ACP `embeddedContext`. Each PDF can be up to
+16 MiB. The delegated prompt carries the original bytes, and the transcript
+records each PDF's URI, MIME type and size.
+
 The client advertises no editor filesystem, terminal or session-MCP facilities.
 Elicitation is declined and surfaced in the result for a subsequent prompt.
 
