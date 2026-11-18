@@ -90,7 +90,10 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
 
   const bundled = app.isPackaged
     ? path.join(process.resourcesPath, executableName())
-    : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
+    : path.join(
+        paths.developmentResourcesRoot,
+        isolated || process.env.OPENCODE_DESKTOP_REUSE_SERVER === "1" ? developmentExecutableName() : executableName(),
+      )
 
   yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = parseCliVersion(yield* run(bundled, ["--version"]))
