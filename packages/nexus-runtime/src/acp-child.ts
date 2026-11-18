@@ -3,6 +3,7 @@ import {
   ndJsonStream,
   RequestError,
   type ClientConnection,
+  type ContentBlock,
   type InitializeResponse,
   type PromptResponse,
   type SessionNotification,
@@ -214,7 +215,41 @@ export class AcpChild {
     return result.sessionId
   }
 
-  async prompt(session: AcpSession, prompt: string, context: RunnerContext, signal: AbortSignal) {
+  async prompt(
+    session: AcpSession,
+    prompt: string,
+    attachments: readonly string[],
+    context: RunnerContext,
+    signal: AbortSignal,
+  ) {
+    const blocks: ContentBlock[] = [{ type: "text", text: prompt }]
+
+    if (attachments.length) {
+      if (this.initialization?.agentCapabilities?.promptCapabilities?.embeddedContext !== true)
+        throw new Error('ACP agent "' + this.agent.name + '" does not advertise embedded context for PDF attachments.')
+      if (!context.attachment) throw new Error("Delegating PDF attachments requires an active executor claim.")
+
+      for (const reference of attachments) {
+        const attachment = await context.attachment(reference, signal)
+        const uri = "nexus://uploads/" + attachment.id
+        const size = attachment.upload.byte_size
+
+        if (attachment.upload.content_type !== "application/pdf") throw new Error("Attachment " + uri + " is not a PDF.")
+        if (size < 1 || size > 16 * 1024 * 1024)
+          throw new Error("Attachment " + uri + " must be a nonempty PDF of at most 16 MiB.")
+
+        const bytes = Buffer.alloc(size)
+        let offset = 0
+
+        for await (const chunk of attachment.read()) {
+          bytes.set(chunk, offset)
+          offset += chunk.byteLength
+        }
+        blocks.push({ type: "resource", resource: { uri, mimeType: "application/pdf", blob: bytes.toString("base64") } })
+      }
+    }
+    signal.throwIfAborted()
+
     const call: Call = {
       session,
       context,
@@ -233,7 +268,7 @@ export class AcpChild {
     session.last_prompt = new Date().toISOString()
     const pending = this.connection!.agent.request("session/prompt", {
       sessionId: session.remote,
-      prompt: [{ type: "text", text: prompt }],
+      prompt: blocks,
     })
     void pending
       .then(
