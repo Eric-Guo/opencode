@@ -19326,6 +19326,57 @@
                     "properties": {
                       "action": {
                         "type": "string",
+                        "enum": ["application.memory"]
+                      },
+                      "workspace": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "conversation": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "speaker": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "command": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["text", "json"]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["action", "conversation", "command"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "action": {
+                        "type": "string",
                         "enum": ["application.approve"]
                       },
                       "workspace": {
@@ -19415,6 +19466,17 @@
                       "key": {
                         "type": "string",
                         "minLength": 1
+                      },
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "title": {
                         "anyOf": [
@@ -23670,10 +23732,10 @@
               "all_flags": {
                 "type": "boolean"
               },
-              "nexus_runtime": {
+              "todo": {
                 "type": "boolean"
               },
-              "todo": {
+              "nexus_runtime": {
                 "type": "boolean"
               },
               "media_blob": {

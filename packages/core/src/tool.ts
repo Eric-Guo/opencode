@@ -418,7 +418,7 @@ const layer = Layer.effect(
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
-              const unadvertised = input.allowUnadvertised ? codeModeTools.get(name) : undefined
+              const unadvertised = input.allowUnadvertised ? codemode?.inventory.tools.get(name) : undefined
               if (unadvertised) return yield* executeTool(unadvertised, name, event.input, context)
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
