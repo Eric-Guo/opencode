@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises"
 import { dirname } from "node:path"
-import type { AnyMessage, Stream } from "@agentclientprotocol/sdk"
+import type { AnyMessage, PromptRequest, Stream } from "@agentclientprotocol/sdk"
 
 export class AcpCapture {
   private writing = Promise.resolve()
@@ -66,7 +66,7 @@ export class AcpCapture {
       ),
       writable: new WritableStream<AnyMessage>({
         write: (message) => {
-          this.record("out", message)
+          this.record("out", promptMetadata(message))
           return writer.write(message)
         },
         close: () => writer.close(),
@@ -74,6 +74,28 @@ export class AcpCapture {
       }),
     }
   }
+}
+
+function promptMetadata(message: AnyMessage) {
+  if (!("method" in message) || message.method !== "session/prompt") return message
+
+  // The client sends validated prompt blocks. Keep the envelope and omit each PDF payload from the transcript.
+  const params = message.params as PromptRequest
+  const prompt = params.prompt.map((block) => {
+    if (block.type !== "resource" || !("blob" in block.resource) || block.resource.mimeType !== "application/pdf")
+      return block
+
+    return {
+      type: block.type,
+      resource: {
+        uri: block.resource.uri,
+        mimeType: block.resource.mimeType,
+        size: Buffer.byteLength(block.resource.blob, "base64"),
+      },
+    }
+  })
+
+  return { ...message, params: { ...params, prompt } }
 }
 
 export function within<A>(promise: Promise<A>, signal: AbortSignal) {
