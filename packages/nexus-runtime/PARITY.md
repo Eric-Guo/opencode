@@ -11,12 +11,11 @@ ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
 The reference revision after that production change updates Ruby lockfiles.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The latest review covers Agent credential renewal, executor
-artifacts, MCP declarations, browser input and development CLI transcripts. The
-runtime gate passes 382 tests across 73 files, including Chromium, PTY and WebRTC.
-The [runtime parity verification](#agent-renewal-executor-artifacts-mcp-browser-and-development-cli)
-records the fixture and live results. The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md)
-tracks `rho-webui` in `packages/nexus-ui`.
+contract tests below. The latest review covers Telegram update replay, T3 RPC
+recovery, development transcript gaps, shell exit output and web error responses.
+The runtime gate passes 395 tests across 73 files, including Chromium, PTY and
+WebRTC. See the [November 19 verification](#replay-transcripts-and-tool-output-november-19-2026)
+and the [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md).
 
 ## Application and executor
 
@@ -1113,3 +1112,34 @@ and root `bun run check` passed.
 - The scratch credentials were revoked, the test workspaces and Agents were
   retired, and the isolated services were stopped. The elected service remained
   ready on its existing pairing.
+
+## Replay, transcripts and tool output, November 19, 2026
+
+| Rho package | TypeScript behavior and verification |
+| --- | --- |
+| `rho-ingress-telegram` | `telegram-ingress.ts` stages the original Telegram update, selected Bot, routing decision and receipt time in the physical Connection document before dispatch. Replay uses that Bot after a target change, holds the offset while its binding is missing, and clears the receipt in the same write that advances the offset. `telegram.test.ts` interrupts a schedule creation, verifies its original idempotency key on recovery, and checks positive and zero polling flood waits across restart. |
+| `rho-t3` | `t3-transport.ts` validates all six adopted RPC methods before ticket discovery and requires the matching request ID for each exchange. `t3.test.ts` exercises malformed, failed and mismatched replies after launch, checks recovery through the native projection, and counts one launch across claim replay. It also covers bundled frames, caller cancellation and forwarding the worktree strategy. |
+| `rho-dev` | `dev/terminal.ts` applies the watch deadline while waiting for the first run. `dev/streams.ts` counts missing events between each reader's cursors. Watch and follow restore text and reasoning from the SDK's byte-counted snapshots on overflow. `dev.test.ts` covers overlapping deltas and two readers sharing a WebSocket subscription with an oversized frame between retained frames. |
+| `rho-env` | `runner.ts` and `bash-output.ts` format native OpenCode shell results. A silent nonzero exit now separates the output placeholder from the exit status with a blank line. Timeout results report the duration. `bash-output.test.ts` covers both cases with and without captured output. |
+| `rho-web-tools` | `web.ts` reports the requested URL and HTTP reason phrase when a site answers with an error. It trims the excerpt, omits an empty body and retains the final URL in structured data. `web.test.ts` checks a redirected 404, a bounded 403 excerpt and a 300 with a body and no Location. |
+
+The review also traced convention precedence in `rho`, child operations and
+approvals in `rho-codemode`, tab ownership and input handling in `rho-browser`,
+tool curation and readable media in `rho-mcp`, editor ingress and replay in
+`rho-acp`, and delegated content and cancellation in `rho-acp-client`.
+Their production owners and regression suites are listed in the
+[reference contract table](#reference-contract-anchors).
+
+The runtime gate passed **395 tests across 73 files** with Chromium, PTY and
+WebRTC. Native Code Mode passed **1,694 tests across 46 files**. Both runtime
+type checks, the runtime build and the repository's `bun run check` passed.
+
+The built runtime used the elected service's development Nexus pairing at
+`http://localhost:3000`. Telegram and T3 used loopback peers. An interrupted
+Telegram acknowledgement left the original update in the Nexus Store. After
+its target moved, the original Bot consumed it with one Telegram read.
+Two-second and zero-second flood waits survived restart. T3 recovered a launch
+whose peer returned failure after accepting it. Retrying the same assignment
+returned the same completed work ID with one peer launch. The source CLI's
+`watch` timed out on a scratch conversation with no run. The temporary profile
+Store entries were removed and the development workspace was deleted.

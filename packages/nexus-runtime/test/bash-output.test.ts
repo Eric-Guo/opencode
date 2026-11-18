@@ -2,7 +2,15 @@ import { expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { bashOutput } from "../src/bash-output"
+import { bashOutput, bashResultText } from "../src/bash-output"
+
+test("bash separates a silent command's exit status from its output placeholder", () => {
+  expect(bashResultText("", 0)).toBe("(no output)")
+  expect(bashResultText("", 3)).toBe("(no output)\n\nCommand exited with code 3")
+  expect(bashResultText("failed", 3)).toBe("failed\n\nCommand exited with code 3")
+  expect(bashResultText("", null, 2)).toBe("Command timed out after 2 seconds")
+  expect(bashResultText("waiting", null, 2)).toBe("waiting\n\nCommand timed out after 2 seconds")
+})
 
 test("bash captures complete overflow and renders bounded line and byte tails with content-addressed spills", async () => {
   const fixture = await mkdtemp(join(tmpdir(), "nexus-bash-"))
