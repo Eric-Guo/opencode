@@ -14,6 +14,52 @@ test("Browser readiness rejects an absent executable before any tool is publishe
   const browser = new BrowserSession("/opencode-fixture/missing-chromium", owner.signal)
   try {
     await expect(browser.check()).rejects.toThrow("ENOENT")
+    expect(
+      await browserTools("/opencode-fixture/missing-chromium", owner.signal, browser)[1].execute(
+        {},
+        {
+          directory: tmpdir(),
+          workspace: "workspace",
+          conversation: "conversation",
+          run: "run",
+          task: "snapshot",
+          signal: owner.signal,
+        },
+      ),
+    ).toMatchObject({ is_error: true, content: expect.stringContaining("Browser driver unavailable") })
+  } finally {
+    owner.abort()
+    await browser.close()
+  }
+})
+
+test.skipIf(!chromium)("A browser tool deadline returns an error and replaces only its tab", async () => {
+  const owner = new AbortController()
+  const browser = new BrowserSession(chromium!, owner.signal, { callTimeout: 400 })
+  const tools = browserTools(chromium!, owner.signal, browser)
+  const context = {
+    directory: tmpdir(),
+    workspace: "workspace",
+    conversation: "conversation",
+    run: "run",
+    task: "evaluate",
+    signal: owner.signal,
+  }
+  const evaluateTool = tools.find((tool) => tool.definition.name === "browser_evaluate")!
+  const snapshotTool = tools.find((tool) => tool.definition.name === "browser_snapshot")!
+
+  try {
+    const other = { ...context, run: "other" }
+    await evaluateTool.execute({ expression: "document.title = 'Other tab'" }, other)
+    expect(await evaluateTool.execute({ expression: "new Promise(() => {})" }, context)).toMatchObject({
+      is_error: true,
+      content: expect.stringContaining("Browser call timed out"),
+    })
+    expect((await snapshotTool.execute({}, other)).content).toContain("Title: Other tab")
+    expect((await snapshotTool.execute({}, context)).content).toContain("new browser tab")
+
+    const canceled = AbortSignal.abort(new Error("Caller canceled browser work"))
+    await expect(snapshotTool.execute({}, { ...context, signal: canceled })).rejects.toThrow("Caller canceled")
   } finally {
     owner.abort()
     await browser.close()

@@ -5675,6 +5675,14 @@ export type ExperimentalNexusManageInput = {
       }
     | { readonly action: "application.skills" }
     | {
+        readonly action: "application.memory"
+        readonly workspace?: string | null
+        readonly conversation: string
+        readonly speaker?: string | null
+        readonly command: string
+        readonly format?: "text" | "json" | null
+      }
+    | {
         readonly action: "application.approve"
         readonly workspace: string
         readonly conversation: string

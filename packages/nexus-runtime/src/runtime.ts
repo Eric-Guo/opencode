@@ -52,6 +52,7 @@ import type { ApprovalGrant } from "./approval-grant"
 import { HumanLogin } from "./login"
 import { NexusApplication } from "./application"
 import { Operations } from "./operations"
+import { conversationMemory } from "./memory-commands"
 export { NexusApplication } from "./application"
 import type { NexusPreset } from "@opencode/schema/nexus-preset"
 import type { NexusBot } from "@opencode/schema/nexus-bot"
@@ -1269,6 +1270,13 @@ export class NexusRuntime {
       })
     }
     if (command.action === "bot.submit") return active.application.bots.submit(command, member)
+    if (command.action === "application.memory") {
+      const result = await conversationMemory(member, {
+        ...command,
+        workspace: command.workspace ?? active.identity.workspace,
+      })
+      return command.format === "json" ? result.value : result.text
+    }
     if (command.action === "application.operation") {
       const operation = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(command.operation)
       return new Operations(member, active.application, {

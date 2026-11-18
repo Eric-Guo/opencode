@@ -299,7 +299,9 @@ for (const mode of ["normal", "lost launch", "oversized report"])
           return { type: "resource_link", uri: "nexus://uploads/fixture", name }
         },
       }
-      const result = await client.tools()[0].execute({ prompt: "Fix parser" }, context)
+      const result = await client
+        .tools()[0]
+        .execute({ prompt: "Fix parser", agent: " Codex ", model: " Code " }, context)
       expect(result.is_error).toBe(false)
       expect(result.structured_content).toMatchObject({
         model: "code",
@@ -320,12 +322,26 @@ for (const mode of ["normal", "lost launch", "oversized report"])
         ])
         expect(JSON.parse(files[0].text)).toHaveProperty("text", "界".repeat(24000))
       } else expect(files[1].text).toContain("verified fixture change")
-      await client.tools()[0].execute({ prompt: "A retried payload is not relaunched" }, context)
+      const replay = await client
+        .tools()[0]
+        .execute({ prompt: "Fix parser", agent: " Codex ", model: " Code " }, context)
+      expect(replay.structured_content).toHaveProperty("model", "code")
       expect(peer.requests.filter((row) => row.tag === "orchestration.launchThread")).toHaveLength(1)
       expect(store.entries.size).toBe(1)
       expect(JSON.stringify([...store.entries.values()])).not.toContain("fixture-bearer")
       const record = [...store.entries.values()][0]
       expect(record.value).toHaveProperty("placement.worktreePath", "/project")
+      expect(record.value).toHaveProperty("selection.model", "code")
+      await expect(
+        client.tools()[0].execute(
+          { prompt: "Follow-up", work_id: record.public_id, model: "fast" },
+          {
+            ...context,
+            task: "follow-up",
+          },
+        ),
+      ).rejects.toThrow("retains its original agent and model")
+      expect(peer.requests.filter((row) => row.payload.type === "message.dispatch")).toHaveLength(0)
       await expect(
         client
           .tools()[1]
