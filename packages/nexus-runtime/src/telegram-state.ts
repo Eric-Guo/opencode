@@ -116,6 +116,9 @@ export const TelegramState = Schema.Struct({
   batches: Schema.Array(TelegramBatch),
   work: Schema.Array(TelegramWork),
   deliveries: Schema.Array(TelegramDelivery),
+  media_cancellations: Schema.optional(
+    Schema.Array(Schema.Struct({ workspace: Schema.String, inference: Schema.String })),
+  ),
   messages: Schema.optional(Schema.Array(TelegramDelivery)),
   jobs: Schema.optional(
     Schema.Array(
@@ -213,6 +216,7 @@ export const TelegramState = Schema.Struct({
       Schema.Struct({
         update: Schema.Int,
         clock: Schema.optional(Schema.Number),
+        workspace: Schema.optional(Schema.String),
         job: Schema.optional(Schema.Struct({ target: Locator, model: Schema.NullOr(Schema.String) })),
         fork: Schema.optional(
           Schema.Struct({ target: Locator, turn: Schema.String, variant: Schema.optional(Schema.String) }),

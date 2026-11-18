@@ -286,6 +286,7 @@ export async function execute(
       signal,
       typeof input.offset === "number" ? input.offset : undefined,
       typeof input.limit === "number" ? input.limit : undefined,
+      typeof input.path === "string" ? input.path : undefined,
     )
   ).content
 }
@@ -500,7 +501,8 @@ export async function runClaim(
           if (!(error instanceof EditorFailure)) throw error
           return error
         })
-      if (!(result instanceof EditorFailure)) return await readEditorWindow(result, signal, offset, limit)
+      if (!(result instanceof EditorFailure))
+        return await readEditorWindow(result, signal, offset, limit, row.tool_input.path)
       if (result.code === "beyond_eof") return { is_error: true, content: `Offset ${offset} is beyond end of file.` }
       if (!["not_found", "unavailable"].includes(result.code))
         return { is_error: true, content: (editor.client ?? "The editor") + ": " + result.message }
@@ -650,6 +652,7 @@ export async function runClaim(
         signal,
         typeof row.tool_input.offset === "number" ? row.tool_input.offset : undefined,
         typeof row.tool_input.limit === "number" ? row.tool_input.limit : undefined,
+        typeof row.tool_input.path === "string" ? row.tool_input.path : undefined,
       )
       return { ...result, content: editorNotice ? editorNotice + "\n\n" + result.content : result.content }
     }
