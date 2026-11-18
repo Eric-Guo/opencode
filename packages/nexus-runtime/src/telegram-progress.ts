@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { Schema } from "effect"
 import type { ExecutionSnapshot, Run } from "@cybros/agent"
-import { repairableTasks } from "./execution"
+import { modelRecoveryHint, repairableTasks } from "./execution"
 import type { StoreDocument } from "./document"
 import { TelegramError, TelegramUncertain } from "./telegram-api"
 import type { TelegramState, TelegramWork } from "./telegram-state"
@@ -140,10 +140,8 @@ export function telegramAction(run: Run) {
     const failed = repairableTasks(run)[0]
     if (failed) {
       const key = failed.error?.key
-      if (key === "conversation_cost_limit_reached")
-        return "The Conversation cost limit has been reached. Raise or clear that limit, then retry the held model task to continue from its existing graph. Changing the limit does not restart work."
-      if (key === "provider_context_overflow")
-        return "Context exceeds the model server's limit. In Nexus Settings > Model providers > Edit model > Context and capabilities, match Input token limit or Combined context window to the server's actual limit (use only one), and check Output token limit. If needed, lower the requested output budget, shorten the input, or start a new conversation."
+      const hint = modelRecoveryHint(key)
+      if (hint) return hint
       if (["provider_model_unavailable", "model_unavailable"].includes(String(key)))
         return "The selected model provider is unavailable. Check its credentials and model settings in Nexus, then open the failed request in OpenCode to retry it."
       return "This request needs attention. Open the affected request in OpenCode to inspect and resolve it."

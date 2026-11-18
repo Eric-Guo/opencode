@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { Client, type JsonObject } from "@cybros/agent"
 import { RealtimeClient } from "@cybros/agent/realtime"
 import { Schema } from "effect"
@@ -679,4 +682,150 @@ test("one-shot tool requests capture runner placement, retain author guard rules
   } finally {
     fixture.server.stop(true)
   }
+})
+
+test("source CLI discovers the installed channel, authenticates privately, and follows mainline rounds", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-dev-service-"))
+  const requests: JsonObject[] = []
+  const round = (task_key: string) => ({
+    task_key,
+    status: "completed",
+    mainline: true,
+    calls: { count: 0, items: [] },
+  })
+  const frame = (channel: string, type: string, key: string, payload: JsonObject, run = "run") => ({
+    channel,
+    frame: { type, task_key: key, run_public_id: run, payload },
+  })
+  using server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      expect(request.headers.get("authorization")).toBe("Basic " + btoa("opencode:private-fixture"))
+      const path = new URL(request.url).pathname
+      if (path === "/api/info") return Response.json({ pid: process.pid, version: "fixture" })
+      if (path.endsWith("/extensions")) return Response.json([{ id: "nexus.dev", active: true, enabled: true }])
+      if (path.endsWith("/status")) return Response.json({ workspace: "workspace" })
+      const input = object(object(await request.json()).input)
+      requests.push(input)
+      switch (input.action) {
+        case "target":
+          return Response.json({ workspace: "workspace", run: "run", conversation: null, side: false })
+        case "stream.open":
+          return Response.json({ stream: "reader" })
+        case "transcript":
+          return Response.json({ rounds: [round("r1"), round("r2")], has_older: true, next_before: "earlier" })
+        case "stream.poll":
+          return Response.json({
+            events: [
+              frame("progress", "round_started", "r3", { mainline: true }),
+              frame("progress", "step_started", "r3t1", { status: "running" }),
+              frame("progress", "step_claimed", "r3t1", {}),
+              frame("transcript", "call", "r3t1", { call: { task_key: "r3t1", name: "read" } }),
+              frame("transcript", "round", "r3", { round: { ...round("r3"), text_preview: "settled" } }),
+              frame("progress", "round_started", "r4", { mainline: false }),
+              frame("progress", "step_started", "r4t1", {}),
+              frame("transcript", "round", "r4", { round: { ...round("r4"), mainline: false } }),
+              frame("transcript", "round", "r5", { round: round("r5") }, "other-run"),
+            ],
+            lost: 0,
+          })
+        case "run":
+          return Response.json({ status: "completed" })
+        case "stream.close":
+          return Response.json(null)
+        default:
+          throw new Error("Unexpected action " + input.action)
+      }
+    },
+  })
+  const invoke = async (...args: string[]) => {
+    const child = Bun.spawn(
+      [process.execPath, join(import.meta.dir, "../dev/cli.ts"), "transcript", "run", "--follow", ...args],
+      {
+        env: { ...process.env, XDG_STATE_HOME: directory, PATH: directory + "/bin:" + process.env.PATH },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    const [code, output, error] = await Promise.all([child.exited, child.stdout.text(), child.stderr.text()])
+    return { code, output, error }
+  }
+  try {
+    await Promise.all([mkdir(join(directory, "opencode")), mkdir(join(directory, "bin"))])
+    await writeFile(
+      join(directory, "opencode", "service-fixture.json"),
+      JSON.stringify({
+        url: server.url.origin,
+        password: "private-fixture",
+        pid: process.pid,
+        version: "fixture",
+      }),
+      { mode: 0o600 },
+    )
+    await writeFile(
+      join(directory, "bin", "opencode"),
+      `#!/bin/sh
+case "$*" in
+"service status") echo "${server.url.origin}" ;;
+"service get password") echo unrelated-configuration ;;
+*) exit 2 ;;
+esac
+`,
+      { mode: 0o700 },
+    )
+    expect(await invoke("--prefix", "r4t1")).toMatchObject({ code: 1, error: expect.stringContaining("--prefix") })
+    expect(requests).toEqual([])
+    const result = await invoke("--before", "cursor", "--limit", "2", "--json")
+    expect(result).toMatchObject({ code: 0, error: "older: earlier\n" })
+    expect(
+      result.output
+        .trim()
+        .split("\n")
+        .map((line) => object(JSON.parse(line))),
+    ).toEqual([
+      round("r1"),
+      round("r2"),
+      { live: ["r3"] },
+      { live: ["r3", "r3t1"] },
+      { live: ["r3"] },
+      { ...round("r3"), text_preview: "settled" },
+      { live: [] },
+    ])
+    expect(requests.filter((request) => request.action === "transcript")).toMatchObject([
+      { before: "cursor", limit: 2 },
+    ])
+    expect(requests.at(-1)).toMatchObject({ action: "stream.close" })
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("development task reporting explains unresolved model holds and omits resolved and absorbed failures", async () => {
+  const hints: string[] = []
+  const reports: JsonObject[] = []
+  const terminal = {
+    signal: new AbortController().signal,
+    command: async (input: JsonObject): Promise<JsonObject> =>
+      input.action === "target"
+        ? { workspace: "w", conversation: null, run: "run", side: false }
+        : { task: reports.shift()! },
+    write: () => {},
+    error: (line: string) => hints.push(line),
+  } satisfies Parameters<typeof runDevelopment>[1]
+  const held = { kind: "model_task", status: "failed", error: { key: "provider_context_overflow" } }
+  for (const task of [
+    held,
+    { ...held, error: { key: "conversation_cost_limit_reached" }, on_failure: "absorb" },
+    { ...held, failure_resolution: "retry" },
+    { ...held, on_failure: "absorb" },
+    { ...held, kind: "tool_task" },
+  ]) {
+    reports.push(task)
+    await runDevelopment(["task", "run", "r1"], terminal)
+  }
+  expect(hints).toEqual([
+    expect.stringContaining("Input token limit"),
+    expect.stringContaining("retry the held model task"),
+  ])
 })

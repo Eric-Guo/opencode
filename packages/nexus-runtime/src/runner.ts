@@ -92,7 +92,7 @@ const mutation = {
 export const tools: AnnouncedTool[] = [
   {
     name: "file_import",
-    description: "Materialize an attachment from this input in the project.",
+    description: "Download an attachment from this input to the runner artifact directory.",
     effect_profile: readEffect,
     input_schema: { type: "object", properties: { upload: { type: "string" } }, required: ["upload"] },
   },
