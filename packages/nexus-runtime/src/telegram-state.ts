@@ -132,6 +132,16 @@ export const TelegramState = Schema.Struct({
   history: Schema.optional(
     Schema.Record(Schema.String, Schema.Struct({ position: Schema.Int, pending: Schema.Array(Schema.String) })),
   ),
+  sessions: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        cursors: Schema.Record(Schema.String, Schema.String),
+        listed: Schema.Record(Schema.String, Schema.String),
+        tracked: Schema.Record(Schema.String, Schema.String),
+      }),
+    ),
+  ),
   searches: Schema.optional(
     Schema.Record(
       Schema.String,
@@ -207,6 +217,7 @@ export const TelegramState = Schema.Struct({
         fork: Schema.optional(
           Schema.Struct({ target: Locator, turn: Schema.String, variant: Schema.optional(Schema.String) }),
         ),
+        resume: Schema.optional(Schema.Struct({ target: Locator, reply: Schema.optional(Schema.String) })),
       }),
     ),
   ),
