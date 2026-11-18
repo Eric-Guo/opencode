@@ -310,6 +310,26 @@ export default Runtime.handler(
       yield* Effect.tryPromise(() => nexus.logout())
       return
     }
+    if (input.action === "manage") {
+      yield* Effect.tryPromise(async () => {
+        if (Option.isNone(input.json)) throw new Error("Provide a Nexus command using --json.")
+
+        const { NexusCommand } = await import("@opencode/protocol/nexus-command")
+        const command = Schema.decodeUnknownSync(Schema.fromJsonString(NexusCommand))(input.json.value)
+        const result = await nexus.manage({
+          "x-nexus-origin": process.env.NEXUS_URL,
+          "x-nexus-member-token": process.env.NEXUS_MEMBER_TOKEN,
+          payload: command as Parameters<typeof nexus.manage>[0]["payload"],
+        })
+
+        process.stdout.write(
+          (command.action === "application.memory" && command.format !== "json" && typeof result === "string"
+            ? result
+            : JSON.stringify(result, null, 2)) + "\n",
+        )
+      })
+      return
+    }
     const result = yield* Effect.tryPromise(async () => {
       if (input.action === "extensions") return nexus.extensions()
       if (input.action === "configure") {
@@ -322,17 +342,6 @@ export default Runtime.handler(
             typeof nexus.configureExtension
           >[0],
         )
-      }
-      if (input.action === "manage") {
-        if (Option.isNone(input.json)) throw new Error("Provide a Nexus command using --json.")
-        const { NexusCommand } = await import("@opencode/protocol/nexus-command")
-        return nexus.manage({
-          "x-nexus-origin": process.env.NEXUS_URL,
-          "x-nexus-member-token": process.env.NEXUS_MEMBER_TOKEN,
-          payload: Schema.decodeUnknownSync(Schema.fromJsonString(NexusCommand))(input.json.value) as Parameters<
-            typeof nexus.manage
-          >[0]["payload"],
-        })
       }
       if (input.action === "disconnect") return nexus.disconnect()
       if (input.action === "schedules" || input.action === "memory" || input.action === "mcp")
