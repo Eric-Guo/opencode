@@ -266,8 +266,16 @@ export interface PerRequest {
   readonly elicitation?: ElicitationHandler["create"]
 }
 
+/** Peer declaration before OpenCode normalizes it for native callers. */
+export interface AdvertisedTool {
+  readonly name: string
+  readonly description?: string
+  readonly inputSchema: unknown
+}
+
 /** Handle over a connected MCP server that keeps the SDK `Client` out of the rest of core. */
 export interface Connection {
+  readonly advertisedTools: readonly AdvertisedTool[]
   /** True when the connection negotiated revision 2026-07-28 or later; false is the initialize handshake. */
   readonly modern: boolean
   /** The protocol revision the connection negotiated, such as "2025-11-25". */
@@ -668,6 +676,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     )
     const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
     const listed = new Map<string, Tool>()
+    let advertisedTools: AdvertisedTool[] = []
     const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
       Effect.tryPromise({ try: run, catch: failure }).pipe(
@@ -760,6 +769,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
 
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
+      get advertisedTools() {
+        return advertisedTools
+      },
       modern: client.getProtocolEra() === "modern",
       protocolVersion: client.getNegotiatedProtocolVersion(),
       title: client.getServerVersion()?.title?.trim() || undefined,
@@ -886,6 +898,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
               // whole list; each is checked here and copied, dropping fields of the wrong type.
               Effect.flatMap((result) => {
                 const skipped: Array<{ tool: unknown; reason: string }> = []
+                const declarations: AdvertisedTool[] = []
                 const tools = result.tools.flatMap((tool: unknown): Tool[] => {
                   const skip = (reason: string) => {
                     skipped.push({ tool: isRecord(tool) ? tool.name : undefined, reason })
@@ -893,6 +906,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                   }
                   if (!isRecord(tool)) return skip("not an object")
                   if (typeof tool.name !== "string" || tool.name === "") return skip("name is not a non-empty string")
+                  declarations.push({
+                    name: tool.name,
+                    description: typeof tool.description === "string" ? tool.description : undefined,
+                    inputSchema: tool.inputSchema,
+                  })
+
                   if (!isRecord(tool.inputSchema)) return skip("inputSchema is not an object")
                   if (tool.inputSchema.type !== undefined && tool.inputSchema.type !== "object")
                     return skip('inputSchema type is not "object"')
@@ -919,6 +938,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                     },
                   ]
                 })
+                advertisedTools = declarations
                 listed.clear()
                 for (const tool of tools) listed.set(tool.name, tool)
                 return Effect.forEach(

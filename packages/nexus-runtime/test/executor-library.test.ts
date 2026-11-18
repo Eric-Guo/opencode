@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test"
+import { createHash } from "node:crypto"
+import { mkdir, readdir } from "node:fs/promises"
+import { join } from "node:path"
 import { NexusExecutor, RunnerAdmission } from "../src/executor"
 import { definition } from "../src/extensions"
 import { executorFixture } from "./fixture/executor"
@@ -189,3 +192,60 @@ test("worker extensions receive live claim orchestration without credentials", a
     await fixture.close()
   }
 })
+
+test.each([false, true])(
+  "file_import publishes complete artifacts under storage or an explicit location (override=%s)",
+  async (override) => {
+    const fixture = await executorFixture()
+    const root = join(fixture.directory, "project")
+    const storage = join(fixture.directory, "storage")
+    await mkdir(root)
+    const artifacts = override ? join(fixture.directory, "custom") : undefined
+    const executor = new NexusExecutor({
+      executor: fixture.client,
+      id: "executor",
+      root,
+      storage,
+      artifacts,
+      extensions: () => [],
+      placement: "fixed",
+    })
+    const id = crypto.randomUUID()
+    let bytes = "complete"
+    fixture.control.route = async (request) => {
+      const path = new URL(request.url).pathname
+      if (path.endsWith("/attachments/" + id))
+        return Response.json({
+          upload: {
+            public_id: id,
+            filename: "file.txt",
+            content_type: "text/plain",
+            byte_size: 8,
+            created_at: new Date().toISOString(),
+          },
+        })
+      if (path.endsWith("/attachments/" + id + "/bytes")) return new Response(bytes)
+    }
+    const download = async (task: string) => {
+      fixture.add("run", task, "file_import", { tool_input: { upload: "nexus://uploads/" + id } })
+      await executor.sweep()
+      await executor.drain()
+      return fixture.commits.at(-1)?.body
+    }
+    try {
+      const directory = join(
+        artifacts ?? join(storage, "artifacts"),
+        createHash("sha256").update(root).digest("hex").slice(0, 16),
+      )
+      expect(await download("first")).toMatchObject({ structured_content: { path: join(directory, id + "-file.txt") } })
+      bytes = "short"
+      expect(await download("second")).toMatchObject({ is_error: true })
+      expect(await readdir(directory)).toEqual([id + "-file.txt"])
+      expect(await Bun.file(join(directory, id + "-file.txt")).text()).toBe("complete")
+      expect(await readdir(root)).toEqual([])
+    } finally {
+      await executor.close()
+      await fixture.close()
+    }
+  },
+)

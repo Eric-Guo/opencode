@@ -2,7 +2,10 @@
 
 import { setTimeout } from "node:timers/promises"
 import { OpenCode } from "@opencode/client/promise"
-import { Service } from "@opencode/client/service"
+import { $, Glob, which } from "bun"
+import { dirname } from "node:path"
+import { Schema } from "effect"
+import { Service, fallback, type Endpoint } from "@opencode/client/service"
 import { developmentHelp, parseDevelopment, runDevelopment } from "./terminal"
 
 /** A source-only terminal for the enabled dev extension. Discovery never starts or replaces the service. */
@@ -13,7 +16,7 @@ export async function main(args = process.argv.slice(2)) {
     process.stdout.write(developmentHelp)
     return 0
   }
-  const endpoint = await Service.discover()
+  const endpoint = await installedService()
 
   if (!endpoint)
     throw new Error("No elected OpenCode service is available. Start OpenCode before using development controls.")
@@ -75,6 +78,28 @@ export async function main(args = process.argv.slice(2)) {
   } finally {
     process.removeListener("SIGINT", cancel)
     process.removeListener("SIGTERM", cancel)
+  }
+}
+
+async function installedService(): Promise<Endpoint | undefined> {
+  const binary = which("opencode")
+  if (!binary) return Service.discover()
+
+  const status = await $`${binary} service status`.quiet().nothrow()
+  if (status.exitCode !== 0) return
+  const url = status.text().trim()
+  if (!URL.canParse(url)) return
+  const elected = Schema.is(Schema.Struct({ url: Schema.Literal(url) }))
+
+  // The config directory may be overridden independently of the elected registration.
+  // Let the SDK verify the running owner and use the credential that owner published.
+  for await (const file of new Glob("service{,-*}.json").scan({ cwd: dirname(fallback()), absolute: true })) {
+    const matches = await Bun.file(file)
+      .json()
+      .then(elected, () => false)
+    if (!matches) continue
+    const endpoint = await Service.discover({ file })
+    if (endpoint?.url === url) return endpoint
   }
 }
 

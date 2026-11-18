@@ -101,9 +101,10 @@ export async function* runPrompt(
           live.run = state.run
           const socket = application.realtime()
           const stop = new AbortController()
-          const watching = (async () => {
+          const observing = AbortSignal.any([active, stop.signal])
+          const watch = async () => {
             const subscription = await socket.runTranscript(workspace, live.run, {
-              signal: AbortSignal.any([active, stop.signal]),
+              signal: observing,
             })
             for await (const frame of subscription) {
               const event = Schema.decodeUnknownSync(NexusRun.Event)({
@@ -116,7 +117,13 @@ export async function* runPrompt(
               live.bytes += bytes
               frames.push(event)
             }
-          })().catch(() => {})
+          }
+          const watching = (async () => {
+            while (!observing.aborted) {
+              await watch().catch(() => {})
+              if (!observing.aborted) await setTimeout(1000, undefined, { signal: observing }).catch(() => {})
+            }
+          })()
           streams.push({
             close: async () => {
               stop.abort()
