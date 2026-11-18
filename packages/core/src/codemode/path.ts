@@ -22,7 +22,7 @@ const flavor = (module: path.PlatformPath) => {
 
 // A run gets `path` only with the session's Location (see `CodeModeTool.create`).
 const directory = Effect.flatMap(Effect.serviceOption(Location.Service), (location) =>
-  Option.isSome(location) ? Effect.succeed(location.value.directory) : Effect.die("Code Mode path needs a Location."),
+  Option.isSome(location) ? Effect.succeed(location.value.directory) : Effect.die(new Error("Code Mode path needs a Location.")),
 )
 
 /** The host's own path module, as Node gives it, with `path.posix` and `path.win32`. */
