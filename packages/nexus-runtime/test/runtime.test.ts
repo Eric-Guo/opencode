@@ -273,6 +273,20 @@ test.each([
         })
       if (path.endsWith("/tasks/call")) return Response.json({ task: task() })
       if (path.endsWith("/tasks/call/approve")) return Response.json({ task: { ...task(), status: "completed" } })
+      if (path === "/agent_api/v1/workspaces/workspace/conversations/conversation/memory")
+        return Response.json({
+          memory: [
+            {
+              collection_public_id: "collection",
+              public_id: "note",
+              lock_version: 0,
+              path: "conversation/note.md",
+              bytesize: 5,
+              content: null,
+              written_at: measured,
+            },
+          ],
+        })
       if (path.endsWith("/schedules/job/executions"))
         return Response.json({ executions: [], pagination: { next_after: null, last_cursor: null } })
       if (path.endsWith("/conversations/conversation/schedules") || path.endsWith("/schedules/job")) {
@@ -457,6 +471,15 @@ test.each([
           { model: "provider/updated" },
         ])
         expect(calls.find((call) => call.path.endsWith("/schedules/job/executions"))?.after).toBe("next-execution")
+        const memory = { action: "application.memory", conversation: "conversation", command: "ls" } as const
+
+        expect(await runtime.manage(memory)).toBe("conversation/note.md (5 bytes)")
+        expect(await runtime.manage({ ...memory, format: "json" }, nexus.url.origin, "human")).toMatchObject([
+          { path: "conversation/note.md", lock_version: 0 },
+        ])
+        expect(
+          calls.filter((call) => call.path.endsWith("/conversations/conversation/memory")).at(-1)?.authorization,
+        ).toBe("Bearer human")
       }
       if ("apiKey" in fixture) {
         await runtime.manage({ action: "settings.update", patch: { subagent_default: false } })
