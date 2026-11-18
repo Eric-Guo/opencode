@@ -742,8 +742,13 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       const chat = nexus.workspace.conversation(id)
       pending.set(id, owner)
       try {
-        const prompt = await editorPrompt(ctx.params.prompt, nexus.client, signal)
-        const command = /^\/(retry|abandon|compact)(?:\s|$)/.exec(prompt.text)?.[1]
+        const prompt = await editorPrompt(
+          ctx.params.prompt,
+          nexus.client,
+          signal,
+          (text) => !session.question && !surfaceCommand(text),
+        )
+        const command = surfaceCommand(prompt.text)
 
         if (command === "compact") {
           await chat.compact(undefined, { signal })
@@ -848,7 +853,16 @@ const modes = [
   { id: "rules", name: "Rules", description: "Apply the configured approval rules." },
 ]
 
-export async function editorPrompt(parts: readonly ContentBlock[], client: Client, signal: AbortSignal) {
+function surfaceCommand(text: string) {
+  return /^\/(retry|abandon|compact)(?:\s|$)/.exec(text)?.[1]
+}
+
+export async function editorPrompt(
+  parts: readonly ContentBlock[],
+  client: Client,
+  signal: AbortSignal,
+  acceptsPDF?: (text: string) => boolean,
+) {
   const text: string[] = []
   const files: File[] = []
   const attachments: string[] = []
@@ -894,6 +908,11 @@ export async function editorPrompt(parts: readonly ContentBlock[], client: Clien
     files.push(new File([bytes], "editor-input-" + (files.length + 1) + "." + extension, { type: media.mime }))
   }
 
+  const prompt = text.join("\n\n")
+
+  if (acceptsPDF && files.some((file) => file.type === "application/pdf") && !acceptsPDF(prompt))
+    throw RequestError.invalidParams(undefined, "PDF attachments require a new conversation turn.")
+
   for (const file of files) {
     signal.throwIfAborted()
     const upload = await client.uploads.create(file, file.name, { signal })
@@ -901,5 +920,5 @@ export async function editorPrompt(parts: readonly ContentBlock[], client: Clien
     attachments.push(upload.public_id)
   }
 
-  return { text: text.join("\n\n"), ...(attachments.length ? { attachments } : {}) }
+  return { text: prompt, ...(attachments.length ? { attachments } : {}) }
 }

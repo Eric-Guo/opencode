@@ -58,6 +58,10 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
   const elicited = Promise.withResolvers<void>()
   const answer = Promise.withResolvers<{ action: "cancel" }>()
   const held = Promise.withResolvers<void>()
+  const pdf = {
+    type: "resource",
+    resource: { uri: "file:///answer.pdf", mimeType: "application/pdf", blob: "JVBERi0xLjcK" },
+  } as const
   const ask = {
     key: "ask",
     kind: "ask_task",
@@ -301,6 +305,13 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     await expect(
       peer.agent.request("session/prompt", {
         sessionId: "conversation",
+        prompt: [{ type: "text", text: "/compact" }, pdf],
+      }),
+    ).rejects.toMatchObject({ code: -32602, message: expect.stringContaining("new conversation turn") })
+    expect(calls.some((call) => /\/(?:uploads|compaction)$/.test(call))).toBe(false)
+    await expect(
+      peer.agent.request("session/prompt", {
+        sessionId: "conversation",
         prompt: [{ type: "image", data: "not base64!", mimeType: "image/png" }],
       }),
     ).rejects.toMatchObject({ code: -32602 })
@@ -360,6 +371,14 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     ).rejects.toMatchObject({ code: -32600 })
     answer.resolve({ action: "cancel" })
     await held.promise
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await expect(
+      peer.agent.request("session/prompt", {
+        sessionId: "conversation",
+        prompt: [{ type: "text", text: "Yes" }, pdf],
+      }),
+    ).rejects.toMatchObject({ code: -32602, message: expect.stringContaining("new conversation turn") })
+    expect(calls.some((call) => /\/(?:uploads|resolve)$/.test(call))).toBe(false)
     await peer.agent.request("session/close", { sessionId: "conversation" })
     expect(calls.some((call) => call.endsWith("/cancellation"))).toBe(false)
   } finally {
