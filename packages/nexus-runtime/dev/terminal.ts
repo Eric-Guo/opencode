@@ -335,22 +335,22 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
       }),
     )
     const template = parsed.text("template")
-    print(
-      await call("prompt.preview", {
-        conversation: await conversation(word(1, "CONVERSATION")),
-        prompt: parsed.text("prompt"),
-        model: parsed.text("model"),
-        answering_user_public_id: parsed.text("to"),
-        variables,
-        ...(template
-          ? {
-              template: Schema.decodeUnknownSync(Schema.fromJsonString(ObjectValue))(
-                template === "-" ? ((await terminal.read?.()) ?? "") : await readFile(template, "utf8"),
-              ),
-            }
-          : {}),
-      }),
-    )
+    const result = await call("prompt.preview", {
+      conversation: await conversation(word(1, "CONVERSATION")),
+      prompt: parsed.text("prompt"),
+      model: parsed.text("model"),
+      answering_user_public_id: parsed.text("to"),
+      variables,
+      ...(template
+        ? {
+            template: Schema.decodeUnknownSync(Schema.fromJsonString(ObjectValue))(
+              template === "-" ? ((await terminal.read?.()) ?? "") : await readFile(template, "utf8"),
+            ),
+          }
+        : {}),
+    })
+    if (parsed.values.json) print(result)
+    else terminal.write(formatPromptPreview(result))
     return 0
   }
   if (parsed.verb === "conversation") {
@@ -873,6 +873,64 @@ async function followDevelopment(
   } finally {
     if (state.stream) await call("stream.close", { stream: state.stream }).catch(() => {})
   }
+}
+
+function formatPromptPreview(value: JsonValue) {
+  const estimate = object(value)
+  const history = object(estimate.history)
+  const lines = [
+    "tokens: " +
+      estimate.input_tokens +
+      (estimate.tokenizer_exact ? " (exact)" : " (estimated)") +
+      " · limit " +
+      (estimate.catalog_input_token_limit ?? "-") +
+      " · advisory " +
+      (estimate.advisory_input_token_limit ?? "-"),
+    "history: selected " +
+      history.selected +
+      " · skipped " +
+      history.skipped +
+      (history.skipped_reason ? " (" + history.skipped_reason + ")" : "") +
+      " · compacted " +
+      history.compacted,
+  ]
+  if (!estimate.rendered) return lines.join("\n") + "\n"
+
+  const rendered = object(estimate.rendered)
+  const storage = object(rendered.storage)
+  const memory = object(rendered.memory)
+  const blocks = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(rendered.blocks)
+
+  return [
+    "mechanism: " + rendered.mechanism,
+    ...lines,
+    "storage: " +
+      storage.bytes +
+      " of " +
+      storage.bound +
+      " bytes (" +
+      (storage.within_bound ? "within bound" : "over: " + storage.refusal) +
+      ")",
+    "blocks:",
+    ...blocks.map(
+      (block) =>
+        "  " +
+        [
+          block.index,
+          block.block,
+          block.type,
+          block.role ?? "-",
+          block.state,
+          block.tokens + " / " + (block.allocated_tokens ?? "-"),
+        ].join(" · "),
+    ),
+    "memory: " + memory.included + " included · " + memory.omitted + " omitted",
+    "slots: " + JSON.stringify(rendered.slots),
+    "",
+    "entries:",
+    JSON.stringify(rendered.entries, null, 2),
+    "",
+  ].join("\n")
 }
 
 export function formatDevelopment(value: JsonValue): string {

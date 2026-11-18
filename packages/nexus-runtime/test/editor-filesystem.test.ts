@@ -109,6 +109,12 @@ test("editor reads page unsaved buffers and normalize both beyond-EOF shapes", a
   expect(await fixture.call("read", { path: "file", offset: 3, limit: 2 })).toMatchObject({
     content: "three\nfour\n\n[Showing lines 3-4; more lines remain. Use offset=5 to continue.]",
   })
+  fixture.control.reply = () => Response.json({ content: "x".repeat(60 * 1024) })
+  expect(await fixture.call("read", { path: "file's draft", offset: 7, limit: 1 })).toMatchObject({
+    content:
+      "[Line 7 is 61440 bytes, exceeds 50 KiB limit. Use bash: sed -n '7p' < 'file'\\''s draft' | head -c 51200]",
+    structured_content: { truncation: { first_line_exceeds_limit: true, max_bytes: 51200 } },
+  })
   for (const body of [{ content: "" }, { error: { code: "beyond_eof", message: "no line" } }]) {
     fixture.control.reply = () => Response.json(body, { status: "error" in body ? 422 : 200 })
     expect(await fixture.call("read", { path: "file", offset: 5 })).toMatchObject({
