@@ -11,6 +11,7 @@ test("adaptations select by lane-independent reference and apply boot aliases wi
   try {
     const pack = await Adaptations.load(defaultSettings, directory, "openai_api/gpt-6.1-sol")
     expect(pack.facts("other/gpt-6.1-sol")).toMatchObject({ row: "codex", source: "bundled" })
+    expect(pack.facts("vipai/gpt-6.2-sol")).toMatchObject({ row: "codex", source: "bundled" })
     expect(pack.facts("broker/z-ai/glm-5.3")).toMatchObject({ row: "glm-5.3", boot_row: "codex" })
     expect(pack.facts("broker/z-ai/glm-5.3-flash")).toMatchObject({ row: "default" })
     const catalog = data.presets.presets.codex.aliases.map((alias) => ({
