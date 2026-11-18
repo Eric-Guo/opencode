@@ -1,6 +1,9 @@
 import { app } from "electron"
 import { SidecarChanged } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
+import { ApplicationLifecycle } from "../lifecycle"
+import { endsApp } from "../lifecycle/machine"
+import { Shutdown } from "../lifecycle/shutdown"
 import { getMainWindows, getPrimaryWebContents } from "../windows"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { execFile } from "node:child_process"
@@ -11,6 +14,7 @@ import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { serviceFile } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
+import { getKeepServiceRunning } from "./keep-running"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { DesktopProxy } from "../network"
 import { ensureProxyService } from "./proxy"
@@ -35,10 +39,15 @@ export const layer = Layer.effect(
     const path = yield* Path.Path
     const client = yield* Effect.promise(() => import("@opencode/client/service"))
     const desktopCli = yield* DesktopCli.Service
+    const lifecycle = yield* ApplicationLifecycle.Service
+    const shutdown = yield* Shutdown.Service
+
+    const reuse = !app.isPackaged && process.env.OPENCODE_DESKTOP_REUSE_SERVER === "1"
 
     const state = yield* BackgroundServiceMachine.make({
       probe: Effect.succeed(undefined),
-      ensure: (mode) => connect(mode).pipe(Effect.provide(context)),
+      // A second dev window connects without applying startup settings to the shared service.
+      ensure: (mode) => connect(reuse ? "reconnect" : mode, reuse).pipe(Effect.provide(context)),
       publish: (data) => {
         SidecarCredentials.set(data)
         const event = new SidecarChanged({ url: data.url })
@@ -46,27 +55,41 @@ export const layer = Layer.effect(
       },
     })
 
-    return Service.of({
-      ...state,
-      stop: Effect.gen(function* () {
-        const cli = yield* desktopCli.resolve
-        yield* Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path, cli.version) }))
-      }).pipe(
-        Effect.tap(() => Effect.logInfo("v2 CLI background service stopped")),
-        Effect.asVoid,
-        Effect.catch((error) => Effect.logWarning("failed to stop background service", { error })),
+    const stop = reuse
+      ? Effect.void
+      : Effect.gen(function* () {
+          const cli = yield* desktopCli.resolve
+          yield* Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path, cli.version), pty: "clear" }))
+        }).pipe(
+          Effect.tap(() => Effect.logInfo("v2 CLI background service stopped")),
+          Effect.asVoid,
+          Effect.catch((error) => Effect.logWarning("failed to stop background service", { error })),
+        )
+
+    // Relaunches and update handoffs leave the service available for the next app.
+    const remove = yield* shutdown.add({
+      stop: Effect.suspend(() =>
+        endsApp(lifecycle.state()) && !getKeepServiceRunning() ? state.dispose.pipe(Effect.andThen(stop)) : Effect.void,
       ),
+      resume: Effect.void,
     })
+
+    yield* Effect.addFinalizer(() => Effect.sync(remove))
+
+    return Service.of({ connection: state.connection, reconnect: state.reconnect, stop })
   }),
 )
 
-const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial" | "reconnect") {
+const connect = Effect.fn("BackgroundService.connect")(function* (
+  mode: BackgroundServiceMachine.ConnectMode,
+  reuse: boolean,
+) {
   yield* Effect.logInfo("starting v2 background service")
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const proxy = yield* DesktopProxy.Service
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  const isolated = !app.isPackaged && !reuse && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
 
@@ -102,7 +125,9 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     ensureProxyService(
       proxy,
       {
-        file: registrationFile(path, cli.version),
+        file: reuse
+          ? process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE || undefined
+          : registrationFile(path, cli.version),
         version,
         env: proxy.environment(),
         // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
