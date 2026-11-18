@@ -175,13 +175,18 @@ export class InputAdmissions {
     return (await this.latest(workspace, conversation))?.body.model?.model
   }
 
-  async modelSelection(workspace: string, conversation: string) {
-    const latest = await this.latest(workspace, conversation)
-    if (latest?.notes?.["nexus.addressed"]) return
-    return latest?.body.model_selection?.source === "explicit" ? latest.body.model_selection : undefined
+  async modelSelection(workspace: string, conversation: string, initial?: { model: string; addressedTo?: string }) {
+    const latest = await this.latest(workspace, conversation, initial)
+    if (latest?.notes?.["nexus.addressed"] && !initial?.addressedTo) return
+    if (latest?.body.model_selection)
+      return latest.body.model_selection.source === "explicit" ? latest.body.model_selection : undefined
+
+    // Foreign agents receive only the model reference. Their input can still replace the opening choice.
+    const model = latest ? (initial?.addressedTo ? latest.body.model?.model : undefined) : initial?.model
+    if (model) return { source: "explicit" as const, constraint: "route" as const, model, alternatives: [] }
   }
 
-  private async latest(workspace: string, conversation: string) {
+  private async latest(workspace: string, conversation: string, initial?: { addressedTo?: string }) {
     let selected: { at: string; value: typeof Admission.Type } | undefined
     let after: string | undefined
     do {
@@ -193,6 +198,8 @@ export class InputAdmissions {
         )
         if (value.target?.workspace !== workspace || value.target.conversation !== conversation || !value.body.model)
           continue
+        const addressedTo = value.notes?.["nexus.addressed"] ? value.body.answering_user_public_id : undefined
+        if (initial && initial.addressedTo !== addressedTo) continue
         selected = { at: row.created_at, value }
       }
       after = page.next_after ?? undefined

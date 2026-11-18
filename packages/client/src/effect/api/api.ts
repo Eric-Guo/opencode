@@ -3679,6 +3679,7 @@ export type ExperimentalNexusManageInput = {
         readonly action: "application.open"
         readonly workspace?: string | undefined
         readonly key: string
+        readonly model?: string | undefined
         readonly title?: string | undefined
         readonly runner?: string | null | undefined
       }
