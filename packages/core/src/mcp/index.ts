@@ -57,6 +57,7 @@ export interface ServerInstructions {
   readonly instructions: string
 }
 
+export type AdvertisedTool = McpClient.AdvertisedTool
 /** Checked MCP tool definition tagged with the server that owns it. */
 export type Tool = McpClient.Tool & { readonly server: ServerName; readonly codemode?: boolean }
 export type ToolResultContent = McpClient.CallToolContent
@@ -175,6 +176,8 @@ export interface Interface extends State.Transformable<Editor> {
    * name until it closes, then the most recent remaining connection takes over.
    */
   readonly attach: (name: string, transport: Transport) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
+  /** Original declarations of the peers serving this name, before native tool normalization. */
+  readonly advertisedTools: (server: string) => Effect.Effect<readonly AdvertisedTool[]>
   readonly tools: () => Effect.Effect<Tool[]>
   /**
    * Waits for servers that are still connecting, each until it settles or until its startup grace
@@ -1069,6 +1072,20 @@ export const layer = (options?: Options) =>
           yield* attach(ServerName.make(client), transport)
         }),
         // Reads report what is connected now; servers still starting contribute once they publish a change.
+        advertisedTools: (server) =>
+          Effect.sync(() => {
+            const name = ServerName.make(server)
+            const configured = entries.get(name)?.connection.client?.advertisedTools ?? []
+            const client = attached.get(name)?.at(-1)
+            if (!client) return configured
+
+            const shadowed = new Set(client.tools.map((tool) => tool.name))
+            const names = new Set(configured.map((tool) => tool.name))
+            return [
+              ...configured.filter((tool) => !shadowed.has(tool.name)),
+              ...client.client.advertisedTools.filter((tool) => shadowed.has(tool.name) || !names.has(tool.name)),
+            ]
+          }),
         tools: Effect.fn("MCP.tools")(function* () {
           const clients = Array.from(attached.values()).flatMap((stack) => stack.at(-1)?.tools ?? [])
           // Match callTool: an attached client's tool shadows a configured server's tool of the same name.
