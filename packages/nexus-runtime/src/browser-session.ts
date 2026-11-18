@@ -596,11 +596,13 @@ export async function act(tab: Tab, ref: string, text?: string, submit = false) 
             if(!reason&&!fill){
               await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
               const latest=this.getBoundingClientRect();
-              const x=Math.max(0,Math.min(innerWidth-1,latest.x+latest.width/2)),y=Math.max(0,Math.min(innerHeight-1,latest.y+latest.height/2));
+              const x=(Math.max(0,latest.left)+Math.min(innerWidth,latest.right))/2;
+              const y=(Math.max(0,latest.top)+Math.min(innerHeight,latest.bottom))/2;
               let hit=this.ownerDocument.elementFromPoint(x,y);
               while(hit&&hit.shadowRoot&&hit.shadowRoot.elementFromPoint(x,y)!==hit)hit=hit.shadowRoot.elementFromPoint(x,y);
               reason=['x','y','width','height'].some(key=>Math.abs(box[key]-latest[key])>1)?'moving':
                 hit!==this&&!this.contains(hit)?'covered by another element':'';
+              if(!reason)return {x:(x-latest.left)/latest.width,y:(y-latest.top)/latest.height};
             }
             if(!reason)return true;
             await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -611,7 +613,9 @@ export async function act(tab: Tab, ref: string, text?: string, submit = false) 
         returnByValue: true,
       }),
     )
-    if (ready.result.value !== true)
+    if (ready.exceptionDetails)
+      throw new Error(ready.exceptionDetails.exception?.description ?? ready.exceptionDetails.text)
+    if (typeof ready.result.value === "string")
       throw new Error(
         "This element is " + ready.result.value + ". Take a new browser_snapshot after the page is ready.",
       )
@@ -696,11 +700,15 @@ export async function act(tab: Tab, ref: string, text?: string, submit = false) 
       }
       return
     }
+    const point = Schema.decodeUnknownSync(Schema.Struct({ x: Schema.Number, y: Schema.Number }))(ready.result.value)
+    // The hit test uses the element's frame. CDP dispatch uses the session viewport, including same-process frames.
     const box = Schema.decodeUnknownSync(
-      Schema.Struct({ model: Schema.Struct({ content: Schema.Array(Schema.Number) }) }),
+      Schema.Struct({ model: Schema.Struct({ border: Schema.Array(Schema.Number) }) }),
     )(await send("DOM.getBoxModel", { backendNodeId }))
-    const x = (box.model.content[0] + box.model.content[2] + box.model.content[4] + box.model.content[6]) / 4
-    const y = (box.model.content[1] + box.model.content[3] + box.model.content[5] + box.model.content[7]) / 4
+    const xs = box.model.border.filter((_, index) => index % 2 === 0)
+    const ys = box.model.border.filter((_, index) => index % 2 === 1)
+    const x = Math.min(...xs) + (Math.max(...xs) - Math.min(...xs)) * point.x
+    const y = Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * point.y
     await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 })
     await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 })
   } finally {
