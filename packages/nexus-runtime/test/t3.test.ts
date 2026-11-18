@@ -28,6 +28,7 @@ function service(
     version?: number
     loseLaunch?: boolean
     corruptModel?: boolean
+    oversizedReport?: boolean
     missingMessage?: boolean
     question?: "command" | "user_input"
     unsafe?: boolean
@@ -96,7 +97,11 @@ function service(
                   role: "user",
                   text: "Fix parser",
                 },
-                { id: "answer", role: "assistant", text: "Implemented and checked" },
+                {
+                  id: "answer",
+                  role: "assistant",
+                  text: options.oversizedReport ? "界".repeat(24000) : "Implemented and checked",
+                },
               )
             if (options.corruptModel) {
               state.projection.runs[0].modelSelection.model = "substituted"
@@ -146,7 +151,8 @@ function service(
           if (frame.tag === "orchestration.getThreadProjection") return state.projection
           if (frame.tag === "orchestration.getTurnItem")
             return { item: { type: "command_execution", input: "bun test", output: "All checks passed", exitCode: 0 } }
-          if (frame.tag === "orchestration.getFullThreadDiff") return { diff: "+verified fixture change\n" }
+          if (frame.tag === "orchestration.getFullThreadDiff")
+            return options.oversizedReport ? {} : { diff: "+verified fixture change\n" }
           if (frame.tag === "orchestration.dispatchCommand" && frame.payload.type === "run.interrupt") {
             state.projection.runs[0].status = "interrupted"
             return { sequence: 1 }
@@ -217,9 +223,10 @@ test("T3 catalog resolves explicit aliases without provider or model fallback", 
   expect(JSON.stringify(catalog.report())).not.toContain("native-codex")
 })
 
-for (const loseLaunch of [false, true])
-  test("T3 durable assignment survives replay" + (loseLaunch ? " and a lost launch response" : ""), async () => {
-    using peer = service({ loseLaunch })
+for (const mode of ["normal", "lost launch", "oversized report"])
+  test("T3 result and durable assignment survive replay: " + mode, async () => {
+    const oversizedReport = mode === "oversized report"
+    using peer = service({ loseLaunch: mode === "lost launch", oversizedReport })
     const store = storeFixture()
     const directory = await mkdtemp(join(tmpdir(), "nexus-t3-"))
     try {
@@ -248,9 +255,25 @@ for (const loseLaunch of [false, true])
       }
       const result = await client.tools()[0].execute({ prompt: "Fix parser" }, context)
       expect(result.is_error).toBe(false)
-      expect(files.map((row) => row.name.split(".").at(-1))).toEqual(["json", "diff"])
+      expect(result.structured_content).toMatchObject({
+        model: "code",
+        branch: "main",
+        worktree: "/project",
+        requests: [],
+      })
+      expect(files.map((row) => row.name.split(".").at(-1))).toEqual(oversizedReport ? ["json"] : ["json", "diff"])
       expect(files[0].text).toContain("All checks passed")
-      expect(files[1].text).toContain("verified fixture change")
+      if (oversizedReport) {
+        expect(result.structured_content).toHaveProperty(
+          "limitation",
+          expect.stringContaining("Final diff unavailable"),
+        )
+        expect(result.content).toMatchObject([
+          { type: "text", text: expect.stringContaining("See the attached JSON report") },
+          { type: "resource_link" },
+        ])
+        expect(JSON.parse(files[0].text)).toHaveProperty("text", "界".repeat(24000))
+      } else expect(files[1].text).toContain("verified fixture change")
       await client.tools()[0].execute({ prompt: "A retried payload is not relaunched" }, context)
       expect(peer.requests.filter((row) => row.tag === "orchestration.launchThread")).toHaveLength(1)
       expect(store.entries.size).toBe(1)
@@ -351,6 +374,29 @@ for (const mode of ["approve", "unsafe", "expired", "question"] as const)
           signal: AbortSignal.timeout(2000),
           ask: async (key) => {
             questions.push(key)
+            if (mode === "question") {
+              const work = [...store.entries.values()][0]
+              const observation = await client.tools()[1].execute(
+                { action: "observe", work_id: work.public_id },
+                {
+                  workspace: "workspace",
+                  conversation: "conversation",
+                  run: "run",
+                  task: "observe",
+                  directory: "/project",
+                  signal: AbortSignal.timeout(2000),
+                },
+              )
+              expect(observation.structured_content).toMatchObject({
+                requests: [
+                  {
+                    kind: "user_input",
+                    prompt: "Choose the action",
+                    questions: [{ prompt: "Which colors?", options: ["Blue", "Green"] }],
+                  },
+                ],
+              })
+            }
             if (mode === "expired") peer.state.projection.providerSessions[0].status = "stopped"
             return mode === "question" ? '["Blue","Green"]' : "accept"
           },

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Client, type JsonObject } from "@cybros/agent"
 import { NexusApplication } from "../src/application"
 import { storeFixture } from "./fixture/store"
-import { conversationFixture, inputFixture } from "./fixture/conversation"
+import { conversationFixture, inputFixture, turnFixture } from "./fixture/conversation"
 
 test("Input admission freezes policy before POST and replays the same body after a lost response and restart", async () => {
   const submitted: { key: string; body: JsonObject }[] = []
@@ -152,32 +152,37 @@ test("Mainline model inheritance follows settled execution while explicit choice
   const fixture = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
     if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: conversationFixture() })
-    if (path.endsWith("/turns"))
+    if (path.endsWith("/turns")) {
+      const before = new URL(request.url).searchParams.get("before_position")
+      const history = state.settled
+        ? Array.from({ length: 204 }, (_, position) =>
+            position === 103
+              ? turnFixture(position, {
+                  public_id: "turn",
+                  kind: "direct_reply",
+                  active_variant: {
+                    public_id: "variant",
+                    source: "original",
+                    status: "completed",
+                    run_public_id: "run",
+                    model: { provider_id: "provider", model_ref: "not-the-mainline" },
+                  },
+                })
+              : turnFixture(position),
+          )
+        : []
+      const turns = before
+        ? history.filter((turn) => Number(turn.position) < Number(before)).slice(-100)
+        : history.slice(0, 100)
+
       return Response.json({
-        turns: state.settled
-          ? [
-              {
-                public_id: "turn",
-                input_public_id: "first",
-                position: 1,
-                kind: "direct_reply",
-                role: "assistant",
-                status: "completed",
-                visibility: "visible",
-                created_at: "2026-01-01T00:00:00Z",
-                answering_user_public_id: "main",
-                active_variant: {
-                  public_id: "variant",
-                  source: "original",
-                  status: "completed",
-                  run_public_id: "run",
-                  model: { provider_id: "provider", model_ref: "not-the-mainline" },
-                },
-              },
-            ]
-          : [],
-        pagination: { before_position: null, after_position: null },
+        turns,
+        pagination: {
+          before_position: turns[0]?.position ?? null,
+          after_position: turns.at(-1)?.position ?? null,
+        },
       })
+    }
     if (path.endsWith("/runs/run"))
       return Response.json({
         run: {

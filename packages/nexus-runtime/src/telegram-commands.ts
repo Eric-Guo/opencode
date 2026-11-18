@@ -3,6 +3,7 @@ import { APIError } from "@cybros/agent"
 import type { NexusApplication } from "./application"
 import type { StoreDocument } from "./document"
 import type { TelegramState, TelegramWork } from "./telegram-state"
+import { TURN_POSITION_CEILING } from "./history"
 
 const Page = Schema.Struct({
   next_after: Schema.optional(Schema.NullOr(Schema.String)),
@@ -29,14 +30,18 @@ export async function telegramConversationCommand(
     model?: string
     tracking?: {
       document: StoreDocument<TelegramState>
+      update: number
       route: TelegramWork["route"]
       requester: string
-      speaker: string
+      speaker: () => Promise<string>
     }
   },
 ) {
   const application = context.application
   const options = { signal: context.signal }
+  const tracking = context.tracking
+  const switched = () =>
+    tracking?.document.change((state) => ({ ...state!, batches: state!.batches.filter((row) => !!row.submission) }))
   if (action === "sessions") {
     const page = Number(argument || "1")
     if (!Number.isInteger(page) || page < 1) return "Use /sessions PAGE with a positive page number."
@@ -48,8 +53,10 @@ export async function telegramConversationCommand(
         .join("\n\n") || "No saved conversations on this page."
     )
   }
-  if (action === "resume" && !argument.includes(" ")) {
+  if (action === "resume") {
     if (!context.owner) return "Only the Bot owner can change the shared conversation."
+    if (!/^\S+$/.test(argument)) return "Use /resume ID."
+
     const row = (await botHistory(application, context.bot)).find((row) => row.public_id === argument)
     if (!row) return "Choose a saved conversation ID from /sessions."
     await application.bots.command({
@@ -59,6 +66,7 @@ export async function telegramConversationCommand(
       workspace: row.workspace_public_id,
       conversation: row.public_id,
     })
+    await switched()
     return "Current conversation: " + row.public_id + "."
   }
   if (
@@ -81,15 +89,21 @@ export async function telegramConversationCommand(
   )
     return
   if (action === "codemode") return "Code Mode stays off in Bot conversations."
-  if (!context.current) return "Send a message to open a conversation first."
   const mutating =
     !["history", "variants", "context", "search"].includes(action) ||
-    (action === "history" && !!argument && !argument.startsWith("before "))
+    (action === "history" && !!argument && !/^before(?:\s|$)/.test(argument))
   if (mutating && !context.owner) return "Only the Bot owner can change the shared conversation."
+  const forkControl = action === "fork" ? (await tracking?.document.read())?.control : undefined
+  const frozen = forkControl?.update === tracking?.update ? forkControl?.fork : undefined
+  const current = frozen
+    ? { public_id: frozen.target.conversation, workspace_public_id: frozen.target.workspace }
+    : context.current
+  if (!current) return "Send a message to open a conversation first."
+
   const locator =
     argument && ["archive", "restore"].includes(action)
       ? (await botHistory(application, context.bot)).find((row) => row.public_id === argument)
-      : context.current
+      : current
   if (!locator) return "Choose a saved conversation ID from /sessions."
   const scope = application.client.workspace(locator.workspace_public_id).conversation(locator.public_id)
   if (action === "rename") {
@@ -107,18 +121,27 @@ export async function telegramConversationCommand(
     return "Conversation restored."
   }
   if (action === "compact") {
+    if (argument) return "Use /compact."
     await scope.compact(undefined, options)
     return "Compaction requested."
   }
-  if (action === "context")
+  if (action === "context") {
+    if (argument) return "Use /context."
     return JSON.stringify(
       await scope.estimateInput(
-        { prompt: "", render: true, ...(context.model ? { model: { model: context.model } } : {}) },
+        {
+          prompt: "",
+          render: true,
+          answering_user_public_id: context.bot,
+          speaker_public_id: await tracking?.speaker(),
+          ...(context.model ? { model: { model: context.model } } : {}),
+        },
         options,
       ),
       null,
       2,
     )
+  }
   if (action === "search") {
     if (!argument) return "Use /search TEXT or /search next."
     const history = await botHistory(application, context.bot)
@@ -164,7 +187,7 @@ export async function telegramConversationCommand(
     )
   }
   if (action === "history") {
-    const [verb, id] = argument.split(/\s+/)
+    const [verb, id, extra] = argument.split(/\s+/)
     const changes: Record<string, { visibility?: string; concealed?: boolean }> = {
       hide: { visibility: "hidden" },
       show: { visibility: "visible" },
@@ -173,12 +196,14 @@ export async function telegramConversationCommand(
       delete: { concealed: true },
       restore: { concealed: false },
     }
-    if (verb && changes[verb]) {
-      if (!id) return "Specify the stable turn ID from /history."
-      await scope.turns.setViewState(id, changes[verb], options)
+    const fields = Object.hasOwn(changes, verb) ? changes[verb] : undefined
+    if (fields) {
+      if (!id || extra) return "Specify one stable turn ID from /history."
+      await scope.turns.setViewState(id, fields, options)
       return "History view updated."
     }
-    if (argument && (verb !== "before" || !/^\d+$/.test(id ?? ""))) return "Use /history or /history before POSITION."
+    if (argument && (verb !== "before" || extra || !/^\d+$/.test(id ?? "") || Number(id) > TURN_POSITION_CEILING))
+      return "Use /history or /history before POSITION."
     return JSON.stringify(
       await scope.history({ before_position: id ? Number(id) : undefined, limit: 20 }, options),
       null,
@@ -186,74 +211,120 @@ export async function telegramConversationCommand(
     )
   }
   const match = /^(\d+)(?:\s+([\s\S]*))?$/.exec(argument)
-  const page = await scope.turns.list(
-    { ...(match ? { before_position: Number(match[1]) + 1 } : {}), limit: 1, include_hidden: true },
-    options,
-  )
-  const turn = page.items[0]
-  if (!turn || (match && turn.position !== Number(match[1]))) return "Choose a turn position from /history."
-  const track = async (variant?: string) => {
-    if (!context.tracking) return
-    const tracking = context.tracking
-    const deck = await scope.turns.variants(turn.public_id, options)
-    await tracking.document.change((state) => ({
-      ...state!,
-      candidates: [
-        ...(state!.candidates ?? []).filter((row) => row.id !== context.key),
-        {
-          id: context.key,
-          route: tracking.route,
-          target: { workspace: locator.workspace_public_id, conversation: locator.public_id },
-          requester: tracking.requester,
-          speaker: tracking.speaker,
-          turn: turn.public_id,
-          previous: turn.active_variant?.public_id ?? null,
-          known: deck.items.map((row) => row.public_id),
-          ...(variant ? { variant } : {}),
-        },
-      ],
-    }))
-  }
+  const position = match ? Number(match[1]) : undefined
+  const value = match?.[2]
+  const usage = "Use /" + action + " as shown in /help."
+  if (argument && (position === undefined || position >= TURN_POSITION_CEILING)) return usage
+  if (action === "undo" && argument) return usage
+  if (["variants", "variant", "edit"].includes(action) && position === undefined) return usage
+  if (["fork", "regenerate", "variants"].includes(action) && value) return usage
+  if (["variant", "edit"].includes(action) && !value?.trim()) return usage
+  const [variant, view, extra] = action === "variant" ? value!.split(/\s+/) : []
+  if (action === "variant" && (extra || (view && !["hide", "restore"].includes(view))))
+    return "Use /variant POSITION ID [hide|restore]."
+
+  const turn = frozen
+    ? undefined
+    : (
+        await scope.turns.list(
+          { before_position: position === undefined ? TURN_POSITION_CEILING : position + 1, limit: 1 },
+          options,
+        )
+      ).items[0]
+  const turnID = frozen?.turn ?? turn?.public_id
+  if (!turnID || (!frozen && position !== undefined && turn?.position !== position))
+    return "Choose a turn position from /history."
+
   if (action === "fork") {
+    const active = turn?.active_variant?.public_id
+    const fork = frozen ?? {
+      target: { workspace: locator.workspace_public_id, conversation: locator.public_id },
+      turn: turnID,
+      ...(active ? { variant: active } : {}),
+    }
+
+    if (tracking && !frozen)
+      await tracking.document.change((state) => ({
+        ...state!,
+        control: { ...state?.control, update: tracking.update, fork },
+      }))
+
     const receipt = await application.bots.command({
       action: "bot.fork",
       id: context.bot,
       key: context.key,
-      workspace: locator.workspace_public_id,
-      conversation: locator.public_id,
-      turn: turn.public_id,
+      workspace: fork.target.workspace,
+      conversation: fork.target.conversation,
+      turn: fork.turn,
+      ...(fork.variant ? { variant: fork.variant } : {}),
     })
+    await switched()
     return "Fork selected: " + JSON.stringify(receipt)
   }
-  if (action === "regenerate") {
-    await track()
-    await scope.turns.regenerate(turn.public_id, context.model ? { model: { model: context.model } } : {}, {
-      ...options,
-      idempotencyKey: context.key,
-    })
-    return "Regeneration requested. The selected result will be delivered here."
-  }
-  if (action === "variants") return JSON.stringify(await scope.turns.variants(turn.public_id, options), null, 2)
-  if (action === "variant") {
-    const [id, verb] = (match?.[2] ?? "").split(/\s+/)
-    if (!id || (verb && !["hide", "restore"].includes(verb))) return "Use /variant POSITION ID [hide|restore]."
-    if (verb) await scope.turns.setVariantViewState(turn.public_id, id, { concealed: verb === "hide" }, options)
-    else {
-      await track(id)
-      await scope.turns.activate(turn.public_id, id, options)
-    }
-    return "Variant updated."
-  }
-  if (action === "edit") {
-    if (!match?.[2]) return "Use /edit POSITION TEXT."
-    await track()
-    await scope.turns.edit(turn.public_id, { text: match[2] }, options)
-    return "Edited tail candidate added."
-  }
+  if (action === "variants") return JSON.stringify(await scope.turns.variants(turnID, options), null, 2)
   if (action === "undo") {
-    await scope.turns.delete(turn.public_id, options)
+    await scope.turns.delete(turnID, options)
     return "Newest turn deleted."
   }
+  if (action === "variant" && view) {
+    await scope.turns.setVariantViewState(turnID, variant, { concealed: view === "hide" }, options)
+    return "Variant updated."
+  }
+
+  const operation = action === "regenerate" || action === "edit" ? action : "activate"
+  const execute = () => {
+    if (operation === "regenerate")
+      return scope.turns
+        .regenerate(turnID, context.model ? { model: { model: context.model } } : {}, {
+          ...options,
+          idempotencyKey: context.key,
+        })
+        .then((result) => result.variant)
+    if (operation === "edit") return scope.turns.edit(turnID, { text: value! }, options)
+    return scope.turns.activate(turnID, variant, options)
+  }
+  if (tracking) {
+    const deck = await scope.turns.variants(turnID, options)
+    const speaker = await tracking.speaker()
+    const watch = {
+      id: context.key,
+      route: tracking.route,
+      target: { workspace: locator.workspace_public_id, conversation: locator.public_id },
+      requester: tracking.requester,
+      speaker,
+      turn: turnID,
+      previous: deck.items.find((row) => row.active)?.public_id ?? turn?.active_variant?.public_id ?? null,
+      known: deck.items.map((row) => row.public_id),
+      ...(variant ? { variant } : {}),
+    } satisfies NonNullable<TelegramState["candidates"]>[number]
+    await tracking.document.change((state) => ({
+      ...state!,
+      candidates: [...(state!.candidates ?? []).filter((row) => row.id !== watch.id), { ...watch, operation }],
+    }))
+    const result = await execute().catch(async (error: unknown) => {
+      if (error instanceof APIError && error.status < 500 && ![408, 429].includes(error.status))
+        await tracking.document.change((state) => ({
+          ...state!,
+          candidates: (state!.candidates ?? []).filter((row) => row.id !== watch.id),
+        }))
+      throw error
+    })
+    await tracking.document.change((state) => ({
+      ...state!,
+      candidates: (state!.candidates ?? []).flatMap((row) =>
+        row.id !== watch.id
+          ? [row]
+          : result.public_id === watch.previous
+            ? []
+            : [{ ...watch, variant: result.public_id }],
+      ),
+    }))
+  }
+  if (!tracking) await execute()
+
+  if (action === "regenerate") return "Regeneration requested. The selected result will be delivered here."
+  if (action === "edit") return "Edited tail candidate added."
+  return "Variant updated."
 }
 
 export async function telegramMemoryCommand(

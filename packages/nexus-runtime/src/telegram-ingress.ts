@@ -445,7 +445,7 @@ export class TelegramIngress {
       const action =
         callback?.[1] ?? (update.value.stopped_message_generation ? "stop" : answer ? "answer" : command?.name)
       const createJob = action === "job" && /^create\s/.test(command?.argument ?? "")
-      if (state.control?.update === update.id && !(createJob && state.control.job)) {
+      if (state.control?.update === update.id && !(createJob && state.control.job) && !state.control.fork) {
         await finish(
           "The previous control may have succeeded. It was not repeated. Use /status, /history or /queue to inspect the result.",
         )
@@ -469,7 +469,7 @@ export class TelegramIngress {
           "destinations",
           "settings",
         ].includes(action ?? "") &&
-        !(action === "history" && (!command?.argument || command.argument.startsWith("before ")))
+        !(action === "history" && (!command?.argument || /^before(?:\s|$)/.test(command.argument)))
       )
         await document.change((state) => ({
           ...(state ?? telegramState()),
@@ -504,7 +504,7 @@ export class TelegramIngress {
         if (
           error instanceof TransportError ||
           error instanceof MalformedResponse ||
-          (error instanceof APIError && (error.status >= 500 || error.status === 429))
+          (error instanceof APIError && (error.status >= 500 || [408, 429].includes(error.status)))
         )
           throw error
         return error instanceof APIError
@@ -1829,17 +1829,6 @@ export class TelegramIngress {
       else await chat.inputs.delete(work.input, { signal: this.signal })
       return "Stop requested; completion is observed separately."
     }
-    const tracked = ["regenerate", "variant", "edit", "search"].includes(action)
-    const speaker = tracked
-      ? await this.application().client.profile.registerIngressSpeaker(
-          {
-            channel_key: "telegram:" + id,
-            external_id: update.requester,
-            display_name: update.user?.first_name ?? update.requester,
-          },
-          { signal: this.signal },
-        )
-      : undefined
     const conversationResult = await telegramConversationCommand(action, argument, {
       application: this.application(),
       bot: id,
@@ -1848,27 +1837,31 @@ export class TelegramIngress {
       key: keyValue,
       signal: this.signal,
       model: state.model,
-      ...(speaker
-        ? {
-            tracking: {
-              document,
-              route: {
-                connection: binding.connection_public_id!,
-                chat: update.chat,
-                topic: update.topic,
-                group: update.group,
-              },
-              requester: update.requester,
-              speaker: speaker.public_id,
+      tracking: {
+        document,
+        update: update.id,
+        route: {
+          connection: binding.connection_public_id!,
+          chat: update.chat,
+          topic: update.topic,
+          group: update.group,
+        },
+        requester: update.requester,
+        speaker: async () => {
+          const speaker = await this.application().client.profile.registerIngressSpeaker(
+            {
+              channel_key: "telegram:" + id,
+              external_id: update.requester,
+              display_name: update.user?.first_name ?? update.requester,
             },
-          }
-        : {}),
+            { signal: this.signal },
+          )
+
+          return speaker.public_id
+        },
+      },
     })
-    if (conversationResult !== undefined) {
-      if (["resume", "fork"].includes(action))
-        await document.change((state) => ({ ...state!, batches: state!.batches.filter((row) => !!row.submission) }))
-      return conversationResult
-    }
+    if (conversationResult !== undefined) return conversationResult
     if (action === "memory") return this.memory(id, bot, update, argument)
     if (!owner) return "Only the Bot owner can change shared conversation settings."
     if (action === "observe") {
