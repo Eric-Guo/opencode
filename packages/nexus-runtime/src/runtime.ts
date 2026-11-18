@@ -3,6 +3,8 @@ import { RegisteredAgents } from "./registered-agents"
 import { runnerEnvironment } from "./runner-environment"
 import {
   APIError,
+  AuthorizationLost,
+  ConnectionSuperseded,
   Client,
   DeviceFlow,
   ExecutorClient,
@@ -63,6 +65,7 @@ import { DefaultEnvironment } from "./default-environment"
 import type { NexusRun } from "@opencode/schema/nexus-run"
 import { ApplicationSettings } from "./settings"
 import { Adaptations } from "./adaptations"
+import { AgentRenewal, renewalClock } from "./renewal"
 import { McpSessions } from "./mcp-sessions"
 
 const ModeValues = Schema.Struct({ code_mode: Schema.Boolean, subagent: Schema.Boolean })
@@ -104,6 +107,7 @@ export class NexusRuntime {
   private readonly human: HumanLogin
   private readonly store: CredentialStore
   private readonly defaultEnvironment: DefaultEnvironment
+  private renewal?: AgentRenewal
   private work?: Promise<void>
   private pending?: Promise<Status>
   private settings?: Settings
@@ -139,6 +143,7 @@ export class NexusRuntime {
   constructor(
     private readonly storage: string,
     private readonly host?: HostTools,
+    private readonly clock = renewalClock,
   ) {
     this.applicationSettings = new ApplicationSettings(join(storage, "application-settings.json"))
     this.human = new HumanLogin(join(storage, "human"))
@@ -147,7 +152,11 @@ export class NexusRuntime {
   }
 
   status() {
-    return this.executor ? { ...this.statusValue, executor: this.executor.snapshot() } : this.statusValue
+    return {
+      ...this.statusValue,
+      ...(this.renewal?.issue && { error: this.renewal.issue }),
+      ...(this.executor && { executor: this.executor.snapshot() }),
+    }
   }
 
   async *runPrompt(input: NexusRun.Input, signal: AbortSignal) {
@@ -264,7 +273,7 @@ export class NexusRuntime {
     const credentials =
       document?.authentication_kind === "api_key"
         ? new APIKeyCredentials(document)
-        : await OAuthCredentials.load({ authority, store: this.store })
+        : await OAuthCredentials.load({ authority, store: this.store, clock: this.clock.now })
     if (credentials) this.start(credentials, this.settings)
   }
 
@@ -339,7 +348,12 @@ export class NexusRuntime {
       .awaitCredentials(auth, { signal })
       .then(async (bundle) => {
         signal.removeEventListener("abort", cancel)
-        const credentials = await OAuthCredentials.issue({ credentials: bundle, authority, store: this.store })
+        const credentials = await OAuthCredentials.issue({
+          credentials: bundle,
+          authority,
+          store: this.store,
+          clock: this.clock.now,
+        })
         this.credentials = credentials
         await this.run(credentials, settings, signal)
       })
@@ -380,6 +394,46 @@ export class NexusRuntime {
   }
 
   private async run(credentials: OAuthCredentials | APIKeyCredentials, settings: Settings, signal: AbortSignal) {
+    if (!(credentials instanceof OAuthCredentials)) return this.serve(credentials, settings, signal)
+    const renewal = new AgentRenewal(credentials, this.clock)
+    this.renewal = renewal
+    const owner = new AbortController()
+    const active = AbortSignal.any([signal, owner.signal, renewal.lost.signal])
+    const maintenance = renewal.maintain(active).catch((error) => {
+      if (!active.aborted) throw error
+    })
+    try {
+      await this.serve(credentials, settings, active, renewal)
+    } catch (error) {
+      if (!renewal.lost.signal.aborted) throw error
+    } finally {
+      owner.abort()
+      await maintenance
+      await credentials.drain()
+      this.renewal = undefined
+      if (renewal.lost.signal.aborted && !signal.aborted) {
+        const loss: unknown = renewal.lost.signal.reason
+        await this.releaseConnection()
+        // The SDK checks the stored lineage before deleting a credential it has marked lost.
+        if (loss instanceof AuthorizationLost)
+          await credentials.revoke().catch((error: unknown) => {
+            if (!(error instanceof ConnectionSuperseded)) throw error
+          })
+        this.credentials = undefined
+        this.statusValue = {
+          ...this.view("unpaired"),
+          error: "Agent authorization was lost. Pair this installation again.",
+        }
+      }
+    }
+  }
+
+  private async serve(
+    credentials: OAuthCredentials | APIKeyCredentials,
+    settings: Settings,
+    signal: AbortSignal,
+    renewal?: AgentRenewal,
+  ) {
     this.statusValue = this.view("connecting")
     await this.applicationSettings.restore()
     this.adaptations = await Adaptations.load(
@@ -389,8 +443,17 @@ export class NexusRuntime {
     )
     await this.defaultEnvironment.restore(settings.directory)
     this.statusValue = this.view("connecting")
-    const member = new Client({ baseURL: settings.origin, credentialProvider: credentials.provider("member") })
-    const options = { baseURL: settings.origin, credentialProvider: async () => credentials.provider("executor")() }
+    const memberOptions = renewal?.options(settings.origin, "member") ?? {
+      baseURL: settings.origin,
+      credentialProvider: credentials.provider("member"),
+    }
+    const member = new Client(memberOptions)
+    const options = renewal?.options(settings.origin, "executor") ?? {
+      baseURL: settings.origin,
+      credentialProvider: async () => credentials.provider("executor")(),
+    }
+    const socket = (options: ConstructorParameters<typeof RealtimeClient>[0]) =>
+      renewal?.socket(options) ?? new RealtimeClient(options)
     const executor = new ExecutorClient(options)
     const refresh = (role: "agent" | "runner" = "runner") => {
       const policy = executionConfiguration(this.extensionManager?.list() ?? [])
@@ -671,9 +734,8 @@ export class NexusRuntime {
             },
             { grant: (value) => this.grantRule(value), list: () => this.approvals },
             () =>
-              new RealtimeClient({
-                baseURL: settings.origin,
-                credentialProvider: credentials.provider("member"),
+              socket({
+                ...memberOptions,
                 timeoutMs: 5000,
               }),
             () => ({
@@ -715,7 +777,7 @@ export class NexusRuntime {
         )
         const lifecycle = this.connection.application.watch(AbortSignal.any([signal, ingress.signal]))
         const inbox = this.listen(
-          options,
+          socket(options),
           executor,
           runner,
           this.defaultEnvironment.root,
@@ -735,7 +797,7 @@ export class NexusRuntime {
         await this.extensionManager?.emit("member.disconnected", {})
         this.connection = undefined
         this.failed(cause)
-        if (signal.aborted || (cause instanceof APIError && cause.status === 401)) return
+        if (signal.aborted || (!renewal && cause instanceof APIError && cause.status === 401)) return
         await scheduler.wait(5000, { signal })
       }
     }
@@ -815,7 +877,7 @@ export class NexusRuntime {
   }
 
   private async listen(
-    options: { baseURL: string; credentialProvider: () => Promise<string> },
+    realtime: RealtimeClient,
     executor: ExecutorClient,
     id: string,
     directory: string,
@@ -837,8 +899,8 @@ export class NexusRuntime {
       host: this.host,
       builtins,
       protectedRoots: [this.storage],
-      artifacts: join(this.storage, "artifacts"),
-      realtime: new RealtimeClient(options),
+      realtime,
+      fatalUnauthorized: !this.renewal,
       ports: {
         read: (workspace, anchor) => this.connection?.application.environments.port(workspace, anchor),
         drop: (workspace, anchor, port) => this.connection?.application.environments.dropPort(workspace, anchor, port),
@@ -1598,17 +1660,22 @@ export class NexusRuntime {
           { signal: AbortSignal.timeout(5000) },
         )
         .catch(() => {})
-    this.sites.clear()
-    this.approvals.length = 0
     await this.human.close()
     await this.pending?.catch(() => {})
     await this.work
+    await this.releaseConnection()
+    if (this.credentials instanceof OAuthCredentials) await this.credentials.drain()
+  }
+
+  private async releaseConnection() {
+    this.connection = undefined
+    this.approvals.length = 0
+    this.sites.clear()
     await this.extensionManager?.close()
     await this.editorChanges
     await this.editorSessions.close()
     this.publish = undefined
     this.extensionManager = undefined
-    if (this.credentials instanceof OAuthCredentials) await this.credentials.drain()
     this.executor = undefined
   }
 }
