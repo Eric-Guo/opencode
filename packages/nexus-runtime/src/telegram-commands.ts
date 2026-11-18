@@ -12,9 +12,49 @@ const Page = Schema.Struct({
       public_id: Schema.String,
       workspace_public_id: Schema.String,
       title: Schema.optional(Schema.NullOr(Schema.String)),
+      archived_at: Schema.optional(Schema.NullOr(Schema.String)),
     }),
   ),
 })
+const Selected = Schema.Struct({
+  selected: Schema.Struct({ public_id: Schema.String, workspace_public_id: Schema.String }),
+})
+type Conversation = typeof Selected.Type.selected
+type Route = TelegramWork["route"]
+
+function sessionRoute(route: Route) {
+  return JSON.stringify([route.connection, route.chat, route.topic])
+}
+
+function sessionHistory(state: TelegramState, route: Route) {
+  return state.sessions?.[sessionRoute(route)] ?? { cursors: {}, listed: {}, tracked: {} }
+}
+
+export function telegramSessionSwitch(
+  state: TelegramState,
+  route: Route,
+  conversations: readonly (Conversation | null)[],
+) {
+  const history = sessionHistory(state, route)
+  const key = sessionRoute(route)
+
+  return {
+    ...state,
+    batches: state.batches.filter((row) => row.submission || sessionRoute(row.route) !== key),
+    sessions: {
+      ...state.sessions,
+      [key]: {
+        ...history,
+        tracked: {
+          ...history.tracked,
+          ...Object.fromEntries(
+            conversations.flatMap((row) => (row ? [[row.public_id, row.workspace_public_id]] : [])),
+          ),
+        },
+      },
+    },
+  }
+}
 
 /** Chat commands operate on the selected Bot's existing Nexus authorities. */
 export async function telegramConversationCommand(
@@ -23,7 +63,7 @@ export async function telegramConversationCommand(
   context: {
     application: NexusApplication
     bot: string
-    current: { public_id: string; workspace_public_id: string } | null
+    current: Conversation | null
     owner: boolean
     key: string
     signal: AbortSignal
@@ -40,34 +80,114 @@ export async function telegramConversationCommand(
   const application = context.application
   const options = { signal: context.signal }
   const tracking = context.tracking
-  const switched = () =>
-    tracking?.document.change((state) => ({ ...state!, batches: state!.batches.filter((row) => !!row.submission) }))
   if (action === "sessions") {
+    if (argument && !/^[1-9][0-9]{0,7}$/.test(argument)) return "Use /sessions [PAGE] with a positive page number."
+
     const page = Number(argument || "1")
-    if (!Number.isInteger(page) || page < 1) return "Use /sessions PAGE with a positive page number."
-    const rows = await botHistory(application, context.bot)
+    const state = await tracking?.document.read()
+    const after = page > 1 && state && tracking ? sessionHistory(state, tracking.route).cursors[page] : undefined
+
+    if (page > 1 && !after) return "That page has not been listed yet. Use /sessions and follow its next page."
+
+    const result = Schema.decodeUnknownSync(Page)(
+      await application.bots.command(
+        { action: "bot.history", id: context.bot, limit: 10, ...(after ? { after } : {}) },
+        options,
+      ),
+    )
+    await tracking?.document.change((state) => {
+      const history = sessionHistory(state!, tracking.route)
+      const cursors = Object.fromEntries(Object.entries(history.cursors).filter(([key]) => Number(key) <= page))
+
+      if (result.next_after) cursors[page + 1] = result.next_after
+
+      return {
+        ...state!,
+        sessions: {
+          ...state!.sessions,
+          [sessionRoute(tracking.route)]: {
+            ...history,
+            cursors,
+            listed: Object.fromEntries(result.items.map((row) => [row.public_id, row.workspace_public_id])),
+          },
+        },
+      }
+    })
+    if (!result.items.length) return "No conversations are saved on this page. Send a message or use /new to start one."
+
+    const rows = result.items.map((row) => {
+      const title = Array.from(row.title?.replace(/\s+/g, " ").trim() || "Untitled conversation")
+        .slice(0, 120)
+        .join("")
+      return (
+        title +
+        (row.public_id === context.current?.public_id ? " [current]" : "") +
+        (row.archived_at ? " [archived]" : "") +
+        "\n" +
+        row.public_id
+      )
+    })
+
     return (
-      rows
-        .slice((page - 1) * 10, page * 10)
-        .map((row) => (row.title ?? "Untitled") + "\n" + row.public_id + " · " + row.workspace_public_id)
-        .join("\n\n") || "No saved conversations on this page."
+      "Bot conversations (page " +
+      page +
+      "):\n" +
+      rows.join("\n\n") +
+      "\n\nThe Bot owner can use /resume ID to select a conversation." +
+      (result.next_after ? "\nNext page: /sessions " + (page + 1) : "")
     )
   }
   if (action === "resume") {
     if (!context.owner) return "Only the Bot owner can change the shared conversation."
     if (!/^\S+$/.test(argument)) return "Use /resume ID."
 
-    const row = (await botHistory(application, context.bot)).find((row) => row.public_id === argument)
-    if (!row) return "Choose a saved conversation ID from /sessions."
-    await application.bots.command({
-      action: "bot.resume",
-      id: context.bot,
-      key: context.key,
-      workspace: row.workspace_public_id,
-      conversation: row.public_id,
-    })
-    await switched()
-    return "Current conversation: " + row.public_id + "."
+    const state = await tracking?.document.read()
+    const original = state?.control?.update === tracking?.update ? state?.control?.resume : undefined
+
+    if (original?.reply) return original.reply
+
+    const history = state && tracking ? sessionHistory(state, tracking.route) : undefined
+    const tracked =
+      state && tracking
+        ? [...state.work, ...state.batches].find(
+            (row) => row.target.conversation === argument && sessionRoute(row.route) === sessionRoute(tracking.route),
+          )?.target.workspace
+        : undefined
+    const workspace =
+      history?.listed[argument] ??
+      history?.tracked[argument] ??
+      tracked ??
+      (argument === context.current?.public_id ? context.current.workspace_public_id : undefined)
+    const target = original?.target ?? (workspace ? { workspace, conversation: argument } : undefined)
+
+    if (!target) return "Choose a saved conversation ID from /sessions."
+    if (tracking && !original)
+      await tracking.document.change((state) => ({
+        ...state!,
+        control: { ...state?.control, update: tracking.update, resume: { target } },
+      }))
+
+    const receipt = Schema.decodeUnknownSync(Selected)(
+      await application.bots.command(
+        {
+          action: "bot.resume",
+          id: context.bot,
+          key: context.key,
+          ...target,
+        },
+        options,
+      ),
+    )
+    const reply =
+      "Resumed conversation " +
+      receipt.selected.public_id +
+      ". Earlier work still reports to its original conversation."
+
+    await tracking?.document.change((state) => ({
+      ...telegramSessionSwitch(state!, tracking.route, [context.current, receipt.selected]),
+      control: { ...state?.control, update: tracking.update, resume: { target, reply } },
+    }))
+    return reply
   }
   if (
     ![
@@ -258,7 +378,8 @@ export async function telegramConversationCommand(
       turn: fork.turn,
       ...(fork.variant ? { variant: fork.variant } : {}),
     })
-    await switched()
+    const selected = Schema.decodeUnknownSync(Selected)(receipt).selected
+    await tracking?.document.change((state) => telegramSessionSwitch(state!, tracking.route, [current, selected]))
     return "Fork selected: " + JSON.stringify(receipt)
   }
   if (action === "variants") return JSON.stringify(await scope.turns.variants(turnID, options), null, 2)

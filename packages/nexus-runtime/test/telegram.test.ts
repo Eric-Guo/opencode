@@ -27,6 +27,7 @@ function fixture(group = true) {
     running: false,
     formatting: false,
     loseSchedule: false,
+    loseResume: false,
     changedVariant: false,
     inference: 0,
     latest: 1,
@@ -41,6 +42,7 @@ function fixture(group = true) {
   const schedules: { key: string; body: JsonObject; path: string }[] = []
   const scheduleEdits: JsonObject[] = []
   const forks: { key: string | null; body: unknown }[] = []
+  const historyReads: Record<string, string>[] = []
   const regenerations: (string | null)[] = []
   const contextEstimates: JsonObject[] = []
   const participationPrompts: JsonObject[] = []
@@ -274,6 +276,17 @@ function fixture(group = true) {
         ],
       })
     if (path.endsWith("/tools")) return Response.json({ tools: [] })
+    if (path.endsWith("/agent_api/v1/conversations")) {
+      historyReads.push(Object.fromEntries(url.searchParams))
+      const later = url.searchParams.get("after") === "next"
+
+      return Response.json({
+        conversations: later
+          ? [conversationFixture({ public_id: "new-conversation", title: "Earlier session", archived_at: "yesterday" })]
+          : [conversationFixture({ title: "Current session", public_id: "conversation" })],
+        pagination: { next_after: later ? null : "next" },
+      })
+    }
     if (path.endsWith("/ingress_speakers")) {
       const body = (await request.json()) as { ingress_speaker: JsonObject }
       return Response.json(
@@ -287,8 +300,13 @@ function fixture(group = true) {
         { status: 201 },
       )
     }
-    if (path.endsWith("/conversations/conversation/archive"))
+    if (path.endsWith("/conversations/conversation/archive")) {
+      if (state.loseResume) {
+        state.loseResume = false
+        return new Response("lost body", { status: 200 })
+      }
       return Response.json({ conversation: conversationFixture({ answering_user_public_id: bot, archived_at: "now" }) })
+    }
     if (path.endsWith("/conversations/conversation") || path.endsWith("/conversations/new-conversation"))
       return Response.json({
         conversation: conversationFixture({
@@ -465,6 +483,7 @@ function fixture(group = true) {
     schedules,
     scheduleEdits,
     forks,
+    historyReads,
     regenerations,
     contextEstimates,
     participationPrompts,
@@ -1093,63 +1112,56 @@ test("Telegram checks model availability before changing future-input selection"
   expect(peer.saved().model).toBe("provider/available")
 })
 
-test("Telegram conversation history commands find sessions beyond the first API page", async () => {
-  const pages: string[] = []
-  const store = storeFixture(async (request) => {
-    const url = new URL(request.url)
-    if (url.pathname.endsWith("/profile/agents"))
-      return Response.json({
-        agents: [
-          {
-            public_id: bot,
-            name: "bot-fixture",
-            scope: "instance",
-            derived_from_public_id: "main",
-            handle: "bot-fixture",
-            description: "Bot",
-            agent_identifier: "bot-fixture",
-            steward_public_id: "owner",
-            kind: "agent",
-            configuration: {
-              tool_definitions: [],
-              kernel_tools: [],
-              runner_executor_public_ids: [],
-              mcp_tools: [],
-              fallback_models: [],
-            },
-          },
-        ],
-      })
-    if (url.pathname.endsWith("/conversations")) {
-      pages.push(url.searchParams.get("after") ?? "first")
-      return Response.json({
-        conversations: url.searchParams.has("after")
-          ? [conversationFixture({ public_id: "later", title: "Later session" })]
-          : Array.from({ length: 10 }, (_, index) =>
-              conversationFixture({ public_id: "early-" + index, title: "Earlier session" }),
-            ),
-        pagination: { next_after: url.searchParams.has("after") ? null : "next" },
-      })
-    }
+test("Telegram lists one page per command and resumes the original workspace after restart", async () => {
+  using peer = fixture()
+  const ingress = peer.open()
+  const from = { id: 10, first_name: "Owner" }
+  await ingress.ingest(connection, message(1, "/sessions 2", { from }), now)
+  expect(peer.historyReads).toEqual([])
+  await ingress.ingest(connection, message(2, "/sessions", { from }), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Current session [current]")
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Next page: /sessions 2")
+
+  await peer.open().ingest(connection, message(3, "/sessions 2", { from }), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Earlier session [archived]")
+  expect(peer.historyReads).toEqual([
+    {
+      limit: "10",
+      order: "desc",
+      order_by: "last_activity_at",
+      metadata_key: "opencode.bot",
+      metadata_value: bot,
+      answering_user_public_id: bot,
+    },
+    {
+      limit: "10",
+      order: "desc",
+      order_by: "last_activity_at",
+      metadata_key: "opencode.bot",
+      metadata_value: bot,
+      answering_user_public_id: bot,
+      after: "next",
+    },
+  ])
+
+  await peer.open().ingest(connection, message(4, "/resume new-conversation"), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Only the Bot owner")
+
+  peer.state.loseResume = true
+  const resume = message(5, "/resume new-conversation", { from })
+  await expect(peer.open().ingest(connection, resume, now)).rejects.toThrow()
+  expect(peer.saved().control?.resume).toEqual({
+    target: { workspace: "workspace", conversation: "new-conversation" },
   })
-  try {
-    const application = new NexusApplication(
-      store.client,
-      { agent: "main", runner: "runner", workspace: "workspace" },
-      () => ({}),
-    )
-    const { telegramConversationCommand } = await import("../src/telegram-commands")
-    const result = await telegramConversationCommand("sessions", "2", {
-      application,
-      bot,
-      current: null,
-      owner: true,
-      key: "history",
-      signal: new AbortController().signal,
-    })
-    expect(result).toContain("Later session")
-    expect(pages).toEqual(["first", "next"])
-  } finally {
-    store.server.stop(true)
-  }
+  const original = Schema.decodeUnknownSync(Schema.Struct({ pending: Schema.Struct({ key: Schema.String }) }))(
+    peer.entries.get(peer.current)?.value,
+  ).pending.key
+
+  await peer.open().ingest(connection, resume, now)
+  expect(peer.historyReads).toHaveLength(2)
+  expect(peer.entries.get(peer.current)?.value).toMatchObject({
+    current: { public_id: "new-conversation", workspace_public_id: "workspace" },
+    receipts: { [original]: { action: "bot.resume" } },
+  })
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Resumed conversation new-conversation")
 })
