@@ -42,6 +42,9 @@ const Message = Schema.Struct({
   animation: Schema.optional(Media),
   sticker: Schema.optional(Media),
 })
+export const TelegramRawUpdate = Schema.StructWithRest(Schema.Struct({ update_id: Schema.Int }), [
+  Schema.Record(Schema.String, Schema.MutableJson),
+])
 const Update = Schema.Struct({
   update_id: Schema.Int,
   message: Schema.optional(Message),
