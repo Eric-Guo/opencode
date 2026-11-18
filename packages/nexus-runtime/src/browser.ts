@@ -75,7 +75,7 @@ export function browserTools(
         return { is_error: true, content: 'text is required; send "" to clear the field.' }
       if (spec.name === "browser_evaluate" && !args.expression?.trim())
         return { is_error: true, content: "expression is required." }
-      return session.run(JSON.stringify([ctx.workspace, ctx.run]), ctx.signal, async (tab, active) => {
+      const result = session.run(JSON.stringify([ctx.workspace, ctx.run]), ctx.signal, async (tab, active) => {
         const fresh = tab.fresh
         const noticed = (text: string) => (fresh ? notice : "") + text
         try {
@@ -160,6 +160,19 @@ export function browserTools(
         } catch (error) {
           active.throwIfAborted()
           return { is_error: true, content: noticed(error instanceof Error ? error.message : String(error)) }
+        }
+      })
+
+      return result.catch((error: unknown) => {
+        ctx.signal.throwIfAborted()
+        signal.throwIfAborted()
+        const message = error instanceof Error ? error.message : String(error)
+        return {
+          is_error: true,
+          content:
+            error instanceof DOMException && error.name === "TimeoutError"
+              ? "Browser call timed out. Take a new browser_snapshot before acting."
+              : "Browser driver unavailable: " + message,
         }
       })
     },
