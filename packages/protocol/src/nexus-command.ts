@@ -44,6 +44,14 @@ export const NexusCommand = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("application.skills") }),
   Schema.Struct({
+    action: Schema.Literal("application.memory"),
+    workspace: Schema.optional(Schema.NonEmptyString),
+    conversation: Schema.NonEmptyString,
+    speaker: Schema.optional(Schema.NonEmptyString),
+    command: Schema.String,
+    format: Schema.optional(Schema.Literals(["text", "json"])),
+  }),
+  Schema.Struct({
     action: Schema.Literal("application.approve"),
     workspace: Schema.NonEmptyString,
     conversation: Schema.NonEmptyString,
