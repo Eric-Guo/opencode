@@ -84,6 +84,109 @@ test("development CLI preserves exact old-run results, explicit pause force, aut
   }
 })
 
+test("development prompt preview uses the next input's declaration and model without admitting input", async () => {
+  const estimates: JsonObject[] = []
+  const rendered = {
+    input_tokens: 7,
+    tokenizer_exact: true,
+    catalog_input_token_limit: 1000,
+    advisory_input_token_limit: null,
+    message_count: 1,
+    history: { selected: 1, skipped: 0, skipped_reason: null, compacted: 0 },
+    rendered: {
+      mechanism: "assembly",
+      storage: { bytes: 12, bound: 1000, within_bound: true, refusal: null },
+      blocks: [{ index: 0, block: "input", type: "input", role: "user", state: "selected", tokens: 7 }],
+      slots: {},
+      memory: { included: 0, omitted: 0 },
+      entries: [{ role: "user", parts: [{ type: "text", text: "Preview text" }] }],
+    },
+  }
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+
+    if (path.endsWith("/conversations/conversation"))
+      return Response.json({ conversation: conversationFixture({ answering_user_public_id: "main" }) })
+    if (path.endsWith("/turns")) return Response.json({ turns: [], pagination: {} })
+    if (path.endsWith("/context_estimate")) {
+      estimates.push(object(object(await request.json()).context_estimate))
+      return Response.json({ context_estimate: { ...rendered, ...rendered.rendered } })
+    }
+    if (!["GET", "HEAD"].includes(request.method) && !path.endsWith("/store_entries"))
+      throw new Error("Unexpected mutation in prompt preview")
+  })
+  const policy = {
+    model: "provider/default",
+    agent_configuration: { system_prompt: { content: "Current declaration" } },
+    fallback_models: ["provider/fallback"],
+  }
+  const application = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+    undefined,
+    async () => policy,
+  )
+  const output: string[] = []
+  const terminal = {
+    signal: new AbortController().signal,
+    command: async (input: JsonObject) => json(JSON.stringify(await application.operations.command(input))),
+    write: (text: string | Uint8Array) => {
+      output.push(text.toString())
+    },
+    error: () => {},
+    read: async () => JSON.stringify({ blocks: [{ type: "input" }] }),
+  }
+
+  try {
+    const args = [
+      "prompt",
+      "preview",
+      "conversation",
+      "--prompt",
+      "Preview text",
+      "--var",
+      "mood=calm=ish",
+      "--template",
+      "-",
+    ]
+
+    await runDevelopment(args, terminal)
+    expect(estimates[0]).toMatchObject({
+      render: true,
+      model: { model: "provider/default" },
+      answering_user_public_id: "main",
+      agent_configuration: policy.agent_configuration,
+      fallback_models: policy.fallback_models,
+      variables: { mood: "calm=ish" },
+      template: { blocks: [{ type: "input" }] },
+    })
+    expect(output[0]).toContain("mechanism: assembly")
+    expect(output[0]).toContain('"text": "Preview text"')
+    expect(fixture.state.writes).toBe(0)
+
+    await application.captureInput({
+      workspace: "workspace",
+      conversation: "conversation",
+      key: "prior",
+      text: "Earlier",
+      model: "provider/remembered",
+    })
+    const writes = fixture.state.writes
+
+    await runDevelopment([...args, "--json"], terminal)
+    await runDevelopment([...args, "--model", "provider/override"], terminal)
+    expect(estimates.slice(1).map((estimate) => estimate.model)).toEqual([
+      { model: "provider/remembered" },
+      { model: "provider/override" },
+    ])
+    expect(json(output[1])).toMatchObject(rendered)
+    expect(fixture.state.writes).toBe(writes)
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
 test("development queued edits preserve optimistic versions and clear scheduling with the typed immediate delay", async () => {
   const writes: unknown[] = []
   const fixture = storeFixture(async (request) => {
