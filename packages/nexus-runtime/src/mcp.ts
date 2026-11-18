@@ -114,6 +114,18 @@ export async function activateMcp(
 
   const servers = await Effect.runPromise(mcp.servers(), { signal: api.signal })
   const budgets = { ...ledger }
+  const catalog = (server: string) =>
+    Effect.runPromise(
+      Effect.all(
+        {
+          tools: mcp.advertisedTools(server),
+          prompts: mcp.serverPrompts({ server }),
+          resources: mcp.resources({ server }),
+        },
+        { concurrency: "unbounded" },
+      ).pipe(Effect.result),
+      { signal: api.signal },
+    )
 
   for (const row of settings.rows) {
     await refreshSecrets(row).catch(() => {})
@@ -139,7 +151,18 @@ export async function activateMcp(
       continue
     }
 
-    const curated = curateMcp(row, await Effect.runPromise(mcp.advertisedTools(row.server), { signal: api.signal }))
+    const reject = async (issue: string) => {
+      report.status = "down"
+      report.issue = mcpRedact(issue, row)
+      issues.push(row.key + ": " + report.issue)
+      await Effect.runPromise(registrations.get(row.server) ?? Effect.void)
+    }
+    const listed = await catalog(row.server)
+    if (listed._tag === "Failure") {
+      await reject(listed.failure.message)
+      continue
+    }
+    const curated = curateMcp(row, listed.success.tools)
     const entries = [...budgets[row.role], ...curated.tools.map((tool) => tool.definition)]
     const fault =
       curated.fault ??
@@ -151,10 +174,7 @@ export async function activateMcp(
       if (tool.reason === "Invalid object JSON Schema")
         skippedSchemas.push(row.key + ": " + tool.name + ": " + tool.reason)
     if (fault) {
-      report.status = "down"
-      report.issue = mcpRedact(fault, row)
-      issues.push(row.key + ": " + report.issue)
-      await Effect.runPromise(registrations.get(row.server) ?? Effect.void)
+      await reject(fault)
       continue
     }
 
@@ -204,14 +224,7 @@ export async function activateMcp(
         },
       })
 
-    const [prompts, resources] = await Promise.all([
-      Effect.runPromise(mcp.serverPrompts({ server: row.server }), { signal: api.signal }).catch(() => []),
-      Effect.runPromise(mcp.resources({ server: row.server }), { signal: api.signal }).catch(() => ({
-        resources: [],
-        templates: [],
-      })),
-    ])
-    const documents = curateMcpDocuments(row, prompts, resources.resources)
+    const documents = curateMcpDocuments(row, listed.success.prompts, listed.success.resources.resources)
 
     report.documents = documents.documents.map((document) => ({ name: document.name, kind: document.kind }))
     report.skipped_documents = documents.skipped
@@ -362,13 +375,17 @@ export async function activateMcp(
           issue:
             server && "error" in server.status ? mcpRedact(server.status.error, row) : "MCP probe did not connect.",
         }
-      const [tools, prompts, resources] = await Promise.all([
-        Effect.runPromise(mcp.advertisedTools(name), { signal: api.signal }),
-        Effect.runPromise(mcp.serverPrompts({ server: name }), { signal: api.signal }),
-        Effect.runPromise(mcp.resources({ server: name }), { signal: api.signal }),
-      ])
-      const curated = curateMcp(row, tools)
-      const documents = curateMcpDocuments(row, prompts, resources.resources)
+      const listed = await catalog(name)
+      if (listed._tag === "Failure")
+        return {
+          server: row.key,
+          transport: row.transport,
+          serves: row.role,
+          status: "down",
+          issue: mcpRedact(listed.failure.message, row),
+        }
+      const curated = curateMcp(row, listed.success.tools)
+      const documents = curateMcpDocuments(row, listed.success.prompts, listed.success.resources.resources)
       return Schema.decodeUnknownSync(Schema.MutableJson)({
         server: row.key,
         transport: row.transport,
@@ -380,7 +397,7 @@ export async function activateMcp(
         skipped: curated.skipped,
         documents: documents.documents,
         skipped_documents: documents.skipped,
-        templates: resources.templates,
+        templates: listed.success.resources.templates,
       })
     } finally {
       await Effect.runPromise(Scope.close(scope, Exit.void))
