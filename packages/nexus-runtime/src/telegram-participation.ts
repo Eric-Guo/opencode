@@ -1,3 +1,4 @@
+import { TURN_POSITION_CEILING } from "./history"
 import { Schema } from "effect"
 import { APIError } from "@cybros/agent"
 import type { NexusApplication } from "./application"
@@ -102,8 +103,30 @@ export async function telegramParticipate(
     const chat = application.client.workspace(source.target.workspace).conversation(source.target.conversation)
     const materialized = await chat.inputs.materialization(source.input, { include_hidden: true }, { signal })
     if (!materialized) return
-    const history = await chat.turns.list({ limit: 20 }, { signal })
-    if (!history.items.some((row) => row.public_id === materialized.turn_public_id)) return
+    const history = await chat.turns.list({ before_position: TURN_POSITION_CEILING, limit: 20 }, { signal })
+    const rows = history.items.filter((row) => row.kind === "message" && row.status === "completed")
+    const selected: string[] = []
+    let remaining = 8000
+    let includesSource = false
+
+    for (const row of rows.toReversed()) {
+      const line = JSON.stringify({
+        role: row.role,
+        speaker: row.speaker,
+        text: Array.from(row.active_variant?.content ?? "")
+          .slice(0, 2000)
+          .join(""),
+      })
+      const length = Array.from(line).length + 1
+      if (length > remaining) break
+
+      remaining -= length
+      selected.push(line)
+      includesSource ||= row.public_id === materialized.turn_public_id
+    }
+
+    if (!includesSource) return
+
     const memory = chat.memory(source.speaker)
     const notes = await memory.list({ signal })
     const contents = await Promise.all(
@@ -112,10 +135,6 @@ export async function telegramParticipate(
         .slice(0, 6)
         .map((row) => memory.read(row.path, { signal })),
     )
-    const text = history.items
-      .map((row) => row.role + ": " + (row.active_variant?.content ?? ""))
-      .join("\n")
-      .slice(-8000)
     candidate = {
       id: "participation:" + bot + ":" + source.update,
       update: source.update,
@@ -125,7 +144,7 @@ export async function telegramParticipate(
         "Relevant memory:",
         ...contents.map((row) => (row.content ?? "").slice(0, 2000)),
         "Quoted discussion:",
-        text,
+        selected.reverse().join("\n"),
       ].join("\n\n"),
       model: source.model,
       target: source.target,

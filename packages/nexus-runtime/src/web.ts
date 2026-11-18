@@ -12,6 +12,7 @@ import { scheduler } from "node:timers/promises"
 import ipaddr from "ipaddr.js"
 import type { CommitTask } from "@cybros/agent"
 import type { RunnerContext } from "./extensions"
+import { outputHead } from "./output-window"
 
 const CAP = 5 * 1024 * 1024
 const INVISIBLE = /[\u200B-\u200F\u2028-\u202E\u2060-\u2064\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
@@ -308,49 +309,24 @@ export async function renderWebContent(
   const body = decode(html ? bytes.subarray(0, 1048576) : bytes, contentType, html)
   const rendered = html ? await markdown(body) : { text: body }
   const text = rendered.text.replace(INVISIBLE, "")
-  const lines = text.split("\n")
-  if (text.endsWith("\n")) lines.pop()
-  const kept: string[] = []
-  let size = 0
-  for (const line of lines) {
-    const cost = Buffer.byteLength(line) + (kept.length ? 1 : 0)
-    if (kept.length >= 2000 || size + cost > 51200) break
-    kept.push(line)
-    size += cost
-  }
-  const truncated = !options.raw && (Buffer.byteLength(text) > 51200 || lines.length > 2000)
-  const axis = kept.length === 2000 ? "lines" : "bytes"
-  const details = {
-    truncation: truncated
-      ? {
-          truncated: true,
-          truncated_by: axis,
-          total_bytes: Buffer.byteLength(text),
-          total_lines: lines.length,
-          output_bytes: size,
-          output_lines: kept.length,
-          first_line_exceeds_limit: !kept.length,
-          last_line_partial: false,
-          max_bytes: 51200,
-          max_lines: 2000,
-        }
-      : null,
-  }
   const metadata = {
     ...(rendered.title ? { title: rendered.title } : {}),
     ...(html ? { markdown_bytes: Buffer.byteLength(text) } : {}),
     ...(html && bytes.length > 1048576 ? { rendered_bytes: 1048576 } : {}),
   }
 
-  if (!truncated) return { content: text, structured_content: details, ...metadata }
+  const output = options.raw ? { text, truncation: null } : outputHead(text)
+  const limits = output.truncation
+  const details = { truncation: limits }
+  if (!limits) return { content: output.text, structured_content: details, ...metadata }
 
   const name = "web-" + createHash("sha256").update(text).digest("hex").slice(0, 16) + ".md"
   const path = await capture(Buffer.from(text), name, options.artifacts)
   const file = await publish(new Blob([text], { type: html ? "text/markdown" : type }), name)
-  const footer = !kept.length
-    ? `[Line 1 is ${formatSize(Buffer.byteLength(text))}, exceeds 50.0KB limit. Full output: ${path ?? name}]`
-    : `\n\n[Showing lines 1-${kept.length} of ${lines.length}${axis === "bytes" ? " (50.0KB limit)" : ""}. Full output: ${path ?? name}]`
-  return { content: [{ type: "text", text: kept.join("\n") + footer }, file], structured_content: details, ...metadata }
+  const footer = limits.first_line_exceeds_limit
+    ? `[Line 1 is ${formatSize(limits.total_bytes)}, exceeds 50.0KB limit. Full output: ${path ?? name}]`
+    : `\n\n[Showing lines 1-${limits.output_lines} of ${limits.total_lines}${limits.truncated_by === "bytes" ? " (50.0KB limit)" : ""}. Full output: ${path ?? name}]`
+  return { content: [{ type: "text", text: output.text + footer }, file], structured_content: details, ...metadata }
 }
 
 async function markdown(body: string) {

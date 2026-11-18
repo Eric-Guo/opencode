@@ -1,3 +1,4 @@
+import { TURN_POSITION_CEILING } from "./history"
 import {
   APIError,
   TransportError,
@@ -126,7 +127,7 @@ export class MemoryReviews {
             .turns.list(
               state || known !== undefined
                 ? { after_position: Math.max(state?.after ?? -1, known ?? -1), limit: 100 }
-                : { before_position: 2147483647, limit: 1 },
+                : { before_position: TURN_POSITION_CEILING, limit: 1 },
               { signal },
             )
           // Existing history establishes a discovery position; auto-enable starts with the next settled reply.
@@ -246,7 +247,8 @@ export class MemoryReview {
       throw new Error("Memory binding changed while enabling review.")
     const position =
       after ??
-      (await this.conversation.turns.list({ before_position: 2147483647, limit: 1 })).items.at(-1)?.position ??
+      (await this.conversation.turns.list({ before_position: TURN_POSITION_CEILING, limit: 1 })).items.at(-1)
+        ?.position ??
       -1
     await this.change((state) => ({
       ...state,
