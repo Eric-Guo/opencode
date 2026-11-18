@@ -66,6 +66,7 @@ export const NexusCommand = Schema.Union([
     action: Schema.Literal("application.open"),
     workspace: Schema.optional(Schema.NonEmptyString),
     key: Schema.NonEmptyString,
+    model: Schema.optional(Schema.NonEmptyString),
     title: Schema.optional(Schema.String),
     runner: Schema.optional(Schema.NullOr(Schema.String)),
   }),

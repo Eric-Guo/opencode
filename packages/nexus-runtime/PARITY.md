@@ -11,10 +11,10 @@ ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
 The reference revision after that production change updates Ruby lockfiles.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The latest review covers Telegram update replay, T3 RPC
-recovery, development transcript gaps, shell exit output and web error responses.
-The runtime gate passes 395 tests across 73 files, including Chromium, PTY and
-WebRTC. See the [November 19 verification](#replay-transcripts-and-tool-output-november-19-2026)
+contract tests below. The latest review covers promptless model selection,
+attachment-only input, browser click coordinates, MCP catalog publication and
+Git review. The runtime gate passes 397 tests across 73 files, including
+Chromium, PTY and WebRTC. See the [admission and tool verification](#conversation-admission-and-tool-verification-november-19-2026)
 and the [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md).
 
 ## Application and executor
@@ -1143,3 +1143,24 @@ whose peer returned failure after accepting it. Retrying the same assignment
 returned the same completed work ID with one peer launch. The source CLI's
 `watch` timed out on a scratch conversation with no run. The temporary profile
 Store entries were removed and the development workspace was deleted.
+
+## Conversation admission and tool verification, November 19, 2026
+
+| Package | Reference and OpenCode behavior |
+| --- | --- |
+| `rho`, `rho-dev` | `rho/test/daemon/promptless_model_selection_test.rb` and `input_idempotency_test.rb` cover opening without an input and admitting prepared uploads. `application.open` records the requested route when the conversation is created. After restart, the first `say` inherits the explicit route and retains its configured fallbacks. The development CLI accepts attachment-only `do` and `say`, rejects input options on an empty open before creation, and reports a blocked admission with its reason. `test/dev.test.ts` exercises the CLI, application and SDK together. |
+| `rho-browser` | `src/browser-session.ts` hit-tests the visible part of the element and maps that point into the Chromium session viewport for mouse dispatch. `test/browser.test.ts` clicks a fixed button wider than the viewport and checks its handler ran once. It also exercises covered controls and both same-origin and isolated frames. |
+| `rho-mcp` | `rho-mcp/lib/rho/mcp/connection.rb` reads the advertised catalogs before publishing a connection. `src/mcp.ts` stages tools, prompts and resources together. A failed list releases the runtime's registration for that server and reports a redacted issue. `test/mcp-session.test.ts` checks both failing listing methods, probe results, and continued publication from a healthy sibling through OpenCode's MCP transport. |
+| `rho-env` | `rho-env/lib/rho/env/tools/git_review.rb` preserves worktree names and bounds Git reads to ten seconds. `src/runner-git.ts` preserves trailing spaces, reports the deadline and missing executable as tool errors, and propagates caller cancellation. `test/git-review.test.ts` exercises path preservation, missing directories and cancellation. An isolated run also checked the missing executable and the real ten-second deadline. |
+
+Against development Nexus, a promptless open created zero inputs and zero turns.
+A new application instance submitted a scheduled attachment-only input to the
+same conversation. Its frozen admission retained `deepseek/deepseek-v4-pro`
+over the `deepseek/deepseek-flash` default, and the downloaded attachment
+matched all 25 bytes. The scheduled input, admission record, scratch workspace
+and upload were removed after verification.
+
+The runtime conformance suite passed 397 tests in 73 files with Chromium, PTY
+and WebRTC. The native Code Mode suite passed 1,694 tests. The runtime build,
+both runtime type checks, the Nexus CLI and experimental identifier tests, and
+the repository's `bun run check` also passed.
