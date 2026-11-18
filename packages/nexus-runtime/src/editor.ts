@@ -1,4 +1,4 @@
-import { executionSnapshot } from "./execution"
+import { executionSnapshot, repairTaskKey } from "./execution"
 export { authenticateEditorTerminal } from "./editor-auth"
 
 import {
@@ -762,18 +762,15 @@ export async function editor(stream: Stream, status: Status, token: string, opti
 
           if (!runID) throw new RequestError(-32603, "There is no holding task in this editor session.")
 
-          const run = await nexus.workspace.run(runID).fetch({ signal })
-          const candidates = run.tasks.filter((task) => ["failed", "timed_out", "uncertain"].includes(task.status))
-
-          if (candidates.length !== 1)
-            throw new RequestError(-32603, "A single holding task is required; select the task in OpenCode.")
+          const run = nexus.workspace.run(runID)
+          const task = run.task(repairTaskKey(await run.fetch({ signal })))
 
           if (command === "abandon") {
-            await nexus.workspace.run(runID).task(candidates[0].key).abandon({ signal })
+            await task.abandon({ signal })
             return { stopReason: "end_turn" as const }
           }
 
-          await nexus.workspace.run(runID).task(candidates[0].key).retry(undefined, { signal })
+          await task.retry(undefined, { signal })
           await catchUp(session.last!.execution, (snapshot) => snapshot.status !== "failed", signal)
         }
 
