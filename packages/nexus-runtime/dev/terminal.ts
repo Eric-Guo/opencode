@@ -891,7 +891,13 @@ async function followDevelopment(
   const call = (action: string, fields: Record<string, unknown> = {}) =>
     terminal.command(clean({ action, addressed: true, ...fields }))
   const deadline = parsed.number("timeout")
-  const state: { stream?: string; run?: string; after?: string } = {}
+  const state: { stream?: string; run?: string } = {}
+  const wait = (interval: number) => {
+    const remaining = deadline === undefined ? Infinity : deadline * 1000 - (performance.now() - started)
+    if (remaining <= 0) throw new Error("Timed out watching " + (target.run ?? target.conversation))
+
+    return setTimeout(Math.min(interval, remaining), undefined, { signal: terminal.signal })
+  }
   const partial = (value: string, channel: "text" | "reasoning", delta = false, length?: number) => {
     const accumulator = channel === "text" ? text : reasoning
     const output = delta
@@ -900,14 +906,21 @@ async function followDevelopment(
         ? accumulator.replaceOnSettle(value)
         : accumulator.replaceSnapshot(value, length)
     if ((channel === "text" ? parsed.values.stream !== false : parsed.values.reasoning) && output)
-      terminal.write((accumulator.replaced ? "\n" : "") + output)
+      terminal.write((!delta && accumulator.replaced ? "\n" : "") + output)
+  }
+  const snapshot = (row: JsonObject) => {
+    for (const channel of ["text", "reasoning"] as const) {
+      const value = row[channel]
+      const length = row[channel + "_length"]
+      if (typeof value === "string") partial(value, channel, false, typeof length === "number" ? length : undefined)
+    }
   }
   try {
     while (!terminal.signal.aborted) {
       if (!target.run && target.conversation)
         target = Schema.decodeUnknownSync(Target)(await call("target", { host: target.conversation }))
       if (!target.run) {
-        await setTimeout(250, undefined, { signal: terminal.signal })
+        await wait(250)
         continue
       }
       if (state.run !== target.run) {
@@ -920,23 +933,17 @@ async function followDevelopment(
         )
         state.stream = Schema.decodeUnknownSync(Schema.String)(opened.stream)
         state.run = target.run
-        state.after = undefined
         text.reset()
         reasoning.reset()
-        if (typeof opened.text === "string")
-          partial(opened.text, "text", false, typeof opened.text_length === "number" ? opened.text_length : undefined)
-        if (typeof opened.reasoning === "string")
-          partial(
-            opened.reasoning,
-            "reasoning",
-            false,
-            typeof opened.reasoning_length === "number" ? opened.reasoning_length : undefined,
-          )
+        snapshot(opened)
         seen.clear()
       }
       const events = object(await call("stream.poll", { stream: state.stream }))
-      if (typeof events.lost === "number" && events.lost)
-        terminal.error(`Live stream skipped ${events.lost} buffered events; durable snapshots follow.\n`)
+      const lost = Number(events.lost ?? 0) > 0
+      if (lost) {
+        terminal.error(`Live stream skipped ${events.lost} buffered events. Restoring transcript snapshot.\n`)
+        snapshot(events)
+      }
       for (const event of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(events.events)) {
         if (event.channel === "notice") {
           terminal.error(String(event.message) + "\n")
@@ -945,6 +952,13 @@ async function followDevelopment(
         if (event.channel === "resync") continue
         const frame = object(event.frame)
         const payload = object(frame.payload ?? {})
+        // The snapshot already includes transcript deltas and resets through this poll's cursor.
+        if (
+          lost &&
+          event.channel === "transcript" &&
+          ["stream_reset", "text_delta", "reasoning_delta"].includes(String(frame.type))
+        )
+          continue
         if (event.channel === "transcript" && frame.type === "stream_reset") {
           text.reset()
           reasoning.reset()
@@ -995,9 +1009,7 @@ async function followDevelopment(
         terminal.write("status: " + String(info.status) + "\n")
         return info.status === "completed" || object(info.turn ?? {}).status === "completed" ? 0 : 1
       }
-      if (deadline !== undefined && performance.now() - started >= deadline * 1000)
-        throw new Error("Timed out watching " + target.run)
-      await setTimeout(100, undefined, { signal: terminal.signal })
+      await wait(100)
     }
     return 130
   } finally {
