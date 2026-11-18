@@ -1,20 +1,21 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`3e5d0877da1ac7bfd83757617fb6eee257d07521`. Paths in the first column are relative
+`d15b55bdd268caeff4fd3d5f608f8ad98384c849`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
 
 The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` covers
 ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
+The reference revision after that production change updates Ruby lockfiles.
 
-The latest review traced the eleven executable non-WebUI packages through their
-production TypeScript entry points and conformance suites. It corrected one-shot
-run reporting, task repair selection, Bot and Telegram session history, MCP
-documents and captures, and web redirect results. The runtime gate passes 368
-tests across 71 files, including real Chromium, PTY and WebRTC transports. The
-final sections record the behavioral changes and live verification.
+The eleven executable non-WebUI packages have production TypeScript owners and
+contract tests below. The latest review corrected Telegram history, search and
+session changes, T3 control validation, browser input, oversized file reads
+and development prompt preview. The runtime gate passes 372 tests across 71
+files, including Chromium, PTY and WebRTC. The final sections record the
+behavioral changes and live verification.
 
 ## Application and executor
 
@@ -970,3 +971,42 @@ paging and resume recovery across an ingress restart. `run.test.ts` covered
 a refused unattended denial and model-switch replay across a transient event
 read failure. `operations.test.ts` covered the cost-limit exception and
 ambiguous task repair. The earlier T3 verification used a local protocol peer.
+
+## History, tool inputs and prompt preview, November 18, 2026
+
+- `rho-ingress-telegram` history renders ten turns with stable IDs and a
+  continuation command. Search includes archived conversations and scopes
+  matches and cursors to the connection, chat and topic. Session switches
+  remove unsubmitted work and unsent voice deliveries for that route. The
+  durable cancellation receipts carry the original workspace and survive
+  restart. `telegram.test.ts` covers the conversation workflow and resume.
+- `rho-t3` returns an actionable tool error for incomplete work controls
+  before reading a work record or calling the native service. `t3.test.ts`
+  checks both boundaries with loopback peers.
+- `rho-browser` fills editable controls using the existing Chromium session.
+  `browser.test.ts` verifies text replacement, clearing, Enter submission,
+  date input and refusal of a checkbox with real Chromium.
+- `rho-env` reports a shell-quoted command for the oversized line in disk and
+  editor reads. Input redirection supports leading dashes and works with both
+  BSD and GNU sed. `runner.test.ts` and `editor-filesystem.test.ts` cover the
+  original path, line and byte limit.
+- `rho` and `rho-dev` share the input preparation used by `say` for the
+  read-only prompt estimate. `dev.test.ts` checks default, remembered and
+  explicit models, captured declarations, template variables, terminal and
+  JSON output, and the absence of an admission write.
+
+The full runtime gate exercised the existing application and executor, native
+Code Mode, the web reader, browser, MCP, both ACP directions, Telegram, T3
+and the development extension. The shared Code Mode suite passed 1,694 tests.
+The focused Core MCP and OAuth suites passed 134 tests. Both runtime type
+checks and build, the CLI and Server adapters, 76 Nexus UI bridge tests and
+root `bun run check` passed.
+
+An isolated managed service built from the patched checkout paired to
+development Nexus at `http://localhost:3000`. Prompt preview rendered the
+supplied text without admitting input. A Human approved a model-driven
+Code Mode request and its nested bash call. A scratch counter recorded one
+execution, and the model returned the UUID printed by bash. Telegram's history
+formatter retrieved that answer from Nexus. Telegram transport and T3 used
+local protocol peers. The scratch Agents, workspaces and files were removed.
+The elected OpenCode service kept its existing pairing and default workspace.

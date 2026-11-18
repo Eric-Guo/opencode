@@ -615,14 +615,50 @@ export async function act(tab: Tab, ref: string, text?: string, submit = false) 
       const focused = Schema.decodeUnknownSync(Remote)(
         await send("Runtime.callFunctionOn", {
           objectId,
-          functionDeclaration:
-            "function(){this.focus();if(this.isContentEditable){const range=document.createRange();range.selectNodeContents(this);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);return}if(!['INPUT','TEXTAREA'].includes(this.tagName))throw Error('Choose an editable field');this.select()}",
+          functionDeclaration: `function(value) {
+            if (this.tagName === 'INPUT') {
+              const type = this.type;
+              if (['color', 'date', 'datetime-local', 'month', 'range', 'time', 'week'].includes(type)) {
+                const expected = (type === 'color' ? value.toLowerCase() : value).trim();
+                const input = this.ownerDocument.createElement('input');
+                input.type = type;
+                for (const attr of ['min', 'max', 'step']) {
+                  if (this.hasAttribute(attr)) input.setAttribute(attr, this.getAttribute(attr));
+                }
+                input.value = expected;
+                if (input.value !== expected) throw Error('Malformed value for input of type ' + type);
+                this.value = expected;
+                this.focus();
+                this.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                this.dispatchEvent(new Event('change', { bubbles: true }));
+                return false;
+              }
+              if (!['email', 'number', 'password', 'search', 'tel', 'text', 'url'].includes(type))
+                throw Error('Input of type ' + type + ' cannot be filled');
+              if (type === 'number' && !Number.isFinite(Number(value.trim())))
+                throw Error('Only a number can be entered into an input of type number');
+            } else if (this.tagName !== 'TEXTAREA' && !this.isContentEditable) {
+              throw Error('Choose an editable field');
+            }
+            this.focus();
+            if (this.isContentEditable) {
+              const range = this.ownerDocument.createRange();
+              range.selectNodeContents(this);
+              const selection = this.ownerDocument.getSelection();
+              selection.removeAllRanges();
+              selection.addRange(range);
+            } else {
+              this.select();
+            }
+            return true;
+          }`,
+          arguments: [{ value: text }],
           returnByValue: true,
         }),
       )
       if (focused.exceptionDetails)
         throw new Error(focused.exceptionDetails.exception?.description ?? focused.exceptionDetails.text)
-      await send("Input.insertText", { text })
+      if (focused.result.value === true) await send("Input.insertText", { text })
       if (submit) {
         await send("Input.dispatchKeyEvent", {
           type: "keyDown",
