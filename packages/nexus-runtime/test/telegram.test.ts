@@ -30,6 +30,7 @@ function fixture(group = true) {
     loseResume: false,
     changedVariant: false,
     inference: 0,
+    loseCancellation: false,
     latest: 1,
     fork: "ok",
     regeneration: "ok",
@@ -43,6 +44,8 @@ function fixture(group = true) {
   const scheduleEdits: JsonObject[] = []
   const forks: { key: string | null; body: unknown }[] = []
   const historyReads: Record<string, string>[] = []
+  const windows: { path: string; query: Record<string, string> }[] = []
+  const cancellations: string[] = []
   const regenerations: (string | null)[] = []
   const contextEstimates: JsonObject[] = []
   const participationPrompts: JsonObject[] = []
@@ -51,6 +54,90 @@ function fixture(group = true) {
     const url = new URL(request.url)
     const path = url.pathname
     requests.push(path)
+    if (path.endsWith("/history") || path.endsWith("/conversation_search")) {
+      windows.push({ path, query: Object.fromEntries(url.searchParams) })
+      if (path.endsWith("/history")) {
+        const older = url.searchParams.has("before_position")
+
+        return Response.json({
+          conversation: { public_id: "conversation", title: "Current session" },
+          turns: older
+            ? []
+            : [
+                {
+                  public_id: "turn-current",
+                  position: 3,
+                  kind: "direct_reply",
+                  role: "assistant",
+                  status: "completed",
+                  created_at: new Date(now).toISOString(),
+                  truncated: false,
+                  prompt: "Question",
+                  content: "Answer",
+                  steers: "A steer",
+                },
+              ],
+          truncated: false,
+          pagination: { has_older: !older, before_position: older ? null : 3, has_newer: older },
+        })
+      }
+      const older = url.searchParams.has("after")
+
+      return Response.json({
+        matches: older
+          ? []
+          : [
+              {
+                conversation_public_id: "conversation",
+                title: "This chat",
+                position: 3,
+                excerpt: "Visible excerpt",
+                field: "content",
+                inherited: false,
+                truncated: false,
+              },
+              {
+                conversation_public_id: "new-conversation",
+                title: "Other topic",
+                position: null,
+                excerpt: "Hidden excerpt",
+                field: "content",
+                inherited: false,
+                truncated: false,
+              },
+            ],
+        pagination: { next_after: older ? null : "search-next" },
+      })
+    }
+    if (path.endsWith("/cancellation") && path.includes("/inference_requests/")) {
+      cancellations.push(path)
+      if (state.loseCancellation) {
+        state.loseCancellation = false
+        return Response.json({ error: { code: "unavailable" } }, { status: 503 })
+      }
+      return Response.json({
+        inference_request: {
+          public_id: path.split("/").at(-2),
+          workload: "speech_generation",
+          status: "canceled",
+          model: { provider_id: "provider", model_ref: "model" },
+          created_at: new Date(now).toISOString(),
+          updated_at: new Date(now).toISOString(),
+          usage_summary: {
+            request_count: 0,
+            input_tokens: 0,
+            cache_read_tokens: 0,
+            uncached_input_tokens: 0,
+            cache_creation_tokens: 0,
+            output_tokens: 0,
+            reasoning_tokens: 0,
+            total_tokens: 0,
+            cost_amount: "0",
+            cost_complete: true,
+          },
+        },
+      })
+    }
     if (path.endsWith("/models"))
       return Response.json({
         models: [
@@ -484,6 +571,8 @@ function fixture(group = true) {
     scheduleEdits,
     forks,
     historyReads,
+    windows,
+    cancellations,
     regenerations,
     contextEstimates,
     participationPrompts,
@@ -1164,4 +1253,109 @@ test("Telegram lists one page per command and resumes the original workspace aft
     receipts: { [original]: { action: "bot.resume" } },
   })
   expect(peer.saved().deliveries.at(-1)?.text).toContain("Resumed conversation new-conversation")
+})
+
+test("Telegram renders history continuations and searches only the tracked topic after restart", async () => {
+  using peer = fixture()
+  const ingress = peer.open()
+  await ingress.ingest(connection, message(1, "/search launch"), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("No conversations are saved")
+  const initial = message(2, "@FixtureBot launch", { entities: [{ type: "mention", offset: 0, length: 11 }] })
+
+  await ingress.ingest(connection, initial, now)
+  await ingress.ingest(connection, message(3, "/sessions"), now)
+  await ingress.ingest(connection, message(4, "/sessions 2"), now)
+  await ingress.ingest(connection, message(5, "/history"), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toBe(
+    "Turn 3 · turn-current\nQuestion\nAnswer\nA steer\n\nOlder history: /history before 3",
+  )
+  await ingress.ingest(connection, message(6, "/history before 3"), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toBe("No visible history in this window.")
+  await ingress.ingest(connection, message(7, "/search launch"), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Visible excerpt")
+  expect(peer.saved().deliveries.at(-1)?.text).not.toContain("Hidden excerpt")
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("/search next")
+  await peer.open().ingest(connection, message(8, "/search next"), now)
+  expect(peer.windows.map((row) => row.query)).toEqual([
+    { limit: "10" },
+    { limit: "10", before_position: "3" },
+    { query: "launch", archived: "include", answering_user_public_id: bot, limit: "50" },
+    { query: "launch", archived: "include", answering_user_public_id: bot, limit: "50", after: "search-next" },
+  ])
+  expect(peer.windows.every((row) => row.path.includes("/workspaces/workspace/"))).toBe(true)
+})
+
+test("Telegram resume retires only pending media for its route and retries cancellation after restart", async () => {
+  using peer = fixture()
+  const ingress = peer.open()
+  const from = { id: 10, first_name: "Owner" }
+  await ingress.ingest(connection, message(1, "/sessions", { from }), now)
+  await ingress.ingest(connection, message(2, "/sessions 2", { from }), now)
+  const entry = [...peer.entries.values()].find((row) => row.namespace === "opencode.telegram.bot")!
+  const state = peer.saved()
+  const route = state.deliveries[0].route
+  const target = { workspace: "original-workspace", conversation: "conversation" }
+  const delivery = { route, target, text: "Original result", retry: now + 10000 }
+  const other = { ...route, topic: 9 }
+  const batch = {
+    route,
+    target,
+    requester: "10",
+    speaker: "speaker",
+    sources: [{ update: 0, message: 100, text: "Original source", date: now / 1000 }],
+    ready: now + 10000,
+    observe: false,
+  }
+
+  peer.entries.set(entry.public_id, {
+    ...entry,
+    value: Schema.decodeUnknownSync(Schema.MutableJson)({
+      ...state,
+      deliveries: [
+        { ...delivery, id: "preparing", kind: "voice", status: "preparing", inference: "speech-request" },
+        { ...delivery, id: "pending", kind: "voice", status: "pending" },
+        { ...delivery, id: "other", kind: "voice", status: "preparing", route: other },
+        { ...delivery, id: "answer", kind: "answer", status: "pending" },
+        { ...delivery, id: "uncertain", kind: "voice", status: "uncertain" },
+      ],
+      batches: [
+        {
+          ...batch,
+          id: "voice",
+          media: { kind: "voice", file_id: "voice-file", filename: "voice.ogg", content_type: "audio/ogg" },
+          inference: "transcription-request",
+        },
+        { ...batch, id: "other-topic", route: other },
+        {
+          ...batch,
+          id: "submitted",
+          submission: { action: "bot.submit", id: bot, ...target, key: "submitted", text: "Original source" },
+        },
+      ],
+    }),
+  })
+  await peer.open().ingest(connection, message(3, "/resume new-conversation", { from }), now)
+  expect(peer.saved().batches.map((row) => row.id)).toEqual(["other-topic", "submitted"])
+  expect(
+    peer
+      .saved()
+      .deliveries.map((row) => row.id)
+      .slice(0, 3),
+  ).toEqual(["other", "answer", "uncertain"])
+  expect(peer.saved().media_cancellations?.map((row) => row.inference)).toEqual([
+    "transcription-request",
+    "speech-request",
+  ])
+  peer.state.loseCancellation = true
+  await expect(peer.open().tick(connection, now)).rejects.toThrow()
+  expect(peer.saved().media_cancellations).toHaveLength(2)
+  await peer.open().tick(connection, now)
+  expect(peer.saved().media_cancellations).toEqual([])
+  const lane = "/workspaces/original-workspace/inference_requests/"
+
+  expect(peer.cancellations.map((path) => path.slice(path.indexOf(lane)))).toEqual([
+    lane + "transcription-request/cancellation",
+    lane + "transcription-request/cancellation",
+    lane + "speech-request/cancellation",
+  ])
 })

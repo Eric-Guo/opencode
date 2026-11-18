@@ -42,6 +42,12 @@ test("read pages complete lines, bounds giant lines, scrubs invalid UTF-8 and ho
   await expect(execute(root, "read", { path, offset: 2101 }, signal)).rejects.toThrow("beyond end")
   await writeFile(path, "a".repeat(65537))
   expect(await execute(root, "read", { path }, signal)).toContain("Line 1 is 65537 bytes")
+  const quoted = "- notes' draft.txt"
+
+  await writeFile(join(root, quoted), "first\n" + "日".repeat(21000))
+  expect(await execute(root, "read", { path: quoted, offset: 2 }, signal)).toBe(
+    "[Line 2 is 63000 bytes, exceeds 50 KiB limit. Use bash: sed -n '2p' < '- notes'\\'' draft.txt' | head -c 51200]",
+  )
   await writeFile(path, new Uint8Array([255]))
   expect(await execute(root, "read", { path }, signal)).toBe("�")
   await expect(execute(root, "read", { path: "." }, signal)).rejects.toThrow("regular")
