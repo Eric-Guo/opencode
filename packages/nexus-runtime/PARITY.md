@@ -1,20 +1,19 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6`. Paths in the first column are relative
+`3e5d0877da1ac7bfd83757617fb6eee257d07521`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
 
-The current reference differs from the previous baseline
-`31b82029d75d1ed9626b80739e4caca16671b344` only in Ruby dependency locks and
-gem dependency metadata. Its production source and reference tests are unchanged.
+The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` covers
+ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
 
 The November 17, 2026 reviews rechecked the eleven executable non-WebUI packages
 against their production TypeScript owners and local conformance evidence. The
 latest passes corrected search result framing, output budgeting, subprocess cleanup,
 nullable skill names, portable executable lookup and editor filesystem failures.
-The complete runtime gate passes 359 tests across 71 files, including file-mutation
+The complete runtime gate passes 360 tests across 71 files, including file-mutation
 queue, editor response and interruption regressions, a minified Node search regression and real headless
 Chromium, PTY and WebRTC transports. Details and live
 verification are recorded in the final sections below.
@@ -61,7 +60,7 @@ suites exercise the OpenCode implementation rather than executing Ruby.
 | `rho-browser`          | `tools_test.rb`, `session_test.rb`, `session_idle_test.rb`, `session_popups_test.rb`                                                                                 | `browser` with real Chromium                                                                  |
 | `rho-mcp`              | `curation_test.rb`, `documents_test.rb`, `post_login_refresh_test.rb`, `conversations_test.rb`                                                                       | `mcp`, `mcp-session`, `mcp-sessions`, `mcp-exchange`, `captured-mcp`                          |
 | `rho-acp`              | `acp/reference_replay_test.rb`, `acp/recovery_attach_test.rb`, `acp/permissions_test.rb`, `acp/materialization_test.rb`                                              | `editor-replay`, `editor-permissions`, `editor`, `application`, `runtime`                     |
-| `rho-acp-client`       | `tool_test.rb`, `policy_test.rb`, `cancel_reuse_test.rb`, `child_retirement_test.rb`                                                                                 | `acp`, `adapters`, `runner-policy`                                                            |
+| `rho-acp-client`       | `tool_test.rb`, `children_test.rb`, `policy_test.rb`, `cancel_reuse_test.rb`, `child_retirement_test.rb`                                                            | `acp`, `attachments`, `adapters`, `runner-policy`                                             |
 | `rho-ingress-telegram` | `routing_test.rb`, `input_batch_test.rb`, `recovery_test.rb`, `delivery_test.rb`, `worker_result_delivery_test.rb`                                                   | `telegram`, `telegram-workers`, `telegram-cross-bot`, `telegram-render`, `telegram-transport` |
 | `rho-t3`               | `catalog_test.rb`, `setup_test.rb`, `work_test.rb`, `stop_test.rb`, `session_test.rb`                                                                                | `t3`                                                                                          |
 | `rho-dev`              | `dev_commands/inspection_test.rb`, `dev_commands/execution_test.rb`, `dev_commands/stream_test.rb`, `dev_commands/conversations_test.rb`                             | `dev`, `dev-worker`, `operations`                                                             |
@@ -814,3 +813,33 @@ produced bounded answer text and progress, and the published Nexus upload
 retained the omitted text. A loopback MCP peer reported 119 bytes through both
 management commands. The temporary workspace, Agent, uploads and credentials
 were cleaned up. The installed service remained ready on its original build.
+
+## ACP PDF forwarding, November 18, 2026
+
+- Rho now accepts PDF resource blobs on new ACP prompts. OpenCode rejects them
+  with ACP `-32602` on surface commands and held answers before staging an upload.
+  The regressions in `editor.test.ts` check both entry points.
+- The `delegate_agent` tool accepts ordered PDF upload IDs or Nexus attachment
+  URIs. The child must advertise ACP `embeddedContext`. The runner uses the
+  current claim's attachment capability for descriptor and byte reads. It checks
+  MIME type and the 16 MiB per-file limit before opening a body, and verifies
+  the downloaded length before prompting the child. The same reader serves
+  `file_import`, which retains its large-media support.
+- The child receives the original PDF bytes as embedded resources. The outgoing
+  ACP transcript records the canonical URI, MIME type and decoded size. The
+  `attachments.test.ts` regression uses real ACP stdio and HTTP attachments to
+  verify byte hashes and order, including a 16 MiB PDF. Unknown, inaccessible,
+  truncated and unsupported attachments refuse the whole child prompt.
+
+The installed OpenCode service at `ffa01412d19` completed an ACP prompt
+with a synthetic PDF against development Nexus. Nexus preserved the PDF MIME
+type and returned all 624 original bytes. The sealed request for the configured
+`deepseek/deepseek-flash` model carried the attachment reference. The scratch
+conversations and uploads were cleaned up.
+
+A temporary source runtime at OpenCode base `ffa01412d19` executed a durable
+Nexus `delegate_agent` task. A real ACP child received the byte-identical PDF,
+and the capture downloaded from Nexus contained its metadata. The workspace,
+uploads, Agent and both credentials were retired. The 360-test Chromium, PTY
+and WebRTC conformance gate, both runtime type checks, runtime build and root
+`bun run check` passed.
