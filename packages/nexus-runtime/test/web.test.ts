@@ -202,6 +202,13 @@ test("redirect refusals preserve actionable destinations without following malfo
     fetch(request) {
       const path = new URL(request.url).pathname
       requests.push(path)
+      if (path.startsWith("/hop/")) {
+        const hop = Number(path.split("/").at(-1))
+        return new Response(null, {
+          status: 302,
+          headers: { Location: hop === 3 ? "https://example.org/next" : "/hop/" + (hop + 1) },
+        })
+      }
       if (path === "/bad") return new Response(null, { status: 302, headers: { Location: "/has a space" } })
       if (path === "/retry")
         return new Response(null, { status: 302, headers: { Location: "/next", "Retry-After": "later" } })
@@ -215,8 +222,8 @@ test("redirect refusals preserve actionable destinations without following malfo
   const publish = async () => {
     throw new Error("Unexpected attachment")
   }
-  const fetch = (path: string) =>
-    webFetch(new URL(path, server.url).href, new AbortController().signal, publish, { allowPrivateNetwork: true })
+  const fetch = (path: string, raw = false) =>
+    webFetch(new URL(path, server.url).href, new AbortController().signal, publish, { allowPrivateNetwork: true, raw })
   try {
     expect(await fetch("/bad")).toMatchObject({ is_error: true, structured_content: { status: 302, final_url: null } })
     expect(await fetch("/retry")).toMatchObject({
@@ -225,9 +232,32 @@ test("redirect refusals preserve actionable destinations without following malfo
     })
     const huge = await fetch("/huge")
     expect(huge).toMatchObject({ is_error: true, structured_content: { status: 302, final_url: null } })
-    expect(String(huge.content)).toContain("…")
+    expect(String(huge.content)).toMatch(/…\(\d+ more bytes\)$/)
+    expect(await fetch("/hop/0")).toMatchObject({
+      is_error: true,
+      content: expect.stringContaining("Request this URL separately: https://example.org/next"),
+      structured_content: { status: 302, final_url: "https://example.org/next" },
+    })
+    expect(await fetch("/hop/0", true)).toMatchObject({
+      is_error: true,
+      content: expect.stringContaining("Request this URL separately: https://example.org/next"),
+    })
     expect(await fetch("/zero")).toMatchObject({ content: expect.stringContaining("done") })
-    expect(requests).toEqual(["/bad", "/retry", "/huge", "/zero", "/next"])
+    expect(requests).toEqual([
+      "/bad",
+      "/retry",
+      "/huge",
+      "/hop/0",
+      "/hop/1",
+      "/hop/2",
+      "/hop/3",
+      "/hop/0",
+      "/hop/1",
+      "/hop/2",
+      "/hop/3",
+      "/zero",
+      "/next",
+    ])
   } finally {
     server.stop(true)
   }
