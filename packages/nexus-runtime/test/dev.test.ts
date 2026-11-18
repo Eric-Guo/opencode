@@ -4,7 +4,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Client, type JsonObject, type JsonValue } from "@cybros/agent"
 import { RealtimeClient } from "@cybros/agent/realtime"
-import { Schema } from "effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect, Schema } from "effect"
 import { NexusApplication } from "../src/application"
 import type { ApprovalGrant } from "../src/approval-grant"
 import { runDevelopment, parseDevelopment } from "../dev/terminal"
@@ -832,6 +833,7 @@ test("source CLI discovers the installed channel, authenticates privately, and f
         password: "private-fixture",
         pid: process.pid,
         version: "fixture",
+        provenance: await Effect.runPromise(Service.provenance),
       }),
       { mode: 0o600 },
     )
