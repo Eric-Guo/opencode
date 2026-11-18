@@ -7,7 +7,7 @@ import type { Nexus } from "@opencode/schema/nexus"
 import type { NexusApplication } from "./application"
 import { StoreDocument } from "./document"
 import { TelegramSettings, type TelegramBinding } from "./telegram-settings"
-import { TelegramUpdate } from "./telegram-update"
+import { TelegramRawUpdate, TelegramUpdate } from "./telegram-update"
 import {
   TelegramAPI,
   TelegramError,
@@ -91,13 +91,14 @@ export class TelegramIngress {
         .map(async ([id]) => {
           while (!this.signal.aborted) {
             try {
-              await this.poll(id)
-              this.issues.delete(id)
+              const wait = await this.poll(id)
+              if (wait) await setTimeout(wait, undefined, { signal: this.signal })
+              else this.issues.delete(id)
             } catch (error) {
               if (this.signal.aborted) break
               this.issues.set(id, error instanceof Error ? error.message : "Telegram reconciliation failed.")
               await setTimeout(
-                error instanceof TelegramError && error.retryAfter ? error.retryAfter * 1000 : 3000,
+                error instanceof TelegramError && error.retryAfter !== undefined ? error.retryAfter * 1000 : 3000,
                 undefined,
                 { signal: this.signal },
               ).catch(() => {})
@@ -192,11 +193,30 @@ export class TelegramIngress {
     throw new Error("Unknown Telegram command.")
   }
 
-  async poll(connection: string, now = Date.now()) {
+  async poll(connection: string, now?: number) {
+    const retry = (await this.connection(connection).read())?.retry ?? 0
+    const started = now ?? Date.now()
+    if (retry > started) return retry - started
+
+    try {
+      await this.pollUpdates(connection, now)
+    } catch (error) {
+      if (error instanceof TelegramError && error.retryAfter !== undefined)
+        await this.transport(connection).throttle(error.retryAfter, now ?? Date.now())
+
+      throw error
+    }
+  }
+
+  private async pollUpdates(connection: string, now?: number) {
     await this.identity(connection)
+    const current = (await this.connection(connection).read())!
+    if (current.pending) {
+      await this.ingest(connection, current.pending.update, now)
+      return
+    }
+
     await this.tick(connection, now)
-    const document = this.connection(connection)
-    const current = (await document.read())!
     const active = (
       await Promise.all(
         Object.entries(this.settings.bots)
@@ -211,12 +231,7 @@ export class TelegramIngress {
         allowed_updates: ["message", "callback_query", "stopped_message_generation"],
       }),
     )
-    for (const raw of updates) {
-      const update = new TelegramUpdate(raw)
-      if (update.id < (await document.read())!.offset) continue
-      await this.ingest(connection, raw, now)
-      await document.change((state) => ({ ...state!, offset: Math.max(state!.offset, update.id + 1) }))
-    }
+    for (const raw of updates) await this.ingest(connection, raw, now)
     await this.tick(connection, now)
   }
 
@@ -247,7 +262,9 @@ export class TelegramIngress {
             commands: telegramMenu.map((row) => ({ command: row.command, description: row.description })),
           })
           .then(() => this.menus.add(connection))
-          .catch(() => {})
+          .catch((error: unknown) => {
+            if (error instanceof TelegramError && error.retryAfter !== undefined) throw error
+          })
       }
       return saved.identity!
     } finally {
@@ -256,33 +273,62 @@ export class TelegramIngress {
   }
 
   async ingest(connection: string, raw: unknown, now = Date.now()) {
-    const update = new TelegramUpdate(raw)
+    const incoming = Schema.decodeUnknownSync(TelegramRawUpdate)(raw)
+    const document = this.connection(connection)
+    const state = await document.read()
+    if (incoming.update_id < (state?.offset ?? 0)) return
+    if (state?.pending && state.pending.update.update_id !== incoming.update_id)
+      throw new Error("Telegram's previous update has not been acknowledged.")
+
+    const update = new TelegramUpdate(state?.pending?.update ?? incoming)
+    const selected = state?.pending ?? (await this.selectBot(connection, update))
+    if (selected) {
+      if (!state?.pending)
+        await document.change((current) => ({
+          offset: 0,
+          identity: null,
+          ...current,
+          pending: { ...selected, received_at: now, update: incoming },
+        }))
+      const binding = this.settings.bots[selected.bot]
+      if (!binding?.enabled || binding.connection_public_id !== connection)
+        throw new Error("Telegram's pending update needs its original Bot binding.")
+
+      await this.dispatch(connection, selected.bot, binding, update, selected.exact, state?.pending?.received_at ?? now)
+    }
+
+    await document.change((current) => ({ identity: null, ...current, pending: null, offset: update.id + 1 }))
+  }
+
+  private async selectBot(connection: string, update: TelegramUpdate) {
     if (!update.supported) return
-    const exact = Object.entries(this.settings.bots).find(
-      ([, row]) =>
-        row.enabled &&
-        row.connection_public_id === connection &&
-        row.target?.chat_id === update.chat &&
-        row.target.topic_id === update.topic,
+    const bots = Object.entries(this.settings.bots).filter(
+      ([, row]) => row.enabled && row.connection_public_id === connection,
     )
-    const known = exact
-      ? undefined
-      : (
-          await Promise.all(
-            Object.entries(this.settings.bots)
-              .filter(([, row]) => row.enabled && row.connection_public_id === connection)
-              .map(async ([id, binding]) => ({ id, binding, state: await this.state(id).read() })),
-          )
-        ).find((row) =>
-          row.state?.work.some((work) =>
-            [work.route, ...(work.result_route ? [work.result_route] : [])].some(
-              (route) => route.chat === update.chat && route.topic === update.topic && route.connection === connection,
-            ),
+    const exact = bots.find(([, row]) => row.target?.chat_id === update.chat && row.target.topic_id === update.topic)
+    if (exact) return { bot: exact[0], exact: true }
+
+    for (const [id] of bots) {
+      const state = await this.state(id).read()
+      if (
+        state?.work.some((work) =>
+          [work.route, ...(work.result_route ? [work.result_route] : [])].some(
+            (route) => route.chat === update.chat && route.topic === update.topic && route.connection === connection,
           ),
         )
-    const selected = exact ?? (known ? ([known.id, known.binding] as const) : undefined)
-    if (!selected) return
-    const [id, binding] = selected
+      )
+        return { bot: id, exact: false }
+    }
+  }
+
+  private async dispatch(
+    connection: string,
+    id: string,
+    binding: TelegramBinding,
+    update: TelegramUpdate,
+    exact: boolean,
+    now: number,
+  ) {
     const identity = (await this.connection(connection).read())?.identity ?? (await this.identity(connection))
     const command = update.command(identity.username)
     if (command?.name === "addressed_elsewhere") return
@@ -1403,7 +1449,7 @@ export class TelegramIngress {
     } catch (error) {
       if (this.signal.aborted) throw error
       await save(
-        error instanceof TelegramError && error.retryAfter
+        error instanceof TelegramError && error.retryAfter !== undefined
           ? { status: "pending", retry: now + error.retryAfter * 1000 }
           : error instanceof TelegramError && error.code === 400 && ["sendPhoto", "sendVoice"].includes(method)
             ? { status: "pending", document: true }
