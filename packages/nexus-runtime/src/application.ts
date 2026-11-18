@@ -298,6 +298,7 @@ export class NexusApplication {
       title?: string
       workspace?: string
       runner?: string | null
+      model?: string
       agent?: string
       restricted?: boolean
     },
@@ -318,6 +319,14 @@ export class NexusApplication {
           (row) => row.public_id === this.identity.agent,
         )
       : undefined
+    const model = input.model?.trim()
+    const metadata =
+      recipient === this.identity.agent
+        ? {
+            "opencode.title_pending": !input.title,
+            "opencode.initial_modes": { code_mode: this.defaults().code_mode, subagent: this.defaults().subagent },
+          }
+        : undefined
     const result = await this.member.workspace(workspace).conversations.create(
       {
         answering_user_public_id: recipient,
@@ -338,14 +347,7 @@ export class NexusApplication {
             }
           : {}),
         title: input.title,
-        ...(recipient === this.identity.agent
-          ? {
-              metadata: {
-                "opencode.title_pending": !input.title,
-                "opencode.initial_modes": { code_mode: this.defaults().code_mode, subagent: this.defaults().subagent },
-              },
-            }
-          : {}),
+        metadata: model ? { ...metadata, "opencode.initial_model": model } : metadata,
       },
       { ...options, idempotencyKey: input.key },
     )
@@ -451,6 +453,12 @@ export class NexusApplication {
           this.hooks?.agents?.(),
         )
       : undefined
+    const initialModel = conversation.metadata["opencode.initial_model"]
+    const initial =
+      conversation.answering_user_public_id === (recipient ?? this.identity.agent) && typeof initialModel === "string"
+        ? { model: initialModel, addressedTo: recipient !== this.identity.agent ? recipient : undefined }
+        : undefined
+
     if (recipient && recipient !== this.identity.agent && !side) {
       if (conversation.archived_at || conversation.side)
         throw new Error("This conversation cannot receive addressed input.")
@@ -458,11 +466,21 @@ export class NexusApplication {
       const registered = (await this.member.profile.agents.list(options)).find(
         (agent) => agent.public_id === recipient && this.hooks?.agents?.().includes(agent.name),
       )
+      const previous =
+        initial && !input.model
+          ? await this.admissions.modelSelection(input.workspace, input.conversation, initial)
+          : undefined
+      const model = input.model ?? previous?.model
       return foreignInput(
         {
           ...input,
-          ...(registered && !input.model && !registered.configuration.default_model
-            ? { model: this.base().default_model ?? undefined }
+          model:
+            model ??
+            (registered && !registered.configuration.default_model
+              ? (this.base().default_model ?? undefined)
+              : undefined),
+          ...(registered && model
+            ? { model_selection: { source: "explicit", constraint: "route", model, alternatives: [] } }
             : {}),
           ...(registered && conversation.default_runner
             ? {
@@ -515,7 +533,9 @@ export class NexusApplication {
             ? await this.policy(input.workspace, input.conversation, input.preset)
             : await this.prepare(input.preset, { workspace: input.workspace, conversation: input.conversation })))
     const previousSelection =
-      !side && !input.model ? await this.admissions.modelSelection(input.workspace, input.conversation) : undefined
+      !side && !input.model
+        ? await this.admissions.modelSelection(input.workspace, input.conversation, initial)
+        : undefined
     const model = input.model ?? previousSelection?.model ?? side?.model ?? prepared.model
 
     if (!model && !inherited) throw new Error("Select a model before submitting input.")
