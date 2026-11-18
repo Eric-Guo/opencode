@@ -245,8 +245,16 @@ export class AcpClient {
               )
               .catch(() => undefined)
           : undefined
+      const output = delegatedOutput(result.text)
+      const notice =
+        output.truncated || result.truncated
+          ? "\n\n[ACP answer truncated. " +
+            (resource ? "See the attached transcript." : transcript ? "See acp.logs for the transcript." : "Transcript unavailable.") +
+            "]"
+          : ""
       const text =
-        result.text +
+        output.text +
+        notice +
         result.asks
           .map((ask) => "\n\nThe agent asked: " + ask + " — declined; continue the session with an answer.")
           .join("") +
@@ -368,4 +376,23 @@ export function acpTool(config: string) {
   const tool = client.tool()
   if (!tool) throw new Error("Configure an enabled ACP agent.")
   return { ...tool, close: () => client.close(), [Symbol.asyncDispose]: () => client.close() }
+}
+
+function delegatedOutput(text: string) {
+  const lines = text.split("\n")
+  if (text.endsWith("\n")) lines.pop()
+
+  const kept: string[] = []
+  let bytes = 0
+
+  for (const line of lines) {
+    const cost = Buffer.byteLength(line) + (kept.length ? 1 : 0)
+
+    if (kept.length === 2000 || bytes + cost > 50 * 1024) break
+
+    bytes += cost
+    kept.push(line)
+  }
+
+  return { text: kept.join("\n"), truncated: kept.length < lines.length }
 }
