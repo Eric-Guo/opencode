@@ -36,9 +36,12 @@ export const layer = Layer.effect(
     const client = yield* Effect.promise(() => import("@opencode/client/service"))
     const desktopCli = yield* DesktopCli.Service
 
+    const reuse = !app.isPackaged && process.env.OPENCODE_DESKTOP_REUSE_SERVER === "1"
+
     const state = yield* BackgroundServiceMachine.make({
       probe: Effect.succeed(undefined),
-      ensure: (mode) => connect(mode).pipe(Effect.provide(context)),
+      // A second dev window connects without applying startup settings to the shared service.
+      ensure: (mode) => connect(reuse ? "reconnect" : mode, reuse).pipe(Effect.provide(context)),
       publish: (data) => {
         SidecarCredentials.set(data)
         const event = new SidecarChanged({ url: data.url })
@@ -48,25 +51,30 @@ export const layer = Layer.effect(
 
     return Service.of({
       ...state,
-      stop: Effect.gen(function* () {
-        const cli = yield* desktopCli.resolve
-        yield* Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path, cli.version) }))
-      }).pipe(
-        Effect.tap(() => Effect.logInfo("v2 CLI background service stopped")),
-        Effect.asVoid,
-        Effect.catch((error) => Effect.logWarning("failed to stop background service", { error })),
-      ),
+      stop: reuse
+        ? Effect.void
+        : Effect.gen(function* () {
+            const cli = yield* desktopCli.resolve
+            yield* Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path, cli.version) }))
+          }).pipe(
+            Effect.tap(() => Effect.logInfo("v2 CLI background service stopped")),
+            Effect.asVoid,
+            Effect.catch((error) => Effect.logWarning("failed to stop background service", { error })),
+          ),
     })
   }),
 )
 
-const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial" | "reconnect") {
+const connect = Effect.fn("BackgroundService.connect")(function* (
+  mode: BackgroundServiceMachine.ConnectMode,
+  reuse: boolean,
+) {
   yield* Effect.logInfo("starting v2 background service")
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const proxy = yield* DesktopProxy.Service
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  const isolated = !app.isPackaged && !reuse && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
 
@@ -102,7 +110,9 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     ensureProxyService(
       proxy,
       {
-        file: registrationFile(path, cli.version),
+        file: reuse
+          ? process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE || undefined
+          : registrationFile(path, cli.version),
         version,
         env: proxy.environment(),
         // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
