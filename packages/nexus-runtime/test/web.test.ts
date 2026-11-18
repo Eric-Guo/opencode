@@ -17,6 +17,9 @@ test("web fetch follows bounded same-site redirects, decodes compressed bodies a
         return new Response(null, { status: 302, headers: { Location: "https://example.com/private" } })
       if (path === "/loop") return new Response(null, { status: 302, headers: { Location: "/loop" } })
       if (path === "/error") return new Response("denied\n" + "x".repeat(1000), { status: 403 })
+      if (path === "/missing") return Response.redirect(new URL("/empty", request.url).href)
+      if (path === "/empty") return new Response("  \n", { status: 404 })
+      if (path === "/choices") return new Response("  " + "ä".repeat(300) + "\n", { status: 300 })
       if (path === "/bomb")
         return new Response(gzipSync("x".repeat(5 * 1024 * 1024 + 1)), { headers: { "Content-Encoding": "gzip" } })
       if (path === "/large") return new Response("x".repeat(6 * 1024 * 1024))
@@ -50,10 +53,19 @@ test("web fetch follows bounded same-site redirects, decodes compressed bodies a
     const failure = await webFetch(new URL("/error", server.url).href, signal, publish, options)
     expect(failure).toMatchObject({
       is_error: true,
-      content: expect.stringContaining("denied"),
+      content: expect.stringContaining(" answered 403 Forbidden\n\ndenied"),
       structured_content: { status: 403, bytes: 1007 },
     })
     expect(String(failure.content).length).toBeLessThan(650)
+    const missing = new URL("/missing", server.url).href
+    expect(await webFetch(missing, signal, publish, options)).toMatchObject({
+      content: missing + " answered 404 Not Found",
+      structured_content: { status: 404, final_url: new URL("/empty", server.url).href },
+    })
+    const choices = new URL("/choices", server.url).href
+    expect(await webFetch(choices, signal, publish, options)).toMatchObject({
+      content: choices + " answered 300 Multiple Choices\n\n" + "ä".repeat(300),
+    })
     expect(await webFetch(new URL("/bomb", server.url).href, signal, publish, options)).toMatchObject({
       is_error: true,
       structured_content: { status: null, final_url: null, content_type: null, bytes: 5 * 1024 * 1024 + 1 },
