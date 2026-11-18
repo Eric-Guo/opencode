@@ -2,7 +2,7 @@ import { claimProgress } from "./claim-progress"
 import { claimAttachments } from "./claim-attachments"
 import { FSUtil } from "@opencode/util/fs-util"
 import { ClaimInterrupted, type CodeOperation } from "./claim-control"
-import { bashOutput } from "./bash-output"
+import { bashOutput, bashResultText } from "./bash-output"
 import { listDirectory } from "./runner-list"
 import { codeBinding, codeInstructions } from "./code-settings"
 import type { HostTools } from "./host"
@@ -575,14 +575,7 @@ export async function runClaim(
       const output = await host.shell(workdir, row.tool_input.command, signal, timeout * 1000, progress)
       const rendered = await bashOutput(output.file, signal, artifactsDirectory)
       const timedOut = output.structured_content.status === "timeout"
-      const status = timedOut
-        ? "Command timed out after " + timeout + " seconds"
-        : output.structured_content.exit !== null && output.structured_content.exit !== 0
-          ? "Command exited with code " + output.structured_content.exit
-          : ""
-      const text =
-        (rendered.content || (timedOut ? "" : "(no output)")) +
-        (status ? (rendered.content ? "\n\n" : "") + status : "")
+      const text = bashResultText(rendered.content, output.structured_content.exit, timedOut ? timeout : undefined)
       const content = rendered.spill
         ? [
             { type: "text", text },
@@ -594,7 +587,9 @@ export async function runClaim(
         is_error: timedOut || (output.structured_content.exit !== null && output.structured_content.exit !== 0),
         structured_content: {
           ...rendered.details,
-          ...(output.structured_content.exit === null ? {} : { exit_status: output.structured_content.exit }),
+          ...(timedOut || output.structured_content.exit === null
+            ? {}
+            : { exit_status: output.structured_content.exit }),
         },
       }
       const after = before && (await host.capture(root, signal))

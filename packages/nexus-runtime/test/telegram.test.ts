@@ -22,6 +22,8 @@ function fixture(group = true) {
     physical: 123,
     loseInput: false,
     rateLimited: false,
+    pollRetry: undefined as number | undefined,
+    updates: [] as JsonObject[],
     uncertainSend: false,
     terminal: false,
     running: false,
@@ -154,7 +156,14 @@ function fixture(group = true) {
       })
     if (path.endsWith("/getMe"))
       return Response.json({ ok: true, result: { id: state.physical, username: "FixtureBot", is_bot: true } })
-    if (path.endsWith("/getUpdates")) return Response.json({ ok: true, result: [] })
+    if (path.endsWith("/getUpdates")) {
+      if (state.pollRetry !== undefined)
+        return Response.json(
+          { ok: false, error_code: 429, parameters: { retry_after: state.pollRetry } },
+          { status: 429 },
+        )
+      return Response.json({ ok: true, result: state.updates.splice(0) })
+    }
     if (path.endsWith("/getFile"))
       return Response.json({ ok: true, result: { file_path: "files/oversized", file_size: 21 * 1024 * 1024 } })
     if (["/setMyCommands", "/sendChatAction"].some((method) => path.endsWith(method)))
@@ -563,17 +572,20 @@ function fixture(group = true) {
       },
     },
   }
-  const open = () => {
+  const open = (bots: Record<string, (typeof config.bots)[typeof bot]> = config.bots) => {
     const app = new NexusApplication(
       service.client,
       { workspace: "workspace", agent: "main", runner: "runner" },
       () => ({ default_model: "provider/original" }),
     )
-    return new TelegramIngress(config, {
-      application: () => app,
-      signal: AbortSignal.timeout(10000),
-      origin: service.server.url.origin,
-    })
+    return new TelegramIngress(
+      { ...config, bots },
+      {
+        application: () => app,
+        signal: AbortSignal.timeout(10000),
+        origin: service.server.url.origin,
+      },
+    )
   }
   const saved = () =>
     Schema.decodeUnknownSync(TelegramState)(
@@ -620,6 +632,43 @@ function message(id: number, text: string, fields: JsonObject = {}) {
     },
   }
 }
+
+test("a polled update survives a missing binding and recovers with its original Bot after reassignment", async () => {
+  using peer = fixture()
+  const update = message(8, "/job create every 1m Recover me", { sender_boost_count: 1 })
+  peer.state.updates.push(update)
+  peer.state.loseSchedule = true
+  await expect(peer.open().poll(connection, now)).rejects.toThrow()
+  const binding = peer.config.bots[bot]
+  const connectionState = () =>
+    [...peer.entries.values()].find((row) => row.namespace === "opencode.telegram.connection")?.value
+  expect(connectionState()).toMatchObject({ offset: 0, pending: { bot, update } })
+
+  await expect(peer.open({ [second]: binding }).poll(connection, now)).rejects.toThrow("original Bot")
+  expect(connectionState()).toMatchObject({ offset: 0, pending: { bot } })
+  const moved = peer.open({ [second]: binding, [bot]: { ...binding, target: { chat_id: "-200" } } })
+  await moved.poll(connection, now + 700000)
+  expect(peer.schedules).toHaveLength(2)
+  expect(peer.schedules[1]).toEqual(peer.schedules[0])
+  expect(peer.requests.filter((path) => path.endsWith("/getUpdates"))).toHaveLength(1)
+  expect(connectionState()).toMatchObject({ offset: 9, pending: null })
+  expect(peer.saved().jobs?.[0]?.id).toBe("job")
+})
+
+test("a polling flood wait survives restart and zero permits immediate polling", async () => {
+  using peer = fixture()
+  peer.state.pollRetry = 5
+  await expect(peer.open().poll(connection, now)).rejects.toThrow("429")
+  const restored = peer.open()
+  await restored.poll(connection, now + 4999)
+  expect(peer.requests.filter((path) => path.endsWith("/getUpdates"))).toHaveLength(1)
+
+  peer.state.pollRetry = 0
+  await expect(restored.poll(connection, now + 5000)).rejects.toThrow("429")
+  peer.state.pollRetry = undefined
+  await restored.poll(connection, now + 5000)
+  expect(peer.requests.filter((path) => path.endsWith("/getUpdates"))).toHaveLength(3)
+})
 
 test("Telegram queue keeps the IDs it displayed through reordering and a lost durable receipt", async () => {
   using peer = fixture()
