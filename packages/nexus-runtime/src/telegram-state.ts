@@ -156,6 +156,7 @@ export const TelegramState = Schema.Struct({
         previous: Schema.NullOr(Schema.String),
         known: Schema.Array(Schema.String),
         variant: Schema.optional(Schema.String),
+        operation: Schema.optional(Schema.Literals(["activate", "edit", "regenerate"])),
       }),
     ),
   ),
@@ -203,6 +204,9 @@ export const TelegramState = Schema.Struct({
         update: Schema.Int,
         clock: Schema.optional(Schema.Number),
         job: Schema.optional(Schema.Struct({ target: Locator, model: Schema.NullOr(Schema.String) })),
+        fork: Schema.optional(
+          Schema.Struct({ target: Locator, turn: Schema.String, variant: Schema.optional(Schema.String) }),
+        ),
       }),
     ),
   ),
