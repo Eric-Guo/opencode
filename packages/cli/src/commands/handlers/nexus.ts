@@ -167,6 +167,7 @@ export default Runtime.handler(
                 await nexus.manage({
                   payload: {
                     action: "application.open",
+                    model: Option.getOrUndefined(input.model),
                     key: crypto.randomUUID(),
                     runner: Option.getOrUndefined(input.runner),
                   },
