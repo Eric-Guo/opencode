@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto"
 import { execFile } from "node:child_process"
-import { realpath } from "node:fs/promises"
 import { resolve } from "node:path"
 import { promisify } from "node:util"
 import type { JsonObject } from "@cybros/agent"
+import { missing } from "./storage"
 
 const execute = promisify(execFile)
 export async function runGit(root: string, args: string[], signal?: AbortSignal) {
@@ -15,11 +15,23 @@ export async function gitReview(
   input: JsonObject,
   signal: AbortSignal,
 ): Promise<{ content: string; structured_content?: JsonObject; is_error?: boolean }> {
-  const active = AbortSignal.any([signal, AbortSignal.timeout(10000)])
-  const root = await realpath(resolve(directory, typeof input.root === "string" ? input.root : "."))
+  signal.throwIfAborted()
+  const timeout = AbortSignal.timeout(10000)
+  const root = resolve(directory, typeof input.root === "string" ? input.root : ".")
+  try {
+    return await readGitReview(root, input, AbortSignal.any([signal, timeout]))
+  } catch (error) {
+    signal.throwIfAborted()
+    if (timeout.aborted) return { is_error: true, content: "review_timeout: the Git read exceeded 10 seconds" }
+    if (missing(error))
+      return { is_error: true, content: "git_unavailable: Git or the working directory is unavailable" }
+    throw error
+  }
+}
+
+async function readGitReview(root: string, input: JsonObject, active: AbortSignal) {
   const git = async (cwd: string, args: string[]) =>
-    execute("git", ["--literal-pathspecs", ...args], {
-      cwd,
+    execute("git", ["--literal-pathspecs", "-C", cwd, ...args], {
       signal: active,
       encoding: "buffer",
       maxBuffer: 32768,
@@ -28,6 +40,7 @@ export async function gitReview(
       (result) => ({ text: result.stdout.toString(), bytes: result.stdout, status: 0, truncated: false }),
       (error: unknown) => {
         active.throwIfAborted()
+        if (missing(error)) throw error
         if (!(error instanceof Error) || !("stdout" in error) || !Buffer.isBuffer(error.stdout)) throw error
         return {
           text: error.stdout.subarray(0, 32768).toString(),
@@ -39,7 +52,7 @@ export async function gitReview(
     )
   const top = await git(root, ["rev-parse", "--show-toplevel"])
   if (top.status !== 0) return { is_error: true, content: "not_git: select a Git working directory" }
-  const worktree = top.text.trim()
+  const worktree = top.text.replace(/\n$/, "")
   const base =
     typeof input.base === "string" ? input.base : (await git(worktree, ["rev-parse", "--verify", "HEAD"])).text.trim()
   if (!/^[a-f0-9]{40,64}$/.test(base))
