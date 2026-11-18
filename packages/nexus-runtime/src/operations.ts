@@ -1,3 +1,4 @@
+import { TURN_POSITION_CEILING } from "./history"
 import { executionSnapshot } from "./execution"
 import { Schema } from "effect"
 import {
@@ -365,7 +366,11 @@ export class Operations {
           throw new Error("This conversation belongs to another agent.")
         const turn =
           conversation.active_turn_public_id ??
-          (await workspace.conversation(input.host).turns.list({ limit: 1 }, options)).items.at(-1)?.public_id
+          (
+            await workspace
+              .conversation(input.host)
+              .turns.list({ before_position: TURN_POSITION_CEILING, limit: 1 }, options)
+          ).items.at(-1)?.public_id
         const variant = turn
           ? (await workspace.conversation(input.host).turns.variants(turn, options)).items.find((row) => row.active)
           : undefined
@@ -531,7 +536,9 @@ export class Operations {
       if (input.action === "result") {
         if (input.input) return chat.inputExecution(input.input).recover(options).then(executionSnapshot)
 
-        const turn = info.active_turn_public_id ?? (await chat.turns.list({ limit: 1 }, options)).items[0]?.public_id
+        const turn =
+          info.active_turn_public_id ??
+          (await chat.turns.list({ before_position: TURN_POSITION_CEILING, limit: 1 }, options)).items[0]?.public_id
         if (!turn) return null
         const variant = (await chat.turns.variants(turn, options)).items.find((row) => row.active)
         if (!variant) return null
@@ -655,7 +662,7 @@ export class Operations {
             restoration: { status: "unchanged", runners: [] },
           }
 
-        const tail = (await chat.turns.list({ limit: 1 }, options)).items.at(-1)
+        const tail = (await chat.turns.list({ before_position: TURN_POSITION_CEILING, limit: 1 }, options)).items.at(-1)
         if (tail?.public_id !== input.turn)
           throw new Error("Regenerate requires the tail turn; rewind to an earlier turn first.")
         const variant = (await chat.turns.variants(input.turn, options)).items.find((row) => row.active)
