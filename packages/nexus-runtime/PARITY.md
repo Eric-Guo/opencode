@@ -14,7 +14,7 @@ The November 17, 2026 reviews rechecked the eleven executable non-WebUI packages
 against their production TypeScript owners and local conformance evidence. The
 latest passes corrected search result framing, output budgeting, subprocess cleanup,
 nullable skill names, portable executable lookup and editor filesystem failures.
-The complete runtime gate passes 358 tests across 71 files, including file-mutation
+The complete runtime gate passes 359 tests across 71 files, including file-mutation
 queue, editor response and interruption regressions, a minified Node search regression and real headless
 Chromium, PTY and WebRTC transports. Details and live
 verification are recorded in the final sections below.
@@ -780,3 +780,37 @@ in-flight tasks, no executor issue and its original pairing and default workspac
 
 These fixes require rebuilding the installed managed service. No public Protocol,
 HttpApi, SDK, configuration or storage format changed, and no new flag is needed.
+
+## ACP content and MCP reporting review, November 18, 2026
+
+The eleven non-WebUI runtime owners and their reference anchors were checked
+against Cybros `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6`. The existing
+OpenCode service, extension registrations and executor paths own those
+capabilities. The WebUI correspondence is recorded in `packages/nexus-ui`.
+
+- `rho-acp/test/acp/content_test.rb` defines embedded text and resource-link
+  formatting. `editor.ts` preserves the URI and fenced context and validates the
+  full prompt before starting any upload. Media must decode as standard base64
+  and fit the 16 MiB decoded attachment limit. Embedded PDFs remain an explicit
+  OpenCode extension. Uploaded files carry a media extension.
+- `rho-acp-client/lib/rho/acp-client/call.rb` keeps whole answer lines within
+  2,000 lines and 50 KiB. `acp.ts` and `acp-child.ts` use these limits and report
+  truncation with the existing transcript capture. Progress carries the newest
+  4 KiB, preserving UTF-8 and dropping a leading partial line when possible.
+- `rho-mcp/test/curation_test.rb` measures the model-facing tool declarations
+  separately from the executor announcement. `mcp-curation.ts` uses the bundled
+  SDK's tool lowering for `mcp.list` and `mcp.probe`. The 65,536-byte admission
+  limit still uses the full executor announcement.
+
+The focused regressions, all 359 runtime conformance tests with Chromium, PTY
+and WebRTC, both runtime type checks, the build, the CLI and Server adapter
+tests, the 76 Nexus UI bridge tests, and root `bun run check` passed.
+
+Live checks used the patched source at OpenCode base `f8d09bea454` against
+development Nexus. A real ACP session submitted the fenced text and both
+attachments through shared Human admission. The image and PDF downloaded with
+matching bytes, and malformed media was refused before upload. A real ACP child
+produced bounded answer text and progress, and the published Nexus upload
+retained the omitted text. A loopback MCP peer reported 119 bytes through both
+management commands. The temporary workspace, Agent, uploads and credentials
+were cleaned up. The installed service remained ready on its original build.

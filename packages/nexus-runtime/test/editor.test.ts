@@ -301,11 +301,22 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     await expect(
       peer.agent.request("session/prompt", {
         sessionId: "conversation",
-        prompt: [{ type: "text", text: "Use the runtime" }],
+        prompt: [{ type: "image", data: "not base64!", mimeType: "image/png" }],
+      }),
+    ).rejects.toMatchObject({ code: -32602 })
+    expect(submitted).toEqual([])
+    await expect(
+      peer.agent.request("session/prompt", {
+        sessionId: "conversation",
+        prompt: [
+          { type: "text", text: "Use the runtime" },
+          { type: "resource", resource: { uri: "file:///notes", text: "Unsaved notes" } },
+        ],
       }),
     ).rejects.toBeDefined()
     expect(submitted).toHaveLength(1)
     expect(submitted[0]).toMatchObject({
+      text: "Use the runtime\n\nfile:///notes\n```\nUnsaved notes\n```",
       inline: [{ role: "developer", position: "lead", text: "Authored ACP instructions" }],
       model: { model: "launch-model" },
       approval_mode: "bypass",
@@ -463,22 +474,69 @@ test("ACP transcript keeps fallback message identities separate and does not dup
   }
 })
 
-test("ACP prompt conversion retains embedded text and rejects unsupported audio before submission", async () => {
-  const member = new Client({ baseURL: "http://127.0.0.1:1", credential: "unused" })
-  const signal = new AbortController().signal
+test("ACP prompt preserves resource boundaries and validates all media before uploading", async () => {
+  const uploads: { type: string; contents: number[] }[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const file = (await request.formData()).get("upload[file]")
+      if (!(file instanceof File)) throw new Error("Expected an attachment upload.")
 
-  expect(
-    await editorPrompt(
-      [
-        { type: "text", text: "Read this" },
-        { type: "resource", resource: { uri: "file:///notes", text: "Unsaved notes" } },
-        { type: "resource_link", uri: "https://example.test", name: "Example", description: "Reference" },
-      ],
-      member,
-      signal,
-    ),
-  ).toEqual({ text: "Read this\n\nfile:///notes\nUnsaved notes\n\nresource: https://example.test\nReference" })
-  await expect(
-    editorPrompt([{ type: "audio", data: "YQ==", mimeType: "audio/wav" }], member, signal),
-  ).rejects.toMatchObject({ code: -32602 })
+      uploads.push({ type: file.type, contents: [...new Uint8Array(await file.arrayBuffer())] })
+      return Response.json(
+        {
+          upload: {
+            public_id: "upload-" + uploads.length,
+            filename: file.name,
+            content_type: file.type,
+            byte_size: file.size,
+            created_at: new Date().toISOString(),
+          },
+        },
+        { status: 201 },
+      )
+    },
+  })
+  const member = new Client({ baseURL: server.url.origin, credential: "fixture" })
+  const signal = new AbortController().signal
+  const image = { type: "image", data: " AAE\r\nC ", mimeType: "image/png" } as const
+
+  try {
+    for (const block of [
+      { type: "audio", data: "YQ==", mimeType: "audio/wav" },
+      { ...image, data: "not base64!" },
+      { ...image, data: "AB==" },
+      { ...image, data: "" },
+      { ...image, data: Buffer.alloc(16 * 1024 * 1024 + 1).toString("base64") },
+      { type: "resource", resource: { uri: "file:///binary", mimeType: "application/zip", blob: "YQ==" } },
+      { type: "resource_link", uri: "", name: "Missing URI" },
+    ] as const) {
+      await expect(editorPrompt([image, block], member, signal)).rejects.toMatchObject({ code: -32602 })
+    }
+    expect(uploads).toEqual([])
+
+    expect(
+      await editorPrompt(
+        [
+          { type: "text", text: "Read this" },
+          image,
+          { type: "resource", resource: { uri: "file:///notes", text: "Unsaved notes\n" } },
+          { type: "resource", resource: { uri: "file:///report.pdf", mimeType: "application/pdf", blob: "JVBERg==" } },
+          { type: "resource_link", uri: "https://example.test", name: "Example", description: "Reference" },
+        ],
+        member,
+        signal,
+      ),
+    ).toEqual({
+      text: "Read this\n\nfile:///notes\n```\nUnsaved notes\n```\n\nhttps://example.test",
+      attachments: ["upload-1", "upload-2"],
+    })
+    expect(uploads).toEqual([
+      { type: "image/png", contents: [0, 1, 2] },
+      { type: "application/pdf", contents: [37, 80, 68, 70] },
+    ])
+  } finally {
+    server.stop(true)
+  }
 })
