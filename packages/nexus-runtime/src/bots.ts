@@ -472,7 +472,10 @@ export class Bots {
                 ? { selected: { public_id: command.conversation, workspace_public_id: command.workspace } }
                 : {
                     source: { public_id: command.conversation, workspace_public_id: command.workspace },
-                    fork: { turn_public_id: command.turn, variant_public_id: command.variant },
+                    fork: {
+                      turn_public_id: command.turn,
+                      ...(command.variant ? { variant_public_id: command.variant } : {}),
+                    },
                   }),
             }
           : {
@@ -540,6 +543,12 @@ export class Bots {
             .workspace(pending.source.workspace_public_id)
             .conversation(pending.source.public_id)
             .fork(pending.fork!, { idempotencyKey: pending.key })
+            .catch(async (error: unknown) => {
+              if (error instanceof APIError && error.status < 500 && ![408, 429].includes(error.status))
+                await document.change((current) => ({ current: current!.current, receipts: current!.receipts }))
+
+              throw error
+            })
         : await this.member
             .workspace(pending.workspace!)
             .conversations.create(pending.create!, { idempotencyKey: pending.key })
