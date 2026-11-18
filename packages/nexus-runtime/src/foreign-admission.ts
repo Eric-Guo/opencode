@@ -40,6 +40,7 @@ export function foreignInput(
   input: {
     text: string
     model?: string
+    model_selection?: CreateInput["model_selection"]
     instructions?: string
     approval?: "bypass" | "ask" | "rules"
     attachments?: readonly string[]
@@ -57,6 +58,7 @@ export function foreignInput(
     text: input.text,
     answering_user_public_id: recipient,
     ...(input.model ? { model: { model: input.model } } : {}),
+    ...(input.model_selection ? { model_selection: input.model_selection } : {}),
     ...(input.instructions ? { instructions: input.instructions } : {}),
     ...(input.approval ? { approval_mode: input.approval } : {}),
     ...(input.attachments?.length ? { attachments: [...input.attachments] } : {}),
