@@ -13,7 +13,6 @@ import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { ReferenceInstructions } from "@opencode/core/reference/instructions"
-import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionContext } from "@opencode/core/session/context"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
@@ -26,6 +25,7 @@ import { WriteTool } from "@opencode/core/tool/plugin/write"
 import { WebSearch } from "@opencode/core/websearch"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Effect, Layer, Schema } from "effect"
+import { tempLocationLayer } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { readInitial } from "./lib/instructions"
 import { codeModeListings, registerToolPlugin } from "./lib/tool"
@@ -112,7 +112,7 @@ const makeContextLayer = (overrides: string | undefined) =>
   Layer.mergeAll(
     PluginTestLayer,
     AppNodeBuilder.build(LayerNode.group([SessionContext.node, FileMutation.node, FileWrite.node, Formatter.node]), [
-      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      Location.node.replace(tempLocationLayer),
       Mcp.node.replace(
         Layer.mock(Mcp.Service, {
           awaitStartup: () => Effect.void,
@@ -142,6 +142,7 @@ const setupContext = Effect.gen(function* () {
   const registry = yield* Tool.Service
   const websearch = yield* WebSearch.Service
   const sessions = yield* Session.Service
+  const location = yield* Location.Service
   const context = yield* SessionContext.Service
   const flags = yield* Flag.Service
   const fullCodeMode = yield* flags.enabled("full_codemode")
@@ -206,7 +207,7 @@ const setupContext = Effect.gen(function* () {
   const select = (providerID: string, id: string, permissions?: Session.Info["permissions"]) =>
     sessions
       .create({
-        location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+        location: Location.Ref.make({ directory: location.directory }),
         model: Model.Ref.make({ providerID: Provider.ID.make(providerID), id: Model.ID.make(id) }),
         ...(permissions ? { permissions } : {}),
       })

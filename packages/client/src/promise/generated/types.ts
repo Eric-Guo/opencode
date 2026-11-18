@@ -2605,8 +2605,8 @@ export type ConfigEntry =
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
           all_flags?: boolean
-          nexus_runtime?: boolean
           todo?: boolean
+          nexus_runtime?: boolean
           media_blob?: boolean
           automations?: boolean
           kimi_weekly_quota_retry?: boolean
