@@ -1,4 +1,5 @@
 import { claimProgress } from "./claim-progress"
+import { claimAttachments } from "./claim-attachments"
 import { FSUtil } from "@opencode/util/fs-util"
 import { ClaimInterrupted, type CodeOperation } from "./claim-control"
 import { bashOutput } from "./bash-output"
@@ -335,20 +336,18 @@ export async function runClaim(
         context.model_defaults,
       )
     }
+    const readAttachment = claimToken
+      ? claimAttachments(executor.inboxTask(row.run_public_id, row.task_key), claimToken, signal)
+      : undefined
+
     if (row.tool_name === "file_import") {
-      if (!claimToken) return { is_error: true, content: "Attachment import requires an active executor claim" }
-      const match =
-        typeof row.tool_input.upload === "string"
-          ? /^(?:nexus:\/\/uploads\/)?([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.exec(
-              row.tool_input.upload,
-            )
-          : null
-      if (!match) return { is_error: true, content: "Expected a Nexus attachment reference or upload UUID" }
-      const id = match[1].toLowerCase()
-      const task = executor.inboxTask(row.run_public_id, row.task_key)
-      const upload = await task.attachment(id, claimToken, { signal })
-      const download = await task.attachmentBytes(id, claimToken, { signal })
-      if (!download.body) throw new Error("Attachment has no content.")
+      if (!readAttachment) return { is_error: true, content: "Attachment import requires an active executor claim" }
+      if (typeof row.tool_input.upload !== "string")
+        throw new ToolInputError("Expected a Nexus attachment reference or upload UUID")
+
+      const attachment = await readAttachment(row.tool_input.upload)
+      const id = attachment.id
+      const upload = attachment.upload
       const dir = artifactsDirectory ?? (await destination(root, "nexus-attachments"))
       await mkdir(dir, { recursive: true, mode: 0o700 })
       const folder = await mkdtemp(join(dir, "import-"))
@@ -367,14 +366,8 @@ export async function runClaim(
       const temporary = join(folder, "attachment.part")
       const file = await open(temporary, "wx", 0o600)
       try {
-        let size = 0
-        for await (const chunk of download.body) {
-          signal.throwIfAborted()
-          size += chunk.length
-          if (size > upload.byte_size) throw new Error("Attachment changed during download.")
-          await file.writeFile(chunk)
-        }
-        if (size !== upload.byte_size) throw new Error("Incomplete attachment.")
+        for await (const chunk of attachment.read()) await file.writeFile(chunk)
+
         await file.close()
         signal.throwIfAborted()
         await rename(temporary, path)
@@ -443,6 +436,7 @@ export async function runClaim(
         artifacts: artifactsDirectory,
         signal,
         publish,
+        attachment: readAttachment,
         ask,
         orchestration,
         ...startup,
