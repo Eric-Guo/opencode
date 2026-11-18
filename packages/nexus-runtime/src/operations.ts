@@ -59,6 +59,7 @@ export const Operation = Schema.Union([
     action: Schema.Literal("open"),
     workspace: Schema.optional(Schema.NonEmptyString),
     ...Key,
+    model: Schema.optional(Schema.NonEmptyString),
     title: Schema.optional(Schema.String),
     runner: Schema.optional(Schema.String),
     agent: Schema.optional(Schema.String),
