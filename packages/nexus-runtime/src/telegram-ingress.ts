@@ -1,4 +1,4 @@
-import { executionSnapshot } from "./execution"
+import { executionSnapshot, repairTaskKey } from "./execution"
 import { createHash } from "node:crypto"
 import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
@@ -16,7 +16,7 @@ import {
   telegramChunks,
   telegramBytes,
 } from "./telegram-api"
-import { telegramConversationCommand, telegramMemoryCommand } from "./telegram-commands"
+import { telegramConversationCommand, telegramMemoryCommand, telegramSessionSwitch } from "./telegram-commands"
 import { telegramSetup } from "./telegram-setup"
 import { telegramJob, telegramTime } from "./telegram-schedules"
 import { telegramJobDiscovery } from "./telegram-job-discovery"
@@ -445,7 +445,12 @@ export class TelegramIngress {
       const action =
         callback?.[1] ?? (update.value.stopped_message_generation ? "stop" : answer ? "answer" : command?.name)
       const createJob = action === "job" && /^create\s/.test(command?.argument ?? "")
-      if (state.control?.update === update.id && !(createJob && state.control.job) && !state.control.fork) {
+      if (
+        state.control?.update === update.id &&
+        !(createJob && state.control.job) &&
+        !state.control.fork &&
+        !(action === "resume" && state.control.resume)
+      ) {
         await finish(
           "The previous control may have succeeded. It was not repeated. Use /status, /history or /queue to inspect the result.",
         )
@@ -1368,6 +1373,12 @@ export class TelegramIngress {
     const document = this.state(id)
     const owner = binding.owner_id === update.requester
     const keyValue = key(id, update.id, action)
+    const route = {
+      connection: binding.connection_public_id!,
+      chat: update.chat,
+      topic: update.topic,
+      group: update.group,
+    }
     if (action === "settings")
       return (
         "Mode: " +
@@ -1728,12 +1739,11 @@ export class TelegramIngress {
       if (operation === "pause") await scope.run(run).pause(false, { signal: this.signal })
       else if (operation === "resume") await scope.run(run).resume({ signal: this.signal })
       else if (operation === "retry" || operation === "abandon") {
-        const detail = await scope.run(run).fetch({ signal: this.signal })
-        const task =
-          words[0] ?? detail.tasks.findLast((row) => ["failed", "timed_out", "uncertain"].includes(row.status))?.key
-        if (!task) return "Supply the failed task key after the task ID."
-        if (operation === "retry") await scope.run(run).task(task).retry(undefined, { signal: this.signal })
-        else await scope.run(run).task(task).abandon({ signal: this.signal })
+        const execution = scope.run(run)
+        const task = execution.task(words[0] ?? repairTaskKey(await execution.fetch({ signal: this.signal })))
+
+        if (operation === "retry") await task.retry(undefined, { signal: this.signal })
+        else await task.abandon({ signal: this.signal })
       } else return "Use /task pause|resume|retry|abandon [TASK_ID] [TASK_KEY]."
       return "Task " + operation + " accepted."
     }
@@ -1874,17 +1884,11 @@ export class TelegramIngress {
       await document.change((state) => ({ ...state!, mode: argument as "assistant" | "active" }))
       return "Group participation: " + argument + "."
     }
-    if (action === "new" || action === "resume") {
-      const args = argument.split(/\s+/)
-      if (action === "resume" && args.length !== 2) return "Use /resume WORKSPACE_ID CONVERSATION_ID."
+    if (action === "new") {
       const receipt = Schema.decodeUnknownSync(Selected)(
-        await this.application().bots.command(
-          action === "new"
-            ? { action: "bot.new", id, key: keyValue }
-            : { action: "bot.resume", id, key: keyValue, workspace: args[0], conversation: args[1] },
-        ),
+        await this.application().bots.command({ action: "bot.new", id, key: keyValue }),
       )
-      await document.change((state) => ({ ...state!, batches: state!.batches.filter((row) => !!row.submission) }))
+      await document.change((state) => telegramSessionSwitch(state!, route, [bot.current, receipt.selected]))
       return "Current conversation: " + receipt.selected.public_id + "."
     }
     if (action === "history")
@@ -1938,13 +1942,15 @@ export class TelegramIngress {
               )
             ).workspace.public_id
           : matches[0].public_id
-      await this.application().bots.command({
-        action: "bot.workspace",
-        id,
-        key: keyValue,
-        workspace: selected,
-      })
-      await document.change((state) => ({ ...state!, batches: state!.batches.filter((row) => !!row.submission) }))
+      const receipt = Schema.decodeUnknownSync(Selected)(
+        await this.application().bots.command({
+          action: "bot.workspace",
+          id,
+          key: keyValue,
+          workspace: selected,
+        }),
+      )
+      await document.change((state) => telegramSessionSwitch(state!, route, [bot.current, receipt.selected]))
       return "Home Workspace selected and a new current conversation opened."
     }
     if (action === "compact" && bot.current) {

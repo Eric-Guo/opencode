@@ -5445,7 +5445,13 @@ export type ExperimentalNexusManageInput = {
         readonly expected_steering_run_public_id?: string
       }
     | { readonly action: "bot.read" | "bot.remove"; readonly id: string }
-    | { readonly action: "bot.history"; readonly id: string; readonly after?: string; readonly archived?: boolean }
+    | {
+        readonly action: "bot.history"
+        readonly id: string
+        readonly after?: string
+        readonly archived?: boolean
+        readonly limit?: number
+      }
     | { readonly action: "bot.current" | "bot.new"; readonly id: string; readonly key: string }
     | { readonly action: "bot.workspace"; readonly id: string; readonly key: string; readonly workspace: string }
     | {

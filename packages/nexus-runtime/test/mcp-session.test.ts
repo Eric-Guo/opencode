@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Layer, Schema, Scope } from "effect"
 import { tmpdir } from "node:os"
-import { mkdtemp, realpath, rm } from "node:fs/promises"
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
@@ -302,6 +302,8 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
     const mcp = yield* Mcp.Service
     yield* Effect.promise(async () => {
       const calls: string[] = []
+      const pdf = Buffer.from("%PDF-1.4\nfixture\n%%EOF")
+      const resource = { uri: "fixture://manual", mimeType: "application/pdf", blob: pdf.toString("base64") }
       const server = Bun.serve({
         hostname: "127.0.0.1",
         port: 0,
@@ -321,19 +323,36 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
               id: message.id,
               error: { code: mode === "arguments" ? -32602 : -32603, message: "fixture-private-secret refusal" },
             })
-          const result =
-            message.method === "initialize"
-              ? {
-                  protocolVersion: "2024-11-05",
-                  capabilities: { tools: {} },
-                  serverInfo: { name: "fixture", version: "1" },
-                }
-              : message.method === "tools/list"
-                ? { tools: [{ name: "probe", description: "Probe", inputSchema: { type: "object" } }] }
-                : { isError: mode === "tool", content: [{ type: "text", text: "returned answer" }] }
+          const results: Record<string, object> = {
+            initialize: {
+              protocolVersion: "2024-11-05",
+              capabilities: { tools: {}, prompts: {}, resources: {} },
+              serverInfo: { name: "fixture", version: "1" },
+            },
+            "tools/list": { tools: [{ name: "probe", description: "Probe", inputSchema: { type: "object" } }] },
+            "resources/list": {
+              resources: [
+                { uri: resource.uri, mimeType: resource.mimeType, name: "manual", description: "Read the manual" },
+              ],
+            },
+            "resources/templates/list": { resourceTemplates: [] },
+            "resources/read": { contents: [resource] },
+            "prompts/list": { prompts: [{ name: "review", description: "Review the manual" }] },
+            "prompts/get": {
+              messages: [
+                { role: "user", content: { type: "text", text: "Read the manual" } },
+                { role: "assistant", content: { type: "resource", resource } },
+              ],
+            },
+            "tools/call": {
+              isError: mode === "tool",
+              content:
+                mode === "media" ? [{ type: "resource", resource }] : [{ type: "text", text: "returned answer" }],
+            },
+          }
           return message.id === undefined
             ? new Response(null, { status: 202 })
-            : Response.json({ jsonrpc: "2.0", id: message.id, result })
+            : Response.json({ jsonrpc: "2.0", id: message.id, result: results[message.method] })
         },
       })
       const directory = await mkdtemp(join(tmpdir(), "nexus-mcp-errors-"))
@@ -396,6 +415,37 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
           signal: new AbortController().signal,
         }
         expect(await tool.execute({ mode: "tool" }, context)).toMatchObject({ is_error: true })
+        const artifacts = join(directory, "artifacts")
+        const captured = {
+          ...context,
+          artifacts,
+          publish: async (media: Blob, name: string) => {
+            expect(media.type).toBe(resource.mimeType)
+            expect(Buffer.from(await media.arrayBuffer())).toEqual(pdf)
+            expect(await readFile(join(artifacts, name))).toEqual(pdf)
+            return { type: "resource_link", uri: "nexus://uploads/fixture", name }
+          },
+        }
+        for (const [name, load] of [
+          ["resource", () => tool.execute({ mode: "media" }, captured)],
+          ["active-manual", () => manager.readDocument("active-manual", captured, "agent")],
+          ["active-review", () => manager.readDocument("active-review", captured, "agent")],
+        ] as const) {
+          const result = await load()
+          expect(result?.content).toEqual([
+            ...(name === "active-review"
+              ? [
+                  { type: "text", text: "Read the manual" },
+                  { type: "text", text: "assistant:" },
+                ]
+              : []),
+            { type: "text", text: expect.stringContaining(join(artifacts, "mcp-active-" + name)) },
+            { type: "resource_link", uri: "nexus://uploads/fixture", name: expect.stringMatching(/\.pdf$/) },
+          ])
+        }
+        expect((await manager.readDocument("active-manual", context, "agent"))?.content).toEqual([
+          { type: "text", text: "[resource: fixture://manual (application/pdf), content discarded]" },
+        ])
         const invalid = await tool.execute({ mode: "arguments" }, context)
         expect(invalid).toMatchObject({
           is_error: true,
