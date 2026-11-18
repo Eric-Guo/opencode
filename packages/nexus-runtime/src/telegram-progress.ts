@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { Schema } from "effect"
 import type { ExecutionSnapshot, Run } from "@cybros/agent"
+import { repairableTasks } from "./execution"
 import type { StoreDocument } from "./document"
 import { TelegramError, TelegramUncertain } from "./telegram-api"
 import type { TelegramState, TelegramWork } from "./telegram-state"
@@ -136,13 +137,7 @@ export class TelegramProgress {
 
 export function telegramAction(run: Run) {
   if (["failed", "needs_attention"].includes(run.status)) {
-    const failed = run.tasks.find(
-      (row) =>
-        ["failed", "timed_out", "uncertain"].includes(row.status) &&
-        !row.failure_resolution &&
-        (row.on_failure !== "absorb" ||
-          (row.kind === "model_task" && row.error?.key === "conversation_cost_limit_reached")),
-    )
+    const failed = repairableTasks(run)[0]
     if (failed) {
       const key = failed.error?.key
       if (key === "conversation_cost_limit_reached")
