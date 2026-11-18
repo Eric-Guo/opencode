@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { ToolLowering } from "@cybros/agent"
 import { createHash } from "node:crypto"
 import { mcpName, mcpSettings } from "../src/mcp-settings"
 import { curateMcp, curateMcpDocuments, mcpAnnouncementBytes } from "../src/mcp-curation"
@@ -115,10 +116,18 @@ test("MCP curation treats stale explicit lists atomically and keeps verbatim des
     timeout_ms: 600000,
   })
   expect(result.skipped).toHaveLength(2)
-  expect(result.bytes).toBe(Buffer.byteLength(JSON.stringify(result.tools.map((tool) => tool.definition))))
-  expect(mcpAnnouncementBytes([result.tools[0].definition, result.tools[0].definition])).toBe(
-    result.tools[0].bytes * 2 + 3,
+  const definition = result.tools[0].definition
+  const modelBytes = Buffer.byteLength(JSON.stringify(ToolLowering.functionEntry(definition)))
+  const announcementBytes = Buffer.byteLength(JSON.stringify(definition))
+
+  expect(result.tools[0].bytes).toBe(modelBytes)
+  expect(result.bytes).toBe(modelBytes)
+  expect(mcpAnnouncementBytes([definition, definition])).toBe(announcementBytes * 2 + 3)
+  const multiple = curateMcp(row, [tools[0], { ...tools[0], name: "write" }])
+  expect(multiple.bytes).toBe(
+    Buffer.byteLength(JSON.stringify(ToolLowering.functionEntry(multiple.tools[1].definition))) + modelBytes,
   )
+  expect(curateMcp(row, []).bytes).toBe(0)
   expect(curateMcp({ ...row, tools: ["missing"] }, tools).fault).toContain("missing")
   expect(curateMcp({ ...row, tools: ["read", "blank"] }, tools).tools).toEqual([])
   expect(curateMcp(row, [...tools, tools[0]]).fault).toContain("duplicate")

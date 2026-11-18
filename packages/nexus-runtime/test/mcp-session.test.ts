@@ -382,6 +382,11 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
       try {
         await manager.start()
         const tool = manager.tools().find((tool) => tool.definition.name === "mcp__active__probe")!
+        expect(await manager.command("mcp.list", {})).toMatchObject([
+          { server: "active", bytes: 113, tools: [{ name: "mcp__active__probe", bytes: 113 }] },
+          { server: "parked", status: "disabled" },
+          { server: "context7", status: "disabled" },
+        ])
         const context = {
           workspace: "w",
           conversation: "c",
@@ -402,7 +407,8 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
         const before = calls.filter((method) => method === "initialize").length
         expect(await manager.command("mcp.probe", { server: "parked" })).toMatchObject({
           status: "connected",
-          tools: [{ name: "mcp__parked__probe" }],
+          bytes: 113,
+          tools: [{ name: "mcp__parked__probe", bytes: 113 }],
         })
         expect(calls.filter((method) => method === "initialize").length).toBeGreaterThan(before)
         expect(manager.tools().some((tool) => tool.definition.name === "mcp__parked__probe")).toBe(false)
