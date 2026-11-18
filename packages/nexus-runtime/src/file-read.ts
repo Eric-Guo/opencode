@@ -22,7 +22,7 @@ export async function readablePath(root: string, path: string) {
   })
 }
 
-export async function readWindow(path: string, signal: AbortSignal, offset = 1, limit?: number) {
+export async function readWindow(path: string, signal: AbortSignal, offset = 1, limit?: number, displayPath = path) {
   const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK)
   try {
     if (!(await file.stat()).isFile()) throw new ToolInputError("Expected a regular file.")
@@ -39,13 +39,20 @@ export async function readWindow(path: string, signal: AbortSignal, offset = 1, 
       signal,
       offset,
       limit,
+      displayPath,
     )
   } finally {
     await file.close()
   }
 }
 
-export function readEditorWindow(content: string, signal: AbortSignal, offset = 1, limit = 2000) {
+export function readEditorWindow(
+  content: string,
+  signal: AbortSignal,
+  offset: number,
+  limit: number,
+  displayPath: string,
+) {
   if (!content && offset > 1) throw new ToolInputError(`Offset ${offset} is beyond end of file.`)
   return scanWindow(
     (async function* () {
@@ -54,6 +61,7 @@ export function readEditorWindow(content: string, signal: AbortSignal, offset = 
     signal,
     1,
     limit,
+    displayPath,
     offset,
   )
 }
@@ -62,8 +70,9 @@ export function readEditorWindow(content: string, signal: AbortSignal, offset = 
 async function scanWindow(
   chunks: AsyncIterable<Buffer>,
   signal: AbortSignal,
-  offset = 1,
-  limit?: number,
+  offset: number,
+  limit: number | undefined,
+  displayPath: string,
   editorOffset?: number,
 ) {
   const start = Math.max(1, offset)
@@ -128,7 +137,7 @@ async function scanWindow(
   const next = from + lines.length
   const content =
     !lines.length && truncated === "bytes"
-      ? `[Line ${from} is ${firstBytes} bytes, exceeds 50 KiB limit. Use bash to read a byte range.]`
+      ? `[Line ${from} is ${firstBytes} bytes, exceeds 50 KiB limit. Use bash: sed -n '${from}p' < '${displayPath.replaceAll("'", "'\\''")}' | head -c ${maximum}]`
       : lines.join("\n") +
         (editorOffset !== undefined
           ? truncated || total > (limit ?? 2000)

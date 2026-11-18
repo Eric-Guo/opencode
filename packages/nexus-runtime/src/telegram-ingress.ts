@@ -16,7 +16,12 @@ import {
   telegramChunks,
   telegramBytes,
 } from "./telegram-api"
-import { telegramConversationCommand, telegramMemoryCommand, telegramSessionSwitch } from "./telegram-commands"
+import {
+  telegramConversationCommand,
+  telegramMemoryCommand,
+  telegramSessionSwitch,
+  telegramTrackConversations,
+} from "./telegram-commands"
 import { telegramSetup } from "./telegram-setup"
 import { telegramJob, telegramTime } from "./telegram-schedules"
 import { telegramJobDiscovery } from "./telegram-job-discovery"
@@ -449,7 +454,9 @@ export class TelegramIngress {
         state.control?.update === update.id &&
         !(createJob && state.control.job) &&
         !state.control.fork &&
-        !(action === "resume" && state.control.resume)
+        !(action === "resume" && state.control.resume) &&
+        action !== "new" &&
+        !(action === "workspace" && state.control.workspace)
       ) {
         await finish(
           "The previous control may have succeeded. It was not repeated. Use /status, /history or /queue to inspect the result.",
@@ -575,8 +582,8 @@ export class TelegramIngress {
     const observedVoice = !addressed && update.media?.kind === "voice"
     const media = observedVoice ? undefined : update.media
     const quote = reply && ["answer", "participation"].includes(reply.kind) ? reply.text : undefined
-    await document.change((current) => {
-      const state = current ?? telegramState()
+    await document.change((saved) => {
+      const state = saved ?? telegramState()
       if (state.batches.reduce((count, row) => count + row.sources.length, 0) >= 20)
         throw new Error("Telegram has twenty pending source messages; wait for admission or stop a queued request.")
       const previous = state.batches.at(-1)
@@ -585,6 +592,7 @@ export class TelegramIngress {
         !previous.submission &&
         !previous.media &&
         !media &&
+        sameRoute(previous.route, route) &&
         previous.ready > now &&
         previous.requester === update.requester &&
         previous.target.conversation === target.conversation &&
@@ -615,7 +623,7 @@ export class TelegramIngress {
             ...(media ? { media } : {}),
           }
       return {
-        ...state,
+        ...telegramTrackConversations(state, route, [current]),
         consumed: { ...state.consumed, [connection]: update.id },
         batches: batchable ? [...state.batches.slice(0, -1), batch] : [...state.batches, batch],
       }
@@ -672,6 +680,20 @@ export class TelegramIngress {
       })
       await telegramJobDiscovery(document, this.application(), id, this.signal)
       const state = (await document.read()) ?? telegramState()
+      for (const receipt of state.media_cancellations ?? []) {
+        await this.application()
+          .client.workspace(receipt.workspace)
+          .inferenceRequests.cancel(receipt.inference, { signal: this.signal })
+          .catch((error: unknown) => {
+            if (!(error instanceof APIError && [403, 404, 409, 410].includes(error.status))) throw error
+          })
+        await document.change((state) => ({
+          ...state!,
+          media_cancellations: state!.media_cancellations?.filter(
+            (row) => row.workspace !== receipt.workspace || row.inference !== receipt.inference,
+          ),
+        }))
+      }
       for (const job of state.jobs ?? []) {
         const executions = await this.application()
           .client.workspace(job.target.workspace)
@@ -1911,6 +1933,10 @@ export class TelegramIngress {
     if (action === "workspace") {
       const [operation, ...words] = argument.split(/\s+/)
       const value = words.join(" ")
+      const frozen = state.control?.update === update.id ? state.control.workspace : undefined
+
+      if (frozen) return this.switchWorkspace(document, route, id, keyValue, bot.current, frozen)
+
       const choices = []
       let after: string | undefined
       do {
@@ -1942,16 +1968,11 @@ export class TelegramIngress {
               )
             ).workspace.public_id
           : matches[0].public_id
-      const receipt = Schema.decodeUnknownSync(Selected)(
-        await this.application().bots.command({
-          action: "bot.workspace",
-          id,
-          key: keyValue,
-          workspace: selected,
-        }),
-      )
-      await document.change((state) => telegramSessionSwitch(state!, route, [bot.current, receipt.selected]))
-      return "Home Workspace selected and a new current conversation opened."
+      await document.change((state) => ({
+        ...state!,
+        control: { ...state!.control, update: update.id, workspace: selected },
+      }))
+      return this.switchWorkspace(document, route, id, keyValue, bot.current, selected)
     }
     if (action === "compact" && bot.current) {
       await this.application()
@@ -1962,6 +1983,24 @@ export class TelegramIngress {
     }
     void now
     return "Unknown command. Use /help."
+  }
+
+  private async switchWorkspace(
+    document: StateDocument,
+    route: TelegramDelivery["route"],
+    bot: string,
+    key: string,
+    current: typeof Bot.Type.current,
+    workspace: string,
+  ) {
+    const receipt = Schema.decodeUnknownSync(Selected)(
+      await this.application().bots.command(
+        { action: "bot.workspace", id: bot, key, workspace },
+        { signal: this.signal },
+      ),
+    )
+    await document.change((state) => telegramSessionSwitch(state!, route, [current, receipt.selected]))
+    return "Home Workspace selected and a new current conversation opened."
   }
 
   private async memory(id: string, bot: typeof Bot.Type, update: TelegramUpdate, argument: string) {
