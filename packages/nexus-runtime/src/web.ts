@@ -215,12 +215,20 @@ export async function webFetch(
         details.bytes = bytes.length
         active.throwIfAborted()
 
-        if (status < 200 || status >= 300)
+        if (status < 200 || status >= 300) {
+          const phrase = http.STATUS_CODES[status]
+          const heading = shorten(initial.href, 512) + " answered " + status + (phrase ? " " + phrase : "")
+          const excerpt = decode(
+            status >= 400 ? bytes.subarray(0, 512) : bytes,
+            response.headers["content-type"] ?? "",
+            false,
+          ).trim()
           return {
             is_error: true,
-            content: `${shorten(url.href, 512)} answered HTTP ${status}\n\n${decode(bytes.subarray(0, 512), response.headers["content-type"] ?? "", false)}`,
+            content: excerpt ? heading + "\n\n" + excerpt : heading,
             structured_content: details,
           }
+        }
 
         const rendered = await renderWebContent(bytes, response.headers["content-type"] ?? "", publish, {
           ...options,

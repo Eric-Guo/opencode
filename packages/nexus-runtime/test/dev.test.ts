@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Client, type JsonObject } from "@cybros/agent"
+import { Client, type JsonObject, type JsonValue } from "@cybros/agent"
 import { RealtimeClient } from "@cybros/agent/realtime"
 import { Schema } from "effect"
 import { NexusApplication } from "../src/application"
@@ -24,6 +24,69 @@ const task = {
   waiting_on: [],
   approval: null,
 }
+
+test("watch times out while waiting for the first run without opening a subscription", async () => {
+  const calls: string[] = []
+  await expect(
+    runDevelopment(["watch", "chat", "--timeout", "0"], {
+      signal: AbortSignal.timeout(1000),
+      command: async (input) => {
+        calls.push(String(input.action))
+        return { workspace: "workspace", conversation: "chat", side: false, run: null }
+      },
+      write() {},
+      error() {},
+    }),
+  ).rejects.toThrow("Timed out watching chat")
+  expect(calls.every((action) => action === "target")).toBe(true)
+})
+
+for (const verb of ["watch", "follow"])
+  test(verb + " recovers both transcript tails from a gap without replaying retained deltas", async () => {
+    const output: string[] = []
+    const calls: string[] = []
+    const code = await runDevelopment([verb, "run", ...(verb === "follow" ? ["--reasoning"] : []), "--timeout", "0"], {
+      signal: AbortSignal.timeout(1000),
+      command: async (input): Promise<JsonValue> => {
+        calls.push(String(input.action))
+        switch (input.action) {
+          case "target":
+            return { workspace: "workspace", conversation: "chat", run: "run", side: false }
+          case "stream.open":
+            return { stream: "id", text: "A", text_length: 1, reasoning: "", reasoning_length: 0 }
+          case "stream.poll":
+            return {
+              lost: 2,
+              text: "A界C",
+              text_length: 5,
+              reasoning: "reason",
+              reasoning_length: 6,
+              events: [
+                { channel: "transcript", frame: { type: "text_delta", payload: { text: "C" } } },
+                { channel: "transcript", frame: { type: "reasoning_delta", payload: { text: "on" } } },
+              ],
+            }
+          case "run":
+            return { status: "completed", tasks: [] }
+          case "run.result":
+            return { output: "A界C" }
+          case "stream.close":
+            return null
+          default:
+            throw new Error(String(input.action))
+        }
+      },
+      write: (value) => {
+        output.push(String(value))
+      },
+      error() {},
+    })
+    expect(code).toBe(0)
+    expect(output.filter((line) => line.trim() && !line.startsWith("status:")).sort()).toEqual(
+      (verb === "follow" ? ["A", "界C", "reason"] : ["A", "界C"]).sort(),
+    )
+    expect(calls.at(-1)).toBe("stream.close")
+  })
 
 test("development CLI preserves exact old-run results, explicit pause force, authored steps and resolution tokens", async () => {
   const writes: { path: string; body: unknown }[] = []
@@ -386,9 +449,8 @@ test("explicit workspace member addressing preserves recipient policy and immuta
 })
 
 test("development live streams use daemon credentials, carry transcript frames and close only their subscription", async () => {
-  const subscribed = Promise.withResolvers<void>()
+  const subscribed = Promise.withResolvers<(text: string) => void>()
   const closed = Promise.withResolvers<void>()
-  const received = Promise.withResolvers<void>()
   const requests: string[] = []
   const server = Bun.serve({
     port: 0,
@@ -411,13 +473,14 @@ test("development live streams use daemon credentials, carry transcript frames a
         socket.send(JSON.stringify({ type: "confirm_subscription", identifier: request.identifier }))
         const identifier = object(JSON.parse(request.identifier))
         if (identifier.items !== "transcript") return
-        socket.send(
-          JSON.stringify({
-            identifier: request.identifier,
-            message: { event: { type: "text_delta", run_public_id: "run", text: "Live words" } },
-          }),
+        subscribed.resolve((text) =>
+          socket.send(
+            JSON.stringify({
+              identifier: request.identifier,
+              message: { event: { type: "text_delta", run_public_id: "run", text } },
+            }),
+          ),
         )
-        subscribed.resolve()
       },
       close() {
         closed.resolve()
@@ -440,17 +503,26 @@ test("development live streams use daemon credentials, carry transcript frames a
   const streams = new DevelopmentStreams(() => application, new AbortController().signal)
   try {
     const stream = object(await streams.command({ action: "stream.open", run: "run" })).stream
-    await subscribed.promise
-    const deadline = performance.now() + 5000
+    const slower = object(await streams.command({ action: "stream.open", run: "run" })).stream
+    const send = await subscribed.promise
+    send("prefix")
+    send("x".repeat(1024 * 1024))
+    send("suffix")
+    const deadline = performance.now() + 2000
     while (performance.now() < deadline) {
       const page = object(await streams.command({ action: "stream.poll", stream }))
-      if (JSON.stringify(page).includes("Live words")) {
-        received.resolve()
-        break
-      }
+      if (JSON.stringify(page.events).includes("suffix")) break
       await new Promise<void>((resolve) => setImmediate(resolve))
     }
-    await received.promise
+    const page = object(await streams.command({ action: "stream.poll", stream: slower }))
+    expect(page).toMatchObject({ lost: 1, text_length: 1024 * 1024 + 12 })
+    expect(String(page.text)).toEndWith("suffix")
+    expect(page.events).toMatchObject([
+      { frame: { payload: { text: "prefix" } } },
+      { frame: { payload: { text: "suffix" } } },
+    ])
+    expect(await streams.command({ action: "stream.poll", stream: slower })).toMatchObject({ events: [], lost: 0 })
+    await streams.command({ action: "stream.close", stream: slower })
     await streams.command({ action: "stream.close", stream })
     await closed.promise
     expect(requests.every((request) => request.startsWith("GET "))).toBe(true)

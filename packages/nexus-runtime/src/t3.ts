@@ -8,20 +8,11 @@ import type { Nexus } from "@opencode/schema/nexus"
 import type { NexusApplication } from "./application"
 import { definition, type RunnerContext, type RunnerTool } from "./extensions"
 import { runnerRefusal } from "./runner-policy"
-import { T3Transport, T3Uncertain } from "./t3-transport"
+import { T3Selection, T3Transport, T3Uncertain, T3Workspace } from "./t3-transport"
 import { T3Catalog } from "./t3-catalog"
 import { T3Native } from "./t3-native"
 import { outputHead } from "./output-window"
 
-const Workspace = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("root") }),
-  Schema.Struct({ type: Schema.Literal("existing_worktree"), worktreePath: Schema.NonEmptyString }),
-  Schema.Struct({
-    type: Schema.Literal("worktree"),
-    baseRef: Schema.NonEmptyString,
-    branch: Schema.optional(Schema.String),
-  }),
-])
 const Settings = Schema.Struct({
   server: Schema.optional(Schema.Literals(["host", "local"])),
   listen_port: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))),
@@ -30,9 +21,8 @@ const Settings = Schema.Struct({
   project: Schema.optional(Schema.String),
   project_id: Schema.optional(Schema.String),
   default_agent: Schema.optional(Schema.String),
-  workspace: Schema.optional(Workspace),
+  workspace: Schema.optional(T3Workspace),
 })
-const Selection = Schema.Struct({ instanceId: Schema.String, model: Schema.String })
 const Question = Schema.Struct({
   id: Schema.String,
   question: Schema.String,
@@ -64,12 +54,12 @@ const Projection = Schema.Struct({
     id: Schema.String,
     projectId: Schema.String,
     runtimeMode: Schema.String,
-    modelSelection: Selection,
+    modelSelection: T3Selection,
     branch: Schema.NullOr(Schema.String),
     worktreePath: Schema.NullOr(Schema.String),
   }),
   runs: Schema.Array(
-    Schema.Struct({ id: Schema.String, ordinal: Schema.Number, status: Schema.String, modelSelection: Selection }),
+    Schema.Struct({ id: Schema.String, ordinal: Schema.Number, status: Schema.String, modelSelection: T3Selection }),
   ),
   messages: Schema.Array(Schema.Struct({ id: Schema.String, role: Schema.String, text: Schema.String })),
   runtimeRequests: Schema.Array(
@@ -112,10 +102,10 @@ const Record = Schema.Struct({
   environment: Schema.Struct({
     url: Schema.String,
     projectId: Schema.String,
-    workspaceStrategy: Workspace,
+    workspaceStrategy: T3Workspace,
     runtimeMode: Schema.Literal("approval-required"),
     interactionMode: Schema.Literal("default"),
-    modelSelection: Selection,
+    modelSelection: T3Selection,
   }),
   selection: Schema.Struct({ agent: Schema.String, harness: Schema.String, model: Schema.String }),
   placement: Schema.optional(
