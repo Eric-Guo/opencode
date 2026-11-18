@@ -28,7 +28,7 @@ test.skipIf(!chromium)(
       hostname: "127.0.0.1",
       fetch: () =>
         new Response(
-          '<title>Fixture</title><label>Name<input id="name"></label><button onclick="document.title=document.querySelector(\'#name\').value">Save</button>',
+          '<title>Fixture</title><label>Name<input id="name" onkeydown="if(event.key===\'Enter\') document.title=this.value"></label><button onclick="document.title=document.querySelector(\'#name\').value">Save</button><label>Opt in<input type="checkbox"></label><label>Date<input type="date"></label>',
           { headers: { "content-type": "text/html" } },
         ),
     })
@@ -114,6 +114,28 @@ test.skipIf(!chromium)(
         "async () => document.title",
       ])
         expect((await run("browser_evaluate", { expression })).structured_content).toBe("Saved fixture")
+      const form = await run("browser_snapshot")
+      const refused = await run("browser_type", { ref: ref(form.content, "checkbox"), text: "yes", submit: true })
+
+      expect(refused).toMatchObject({ is_error: true, content: expect.stringContaining("checkbox cannot be filled") })
+      expect(
+        (await run("browser_evaluate", { expression: "document.querySelector('[type=checkbox]').checked" }))
+          .structured_content,
+      ).toBe(false)
+      const date = await run("browser_snapshot")
+      const filled = await run("browser_type", { ref: ref(date.content, "Date"), text: "2026-11-18" })
+
+      expect(filled.is_error).not.toBe(true)
+      expect(
+        (await run("browser_evaluate", { expression: "document.querySelector('[type=date]').value" }))
+          .structured_content,
+      ).toBe("2026-11-18")
+      const beforeSubmit = await run("browser_snapshot")
+
+      expect(
+        (await run("browser_type", { ref: ref(beforeSubmit.content, "textbox"), text: "Submitted", submit: true }))
+          .content,
+      ).toContain("Title: Submitted")
       const shot = await run("browser_screenshot")
       expect(shot.content).toMatchObject([
         { type: "text", text: expect.stringContaining("Saved a screenshot") },
