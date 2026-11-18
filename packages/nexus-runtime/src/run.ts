@@ -1,8 +1,27 @@
 import { executionSnapshot } from "./execution"
+import { APIError, TransportError, type ExecutionIdentity, type JsonObject } from "@cybros/agent"
 import { NexusRun } from "@opencode/schema/nexus-run"
 import { Schema } from "effect"
 import type { NexusApplication } from "./application"
 import { setTimeout } from "node:timers/promises"
+
+const ModelChange = Schema.Struct({
+  from: Schema.String,
+  to: Schema.String,
+  reason: Schema.String,
+  category: Schema.optional(Schema.String),
+})
+const ModelSwitch = Schema.Struct({ task: Schema.String, ...ModelChange.fields })
+const ModelEvent = Schema.Struct({
+  turn_public_id: Schema.String,
+  variant_public_id: Schema.optional(Schema.NullOr(Schema.String)),
+  run_public_id: Schema.optional(Schema.NullOr(Schema.String)),
+  task_key: Schema.optional(Schema.String),
+  model_change: Schema.optional(Schema.NullOr(ModelChange)),
+  finish_quality: Schema.optional(Schema.NullOr(Schema.String)),
+  model: Schema.optional(Schema.NullOr(Schema.String)),
+  refusal_category: Schema.optional(Schema.NullOr(Schema.String)),
+})
 
 /** A one-shot caller owns cancellation; readers of existing work do not. */
 export async function* runPrompt(
@@ -16,6 +35,8 @@ export async function* runPrompt(
   const streams: Array<{ close(): Promise<void> }> = []
   const frames: NexusRun.Event[] = []
   const live = { run: "", bytes: 0 }
+  const modelSwitches: JsonObject[] = []
+  const refusals: JsonObject[] = []
   const state = {
     conversation: "",
     workspace: input.workspace ?? application.identity.workspace,
@@ -61,7 +82,7 @@ export async function* runPrompt(
     const execution = chat.inputExecution(accepted.input.public_id)
     const denied = new Set<string>()
     let previous = ""
-    while (!active.aborted) {
+    follow: while (!active.aborted) {
       const snapshot = await execution.recover({ signal: active }).then(executionSnapshot)
       if (execution.blocked_reason) {
         state.reason = execution.blocked_reason
@@ -121,7 +142,6 @@ export async function* runPrompt(
         if (snapshot.status === "failed" && !snapshot.terminal && !snapshot.needs_attention) {
           state.exit = 2
           state.reason = snapshot.failure_reason ?? "hold"
-          await chat.cancel({ signal: AbortSignal.timeout(5000) })
           break
         }
         if (snapshot.needs_attention) {
@@ -130,14 +150,25 @@ export async function* runPrompt(
           for (const decision of approvals) {
             const identity = state.run + ":" + decision.detail.task.key
             if (denied.has(identity)) continue
-            await decision.task.deny("opencode nexus run: non-interactive; nobody can approve", { signal: active })
+            const refusal = await decision.task
+              .deny("opencode nexus run: non-interactive; nobody can approve", { signal: active })
+              .then(
+                () => undefined,
+                (error: unknown) => (error instanceof Error ? error.message : String(error)),
+              )
+
+            active.throwIfAborted()
+            if (refusal !== undefined) {
+              state.exit = 2
+              state.reason = (snapshot.attention?.reason ?? "approval_required") + " — " + refusal
+              break follow
+            }
             denied.add(identity)
             state.denied++
           }
           if (!approvals.length || decisions.some((decision) => decision.kind === "ask")) {
             state.exit = 2
             state.reason = snapshot.attention?.reason ?? "needs_person"
-            await chat.cancel({ signal: AbortSignal.timeout(5000) })
             break
           }
         }
@@ -145,6 +176,8 @@ export async function* runPrompt(
       await setTimeout(250, undefined, { signal: active })
     }
     active.throwIfAborted()
+    if (execution.result && execution.snapshot)
+      await readModelEvents(chat, execution.result, execution.snapshot.execution, modelSwitches, refusals, active)
   } catch (error) {
     state.reason = active.aborted
       ? timeout?.aborted
@@ -156,7 +189,7 @@ export async function* runPrompt(
     state.exit = active.aborted ? (timeout?.aborted ? 2 : 130) : 1
   } finally {
     await Promise.allSettled(streams.map((stream) => stream.close()))
-    if (state.conversation && active.aborted)
+    if (state.conversation && (state.exit === 2 || active.aborted))
       await application.client
         .workspace(state.workspace)
         .conversation(state.conversation)
@@ -172,7 +205,7 @@ export async function* runPrompt(
           ? state.reason === "timeout"
             ? "timeout"
             : "needs_person"
-          : state.exit === 130
+          : state.exit === 130 || state.status === "canceled"
             ? "canceled"
             : "failed",
     is_error: state.exit !== 0,
@@ -185,7 +218,81 @@ export async function* runPrompt(
     turn_id: state.turn,
     run_id: state.run,
     result: state.content,
+    model_switches: modelSwitches,
+    refusals,
   }
+}
+
+// Conversation-owned runs narrate on the conversation feed, including after the live text stream closes.
+async function readModelEvents(
+  chat: ReturnType<ReturnType<NexusApplication["client"]["workspace"]>["conversation"]>,
+  original: ExecutionIdentity,
+  selected: ExecutionIdentity,
+  switches: JsonObject[],
+  refusals: JsonObject[],
+  active: AbortSignal,
+) {
+  const signal = AbortSignal.any([active, AbortSignal.timeout(3000)])
+  const variants = new Set([original.variant_public_id, selected.variant_public_id])
+  const runs = new Set([original.run_public_id, selected.run_public_id])
+
+  if (original.variant_public_id !== selected.variant_public_id) {
+    const deck = await chat.turns.variants(original.turn_public_id, { signal }).catch(() => undefined)
+    const byID = new Map(deck?.items.map((variant) => [variant.public_id, variant]))
+    const seen = new Set<string>()
+    let variant = selected.variant_public_id ? byID.get(selected.variant_public_id) : undefined
+
+    while (variant?.source === "fallback" && !seen.has(variant.public_id)) {
+      seen.add(variant.public_id)
+      variant = variant.origin_variant_public_id ? byID.get(variant.origin_variant_public_id) : undefined
+      if (!variant) break
+
+      variants.add(variant.public_id)
+      runs.add(variant.run_public_id)
+    }
+  }
+
+  let after: string | undefined
+  let sequence = -1
+  do {
+    const read = () => chat.events({ after, limit: 200 }, { signal })
+    const page = await read().catch((error: unknown) =>
+      error instanceof TransportError || (error instanceof APIError && error.status >= 500)
+        ? read().catch(() => undefined)
+        : undefined,
+    )
+
+    if (!page) break
+
+    for (const event of page.items) {
+      if (event.sequence <= sequence) continue
+      sequence = event.sequence
+      if (!["task_status", "turn_created", "turn_status", "round_result"].includes(event.type)) continue
+      const decoded = Schema.decodeUnknownOption(ModelEvent)(event.payload)
+
+      if (decoded._tag === "None") continue
+      const row = decoded.value
+
+      if (row.turn_public_id !== original.turn_public_id) continue
+      if (row.run_public_id && !runs.has(row.run_public_id)) continue
+      if (row.variant_public_id && !variants.has(row.variant_public_id)) continue
+      if (!row.run_public_id && !row.variant_public_id) continue
+
+      const task = row.task_key ?? "reply"
+      if (event.type !== "round_result" && row.model_change) switches.push({ task, ...row.model_change })
+      if (
+        (event.type === "round_result" || event.type === "turn_status") &&
+        (row.finish_quality === "refused" || row.finish_quality === "blocked")
+      )
+        refusals.push({
+          task,
+          ...(row.model ? { model: row.model } : {}),
+          ...(row.refusal_category ? { category: row.refusal_category } : {}),
+        })
+    }
+    if (!page.next_after || page.next_after === after) break
+    after = page.next_after
+  } while (!signal.aborted)
 }
 
 /** Both live frames and durable snapshots feed one output cursor. */
@@ -228,6 +335,23 @@ export class RunOutput {
     }
     if (event.type !== "result") return
     if (this.options.format === "text") {
+      const switches = Schema.decodeUnknownOption(Schema.Array(ModelSwitch))(event.model_switches)
+
+      if (switches._tag === "Some")
+        for (const change of switches.value) {
+          const text =
+            change.task +
+            " switched from " +
+            change.from +
+            " to " +
+            change.to +
+            " (" +
+            change.reason +
+            (change.category ? ": " + change.category : "") +
+            ")\n"
+          if (this.options.print) this.options.error("opencode nexus run: " + text)
+          else this.options.write("\n" + text)
+        }
       if (this.options.print) this.options.write(String(event.result ?? "") + "\n")
       if (!this.options.print) {
         this.snapshot(String(event.result ?? ""))

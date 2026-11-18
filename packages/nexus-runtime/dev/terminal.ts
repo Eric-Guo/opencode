@@ -660,14 +660,6 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     )
     return 0
   }
-  if (["retry", "abandon"].includes(parsed.verb) && !parsed.args[1]) {
-    const tasks = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(
-      object(await call("run", { run: resolved.run })).tasks,
-    )
-    const held = tasks.filter((task) => ["failed", "uncertain", "timed_out"].includes(String(task.status)))
-    if (held.length !== 1) throw new Error("Name the task to " + parsed.verb + "; the run has no single holding task.")
-    parsed.args[1] = String(held[0].key)
-  }
   const action =
     { stop: "task.cancel", pause: "run.pause", resume: "run.resume", delete: "run.delete", compact: "task.compact" }[
       parsed.verb

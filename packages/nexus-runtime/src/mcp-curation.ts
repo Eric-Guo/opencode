@@ -116,5 +116,18 @@ export function curateMcpDocuments(
 }
 
 export function mcpReadable(mime: string) {
-  return /^(?:text\/|image\/)|^application\/(?:(?:[\w.-]+\+)?(?:json|xml|yaml|x-yaml|toml)|pdf)$/i.test(mime)
+  return (
+    /^(?:text\/)|^application\/(?:[\w.-]+\+)?(?:json|xml|yaml|x-yaml|toml)$/i.test(mime) ||
+    mcpCaptureExtensions.has(mime)
+  )
 }
+
+export const mcpCaptureExtensions = new Map([
+  ["image/png", "png"],
+  ["image/jpeg", "jpg"],
+  ["image/jpg", "jpg"],
+  ["image/gif", "gif"],
+  ["image/webp", "webp"],
+  ["image/svg+xml", "svg"],
+  ["application/pdf", "pdf"],
+])
