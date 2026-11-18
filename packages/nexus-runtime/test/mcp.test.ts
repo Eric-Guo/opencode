@@ -146,12 +146,14 @@ test("MCP documents exclude required arguments, binary resources and duplicate n
     [
       { server, name: "read", description: "Collision", uri: "test://read" },
       { server, name: "binary", description: "Binary", uri: "test://binary", mimeType: "application/octet-stream" },
+      { server, name: "opaque-image", description: "Unsupported image", uri: "test://other", mimeType: "image/fax" },
+      { server, name: "pdf", description: "PDF resource", uri: "test://pdf", mimeType: "application/pdf" },
       { server, name: "unknown", description: "Read decides format", uri: "test://unknown" },
     ],
   )
 
-  expect(result.documents.map((document) => document.name)).toEqual(["docs-read", "docs-unknown"])
-  expect(result.skipped).toHaveLength(3)
+  expect(result.documents.map((document) => document.name)).toEqual(["docs-read", "docs-pdf", "docs-unknown"])
+  expect(result.skipped).toHaveLength(4)
 })
 
 test("MCP result mapping redacts nested structured content and only publishes readable media", async () => {
@@ -197,8 +199,33 @@ test("MCP result mapping redacts nested structured content and only publishes re
   expect(result.content).toMatchObject([
     { type: "text", text: "Credential [redacted]" },
     { type: "text", text: "[audio/wav content discarded]" },
+    { type: "text", text: "[image: image/png, 1 bytes and attached]" },
     { type: "resource_link" },
   ])
   expect(uploads).toHaveLength(1)
   expect(await uploads[0].text()).toBe("a")
+  expect(
+    await mcpResult(
+      {
+        isError: false,
+        structured: { value: "secret-value" },
+        content: [{ type: "text", text: "" }],
+      },
+      row,
+      {
+        workspace: "w",
+        conversation: "c",
+        run: "r",
+        task: "t",
+        directory: "/project",
+        signal: new AbortController().signal,
+      },
+    ),
+  ).toMatchObject({
+    structured_content: { value: "[redacted]" },
+    content: [
+      { type: "text", text: '{"value":"[redacted]"}' },
+      { type: "text", text: "" },
+    ],
+  })
 })
