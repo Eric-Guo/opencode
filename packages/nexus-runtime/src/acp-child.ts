@@ -13,6 +13,7 @@ import type { ChildProcess } from "node:child_process"
 import { Writable, Readable } from "node:stream"
 import { resolve } from "node:path"
 import { Schema } from "effect"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import type { JsonObject } from "@cybros/agent"
 import type { RunnerContext } from "./extensions"
 import { AcpCapture, within } from "./acp-capture"
@@ -36,6 +37,7 @@ type Call = {
   session: AcpSession
   context: RunnerContext
   text: string
+  truncated: boolean
   message?: string | null
   calls: number
   refused: number
@@ -217,6 +219,7 @@ export class AcpChild {
       session,
       context,
       text: "",
+      truncated: false,
       tail: "",
       calls: 0,
       refused: 0,
@@ -252,9 +255,7 @@ export class AcpChild {
           await this.close(true)
           return {
             ...this.reply(call, { stopReason: "cancelled" }),
-            text: this.capture.redact(
-              'ACP agent "' + this.agent.name + '" timed out; its process group was terminated.\n' + call.text,
-            ),
+            text: 'ACP agent "' + this.agent.name + '" timed out; its process group was terminated.\n' + this.answer(call),
             stop: "timed_out",
             error: true,
           }
@@ -266,6 +267,7 @@ export class AcpChild {
         stop: this.exit ? "exited" : "refused",
         error: true,
         text: this.capture.redact(this.describe(error)),
+        truncated: false,
       }
     }
   }
@@ -281,7 +283,8 @@ export class AcpChild {
 
   private reply(call: Call, response: PromptResponse) {
     return {
-      text: this.capture.redact(call.text),
+      text: this.answer(call),
+      truncated: call.truncated,
       stop: response.stopReason as string,
       error: !["end_turn", "max_tokens"].includes(response.stopReason),
       calls: call.calls,
@@ -291,18 +294,30 @@ export class AcpChild {
     }
   }
 
+  private answer(call: Call) {
+    const text = this.capture.redact(call.text)
+
+    // A clipped raw prefix can only contribute complete lines to the final answer.
+    return call.truncated ? text.slice(0, text.lastIndexOf("\n") + 1) : text
+  }
+
   private update(notification: SessionNotification) {
     const call = this.current
     if (!call || call.canceled || notification.sessionId !== call.session.remote) return
     const update = notification.update
     if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
-      if (call.message != null && call.message !== update.messageId && call.text && !call.text.endsWith("\n")) {
-        call.text += "\n"
-        call.tail += "\n"
-      }
+      const chunk =
+        (call.message != null && call.message !== update.messageId && call.text && !call.text.endsWith("\n") ? "\n" : "") +
+        update.content.text
+
       call.message = update.messageId
-      call.text = (call.text + update.content.text).slice(0, 65536)
-      call.tail = (call.tail + update.content.text).slice(-65536)
+      if (!call.truncated) {
+        const combined = call.text + chunk
+
+        call.text = TextBoundary.head(combined, 65536)
+        call.truncated = call.text.length < combined.length
+      }
+      call.tail = TextBoundary.tail(call.tail + chunk, 65536)
     }
     if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
       const previous = call.session.tools.get(update.toolCallId)
@@ -314,20 +329,22 @@ export class AcpChild {
       }
       call.session.tools.set(update.toolCallId, tracked)
       if (update.sessionUpdate === "tool_call") call.calls++
-      call.tail = (
+      call.tail = TextBoundary.tail(
         call.tail +
         "\n" +
         [tracked.kind, tracked.title, tracked.status].filter(Boolean).join(": ") +
-        "\n"
-      ).slice(-65536)
+        "\n",
+        65536,
+      )
     }
     if (update.sessionUpdate === "plan")
-      call.tail = (
+      call.tail = TextBoundary.tail(
         call.tail +
         "\n" +
         update.entries.map((entry) => entry.status + ": " + entry.content).join("\n") +
-        "\n"
-      ).slice(-65536)
+        "\n",
+        65536,
+      )
     if (update.sessionUpdate === "usage_update")
       call.usage = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))(
         JSON.stringify(update),
@@ -345,9 +362,11 @@ export class AcpChild {
     // One in-flight frame per call; intermediate deltas coalesce into the latest bounded tail.
     call.progress = (async () => {
       while (!call.canceled && this.current === call && !call.context.signal.aborted) {
-        const text = this.capture.redact(call.tail).slice(-16384)
+        const bytes = Buffer.from(this.capture.redact(call.tail))
+        const tail = TextBoundary.utf8Tail(bytes, 4096)
+        const text = bytes.length > 4096 ? tail.slice(tail.indexOf("\n") + 1) : tail
 
-        if (text === call.reported) return
+        if (!text || text === call.reported) return
 
         call.reported = text
         await report(text).catch(() => {})

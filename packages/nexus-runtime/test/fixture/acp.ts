@@ -71,6 +71,10 @@ const app = agent({name:"Fixture"})
   const prompt=ctx.params.prompt.map(part=>part.type==="text"?part.text:"").join("");
   await report("prompt",{prompt,session:id});
   const emit = text => ctx.client.notify("session/update",{sessionId:id,update:{sessionUpdate:"agent_message_chunk",content:{type:"text",text}}});
+  if(prompt==="output-bytes"||prompt==="output-lines"){
+    await emit(prompt==="output-bytes" ? "First line\\n"+"語".repeat(25000)+"\\nfinal progress" : "entry\\n".repeat(2000)+"omitted last line");
+    return {stopReason:"end_turn"};
+  }
   if(prompt==="cancelme"||prompt==="deadline"){
     await gate("late-"+process.pid+"-"+id);
     await emit("late output from canceled work");
