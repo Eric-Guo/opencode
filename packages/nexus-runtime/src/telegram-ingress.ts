@@ -2,7 +2,7 @@ import { executionSnapshot, repairTaskKey } from "./execution"
 import { createHash } from "node:crypto"
 import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
-import { APIError, MalformedResponse, TransportError, type JsonValue } from "@cybros/agent"
+import { APIError, MalformedResponse, TransportError, type Input, type JsonValue } from "@cybros/agent"
 import type { Nexus } from "@opencode/schema/nexus"
 import type { NexusApplication } from "./application"
 import { StoreDocument } from "./document"
@@ -16,12 +16,8 @@ import {
   telegramChunks,
   telegramBytes,
 } from "./telegram-api"
-import {
-  telegramConversationCommand,
-  telegramMemoryCommand,
-  telegramSessionSwitch,
-  telegramTrackConversations,
-} from "./telegram-commands"
+import { telegramConversationCommand, telegramSessionSwitch, telegramTrackConversations } from "./telegram-commands"
+import { conversationMemory } from "./memory-commands"
 import { telegramSetup } from "./telegram-setup"
 import { telegramJob, telegramTime } from "./telegram-schedules"
 import { telegramJobDiscovery } from "./telegram-job-discovery"
@@ -29,9 +25,9 @@ import { telegramParticipate } from "./telegram-participation"
 import { telegramWorkers } from "./telegram-workers"
 import { telegramCandidates, telegramExecution } from "./telegram-candidates"
 import { publishedArtifacts } from "./published-artifacts"
-import { telegramRender } from "./telegram-render"
+import { telegramPreview, telegramRender } from "./telegram-render"
 import { TelegramTransport } from "./telegram-transport"
-import { TelegramProgress } from "./telegram-progress"
+import { TelegramProgress, telegramAction } from "./telegram-progress"
 import { telegramMenu, telegramHelp } from "./telegram-menu"
 import {
   TelegramConnectionState,
@@ -44,6 +40,7 @@ import {
 
 const Identity = Schema.Struct({ id: Schema.Int, username: Schema.String, is_bot: Schema.Literal(true) })
 const Bot = Schema.Struct({
+  configuration: Schema.optional(Schema.Struct({ default_model: Schema.optional(Schema.NullOr(Schema.String)) })),
   settings: Schema.Struct({
     audience: Schema.Literals(["owner", "external"]),
     welcome_message: Schema.NullOr(Schema.String),
@@ -54,6 +51,8 @@ const Selected = Schema.Struct({
   selected: Schema.Struct({ public_id: Schema.String, workspace_public_id: Schema.String }),
 })
 const Sent = Schema.Struct({ message_id: Schema.Int })
+const queueUsage =
+  "Use /queue list, /queue edit N TEXT, /queue cancel N, or /queue reschedule N in DURATION|at TIME|now."
 const File = Schema.Struct({ file_path: Schema.String, file_size: Schema.optional(Schema.Number) })
 type StateDocument = StoreDocument<TelegramState>
 
@@ -449,6 +448,61 @@ export class TelegramIngress {
     if (command || callback || answer || update.value.stopped_message_generation) {
       const action =
         callback?.[1] ?? (update.value.stopped_message_generation ? "stop" : answer ? "answer" : command?.name)
+      const argument = answer ? update.text : (command?.argument ?? "")
+      if (action === "queue" && (!argument || argument === "list")) {
+        if (!bot.current) {
+          await finish("No conversation is open.")
+          return
+        }
+        const target = { workspace: bot.current.workspace_public_id, conversation: bot.current.public_id }
+        const chat = this.application().client.workspace(target.workspace).conversation(target.conversation)
+        const result = await chat.inputs.list({ signal: this.signal }).catch(controlFailure)
+        if (typeof result === "string") {
+          await finish(result)
+          return
+        }
+        const visible = result.items.filter((input) => owner || queueOwner(state, route, update.requester, input))
+        const displayed: string[] = []
+        const lines: string[] = []
+        let length = 0
+
+        for (const row of visible) {
+          const details = [
+            row.state,
+            row.blocked_reason,
+            backgroundInput(row.origin)
+              ? "background result, read-only"
+              : row.state === "steering"
+                ? "cancel only"
+                : null,
+            row.attachments?.length ? row.attachments.length + " attachment(s)" : null,
+            row.deliver_at ? "not before " + row.deliver_at : null,
+          ].filter(Boolean)
+          const preview = telegramPreview((row.text ?? "").replace(/\s+/g, " ").trim(), 220) || "[No text]"
+          const line = lines.length + 1 + ". " + preview + " (" + details.join(", ") + ")\n   Input: " + row.public_id
+          length += line.length + 1
+          if (length > 11500) break
+
+          lines.push(line)
+          displayed.push(row.public_id)
+        }
+        const text = lines.length
+          ? "Waiting requests:\n" +
+            lines.join("\n") +
+            "\n" +
+            (displayed.length < visible.length ? "More requests are waiting.\n" : "") +
+            queueUsage
+          : "No requests are waiting in this conversation."
+
+        await finish(text, (current) => ({
+          ...current,
+          queue_selections: {
+            ...current.queue_selections,
+            [queueRoute(route, update.requester)]: { target, inputs: displayed },
+          },
+        }))
+        return
+      }
       const createJob = action === "job" && /^create\s/.test(command?.argument ?? "")
       if (
         state.control?.update === update.id &&
@@ -509,22 +563,10 @@ export class TelegramIngress {
         saved,
         update,
         action ?? "unknown",
-        answer ? update.text : (command?.argument ?? ""),
+        argument,
         callbackDelivery || reply,
         saved.control?.clock ?? now,
-      ).catch((error: unknown) => {
-        if (
-          error instanceof TransportError ||
-          error instanceof MalformedResponse ||
-          (error instanceof APIError && (error.status >= 500 || [408, 429].includes(error.status)))
-        )
-          throw error
-        return error instanceof APIError
-          ? "Command refused: " + error.status + "."
-          : error instanceof Error
-            ? error.message
-            : "Command unavailable."
-      })
+      ).catch(controlFailure)
       await finish(response)
       return
     }
@@ -1454,16 +1496,56 @@ export class TelegramIngress {
         (snapshot?.status ?? execution.blocked_reason ?? "Waiting for materialization")
       )
     }
-    if (action === "status")
-      return (
-        "Current conversation: " +
-        (bot.current?.public_id ?? "none") +
-        ". Pending sources: " +
-        state.batches.length +
-        ". Active work: " +
-        state.work.filter((row) => !row.terminal).length +
-        "."
+    if (action === "status") {
+      const issues = state.deliveries.filter(
+        (row) =>
+          sameRoute(row.route, route) &&
+          (owner || row.requester === update.requester) &&
+          (row.status === "uncertain" || row.status === "refused"),
+      ).length
+      if (!bot.current) return "Status: idle\nNo conversation is open.\nDelivery issues: " + issues + "."
+
+      const workspace = bot.current.workspace_public_id
+      const conversation = bot.current.public_id
+      const scope = this.application().client.workspace(workspace)
+      const chat = scope.conversation(conversation)
+      const options = { signal: this.signal }
+      const [info, inbox, space] = await Promise.all([
+        chat.fetch(options),
+        chat.inputs.list(options),
+        scope.fetch(options),
+      ])
+      const inputs = inbox.items.filter((input) => owner || queueOwner(state, route, update.requester, input))
+      const work = state.work.filter(
+        (row) =>
+          sameRoute(row.route, route) &&
+          row.target.workspace === workspace &&
+          row.target.conversation === conversation &&
+          (owner || row.requester === update.requester),
       )
+      const variant = info.active_turn_public_id
+        ? (await chat.turns.variants(info.active_turn_public_id, options)).items.find((row) => row.active)
+        : undefined
+      const run = variant?.run_public_id ? await scope.run(variant.run_public_id).fetch(options) : undefined
+      const blocked = inputs.some((row) => row.state === "blocked" && row.blocked_reason !== "run_held")
+      const pending = run?.tasks.filter((task) => task.status === "awaiting_input" || task.status === "needs_approval")
+
+      return [
+        "Conversation: " + conversation + (info.title ? " · " + telegramPreview(info.title, 120) : ""),
+        "Workspace: " + telegramPreview(space.name, 100) + " (" + workspace + ")",
+        "Next request model: " + (state.model ?? bot.configuration?.default_model ?? "Bot preset default"),
+        "Status: " + (blocked ? "blocked" : (run?.status ?? variant?.status ?? "idle")),
+        "Current action: " +
+          (blocked ? "Queued input needs attention in OpenCode" : run ? telegramAction(run) : "Waiting for work"),
+        "Queued: " + inputs.filter((row) => row.delivery_mode === "queue").length,
+        "Steering updates: " + inputs.filter((row) => row.delivery_mode === "steer").length,
+        "Blocked: " + inputs.filter((row) => row.state === "blocked").length,
+        "Pending decisions: " + (pending?.length ?? 0),
+        ...(work.length ? ["Recent task IDs:", ...work.slice(-10).map((row) => row.input)] : []),
+        "Delivery issues: " + issues + ".",
+        "Use /queue to view or change waiting requests.",
+      ].join("\n")
+    }
     if (action === "destinations") {
       if (!owner) return "Only the Bot owner can manage result destinations."
       return (
@@ -1566,45 +1648,53 @@ export class TelegramIngress {
       )
     if (action === "queue") {
       if (!bot.current) return "No conversation is open."
+      if (update.media || update.unsupportedMedia) return "Queue controls accept text only."
+
+      const match = /^(edit|cancel|reschedule)\s+([1-9][0-9]{0,9})(?:\s+([\s\S]+))?$/.exec(argument)
+      if (!match || (match[1] === "cancel" ? match[3] !== undefined : !match[3]?.trim())) return queueUsage
+      const timing =
+        match[1] !== "reschedule"
+          ? {}
+          : match[3] === "now"
+            ? { deliver_in: "0s" }
+            : { deliver_at: telegramTime(match[3], now) }
+      const selection = state.queue_selections?.[queueRoute(route, update.requester)]
+      if (
+        !selection ||
+        selection.target.workspace !== bot.current.workspace_public_id ||
+        selection.target.conversation !== bot.current.public_id
+      )
+        return "Use /queue to list this conversation's waiting requests first."
+
+      const id = selection.inputs[Number(match[2]) - 1]
+      if (!id) return "That number is outside the most recent list. Use /queue to refresh it."
+
       const chat = this.application()
-        .client.workspace(bot.current.workspace_public_id)
-        .conversation(bot.current.public_id)
-      const page = await chat.inputs.list({ signal: this.signal })
-      const allowed = page.items.filter(
-        (input) =>
-          owner || state.work.some((work) => work.input === input.public_id && work.requester === update.requester),
-      )
-      if (!argument) {
-        await document.change((state) => ({
-          ...state!,
-          queue: { ...state!.queue, [update.requester]: allowed.map((row) => row.public_id) },
-        }))
-        return (
-          allowed
-            .map(
-              (row, index) => String(index + 1) + ". " + row.public_id + " · " + row.state + " · " + (row.text ?? ""),
-            )
-            .join("\n") || "No waiting inputs."
-        )
-      }
-      const match = /^(edit|cancel|reschedule)\s+(\d+)(?:\s+([\s\S]*))?$/.exec(argument)
-      if (!match)
-        return "Use /queue, /queue edit N TEXT, /queue cancel N, or /queue reschedule N in DURATION|at TIME|now."
-      const selected = allowed.find((row) => row.public_id === state.queue?.[update.requester]?.[Number(match[2]) - 1])
-      if (!selected) return "Refresh /queue before selecting a waiting input."
+        .client.workspace(selection.target.workspace)
+        .conversation(selection.target.conversation)
+      const options = { signal: this.signal }
+      const selected = (await chat.inputs.list(options)).items.find((row) => row.public_id === id)
+      if (!selected || !["pending", "blocked", "steering"].includes(selected.state))
+        return "That request is no longer waiting. Use /queue to refresh the list."
+      if (backgroundInput(selected.origin)) return "Background result messages are read-only."
+      if (!owner && !queueOwner(state, route, update.requester, selected))
+        return "Only this request's sender or the Bot owner can edit or cancel it."
       if (match[1] === "cancel") {
-        await chat.inputs.delete(selected.public_id, { signal: this.signal })
-        return "Waiting input canceled."
+        await chat.inputs.delete(selected.public_id, options)
+        return "Waiting request " + match[2] + " canceled."
       }
-      await chat.inputs.update(
+      if (selected.state === "steering")
+        return "That instruction is waiting for the next model step. Use /queue cancel " + match[2] + " to cancel it."
+
+      const row = await chat.inputs.update(
         selected.public_id,
-        {
-          expected_lock_version: selected.lock_version,
-          ...(match[1] === "edit" ? { text: match[3] ?? "" } : { deliver_at: telegramTime(match[3] ?? "", now) }),
-        },
-        { signal: this.signal },
+        { expected_lock_version: selected.lock_version, ...(match[1] === "edit" ? { text: match[3] } : timing) },
+        options,
       )
-      return "Waiting input updated."
+      if (match[1] === "edit") return "Waiting request " + match[2] + " updated."
+      return (
+        "Waiting request " + match[2] + " rescheduled" + (row.deliver_at ? " for " + row.deliver_at : " for now") + "."
+      )
     }
     if (action === "job" || action === "remind") {
       if (update.media || update.unsupportedMedia) return "/job and /remind accept text only."
@@ -2013,13 +2103,17 @@ export class TelegramIngress {
       },
       { signal: this.signal },
     )
-    return telegramMemoryCommand(argument, {
-      application: this.application(),
-      workspace: bot.current.workspace_public_id,
-      conversation: bot.current.public_id,
-      speaker: speaker.public_id,
-      signal: this.signal,
-    })
+    const result = await conversationMemory(
+      this.application().client,
+      {
+        workspace: bot.current.workspace_public_id,
+        conversation: bot.current.public_id,
+        speaker: speaker.public_id,
+        command: argument,
+      },
+      this.signal,
+    )
+    return result.text
   }
 }
 
@@ -2028,6 +2122,41 @@ function key(...parts: (string | number)[]) {
 }
 function sameRoute(a: TelegramDelivery["route"], b: TelegramDelivery["route"]) {
   return a.connection === b.connection && a.chat === b.chat && a.topic === b.topic
+}
+function queueRoute(route: TelegramDelivery["route"], requester: string) {
+  return JSON.stringify([route.connection, route.chat, route.topic, requester])
+}
+
+function controlFailure(error: unknown) {
+  if (
+    error instanceof TransportError ||
+    error instanceof MalformedResponse ||
+    (error instanceof APIError && (error.status >= 500 || [408, 429].includes(error.status)))
+  )
+    throw error
+  return error instanceof APIError
+    ? "Command refused: " + error.status + "."
+    : error instanceof Error
+      ? error.message
+      : "Command unavailable."
+}
+
+function backgroundInput(origin: string) {
+  return origin === "task_result" || origin === "child"
+}
+
+function queueOwner(state: TelegramState, route: TelegramDelivery["route"], requester: string, input: Input) {
+  return state.work.some(
+    (row) =>
+      row.requester === requester &&
+      sameRoute(row.route, route) &&
+      (row.input === input.public_id ||
+        (input.delivery_mode === "steer" &&
+          "speaker_public_id" in input.speaker &&
+          row.speaker === input.speaker.speaker_public_id &&
+          input.expected_steering_run_public_id !== null &&
+          (row.execution?.run_public_id ?? row.draft?.run) === input.expected_steering_run_public_id)),
+  )
 }
 function enqueue(rows: readonly TelegramDelivery[], delivery: TelegramDelivery): TelegramDelivery[] {
   return rows.some((row) => row.id === delivery.id) ? [...rows] : [...rows, delivery]

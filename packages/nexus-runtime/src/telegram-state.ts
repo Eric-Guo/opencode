@@ -131,7 +131,9 @@ export const TelegramState = Schema.Struct({
       }),
     ),
   ),
-  queue: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
+  queue_selections: Schema.optional(
+    Schema.Record(Schema.String, Schema.Struct({ target: Locator, inputs: Schema.Array(Schema.String) })),
+  ),
   history: Schema.optional(
     Schema.Record(Schema.String, Schema.Struct({ position: Schema.Int, pending: Schema.Array(Schema.String) })),
   ),
