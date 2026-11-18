@@ -10,6 +10,71 @@ const Frame = Schema.Struct({
 const Ticket = Schema.Struct({ ticket: Schema.NonEmptyString })
 const Config = Schema.Struct({ environment: Schema.Struct({ orchestrationProtocolVersion: Schema.Literal(2) }) })
 
+export const T3Workspace = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("root"), branch: Schema.optional(Schema.String) }),
+  Schema.Struct({
+    type: Schema.Literal("existing_worktree"),
+    worktreePath: Schema.NonEmptyString,
+    branch: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("worktree"),
+    baseRef: Schema.NonEmptyString,
+    branch: Schema.optional(Schema.String),
+    startFromOrigin: Schema.optional(Schema.Boolean),
+  }),
+])
+export const T3Selection = Schema.Struct({ instanceId: Schema.String, model: Schema.String })
+const Message = { messageId: Schema.String, text: Schema.String, attachments: Schema.Array(Schema.MutableJson) }
+const Command = { threadId: Schema.String, commandId: Schema.String }
+const requests: Readonly<Record<string, Schema.Top>> = {
+  "server.getConfig": Schema.Record(Schema.String, Schema.MutableJson),
+  "orchestration.getThreadProjection": Schema.Struct({ threadId: Schema.String }),
+  "orchestration.getTurnItem": Schema.Struct({ threadId: Schema.String, itemId: Schema.String }),
+  "orchestration.getFullThreadDiff": Schema.Struct({
+    threadId: Schema.String,
+    toTurnCount: Schema.Number,
+    ignoreWhitespace: Schema.optional(Schema.Boolean),
+  }),
+  "orchestration.launchThread": Schema.Struct({
+    ...Command,
+    projectId: Schema.String,
+    title: Schema.String,
+    modelSelection: T3Selection,
+    runtimeMode: Schema.Literal("approval-required"),
+    interactionMode: Schema.Literal("default"),
+    workspaceStrategy: T3Workspace,
+    initialMessage: Schema.Struct(Message),
+  }),
+  "orchestration.dispatchCommand": Schema.Union([
+    Schema.Struct({
+      ...Command,
+      ...Message,
+      type: Schema.Literal("message.dispatch"),
+      createdBy: Schema.Literal("agent"),
+      creationSource: Schema.Literal("server"),
+      dispatchMode: Schema.Union([
+        Schema.Struct({ type: Schema.Literal("start_immediately") }),
+        Schema.Struct({ type: Schema.Literal("steer_active"), targetRunId: Schema.String }),
+      ]),
+    }),
+    Schema.Struct({
+      ...Command,
+      type: Schema.Literal("run.interrupt"),
+      runId: Schema.String,
+      holdQueue: Schema.Literal(true),
+      reason: Schema.String,
+    }),
+    Schema.Struct({
+      ...Command,
+      type: Schema.Literal("runtime-request.respond"),
+      requestId: Schema.String,
+      decision: Schema.optional(Schema.Literals(["accept", "decline"])),
+      answers: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
+    }),
+  ]),
+}
+
 export class T3Uncertain extends Error {}
 
 /** Every exchange authenticates afresh. A lost mutation response is never retried here. */
@@ -41,6 +106,12 @@ export class T3Transport {
 
   async call(method: string, payload: object, signal: AbortSignal): Promise<JsonValue> {
     const active = AbortSignal.any([signal, AbortSignal.timeout(30000)])
+    signal.throwIfAborted()
+    if (!Object.hasOwn(requests, method)) throw new Error("Unsupported T3 RPC method.")
+    if (!Schema.is(requests[method]!)(payload)) throw new Error("Invalid T3 RPC payload.")
+    const business = JSON.stringify({ _tag: "Request", id: "1", tag: method, payload, headers: [] })
+    if (Buffer.byteLength(business) > 4 * 1024 * 1024) throw new Error("T3 request exceeded the 4 MiB bound.")
+
     const ticket = Schema.decodeUnknownSync(Ticket)(
       await this.http(
         "POST",
@@ -67,19 +138,29 @@ export class T3Transport {
 
     try {
       return await new Promise<JsonValue>((resolve, reject) => {
+        const fail = (reason: unknown) => {
+          socket.removeAllListeners("message")
+          reject(reason)
+        }
         const unavailable = () =>
-          reject(
+          fail(
             state.sent
               ? new T3Uncertain("T3 RPC response was unavailable; reconcile the existing work.")
               : new Error("T3 RPC connection failed."),
           )
-        abort = () => reject(active.reason)
+        abort = () => (signal.aborted ? fail(signal.reason) : unavailable())
         active.addEventListener("abort", abort, { once: true })
         socket.once("close", unavailable)
         socket.once("error", unavailable)
-        const send = (id: string, tag: string, body: object) =>
-          socket.send(JSON.stringify({ _tag: "Request", id, tag, payload: body, headers: [] }))
-        socket.once("open", () => send("0", "server.getConfig", {}))
+        const incompatible = () => fail(new Error("T3 requires orchestration protocol-2."))
+        socket.once("unexpected-response", (_request, response) => {
+          response.destroy()
+          if (response.statusCode === 426) incompatible()
+          else unavailable()
+        })
+        socket.once("open", () =>
+          socket.send(JSON.stringify({ _tag: "Request", id: "0", tag: "server.getConfig", payload: {}, headers: [] })),
+        )
         socket.on("message", (data) => {
           try {
             const message = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(data.toString())
@@ -90,20 +171,22 @@ export class T3Transport {
                 continue
               }
               if (frame._tag === "Pong") continue
-              if (frame._tag !== "Exit" || frame.exit?._tag !== "Success") throw new Error("T3 refused the operation.")
-              if (frame.requestId === "0") {
-                Schema.decodeUnknownSync(Config)(frame.exit.value)
-                if (method === "server.getConfig") {
-                  resolve(frame.exit.value ?? null)
-                  continue
-                }
-                state.sent = true
-                send("1", method, payload)
-              }
-              if (frame.requestId === "1") resolve(frame.exit.value ?? null)
+              if (
+                frame._tag !== "Exit" ||
+                frame.requestId !== (state.sent ? "1" : "0") ||
+                frame.exit?._tag !== "Success"
+              )
+                return unavailable()
+              if (state.sent) return resolve(frame.exit.value ?? null)
+              if (!Schema.is(Config)(frame.exit.value)) return incompatible()
+              if (method === "server.getConfig") return resolve(frame.exit.value ?? null)
+
+              state.sent = true
+              // Only the next WebSocket message can answer the request we are sending now.
+              return socket.send(business)
             }
           } catch {
-            reject(new Error("T3 returned an invalid or incompatible protocol-2 response."))
+            unavailable()
           }
         })
         if (active.aborted) abort()

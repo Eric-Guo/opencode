@@ -74,7 +74,7 @@ export class DevelopmentStreams {
     }
     row.touched = performance.now()
     const events = row.events.filter((event) => event.sequence > reader.after)
-    const lost = Math.max(0, (row.events[0]?.sequence ?? row.sequence + 1) - reader.after - 1)
+    const lost = row.sequence - reader.after - events.length
     reader.after = row.sequence
     return {
       events: events.map((event) => event.value),
