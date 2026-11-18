@@ -3,6 +3,14 @@ import { createHash } from "node:crypto"
 import { copyFile, mkdir, open } from "node:fs/promises"
 import { dirname, join } from "node:path"
 
+export function bashResultText(content: string, exit: number | null, timeout?: number) {
+  if (timeout !== undefined)
+    return [content, "Command timed out after " + timeout + " seconds"].filter(Boolean).join("\n\n")
+
+  const body = content || "(no output)"
+  return exit === null || exit === 0 ? body : body + "\n\nCommand exited with code " + exit
+}
+
 /** Render Rho's fixed tail window from OpenCode's complete, file-backed shell capture. */
 export async function bashOutput(
   path: string,
