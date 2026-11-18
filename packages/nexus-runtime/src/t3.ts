@@ -472,12 +472,15 @@ export class T3Client {
         )
         return { entry: receipt.store_entry, value }
       })())
+    // The claim key recovers an already accepted launch. Explicit continuations can only keep its selection.
     if (
-      (input.agent &&
+      prior &&
+      input.work_id &&
+      ((input.agent &&
         ![work.value.selection.agent, work.value.selection.harness].some(
           (name) => name.toLowerCase() === input.agent!.toLowerCase(),
         )) ||
-      (input.model && input.model !== work.value.selection.model)
+        (input.model && input.model !== work.value.selection.model))
     )
       throw new Error("Existing coding work retains its original agent and model.")
 
