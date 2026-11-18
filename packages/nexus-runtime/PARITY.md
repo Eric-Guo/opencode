@@ -9,14 +9,12 @@ need neither that checkout nor Ruby.
 The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` covers
 ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
 
-The November 17, 2026 reviews rechecked the eleven executable non-WebUI packages
-against their production TypeScript owners and local conformance evidence. The
-latest passes corrected search result framing, output budgeting, subprocess cleanup,
-nullable skill names, portable executable lookup and editor filesystem failures.
-The complete runtime gate passes 360 tests across 71 files, including file-mutation
-queue, editor response and interruption regressions, a minified Node search regression and real headless
-Chromium, PTY and WebRTC transports. Details and live
-verification are recorded in the final sections below.
+The latest review traced the eleven executable non-WebUI packages through their
+production TypeScript entry points and conformance suites. It corrected newest-turn
+selection, Telegram history controls and candidate recovery, and web and T3 output
+limits. The runtime gate passes 366 tests across 71 files, including real Chromium,
+PTY and WebRTC transports. The final sections record the behavioral changes and
+live verification.
 
 ## Application and executor
 
@@ -843,3 +841,47 @@ and the capture downloaded from Nexus contained its metadata. The workspace,
 uploads, Agent and both credentials were retired. The 360-test Chromium, PTY
 and WebRTC conformance gate, both runtime type checks, runtime build and root
 `bun run check` passed.
+
+## Conversation history, Telegram, and output review, November 18, 2026
+
+The TypeScript entry points and reference test anchors above were checked at
+Cybros `3e5d0877da1`. The managed runtime composes the shared application and
+executor. The optional tool and ingress surfaces register through the runtime's
+extension manager. The CLI starts the ACP peer, and the development extension
+calls the shared application operations. The ACP PDF, delegated attachment, and
+claim reader tests cover the production delta from `f5e4899094`.
+
+- `rho` and `rho-dev` use an exclusive reverse window when resolving idle
+  results and the regeneration tail. The model inheritance test crosses a
+  100-turn page boundary after finding no qualifying reply in the newest page.
+  Forward cursor consumers still advance from their saved position.
+- `rho-ingress-telegram` validates history controls before turn lookup. The
+  ingress test checks queued input after malformed and refused commands and
+  retries a lost fork response with the original workspace, turn, variant and
+  key after the conversation advances. Context preview uses the requesting
+  speaker and selected Bot. Participation requires the observed message in the
+  rendered recent window. Workers resolve their exact active turn. Candidate
+  recovery uses the regeneration receipt, the returned variant, or matching
+  edit lineage as appropriate. The tests cover a refused candidate watch and a
+  lost response with an unrelated candidate in the deck.
+- `rho-env` whole-line output limits now share one TypeScript implementation
+  across `rho-web-tools`, `rho-acp-client` and `rho-t3`. Web fetch counts a
+  final line terminator separately from the output window. Operator raw output
+  and uploaded captures retain the full rendered text. T3 publishes the full
+  report, keeps the inline result within the budget, and exposes model,
+  worktree, branch, pending questions and any diff limitation in its summary.
+  The T3 peer tests cover a multibyte report, omitted command output, an
+  unavailable diff, and pending question options.
+
+Live development Nexus at `http://localhost:3000` reproduced the default
+turn-index page selecting the first turn of an idle conversation. With patched
+source based on `ac2083b9118`, the scratch conversation's first turn was
+`01a1ecb0-3021-70a3-964a-2658eed0acdd`. Target and result both selected the
+second turn, `01a1ecb0-3070-7118-82c6-d0c026127d04`. Regeneration completed
+on that turn as candidate `01a1ecb0-3ceb-75fe-87a5-840923e603fd`, which the
+next result reported. The scratch workspace and conversation were removed.
+The installed OpenCode service continued running on its existing build.
+
+The runtime conformance gate, both runtime type checks and build, CLI and
+Server adapter tests, and root `bun run check` passed. Telegram and T3 used
+local protocol peers for integration coverage.

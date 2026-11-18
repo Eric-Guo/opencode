@@ -20,14 +20,24 @@ export async function telegramWorkers(
   for (const root of roots) {
     const chat = application.client.workspace(root.target.workspace).conversation(root.target.conversation)
     const children = await chat.children({}, { signal })
-    for (const child of children.items.filter((child) => child.active_turn_public_id)) {
-      const turn = (
-        await application.client
-          .workspace(root.target.workspace)
-          .conversation(child.public_id)
-          .turns.list({ limit: 1 }, { signal })
-      ).items[0]
-      if (!turn?.input_public_id || turn.sender_conversation_public_id !== root.target.conversation) continue
+    for (const child of children.items) {
+      if (!child.active_turn_public_id) continue
+
+      const turn = await application.client
+        .workspace(root.target.workspace)
+        .conversation(child.public_id)
+        .turns.fetch(child.active_turn_public_id, undefined, { signal })
+        .catch((error: unknown) => {
+          if (error instanceof APIError && [403, 404, 410].includes(error.status)) return null
+          throw error
+        })
+      if (
+        !turn?.input_public_id ||
+        turn.kind !== "direct_reply" ||
+        turn.inherited ||
+        turn.sender_conversation_public_id !== root.target.conversation
+      )
+        continue
       const owner = state.work.find((work) => work.execution?.run_public_id === turn.sender_run_public_id)
       if (!owner) continue
       await document.change((state) => ({
