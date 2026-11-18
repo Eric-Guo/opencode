@@ -73,9 +73,9 @@ export class Bots {
     this.admissions = admissions ?? new InputAdmissions(member)
   }
 
-  async command(command: NexusBot.Command) {
+  async command(command: NexusBot.Command, options?: { signal: AbortSignal }) {
     if (command.action === "bot.submit") return this.submit(command)
-    const agents = (await this.member.profile.agents.list()).filter(
+    const agents = (await this.member.profile.agents.list(options)).filter(
       (agent) => agent.scope === "instance" && agent.name.startsWith("bot-"),
     )
 
@@ -122,12 +122,19 @@ export class Bots {
       return null
     }
     if (command.action === "bot.history")
-      return this.member.conversations.list({
-        archived: command.archived ?? true,
-        after: command.after,
-        metadata_key: "opencode.bot",
-        metadata_value: agent.public_id,
-      })
+      return this.member.conversations.list(
+        {
+          archived: command.archived,
+          after: command.after,
+          limit: command.limit,
+          answering_user_public_id: agent.public_id,
+          metadata_key: "opencode.bot",
+          metadata_value: agent.public_id,
+          order_by: "last_activity_at",
+          order: "desc",
+        },
+        options,
+      )
     if (command.action === "bot.configure") {
       return this.serial(agent.public_id, async () => {
         await this.recover(agent.public_id)

@@ -1,5 +1,5 @@
 import { TURN_POSITION_CEILING } from "./history"
-import { executionSnapshot } from "./execution"
+import { executionSnapshot, repairTaskKey } from "./execution"
 import { Schema } from "effect"
 import {
   APIError,
@@ -224,7 +224,7 @@ export const Operation = Schema.Union([
     limit: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
   }),
   Schema.Struct({
-    action: Schema.Literals(["task", "abandon", "task.cancel", "task.compact", "request"]),
+    action: Schema.Literals(["task", "task.cancel", "task.compact", "request"]),
     ...Task,
   }),
   Schema.Struct({ action: Schema.Literal("terminal.realtime"), ...Task }),
@@ -242,8 +242,14 @@ export const Operation = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("deny"), ...Task, reason: Schema.optional(Schema.String) }),
   Schema.Struct({
+    action: Schema.Literal("abandon"),
+    ...Run,
+    task: Schema.optional(Schema.NonEmptyString),
+  }),
+  Schema.Struct({
     action: Schema.Literal("retry"),
-    ...Task,
+    ...Run,
+    task: Schema.optional(Schema.NonEmptyString),
     model: Schema.optional(Schema.String),
     reasoning_effort: Schema.optional(Schema.String),
     reasoning_enabled: Schema.optional(Schema.Boolean),
@@ -761,6 +767,20 @@ export class Operations {
       if (input.action === "transcript")
         return run.transcript({ before: input.before, prefix: input.prefix, limit: input.limit }, options)
 
+      if (input.action === "retry" || input.action === "abandon") {
+        const task = run.task(input.task ?? repairTaskKey(info))
+
+        if (input.action === "abandon") return task.abandon(options)
+
+        return task.retry(
+          {
+            model: input.model,
+            reasoning_effort: input.reasoning_effort,
+            reasoning_enabled: input.reasoning_enabled,
+          },
+          options,
+        )
+      }
       if ("task" in input) {
         const task = run.task(input.task)
 
@@ -796,22 +816,12 @@ export class Operations {
           return { task: result, grant: failure ? { refused: failure } : grant }
         }
         if (input.action === "deny") return task.deny(input.reason, options)
-        if (input.action === "retry")
-          return task.retry(
-            {
-              model: input.model,
-              reasoning_effort: input.reasoning_effort,
-              reasoning_enabled: input.reasoning_enabled,
-            },
-            options,
-          )
         if (input.action === "answer")
           return task.resolve(
             { content: input.content, resolution_token: input.token, outcome: input.outcome },
             options,
           )
         if (input.action === "resolve") return task.resolve({ answer: input.answer }, options)
-        if (input.action === "abandon") return task.abandon(options)
         if (input.action === "task.cancel") return task.cancel(options)
         if (input.action === "task.compact") return task.compact(options)
         if (input.action === "request") return task.request(options)
