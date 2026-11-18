@@ -270,7 +270,14 @@ opencode nexus manage --json '{"action":"preset.list"}'
 opencode nexus manage --json '{"action":"preset.create","value":{"name":"Writer","description":"Draft reports","configuration":{"system_prompt":"Draft clear reports.","fallback_models":[]}}}'
 opencode nexus manage --json '{"action":"bot.create","name":"assistant","description":"Personal assistant","settings":{"home_workspace_public_id":"WORKSPACE_ID"}}'
 opencode nexus manage --json '{"action":"bot.list"}'
+opencode nexus manage --json '{"action":"application.memory","conversation":"CONVERSATION_ID","command":"grep project decisions"}'
 ```
+
+`application.memory` shares the Telegram commands `ls [PATH]`, `read PATH`,
+`write PATH TEXT`, `edit JSON`, `grep PATTERN` and `delete PATH`. Use `workspace`
+for a conversation outside the paired workspace and `speaker` to select an ingress
+Speaker. The CLI prints text by default. Set `format` to `json` for the underlying
+records. Each mutation carries the collection, document and version preconditions.
 
 Preset commands cover read, replacement, duplication, removal, portable JSON and Markdown import/export, role publication and atomic application defaults. Bot commands cover settings, identity,
 duplication, history, current/new/resume/fork, atomic Home-workspace switches and submission. Reading a Bot never

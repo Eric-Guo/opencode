@@ -11,11 +11,10 @@ ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
 The reference revision after that production change updates Ruby lockfiles.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The latest review corrected Telegram history, search and
-session changes, T3 control validation, browser input, oversized file reads
-and development prompt preview. The runtime gate passes 372 tests across 71
-files, including Chromium, PTY and WebRTC. The final sections record the
-behavioral changes and live verification.
+contract tests below. The latest review covered conversation memory, Telegram
+queue controls, T3 model selection and browser deadlines. The runtime gate passes
+376 tests across 72 files, including Chromium, PTY and WebRTC. The final
+sections record the behavioral changes and live verification.
 
 ## Application and executor
 
@@ -1010,3 +1009,61 @@ execution, and the model returned the UUID printed by bash. Telegram's history
 formatter retrieved that answer from Nexus. Telegram transport and T3 used
 local protocol peers. The scratch Agents, workspaces and files were removed.
 The elected OpenCode service kept its existing pairing and default workspace.
+
+## Conversation memory, Telegram queue, T3 and browser review
+
+- `rho/test/memory_commands_projection_test.rb` maps to `memory-commands.ts`,
+  `memory-commands.test.ts` and the runtime's `application.memory` adapter.
+  Telegram and the management CLI share the SDK operations. A first write
+  prepares an unallocated Speaker default under its owner, then verifies the
+  same binding before writing. Existing documents retain the identity and
+  version from the read. Conflicts surface without replay.
+- `rho-ingress-telegram/test/queue_workflow_test.rb` maps to `telegram-ingress.ts`
+  and `telegram.test.ts`. Numbered replies and their input IDs commit together.
+  An older unscoped selection requests a new list. Status reads the bound
+  conversation and queue without altering the numbered selection.
+- `rho-t3/test/work_test.rb` maps to `t3.ts` and `t3.test.ts`. A new assignment
+  accepts the catalog's model alias. Claim-key recovery uses the accepted
+  selection and launch receipt. An explicit continuation retains the
+  original work's model and provider.
+- `rho-browser/test/tools_test.rb` and `session_popups_test.rb` map to
+  `browser.ts`, `browser-session.ts` and `browser.test.ts`. A driver failure
+  or browser deadline returns a tool error. A caller abort still cancels
+  the call. Chromium tests verify tab replacement and surviving tabs.
+
+Development Nexus verified first-write Speaker allocation, exact edit, grep
+and stale-version refusal through the built runtime. The production Telegram
+ingress used a loopback Telegram peer with a real Nexus Bot, conversation and
+deferred inputs. Queue status, reordering, edit and cancellation after an
+ingress restart all passed. The edit preserved the original delivery time.
+Scratch documents, collections, conversations, queue inputs, Bots, workspaces
+and Store entries were removed. The installed service remained ready. T3 used
+an authenticated loopback peer.
+
+The runtime conformance suite passed 376 tests and the shared Code Mode suite
+passed 1,694. Both runtime type checks and the build passed. Client generation
+ran from `packages/client`. The client, CLI, server and Protocol checks passed,
+along with 404 Nexus UI unit tests and root `bun run check`. The source CLI
+verified plain-text and JSON management output against a local HTTP peer.
+
+### Rebuilt elected service
+
+OpenCode `v0.0.0-dev-202611181546` verified all six conversation memory
+commands against development Nexus. The installed CLI performed the first
+Speaker write and printed plain text. The management API exercised exact
+edit, grep, read, delete and JSON output. Nexus refused an update using
+the previously observed revision.
+
+The elected service temporarily used an authenticated loopback T3 peer.
+A durable delegation resolved the model alias to its canonical ID, recovered
+the dropped launch response and recorded one native launch after admission
+replay. A conflicting continuation failed before it could dispatch. T3
+configuration and publication returned to their original disabled state.
+
+The production Telegram ingress ran separately with a loopback Telegram
+peer and live Nexus. It listed deferred inputs, retained their numbered
+selection across reordering and restart, preserved the due time on edit,
+rescheduled the selected input and canceled the other one. The isolated
+Chromium suite passed five tests covering browser failures, deadlines,
+cancellation and tab ownership. Scratch workspaces and conversations
+were removed, and the elected service remained ready.
