@@ -9,7 +9,60 @@ import { ExtensionManager } from "../src/extension-manager"
 import { register } from "../dev/extension"
 import descriptor from "../dev/extension.json"
 import { storeFixture } from "./fixture/store"
-import { conversationFixture, inputFixture } from "./fixture/conversation"
+import { conversationFixture, inputFixture, turnFixture } from "./fixture/conversation"
+
+test("idle target, result and regeneration use the latest turn in a multi-turn conversation", async () => {
+  const active = { public_id: "original", source: "original", status: "completed", content: "Latest", active: true }
+  const queries: (string | null)[] = []
+  const fixture = storeFixture((request) => {
+    const url = new URL(request.url)
+    if (url.pathname.endsWith("/conversations/conversation"))
+      return Response.json({ conversation: conversationFixture() })
+    if (url.pathname.endsWith("/turns")) {
+      const before = url.searchParams.get("before_position")
+      queries.push(before)
+      const position = before ? 1 : 0
+      return Response.json({
+        turns: [turnFixture(position, { kind: "direct_reply", active_variant: active })],
+        pagination: { before_position: position, after_position: position },
+      })
+    }
+    if (url.pathname.endsWith("/turns/turn-1/variants"))
+      return Response.json({ turn: { public_id: "turn-1", inherited: false }, variants: [active] })
+    if (url.pathname.endsWith("/events"))
+      return Response.json({ events: [], pagination: { next_after: null, watermark: 0 } })
+    if (url.pathname.endsWith("/regeneration_receipt"))
+      return Response.json({ error: { code: "not_found" } }, { status: 404 })
+    if (url.pathname.endsWith("/turns/turn-1/regeneration"))
+      return Response.json(
+        { turn: { public_id: "turn-1", status: "pending" }, variant: { ...active, public_id: "regenerated" } },
+        { status: 202 },
+      )
+  })
+  const app = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+  )
+  try {
+    expect(
+      await app.operations.command({ action: "target", host: "conversation", host_type: "conversation" }),
+    ).toMatchObject({ turn: "turn-1", variant: "original" })
+    expect(await app.operations.command({ action: "result", conversation: "conversation" })).toMatchObject({
+      execution: { turn_public_id: "turn-1", variant_public_id: "original" },
+      content: "Latest",
+    })
+    await expect(
+      app.operations.command({ action: "regenerate", conversation: "conversation", turn: "turn-0", key: "old" }),
+    ).rejects.toThrow("tail turn")
+    expect(
+      await app.operations.command({ action: "regenerate", conversation: "conversation", turn: "turn-1", key: "new" }),
+    ).toMatchObject({ turn_public_id: "turn-1", variant: { public_id: "regenerated" } })
+    expect(queries).toEqual(Array(4).fill("2147483647"))
+  } finally {
+    fixture.server.stop(true)
+  }
+})
 
 test("terminal runs capture placement, ask for approval and return before the shell exits", async () => {
   const requests: { path: string; method: string; body?: unknown; key: string | null }[] = []
