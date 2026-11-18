@@ -15,6 +15,7 @@ import type { RunnerContext } from "./extensions"
 import { outputHead } from "./output-window"
 
 const CAP = 5 * 1024 * 1024
+const ACTIONABLE_URL_BYTES = 8190
 const INVISIBLE = /[\u200B-\u200F\u2028-\u202E\u2060-\u2064\uFEFF\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
 export type WebOptions = {
   allowPrivateNetwork?: boolean
@@ -157,13 +158,14 @@ export async function webFetch(
             next.hostname.replace(/^www\./, "") === initial.hostname.replace(/^www\./, "")
 
           if (!same || hop === 3) {
-            details.final_url = next.href.length <= 8190 ? next.href : null
+            details.final_url = Buffer.byteLength(next.href) <= ACTIONABLE_URL_BYTES ? next.href : null
             return {
               is_error: true,
-              content:
-                hop === 3
-                  ? "Too many redirects (maximum 3)."
-                  : "Redirect to another site. Request this URL separately: " + shorten(next.href, 8190),
+              content: same
+                ? "Too many redirects (maximum 3)."
+                : details.final_url
+                  ? "Redirect to another site. Request this URL separately: " + details.final_url
+                  : "Redirect to another site. The target URL is too long: " + shorten(next.href, ACTIONABLE_URL_BYTES),
               structured_content: details,
             }
           }
@@ -172,10 +174,14 @@ export async function webFetch(
             const delay = /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now()
             if (!Number.isFinite(delay)) {
               details.status = null
-              details.final_url = next.href.length <= 8190 ? next.href : null
+              details.final_url = Buffer.byteLength(next.href) <= ACTIONABLE_URL_BYTES ? next.href : null
               return {
                 is_error: true,
-                content: `The server's Retry-After is not a number of seconds or an HTTP date. Request this URL separately: ${shorten(next.href, 8190)}`,
+                content: details.final_url
+                  ? "The server's Retry-After is not a number of seconds or an HTTP date. Request this URL separately: " +
+                    details.final_url
+                  : "The server's Retry-After is not a number of seconds or an HTTP date. The target URL is too long: " +
+                    shorten(next.href, ACTIONABLE_URL_BYTES),
                 structured_content: details,
               }
             }
@@ -426,5 +432,9 @@ function shorten(value: string, bytes: number) {
   const line = value.replace(/[\r\n\t]/g, " ").replace(INVISIBLE, "")
   const encoded = Buffer.from(line)
   if (encoded.length <= bytes) return line
-  return new TextDecoder().decode(encoded.subarray(0, bytes - 3), { stream: true }) + "…"
+  const marker = (omitted: number) => " …(" + omitted + " more bytes)"
+  const kept = new TextDecoder().decode(encoded.subarray(0, bytes - Buffer.byteLength(marker(encoded.length))), {
+    stream: true,
+  })
+  return kept + marker(encoded.length - Buffer.byteLength(kept))
 }

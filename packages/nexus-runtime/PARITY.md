@@ -10,11 +10,11 @@ The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` covers
 ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
 
 The latest review traced the eleven executable non-WebUI packages through their
-production TypeScript entry points and conformance suites. It corrected newest-turn
-selection, Telegram history controls and candidate recovery, and web and T3 output
-limits. The runtime gate passes 366 tests across 71 files, including real Chromium,
-PTY and WebRTC transports. The final sections record the behavioral changes and
-live verification.
+production TypeScript entry points and conformance suites. It corrected one-shot
+run reporting, task repair selection, Bot and Telegram session history, MCP
+documents and captures, and web redirect results. The runtime gate passes 368
+tests across 71 files, including real Chromium, PTY and WebRTC transports. The
+final sections record the behavioral changes and live verification.
 
 ## Application and executor
 
@@ -885,3 +885,50 @@ The installed OpenCode service continued running on its existing build.
 The runtime conformance gate, both runtime type checks and build, CLI and
 Server adapter tests, and root `bun run check` passed. Telegram and T3 used
 local protocol peers for integration coverage.
+
+## Run reporting, session history and capture review, November 18, 2026
+
+- `rho` one-shot runs stop their conversation when an unattended approval denial
+  is refused. The result reports `needs_person` and counts confirmed denials.
+  The conversation event feed supplies model switches and refusals from the
+  accepted execution and its fallback variants. The print mode reports switches
+  on stderr. `run.test.ts` exercises denial failure, a transient event-read
+  failure, duplicate event delivery and an unrelated run.
+- `rho-dev`, `rho-acp` and `rho-ingress-telegram` share selection of unresolved
+  tasks for keyless retry and abandon, including model cost-limit holds.
+  `operations.test.ts` exercises empty and ambiguous selections, the cost-limit
+  exception and explicit task keys through the development extension.
+- Bot history uses the current Nexus visibility rules and lists roots by
+  recent activity. The shared command accepts `limit` from 1 to 100 and includes
+  both active and archived conversations when `archived` is omitted. Telegram
+  persists cursors and displayed conversation locations by chat and topic. A
+  resumed update reuses its saved workspace, conversation and operation key.
+  `telegram.test.ts` exercises the production ingress and Bot mutation owner.
+- `rho-mcp` reads the selected server's prompt catalog during staging and probe
+  through OpenCode's connected MCP client. A cached catalog can still be loading
+  at that point. Tool results, prompts and resources share the media capture
+  path. A capture names the local file and publishes the same bytes as a Nexus
+  resource link. Empty text falls back to redacted structured content.
+  `mcp.test.ts` and `mcp-session.test.ts` exercise curation, result mapping and
+  the tool, prompt and resource paths against a loopback protocol peer.
+- `rho-web-tools` reports a cross-site redirect encountered at the hop limit
+  with its actionable destination. Overlong targets include the omitted byte
+  count. `web.test.ts` exercises regular tool output and operator raw output.
+
+The conformance gate covered the existing `rho-env` claims, filesystem and
+terminal paths, native `rho-codemode` operations, `rho-browser` Chromium
+actions, `rho-acp-client` stdio delegation and the `rho-t3` protocol peer.
+The runtime build and both type checks, root check, CLI and Server adapters,
+Protocol identifier check, 265 client tests and 76 Nexus UI bridge tests
+passed. The three focused OpenCode MCP suites passed 169 tests. Client
+artifacts were regenerated from the Protocol change.
+
+Against development Nexus at `http://localhost:3000`, the patched source
+paged active and archived Bot conversations and replayed a resume receipt.
+The source runtime announced a loopback MCP prompt and completed a durable
+MCP task whose PDF matched on disk and when downloaded from Nexus. It also
+completed a Human-approved native Code Mode request with one bash execution.
+The installed OpenCode service at `07241c7d0aa` independently verified one
+bash execution, matching downloaded bytes and structured `false`. Temporary
+workspaces, Bots, source Agents, MCP captures and local files were cleaned up.
+Telegram and T3 verification used local protocol peers.

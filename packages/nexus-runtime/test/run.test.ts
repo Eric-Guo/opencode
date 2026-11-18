@@ -16,12 +16,21 @@ for (const scenario of [
   "addressed",
   "running-approval",
   "running-ask",
+  "refused-denial",
+  "fallback-report",
 ])
   test("one-shot run correlates its input and returns " + scenario, async () => {
     const status =
-      scenario === "addressed" ? "completed" : scenario.startsWith("running-") ? scenario.slice(8) : scenario
+      scenario === "refused-denial"
+        ? "approval"
+        : ["addressed", "fallback-report"].includes(scenario)
+          ? "completed"
+          : scenario.startsWith("running-")
+            ? scenario.slice(8)
+            : scenario
     const conversation = conversationFixture(scenario === "addressed" ? { answering_user_public_id: "peer" } : {})
     const control = { canceled: 0, denied: 0 }
+    const reports: string[] = []
     const task = {
       key: "decision",
       kind: "tool",
@@ -71,7 +80,36 @@ for (const scenario of [
         }
         return Response.json({ input: inputFixture() }, { status: 202 })
       }
-      if (path.endsWith("/events"))
+      if (path.endsWith("/events")) {
+        const query = new URL(request.url).searchParams
+
+        if (scenario === "fallback-report" && query.get("limit") === "200") {
+          const after = query.get("after")
+          reports.push(after ?? "")
+          if (reports.length === 1) return new Response(null, { status: 503 })
+
+          const event = (number: number, type: string, payload: object) => ({
+            type,
+            sequence: number,
+            cursor: "cursor-" + number,
+            public_id: "event-" + number,
+            resource: { type: "conversation", public_id: "conversation" },
+            occurred_at: "2026-11-18T00:00:00Z",
+            payload: { turn_public_id: "own", variant_public_id: "first", run_public_id: "run", ...payload },
+          })
+          const switchEvent = event(2, "task_status", {
+            task_key: "model",
+            model_change: { from: "provider/primary", to: "provider/alternate", reason: "model_refused" },
+          })
+          const events = after
+            ? [
+                switchEvent,
+                event(3, "round_result", { task_key: "model", model: "provider/primary", finish_quality: "refused" }),
+              ]
+            : [event(1, "round_result", { run_public_id: "wrong", finish_quality: "blocked" }), switchEvent]
+
+          return Response.json({ events, pagination: { next_after: after ? null : "cursor-2", watermark: 3 } })
+        }
         return Response.json({
           events:
             status === "blocked"
@@ -86,6 +124,7 @@ for (const scenario of [
               : [],
           pagination: { next_after: null, watermark: status === "blocked" ? 1 : 0 },
         })
+      }
       if (path.endsWith("/materialization"))
         return status === "pending" || status === "blocked"
           ? Response.json({ error: { code: "not_found" } }, { status: 404 })
@@ -148,6 +187,8 @@ for (const scenario of [
       if (path.endsWith("/tasks/decision"))
         return Response.json({ task: { ...task, output: null, content: null, structured_content: null } })
       if (path.endsWith("/deny")) {
+        if (scenario === "refused-denial")
+          return Response.json({ error: { code: "conflict", message: "Decision unavailable." } }, { status: 409 })
         control.denied++
         return Response.json({ task })
       }
@@ -179,14 +220,46 @@ for (const scenario of [
       const result = events.at(-1)!
       expect(result).toMatchObject({
         type: "result",
-        exit_status: ["completed", "approval"].includes(status)
-          ? 0
-          : ["pending", "hold", "ask"].includes(status)
+        exit_status:
+          scenario === "refused-denial"
             ? 2
-            : 1,
+            : ["completed", "approval"].includes(status)
+              ? 0
+              : ["pending", "hold", "ask"].includes(status)
+                ? 2
+                : 1,
       })
       if (status === "completed") expect(result.result).toBe("Own answer")
-      if (status === "approval") expect(result.denied_calls).toBe(1)
+      if (scenario === "refused-denial") {
+        expect(result).toMatchObject({
+          subtype: "needs_person",
+          denied_calls: 0,
+          reason: expect.stringContaining("Decision unavailable."),
+        })
+        expect(control.canceled).toBe(1)
+      } else if (status === "approval") expect(result.denied_calls).toBe(1)
+      if (scenario === "fallback-report") {
+        expect(reports).toEqual(["", "", "cursor-2"])
+        expect(result).toMatchObject({
+          model_switches: [
+            { task: "model", from: "provider/primary", to: "provider/alternate", reason: "model_refused" },
+          ],
+          refusals: [{ task: "model", model: "provider/primary" }],
+        })
+        const { RunOutput } = await import("../src/run")
+        const stdout: string[] = []
+        const stderr: string[] = []
+        const output = new RunOutput({
+          format: "text",
+          print: true,
+          write: (text) => stdout.push(text),
+          error: (text) => stderr.push(text),
+        })
+
+        expect(output.accept(result)).toBe(0)
+        expect(stdout.join("")).toBe("Own answer\n")
+        expect(stderr.join("")).toContain("model switched from provider/primary to provider/alternate")
+      }
       if (status === "ask" || status === "hold") expect(control.canceled).toBe(1)
       if (status === "pending") {
         expect(result.reason).toBe("timeout")

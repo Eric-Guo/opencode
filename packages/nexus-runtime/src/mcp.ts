@@ -1,11 +1,14 @@
 import { Effect, Exit, Schedule, Schema, Scope } from "effect"
 import type { AnnouncedTool, JsonObject } from "@cybros/agent"
 import { Integration } from "@opencode/core/integration"
+import { createHash } from "node:crypto"
+import { mkdir, writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import type { Mcp } from "@opencode/core/mcp/index"
 import type { ExtensionAPI } from "./extension-manager"
 import type { RunnerContext } from "./extensions"
 import type { HostTools } from "./host"
-import { curateMcp, curateMcpDocuments, mcpAnnouncementBytes } from "./mcp-curation"
+import { curateMcp, curateMcpDocuments, mcpAnnouncementBytes, mcpCaptureExtensions } from "./mcp-curation"
 import { mcpExchange } from "./mcp-exchange"
 import { mcpRedact, mcpSettings, type McpRow } from "./mcp-settings"
 
@@ -107,10 +110,9 @@ export async function activateMcp(
     { signal: api.signal },
   )
 
-  const [servers, listed, prompts] = await Promise.all([
+  const [servers, listed] = await Promise.all([
     Effect.runPromise(mcp.servers(), { signal: api.signal }),
     Effect.runPromise(mcp.tools(), { signal: api.signal }),
-    Effect.runPromise(mcp.prompts(), { signal: api.signal }),
   ])
   const budgets = { ...ledger }
 
@@ -203,14 +205,14 @@ export async function activateMcp(
         },
       })
 
-    const resources = await Effect.runPromise(mcp.resources({ server: row.server }), { signal: api.signal }).catch(
-      () => ({ resources: [], templates: [] }),
-    )
-    const documents = curateMcpDocuments(
-      row,
-      prompts.filter((prompt) => prompt.server === row.server),
-      resources.resources,
-    )
+    const [prompts, resources] = await Promise.all([
+      Effect.runPromise(mcp.serverPrompts({ server: row.server }), { signal: api.signal }).catch(() => []),
+      Effect.runPromise(mcp.resources({ server: row.server }), { signal: api.signal }).catch(() => ({
+        resources: [],
+        templates: [],
+      })),
+    ])
+    const documents = curateMcpDocuments(row, prompts, resources.resources)
 
     report.documents = documents.documents.map((document) => ({ name: document.name, kind: document.kind }))
     report.skipped_documents = documents.skipped
@@ -248,6 +250,7 @@ export async function activateMcp(
                 },
                 row,
                 context,
+                document.name,
               )
 
               if (response.notice) result.content.unshift({ type: "text", text: response.notice })
@@ -265,29 +268,35 @@ export async function activateMcp(
             await refreshSecrets(row)
             const content: JsonObject[] = response.notice ? [{ type: "text", text: response.notice }] : []
 
-            for (const message of prompt.messages) {
+            for (const [index, message] of prompt.messages.entries()) {
               if (message.role === "assistant") content.push({ type: "text", text: "assistant:" })
 
               const part = message.content
 
               if (part.type === "text") content.push({ type: "text", text: mcpRedact(part.text, row) })
               if (part.type === "image" || part.type === "audio")
-                content.push(await mcpMedia(part.data, part.mimeType, row, context, content.length))
+                content.push(...(await mcpMedia(part, row, context, document.name + "-" + index)))
               if (part.type === "resource") {
                 if ("text" in part.resource) content.push({ type: "text", text: mcpRedact(part.resource.text, row) })
                 if ("blob" in part.resource)
                   content.push(
-                    await mcpMedia(
-                      part.resource.blob,
-                      part.resource.mimeType ?? "application/octet-stream",
+                    ...(await mcpMedia(
+                      {
+                        data: part.resource.blob,
+                        mimeType: part.resource.mimeType ?? "application/octet-stream",
+                        uri: part.resource.uri,
+                      },
                       row,
                       context,
-                      content.length,
-                    ),
+                      document.name + "-" + index,
+                    )),
                   )
               }
               if (part.type === "resource_link")
-                content.push({ type: "text", text: mcpRedact("resource: " + part.uri, row) })
+                content.push({
+                  type: "text",
+                  text: mcpRedact("resource: " + part.uri + " (" + (part.mimeType ?? "unknown type") + ")", row),
+                })
             }
 
             return { content }
@@ -356,18 +365,14 @@ export async function activateMcp(
         }
       const [tools, prompts, resources] = await Promise.all([
         Effect.runPromise(mcp.tools(), { signal: api.signal }),
-        Effect.runPromise(mcp.prompts(), { signal: api.signal }),
+        Effect.runPromise(mcp.serverPrompts({ server: name }), { signal: api.signal }),
         Effect.runPromise(mcp.resources({ server: name }), { signal: api.signal }),
       ])
       const curated = curateMcp(
         row,
         tools.filter((tool) => tool.server === name),
       )
-      const documents = curateMcpDocuments(
-        row,
-        prompts.filter((prompt) => prompt.server === name),
-        resources.resources,
-      )
+      const documents = curateMcpDocuments(row, prompts, resources.resources)
       return Schema.decodeUnknownSync(Schema.MutableJson)({
         server: row.key,
         transport: row.transport,
@@ -447,39 +452,81 @@ export async function activateMcp(
     })
 }
 
-export async function mcpResult(result: Mcp.ToolResult, row: McpRow, context: RunnerContext) {
-  const content = await Promise.all(
-    result.content.map(
-      (part, index): Promise<JsonObject> =>
-        part.type === "text"
-          ? Promise.resolve({ type: "text", text: mcpRedact(part.text, row) })
-          : mcpMedia(part.data, part.mimeType, row, context, index),
+export async function mcpResult(result: Mcp.ToolResult, row: McpRow, context: RunnerContext, document?: string) {
+  const blocks = await Promise.all(
+    result.content.map((part, index) =>
+      part.type === "text"
+        ? [{ type: "text", text: mcpRedact(part.text, row) }]
+        : mcpMedia(part, row, context, document && (index ? document + "-" + index : document)),
     ),
   )
+  const content = blocks.flat()
   const structured =
     result.structured === undefined
       ? undefined
       : redactJson(Schema.decodeUnknownSync(Schema.MutableJson)(result.structured), row)
 
-  if (structured !== undefined && !content.some((part) => part.type === "text"))
+  if (structured !== undefined && !content.some((part) => part.type === "text" && part.text !== ""))
     content.unshift({ type: "text", text: JSON.stringify(structured) })
 
   return { is_error: result.isError, content, ...(structured === undefined ? {} : { structured_content: structured }) }
 }
 
 async function mcpMedia(
-  data: string,
-  mime: string,
+  part: { data: string; mimeType: string; uri?: string },
   row: McpRow,
   context: RunnerContext,
-  index: number,
-): Promise<JsonObject> {
-  if (!mime.startsWith("image/") && mime !== "application/pdf")
-    return { type: "text", text: "[" + mime + " content discarded]" }
-  if (!context.publish) return { type: "text", text: "[" + mime + " requires an upload context]" }
-  if (data.length > Math.ceil((16 * 1024 * 1024) / 3) * 4) throw new Error("MCP media exceeds 16 MiB.")
+  document?: string,
+): Promise<JsonObject[]> {
+  const mime = part.mimeType
+  const extension = mcpCaptureExtensions.get(mime) ?? (!part.uri && mime.startsWith("image/") ? "bin" : undefined)
 
-  return context.publish(new Blob([Buffer.from(data, "base64")], { type: mime }), "mcp-" + row.key + "-" + (index + 1))
+  if (!extension || (!context.artifacts && !context.publish))
+    return [
+      {
+        type: "text",
+        text: mcpRedact(
+          part.uri
+            ? "[resource: " + part.uri + " (" + mime + "), content discarded]"
+            : "[" + mime + " content discarded]",
+          row,
+        ),
+      },
+    ]
+
+  const maximum = 16 * 1024 * 1024
+  if (part.data.length > Math.ceil(maximum / 3) * 4) throw new Error("MCP media exceeds 16 MiB.")
+
+  const bytes = Buffer.from(part.data, "base64")
+  if (bytes.length > maximum) throw new Error("MCP media exceeds 16 MiB.")
+
+  const server = row.key.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 64)
+  const digest = createHash("sha256").update(bytes).digest("hex").slice(0, 16)
+  const kind = part.uri ? "resource" : "image"
+  const name = "mcp-" + server + "-" + (document ?? kind) + "-" + digest + "." + extension
+  const path = context.artifacts ? join(context.artifacts, name) : undefined
+
+  context.signal.throwIfAborted()
+  if (path) {
+    await mkdir(context.artifacts!, { recursive: true, mode: 0o700 })
+    await writeFile(path, bytes, { mode: 0o600, signal: context.signal })
+  }
+  const capture = context.publish ? await context.publish(new Blob([bytes], { type: mime }), name) : undefined
+  const text = mcpRedact(
+    "[" +
+      kind +
+      ": " +
+      mime +
+      ", " +
+      bytes.length +
+      " bytes" +
+      (path ? " — saved at " + path : "") +
+      (capture ? " and attached" : "") +
+      "]",
+    row,
+  )
+
+  return [{ type: "text", text }, ...(capture ? [capture] : [])]
 }
 
 function redactJson(value: Schema.MutableJson, row: McpRow): Schema.MutableJson {
