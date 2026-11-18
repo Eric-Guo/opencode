@@ -220,6 +220,26 @@ test("terminal runs capture placement, ask for approval and return before the sh
 
 test("development controls use the connected application, exact run identities and the agent ownership boundary", async () => {
   const requests: { path: string; method: string; body?: unknown }[] = []
+  const baseTask = {
+    kind: "model_task",
+    lifetime: "run",
+    wake: "foreground",
+    after: [],
+    waiting_on: [],
+    approval: null,
+  }
+  const settled: JsonObject[] = [
+    { key: "absorbed", status: "failed", on_failure: "absorb" },
+    { key: "resolved", status: "timed_out", failure_resolution: "abandoned" },
+  ]
+  const costHold = {
+    key: "budget",
+    status: "failed",
+    kind: "model_task",
+    on_failure: "absorb",
+    error: { key: "conversation_cost_limit_reached" },
+  }
+  let tasks: JsonObject[] = settled
   const directory = await mkdtemp(join(tmpdir(), "nexus-dev-"))
   const fixture = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
@@ -235,8 +255,11 @@ test("development controls use the connected application, exact run identities a
           public_id: path.includes("/foreign") ? "foreign" : "old",
           status: request.method === "GET" ? "running" : "stopped",
           turn: { status: "running", conversation_public_id: path.includes("/foreign") ? "foreign" : "conversation" },
+          tasks: tasks.map((task) => ({ ...baseTask, ...task })),
         },
       })
+    if (/\/tasks\/(budget|named)\/(retry|abandon)$/.test(path))
+      return Response.json({ task: { ...baseTask, key: path.split("/").at(-2), status: "waiting" } })
     if (path.endsWith("/inputs/queued") && request.method === "PATCH")
       return Response.json({ input: inputFixture({ public_id: "queued", text: "corrected", lock_version: 3 }) })
     return Response.json({ error: { code: "unexpected_request" } }, { status: 400 })
@@ -270,6 +293,15 @@ test("development controls use the connected application, exact run identities a
     await expect(manager.command("dev", { action: "run.stop", run: "foreign" })).rejects.toThrow("another agent")
     await expect(manager.command("dev", { action: "stop", conversation: "foreign" })).rejects.toThrow("another agent")
     expect(requests.filter((request) => request.method !== "GET")).toHaveLength(1)
+
+    await expect(manager.command("dev", { action: "retry", run: "old" })).rejects.toThrow("No task")
+    tasks = [...settled, costHold]
+    await manager.command("dev", { action: "retry", run: "old" })
+    expect(requests.at(-1)?.path).toEndWith("/tasks/budget/retry")
+    tasks = [...tasks, { key: "uncertain", status: "uncertain" }]
+    await expect(manager.command("dev", { action: "abandon", run: "old" })).rejects.toThrow("budget, uncertain")
+    await manager.command("dev", { action: "abandon", run: "old", task: "named" })
+    expect(requests.at(-1)?.path).toEndWith("/tasks/named/abandon")
 
     await manager.command("dev", {
       action: "input.edit",

@@ -3622,6 +3622,7 @@ export type ExperimentalNexusManageInput = {
         readonly id: string
         readonly after?: string | undefined
         readonly archived?: boolean | undefined
+        readonly limit?: number | undefined
       }
     | { readonly action: "bot.current" | "bot.new"; readonly id: string; readonly key: string }
     | { readonly action: "bot.workspace"; readonly id: string; readonly key: string; readonly workspace: string }
