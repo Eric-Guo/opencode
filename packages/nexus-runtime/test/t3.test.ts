@@ -183,6 +183,52 @@ function service(
   }
 }
 
+test("T3 rejects incomplete work controls before opening Nexus storage or a peer connection", async () => {
+  using peer = service()
+  const store = storeFixture(() => {
+    throw new Error("T3 must not read a work record")
+  })
+  const signal = new AbortController().signal
+  const client = new T3Client(
+    { url: peer.server.url.origin, token: "bearer", project_id: "project" },
+    {
+      signal,
+      directory: tmpdir(),
+      storage: tmpdir(),
+      application: () =>
+        new NexusApplication(store.client, { workspace: "workspace", agent: "main", runner: "runner" }, () => ({})),
+    },
+  )
+
+  try {
+    const control = client.tools().find((tool) => tool.definition.name === "coding_work")!
+    const context = {
+      workspace: "workspace",
+      conversation: "conversation",
+      directory: tmpdir(),
+      run: "run",
+      task: "task",
+      signal,
+    }
+
+    for (const action of ["observe", "steer", "stop", "forget"])
+      expect(await control.execute({ action }, context)).toMatchObject({
+        is_error: true,
+        content: expect.stringContaining("work_id is required"),
+      })
+
+    expect(await control.execute({ action: "steer", work_id: "work" }, context)).toMatchObject({
+      is_error: true,
+      content: expect.stringContaining("prompt is required"),
+    })
+    expect(peer.http).toEqual([])
+    expect(peer.requests).toEqual([])
+  } finally {
+    await client.close()
+    store.server.stop(true)
+  }
+})
+
 test("T3 authenticates every exchange and refuses incompatible protocol before mutations", async () => {
   using peer = service({ version: 1 })
   const bridge = new T3Transport(peer.server.url.origin, "fixture-bearer")
