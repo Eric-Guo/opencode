@@ -20,6 +20,7 @@ export const emptyMcp = Mcp.Service.of({
   callTool: () => Effect.die("unused mcp.callTool"),
   instructions: () => Effect.succeed([]),
   prompts: () => Effect.succeed([]),
+  serverPrompts: () => Effect.succeed([]),
   prompt: () => Effect.undefined,
   resourceCatalog: () => Effect.succeed(Mcp.ResourceCatalog.make({ resources: [], templates: [] })),
   resources: () => Effect.succeed(Mcp.ResourceCatalog.make({ resources: [], templates: [] })),

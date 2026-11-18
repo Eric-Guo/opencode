@@ -324,6 +324,7 @@ export interface Interface extends State.Transformable<Editor> {
   }) => Effect.Effect<ToolResult, NotFoundError | ToolCallError>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly prompts: () => Effect.Effect<Prompt[]>
+  readonly serverPrompts: (input: { readonly server: ServerName | string }) => Effect.Effect<Prompt[], Error>
   readonly prompt: (input: {
     readonly onSessionRenewed?: () => void
     readonly server: ServerName | string
@@ -1305,6 +1306,14 @@ export const layer = (options?: Options) =>
               (entry.connection.prompts ?? []).map((prompt): Prompt => ({ ...prompt, server })),
             )
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
+        }),
+        serverPrompts: Effect.fn("MCP.serverPrompts")(function* (input) {
+          const server = ServerName.make(input.server)
+          const target = yield* connected(server)
+          if (!target.client) return []
+
+          const prompts = yield* target.entry.connection.recovering(target.client, (client) => client.prompts())
+          return prompts.map((prompt) => ({ ...prompt, server }))
         }),
         prompt: Effect.fn("MCP.prompt")(function* (input) {
           const target = yield* connected(ServerName.make(input.server))

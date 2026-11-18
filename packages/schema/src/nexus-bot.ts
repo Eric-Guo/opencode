@@ -66,6 +66,7 @@ export const Command = Schema.Union([
     id: Schema.String,
     after: Schema.String.pipe(optional),
     archived: Schema.Boolean.pipe(optional),
+    limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })).pipe(optional),
   }),
   Schema.Struct({ action: Schema.Literals(["bot.current", "bot.new"]), id: Schema.String, key: Schema.NonEmptyString }),
   Schema.Struct({
