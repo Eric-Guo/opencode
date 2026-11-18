@@ -22,6 +22,7 @@ type Follower = {
   bytes: number
   touched: number
   attached: boolean
+  enableLive(): void
   text: TranscriptAccumulator
   reasoning: TranscriptAccumulator
   closing?: Promise<void>
@@ -99,12 +100,16 @@ export class DevelopmentStreams {
       ),
     )
     const existing = this.followers.get(run)
-    if (existing && !existing.closing) return existing
+    if (existing && !existing.closing) {
+      if (live) existing.enableLive()
+      return existing
+    }
     if (existing?.closing) await existing.closing
     const socket = application.realtime()
     const owner = new AbortController()
     const active = AbortSignal.any([this.signal, owner.signal])
     const jobs: Promise<void>[] = []
+    let observingLive = false
     const row: Follower = {
       run,
       conversation:
@@ -116,6 +121,11 @@ export class DevelopmentStreams {
       bytes: 0,
       touched: performance.now(),
       attached: false,
+      enableLive() {
+        if (observingLive) return
+        observingLive = true
+        jobs.push(watch("transcript"), watch("progress"))
+      },
       text: new TranscriptAccumulator(),
       reasoning: new TranscriptAccumulator(),
       close: () => {
@@ -153,6 +163,7 @@ export class DevelopmentStreams {
       row.events.push({ sequence: row.sequence, value, bytes })
     }
     const watch = async (channel: "events" | "transcript" | "progress") => {
+      let reconnecting = false
       while (!active.aborted) {
         try {
           const options = { signal: active }
@@ -161,6 +172,8 @@ export class DevelopmentStreams {
             : channel === "transcript"
               ? socket.runTranscript(application.identity.workspace, run, options)
               : socket.runProgress(application.identity.workspace, run, options))
+          if (reconnecting && channel === "transcript") push({ channel: "resync" })
+          reconnecting = true
           for await (const frame of subscription) push({ channel, frame: json(JSON.stringify(frame)) })
         } catch (error) {
           if (active.aborted) return
@@ -169,7 +182,8 @@ export class DevelopmentStreams {
         await setTimeout(1000, undefined, { signal: active }).catch(() => {})
       }
     }
-    jobs.push(watch("events"), ...(live ? [watch("transcript"), watch("progress")] : []))
+    jobs.push(watch("events"))
+    if (live) row.enableLive()
     void (async () => {
       while (!active.aborted && (row.attached || performance.now() - row.touched < 60000))
         await setTimeout(10000, undefined, { signal: active }).catch(() => {})

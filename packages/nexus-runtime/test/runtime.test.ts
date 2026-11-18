@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NexusRuntime } from "../src/runtime"
+import { executorFixture } from "./fixture/executor"
 import { atomic } from "../src/storage"
 import { Schema } from "effect"
 import { conversationFixture } from "./fixture/conversation"
@@ -41,6 +42,7 @@ test.each([
   { name: "non-dedicated", dedicated: false, owned: false, create: false },
   { name: "automatically created", dedicated: true, owned: true, create: true },
   { name: "restored API key", dedicated: false, owned: false, create: false, apiKey: true },
+  { name: "renewing Agent", dedicated: false, owned: false, create: false, renewal: true },
   { name: "imported API key", dedicated: false, owned: false, create: false, importKeys: true },
 ])("validates $name workspace before reporting ready", async (fixture) => {
   const directory = await realpath(await mkdtemp(join(tmpdir(), "nexus-runtime-")))
@@ -48,7 +50,63 @@ test.each([
   const project = join(directory, "project")
   const bound = join(project, "conversation")
   await Promise.all([mkdir(storage), mkdir(bound, { recursive: true })])
-  const runtime = new NexusRuntime(storage)
+  const hour = 3600_000
+  const clock = {
+    time: Date.now(),
+    wake: Promise.withResolvers<void>(),
+    waits: [] as number[],
+    verified: 0,
+    refuse: false,
+    lost: false,
+  }
+  const runtime = new NexusRuntime(
+    storage,
+    undefined,
+    "renewal" in fixture
+      ? {
+          now: () => clock.time,
+          wait: async (ms, signal) => {
+            clock.waits.push(ms)
+            const wake = clock.wake
+            const stop = () => wake.resolve()
+            if (signal.aborted) return
+            signal.addEventListener("abort", stop, { once: true })
+            await wake.promise
+            signal.removeEventListener("abort", stop)
+            clock.wake = Promise.withResolvers<void>()
+          },
+        }
+      : undefined,
+  )
+  const transfer = "renewal" in fixture ? await executorFixture() : undefined
+  const downloading = Promise.withResolvers<void>()
+  const finish = Promise.withResolvers<void>()
+  if (transfer) {
+    const id = crypto.randomUUID()
+    transfer.add("run", "download", "file_import", {
+      executor_context: { "opencode.directory": project },
+      addressed_to: { role: "runner", executor_public_id: "runner", presence: "online", last_seen_at: null },
+      tool_input: { upload: id },
+    })
+    transfer.control.route = async (request) => {
+      const path = new URL(request.url).pathname
+      if (path.endsWith("/attachments/" + id))
+        return Response.json({
+          upload: {
+            public_id: id,
+            filename: "working.txt",
+            content_type: "text/plain",
+            byte_size: 4,
+            created_at: new Date().toISOString(),
+          },
+        })
+      if (path.endsWith("/attachments/" + id + "/bytes")) {
+        downloading.resolve()
+        await finish.promise
+        return new Response("done")
+      }
+    }
+  }
   const changed = Promise.withResolvers<typeof Declaration.Type>()
   const declarations: (typeof Declaration.Type)[] = []
   const calls: { path: string; method: string; authorization: string | null; after: string | null; state: string }[] =
@@ -132,6 +190,43 @@ test.each([
         state: runtime.status().state,
       })
 
+      if (transfer && path.startsWith("/agent_api/v1/executor/inbox"))
+        return fetch(new URL(path + url.search, transfer.server.url), {
+          method: request.method,
+          headers: request.headers,
+          body: request.body ? await request.arrayBuffer() : undefined,
+          signal: request.signal,
+        })
+      if (path === "/oauth/token") {
+        const form = await request.formData()
+        if (!form.has("refresh_token")) return Response.json({ error: "authorization_pending" }, { status: 400 })
+        expect(form.get("refresh_token")).toBe(clock.verified ? "refresh-" + clock.verified : "fixture-refresh")
+        clock.verified++
+        if (clock.lost) return Response.json({ error: "invalid_grant" }, { status: 400 })
+        return Response.json({
+          plane: "member",
+          token_type: "Bearer",
+          access_token: "member-" + clock.verified,
+          executor_access_token: "executor-" + clock.verified,
+          refresh_token: "refresh-" + clock.verified,
+          expires_in: 14 * 86400,
+        })
+      }
+      if (path === "/oauth/device_authorization")
+        return Response.json({
+          device_code: "device",
+          user_code: "ABC",
+          interval: 10,
+          expires_in: 60,
+          verification_uri: url.origin + "/verify",
+          verification_uri_complete: url.origin + "/verify?code=ABC",
+        })
+      if (
+        path === "/agent_api/v1/executors" &&
+        clock.refuse &&
+        request.headers.get("authorization") !== "Bearer member-2"
+      )
+        return Response.json({ error: { code: "unauthorized" } }, { status: 401 })
       if (path === "/oauth/revoke") return new Response(null, { status: 200 })
       if (path === "/agent_api/v1/profile") {
         if (request.headers.get("authorization") === "Bearer invalid")
@@ -368,7 +463,7 @@ test.each([
             refresh_token: "fixture-refresh",
             access_token: "fixture-member",
             executor_access_token: "fixture-executor",
-            expires_at: new Date(Date.now() + 3600_000).toISOString(),
+            expires_at: new Date(clock.time + 7 * 24 * hour + hour).toISOString(),
           }
     await atomic(join(storage, "agent.json"), credentials)
     if ("importKeys" in fixture) {
@@ -413,12 +508,13 @@ test.each([
       expect(runtime.status().identity).toMatchObject({ agent: "agent", workspace: "workspace" })
       expect(runtime.status().error).toBeUndefined()
       expect(await runtime.policy("workspace", "conversation")).toMatchObject({ tools: [], runner: null })
+      if (transfer) await downloading.promise
       expect(runtime.status().executor).toMatchObject({
         running: true,
-        claimed: 0,
+        claimed: transfer ? 1 : 0,
         nudged: 0,
         canceled: 0,
-        in_flight: 0,
+        in_flight: transfer ? 1 : 0,
         starting: 0,
       })
       if ("apiKey" in fixture) {
@@ -628,6 +724,37 @@ test.each([
       expect(() => runtime.runners()).toThrow("Nexus is disconnected.")
     }
 
+    if (transfer) {
+      await downloading.promise
+      expect(runtime.status().executor?.in_flight).toBe(1)
+      expect(clock.waits).toEqual([hour])
+      expect(clock.verified).toBe(0)
+      clock.time += hour
+      clock.wake.resolve()
+      await published(() => clock.waits.length === 2)
+      expect(await Bun.file(join(storage, "agent.json")).json()).toMatchObject({
+        rotation: 1,
+        refresh_token: "refresh-1",
+      })
+      const announced = announcements.length
+      clock.refuse = true
+      await runtime.runners()
+      expect(clock.verified).toBe(2)
+      expect(announcements).toHaveLength(announced)
+      expect(runtime.status().state).toBe("ready")
+      finish.resolve()
+      await published(() => transfer.commits.length === 1)
+      expect(transfer.commits[0].body).toMatchObject({ outcome: "completed", structured_content: { byte_size: 4 } })
+      clock.time += 7 * 24 * hour
+      clock.lost = true
+      clock.wake.resolve()
+      await published(() => runtime.status().state === "unpaired")
+      expect(runtime.status().error).toContain("Pair")
+      expect(await Bun.file(join(storage, "agent.json")).exists()).toBe(false)
+      expect(
+        (await runtime.pair({ origin: nexus.url.origin, model: "fixture", directory: project, workspace: "" })).state,
+      ).toBe("pairing")
+    }
     if ("apiKey" in fixture || "importKeys" in fixture) {
       expect((await Bun.file(join(storage, "agent.json")).json()).authentication_kind).toBe("api_key")
       await runtime.disconnect()
@@ -650,7 +777,9 @@ test.each([
         : [],
     )
   } finally {
+    finish.resolve()
     await runtime.close()
+    await transfer?.close()
     await rm(directory, { recursive: true, force: true })
   }
 })
