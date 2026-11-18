@@ -35,12 +35,39 @@ export function telegramSessionSwitch(
   route: Route,
   conversations: readonly (Conversation | null)[],
 ) {
+  const key = sessionRoute(route)
+  const batches = state.batches.filter((row) => !row.submission && sessionRoute(row.route) === key)
+  const voices = state.deliveries.filter(
+    (row) => row.kind === "voice" && ["pending", "preparing"].includes(row.status) && sessionRoute(row.route) === key,
+  )
+  const cancellations = [...batches, ...voices].flatMap((row) =>
+    row.inference && row.target ? [{ workspace: row.target.workspace, inference: row.inference }] : [],
+  )
+
+  return telegramTrackConversations(
+    {
+      ...state,
+      batches: state.batches.filter((row) => !batches.includes(row)),
+      deliveries: state.deliveries.filter((row) => !voices.includes(row)),
+      ...(cancellations.length
+        ? { media_cancellations: [...(state.media_cancellations ?? []), ...cancellations] }
+        : {}),
+    },
+    route,
+    conversations,
+  )
+}
+
+export function telegramTrackConversations(
+  state: TelegramState,
+  route: Route,
+  conversations: readonly (Conversation | null)[],
+) {
   const history = sessionHistory(state, route)
   const key = sessionRoute(route)
 
   return {
     ...state,
-    batches: state.batches.filter((row) => row.submission || sessionRoute(row.route) !== key),
     sessions: {
       ...state.sessions,
       [key]: {
@@ -209,8 +236,68 @@ export async function telegramConversationCommand(
   )
     return
   if (action === "codemode") return "Code Mode stays off in Bot conversations."
+  if (action === "search") {
+    if (!argument.trim()) return "Use /search TEXT or /search next."
+    if (!tracking) return "No conversations are saved in this chat/topic."
+
+    const key = sessionRoute(tracking.route)
+    const state = await tracking.document.read()
+    const tracked = {
+      ...(state ? sessionHistory(state, tracking.route).tracked : {}),
+      ...Object.fromEntries(
+        [...(state?.work ?? []), ...(state?.batches ?? [])]
+          .filter((row) => sessionRoute(row.route) === key)
+          .map((row) => [row.target.conversation, row.target.workspace]),
+      ),
+    }
+    const saved =
+      argument === "next"
+        ? state?.searches?.[key]
+        : { query: argument, workspaces: [...new Set(Object.values(tracked))], after: null }
+
+    if (!saved) return "No search continuation is saved. Use /search TEXT."
+    const workspace = saved.workspaces[0]
+    if (!workspace) return "No conversations are saved in this chat/topic."
+
+    const result = await application.client.workspace(workspace).conversations.search(
+      {
+        query: saved.query,
+        archived: "include",
+        answering_user_public_id: context.bot,
+        limit: 50,
+        ...(saved.after ? { after: saved.after } : {}),
+      },
+      options,
+    )
+    const next = {
+      ...saved,
+      after: result.next_after,
+      workspaces: result.next_after ? saved.workspaces : saved.workspaces.slice(1),
+    }
+    await tracking.document.change((state) => ({
+      ...state!,
+      searches: { ...state!.searches, [key]: next.workspaces.length ? next : null },
+    }))
+    const matches = result.matches
+      .filter((match) => tracked[match.conversation_public_id] === workspace)
+      .map(
+        (row) =>
+          (row.title ?? "Untitled conversation") +
+          "\n" +
+          row.conversation_public_id +
+          (row.position === null ? "" : " · turn " + row.position) +
+          "\n" +
+          (row.excerpt ?? ""),
+      )
+    return telegramWindow(
+      matches.length
+        ? "Matches in this chat/topic:\n" + matches.join("\n\n")
+        : "No matches from this chat/topic in this search window.",
+      next.workspaces.length ? "\nUse /search next for the next search window." : "",
+    )
+  }
   const mutating =
-    !["history", "variants", "context", "search"].includes(action) ||
+    !["history", "variants", "context"].includes(action) ||
     (action === "history" && !!argument && !/^before(?:\s|$)/.test(argument))
   if (mutating && !context.owner) return "Only the Bot owner can change the shared conversation."
   const forkControl = action === "fork" ? (await tracking?.document.read())?.control : undefined
@@ -262,50 +349,6 @@ export async function telegramConversationCommand(
       2,
     )
   }
-  if (action === "search") {
-    if (!argument) return "Use /search TEXT or /search next."
-    const history = await botHistory(application, context.bot)
-    const key = context.tracking ? context.tracking.route.chat + ":" + context.tracking.route.topic : "current"
-    const saved =
-      argument === "next"
-        ? (await context.tracking?.document.read())?.searches?.[key]
-        : { query: argument, workspaces: [...new Set(history.map((row) => row.workspace_public_id))], after: null }
-    if (!saved?.workspaces.length) return "No search continuation is saved. Use /search TEXT."
-    const result = await application.client
-      .workspace(saved.workspaces[0])
-      .conversations.search(
-        { query: saved.query, answering_user_public_id: context.bot, ...(saved.after ? { after: saved.after } : {}) },
-        options,
-      )
-    const next = {
-      ...saved,
-      after: result.next_after,
-      workspaces: result.next_after ? saved.workspaces : saved.workspaces.slice(1),
-    }
-    await context.tracking?.document.change((state) => ({
-      ...state!,
-      searches: { ...state!.searches, [key]: next.workspaces.length ? next : null },
-    }))
-    const matches = result.matches.filter((match) =>
-      history.some(
-        (row) => row.public_id === match.conversation_public_id && row.workspace_public_id === saved.workspaces[0],
-      ),
-    )
-    return (
-      (matches
-        .map(
-          (row) =>
-            (row.title ?? "Untitled") +
-            "\n" +
-            row.conversation_public_id +
-            (row.position === null ? "" : " · turn " + row.position) +
-            "\n" +
-            (row.excerpt ?? ""),
-        )
-        .join("\n\n") || "No matches from this Bot in this search window.") +
-      (next.workspaces.length ? "\nUse /search next for the next search window." : "")
-    )
-  }
   if (action === "history") {
     const [verb, id, extra] = argument.split(/\s+/)
     const changes: Record<string, { visibility?: string; concealed?: boolean }> = {
@@ -324,10 +367,17 @@ export async function telegramConversationCommand(
     }
     if (argument && (verb !== "before" || extra || !/^\d+$/.test(id ?? "") || Number(id) > TURN_POSITION_CEILING))
       return "Use /history or /history before POSITION."
-    return JSON.stringify(
-      await scope.history({ before_position: id ? Number(id) : undefined, limit: 20 }, options),
-      null,
-      2,
+    const page = await scope.history({ before_position: id ? Number(id) : undefined, limit: 10 }, options)
+    const turns = page.turns.map((turn) =>
+      ["Turn " + turn.position + " · " + turn.public_id, turn.prompt, turn.content, turn.steers]
+        .filter(Boolean)
+        .join("\n"),
+    )
+    return telegramWindow(
+      turns.join("\n\n") || "No visible history in this window.",
+      page.has_older && page.before_position !== null
+        ? "\n\nOlder history: /history before " + page.before_position
+        : "",
     )
   }
   const match = /^(\d+)(?:\s+([\s\S]*))?$/.exec(argument)
@@ -531,6 +581,11 @@ export async function telegramMemoryCommand(
       options,
     )
   return "Memory " + action + " completed: " + fields.path
+}
+
+function telegramWindow(body: string, footer: string) {
+  const limit = 12000 - footer.length
+  return (body.length > limit ? body.slice(0, limit - 1).replace(/\p{Surrogate}$/u, "") + "…" : body) + footer
 }
 
 async function botHistory(application: NexusApplication, bot: string) {
