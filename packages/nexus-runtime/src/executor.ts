@@ -35,6 +35,7 @@ export class NexusExecutor {
     this.signal = options.signal ? AbortSignal.any([options.signal, this.owner.signal]) : this.owner.signal
     this.inbox = new RunnerInbox({
       ...options,
+      artifacts: options.artifacts ?? join(options.storage, "artifacts"),
       signal: this.signal,
       journal: options.journal ?? new ClaimJournal(join(options.storage, "claims")),
       admission: options.admission ?? new RunnerAdmission(),

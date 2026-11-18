@@ -307,7 +307,7 @@ test.skipIf(!chromium)(
         const html =
           path === "/frame"
             ? "<label>Frame field<input></label><button onclick=\"this.textContent='Frame clicked'\">Frame action</button>"
-            : '<button style="position:absolute;left:0;top:0;width:150px;height:40px">Covered</button><div style="position:absolute;left:0;top:0;width:150px;height:40px;z-index:2">Overlay</div><iframe style="margin-top:70px" src="/frame"></iframe><iframe src="' +
+            : '<button style="position:absolute;left:0;top:0;width:150px;height:40px">Covered</button><div style="position:absolute;left:0;top:0;width:150px;height:40px;z-index:2">Overlay</div><input aria-label="Covered field" style="position:absolute;left:0;top:0;width:150px"><fieldset disabled><input aria-label="Disabled field"></fieldset><input aria-label="Locked field" readonly><script>let enters=0;document.addEventListener("keydown",e=>{if(e.key==="Enter") document.title=(++enters)+":"+e.target.value})</script><iframe style="margin-top:70px" src="/frame"></iframe><iframe src="' +
               server.url.href.replace("127.0.0.1", "localhost") +
               'frame"></iframe>'
         return new Response(html, { headers: { "Content-Type": "text/html" } })
@@ -338,7 +338,20 @@ test.skipIf(!chromium)(
       const covered = await run("browser_click", { ref: refs(opened.content, 'button "Covered"')[0] })
       expect(covered.is_error).toBe(true)
       expect(covered.content).toContain("covered")
-      const same = await run("browser_click", { ref: refs(opened.content, 'button "Frame action"')[0] })
+      const field = async (name: string) => {
+        const snapshot = await run("browser_snapshot", {})
+        return run("browser_type", {
+          ref: refs(snapshot.content, 'textbox "' + name + '"')[0],
+          text: name,
+          submit: true,
+        })
+      }
+      expect((await field("Covered field")).is_error).not.toBe(true)
+      expect((await field("Disabled field")).content).toContain("disabled")
+      expect((await field("Locked field")).content).toContain("read-only")
+      const current = await run("browser_snapshot", {})
+      expect(current.content).toContain("Title: 1:Covered field")
+      const same = await run("browser_click", { ref: refs(current.content, 'button "Frame action"')[0] })
       expect(same.is_error).not.toBe(true)
       expect(refs(same.content, 'button "Frame clicked"')).toHaveLength(1)
       const other = await run("browser_click", { ref: refs(same.content, 'button "Frame action"')[0] })
