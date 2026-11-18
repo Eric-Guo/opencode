@@ -26,7 +26,10 @@ const providers = [
 function service(
   options: {
     version?: number
+    bundledHandshake?: boolean
+    holdLaunch?: () => void
     loseLaunch?: boolean
+    launchReply?: "failure" | "malformed" | "wrong id" | "duplicate handshake"
     corruptModel?: boolean
     oversizedReport?: boolean
     missingMessage?: boolean
@@ -164,11 +167,35 @@ function service(
           }
           return { received: frame.payload }
         })()
+        if (options.holdLaunch && frame.tag === "orchestration.launchThread") {
+          options.holdLaunch()
+          return
+        }
         if (options.loseLaunch && frame.tag === "orchestration.launchThread") {
           socket.close()
           return
         }
-        socket.send(JSON.stringify([{ _tag: "Exit", requestId: frame.id, exit: { _tag: "Success", value } }]))
+        if (options.launchReply && frame.tag === "orchestration.launchThread") {
+          const replies = {
+            failure: { _tag: "Exit", requestId: frame.id, exit: { _tag: "Failure", cause: "fixture-private" } },
+            malformed: "{",
+            "wrong id": { _tag: "Exit", requestId: "another", exit: { _tag: "Success" } },
+            "duplicate handshake": {
+              _tag: "Exit",
+              requestId: "0",
+              exit: { _tag: "Success", value: { environment: { orchestrationProtocolVersion: 2 } } },
+            },
+          }
+          const reply = replies[options.launchReply]
+          socket.send(typeof reply === "string" ? reply : JSON.stringify(reply))
+          return
+        }
+        const reply = { _tag: "Exit", requestId: frame.id, exit: { _tag: "Success", value } }
+        socket.send(
+          JSON.stringify(
+            options.bundledHandshake && frame.id === "0" ? [reply, { ...reply, requestId: "1" }] : [reply],
+          ),
+        )
       },
     },
   })
@@ -229,10 +256,37 @@ test("T3 rejects incomplete work controls before opening Nexus storage or a peer
   }
 })
 
+const launch = {
+  threadId: "thread",
+  commandId: "command",
+  title: "Task",
+  projectId: "project",
+  modelSelection: { instanceId: "codex", model: "code" },
+  runtimeMode: "approval-required",
+  interactionMode: "default",
+  workspaceStrategy: { type: "root" },
+  initialMessage: { messageId: "one", text: "Check parser", attachments: [] },
+}
+
+test("T3 rejects unsupported methods and malformed payloads before ticket discovery", async () => {
+  using peer = service()
+  const bridge = new T3Transport(peer.server.url.origin, "fixture-bearer")
+  const signal = AbortSignal.timeout(2000)
+  await expect(bridge.call("other", {}, signal)).rejects.toThrow("method")
+  await expect(bridge.call("server.getConfig", [], signal)).rejects.toThrow("payload")
+  await expect(bridge.call("orchestration.getThreadProjection", {}, signal)).rejects.toThrow("payload")
+  await expect(
+    bridge.call("orchestration.launchThread", { ...launch, runtimeMode: "unknown" }, signal),
+  ).rejects.toThrow("payload")
+  expect(peer.http).toEqual([])
+})
+
 test("T3 authenticates every exchange and refuses incompatible protocol before mutations", async () => {
   using peer = service({ version: 1 })
   const bridge = new T3Transport(peer.server.url.origin, "fixture-bearer")
-  await expect(bridge.call("orchestration.launchThread", {}, AbortSignal.timeout(2000))).rejects.toThrow("protocol-2")
+  await expect(bridge.call("orchestration.launchThread", launch, AbortSignal.timeout(2000))).rejects.toThrow(
+    "protocol-2",
+  )
   expect(peer.requests.map((row) => row.tag)).toEqual(["server.getConfig"])
   expect(peer.http[0].authorization).toBe("Bearer fixture-bearer")
   expect(peer.http[1].compression).toBeNull()
@@ -241,9 +295,30 @@ test("T3 authenticates every exchange and refuses incompatible protocol before m
 test("T3 lost mutation responses remain uncertain without transport retries", async () => {
   using peer = service({ loseLaunch: true })
   const bridge = new T3Transport(peer.server.url.origin, "fixture-bearer")
-  await expect(
-    bridge.call("orchestration.launchThread", { initialMessage: { messageId: "one" } }, AbortSignal.timeout(2000)),
-  ).rejects.toBeInstanceOf(T3Uncertain)
+  await expect(bridge.call("orchestration.launchThread", launch, AbortSignal.timeout(2000))).rejects.toBeInstanceOf(
+    T3Uncertain,
+  )
+  expect(peer.requests.filter((row) => row.tag === "orchestration.launchThread")).toHaveLength(1)
+})
+
+test("T3 accepts only a reply received after its business request", async () => {
+  using peer = service({ bundledHandshake: true })
+  const bridge = new T3Transport(peer.server.url.origin, "fixture-bearer")
+  expect(await bridge.call("orchestration.launchThread", launch, AbortSignal.timeout(2000))).toMatchObject({
+    threadId: launch.threadId,
+  })
+})
+
+test("T3 preserves caller cancellation after dispatch", async () => {
+  const launched = Promise.withResolvers<void>()
+  using peer = service({ holdLaunch: launched.resolve })
+  const bridge = new T3Transport(peer.server.url.origin, "fixture-bearer")
+  const controller = new AbortController()
+  const pending = bridge.call("orchestration.launchThread", launch, controller.signal)
+  await launched.promise
+  const reason = new Error("Caller stopped the assignment")
+  controller.abort(reason)
+  await expect(pending).rejects.toBe(reason)
   expect(peer.requests.filter((row) => row.tag === "orchestration.launchThread")).toHaveLength(1)
 })
 
@@ -269,10 +344,22 @@ test("T3 catalog resolves explicit aliases without provider or model fallback", 
   expect(JSON.stringify(catalog.report())).not.toContain("native-codex")
 })
 
-for (const mode of ["normal", "lost launch", "oversized report"])
+for (const mode of [
+  "normal",
+  "lost launch",
+  "oversized report",
+  "failure",
+  "malformed",
+  "wrong id",
+  "duplicate handshake",
+] as const)
   test("T3 result and durable assignment survive replay: " + mode, async () => {
     const oversizedReport = mode === "oversized report"
-    using peer = service({ loseLaunch: mode === "lost launch", oversizedReport })
+    using peer = service({
+      loseLaunch: mode === "lost launch",
+      oversizedReport,
+      launchReply: mode === "normal" || mode === "lost launch" || mode === "oversized report" ? undefined : mode,
+    })
     const store = storeFixture()
     const directory = await mkdtemp(join(tmpdir(), "nexus-t3-"))
     try {
@@ -282,7 +369,12 @@ for (const mode of ["normal", "lost launch", "oversized report"])
         () => ({}),
       )
       const client = new T3Client(
-        { url: peer.server.url.origin, token: "fixture-bearer", project_id: "project" },
+        {
+          url: peer.server.url.origin,
+          token: "fixture-bearer",
+          project_id: "project",
+          workspace: { type: "worktree", baseRef: "main", branch: "main", startFromOrigin: true },
+        },
         { application: () => app, directory, storage: directory, signal: AbortSignal.timeout(5000) },
       )
       const files: { name: string; text: string }[] = []
@@ -327,6 +419,12 @@ for (const mode of ["normal", "lost launch", "oversized report"])
         .execute({ prompt: "Fix parser", agent: " Codex ", model: " Code " }, context)
       expect(replay.structured_content).toHaveProperty("model", "code")
       expect(peer.requests.filter((row) => row.tag === "orchestration.launchThread")).toHaveLength(1)
+      expect(peer.requests.find((row) => row.tag === "orchestration.launchThread")?.payload.workspaceStrategy).toEqual({
+        type: "worktree",
+        baseRef: "main",
+        branch: "main",
+        startFromOrigin: true,
+      })
       expect(store.entries.size).toBe(1)
       expect(JSON.stringify([...store.entries.values()])).not.toContain("fixture-bearer")
       const record = [...store.entries.values()][0]

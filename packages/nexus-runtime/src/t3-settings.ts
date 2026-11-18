@@ -11,10 +11,19 @@ export const t3Configuration = {
     default_agent: { type: "string" },
     workspace: {
       oneOf: [
-        { type: "object", properties: { type: { const: "root" } }, required: ["type"], additionalProperties: false },
         {
           type: "object",
-          properties: { type: { const: "existing_worktree" }, worktreePath: { type: "string", minLength: 1 } },
+          properties: { type: { const: "root" }, branch: { type: "string" } },
+          required: ["type"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            type: { const: "existing_worktree" },
+            worktreePath: { type: "string", minLength: 1 },
+            branch: { type: "string" },
+          },
           required: ["type", "worktreePath"],
           additionalProperties: false,
         },
@@ -24,6 +33,7 @@ export const t3Configuration = {
             type: { const: "worktree" },
             baseRef: { type: "string", minLength: 1 },
             branch: { type: "string" },
+            startFromOrigin: { type: "boolean" },
           },
           required: ["type", "baseRef"],
           additionalProperties: false,
