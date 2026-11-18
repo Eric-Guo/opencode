@@ -86,6 +86,7 @@ export class RunnerInbox {
       placement?: "fixed" | "captured"
       builtins?: () => BuiltinPolicy
       builtin?: boolean
+      fatalUnauthorized?: boolean
       startupLimit?: number
       hooks?: () => ReturnType<ExtensionManager["captureTools"]>
       result?(row: InboxTask, result: Omit<CommitTask, "claim_token">): Promise<Omit<CommitTask, "claim_token">>
@@ -201,7 +202,7 @@ export class RunnerInbox {
       type: failureType(error),
       code: error instanceof APIError ? error.code : null,
     }
-    if (error instanceof APIError && error.status === 401) {
+    if (this.options.fatalUnauthorized !== false && error instanceof APIError && error.status === 401) {
       this.failure = error
       this.options.wake()
     }
