@@ -5,7 +5,7 @@ import type { Mcp } from "@opencode/core/mcp/index"
 import { openWrite } from "./extensions"
 import { mcpName, type McpRow } from "./mcp-settings"
 
-export function curateMcp(row: McpRow, listed: readonly Pick<Mcp.Tool, "name" | "description" | "inputSchema">[]) {
+export function curateMcp(row: McpRow, listed: readonly Mcp.AdvertisedTool[]) {
   const tools: { raw: string; definition: AnnouncedTool; bytes: number }[] = []
   const skipped: { name: string; reason: string }[] = []
   const names = listed.map((tool) => tool.name)
@@ -28,10 +28,9 @@ export function curateMcp(row: McpRow, listed: readonly Pick<Mcp.Tool, "name" | 
       continue
     }
 
-    const schema = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.MutableJson))(tool.inputSchema)
-    const valid = validMcpSchema(schema)
+    const schema = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.MutableJson))(tool.inputSchema)
 
-    if (!valid) {
+    if (schema._tag === "None" || !validMcpSchema(schema.value)) {
       skipped.push({ name: tool.name, reason: "Invalid object JSON Schema" })
       continue
     }
@@ -40,7 +39,7 @@ export function curateMcp(row: McpRow, listed: readonly Pick<Mcp.Tool, "name" | 
     const definition: AnnouncedTool = {
       name,
       description: tool.description,
-      input_schema: { ...schema, type: "object" },
+      input_schema: schema.value,
       effect_profile: row.profiles[tool.name] ?? openWrite,
       timeout_ms: row.timeout,
       mcp: { server_key: row.key, tool_name: tool.name },
@@ -60,7 +59,7 @@ export function mcpAnnouncementBytes(tools: readonly AnnouncedTool[]) {
   return Buffer.byteLength(JSON.stringify(tools))
 }
 
-function validMcpSchema(schema: Schema.JsonObject) {
+function validMcpSchema(schema: Schema.JsonObject): schema is NonNullable<AnnouncedTool["input_schema"]> {
   if (schema.type !== "object") return false
 
   try {

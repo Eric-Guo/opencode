@@ -57,7 +57,12 @@ it.live("session MCP uses public names and replacement cancels an accepted block
                   serverInfo: { name: "fixture", version: "1" },
                 }
               : message.method === "tools/list"
-                ? { tools: [{ name: "read", description: "Read the document", inputSchema: { type: "object" } }] }
+                ? {
+                    tools: [
+                      { name: "read", description: "Read the document", inputSchema: { type: "object" } },
+                      { name: "broken", description: "Broken", inputSchema: { type: "object", required: "path" } },
+                    ],
+                  }
                 : { content: [{ type: "text", text: "finished" }] }
           if (message.method === "initialize") events.push("initialize")
           if (message.method === "tools/call") {
@@ -98,7 +103,8 @@ it.live("session MCP uses public names and replacement cancels an accepted block
       }
       try {
         const first = await table.bind(input)
-        expect(first.issues).toEqual([])
+        expect(first.issues).toEqual(["My Server: broken: Invalid object JSON Schema"])
+        expect(first.tools).toHaveLength(1)
         expect(first.tools[0]).toStartWith("mcp__My_Server__read_")
         const running = table.tools()[0].execute(
           {},
@@ -329,7 +335,12 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
               capabilities: { tools: {}, prompts: {}, resources: {} },
               serverInfo: { name: "fixture", version: "1" },
             },
-            "tools/list": { tools: [{ name: "probe", description: "Probe", inputSchema: { type: "object" } }] },
+            "tools/list": {
+              tools: [
+                { name: "probe", description: "Probe", inputSchema: { type: "object" } },
+                { name: "broken", description: "Broken", inputSchema: { type: "object", required: "path" } },
+              ],
+            },
             "resources/list": {
               resources: [
                 { uri: resource.uri, mimeType: resource.mimeType, name: "manual", description: "Read the manual" },
@@ -356,6 +367,7 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
         },
       })
       const directory = await mkdtemp(join(tmpdir(), "nexus-mcp-errors-"))
+      const published = Promise.withResolvers<void>()
       const manager = new ExtensionManager(
         new Configuration(join(directory, "configuration.json")),
         [
@@ -396,13 +408,30 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
         ],
         directory,
         new AbortController().signal,
-        async () => {},
+        async () => published.resolve(),
       )
       try {
         await manager.start()
+        await Effect.runPromise(
+          mcp.add("imported", {
+            type: "remote",
+            url: server.url.href,
+            headers: { Authorization: "fixture-private-secret" },
+          }),
+        )
+        await Effect.runPromise(mcp.awaitStartup())
+        const native = await Effect.runPromise(mcp.tools())
+        expect(native.find((row) => row.server === "imported" && row.name === "broken")?.inputSchema).toEqual({
+          type: "object",
+        })
         const tool = manager.tools().find((tool) => tool.definition.name === "mcp__active__probe")!
         expect(await manager.command("mcp.list", {})).toMatchObject([
-          { server: "active", bytes: 113, tools: [{ name: "mcp__active__probe", bytes: 113 }] },
+          {
+            server: "active",
+            skipped: [{ name: "broken", reason: "Invalid object JSON Schema" }],
+            bytes: 113,
+            tools: [{ name: "mcp__active__probe", bytes: 113 }],
+          },
           { server: "parked", status: "disabled" },
           { server: "context7", status: "disabled" },
         ])
@@ -457,11 +486,21 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
         const before = calls.filter((method) => method === "initialize").length
         expect(await manager.command("mcp.probe", { server: "parked" })).toMatchObject({
           status: "connected",
+          skipped: [{ name: "broken", reason: "Invalid object JSON Schema" }],
           bytes: 113,
           tools: [{ name: "mcp__parked__probe", bytes: 113 }],
         })
         expect(calls.filter((method) => method === "initialize").length).toBeGreaterThan(before)
         expect(manager.tools().some((tool) => tool.definition.name === "mcp__parked__probe")).toBe(false)
+        await manager.change({ id: "fixture.mcp", operations: [{ op: "set", path: ["servers"], value: ["imported"] }] })
+        await published.promise
+        expect(await manager.command("mcp.list", {})).toMatchObject([
+          {
+            server: "imported",
+            tools: [{ name: "mcp__imported__probe" }],
+            skipped: [{ name: "broken", reason: "Invalid object JSON Schema" }],
+          },
+        ])
       } finally {
         await manager.close()
         server.stop(true)

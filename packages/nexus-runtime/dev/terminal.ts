@@ -3,7 +3,16 @@ import { basename, extname, join, resolve } from "node:path"
 import { parseArgs } from "node:util"
 import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
-import { TranscriptAccumulator, type JsonObject, type JsonValue } from "@cybros/agent"
+import {
+  ThreadAccumulator,
+  TranscriptAccumulator,
+  type JsonObject,
+  type JsonValue,
+  type RunTranscript,
+  type TranscriptItem,
+  type ProgressFrame,
+} from "@cybros/agent"
+import { modelRecoveryHint } from "../src/execution"
 import { readSkill } from "../src/skills"
 
 export type DevelopmentTerminal = {
@@ -82,7 +91,8 @@ export const developmentHelp = `Nexus development controls (source checkout only
   say HOST TEXT           submit or schedule another input (--mode steer|queue|steer_now)
   followers | runs | providers | models | adaptations | rules
   attach HOST | watch HOST | follow HOST | result HOST
-  transcript HOST | graph HOST | phases HOST | task HOST KEY | request HOST KEY
+  transcript HOST [--before CURSOR] [--limit N] [--follow | --prefix KEY]
+  graph HOST | phases HOST | task HOST KEY | request HOST KEY
   stop HOST [TASK] | pause HOST | resume HOST | retry HOST [TASK] | abandon HOST [TASK]
   approve HOST TASK [--always --match PREFIX] | deny HOST TASK [REASON] | answer HOST TASK TEXT
   compact HOST [TASK] | append HOST -f FILE | delete HOST
@@ -122,6 +132,8 @@ export function parseDevelopment(args: readonly string[]) {
       file: { type: "string", short: "f" },
     },
   })
+  if (parsed.positionals[0] === "transcript" && parsed.values.follow && parsed.values.prefix !== undefined)
+    throw new Error("--follow follows the mainline. Drop --prefix to follow this run.")
   const text = (key: (typeof strings)[number] | "file") => {
     const value = parsed.values[key]
     if (value === undefined) return undefined
@@ -607,11 +619,11 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     print(await call("run.result", { run: resolved.run }))
     return 0
   }
-  if (
-    ["watch", "follow"].includes(parsed.verb) ||
-    (parsed.verb === "transcript" && parsed.values.follow && !parsed.text("prefix"))
-  )
-    return followDevelopment(resolved, parsed, terminal)
+  if (parsed.verb === "transcript" && parsed.values.follow) {
+    if (!resolved.run) throw new Error("This conversation has no materialized run.")
+    return followThread(resolved.run, parsed, terminal)
+  }
+  if (["watch", "follow"].includes(parsed.verb)) return followDevelopment(resolved, parsed, terminal)
   if (parsed.verb === "stop" && !parsed.args[1] && parsed.text("host-type") !== "run" && resolved.conversation) {
     print(await call("stop", { conversation: resolved.conversation }))
     return 0
@@ -702,6 +714,19 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     limit: parsed.number("limit"),
     before: parsed.text("before"),
   })
+  if (parsed.verb === "task") {
+    const hint = heldTaskHint(object(object(result).task))
+    if (hint) terminal.error(hint + "\n")
+  }
+  if (parsed.verb === "transcript" && !parsed.values.json) {
+    const page = object(result)
+    const rounds = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(page.rounds)
+    for (const row of rounds) terminal.write(formatRound(row))
+    if (!rounds.length)
+      terminal.write(parsed.text("prefix") ? "(nothing under " + parsed.text("prefix") + ")\n" : "(no rounds yet)\n")
+    if (page.has_older) terminal.write("older: " + page.next_before + "\n")
+    return 0
+  }
   if (parsed.verb === "graph" && !parsed.values.json) terminal.write(String(object(result).mermaid) + "\n")
   else print(result)
   return 0
@@ -738,6 +763,120 @@ async function turnID(
   )
   if (!turn) throw new Error("Turn " + reference + " does not exist.")
   return String(turn.public_id)
+}
+
+function heldTaskHint(task: JsonObject) {
+  if (
+    task.kind !== "model_task" ||
+    task.failure_resolution ||
+    !["timed_out", "failed", "uncertain"].includes(String(task.status))
+  )
+    return
+  const key = object(task.error ?? {}).key
+  if (task.on_failure !== "absorb" || key === "conversation_cost_limit_reached") return modelRecoveryHint(key)
+}
+
+function formatRound(row: JsonObject) {
+  const calls = object(row.calls ?? {})
+  const items = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(calls.items ?? [])
+  const count = Number(calls.count ?? items.length)
+  const header = [String(row.task_key) + (row.mainline === false ? " (branch)" : ""), row.status]
+  if (count) header.push(count + (count === 1 ? " call" : " calls"))
+  const usage = object(row.usage ?? {})
+  if (typeof usage.total_tokens === "number") header.push(usage.total_tokens + "t")
+  const lines = [header.join("  ")]
+  for (const call of items) {
+    lines.push(
+      "  " + (call.is_error ? "! " : "- ") + call.name + " " + call.status + (call.title ? " — " + call.title : ""),
+    )
+    if (call.output_preview) lines.push("    " + call.output_preview)
+  }
+  if (count > items.length) lines.push("  … " + (count - items.length) + " more calls")
+  if (Array.isArray(row.branches) && row.branches.length) lines.push("  branches: " + row.branches.join(", "))
+  if (row.text_preview) lines.push("  " + row.text_preview)
+  if (row.error) lines.push("  ! " + object(row.error).key)
+  return lines.join("\n") + "\n"
+}
+
+async function followThread(run: string, parsed: ReturnType<typeof parseDevelopment>, terminal: DevelopmentTerminal) {
+  const call = (action: string, fields: Record<string, unknown> = {}) =>
+    terminal.command(clean({ action, addressed: true, ...fields }))
+  const started = performance.now()
+  const timeout = parsed.number("timeout")
+  const limit = parsed.number("limit")
+  const opened = object(await call("stream.open", { run, live: true }))
+  const stream = Schema.decodeUnknownSync(Schema.String)(opened.stream)
+  const thread = new ThreadAccumulator()
+  const seen = new Map<string, string>()
+  const print = (row: JsonObject) => {
+    const signature = JSON.stringify(row)
+    const key = String(row.task_key)
+    if (seen.get(key) === signature) return
+    seen.set(key, signature)
+    terminal.write(parsed.values.json ? signature + "\n" : formatRound(row))
+  }
+  // The worker transports JSON from the typed SDK transcript and channel readers.
+  const seed = async (before?: string) => {
+    const page = (await call("transcript", { run, before, limit })) as unknown as RunTranscript
+    thread.seed(page).forEach(print)
+    if (page.has_older) terminal.error("older: " + page.next_before + "\n")
+  }
+  let observedRunning = false
+  let live = ""
+  try {
+    await seed(parsed.text("before"))
+    while (!terminal.signal.aborted) {
+      const events = object(await call("stream.poll", { stream }))
+      if (events.lost) {
+        terminal.error(`Live stream skipped ${events.lost} buffered events. Refreshing the transcript.\n`)
+        await seed()
+      }
+      for (const event of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(events.events)) {
+        if (event.channel === "notice") {
+          terminal.error(String(event.message) + "\n")
+          continue
+        }
+        if (event.channel === "resync") {
+          await seed()
+          continue
+        }
+        const frame = object(event.frame)
+        if (frame.run_public_id && frame.run_public_id !== run) continue
+        if (event.channel === "transcript") {
+          const item = frame as unknown as TranscriptItem
+          if (item.type === "round") {
+            const settled = thread.settleRound(item)
+            if (settled) print(settled)
+          }
+          if (item.type === "call") thread.settleCall(item)
+        }
+        if (event.channel === "progress") {
+          const progress = frame as unknown as ProgressFrame
+          if (progress.type === "round_started") thread.roundStarted(progress)
+          if (progress.type === "step_started") thread.stepStarted(progress)
+          if (progress.type === "step_claimed") thread.stepClaimed(progress)
+        }
+        const next = thread.live.join(", ")
+        if (next === live) continue
+        live = next
+        terminal.write(
+          parsed.values.json ? JSON.stringify({ live: thread.live }) + "\n" : "live: " + (next || "(nothing)") + "\n",
+        )
+      }
+      const info = object(await call("run", { run }))
+      if (["completed", "failed", "canceled"].includes(String(info.status))) {
+        if (observedRunning || parsed.text("before") === undefined) await seed()
+        return info.status === "completed" ? 0 : 1
+      }
+      observedRunning = true
+      if (timeout !== undefined && performance.now() - started >= timeout * 1000)
+        throw new Error("Timed out watching " + run)
+      await setTimeout(100, undefined, { signal: terminal.signal })
+    }
+    return 130
+  } finally {
+    await call("stream.close", { stream }).catch(() => {})
+  }
 }
 
 async function followDevelopment(
@@ -803,6 +942,7 @@ async function followDevelopment(
           terminal.error(String(event.message) + "\n")
           continue
         }
+        if (event.channel === "resync") continue
         const frame = object(event.frame)
         const payload = object(frame.payload ?? {})
         if (event.channel === "transcript" && frame.type === "stream_reset") {
@@ -829,21 +969,11 @@ async function followDevelopment(
             ? JSON.stringify(task) + "\n"
             : `${task.status}  ${key}${task.tool_name ? "  " + task.tool_name : ""}${task.error ? "  " + JSON.stringify(task.error) : ""}\n`,
         )
+        const hint = heldTaskHint(task)
+        if (hint) terminal.error(hint + "\n")
         if (["awaiting_input", "needs_approval"].includes(String(task.status))) {
           const detail = await call("task", { run: target.run, task: key })
           terminal.write(formatDevelopment(detail))
-        }
-      }
-      if (parsed.verb === "transcript") {
-        const transcript = object(
-          await call("transcript", { run: target.run, prefix: parsed.text("prefix"), limit: parsed.number("limit") }),
-        )
-        for (const row of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(transcript.rounds).toReversed()) {
-          const key = "transcript:" + row.task_key
-          const signature = JSON.stringify(row)
-          if (seen.get(key) === signature) continue
-          seen.set(key, signature)
-          terminal.write(parsed.values.json ? signature + "\n" : formatDevelopment(row))
         }
       }
       if (parsed.values.stream !== false) {

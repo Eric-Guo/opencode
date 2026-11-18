@@ -585,21 +585,25 @@ export async function act(tab: Tab, ref: string, text?: string, submit = false) 
         objectId,
         functionDeclaration: `async function(){
           const deadline=performance.now()+${tab.actionTimeout};let reason='not ready';
+          const fill = ${text !== undefined};
           do {
             if(!this.isConnected)return 'detached';
-            this.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
-            const first=this.getBoundingClientRect();
-            await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            if(!fill)this.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
             const box=this.getBoundingClientRect(),style=getComputedStyle(this);
-            const x=Math.max(0,Math.min(innerWidth-1,box.x+box.width/2)),y=Math.max(0,Math.min(innerHeight-1,box.y+box.height/2));
-            let hit=this.ownerDocument.elementFromPoint(x,y);
-            while(hit&&hit.shadowRoot&&hit.shadowRoot.elementFromPoint(x,y)!==hit)hit=hit.shadowRoot.elementFromPoint(x,y);
-            reason=this.disabled||this.closest('[inert],[aria-disabled="true"]')?'disabled':
-              ${text !== undefined}&&this.readOnly?'read-only':
-              style.visibility==='hidden'||style.display==='none'||!box.width||!box.height?'not visible':
-              ['x','y','width','height'].some(key=>Math.abs(first[key]-box[key])>1)?'moving':
-              hit!==this&&!this.contains(hit)?'covered by another element':'';
+            reason=this.matches(':disabled')||this.closest('[inert]')||this.closest('[aria-disabled]')?.getAttribute('aria-disabled')==='true'?'disabled':
+              fill&&(this.readOnly||this.getAttribute('aria-readonly')==='true')?'read-only':
+              style.visibility!=='visible'||!box.width||!box.height?'not visible':'';
+            if(!reason&&!fill){
+              await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+              const latest=this.getBoundingClientRect();
+              const x=Math.max(0,Math.min(innerWidth-1,latest.x+latest.width/2)),y=Math.max(0,Math.min(innerHeight-1,latest.y+latest.height/2));
+              let hit=this.ownerDocument.elementFromPoint(x,y);
+              while(hit&&hit.shadowRoot&&hit.shadowRoot.elementFromPoint(x,y)!==hit)hit=hit.shadowRoot.elementFromPoint(x,y);
+              reason=['x','y','width','height'].some(key=>Math.abs(box[key]-latest[key])>1)?'moving':
+                hit!==this&&!this.contains(hit)?'covered by another element':'';
+            }
             if(!reason)return true;
+            await new Promise(resolve=>requestAnimationFrame(resolve));
           } while(performance.now()<deadline);
           return reason
         }`,
@@ -658,7 +662,23 @@ export async function act(tab: Tab, ref: string, text?: string, submit = false) 
       )
       if (focused.exceptionDetails)
         throw new Error(focused.exceptionDetails.exception?.description ?? focused.exceptionDetails.text)
-      if (focused.result.value === true) await send("Input.insertText", { text })
+      if (focused.result.value === true) {
+        if (text) await send("Input.insertText", { text })
+        else {
+          await send("Input.dispatchKeyEvent", {
+            type: "keyDown",
+            key: "Delete",
+            code: "Delete",
+            windowsVirtualKeyCode: 46,
+          })
+          await send("Input.dispatchKeyEvent", {
+            type: "keyUp",
+            key: "Delete",
+            code: "Delete",
+            windowsVirtualKeyCode: 46,
+          })
+        }
+      }
       if (submit) {
         await send("Input.dispatchKeyEvent", {
           type: "keyDown",
