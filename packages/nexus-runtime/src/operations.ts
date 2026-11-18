@@ -531,6 +531,9 @@ export class Operations {
       if (info.answering_user_public_id !== this.identity.agent && !input.addressed)
         throw new Error("This conversation belongs to another agent.")
 
+      if (input.action === "prompt.preview")
+        return this.application.preview({ ...input, workspace: selected }, info, options)
+
       if (input.action === "attach") {
         this.application.lifecycle.adopt(selected, input.conversation)
         return info
@@ -590,18 +593,6 @@ export class Operations {
           options,
         )
       }
-      if (input.action === "prompt.preview")
-        return chat.estimateInput(
-          {
-            prompt: input.prompt,
-            model: input.model ? { model: input.model } : undefined,
-            answering_user_public_id: input.answering_user_public_id,
-            variables: input.variables,
-            template: input.template,
-            render: true,
-          },
-          options,
-        )
       if (input.action === "stop") return chat.cancel(options)
       if (input.action === "archive" || input.action === "delete") {
         const result = input.action === "archive" ? await chat.archive(options) : await chat.delete(options)
