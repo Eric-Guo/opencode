@@ -5580,6 +5580,7 @@ export type ExperimentalNexusManageInput = {
         readonly action: "application.open"
         readonly workspace?: string | null
         readonly key: string
+        readonly model?: string | null
         readonly title?: string | null
         readonly runner?: string | null | null
       }
