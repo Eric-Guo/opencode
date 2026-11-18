@@ -27,6 +27,7 @@ it.effect("registers read protection and redaction with the real plugin host", (
       const host = yield* PluginHost.make(plugin, ThapeSsoProtection.ID)
       const call = {
         tool: "read",
+        codemode: false,
         sessionID: Session.ID.make("ses_protection"),
         agent: Agent.ID.make("build"),
         messageID: SessionMessage.ID.make("msg_protection"),
