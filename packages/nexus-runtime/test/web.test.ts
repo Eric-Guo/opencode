@@ -123,6 +123,15 @@ test("web rendering detects legacy encodings, strips invisible controls and caps
   expect((await renderWebContent(Buffer.from("one\u202etwo\0three"), "text/plain", publish)).content).toBe(
     "onetwothree",
   )
+  const exact = "界".repeat(17066) + "ab"
+  const withNewline = Buffer.from(exact + "\n")
+  expect(await renderWebContent(withNewline, "text/plain", publish)).toEqual({
+    content: exact,
+    structured_content: { truncation: null },
+  })
+  expect((await renderWebContent(withNewline, "text/plain", publish, { raw: true })).content).toBe(exact + "\n")
+  expect(uploaded).toEqual([])
+
   const unicode = "界".repeat(30000)
   const rendered = await renderWebContent(Buffer.from(unicode), "text/plain", publish)
 

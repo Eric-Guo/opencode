@@ -10,7 +10,7 @@ import { telegramSetup } from "../src/telegram-setup"
 import { telegramRule, telegramTime } from "../src/telegram-schedules"
 import { telegramChunks } from "../src/telegram-api"
 import { storeFixture } from "./fixture/store"
-import { conversationFixture, inputFixture } from "./fixture/conversation"
+import { conversationFixture, inputFixture, turnFixture } from "./fixture/conversation"
 
 const connection = "00000000-0000-4000-8000-000000000001"
 const bot = "00000000-0000-4000-8000-000000000002"
@@ -29,6 +29,10 @@ function fixture(group = true) {
     loseSchedule: false,
     changedVariant: false,
     inference: 0,
+    latest: 1,
+    fork: "ok",
+    regeneration: "ok",
+    discussion: [] as JsonObject[],
   }
   const sent: JsonObject[] = []
   const previews: JsonObject[] = []
@@ -36,8 +40,14 @@ function fixture(group = true) {
   const requests: string[] = []
   const schedules: { key: string; body: JsonObject; path: string }[] = []
   const scheduleEdits: JsonObject[] = []
+  const forks: { key: string | null; body: unknown }[] = []
+  const regenerations: (string | null)[] = []
+  const contextEstimates: JsonObject[] = []
+  const participationPrompts: JsonObject[] = []
+  const regenerated = { public_id: "regenerated", source: "regenerate", status: "completed", content: "New answer" }
   const service = storeFixture(async (request) => {
-    const path = new URL(request.url).pathname
+    const url = new URL(request.url)
+    const path = url.pathname
     requests.push(path)
     if (path.endsWith("/models"))
       return Response.json({
@@ -137,33 +147,79 @@ function fixture(group = true) {
         ],
         pagination: { next_after: null },
       })
+    if (path.endsWith("/workspaces/workspace"))
+      return Response.json({
+        workspace: {
+          public_id: "workspace",
+          name: "Home",
+          state: "active",
+          dedicated: false,
+          access_mode: "private",
+          lock_version: 0,
+          created_at: new Date(now).toISOString(),
+          updated_at: new Date(now).toISOString(),
+          metadata: {},
+          tool_provider_overrides: {},
+          owner: { public_id: "human", display_name: "Human" },
+          creator: { public_id: "main", display_name: "Main", kind: "agent" },
+        },
+      })
+    if (path.endsWith("/context_estimate")) {
+      contextEstimates.push(((await request.json()) as { context_estimate: JsonObject }).context_estimate)
+      return Response.json({
+        context_estimate: {
+          input_tokens: 1,
+          tokenizer_exact: true,
+          message_count: 1,
+          history: { selected: 1, skipped: 0 },
+        },
+      })
+    }
+    if (path.endsWith("/conversations/conversation/forks")) {
+      forks.push({ key: request.headers.get("idempotency-key"), body: await request.json() })
+      if (state.fork === "refuse") return Response.json({ error: { code: "conflict" } }, { status: 409 })
+      if (state.fork === "lose") {
+        state.fork = "ok"
+        return new Response("lost body", { status: 201 })
+      }
+      return Response.json(
+        {
+          conversation: conversationFixture({ public_id: "new-conversation", answering_user_public_id: bot }),
+          runner_effects: { status: "untouched", runners: [] },
+        },
+        { status: 201 },
+      )
+    }
     if (path.endsWith("/children")) return Response.json({ conversations: [], pagination: { next_after: null } })
     if (path.endsWith("/memory")) return Response.json({ memory: [] })
-    if (path.endsWith("/turns"))
+    if (path.endsWith("/turns")) {
+      const before = url.searchParams.get("before_position")
+      const position = before ? Math.min(Number(before) - 1, state.latest) : 0
+      const limit = Number(url.searchParams.get("limit"))
+      const current = turnFixture(position, {
+        public_id: position === 1 ? "turn" : "turn-" + position,
+        answering_user_public_id: bot,
+        active_variant: {
+          public_id: position === 1 ? "variant" : "variant-" + position,
+          source: "original",
+          status: "completed",
+          content: "A relevant observed discussion",
+          run_public_id: null,
+        },
+      })
       return Response.json({
-        turns: [
-          {
-            public_id: "turn",
-            position: 1,
-            kind: "message",
-            role: "user",
-            status: "completed",
-            visibility: "visible",
-            created_at: new Date(now).toISOString(),
-            answering_user_public_id: bot,
-            active_variant: {
-              public_id: "variant",
-              source: "original",
-              status: "completed",
-              content: "A relevant observed discussion",
-              run_public_id: null,
-            },
-          },
-        ],
+        turns:
+          limit === 20 && state.discussion.length
+            ? before
+              ? [current, ...state.discussion].slice(-limit)
+              : [turnFixture(0)]
+            : [current],
         pagination: { before_position: null, after_position: null },
       })
+    }
     if (path.endsWith("/inference_requests") && request.method === "POST") {
       state.inference++
+      participationPrompts.push((await request.json()) as JsonObject)
       return Response.json(
         {
           inference_request: {
@@ -231,6 +287,8 @@ function fixture(group = true) {
         { status: 201 },
       )
     }
+    if (path.endsWith("/conversations/conversation/archive"))
+      return Response.json({ conversation: conversationFixture({ answering_user_public_id: bot, archived_at: "now" }) })
     if (path.endsWith("/conversations/conversation") || path.endsWith("/conversations/new-conversation"))
       return Response.json({
         conversation: conversationFixture({
@@ -288,10 +346,22 @@ function fixture(group = true) {
           },
         },
       })
+    if (path.endsWith("/turns/turn/regeneration")) {
+      regenerations.push(request.headers.get("idempotency-key"))
+      if (state.regeneration === "refuse") return Response.json({ error: { code: "conflict" } }, { status: 409 })
+      if (state.regeneration === "lose") {
+        state.regeneration = "committed"
+        return new Response("lost body", { status: 202 })
+      }
+      return Response.json({ turn: { public_id: "turn", status: "completed" }, variant: regenerated }, { status: 202 })
+    }
+    if (path.endsWith("/regeneration_receipt") && state.regeneration === "committed")
+      return Response.json({ turn: { public_id: "turn", status: "completed" }, variant: regenerated })
     if (path.endsWith("/turns/turn/variants"))
       return Response.json({
         turn: { public_id: "turn", inherited: false },
         variants: [
+          ...(state.regeneration === "committed" ? [{ ...regenerated, public_id: "unrelated" }, regenerated] : []),
           {
             public_id: "variant",
             source: "original",
@@ -394,6 +464,10 @@ function fixture(group = true) {
     requests,
     schedules,
     scheduleEdits,
+    forks,
+    regenerations,
+    contextEstimates,
+    participationPrompts,
     state,
     config,
     current,
@@ -418,6 +492,76 @@ function message(id: number, text: string, fields: JsonObject = {}) {
     },
   }
 }
+
+test("Telegram preserves queued input on invalid or refused controls and retries a fork with the frozen turn", async () => {
+  using peer = fixture()
+  const ingress = peer.open()
+  const from = { id: 10, first_name: "Owner" }
+  await ingress.ingest(
+    connection,
+    message(1, "@FixtureBot queued", { from, entities: [{ type: "mention", offset: 0, length: 11 }] }),
+    now,
+  )
+  expect(peer.saved().batches).toHaveLength(1)
+  const commands = ["/fork typo", "/fork 1 extra", "/regenerate typo", "/undo 0", "/variants", "/resume one two"]
+  for (const [index, command] of commands.entries())
+    await ingress.ingest(connection, message(index + 2, command, { from }), now)
+
+  expect(peer.saved().batches).toHaveLength(1)
+  expect(peer.requests.filter((path) => path.includes("/turns"))).toEqual([])
+  expect(peer.forks).toEqual([])
+
+  peer.state.fork = "refuse"
+  await ingress.ingest(connection, message(8, "/fork", { from }), now)
+  expect(peer.saved().batches).toHaveLength(1)
+  expect(peer.forks[0].body).toEqual({ fork: { turn_public_id: "turn", variant_public_id: "variant" } })
+
+  peer.state.fork = "lose"
+  const update = message(9, "/fork", { from })
+  await expect(ingress.ingest(connection, update, now)).rejects.toThrow()
+  expect(peer.saved().control?.fork).toMatchObject({ turn: "turn", variant: "variant" })
+  expect(peer.saved().batches).toHaveLength(1)
+  peer.state.latest = 2
+  await peer.open().ingest(connection, update, now)
+  expect(peer.forks.slice(1)).toEqual([peer.forks[1], peer.forks[1]])
+  expect(peer.saved().batches).toHaveLength(0)
+  expect(peer.saved().control).toBeNull()
+})
+
+test("Telegram context previews use the shared Bot and each requesting speaker", async () => {
+  using peer = fixture()
+  const ingress = peer.open()
+  await ingress.ingest(connection, message(1, "/context"), now)
+  await ingress.ingest(connection, message(2, "/context", { from: { id: 30, first_name: "Other requester" } }), now)
+  expect(peer.contextEstimates).toEqual(
+    ["speaker-20", "speaker-30"].map((speaker) => ({
+      prompt: "",
+      render: true,
+      answering_user_public_id: bot,
+      speaker_public_id: speaker,
+    })),
+  )
+})
+
+test("Telegram tracks the exact regenerated candidate after a lost reply and drops a refused watch", async () => {
+  using peer = fixture()
+  const ingress = peer.open()
+  const from = { id: 10, first_name: "Owner" }
+  peer.state.regeneration = "refuse"
+  await ingress.ingest(connection, message(1, "/regenerate", { from }), now)
+  expect(peer.saved().candidates).toEqual([])
+
+  peer.state.regeneration = "lose"
+  const update = message(2, "/regenerate", { from })
+  await expect(ingress.ingest(connection, update, now)).rejects.toThrow()
+  expect(peer.saved().candidates?.[0]).toMatchObject({ turn: "turn", operation: "regenerate" })
+  const restarted = peer.open()
+  await restarted.ingest(connection, update, now)
+  await restarted.tick(connection, now)
+  expect(peer.regenerations).toHaveLength(2)
+  expect(peer.saved().candidates).toEqual([])
+  expect(peer.saved().work.map((work) => work.input)).toEqual(["regenerated"])
+})
 
 test("Telegram rejects duplicate tokens and target reuse, including disabled bindings", () => {
   expect(
@@ -702,6 +846,34 @@ test("Telegram active participation uses a settled observed source and records o
   await peer.open().tick(connection, now + 7002)
   expect(peer.inputs.at(-1)?.body).toMatchObject({ kind: "message", role: "assistant", text: "A useful brief reply." })
   expect(peer.sent.filter((row) => row.text === "A useful brief reply.")).toHaveLength(1)
+})
+
+test("Telegram participation requires its source to fit in the recent completed message window", async () => {
+  using peer = fixture()
+  const ingress = peer.open()
+  await ingress.ingest(connection, message(1, "/mode active", { from: { id: 10, first_name: "Owner" } }), now)
+  await ingress.ingest(connection, message(2, "An observed message"), now + 1)
+  await ingress.tick(connection, now + 2001)
+  peer.state.terminal = true
+  const row = (position: number, content: string, kind = "message") =>
+    turnFixture(position, {
+      kind,
+      active_variant: { public_id: "discussion-" + position, source: "original", status: "completed", content },
+    })
+  peer.state.discussion = Array.from({ length: 4 }, (_, index) => row(index + 2, "界".repeat(2500)))
+  await ingress.tick(connection, now + 7001)
+  expect(peer.participationPrompts).toEqual([])
+
+  peer.state.discussion = [
+    row(2, "Latest discussion in the chat"),
+    row(3, "This direct reply is excluded", "direct_reply"),
+  ]
+  await ingress.tick(connection, now + 7002)
+  expect(peer.participationPrompts).toHaveLength(1)
+  const prompt = JSON.stringify(peer.participationPrompts[0])
+  expect(prompt).toContain("A relevant observed discussion")
+  expect(prompt).toContain("Latest discussion in the chat")
+  expect(prompt).not.toContain("This direct reply is excluded")
 })
 
 test("Telegram retires refused media so a later source can be admitted", async () => {

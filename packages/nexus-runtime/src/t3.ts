@@ -11,6 +11,7 @@ import { runnerRefusal } from "./runner-policy"
 import { T3Transport, T3Uncertain } from "./t3-transport"
 import { T3Catalog } from "./t3-catalog"
 import { T3Native } from "./t3-native"
+import { outputHead } from "./output-window"
 
 const Workspace = Schema.Union([
   Schema.Struct({ type: Schema.Literal("root") }),
@@ -775,7 +776,7 @@ export class T3Client {
 
   private async result(work: Work, current: Projection, context: RunnerContext, capture: boolean) {
     const run = current.runs.toSorted((a, b) => b.ordinal - a.ordinal)[0]
-    const report: JsonObject = {
+    const summary: JsonObject = {
       work_id: work.entry.public_id,
       agent: work.value.selection.agent,
       harness: work.value.selection.harness,
@@ -783,19 +784,20 @@ export class T3Client {
       status: run?.status ?? "not_started",
       worktree: current.thread.worktreePath,
       branch: current.thread.branch,
-      text: current.messages
-        .filter((row) => row.role === "assistant")
-        .map((row) => row.text)
-        .join("\n"),
-      checks: [],
-      workers: json(current.subagents),
       requests: json(
         current.runtimeRequests
           .filter((row) => row.status === "pending")
-          .map((row) => ({
-            kind: row.kind,
-            prompt: current.turnItems.find((item) => item.requestId === row.id)?.prompt,
-          })),
+          .map((row) => {
+            const item = current.turnItems.find((item) => item.requestId === row.id)
+            return {
+              kind: row.kind,
+              prompt: item?.prompt,
+              questions: (item?.questions ?? []).map((question) => ({
+                prompt: question.question,
+                options: question.options.map((option) => option.label),
+              })),
+            }
+          }),
       ),
     }
     const checks = await Promise.all(
@@ -821,20 +823,32 @@ export class T3Client {
           })
         }),
     )
-    report.checks = checks
+    const diff =
+      capture && context.publish
+        ? await this.transport
+            .call(
+              "orchestration.getFullThreadDiff",
+              { threadId: work.value.thread, toTurnCount: run!.ordinal, ignoreWhitespace: false },
+              context.signal,
+            )
+            .then((value) => Schema.decodeUnknownSync(Schema.Struct({ diff: Schema.String }))(value).diff)
+            .catch(() => undefined)
+        : undefined
+    context.signal.throwIfAborted()
+    if (capture && context.publish && diff === undefined)
+      summary.limitation = "Final diff unavailable; reported native results and checks remain available."
+
+    const report = {
+      ...summary,
+      text: current.messages
+        .filter((row) => row.role === "assistant")
+        .map((row) => row.text)
+        .join("\n"),
+      checks,
+      workers: current.subagents,
+    }
     const files: JsonObject[] = []
     if (capture && context.publish) {
-      const diff = await this.transport
-        .call(
-          "orchestration.getFullThreadDiff",
-          { threadId: work.value.thread, toTurnCount: run!.ordinal, ignoreWhitespace: false },
-          context.signal,
-        )
-        .then((value) => Schema.decodeUnknownSync(Schema.Struct({ diff: Schema.String }))(value).diff)
-        .catch(() => undefined)
-      context.signal.throwIfAborted()
-      if (diff === undefined)
-        report.limitation = "Final diff unavailable; reported native results and checks remain available."
       files.push(
         await context.publish(
           new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }),
@@ -846,14 +860,15 @@ export class T3Client {
           await context.publish(new Blob([diff], { type: "text/x-diff" }), "coding-" + work.entry.public_id + ".diff"),
         )
     }
-    const text = JSON.stringify(report).slice(0, 65536)
+    const output = outputHead(JSON.stringify(report))
+    const text = output.truncation
+      ? files.length
+        ? "[Coding report exceeds the inline output limit. See the attached JSON report.]"
+        : "[Coding report exceeds the inline output limit. Review the structured work summary.]"
+      : output.text
     return {
       content: files.length ? [{ type: "text", text }, ...files] : text,
-      structured_content: {
-        work_id: work.entry.public_id,
-        ...work.value.selection,
-        status: run?.status ?? "not_started",
-      },
+      structured_content: summary,
       is_error: !!settled(current) && run?.status !== "completed",
     }
   }
