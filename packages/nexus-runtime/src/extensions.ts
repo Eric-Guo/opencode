@@ -4,6 +4,7 @@ import type { AnnouncedTool, CommitTask, JsonObject, TaskRealtime } from "@cybro
 import type { HostTools } from "./host"
 import type { Orchestration } from "./orchestration"
 import type { RealtimeOptions } from "./realtime"
+import type { claimAttachments } from "./claim-attachments"
 
 export type RunnerContext = {
   artifacts?: string
@@ -18,6 +19,7 @@ export type RunnerContext = {
   started?: () => void
   workerRetired?: (reason: Error) => void
   publish?: (file: Blob, name: string) => Promise<JsonObject>
+  attachment?: ReturnType<typeof claimAttachments>
   progress?: (text: string) => Promise<void>
   processProgress?: (frame: { process_id: string; lines?: string[]; exit?: number | null }) => Promise<void>
   orchestration?: Orchestration
