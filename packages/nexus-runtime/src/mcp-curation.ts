@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import type { AnnouncedTool } from "@cybros/agent"
+import { ToolLowering, type AnnouncedTool } from "@cybros/agent"
 import { compileToolSchema } from "./tool-schema"
 import type { Mcp } from "@opencode/core/mcp/index"
 import { openWrite } from "./extensions"
@@ -49,11 +49,11 @@ export function curateMcp(row: McpRow, listed: readonly Pick<Mcp.Tool, "name" | 
     tools.push({
       raw: tool.name,
       definition,
-      bytes: Buffer.byteLength(JSON.stringify(definition)),
+      bytes: Buffer.byteLength(JSON.stringify(ToolLowering.functionEntry(definition))),
     })
   }
 
-  return { tools, skipped, fault: null, bytes: mcpAnnouncementBytes(tools.map((tool) => tool.definition)) }
+  return { tools, skipped, fault: null, bytes: tools.reduce((total, tool) => total + tool.bytes, 0) }
 }
 
 export function mcpAnnouncementBytes(tools: readonly AnnouncedTool[]) {
