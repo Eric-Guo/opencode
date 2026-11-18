@@ -3,8 +3,10 @@ import { executionSnapshot } from "./execution"
 import type {
   AgentConfigurationInput,
   Client,
+  Conversation,
   CreateInput,
   ExecutionSnapshot,
+  EstimateInput,
   JsonObject,
   RequestOptions,
   ToolDefinition,
@@ -378,6 +380,44 @@ export class NexusApplication {
     )
   }
 
+  async preview(
+    input: {
+      workspace: string
+      conversation: string
+      prompt?: string
+      model?: string
+      answering_user_public_id?: string
+      variables?: JsonObject
+      template?: JsonObject
+    },
+    info: Conversation,
+    options: RequestOptions,
+  ) {
+    const chat = this.member.workspace(input.workspace).conversation(input.conversation)
+    const prepared: EstimateInput = await this.admit(
+      { ...input, text: input.prompt ?? "", addressed: true },
+      this.member,
+      options,
+      info,
+    )
+
+    return chat.estimateInput(
+      {
+        prompt: input.prompt,
+        render: true,
+        model: prepared.model,
+        agent_configuration: prepared.agent_configuration,
+        model_selection: prepared.model_selection,
+        fallback_models: prepared.fallback_models,
+        inline: prepared.inline,
+        answering_user_public_id: prepared.answering_user_public_id,
+        variables: input.variables,
+        template: input.template,
+      },
+      options,
+    )
+  }
+
   captureInput(input: ApplicationInput, author = this.member, options: RequestOptions = {}) {
     return this.admissions.capture(this.admissionRequest(input), () => this.admit(input, author, options))
   }
@@ -391,8 +431,14 @@ export class NexusApplication {
     }
   }
 
-  private async admit(input: Parameters<NexusApplication["submit"]>[0], author: Client, options: RequestOptions) {
-    const conversation = await author.workspace(input.workspace).conversation(input.conversation).fetch(options)
+  private async admit(
+    input: Omit<ApplicationInput, "key">,
+    author: Client,
+    options: RequestOptions,
+    info?: Conversation,
+  ) {
+    const conversation =
+      info ?? (await author.workspace(input.workspace).conversation(input.conversation).fetch(options))
 
     const side = conversation.side ? await this.sides.read(input.workspace, input.conversation) : null
     const recipient = input.addressed

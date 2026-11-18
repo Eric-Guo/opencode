@@ -312,10 +312,10 @@ export class T3Client {
             "Delegate a complete coding assignment to an available coding agent. Discover supported agent/model choices with coding_work action=agents. Waits for completion and relays questions; use work_id to continue the original environment. Observe uncertain work before another launch.",
             {
               prompt: { type: "string", minLength: 1, maxLength: 65536 },
-              title: { type: "string", maxLength: 200 },
-              work_id: { type: "string" },
-              agent: { type: "string" },
-              model: { type: "string" },
+              title: { type: "string", minLength: 1, maxLength: 200 },
+              work_id: { type: "string", minLength: 1 },
+              agent: { type: "string", minLength: 1 },
+              model: { type: "string", minLength: 1 },
             },
             ["prompt"],
           ),
@@ -332,8 +332,8 @@ export class T3Client {
             "Discover agents or list, observe, steer, stop and forget this conversation's coding work. Stop requests cancellation; observe completion separately.",
             {
               action: { enum: ["agents", "list", "observe", "steer", "stop", "forget"] },
-              work_id: { type: "string" },
-              prompt: { type: "string", maxLength: 65536 },
+              work_id: { type: "string", minLength: 1 },
+              prompt: { type: "string", minLength: 1, maxLength: 65536 },
             },
             ["action"],
           ),
@@ -577,7 +577,11 @@ export class T3Client {
           })),
         }),
       }
-    if (!input.work_id) throw new Error("This coding_work action requires work_id.")
+    if (!input.work_id) return { is_error: true, content: "work_id is required for coding_work action=" + input.action }
+    const prompt = input.prompt
+    if (input.action === "steer" && !prompt)
+      return { is_error: true, content: "prompt is required for coding_work action=steer" }
+
     const work = await this.record(input.work_id, context)
     const current = await this.projection(work, context.signal, input.action === "steer")
     if (input.action === "observe") return this.result(work, current, context, false)
@@ -609,12 +613,11 @@ export class T3Client {
       )
       return { content: "Removed the continuation; committed results remain in history." }
     }
-    if (!input.prompt) throw new Error("Steering requires a prompt.")
     if (settled(current) || !(await this.ownerActive(work.value.owner, context)))
       throw new Error("This coding task no longer owns active work.")
     const run = current.runs.toSorted((a, b) => b.ordinal - a.ordinal)[0]
     if (!run) throw new Error("Coding work has no active run to steer.")
-    await this.send(work, input.prompt, { type: "steer_active", targetRunId: run.id }, context)
+    await this.send(work, prompt!, { type: "steer_active", targetRunId: run.id }, context)
     return { content: "Steering submitted for coding work " + work.entry.public_id + "." }
   }
 
