@@ -17,6 +17,7 @@ export const Plugin = define({
 
       models.remove("vipai", "gpt-6-astra")
       models.remove("vipai", "gpt-6.1-sol")
+      models.remove("vipai", "gpt-6.2-sol")
     })
 
     yield* ctx.tool
