@@ -850,14 +850,23 @@ const modes = [
 
 export async function editorPrompt(parts: readonly ContentBlock[], client: Client, signal: AbortSignal) {
   const text: string[] = []
+  const files: File[] = []
   const attachments: string[] = []
+  const maxBytes = 16 * 1024 * 1024
 
   for (const part of parts) {
     if (part.type === "text") text.push(part.text)
     if (part.type === "audio") throw RequestError.invalidParams(undefined, "Audio prompts are not supported.")
-    if (part.type === "resource_link")
-      text.push("resource: " + part.uri + (part.description ? "\n" + part.description : ""))
-    if (part.type === "resource" && "text" in part.resource) text.push(part.resource.uri + "\n" + part.resource.text)
+    if (part.type === "resource_link") {
+      if (!part.uri) throw RequestError.invalidParams(undefined, "Resource link needs a URI.")
+
+      text.push(part.uri)
+    }
+    if (part.type === "resource" && "text" in part.resource) {
+      const body = part.resource.text
+      text.push(part.resource.uri + "\n```\n" + body + (body.endsWith("\n") ? "" : "\n") + "```")
+      continue
+    }
 
     const media =
       part.type === "image"
@@ -869,14 +878,25 @@ export async function editorPrompt(parts: readonly ContentBlock[], client: Clien
     if (!media) continue
     if (!media.mime.startsWith("image/") && media.mime !== "application/pdf")
       throw RequestError.invalidParams(undefined, "Unsupported embedded resource media type.")
-    if (media.data.length > Math.ceil((16 * 1024 * 1024) / 3) * 4)
+
+    const data = media.data.replace(/[ \r\n]/g, "")
+    if (data.length > Math.ceil(maxBytes / 3) * 4)
       throw RequestError.invalidParams(undefined, "Editor media exceeds 16 MiB.")
 
-    const upload = await client.uploads.create(
-      new Blob([Buffer.from(media.data, "base64")], { type: media.mime }),
-      "editor-input-" + (attachments.length + 1),
-      { signal },
-    )
+    const bytes = Buffer.from(data, "base64")
+    if (!bytes.length || bytes.toString("base64") !== data)
+      throw RequestError.invalidParams(undefined, "Editor media data must be valid base64.")
+    if (bytes.length > maxBytes) throw RequestError.invalidParams(undefined, "Editor media exceeds 16 MiB.")
+
+    const extension =
+      media.mime === "image/svg+xml" ? "svg" : media.mime.split("/")[1].replace(/[^a-z0-9]/gi, "") || "img"
+
+    files.push(new File([bytes], "editor-input-" + (files.length + 1) + "." + extension, { type: media.mime }))
+  }
+
+  for (const file of files) {
+    signal.throwIfAborted()
+    const upload = await client.uploads.create(file, file.name, { signal })
 
     attachments.push(upload.public_id)
   }
