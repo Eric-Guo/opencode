@@ -59,5 +59,22 @@ it.live("streams a structured Nexus refusal through the generated client and val
       ),
     )
     expect(response.status).toBe(400)
+    const memory = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/experimental/nexus/manage", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "application.memory",
+            conversation: "fixture",
+            command: "ls",
+            format: "json",
+          }),
+        }),
+      ),
+    )
+
+    expect(memory.status).toBe(400)
+    expect(yield* Effect.promise(() => memory.json())).toMatchObject({ message: "Nexus is disconnected." })
   }),
 )

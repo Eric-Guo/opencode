@@ -35,10 +35,12 @@ function fixture(group = true) {
     fork: "ok",
     regeneration: "ok",
     discussion: [] as JsonObject[],
+    waiting: [] as JsonObject[],
   }
   const sent: JsonObject[] = []
   const previews: JsonObject[] = []
   const inputs: { key: string; body: JsonObject; conversation: string }[] = []
+  const queueWrites: { id: string; method: string; body?: unknown }[] = []
   const requests: string[] = []
   const schedules: { key: string; body: JsonObject; path: string }[] = []
   const scheduleEdits: JsonObject[] = []
@@ -402,6 +404,22 @@ function fixture(group = true) {
           metadata: { "opencode.bot": bot },
         }),
       })
+    if (path.endsWith("/inputs") && request.method === "GET")
+      return Response.json({ inputs: state.waiting, input_queue: { limit: 100, held: state.waiting.length } })
+    if (/\/inputs\/[^/]+$/.test(path) && ["PATCH", "DELETE"].includes(request.method)) {
+      const id = path.split("/").at(-1)!
+      const row = state.waiting.find((row) => row.public_id === id)
+      if (!row) return Response.json({ error: { code: "not_found" } }, { status: 404 })
+      if (request.method === "DELETE") {
+        queueWrites.push({ id, method: request.method })
+        state.waiting = state.waiting.filter((row) => row.public_id !== id)
+        return new Response(null, { status: 204 })
+      }
+      const body = (await request.json()) as { input: JsonObject }
+      queueWrites.push({ id, method: request.method, body })
+      Object.assign(row, body.input, { lock_version: Number(row.lock_version) + 1 })
+      return Response.json({ input: row })
+    }
     if (path.endsWith("/inputs") && request.method === "POST") {
       const body = (await request.json()) as { input: JsonObject }
       inputs.push({
@@ -566,6 +584,8 @@ function fixture(group = true) {
     sent,
     previews,
     inputs,
+    queueWrites,
+    store: service.state,
     requests,
     schedules,
     scheduleEdits,
@@ -600,6 +620,64 @@ function message(id: number, text: string, fields: JsonObject = {}) {
     },
   }
 }
+
+test("Telegram queue keeps the IDs it displayed through reordering and a lost durable receipt", async () => {
+  using peer = fixture()
+  const owner = { id: 10, first_name: "Owner" }
+  const ingress = peer.open()
+  const command = (id: number, text: string) => message(id, text, { from: owner })
+  const earlier = "2030-11-20T00:00:00Z"
+  peer.state.waiting = [
+    inputFixture({
+      public_id: "first",
+      text: "First request",
+      lock_version: 7,
+      deliver_at: earlier,
+      attachments: [{ public_id: "upload", filename: "notes.txt", content_type: "text/plain", byte_size: 4 }],
+    }),
+    inputFixture({ public_id: "background", origin: "task_result" }),
+    inputFixture({ public_id: "steer", state: "steering", delivery_mode: "steer" }),
+  ]
+
+  await ingress.ingest(connection, command(1, "/status"), now)
+  expect(peer.saved().deliveries[0].text).toContain("Workspace: Home")
+  expect(peer.saved().deliveries[0].text).toContain("Steering updates: 1")
+  expect(peer.saved().queue_selections).toBeUndefined()
+  peer.store.loseResponse = true
+  await ingress.ingest(connection, command(2, "/queue list"), now)
+  expect(peer.saved().deliveries[1].text).toContain("1. First request")
+  expect(peer.saved().deliveries[1].text).toContain("1 attachment(s)")
+  expect(peer.saved().deliveries[1].text).toContain("not before " + earlier)
+  expect(peer.saved().deliveries[1].text).toContain("background result, read-only")
+  const selected = peer.saved().queue_selections
+
+  peer.state.waiting.reverse()
+  const restarted = peer.open()
+  await restarted.ingest(connection, command(2, "/queue list"), now)
+  expect(peer.saved().queue_selections).toEqual(selected)
+  await restarted.ingest(connection, command(3, "/queue cancel 2"), now)
+  await restarted.ingest(connection, command(4, "/queue edit 3 cannot edit"), now)
+  await restarted.ingest(connection, command(5, "/queue cancel 1 extra"), now)
+  await restarted.ingest(connection, command(6, "/queue edit 1"), now)
+  await restarted.ingest(connection, message(7, "/queue edit 1 other requester"), now)
+  expect(peer.queueWrites).toEqual([])
+
+  await restarted.ingest(connection, command(8, "/queue edit 1 exact\n  new text"), now)
+  expect(peer.queueWrites[0]).toEqual({
+    id: "first",
+    method: "PATCH",
+    body: { input: { expected_lock_version: 7, text: "exact\n  new text" } },
+  })
+  await restarted.ingest(connection, command(9, "/queue reschedule 1 now"), now)
+  expect(peer.queueWrites[1]).toEqual({
+    id: "first",
+    method: "PATCH",
+    body: { input: { expected_lock_version: 8, deliver_in: "0s" } },
+  })
+  await restarted.ingest(connection, command(10, "/queue cancel 3"), now)
+  expect(peer.queueWrites[2]).toEqual({ id: "steer", method: "DELETE" })
+  expect(peer.state.waiting.map((row) => row.public_id)).toEqual(["background", "first"])
+})
 
 test("Telegram preserves queued input on invalid or refused controls and retries a fork with the frozen turn", async () => {
   using peer = fixture()
