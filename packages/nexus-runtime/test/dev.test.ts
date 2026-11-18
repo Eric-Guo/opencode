@@ -26,6 +26,106 @@ const task = {
   approval: null,
 }
 
+test("development opens an idle conversation and admits attachment-only inputs with the saved route after restart", async () => {
+  const inputs: JsonObject[] = []
+  const opened: JsonObject[] = []
+  const uploaded: string[] = []
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/conversations") && request.method === "POST") {
+      const { conversation } = (await request.json()) as { conversation: JsonObject }
+      opened.push(conversation)
+      return Response.json({ conversation: conversationFixture(conversation) }, { status: 201 })
+    }
+    if (path.endsWith("/conversations/conversation"))
+      return Response.json({ conversation: conversationFixture(opened.at(-1)) })
+    if (path.endsWith("/turns"))
+      return Response.json({ turns: [], pagination: { before_position: null, after_position: null } })
+    if (path.endsWith("/uploads")) {
+      const file = (await request.formData()).get("upload[file]")
+      if (!(file instanceof File)) throw new Error("Expected a staged attachment")
+      uploaded.push(await file.text())
+      return Response.json(
+        {
+          upload: {
+            public_id: "upload",
+            filename: file.name,
+            content_type: file.type,
+            byte_size: file.size,
+            created_at: "now",
+          },
+        },
+        { status: 201 },
+      )
+    }
+    if (path.endsWith("/inputs") && request.method === "POST") {
+      const { input } = (await request.json()) as { input: JsonObject }
+      inputs.push(input)
+      return Response.json({ input: inputFixture({ state: "blocked", blocked_reason: "run_held" }) }, { status: 202 })
+    }
+  })
+  const terminal = () => {
+    const app = new NexusApplication(
+      fixture.client,
+      { workspace: "workspace", agent: "main", runner: "runner" },
+      () => ({}),
+      undefined,
+      async () => ({ agent_configuration: {}, model: "provider/default", fallback_models: ["provider/fallback"] }),
+    )
+    const output: string[] = []
+    return {
+      output,
+      command: async (input: JsonObject) => json(JSON.stringify(await app.operations.command(input))),
+      signal: new AbortController().signal,
+      write: (value: string | Uint8Array) => {
+        output.push(value.toString())
+      },
+      error() {},
+    }
+  }
+  const directory = await mkdtemp(join(tmpdir(), "nexus-attach-"))
+  try {
+    const first = terminal()
+    for (const option of ["--instructions", "--approval", "--until"])
+      await expect(runDevelopment(["do", option, "value"], first)).rejects.toThrow(option)
+    expect(opened).toHaveLength(0)
+    await runDevelopment(["do", "--model", "provider/selected", "--json"], first)
+    expect(json(first.output.join(""))).toEqual({ conversation: "conversation" })
+    expect(opened).toHaveLength(1)
+    expect(inputs).toHaveLength(0)
+
+    const file = join(directory, "note.txt")
+    await writeFile(file, "note")
+    const restored = terminal()
+    await runDevelopment(["say", "conversation", "--attach", file, "--json"], restored)
+    expect(json(restored.output.join(""))).toEqual({
+      conversation: "conversation",
+      input: "input",
+      status: "blocked",
+      blocked_reason: "run_held",
+    })
+    expect(inputs[0]).toMatchObject({
+      text: "",
+      attachments: ["upload"],
+      delivery_mode: "queue",
+      model: { model: "provider/selected" },
+      model_selection: { source: "explicit", model: "provider/selected", constraint: "route", alternatives: [] },
+      fallback_models: ["provider/fallback"],
+    })
+    await runDevelopment(["do", "--attach", file, "--model", "provider/new"], restored)
+    expect(inputs[1]).toMatchObject({
+      text: "",
+      attachments: ["upload"],
+      delivery_mode: "queue",
+      model: { model: "provider/new" },
+    })
+    expect(uploaded).toEqual(["note", "note"])
+  } finally {
+    fixture.server.stop(true)
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
 test("watch times out while waiting for the first run without opening a subscription", async () => {
   const calls: string[] = []
   await expect(
@@ -366,6 +466,7 @@ test("approval grants validate raw boundaries before approval and declare proces
 test("explicit workspace member addressing preserves recipient policy and immutable admission receipts", async () => {
   const submitted: JsonObject[] = []
   const state = { dedicated: false, preparations: 0 }
+  const created: JsonObject[] = []
   const fixture = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
     if (path.endsWith("/principals"))
@@ -388,7 +489,12 @@ test("explicit workspace member addressing preserves recipient policy and immuta
         },
       })
     if (path.endsWith("/profile/agents")) return Response.json({ agents: [] })
-    if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: conversationFixture() })
+    if (path.endsWith("/conversations") && request.method === "POST") {
+      created.push(object(object(await request.json()).conversation))
+      return Response.json({ conversation: conversationFixture(created.at(-1)) }, { status: 201 })
+    }
+    if (path.endsWith("/conversations/conversation"))
+      return Response.json({ conversation: conversationFixture(created.at(-1)) })
     if (path.endsWith("/inputs")) {
       const input = object(object(await request.json()).input)
       submitted.push(input)
@@ -444,6 +550,17 @@ test("explicit workspace member addressing preserves recipient policy and immuta
     await expect(application.submit({ ...input, key: "dedicated" })).rejects.toThrow("dedicated")
     expect(submitted).toHaveLength(2)
     await expect(application.submit({ ...input, key: "ordinary", addressed: false })).rejects.toThrow("Main Agent")
+
+    state.dedicated = false
+    await application.open({ key: "foreign-open", agent: "@helper", model: "foreign/opening" })
+    await application.submit({ ...input, key: "first-foreign" })
+    expect(submitted.at(-1)?.model).toEqual({ model: "foreign/opening" })
+    expect(submitted.at(-1)).not.toHaveProperty("model_selection")
+    await application.submit({ ...input, key: "next-foreign", model: "foreign/replacement" })
+    await application.submit({ ...input, key: "main", answering_user_public_id: "main" })
+    expect(submitted.at(-1)?.model).toEqual({ model: "main-model" })
+    await application.submit({ ...input, key: "return-foreign" })
+    expect(submitted.at(-1)?.model).toEqual({ model: "foreign/replacement" })
   } finally {
     fixture.server.stop(true)
   }
