@@ -26,6 +26,7 @@ import type { HostTools } from "./host"
 export { hostTools } from "./host"
 import type { RunnerTool } from "./extensions"
 import { builtinExtensions } from "./builtins"
+import { processesExtension } from "./processes"
 import { Configuration } from "./configuration"
 import { ExtensionManager } from "./extension-manager"
 import { Packages } from "./packages"
@@ -512,10 +513,11 @@ export class NexusRuntime {
       const description = await this.extensionManager?.describeEnvironment(value)
       return { ...value, report: [value.report, description].filter(Boolean).join("\n\n") }
     }
+    const processes = processesExtension(this.storage)
     this.extensionManager = new ExtensionManager(
       configuration,
       [
-        ...(await builtinExtensions(this.host, this.storage)),
+        ...(await builtinExtensions(this.host, this.storage, processes)),
         packageTools(this.packages, () => this.extensionManager!),
         ...(await this.packages.sources()),
       ],
@@ -749,6 +751,9 @@ export class NexusRuntime {
         }
         this.connection.application.environments.configure({
           root: () => this.defaultEnvironment.root,
+          documents: () => documents("runner"),
+          liveProcess: processes.liveIn,
+          checkpoints: () => builtins().checkpoints,
           protectedRoots: [this.storage],
           hosts: () => this.connection?.application.lifecycle.hostsSnapshot() ?? [],
           mcp: (workspace, conversation, cwd, servers) =>

@@ -168,6 +168,10 @@ test("operator checkpoint queries discover historical roots and compare recorded
     await mkdir(corrupt)
     await writeFile(join(corrupt, "checkpoints.sqlite3"), "not a database")
     expect(await CheckpointStore.discover(join(fixture, "history"), "0000000000000000")).toEqual([])
+    expect(await second.query({ store: "unknown-store", checkpoint: before.hash }, signal)).toMatchObject({
+      is_error: true,
+      content: "checkpoint_store_unknown: unknown-store",
+    })
     const rows = await second.query({}, signal)
     expect(rows.structured_content).toMatchObject({
       records: expect.arrayContaining([

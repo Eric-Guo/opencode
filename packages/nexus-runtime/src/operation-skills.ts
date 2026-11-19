@@ -1,5 +1,6 @@
 import { NotFound, type Client, type RequestOptions } from "@cybros/agent"
 import { Schema } from "effect"
+import type { Environments } from "./environments"
 
 export const SkillOperation = Schema.Union([
   Schema.Struct({ action: Schema.Literal("skills") }),
@@ -23,6 +24,7 @@ export async function skillOperation(
   workspace: string,
   input: typeof SkillOperation.Type,
   options: RequestOptions,
+  environments: Environments,
 ) {
   if (input.action !== "skills" && (input.name.length > 64 || !/^[a-z0-9](?:-?[a-z0-9])*$/.test(input.name)))
     throw new Error("Invalid skill name.")
@@ -45,7 +47,7 @@ export async function skillOperation(
       }),
     )
 
-    return { ...Object.fromEntries(sections), collections }
+    return { ...Object.fromEntries(sections), collections, project: environments.projectDocuments() }
   }
   const collection = collections[input.scope]
 
