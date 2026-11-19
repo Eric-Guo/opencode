@@ -14,7 +14,8 @@ import { conversationFixture, inputFixture, turnFixture } from "./fixture/conver
 test("idle target, result and regeneration use the latest turn in a multi-turn conversation", async () => {
   const active = { public_id: "original", source: "original", status: "completed", content: "Latest", active: true }
   const queries: (string | null)[] = []
-  const fixture = storeFixture((request) => {
+  const envelopes: unknown[] = []
+  const fixture = storeFixture(async (request) => {
     const url = new URL(request.url)
     if (url.pathname.endsWith("/conversations/conversation"))
       return Response.json({ conversation: conversationFixture() })
@@ -33,11 +34,13 @@ test("idle target, result and regeneration use the latest turn in a multi-turn c
       return Response.json({ events: [], pagination: { next_after: null, watermark: 0 } })
     if (url.pathname.endsWith("/regeneration_receipt"))
       return Response.json({ error: { code: "not_found" } }, { status: 404 })
-    if (url.pathname.endsWith("/turns/turn-1/regeneration"))
+    if (url.pathname.endsWith("/turns/turn-1/regeneration")) {
+      envelopes.push(await request.json())
       return Response.json(
         { turn: { public_id: "turn-1", status: "pending" }, variant: { ...active, public_id: "regenerated" } },
         { status: 202 },
       )
+    }
   })
   const app = new NexusApplication(
     fixture.client,
@@ -55,9 +58,21 @@ test("idle target, result and regeneration use the latest turn in a multi-turn c
     await expect(
       app.operations.command({ action: "regenerate", conversation: "conversation", turn: "turn-0", key: "old" }),
     ).rejects.toThrow("tail turn")
+    const intent = { source: "explicit", model: "anthropic/sonnet", constraint: "route", alternatives: [] }
     expect(
-      await app.operations.command({ action: "regenerate", conversation: "conversation", turn: "turn-1", key: "new" }),
+      await app.operations.command({
+        action: "regenerate",
+        conversation: "conversation",
+        turn: "turn-1",
+        key: "new",
+        model: intent.model,
+        model_selection: intent,
+        fallback_models: [],
+      }),
     ).toMatchObject({ turn_public_id: "turn-1", variant: { public_id: "regenerated" } })
+    expect(envelopes).toEqual([
+      { regeneration: { model: { model: intent.model }, model_selection: intent, fallback_models: [] } },
+    ])
     expect(queries).toEqual(Array(4).fill("2147483647"))
   } finally {
     fixture.server.stop(true)
@@ -366,6 +381,34 @@ test("shared submissions capture the current surface policy and retain it on ret
       tool_names: ["read"],
       executor_contexts: { remote: { "opencode.directory": "/remote/project" } },
     })
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
+test("rewind refuses a Bot and fresh history mutations refuse an active turn before any fork or restore", async () => {
+  const info = conversationFixture({ metadata: { "opencode.bot": "bot" } })
+  const writes: string[] = []
+  const fixture = storeFixture((request) => {
+    const path = new URL(request.url).pathname
+    if (request.method !== "GET") writes.push(path)
+    if (path.endsWith("/conversations/conversation")) return Response.json({ conversation: info })
+    if (path.endsWith("/regeneration_receipt")) return Response.json({ error: { code: "not_found" } }, { status: 404 })
+    return Response.json({ error: { code: "unexpected_request" } }, { status: 400 })
+  })
+  const app = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "local" },
+    () => ({}),
+  )
+  const rewind = { action: "rewind", conversation: "conversation", turn: "turn", key: "rewind", restore: false }
+  try {
+    await expect(app.operations.command(rewind)).rejects.toThrow("bot_conversation_required")
+    info.metadata = {}
+    info.active_turn_public_id = "running"
+    await expect(app.operations.command(rewind)).rejects.toThrow("conversation_busy")
+    await expect(app.operations.command({ ...rewind, action: "regenerate" })).rejects.toThrow("conversation_busy")
+    expect(writes).toEqual([])
   } finally {
     fixture.server.stop(true)
   }
