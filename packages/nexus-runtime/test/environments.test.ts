@@ -181,6 +181,13 @@ test("children inherit a durable copy with the parent anchor, while explicit chi
   f.parents.set("child", "parent")
   try {
     await f.environments.bind("workspace", "parent", { root })
+    f.environments.configure({
+      root: () => join(root, "child"),
+      liveProcess: (directory) => (directory === root ? "parent-process" : undefined),
+    })
+    const child = await f.member.workspace("workspace").conversation("child").fetch()
+    await expect(f.environments.assertHistoryIdle("workspace", child)).rejects.toThrow("process_live: parent-process")
+    expect(f.control.writes).toBe(1)
     expect(await f.environments.read("workspace", "child")).toMatchObject({ root, source: "parent", anchor: "parent" })
     expect([...f.locations.values()]).toContain("child")
     await f.environments.bind("workspace", "parent", { root: join(root, "child") })
