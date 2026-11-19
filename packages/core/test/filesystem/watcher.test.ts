@@ -236,6 +236,40 @@ describe("Watcher lifecycle", () => {
     }).pipe(withNative(native))
   })
 
+  it.live("collects the first Location while the second subscriber still receives updates", () =>
+    Effect.gen(function* () {
+      const watcher = yield* Watcher.Test
+      const file = { type: "file", path: path.resolve("shared", "CLAUDE.md") } as const
+      const subscribe = Effect.fnUntraced(function* (name: string) {
+        const subscriber = location({ directory: AbsolutePath.make(path.resolve(name)) })
+        const ready = yield* Deferred.make<void>()
+        const consumer = yield* watcher.subscribe(file, Deferred.succeed(ready, undefined)).pipe(
+          Effect.flatMap(Stream.runHead),
+          Effect.provideService(Location.Service, subscriber),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        yield* Deferred.await(ready)
+        return { consumer, location: new WeakRef(subscriber) }
+      })
+
+      const first = yield* subscribe("first")
+      const second = yield* subscribe("second")
+      yield* Fiber.interrupt(first.consumer)
+
+      // A WeakRef keeps its target alive through the job that created it.
+      yield* Effect.promise(async () => {
+        await Bun.sleep(0)
+        Bun.gc(true)
+      })
+      expect(first.location.deref()).toBeUndefined()
+      expect(yield* watcher.subscriptions()).toEqual([file])
+
+      const update = { path: file.path, type: "update" } as const
+      yield* watcher.emit(update)
+      expect(Option.getOrUndefined(yield* Fiber.join(second.consumer))).toEqual(update)
+    }).pipe(Effect.provide(Watcher.testLayer)),
+  )
+
   it.effect("scope shutdown releases an active subscription exactly once", () => {
     const { native, counts } = countingNative()
     return Effect.gen(function* () {
