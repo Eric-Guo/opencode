@@ -306,8 +306,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
               }
 
               session.question = { decision, execution, transcript }
-              await transcript.question(decision.detail.prompt ?? "Answer requested.")
-              return { stopReason: "end_turn" as const }
+              return { stopReason: "end_turn" as const, question: decision.detail.prompt ?? "Answer requested." }
             }
 
             const task = decision.detail.task
@@ -406,12 +405,15 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     // Start after the load/resume response, so an editor may first display the restored session.
     const task = setTimeout(0, undefined, { signal: owner.signal })
       .then(async () => {
-        if (!state.capabilities.elicitation?.form) {
-          await question.transcript.question(question.decision.detail.prompt ?? "Answer requested.")
-          return
-        }
+        const text = state.capabilities.elicitation?.form
+          ? (await follow(id, session, question.execution, question.transcript, peer, owner.signal)).question
+          : (question.decision.detail.prompt ?? "Answer requested.")
 
-        await follow(id, session, question.execution, question.transcript, peer, owner.signal)
+        if (text === undefined || owner.signal.aborted || pending.get(id) !== owner) return
+
+        // The editor can answer as soon as it receives the question.
+        pending.delete(id)
+        await question.transcript.question(text)
       })
       .catch(async (error: unknown) => {
         if (owner.signal.aborted) return
@@ -812,7 +814,15 @@ export async function editor(stream: Stream, status: Status, token: string, opti
           session.question = undefined
           await answered(execution, question.decision, signal)
         }
-        return await follow(id, session, execution, transcript, ctx.client, signal)
+
+        const result = await follow(id, session, execution, transcript, ctx.client, signal)
+
+        if (result.question !== undefined) {
+          signal.throwIfAborted()
+          await transcript.question(result.question)
+        }
+
+        return { stopReason: result.stopReason }
       } catch (error) {
         if (signal.aborted) return { stopReason: "cancelled" as const }
 
