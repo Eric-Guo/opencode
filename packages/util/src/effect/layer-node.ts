@@ -319,10 +319,10 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
       layers.set(node, layer)
       return layer
     }
-    return buildContext(
-      roots.map(build).reduce<RuntimeLayer>((result, layer) => layer.pipe(Layer.provideMerge(result)), Layer.empty),
-      memoMap,
-      scope,
+    // Build roots in order. Providing earlier outputs to the next root would let a
+    // shared dependency capture the first Location in its service or a long-lived fiber.
+    return Effect.reduce(roots, Context.empty, (context, root) =>
+      buildContext(build(root), memoMap, scope).pipe(Effect.map((next) => Context.merge(context, next))),
     )
   }) as Layer.Layer<A, E>
 }
