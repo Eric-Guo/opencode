@@ -806,13 +806,22 @@ test("regeneration receipt replay never restores checkpoints or redirects a form
     turn: { public_id: "old-turn", status: "running" },
     variant: { public_id: "retry", source: "model", status: "running", active: true, run_public_id: "retry-run" },
   }
-  const fixture = storeFixture((request) => {
+  const envelopes: unknown[] = []
+  const fixture = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
     requests.push({ path, method: request.method, key: request.headers.get("idempotency-key") })
     if (path.endsWith("/conversations/conversation"))
       return Response.json({ conversation: conversationFixture({ active_turn_public_id: "new-turn" }) })
     if (path.endsWith("/regeneration_receipt")) return Response.json(receipt)
-    if (path.endsWith("/regeneration")) return Response.json(receipt, { status: 202 })
+    if (path.endsWith("/regeneration")) {
+      envelopes.push(await request.json())
+      if (envelopes.length === 3)
+        return Response.json(
+          { error: { code: "idempotency_envelope_mismatch", message: "Different intent" } },
+          { status: 409 },
+        )
+      return Response.json(receipt, { status: 202 })
+    }
     return Response.json({ error: { code: "unexpected" } }, { status: 400 })
   })
   const application = new NexusApplication(
@@ -839,6 +848,34 @@ test("regeneration receipt replay never restores checkpoints or redirects a form
       method: "POST",
       key: "stable",
     })
+    const intent = {
+      source: "explicit",
+      model: "chosen/model",
+      constraint: "provider",
+      alternatives: ["chosen/alternate"],
+    }
+    const command = {
+      action: "regenerate",
+      conversation: "conversation",
+      turn: "old-turn",
+      key: "selected",
+      model_selection: intent,
+      fallback_models: [],
+    }
+    await application.operations.command(command)
+    expect(await application.operations.command({ ...command, key: "stable" })).toMatchObject({
+      restoration: { status: "unchanged", door_refused: "idempotency_envelope_mismatch" },
+    })
+    expect(envelopes).toEqual(
+      [{}, ...Array(2).fill({ model_selection: intent, fallback_models: [] })].map((regeneration) => ({
+        regeneration,
+      })),
+    )
+    expect(
+      requests
+        .filter((request) => request.method === "POST")
+        .every((request) => request.path.endsWith("/old-turn/regeneration")),
+    ).toBe(true)
   } finally {
     fixture.server.stop(true)
   }
@@ -1078,4 +1115,40 @@ test("development task reporting explains unresolved model holds and omits resol
     expect.stringContaining("Input token limit"),
     expect.stringContaining("retry the held model task"),
   ])
+})
+
+test("development skills list reports runner documents and distinguishes an empty project from an unbound runner", async () => {
+  const fixture = storeFixture(() => Response.json({ memory_collections: [], pagination: { next_after: null } }))
+  const app = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+  )
+  const lines: string[] = []
+  const terminal = {
+    command: async (input: JsonObject) => json(JSON.stringify(await app.operations.command(input))),
+    write: (value: string | Uint8Array) => {
+      lines.push(value.toString())
+    },
+    error() {},
+    signal: new AbortController().signal,
+  }
+  try {
+    await runDevelopment(["skills"], terminal)
+    expect(lines.join("")).toContain("project (no runner root set)")
+    app.environments.configure({ root: () => process.cwd() })
+    lines.length = 0
+    await runDevelopment(["skills"], terminal)
+    expect(lines.join("")).toContain("project (announced by this runner)\n  (none)")
+    const docs = [{ name: "review", description: "Review a change" }]
+    app.environments.configure({ root: () => process.cwd(), documents: () => docs })
+    lines.length = 0
+    await runDevelopment(["skills", "--json"], terminal)
+    expect(json(lines.join(""))).toMatchObject({ agent: [], workspace: [], project: docs })
+    lines.length = 0
+    await runDevelopment(["skills"], terminal)
+    expect(lines.join("")).toContain("project (announced by this runner)\n  review: Review a change")
+  } finally {
+    fixture.server.stop(true)
+  }
 })
