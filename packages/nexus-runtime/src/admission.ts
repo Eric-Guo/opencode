@@ -1,6 +1,9 @@
 import { APIError, type Client, type CreateInput, type JsonObject, type RequestOptions } from "@cybros/agent"
 import { Schema } from "effect"
 import { createHash } from "node:crypto"
+import { mkdir } from "node:fs/promises"
+import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 import { isDeepStrictEqual } from "node:util"
 import { StoreDocument } from "./document"
 import { TurnDraft, type ExtensionLifecycle } from "./extension-lifecycle"
@@ -71,10 +74,17 @@ const Admission = Schema.Struct({
     tool_names: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   }),
 })
+type Admission = typeof Admission.Type
+const namespace = "opencode.input-admission"
+const decodeAdmission = Schema.decodeUnknownSync(Admission)
+const parseAdmission = Schema.decodeUnknownSync(Schema.fromJsonString(Admission))
+
 /** Preserve the first accepted policy through uncertain responses and service restarts. */
 export class InputAdmissions {
-  private readonly documents = new Map<string, StoreDocument<typeof Admission.Type>>()
-  private readonly gates = new Map<string, Promise<unknown>>()
+  private readonly documents = new Map<string, StoreDocument<Admission>>()
+  private readonly gates = new Map<string, Promise<void>>()
+  private migration?: Promise<void>
+  private readonly journal?: AdmissionJournal
 
   constructor(
     private readonly member: Client,
@@ -89,7 +99,10 @@ export class InputAdmissions {
       body: CreateInput,
       replayed: boolean,
     ) => Promise<void>,
-  ) {}
+    directory?: string,
+  ) {
+    if (directory) this.journal = new AdmissionJournal(directory)
+  }
 
   async submit(
     input: { key: string; workspace: string; conversation: string; request: JsonObject },
@@ -98,6 +111,7 @@ export class InputAdmissions {
     options: RequestOptions = {},
   ) {
     const body = await this.capture(input, prepare)
+    const document = this.document(input.key)
 
     const create = (body: CreateInput) =>
       author
@@ -120,16 +134,14 @@ export class InputAdmissions {
 
       // A stricter declaring profile refuses ask before accepting an input. Persist the
       // tightened envelope so retries after a lost rules response use the same bytes.
-      const tightened = await this.documents.get(input.key)!.change((state) => ({
+      const tightened = await document.change((state) => ({
         ...state!,
         body: { ...state!.body, approval_mode: "rules" as const },
       }))
 
       return create(tightened.body)
     })
-    const accepted = await this.documents
-      .get(input.key)!
-      .change((state) => ({ ...state!, input: receipt.input.public_id }))
+    const accepted = await document.change((state) => ({ ...state!, input: receipt.input.public_id }))
     if (receipt.input.state !== "blocked")
       void this.submitted?.(input, receipt.input.public_id, accepted.body, receipt.replayed).catch(() => {})
     return receipt
@@ -140,34 +152,20 @@ export class InputAdmissions {
     prepare: () => Promise<CreateInput & { admission_notes?: JsonObject }>,
   ) {
     const pending = (this.gates.get(input.key) ?? Promise.resolve()).then(() => this.prepare(input, prepare))
-    this.gates.set(
-      input.key,
-      pending.then(
-        () => {},
-        () => {},
-      ),
+    const gate = pending.then(
+      () => {},
+      () => {},
     )
-    return pending
+    this.gates.set(input.key, gate)
+
+    return pending.finally(() => {
+      if (this.gates.get(input.key) === gate) this.gates.delete(input.key)
+    })
   }
 
   async notes(workspace: string, conversation: string, input: string | null) {
     if (!input) return {}
-    let after: string | undefined
-    do {
-      const page = await this.member.profile.storeEntries.list({ after, limit: 100 })
-      for (const row of page.items.filter((row) => row.namespace === "opencode.input-admission")) {
-        const value = Schema.decodeUnknownSync(Admission)(
-          (await this.member.profile.storeEntries.fetch(row.public_id)).value,
-        )
-        if (
-          value.input === input &&
-          value.target?.workspace === workspace &&
-          value.target.conversation === conversation
-        )
-          return value.notes ?? {}
-      }
-      after = page.next_after ?? undefined
-    } while (after)
+    for await (const row of this.records(workspace, conversation, input)) return row.value.notes ?? {}
     return {}
   }
 
@@ -187,23 +185,14 @@ export class InputAdmissions {
   }
 
   private async latest(workspace: string, conversation: string, initial?: { addressedTo?: string }) {
-    let selected: { at: string; value: typeof Admission.Type } | undefined
-    let after: string | undefined
-    do {
-      const page = await this.member.profile.storeEntries.list({ after, limit: 100 })
-      for (const row of page.items.filter((row) => row.namespace === "opencode.input-admission")) {
-        if (selected && row.created_at < selected.at) continue
-        const value = Schema.decodeUnknownSync(Admission)(
-          (await this.member.profile.storeEntries.fetch(row.public_id)).value,
-        )
-        if (value.target?.workspace !== workspace || value.target.conversation !== conversation || !value.body.model)
-          continue
-        const addressedTo = value.notes?.["nexus.addressed"] ? value.body.answering_user_public_id : undefined
-        if (initial && initial.addressedTo !== addressedTo) continue
-        selected = { at: row.created_at, value }
-      }
-      after = page.next_after ?? undefined
-    } while (after)
+    let selected: { at: string; value: Admission } | undefined
+
+    for await (const row of this.records(workspace, conversation)) {
+      if ((selected && row.at < selected.at) || !row.value.body.model) continue
+      const addressedTo = row.value.notes?.["nexus.addressed"] ? row.value.body.answering_user_public_id : undefined
+      if (initial && initial.addressedTo !== addressedTo) continue
+      selected = row
+    }
     return selected?.value
   }
 
@@ -211,15 +200,7 @@ export class InputAdmissions {
     input: { key: string; workspace: string; conversation: string; request: JsonObject },
     prepare: () => Promise<CreateInput & { admission_notes?: JsonObject }>,
   ) {
-    const document =
-      this.documents.get(input.key) ??
-      new StoreDocument(
-        this.member.profile.storeEntries,
-        "opencode.input-admission",
-        createHash("sha256").update(input.key).digest("hex"),
-        Schema.decodeUnknownSync(Admission),
-      )
-    this.documents.set(input.key, document)
+    const document = this.document(input.key)
     const request = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)))(
       JSON.stringify(input.request),
     )
@@ -240,6 +221,81 @@ export class InputAdmissions {
     await this.accepted?.(input, admission.notes ?? {})
 
     return admission.body
+  }
+
+  private document(key: string) {
+    const hash = createHash("sha256").update(key).digest("hex")
+    if (this.journal) {
+      const journal = this.journal
+      return {
+        read: async () => {
+          await this.migrate(journal)
+          return journal.read(hash)
+        },
+        change: async (edit: (current: Admission | null) => Admission) => {
+          await this.migrate(journal)
+          return journal.change(hash, edit)
+        },
+      }
+    }
+
+    const document =
+      this.documents.get(key) ?? new StoreDocument(this.member.profile.storeEntries, namespace, hash, decodeAdmission)
+    this.documents.set(key, document)
+    return document
+  }
+
+  private async *records(workspace: string, conversation: string, input?: string) {
+    if (this.journal) {
+      await this.migrate(this.journal)
+      yield* this.journal.records(workspace, conversation, input)
+      return
+    }
+
+    for await (const row of this.legacyEntries()) {
+      if (
+        row.value.target?.workspace === workspace &&
+        row.value.target.conversation === conversation &&
+        (input === undefined || row.value.input === input)
+      )
+        yield { at: row.entry.created_at, value: row.value }
+    }
+  }
+
+  private async *legacyEntries() {
+    const store = this.member.profile.storeEntries
+    let after: string | undefined
+    do {
+      const page = await store.list({ after, limit: 100 })
+      for (const row of page.items.filter((row) => row.namespace === namespace)) {
+        const entry = await store.fetch(row.public_id).catch((error: unknown) => {
+          if (error instanceof APIError && error.status === 404) return
+          throw error
+        })
+        if (entry) yield { entry, value: decodeAdmission(entry.value) }
+      }
+      after = page.next_after ?? undefined
+    } while (after)
+  }
+
+  private migrate(journal: AdmissionJournal) {
+    return (this.migration ??= journal
+      .initialize()
+      .then(async () => {
+        // Copy every record before releasing its profile slot. A retry after an interrupted copy can resume safely.
+        for await (const { entry, value } of this.legacyEntries()) {
+          journal.import(entry.key, entry.created_at, entry.lock_version, value)
+          await this.member.profile.storeEntries
+            .delete(entry.public_id, { lock_version: entry.lock_version })
+            .catch((error: unknown) => {
+              if (!(error instanceof APIError && error.status === 404)) throw error
+            })
+        }
+      })
+      .catch((error: unknown) => {
+        this.migration = undefined
+        throw error
+      }))
   }
 
   private async author(input: CreateInput & { admission_notes?: JsonObject }) {
@@ -272,6 +328,85 @@ export class InputAdmissions {
       ),
       notes: draft.notes,
     }
+  }
+}
+
+class AdmissionJournal {
+  private readonly path: string
+
+  constructor(private readonly directory: string) {
+    this.path = join(directory, "admissions.sqlite3")
+  }
+
+  async initialize() {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 })
+    using db = new DatabaseSync(this.path)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS admissions (
+        key TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        workspace TEXT,
+        conversation TEXT,
+        value TEXT NOT NULL,
+        legacy_version INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS admissions_target
+        ON admissions (workspace, conversation, json_extract(value, '$.input'));
+    `)
+  }
+
+  read(key: string) {
+    using db = new DatabaseSync(this.path)
+    return this.find(db, key)
+  }
+
+  change(key: string, edit: (current: Admission | null) => Admission) {
+    using db = new DatabaseSync(this.path)
+    db.exec("BEGIN IMMEDIATE")
+    const current = this.find(db, key)
+    const value = edit(current)
+
+    if (!isDeepStrictEqual(current, value))
+      db.prepare(
+        `
+        INSERT INTO admissions (key, created_at, workspace, conversation, value) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (key) DO UPDATE SET value = excluded.value, legacy_version = NULL
+      `,
+      ).run(
+        key,
+        new Date().toISOString(),
+        value.target?.workspace ?? null,
+        value.target?.conversation ?? null,
+        JSON.stringify(value),
+      )
+    db.exec("COMMIT")
+    return value
+  }
+
+  import(key: string, at: string, version: number, value: Admission) {
+    using db = new DatabaseSync(this.path)
+    db.prepare(
+      `
+      INSERT INTO admissions (key, created_at, workspace, conversation, value, legacy_version) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (key) DO UPDATE SET value = excluded.value, legacy_version = excluded.legacy_version
+      WHERE admissions.legacy_version < excluded.legacy_version
+    `,
+    ).run(key, at, value.target?.workspace ?? null, value.target?.conversation ?? null, JSON.stringify(value), version)
+  }
+
+  records(workspace: string, conversation: string, input?: string) {
+    using db = new DatabaseSync(this.path)
+    const query = "SELECT created_at, value FROM admissions WHERE workspace = ? AND conversation = ?"
+    const rows =
+      input === undefined
+        ? db.prepare(query + " ORDER BY key").all(workspace, conversation)
+        : db.prepare(query + " AND json_extract(value, '$.input') = ? ORDER BY key").all(workspace, conversation, input)
+    return rows.map((row) => ({ at: String(row.created_at), value: parseAdmission(row.value) }))
+  }
+
+  private find(db: DatabaseSync, key: string) {
+    const row = db.prepare("SELECT value FROM admissions WHERE key = ?").get(key)
+    return row ? parseAdmission(row.value) : null
   }
 }
 
