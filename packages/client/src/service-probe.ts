@@ -1,7 +1,6 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
-import { sameProvenance } from "./service-provenance.js"
 import { defaultEnsureTiming } from "./service-timing.js"
 import { matchesVersion } from "./service-version.js"
 
@@ -43,12 +42,19 @@ export function fallback() {
 
 /** Whether two registrations describe the same service instance. */
 export function same(left: Info, right: Info) {
+  const a = left.provenance
+  const b = right.provenance
   return (
     left.id === right.id &&
     left.version === right.version &&
     left.url === right.url &&
     left.pid === right.pid &&
-    sameProvenance(left, right)
+    a?.platform === b?.platform &&
+    a?.host === b?.host &&
+    a?.boot === b?.boot &&
+    a?.pidNamespace === b?.pidNamespace &&
+    a?.netNamespace === b?.netNamespace &&
+    a?.started === b?.started
   )
 }
 
@@ -59,13 +65,15 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
     auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
-    .then(async (response) => ({
-      response,
-      body: response.status === 404 ? undefined : ((await response.json()) as unknown),
-    }))
-    .catch(() => undefined)
-  if (result === undefined) return { service: undefined, timedOut: signal.aborted }
+  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal }).then(
+    (response) => ({ response }),
+    (error: unknown) => ({ error }),
+  )
+  if ("error" in result) {
+    const refused =
+      connectionRefused(result.error) || (result.error instanceof Error && connectionRefused(result.error.cause))
+    return { service: undefined, timedOut: signal.aborted, ownerAlive: refused ? false : undefined }
+  }
   const response = result.response
   // A missing health endpoint identifies protocol incompatibility, not an older
   // version. Only an unmet version requirement lets ensure replace this owner.
@@ -80,10 +88,11 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
       } satisfies LocalService,
       timedOut: false,
     }
-  const serverInfo = decodeInfo(result.body)
-  if (serverInfo === undefined) return { service: undefined, timedOut: false }
-  if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
-  if (info.version !== undefined && serverInfo.version !== info.version) return { service: undefined, timedOut: false }
+  const serverInfo = decodeInfo(await response.json().catch(() => undefined))
+  if (serverInfo === undefined) return { service: undefined, timedOut: signal.aborted }
+  if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false, ownerAlive: false }
+  if (info.version !== undefined && serverInfo.version !== info.version)
+    return { service: undefined, timedOut: false, ownerAlive: true }
   return {
     service: {
       info,
@@ -93,7 +102,12 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
       compatible: true,
     } satisfies LocalService,
     timedOut: false,
+    ownerAlive: true,
   }
+}
+
+function connectionRefused(error: unknown) {
+  return error instanceof Error && "code" in error && error.code === "ECONNREFUSED"
 }
 
 /** Create HTTP authentication headers for a service endpoint. */

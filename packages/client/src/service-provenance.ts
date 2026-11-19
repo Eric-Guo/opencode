@@ -1,6 +1,7 @@
 import { readFile, readlink } from "node:fs/promises"
 import { hostname } from "node:os"
 import type { Info, Provenance } from "./service.js"
+import { probeResult } from "./service-probe.js"
 
 /** Linux PIDs and loopback addresses are meaningful only inside their original execution domain. */
 export async function provenance(): Promise<Provenance | undefined> {
@@ -51,7 +52,7 @@ export async function checkDomain(info: Info) {
     )
 }
 
-/** A missing PID is evidence of death only after verifying its domain; a reused PID is never signalled. */
+/** Check the registered owner's process identity before connecting to it or signaling it. */
 export async function ownerAlive(info: Info) {
   await checkDomain(info)
   if (process.platform !== "linux") {
@@ -59,7 +60,15 @@ export async function ownerAlive(info: Info) {
       process.kill(info.pid, 0)
       return true
     } catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH") return false
+      if (error instanceof Error && "code" in error) {
+        if (error.code === "ESRCH") return false
+        if (process.platform === "win32" && error.code === "EPERM") {
+          // Windows can deny even signal 0, for example when a stale PID now belongs to a system process.
+          // The service listens before it publishes registration, so check its endpoint for the owning PID.
+          const probe = await probeResult(info)
+          if (probe.ownerAlive !== undefined) return probe.ownerAlive
+        }
+      }
       throw error
     }
   }
@@ -69,19 +78,6 @@ export async function ownerAlive(info: Info) {
   })
   if (stat === undefined) return false
   return startTime(stat) === info.provenance?.started && stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0] !== "Z"
-}
-
-export function sameProvenance(left: Info, right: Info) {
-  const a = left.provenance
-  const b = right.provenance
-  return (
-    a?.platform === b?.platform &&
-    a?.host === b?.host &&
-    a?.boot === b?.boot &&
-    a?.pidNamespace === b?.pidNamespace &&
-    a?.netNamespace === b?.netNamespace &&
-    a?.started === b?.started
-  )
 }
 
 function startTime(stat: string) {
