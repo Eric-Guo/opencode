@@ -9,6 +9,7 @@ import { NexusApplication } from "../src/application"
 import { Configuration } from "../src/configuration"
 import { ExtensionManager } from "../src/extension-manager"
 import { workerRegistration } from "../src/worker-extension"
+import { runDevelopment } from "../dev/terminal"
 import { storeFixture } from "./fixture/store"
 import descriptor from "../dev/extension.json"
 
@@ -118,8 +119,17 @@ test("the real development extension preserves SDK methods, live iterators, iden
     await manager.emit("host.ended", { workspace: "workspace", conversation: "conversation" })
     await closed.promise
     expect(await manager.command("dev", { action: "stream.followers" })).toEqual([])
-    await manager.command("dev", { action: "stream.open", run: "run" })
+    await runDevelopment(["attach", "run", "--host-type", "run"], {
+      signal: new AbortController().signal,
+      command: async (input) => Schema.decodeUnknownSync(Schema.MutableJson)(await manager.command("dev", input)),
+      write() {},
+      error() {},
+    })
     await subscribedAgain.promise
+    expect(await manager.command("dev", { action: "stream.followers" })).toEqual([
+      { run: "run", conversation: "conversation", attached: true },
+    ])
+    expect(application.lifecycle.hostsSnapshot()).toEqual([])
     await manager.close()
     await shutdown.promise
     expect(requests.every((request) => request.startsWith("GET "))).toBe(true)

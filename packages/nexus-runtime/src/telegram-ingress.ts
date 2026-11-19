@@ -19,7 +19,7 @@ import {
 import { telegramConversationCommand, telegramSessionSwitch, telegramTrackConversations } from "./telegram-commands"
 import { conversationMemory } from "./memory-commands"
 import { telegramSetup } from "./telegram-setup"
-import { telegramJob, telegramTime } from "./telegram-schedules"
+import { parseTelegramJob, telegramJob, telegramTime } from "./telegram-schedules"
 import { telegramJobDiscovery } from "./telegram-job-discovery"
 import { telegramParticipate } from "./telegram-participation"
 import { telegramWorkers } from "./telegram-workers"
@@ -294,7 +294,7 @@ export class TelegramIngress {
       if (!binding?.enabled || binding.connection_public_id !== connection)
         throw new Error("Telegram's pending update needs its original Bot binding.")
 
-      await this.dispatch(connection, selected.bot, binding, update, selected.exact, state?.pending?.received_at ?? now)
+      await this.dispatch(connection, selected.bot, binding, update, selected.exact, now, state?.pending?.received_at)
     }
 
     await document.change((current) => ({ identity: null, ...current, pending: null, offset: update.id + 1 }))
@@ -327,8 +327,10 @@ export class TelegramIngress {
     binding: TelegramBinding,
     update: TelegramUpdate,
     exact: boolean,
-    now: number,
+    currentTime: number,
+    receivedAt?: number,
   ) {
+    const now = receivedAt ?? currentTime
     const identity = (await this.connection(connection).read())?.identity ?? (await this.identity(connection))
     const command = update.command(identity.username)
     if (command?.name === "addressed_elsewhere") return
@@ -549,10 +551,23 @@ export class TelegramIngress {
         }))
         return
       }
-      const createJob = action === "job" && /^create\s/.test(command?.argument ?? "")
+      const schedule = (action === "job" && /^create(?:\s|$)/.test(argument)) || action === "remind"
+      // Telegram's message date has whole-second precision. Check the receipt window against the recovery clock.
+      if (
+        schedule &&
+        (receivedAt !== undefined || state.control?.update === update.id) &&
+        update.stale(currentTime, 86400 - 1)
+      ) {
+        await finish(
+          "The previous request may already have been accepted. Its recovery window expired. Check " +
+            (action === "job" ? "/job list" : "/queue or /history") +
+            " before sending it again.",
+        )
+        return
+      }
       if (
         state.control?.update === update.id &&
-        !(createJob && state.control.job) &&
+        !(schedule && state.control.job) &&
         !state.control.fork &&
         !(action === "resume" && state.control.resume) &&
         action !== "new" &&
@@ -591,10 +606,12 @@ export class TelegramIngress {
               : {
                   update: update.id,
                   clock: now,
-                  ...(createJob && bot.current
+                  ...(schedule
                     ? {
                         job: {
-                          target: { workspace: bot.current.workspace_public_id, conversation: bot.current.public_id },
+                          target: bot.current
+                            ? { workspace: bot.current.workspace_public_id, conversation: bot.current.public_id }
+                            : null,
                           model: state?.model ?? null,
                         },
                       }
@@ -1744,27 +1761,41 @@ export class TelegramIngress {
     }
     if (action === "job" || action === "remind") {
       if (update.media || update.unsupportedMedia) return "/job and /remind accept text only."
-      const job = action === "job" ? argument.split(/\s+/) : []
-      const trackedJob =
-        job[1] && !["create", "list"].includes(job[0])
-          ? state.jobs?.find(
-              (row) =>
-                row.id === job[1] &&
-                sameRoute(row.route, {
-                  connection: binding.connection_public_id!,
-                  chat: update.chat,
-                  topic: update.topic,
-                  group: update.group,
-                }),
-            )
-          : undefined
-      if (
-        job[1] &&
-        !["create", "list"].includes(job[0]) &&
-        (!trackedJob || (!owner && trackedJob.requester !== update.requester))
-      )
+      if (action === "remind" && !/^(in|at)\s+\S+\s+\S/.test(argument))
+        return "Use /remind in DURATION TEXT or /remind at TIME TEXT."
+      const job = parseTelegramJob(action === "remind" ? "create once " + argument : argument, now)
+      const jobID = !["create", "list"].includes(job.action) ? job.rest.split(/\s+/)[0] : undefined
+      const trackedJob = jobID
+        ? state.jobs?.find(
+            (row) =>
+              row.id === jobID &&
+              sameRoute(row.route, {
+                connection: binding.connection_public_id!,
+                chat: update.chat,
+                topic: update.topic,
+                group: update.group,
+              }),
+          )
+        : undefined
+      if (jobID && (!trackedJob || (!owner && trackedJob.requester !== update.requester)))
         return "That scheduled job is not available to you in this chat/topic. Use /job list."
-      if (!bot.current && !trackedJob && !state.control?.job) return "Send a message to open a conversation first."
+      const frozen = state.control?.job
+      let target = trackedJob?.target ?? frozen?.target
+      if (!target && frozen && job.create) {
+        const opened = Schema.decodeUnknownSync(Selected)(
+          await this.application().bots.command({ action: "bot.current", id, key: keyValue + ":current" }),
+        ).selected
+        const selected = { workspace: opened.workspace_public_id, conversation: opened.public_id }
+        await document.change((current) => ({
+          ...current!,
+          control: { ...current!.control!, job: { ...current!.control!.job!, target: selected } },
+        }))
+        target = selected
+      }
+      target ??= bot.current
+        ? { workspace: bot.current.workspace_public_id, conversation: bot.current.public_id }
+        : undefined
+      if (!target) return "Send a message to open a conversation first."
       const speaker = await this.application().client.profile.registerIngressSpeaker(
         {
           channel_key: "telegram:" + id,
@@ -1773,31 +1804,23 @@ export class TelegramIngress {
         },
         { signal: this.signal },
       )
-      const target = trackedJob?.target ??
-        state.control?.job?.target ?? {
-          workspace: bot.current!.workspace_public_id,
-          conversation: bot.current!.public_id,
-        }
       const route = {
         connection: binding.connection_public_id!,
         chat: update.chat,
         topic: update.topic,
         group: update.group,
       }
-      if (action === "remind") {
-        const match = /^(in|at)\s+(\S+)\s+([\s\S]+)$/.exec(argument)
-        if (!match || update.media)
-          return "Use /remind in DURATION TEXT or /remind at TIME TEXT. Reminders accept text only."
+      if (action === "remind" && job.create?.rule.kind === "once") {
         const submission = {
           action: "bot.submit" as const,
           id,
           ...target,
           key: keyValue,
-          text: "Please remind me now: " + match[3],
+          text: "Please remind me now: " + job.create.prompt,
           speaker: speaker.public_id,
           delivery: "queue" as const,
-          deliver_at: telegramTime(match[1] + " " + match[2], now),
-          ...(state.model ? { model: state.model } : {}),
+          deliver_at: job.create.rule.run_at,
+          ...(frozen?.model ? { model: frozen.model } : {}),
         }
         await document.change((state) => ({
           ...state!,
@@ -1827,16 +1850,16 @@ export class TelegramIngress {
         }))
         return "Reminder queued for " + submission.deliver_at + "."
       }
-      const result = await telegramJob(argument, {
+      const result = await telegramJob(job, {
         application: this.application(),
         bot: id,
         ...target,
         speaker: speaker.public_id,
-        owner: owner || (!!trackedJob && trackedJob.requester === update.requester) || job[0] === "create",
+        owner: owner || (!!trackedJob && trackedJob.requester === update.requester) || !!job.create,
         key: keyValue,
         now,
         signal: this.signal,
-        model: state.control?.job ? (state.control.job.model ?? undefined) : state.model,
+        model: frozen ? (frozen.model ?? undefined) : state.model,
       })
       if (result.schedule)
         await document.change((state) => ({

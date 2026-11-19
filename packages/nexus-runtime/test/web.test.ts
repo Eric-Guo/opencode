@@ -13,6 +13,12 @@ test("web fetch follows bounded same-site redirects, decodes compressed bodies a
       const path = new URL(request.url).pathname
       requests.push(path)
       if (path === "/redirect") return new Response(null, { status: 302, headers: { Location: "/page" } })
+      if (path === "/titles")
+        return new Response(
+          "<template><title>Hidden</title></template><title>Quarterly &amp; annual</title>" +
+            "<svg><title>Chart</title></svg><title>Duplicate</title><p>Sales</p>",
+          { headers: { "Content-Type": "text/html" } },
+        )
       if (path === "/other")
         return new Response(null, { status: 302, headers: { Location: "https://example.com/private" } })
       if (path === "/loop") return new Response(null, { status: 302, headers: { Location: "/loop" } })
@@ -40,6 +46,9 @@ test("web fetch follows bounded same-site redirects, decodes compressed bodies a
     expect(page.content).toContain("# café")
     expect(page.structured_content).toMatchObject({ status: 200, final_url: new URL("/page", server.url).href })
     expect(requests).toEqual(["/redirect", "/page"])
+
+    const titles = await webFetch(new URL("/titles", server.url).href, signal, publish, options)
+    expect(titles.content).toEndWith("; title: Quarterly & annual\n\nSales")
 
     const other = await webFetch(new URL("/other", server.url).href, signal, publish, options)
     expect(other).toMatchObject({

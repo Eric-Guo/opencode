@@ -34,7 +34,7 @@ export function telegramRule(text: string, now: number): { rule: ScheduleRuleInp
       rule: { kind: "once", run_at: telegramTime(match[2] + " " + match[3], now) },
       prompt: match[4] ?? "",
     }
-  if (match?.[1] === "daily" && /^\d\d:\d\d$/.test(match[2])) {
+  if (match?.[1] === "daily" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(match[2])) {
     new Intl.DateTimeFormat("en", { timeZone: match[3] }).format(now)
     return { rule: { kind: "daily", local_time: match[2], time_zone: match[3] }, prompt: match[4] ?? "" }
   }
@@ -43,8 +43,17 @@ export function telegramRule(text: string, now: number): { rule: ScheduleRuleInp
   )
 }
 
+export function parseTelegramJob(argument: string, now: number) {
+  const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(argument.trim())
+  const action = match?.[1] ?? "list"
+  const rest = match?.[2] ?? ""
+  const create = action === "create" ? telegramRule(rest, now) : undefined
+  if (create && !create.prompt.trim()) throw new Error("A scheduled job needs a prompt.")
+  return { action, rest, create }
+}
+
 export async function telegramJob(
-  argument: string,
+  command: ReturnType<typeof parseTelegramJob>,
   context: {
     application: NexusApplication
     bot: string
@@ -58,9 +67,7 @@ export async function telegramJob(
     model?: string
   },
 ) {
-  const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(argument.trim())
-  const action = match?.[1] ?? "list"
-  const rest = match?.[2] ?? ""
+  const { action, rest } = command
   const schedules = context.application.client.workspace(context.workspace).conversation(context.conversation).schedules
   const options = { signal: context.signal }
   if (action === "list") {
@@ -97,22 +104,20 @@ export async function telegramJob(
       text: JSON.stringify(await schedules.executions(id, tail ? { after: tail } : {}, options), null, 2),
     }
   if (!context.owner) return { text: "Only the Bot owner can change scheduled jobs." }
-  if (action === "create") {
-    const parsed = telegramRule(rest, context.now)
-    if (!parsed.prompt.trim()) throw new Error("A scheduled job needs a prompt.")
+  if (command.create) {
     const policy = await context.application.bots.capture({
       action: "bot.submit",
       id: context.bot,
       workspace: context.workspace,
       conversation: context.conversation,
       key: context.key + ":policy",
-      text: parsed.prompt,
+      text: command.create.prompt,
       speaker: context.speaker,
       ...(context.model ? { model: context.model } : {}),
     })
     const receipt = await schedules.create(
       {
-        ...parsed,
+        ...command.create,
         answering_user_public_id: context.bot,
         speaker_public_id: context.speaker,
         model: policy.model,
