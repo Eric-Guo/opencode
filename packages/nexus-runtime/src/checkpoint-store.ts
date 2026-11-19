@@ -81,7 +81,7 @@ export class CheckpointStore {
   }
 
   static async discover(directory: string, id?: string) {
-    if (id !== undefined && !/^[a-f0-9]{16}$/.test(id)) throw new Error("Invalid checkpoint store.")
+    if (id !== undefined && !/^[a-f0-9]{16}$/.test(id)) return []
     const files = id
       ? [id]
       : await readdir(directory).catch((error) => {
