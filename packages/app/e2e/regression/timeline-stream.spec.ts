@@ -1448,21 +1448,17 @@ test.describe("background work", () => {
     expect(gap).toBe(8)
 
     const title = header.getByRole("heading")
-    const before = await title.boundingBox()
-    const exit = await seekExit(working, 100)
+    const exit = await sampleWorkingIndicatorExit(working)
 
     await timeline.transport.send(status("idle", 1, childID))
-
-    const midway = await exit.evaluate((state) => state.sibling)
-
-    expect(midway).toBeLessThan(before!.x)
-    await exit.evaluate((state) => state.animations.forEach((animation) => animation.finish()))
     await expect(working).toHaveCount(0)
 
+    const sample = await exit.jsonValue()
     const after = await title.boundingBox()
 
-    expect(after!.x).toBeLessThan(midway)
-    expect(after!.x).toBeCloseTo(before!.x - 24, 0)
+    expect(sample.midway).toBeLessThan(sample.before)
+    expect(after!.x).toBeLessThan(sample.midway)
+    expect(after!.x).toBeCloseTo(sample.before - 24, 0)
     await exit.dispose()
     await header.locator('[data-slot="session-title-parent"]').click()
     await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
@@ -3288,29 +3284,32 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await page.mouse.up()
 })
 
-// Presence unmounts an element once its exit's duration has passed, even while the exit is paused, so a paused exit
-// cannot be held across test round trips. Seek and measure the next sibling in the task that starts the exit instead.
-function seekExit(locator: Locator, ms: number) {
-  return locator.evaluateHandle((element, ms) => {
-    const animations: Animation[] = []
+function sampleWorkingIndicatorExit(locator: Locator) {
+  return locator.evaluateHandle((element) => {
+    const title = element.nextElementSibling!
+    const before = title.getBoundingClientRect().left
+    const sample = { before, midway: before }
 
-    const sibling = new Promise<number>((resolve) => {
-      const observer = new MutationObserver(() => {
-        if (element.getAttribute("data-visible") !== "false") return
-        observer.disconnect()
-        animations.push(...element.getAnimations())
-        animations.forEach((animation) => {
-          animation.pause()
-          animation.currentTime = ms
-        })
-        resolve(element.nextElementSibling!.getBoundingClientRect().x)
-      })
+    const observer = new MutationObserver(() => {
+      if (element.getAttribute("data-visible") !== "false") return
+      observer.disconnect()
 
-      observer.observe(element, { attributes: true, attributeFilter: ["data-visible"] })
+      // Sample and finish in the browser before the presence fallback timer can remove the indicator.
+      const animations = element.getAnimations()
+
+      for (const animation of animations) {
+        animation.pause()
+        animation.currentTime = Number(animation.effect!.getComputedTiming().activeDuration) / 2
+      }
+
+      sample.midway = title.getBoundingClientRect().left
+      animations.forEach((animation) => animation.finish())
     })
 
-    return { animations, sibling }
-  }, ms)
+    observer.observe(element, { attributes: true, attributeFilter: ["data-visible"] })
+
+    return sample
+  })
 }
 
 function notes(label: string, count: number) {
