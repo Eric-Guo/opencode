@@ -57,7 +57,7 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
   const question = { restored: false, loaded: false }
   const elicited = Promise.withResolvers<void>()
   const answer = Promise.withResolvers<{ action: "cancel" }>()
-  const held = Promise.withResolvers<void>()
+  const questionShown = Promise.withResolvers<void>()
   const pdf = {
     type: "resource",
     resource: { uri: "file:///answer.pdf", mimeType: "application/pdf", blob: "JVBERi0xLjcK" },
@@ -276,7 +276,7 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
         params.update.content.type === "text" &&
         params.update.content.text === "Continue?"
       )
-        held.resolve()
+        questionShown.resolve()
     })
     .onRequest("elicitation/create", () => {
       expect(question.loaded).toBe(true)
@@ -368,10 +368,9 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
         sessionId: "conversation",
         prompt: [{ type: "text", text: "Concurrent prompt" }],
       }),
-    ).rejects.toMatchObject({ code: -32600 })
+    ).rejects.toMatchObject({ code: -32600, message: expect.stringContaining("The editor session is busy.") })
     answer.resolve({ action: "cancel" })
-    await held.promise
-    await new Promise<void>((resolve) => setImmediate(resolve))
+    await questionShown.promise
     await expect(
       peer.agent.request("session/prompt", {
         sessionId: "conversation",
