@@ -12,10 +12,10 @@ Since the previous reference `d15b55bdd`, the three changed files under
 `agents/rho` are Ruby lockfiles for `rho`, `rho-dev` and `rho-ingress-telegram`.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The runtime gate passes 403 tests across 73 files with
-Chromium, PTY and WebRTC. The [latest verification](#schedule-recovery-host-routing-and-tool-output-november-19-2026)
-covers Telegram schedule recovery, CLI host routing, named artifacts and HTML
-titles. The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
+contract tests below. The runtime gate passes 406 tests across 74 files with
+Chromium, PTY and WebRTC. The [latest verification](#rewind-regeneration-and-project-skills-november-19-2026)
+covers process guards, per-runner checkpoint recovery, regeneration replay and
+project skills. The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
 ## Application and executor
@@ -1199,3 +1199,35 @@ The runtime suite passed **403 tests across 73 files**, including the existing
 suites with Chromium, PTY and WebRTC enabled. Native Code Mode passed **1,694
 tests across 46 files**. Both runtime type checkers, the runtime build and the
 root `bun run check` passed.
+
+## Rewind, regeneration and project skills, November 19, 2026
+
+| Reference contract | TypeScript behavior | Regression coverage |
+| --- | --- | --- |
+| `rho/lib/rho/extensions/ops.rb` and `rho/test/extensions/ops_restore_guard_test.rb` | `src/operations.ts` refuses ordinary rewind on a Bot and refuses fresh history mutations during an active turn. `src/environments.ts` checks managed processes in the conversation's current local root before a fork, then checks the root recorded by each local checkpoint before restoration. Checkpoint lookup and restore use the original runner and the member's author approval rules. | `test/operations.test.ts` and `test/restore-operations.test.ts` cover zero writes on preflight refusal, a process in a nested directory, a moved root, checkpoint lookup by run, independent remote restoration, explicit keep, undo and file contents. |
+| `rho/test/core_execution_selection_test.rb` and `rho-dev/lib/rho/dev/conversations.rb` | `src/operations.ts` forwards the requested model selection and fallback list. An accepted key skips restoration and asks Nexus to verify the submitted intent. `dev/terminal.ts` shows the forked conversation or regenerated variant, each runner's result and its undo checkpoint, including when Nexus subsequently refuses regeneration. | `test/operations.test.ts`, `test/dev.test.ts` and `test/restore-operations.test.ts` check omitted fields, an explicit empty list, receipt replay, partial restoration and a conflict after restoration. |
+| `rho/lib/rho/extensions/ops/skill_routes.rb` and `rho-dev/lib/rho/dev/skills.rb` | `src/operation-skills.ts` reports the runner's announced documents alongside agent and workspace skills. `dev/terminal.ts` distinguishes an unbound runner, a bound root with zero documents and a populated project. | `test/dev.test.ts` exercises the operation and both CLI output formats. |
+
+Nexus limits run creation idempotency keys to 36 bytes. The vendored SDK
+originally sent 64 hexadecimal characters for checkpoint lookups and restores,
+which Nexus rejected with `parameter_invalid`. The runtime's Bun patch uses
+32 hexadecimal characters derived from the same operation, runner, source run
+and tool. The restore fixture enforces the server limit and checks retry keys.
+
+Against development Nexus, the source runtime used a private scratch workspace
+and the installed OpenCode executor at `4a4a878482154d99ad7363edd7c493b8ce60a681`.
+A Bot kept its selected conversation. An active turn and a process in the
+current root each prevented a fork. After the root moved, rewind returned a
+child with `process_live`, and regeneration stopped before submission. After
+the process stopped, the executor restored all 44 original bytes and returned
+an undo checkpoint. A fresh regeneration restored first. Repeating its key and
+intent returned the same variant without another runner call. Changing the
+empty fallback list returned `idempotency_envelope_mismatch`. Project skills
+included the document announced from the scratch root. The scratch workspace,
+Bot records and local files were removed.
+
+The runtime conformance suite passed **406 tests across 74 files** with
+Chromium, PTY and WebRTC. Native Code Mode passed **1,694 tests**. Both runtime
+type checkers, the runtime build, the Nexus CLI and experimental identifier
+tests, and the repository's `bun run check` passed. Inspection of the packed
+runtime confirmed it bundles the patched SDK.

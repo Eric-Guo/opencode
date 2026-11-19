@@ -159,6 +159,7 @@
     "seroval-plugins": "1.6.11"
   },
   "patchedDependencies": {
+    "@cybros/agent@./vendor/cybros-agent-0.1.0.tgz": "patches/@cybros%2Fagent@0.1.0.patch",
     "@ai-sdk/openai-compatible@2.0.41": "patches/@ai-sdk%2Fopenai-compatible@2.0.41.patch",
     "@dnd-kit/dom@0.5.0": "patches/@dnd-kit%2Fdom@0.5.0.patch",
     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",

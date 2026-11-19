@@ -1,0 +1,12 @@
+diff --git a/dist/checkpoints.js b/dist/checkpoints.js
+--- a/dist/checkpoints.js
++++ b/dist/checkpoints.js
+@@ -51,7 +51,7 @@
+ }
+ async function call(runs, effect, tool, input, options) {
+     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([options.idempotencyKey, effect.runner_executor_public_id, effect.run_public_id, tool]))));
+-    const idempotencyKey = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
++    const idempotencyKey = Array.from(digest.subarray(0, 16), byte => byte.toString(16).padStart(2, '0')).join('');
+     const run = await runs.startToolCall({ runner_executor_public_id: effect.runner_executor_public_id, tool, input, ...(options.approvalRules === undefined ? {} : { approval_rules: options.approvalRules }) }, { ...options, idempotencyKey });
+     return run.waitForToolResult(options);
+ }
