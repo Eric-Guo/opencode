@@ -80,7 +80,7 @@ export async function runCode(
 
     content.push(block)
   }
-  const resources = new Map<string, JsonObject>()
+  const resources = new Map<string, JsonObject[]>()
   const accepting = new Set<Promise<unknown>>()
   const pending = new Map<string, { outcome: Promise<JsonValue>; settled: boolean; released: boolean }>()
   const modelTools = Array.isArray(defaults.tools)
@@ -116,8 +116,17 @@ export async function runCode(
         if (Buffer.byteLength(JSON.stringify(outcome)) > 8388608) throw new Error("Operation events exceed 8 MiB.")
         if (outcome && typeof outcome === "object" && !Array.isArray(outcome)) {
           for (const block of Array.isArray(outcome.content) ? outcome.content : []) {
-            if (block && typeof block === "object" && !Array.isArray(block) && block.type === "resource_link")
-              resources.set(String(block.uri), block)
+            if (
+              block &&
+              typeof block === "object" &&
+              !Array.isArray(block) &&
+              block.type === "resource_link" &&
+              typeof block.uri === "string"
+            ) {
+              const observed = resources.get(block.uri)
+              if (observed) observed.push(block)
+              else resources.set(block.uri, [block])
+            }
           }
           if (request.kind === "background" && outcome.status === "completed" && !outcome.is_error)
             for (const released of Array.isArray(outcome.released_operations) ? outcome.released_operations : []) {
@@ -195,10 +204,19 @@ export async function runCode(
           },
           resource(value: unknown) {
             const block = Schema.decodeUnknownSync(Input)(value)
-            const observed = typeof block.uri === "string" ? resources.get(block.uri) : undefined
             if (
-              !observed ||
-              Object.entries(block).some(([key, value]) => key !== "type" && !isDeepStrictEqual(observed[key], value))
+              typeof block.uri !== "string" ||
+              !block.uri.trim() ||
+              typeof block.name !== "string" ||
+              !block.name.trim()
+            )
+              throw new Error("resource() requires a URI and a nonblank name.")
+
+            const fields = Object.entries(block).filter(([key]) => key !== "type")
+            if (
+              !resources
+                .get(block.uri)
+                ?.some((observed) => fields.every(([key, value]) => isDeepStrictEqual(observed[key], value)))
             )
               throw new Error("Resource was not observed by this invocation.")
             append({ ...block, type: "resource_link" })
