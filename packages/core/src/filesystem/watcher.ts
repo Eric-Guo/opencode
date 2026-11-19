@@ -6,7 +6,7 @@ import type ParcelWatcher from "@parcel/watcher"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { isRecord } from "@opencode/util/record"
-import { Cause, Context, Effect, FiberSet, Layer, PubSub, RcMap, Stream } from "effect"
+import { Cause, Clock, Context, Effect, FiberSet, Layer, Logger, PubSub, RcMap, References, Scope, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
 import path from "path"
@@ -121,7 +121,13 @@ export const layer = (options?: Options) =>
               ignores: key.ignore.length,
             })
             return pubsub
-          }),
+          }).pipe(
+            // RcMap runs lookup with the first subscriber's services. Both release
+            // finalizers keep this context until the last subscriber leaves.
+            Effect.updateContext((context: Context.Context<Scope.Scope>) =>
+              Context.pick(Scope.Scope, Clock.Clock, Logger.CurrentLoggers, References.MinimumLogLevel)(context),
+            ),
+          ),
       })
 
       const subscribe = Effect.fnUntraced(function* (input: WatchInput, onReady: Effect.Effect<void> = Effect.void) {
