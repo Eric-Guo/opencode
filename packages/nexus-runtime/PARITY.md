@@ -1,21 +1,22 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`d15b55bdd268caeff4fd3d5f608f8ad98384c849`. Paths in the first column are relative
+`b6701bdad4962b077d53a984517b7d8b8aa55c38`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
 
 The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` covers
 ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
-The reference revision after that production change updates Ruby lockfiles.
+Since the previous reference `d15b55bdd`, the three changed files under
+`agents/rho` are Ruby lockfiles for `rho`, `rho-dev` and `rho-ingress-telegram`.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The latest review covers promptless model selection,
-attachment-only input, browser click coordinates, MCP catalog publication and
-Git review. The runtime gate passes 397 tests across 73 files, including
-Chromium, PTY and WebRTC. See the [admission and tool verification](#conversation-admission-and-tool-verification-november-19-2026)
-and the [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md).
+contract tests below. The runtime gate passes 403 tests across 73 files with
+Chromium, PTY and WebRTC. The [latest verification](#schedule-recovery-host-routing-and-tool-output-november-19-2026)
+covers Telegram schedule recovery, CLI host routing, named artifacts and HTML
+titles. The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
+`rho-webui` in `packages/nexus-ui`.
 
 ## Application and executor
 
@@ -1164,3 +1165,37 @@ The runtime conformance suite passed 397 tests in 73 files with Chromium, PTY
 and WebRTC. The native Code Mode suite passed 1,694 tests. The runtime build,
 both runtime type checks, the Nexus CLI and experimental identifier tests, and
 the repository's `bun run check` also passed.
+
+## Schedule recovery, host routing and tool output, November 19, 2026
+
+| Rho reference contract | TypeScript owner | Local regression |
+| --- | --- | --- |
+| `rho-ingress-telegram/lib/rho/ingress-telegram/runtime.rb` and `schedule_workflow.rb` freeze relative rules and creation policy and bound replay by the Telegram message date. | `src/telegram-ingress.ts`, `src/telegram-schedules.ts`, `src/telegram-state.ts` | `test/telegram.test.ts` restarts after a lost creation response, changes the Bot's current conversation, counts submissions on both sides of the receipt cutoff and redelivers the acknowledged update. A valid first `/job create` or `/remind` opens one conversation through `bot.current`. Invalid commands open none. |
+| `rho/lib/rho/host.rb` and `extensions/ops/run_routes/following.rb`, with `rho-dev/lib/rho/dev/conversations.rb` and `runs.rb`, route compaction and attachment by the addressed host. | `dev/terminal.ts` dispatches to `src/operations.ts` or `dev/streams.ts`. | `test/dev.test.ts` checks the exact SDK compaction route, refusal before either invalid write, and conversation adoption. `test/dev-worker.test.ts` attaches a run through the CLI and observes its follower through the extension worker and loopback WebSocket. |
+| `rho-codemode/lib/rho/codemode/runtime.js` emits named resource links. Nexus accepts links to observed artifacts. | `src/code.ts` implements `resource()` in OpenCode Code Mode. | `test/code.test.ts` forwards both names observed for one URI through the native interpreter and rejects an absent or blank name and mismatched metadata. |
+| `rho-web-tools/lib/rho/web-tools/render.rb` removes discarded subtrees before reading the document title. | `src/web.ts` selects the first surviving title and passes the body to OpenCode's HTML-to-Markdown converter. | `test/web.test.ts` fetches a loopback HTML page with template, SVG and duplicate titles and checks both the decoded title and the Markdown body. |
+
+### Development Nexus
+
+The changed runtime used the elected service's pairing with `http://localhost:3000`
+and a private workspace. A loopback peer supplied Telegram identity and command
+registration. The test clock controlled recovery age. Each initial schedule POST
+reached Nexus and committed before its response was discarded.
+
+| Recovery age | Schedule POSTs including the original | Observed result after restart and redelivery |
+| --- | --- | --- |
+| 86,399 seconds | 2 | Both POSTs had the same path, key, policy and rule. Nexus returned the same ID and listed one matching schedule. The runtime queued one success notice. |
+| 86,400 seconds | 1 | Nexus listed one matching schedule. The runtime advanced the Connection offset and queued one notice directing the requester to `/job list`. |
+
+The native Code Mode binding observed two names for one real 51-byte Nexus
+upload and forwarded the first link. A member resolved a run task with that
+output. Nexus returned the selected name and URI on the completed task, and the
+downloaded bytes matched the original. The verification Bot, profile Store
+entries, ingress speaker, conversation, schedules, run and upload were removed
+and the scratch workspace was deleted.
+
+The runtime suite passed **403 tests across 73 files**, including the existing
+`rho-env`, `rho-browser`, `rho-mcp`, `rho-acp`, `rho-acp-client` and `rho-t3`
+suites with Chromium, PTY and WebRTC enabled. Native Code Mode passed **1,694
+tests across 46 files**. Both runtime type checkers, the runtime build and the
+root `bun run check` passed.

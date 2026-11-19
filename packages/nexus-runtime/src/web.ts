@@ -346,36 +346,40 @@ export async function renderWebContent(
 async function markdown(body: string) {
   const { convertHTMLToMarkdown } = await import("@opencode/core/tool/html-markdown")
   const { Parser } = await import("htmlparser2")
-  const ranges: { start: number; end: number }[] = []
-  const state = { depth: 0, start: 0, title: false, titleStart: 0, text: "" }
+  const omitted = new Set(["script", "style", "noscript", "template", "svg", "iframe", "object", "embed"])
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  let title: string | undefined
+  let readingTitle = false
   const parser = new Parser({
     onopentag(name) {
-      if (name === "title") {
-        state.title = true
-        state.titleStart = parser.startIndex
+      if (depth) {
+        depth++
+        return
       }
-      if (name !== "svg") return
-      if (!state.depth) state.start = parser.startIndex
-      state.depth++
+      if (name !== "title" && !omitted.has(name)) return
+
+      parts.push(body.slice(start, parser.startIndex))
+      depth = 1
+      readingTitle = name === "title" && title === undefined
+      if (readingTitle) title = ""
     },
     ontext(text) {
-      if (state.title && !state.depth) state.text += text
+      if (readingTitle) title += text
     },
-    onclosetag(name) {
-      if (name === "title") {
-        state.title = false
-        if (!state.depth) ranges.push({ start: state.titleStart, end: parser.endIndex + 1 })
-      }
-      if (name !== "svg" || !state.depth) return
-      state.depth--
-      if (!state.depth) ranges.push({ start: state.start, end: parser.endIndex + 1 })
+    onclosetag() {
+      if (!depth) return
+      depth--
+      if (depth) return
+      start = parser.endIndex + 1
+      readingTitle = false
     },
   })
   parser.end(body)
-  if (state.depth) ranges.push({ start: state.start, end: body.length })
-  const title = state.text.replace(INVISIBLE, "").trim()
-  const clean = ranges.toReversed().reduce((text, range) => text.slice(0, range.start) + text.slice(range.end), body)
-  return { text: convertHTMLToMarkdown(clean), ...(title ? { title } : {}) }
+  parts.push(body.slice(start))
+  const heading = title?.replace(INVISIBLE, "").trim()
+  return { text: convertHTMLToMarkdown(parts.join("")), ...(heading ? { title: heading } : {}) }
 }
 
 async function capture(bytes: Buffer, name: string, directory?: string) {
