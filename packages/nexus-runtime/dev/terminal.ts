@@ -109,7 +109,7 @@ export const developmentHelp = `Nexus development controls (source checkout only
   graph HOST | phases HOST | task HOST KEY | request HOST KEY
   stop HOST [TASK] | pause HOST | resume HOST | retry HOST [TASK] | abandon HOST [TASK]
   approve HOST TASK [--always --match PREFIX] | deny HOST TASK [REASON] | answer HOST TASK TEXT
-  compact HOST [TASK] | append HOST -f FILE | delete HOST
+  compact CONVERSATION | compact RUN TASK | append HOST -f FILE | delete HOST
   inputs HOST | inputs rm HOST INPUT | inputs edit HOST INPUT [TEXT]
   variant CONVERSATION TURN [VARIANT --conceal|--restore] | activate CONVERSATION TURN VARIANT
   rewind CONVERSATION TURN | regenerate CONVERSATION TURN [--keep-checkpoints]
@@ -628,10 +628,11 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     }
     return object(detail.task).status === "completed" ? 0 : 1
   }
-  const resolved = await target(word(0, "HOST"))
+  const host = word(0, "HOST")
+  const resolved = await target(host)
   if (parsed.verb === "attach") {
-    if (resolved.conversation) await call("attach", { conversation: resolved.conversation })
-    if (resolved.run) await call("stream.attach", { run: resolved.run, live: parsed.values.live !== false })
+    if (host === resolved.conversation) await call("attach", { conversation: host })
+    else await call("stream.attach", { run: host, live: parsed.values.live !== false })
     print(resolved)
     return 0
   }
@@ -649,8 +650,13 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     print(await call("stop", { conversation: resolved.conversation }))
     return 0
   }
-  if (parsed.verb === "compact" && !parsed.args[1] && resolved.conversation) {
-    print(await call("compact", { conversation: resolved.conversation }))
+  if (parsed.verb === "compact") {
+    if (host === resolved.conversation) {
+      if (parsed.args[1]) throw new Error("A conversation picks its own round. Omit the task key.")
+      print(await call("compact", { conversation: host }))
+      return 0
+    }
+    print(await call("task.compact", { run: host, task: word(1, "a round task key") }))
     return 0
   }
   if (parsed.verb === "turns") {
@@ -694,9 +700,7 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     return 0
   }
   const action =
-    { stop: "task.cancel", pause: "run.pause", resume: "run.resume", delete: "run.delete", compact: "task.compact" }[
-      parsed.verb
-    ] ?? parsed.verb
+    { stop: "task.cancel", pause: "run.pause", resume: "run.resume", delete: "run.delete" }[parsed.verb] ?? parsed.verb
   if (
     ![
       "task.cancel",

@@ -212,6 +212,38 @@ try { await nexus.wait(await nexus.start({kind:"tool",name:"read",input:{path:"m
   ).rejects.toThrow("not observed")
 })
 
+test("code matches resource names and metadata against each observed link for the same URI", async () => {
+  const uri = "nexus://uploads/file"
+  const links = ["first.txt", "second.txt"].map((name) => ({
+    type: "resource_link",
+    uri,
+    name,
+    mimeType: "text/plain",
+  }))
+  const result = await run(
+    `const result = await tools.read({path:"file"});
+resource(result.content[0]); resource(result.content[1]);`,
+    {},
+    declarations,
+    async () => ({ content: links }),
+    signal,
+  )
+  expect(result.content).toEqual(links)
+
+  const invalid: JsonObject[] = [{ uri }, { uri, name: " " }, { uri, name: "first.txt", mimeType: "image/png" }]
+  for (const block of invalid) {
+    await expect(
+      run(
+        'await tools.read({path:"file"}); resource(params)',
+        block,
+        declarations,
+        async () => ({ content: links }),
+        signal,
+      ),
+    ).rejects.toThrow(/resource/i)
+  }
+})
+
 test("code forwards observed captures and accepts array step authoring", async () => {
   const capture = { type: "resource_link", uri: "nexus://uploads/image", name: "image.png", mimeType: "image/png" }
   const result = await run(

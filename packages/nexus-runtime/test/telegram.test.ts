@@ -405,6 +405,8 @@ function fixture(group = true) {
       }
       return Response.json({ conversation: conversationFixture({ answering_user_public_id: bot, archived_at: "now" }) })
     }
+    if (path.endsWith("/workspaces/workspace/conversations") && request.method === "POST")
+      return Response.json({ conversation: conversationFixture({ answering_user_public_id: bot }) }, { status: 201 })
     if (path.endsWith("/conversations/conversation") || path.endsWith("/conversations/new-conversation"))
       return Response.json({
         conversation: conversationFixture({
@@ -653,6 +655,56 @@ test("a polled update survives a missing binding and recovers with its original 
   expect(peer.requests.filter((path) => path.endsWith("/getUpdates"))).toHaveLength(1)
   expect(connectionState()).toMatchObject({ offset: 9, pending: null })
   expect(peer.saved().jobs?.[0]?.id).toBe("job")
+})
+
+test.each(["/job create once in 2d Report", "/remind in 2d Report"])(
+  "a valid first %s opens one Bot conversation after validation",
+  async (command) => {
+    using peer = fixture()
+    peer.entries.delete(peer.current)
+    const opens = () => peer.requests.filter((path) => path.endsWith("/workspaces/workspace/conversations"))
+    for (const [index, invalid] of [
+      "/job create every 1m",
+      "/remind in invalid Report",
+      "/job create daily 25:60 UTC Report",
+    ].entries())
+      await peer.open().ingest(connection, message(index + 1, invalid), now)
+
+    expect(opens()).toEqual([])
+    await peer.open().ingest(connection, message(4, command), now)
+    expect(opens()).toHaveLength(1)
+    if (command.startsWith("/job")) {
+      expect(peer.schedules[0].body.prompt).toBe("Report")
+      expect(peer.saved().jobs?.[0].target.conversation).toBe("conversation")
+      return
+    }
+    expect(peer.saved().batches[0].submission).toMatchObject({
+      conversation: "conversation",
+      text: "Please remind me now: Report",
+      deliver_at: new Date(now + 2 * 86400000).toISOString(),
+    })
+  },
+)
+
+test.each([86399, 86400])("a lost Telegram schedule response recovers at age %i seconds", async (age) => {
+  using peer = fixture()
+  const update = message(8, "/job create every 2d Report")
+  peer.state.loseSchedule = true
+  await expect(peer.open().ingest(connection, update, now)).rejects.toThrow()
+  await peer.open().poll(connection, now + age * 1000)
+  await peer.open().ingest(connection, update, now + age * 1000)
+
+  const connectionState = [...peer.entries.values()].find((row) => row.namespace === "opencode.telegram.connection")
+  expect(connectionState?.value).toMatchObject({ offset: 9, pending: null })
+  expect(peer.saved().deliveries).toHaveLength(1)
+  if (age === 86400) {
+    expect(peer.schedules).toHaveLength(1)
+    expect(peer.saved().deliveries[0].text).toContain("/job list")
+    expect(peer.saved().jobs ?? []).toBeEmpty()
+    return
+  }
+  expect(peer.schedules).toEqual([peer.schedules[0], peer.schedules[0]])
+  expect(peer.saved().jobs?.[0].id).toBe("job")
 })
 
 test("a polling flood wait survives restart and zero permits immediate polling", async () => {
