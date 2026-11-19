@@ -1,10 +1,18 @@
-import { APIError, type Client, type JsonObject, type StoreEntry } from "@cybros/agent"
+import {
+  APIError,
+  type Checkpoint,
+  type Client,
+  type Conversation,
+  type JsonObject,
+  type StoreEntry,
+} from "@cybros/agent"
 import { realpath, stat } from "node:fs/promises"
 import { isAbsolute, relative, sep } from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { Schema } from "effect"
 import { resolvePath } from "./file-read"
 import { EditorBinding } from "./editor-bridge"
+import type { Checkpoints } from "./checkpoints"
 
 const Binding = Schema.Struct({
   root: Schema.NonEmptyString,
@@ -33,6 +41,9 @@ type Change = typeof EnvironmentChange.Type
 type Resolved = { binding: Binding; source: "conversation" | "parent" | "default"; entry?: StoreEntry }
 type Settings = {
   root?: () => string
+  documents?: () => { name: string; description: string }[]
+  liveProcess?: (root: string) => string | undefined
+  checkpoints?: () => Checkpoints | undefined
   protectedRoots?: readonly string[]
   hosts?: () => readonly { workspace: string; conversation: string }[]
   mcp?: (workspace: string, anchor: string, root: string, entries: Schema.Json) => Promise<Schema.Json>
@@ -56,6 +67,28 @@ export class Environments {
 
   configure(settings: Settings) {
     this.settings = settings
+  }
+
+  projectDocuments() {
+    return this.settings.root ? (this.settings.documents?.() ?? []) : null
+  }
+
+  async assertHistoryIdle(workspace: string, conversation: Conversation) {
+    if (conversation.active_turn_public_id) throw new Error("conversation_busy: a turn is running. Stop it first.")
+
+    const runner = conversation.default_runner?.executor_public_id
+    if (runner !== this.identity.runner || !this.settings.liveProcess) return
+
+    const current = await this.resolve(workspace, conversation.public_id, runner, "read")
+    const process = this.settings.liveProcess(current.binding.root)
+    if (process) throw new Error("process_live: " + process + " is live in that root. Stop it first.")
+  }
+
+  async restoreGuard(runner: string, checkpoint: Checkpoint) {
+    if (runner !== this.identity.runner || !checkpoint.store || !this.settings.liveProcess) return null
+
+    const store = await this.settings.checkpoints?.()?.forStore(checkpoint.store)
+    return store && this.settings.liveProcess(store.root) ? "process_live" : null
   }
 
   async read(workspace: string, conversation: string, runner?: string) {
@@ -206,7 +239,13 @@ export class Environments {
     return { root: parsed.root, directories: parsed.directories ?? [], anchor: null }
   }
 
-  private async resolve(workspace: string, conversation: string, runner: string, depth = 0): Promise<Resolved> {
+  private async resolve(
+    workspace: string,
+    conversation: string,
+    runner: string,
+    inheritance: "read" | "copy" = "copy",
+    depth = 0,
+  ): Promise<Resolved> {
     if (depth > 8) throw new Error("executor_environment_unavailable: the parent chain is deeper than 8")
     const own = await this.record(workspace, conversation, runner)
     if (own) {
@@ -225,8 +264,9 @@ export class Environments {
     }
     const parent = (await this.member.workspace(workspace).conversation(conversation).fetch()).parent
     if (parent) {
-      const inherited = await this.resolve(workspace, parent.public_id, runner, depth + 1)
+      const inherited = await this.resolve(workspace, parent.public_id, runner, inheritance, depth + 1)
       if (inherited.source !== "default") {
+        if (inheritance === "read") return { binding: inherited.binding, source: "parent" }
         const entry = await this.write(workspace, conversation, runner, inherited.binding, true)
         const binding = Schema.decodeUnknownSync(Binding)(entry.value)
         return this.remember(workspace, conversation, runner, { binding, source: "parent", entry })
