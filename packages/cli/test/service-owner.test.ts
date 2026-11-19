@@ -1,16 +1,69 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
+import { discover } from "@opencode/client/service"
 import { expect, test } from "bun:test"
 import { Effect, Exit, FileSystem, Scope } from "effect"
 import { NetAddress } from "effect/net"
+import assert from "node:assert/strict"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ServiceRegistration } from "../src/services/service-registration"
+import { OPENCODE_VERSION } from "../src/version"
 
 function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
   return Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
 }
+
+test.skipIf(process.platform !== "win32")(
+  "a stale registration with a protected PID allows a replacement service",
+  async () => {
+    // Windows denies access to the System process even for a signal-0 liveness check.
+    const protectedPid = 4
+    assert.throws(() => process.kill(protectedPid, 0), { code: "EPERM" })
+
+    const root = await mkdtemp(join(tmpdir(), "opencode-registration-protected-"))
+    const file = join(root, "service.json")
+    const password = "fixture"
+
+    try {
+      using listener = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch: (request) =>
+          request.headers.get("authorization") === "Basic " + btoa(`opencode:${password}`)
+            ? Response.json({ pid: process.pid, version: OPENCODE_VERSION })
+            : new Response(null, { status: 401 }),
+      })
+      const url = listener.url.origin
+
+      await writeFile(file, JSON.stringify({ url, pid: protectedPid, password }))
+      expect(await discover({ file })).toBeUndefined()
+
+      await run(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const cleanup = yield* ServiceRegistration.register({
+              address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", listener.port!),
+              file,
+              password,
+              id: "replacement",
+              shutdown: Effect.never,
+            })
+
+            expect(yield* Effect.promise(() => discover({ file }))).toEqual({
+              url,
+              auth: { type: "basic", username: "opencode", password },
+            })
+            yield* cleanup
+          }),
+        ),
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  },
+)
 
 test.skipIf(process.platform !== "linux")(
   "registration lease excludes competing publishers even with independent database leases",
