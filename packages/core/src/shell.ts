@@ -15,6 +15,7 @@ import {
   Option,
   Schema,
   Schedule,
+  Scope,
   Stream,
 } from "effect"
 import { ChildProcess } from "effect/process"
@@ -265,13 +266,13 @@ interface Runs<E> {
 
 export interface DaemonInterface {
   /**
-   * A Location's daemon commands. The first call for a Location in this server takes its commands back from the daemon.
+   * Holds a Location's daemon commands for the calling scope, recovering them when the place is opened.
    * Creating one fails with `UnavailableError` only when the daemon could not be reached or started: spawning instead
    * is safe.
    */
   readonly at: (
     location: Location.Interface,
-  ) => Effect.Effect<Runs<PersistentPty.UnavailableError | PersistentPty.RequestError>>
+  ) => Effect.Effect<Runs<PersistentPty.UnavailableError | PersistentPty.RequestError>, never, Scope.Scope>
   /** Runs `effect` until it ends or the server stops, outliving the caller's Location (e.g. a job's completion notice). */
   readonly watch: (effect: Effect.Effect<void, unknown>) => Effect.Effect<void>
   readonly handoffPrepared: () => boolean
@@ -343,26 +344,43 @@ const commandRuns = <E>(host: CommandHost<E>) =>
     const global = yield* Global.Service
     const { unlink } = yield* Effect.promise(() => import("fs/promises"))
     // Keyed by canonical Location. `recovered` resolves once the Location's commands were taken back.
-    const places = new Map<string, { runs: Runs<E>; recovered: Deferred.Deferred<void> }>()
+    const places = new Map<string, ReturnType<typeof place>>()
     // Fibers run with the server's context in its scope, so a Location closing never interrupts them. On shutdown
     // they end without settling anything: the commands keep running for the next server, and the jobs waiting on
     // them are left to the job registry, which keeps their rows for it.
     const fork = (effect: Effect.Effect<void>) =>
       effect.pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.setContext(context))
 
-    const place = (location: Location.Interface) => {
+    const place = (key: string, location: Location.Interface) => {
       const runs = new Map<Shell.ID, Run>()
       const exitOrder: Shell.ID[] = []
       const ref = Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID })
-      const outputDir = path.join(global.data, DIRECTORY, location.project.id)
+      const projectID = location.project.id
+      const outputDir = path.join(global.data, DIRECTORY, projectID)
+
+      // An open Location or an in-flight create/remove holds the place. Retained commands
+      // keep it available to the next Location even after the last holder leaves.
+      let holders = 0
+      const hold = () => {
+        holders++
+      }
+      const release = Effect.sync(() => {
+        if (--holders === 0 && runs.size === 0 && places.get(key)?.runs === handle) places.delete(key)
+      })
+      const using = <A, E>(effect: Effect.Effect<A, E>) =>
+        Effect.acquireUseRelease(
+          Effect.sync(hold),
+          () => effect,
+          () => release,
+        )
 
       const persisted = (run: Pick<Run, "info" | "toolCall" | "timeoutDeadline" | "stopReason">): Stored => ({
         id: run.info.id,
         command: run.info.command,
         shell: run.info.shell,
         location: {
-          directory: location.directory,
-          ...(location.workspaceID !== undefined ? { workspaceID: location.workspaceID } : {}),
+          directory: ref.directory,
+          ...(ref.workspaceID !== undefined ? { workspaceID: ref.workspaceID } : {}),
         },
         metadata: run.info.metadata,
         toolCall: run.toolCall,
@@ -518,7 +536,7 @@ const commandRuns = <E>(host: CommandHost<E>) =>
           args: input.args,
           cwd: input.info.cwd,
           env: input.env,
-          projectID: location.project.id,
+          projectID,
           outputPath: input.info.file,
           metadata: persisted(pending),
         })
@@ -553,8 +571,8 @@ const commandRuns = <E>(host: CommandHost<E>) =>
           const stored = Option.getOrUndefined(decodeStored(process.metadata))
           if (
             !stored ||
-            stored.location.directory !== location.directory ||
-            stored.location.workspaceID !== location.workspaceID ||
+            stored.location.directory !== ref.directory ||
+            stored.location.workspaceID !== ref.workspaceID ||
             path.dirname(process.outputPath) !== outputDir ||
             runs.has(stored.id)
           )
@@ -611,30 +629,33 @@ const commandRuns = <E>(host: CommandHost<E>) =>
       const handle: Runs<E> = {
         get: (id) => runs.get(id),
         list: () => Array.from(runs.values()),
-        create,
+        create: (input) => using(create(input)),
         timeout,
         stop,
-        remove,
+        remove: (id) => using(remove(id)),
       }
-      return { runs: handle, recover }
+      return { runs: handle, recover, recovered: Deferred.makeUnsafe<void>(), hold, release }
     }
 
-    const at = Effect.fnUntraced(function* (location: Location.Interface) {
-      const key = `${location.directory}\0${location.workspaceID ?? ""}`
-      const existing = places.get(key)
-      if (existing) {
-        yield* Deferred.await(existing.recovered)
-        return existing.runs
-      }
-      const placed = place(location)
-      const entry = { runs: placed.runs, recovered: Deferred.makeUnsafe<void>() }
-      places.set(key, entry)
-      // Uninterruptible: the entry is shared, so a caller's interrupt must not leave it half recovered.
-      yield* placed
-        .recover()
-        .pipe(Effect.ensuring(Deferred.succeed(entry.recovered, undefined)), Effect.uninterruptible)
-      return placed.runs
-    })
+    const at = (location: Location.Interface) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const scope = yield* Effect.scope
+          const key = `${location.directory}\0${location.workspaceID ?? ""}`
+          const existing = places.get(key)
+          const entry = existing ?? place(key, location)
+          if (!existing) places.set(key, entry)
+          entry.hold()
+          // The first caller finishes shared recovery even if interrupted. Other callers may stop waiting.
+          const ready = existing
+            ? restore(Deferred.await(entry.recovered))
+            : entry.recover().pipe(Effect.ensuring(Deferred.succeed(entry.recovered, undefined)))
+          yield* ready.pipe(
+            Effect.onExit((exit) => (Exit.isSuccess(exit) ? Scope.addFinalizer(scope, entry.release) : entry.release)),
+          )
+          return entry.runs
+        }),
+      )
 
     return {
       at,

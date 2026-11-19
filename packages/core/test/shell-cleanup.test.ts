@@ -1,12 +1,19 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect } from "effect"
+import { Deferred, Effect, Layer, Option } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
+import { Environment } from "@opencode/core/environment/index"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
+import { ToolOutput } from "@opencode/core/tool-output"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { PersistentPty } from "@opencode/core/persistent-pty"
+import { hostEnvironmentLayer } from "./fixture/environment"
+import { location } from "./fixture/location"
 import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
 import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
@@ -24,6 +31,43 @@ const withStore = <A, E, R>(body: (fs: FSUtil.Interface, root: string) => Effect
   })
 
 describe("Shell cleanup", () => {
+  it.live("runs the shared output sweeps outside the Location that starts them", () =>
+    withStore((fs, root) =>
+      Effect.gen(function* () {
+        const shell = yield* Deferred.make<boolean>()
+        const tool = yield* Deferred.make<boolean>()
+        const recordLocation = (observed: Deferred.Deferred<boolean>) =>
+          Effect.serviceOption(Location.Service).pipe(
+            Effect.flatMap((value) => Deferred.succeed(observed, Option.isSome(value))),
+          )
+        const caller = location({ directory: AbsolutePath.make(root) })
+        const layer = AppNodeBuilder.build(LayerNode.group([Location.node, Shell.node, ToolOutput.node]), [
+          Location.node.replace(Layer.succeed(Location.Service, caller)),
+          Config.node.replace(Config.testLayer()),
+          Environment.node.replace(hostEnvironmentLayer),
+          Global.node.replace(Global.layerWith({ data: root })),
+          PersistentPty.node.replace(disabledPersistentPtyLayer),
+          FSUtil.node.replace(
+            Layer.succeed(FSUtil.Service, {
+              ...fs,
+              readDirectory: (directory) =>
+                directory === path.join(root, ToolOutput.DIRECTORY)
+                  ? recordLocation(tool).pipe(Effect.andThen(fs.readDirectory(directory)))
+                  : fs.readDirectory(directory),
+              readDirectoryEntries: (directory) =>
+                directory === path.join(root, Shell.DIRECTORY)
+                  ? recordLocation(shell).pipe(Effect.andThen(fs.readDirectoryEntries(directory)))
+                  : fs.readDirectoryEntries(directory),
+            }),
+          ),
+        ])
+        yield* Layer.build(layer)
+        expect(yield* Deferred.await(shell)).toBe(false)
+        expect(yield* Deferred.await(tool)).toBe(false)
+      }),
+    ),
+  )
+
   it.live("removes expired output files across projects", () =>
     withStore((fs, root) =>
       Effect.gen(function* () {
