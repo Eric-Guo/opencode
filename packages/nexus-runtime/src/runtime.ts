@@ -16,6 +16,7 @@ import {
   type JsonObject,
 } from "@cybros/agent"
 import { RealtimeClient } from "@cybros/agent/realtime"
+import { createHash } from "node:crypto"
 import { mkdir, readFile, realpath, stat } from "node:fs/promises"
 import { isAbsolute, join, relative, sep, win32, posix } from "node:path"
 import { scheduler } from "node:timers/promises"
@@ -707,6 +708,9 @@ export class NexusRuntime {
           workspace: workspace.public_id,
           workspaceName: workspace.name,
         }
+        const admissionScope = createHash("sha256")
+          .update(JSON.stringify([settings.origin, identity.agent]))
+          .digest("hex")
         this.connection = {
           member,
           configuration,
@@ -747,6 +751,7 @@ export class NexusRuntime {
               hints: (model) => this.adaptations?.hints(model) ?? "",
               adaptations: (model) => this.adaptations?.facts(model) ?? {},
             }),
+            join(this.storage, "admissions", admissionScope),
           ),
         }
         this.connection.application.environments.configure({
