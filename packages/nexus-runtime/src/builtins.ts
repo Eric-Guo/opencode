@@ -37,7 +37,11 @@ const Terminal = Schema.Struct({
   addresses: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
 })
 
-export async function builtinExtensions(host?: HostTools, storage?: string): Promise<ExtensionModule[]> {
+export async function builtinExtensions(
+  host?: HostTools,
+  storage?: string,
+  processes = storage ? processesExtension(storage) : undefined,
+): Promise<ExtensionModule[]> {
   const modules: ExtensionModule[] = [
     {
       descriptor: {
@@ -58,7 +62,7 @@ export async function builtinExtensions(host?: HostTools, storage?: string): Pro
     ...executionExtensions(),
     memoryReviewExtension(),
     skillsExtension(),
-    ...(storage ? [processesExtension(storage)] : []),
+    ...(processes ? [processes] : []),
     conventionsExtension(storage),
     ...capabilityExtensions(),
     {
