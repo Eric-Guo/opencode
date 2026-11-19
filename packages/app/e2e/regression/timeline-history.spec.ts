@@ -808,10 +808,26 @@ test.describe("timeline history", () => {
     await expect(editor).toHaveText("keep this draft")
     expect(await caret()).toBe("keep this draft".length)
 
-    // Paging back to the end follows new content again, as a wheel scroll there does.
+    // PageDown can reach the end before the browser delivers its scroll event. Let new output arrive in that gap.
+    const releaseScroll = await scroller.evaluateHandle((element) => {
+      const holdScroll = (event: Event) => event.stopImmediatePropagation()
+      element.addEventListener("scroll", holdScroll, true)
+      element.addEventListener("scrollend", holdScroll, true)
+
+      return () => {
+        element.removeEventListener("scroll", holdScroll, true)
+        element.removeEventListener("scrollend", holdScroll, true)
+        element.dispatchEvent(new Event("scroll"))
+      }
+    })
+
     for (let index = 0; index < 10 && (await fromEnd()) > 1; index++) await editor.press("PageDown")
     await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    const heightAtEnd = await scroller.evaluate((element) => element.scrollHeight)
     await timeline.send(partUpdated(textPart("prt_page_keys_tail", "Arrived after paging down.\n\n".repeat(20))))
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(heightAtEnd)
+    await releaseScroll.evaluate((deliver) => deliver())
+    await releaseScroll.dispose()
     await timeline.waitForPart("prt_page_keys_tail")
     await expect.poll(fromEnd).toBeLessThanOrEqual(1)
 
