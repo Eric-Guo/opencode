@@ -6,6 +6,7 @@ import {
   Conflict,
   NotFound,
   type AccessEntry,
+  type CheckpointRestoration,
   type Client,
   type RequestOptions,
   type Step,
@@ -193,6 +194,15 @@ export const Operation = Schema.Union([
     ...Turn,
     ...Key,
     model: Schema.optional(Schema.String),
+    model_selection: Schema.optional(
+      Schema.Struct({
+        source: Schema.Literals(["default", "inherited", "explicit"]),
+        model: Schema.String,
+        constraint: Schema.Literals(["any", "model", "provider", "route"]),
+        alternatives: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+      }),
+    ),
+    fallback_models: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
     restore: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({ action: Schema.Literals(["turn", "variants", "turn.delete", "turn.request"]), ...Turn }),
@@ -440,20 +450,8 @@ export class Operations {
       input.action === "skill.remove" ||
       input.action === "skill.push"
     )
-      return skillOperation(this.member, this.identity.workspace, input, options)
+      return skillOperation(this.member, this.identity.workspace, input, options, this.application.environments)
     if (input.action === "call_tool" || input.action === "terminal.open") {
-      const rules = Schema.decodeUnknownSync(
-        Schema.Array(
-          Schema.Struct({
-            tool: Schema.String,
-            verdict: Schema.Literals(["allow", "ask", "deny"]),
-            path: Schema.optional(Schema.String),
-            match: Schema.optional(Schema.String),
-            reason: Schema.optional(Schema.String),
-            origin: Schema.optional(Schema.Literals(["model", "author", "kernel"])),
-          }),
-        ),
-      )((await this.member.profile.fetch(options)).configuration?.approval_rules ?? [])
       const runner = (await this.application.runners.list()).runners.find((row) => row.public_id === input.runner)
       if (!runner) throw new Error("The selected runner is unavailable.")
       const created = await workspace.runs.create(
@@ -479,7 +477,7 @@ export class Operations {
           approval_mode: input.action === "terminal.open" ? "ask" : "bypass",
           prompt_mechanism: "raw",
           default_runner_executor_public_id: input.runner,
-          approval_rules: rules.map((rule) => ({ ...rule, origin: "author" as const })),
+          approval_rules: await this.authorRules(options),
         },
         { ...options, idempotencyKey: input.key },
       )
@@ -642,24 +640,50 @@ export class Operations {
           { turn_public_id: input.turn, variant_public_id: input.variant, title: input.title },
           { ...options, idempotencyKey: input.key },
         )
-      if (input.action === "rewind")
-        return chat.rewind(
-          { turn_public_id: input.turn, variant_public_id: input.variant, title: input.title },
-          { ...options, idempotencyKey: input.key, restoreCheckpoints: input.restore },
-        )
-      if (input.action === "regenerate") {
+      if (input.action === "rewind" || input.action === "regenerate") {
+        const environments = this.application.environments
+        const restoreGuard = environments.restoreGuard.bind(environments)
+        if (input.action === "rewind") {
+          if (info.metadata["opencode.bot"])
+            throw new Error("bot_conversation_required: fork through the Bot's history using bot.fork.")
+          await environments.assertHistoryIdle(selected, info)
+          return chat.rewind(
+            { turn_public_id: input.turn, variant_public_id: input.variant, title: input.title },
+            {
+              ...options,
+              idempotencyKey: input.key,
+              restoreCheckpoints: input.restore,
+              restoreGuard,
+              approvalRules: input.restore === false ? undefined : await this.authorRules(options),
+            },
+          )
+        }
+
+        const submit = (restoration: CheckpointRestoration | { status: "unchanged"; runners: [] }) => {
+          const selection = {
+            model: input.model ? { model: input.model } : undefined,
+            model_selection: input.model_selection,
+            fallback_models: input.fallback_models,
+          }
+          return chat.turns.regenerate(input.turn, selection, { ...options, idempotencyKey: input.key }).then(
+            (result) => ({ ...result, restoration }),
+            (error: unknown) => {
+              if (!(error instanceof Conflict)) throw error
+              return {
+                turn_public_id: input.turn,
+                restoration: { ...restoration, door_refused: error.code ?? error.message },
+              }
+            },
+          )
+        }
         const accepted = await chat.turns.regenerationReceipt(input.key, options).catch((error: unknown) => {
           if (error instanceof NotFound) return null
 
           throw error
         })
-        const selection = input.model ? { model: { model: input.model } } : {}
-        if (accepted)
-          return {
-            ...(await chat.turns.regenerate(input.turn, selection, { ...options, idempotencyKey: input.key })),
-            restoration: { status: "unchanged", runners: [] },
-          }
+        if (accepted) return submit({ status: "unchanged", runners: [] })
 
+        await environments.assertHistoryIdle(selected, info)
         const tail = (await chat.turns.list({ before_position: TURN_POSITION_CEILING, limit: 1 }, options)).items.at(-1)
         if (tail?.public_id !== input.turn)
           throw new Error("Regenerate requires the tail turn; rewind to an earlier turn first.")
@@ -671,7 +695,7 @@ export class Operations {
         )
           throw new Error("This run is busy or needs attention; retry or stop it first.")
 
-        const restoration =
+        const restoration: CheckpointRestoration =
           !variant?.runner_effects || variant.runner_effects.status === "untouched"
             ? { status: "untouched", runners: [] }
             : input.restore === false
@@ -679,17 +703,15 @@ export class Operations {
               : await chat.restoreCheckpoints(variant.runner_effects, {
                   ...options,
                   idempotencyKey: input.key + ":restore",
+                  restoreGuard,
+                  approvalRules: await this.authorRules(options),
                 })
         if (!["untouched", "kept", "restored"].includes(restoration.status))
-          throw new Error("Checkpoint restoration prevented regeneration: " + JSON.stringify(restoration))
+          throw new Error(
+            "restore_failed: checkpoint restoration prevented regeneration. " + JSON.stringify(restoration),
+          )
 
-        return chat.turns.regenerate(input.turn, selection, { ...options, idempotencyKey: input.key }).then(
-          (result) => ({ ...result, restoration }),
-          (error: unknown) => {
-            if (!(error instanceof APIError)) throw error
-            return { turn_public_id: input.turn, restoration: { ...restoration, door_refused: error.message } }
-          },
-        )
+        return submit(restoration)
       }
       if (input.action === "turn.request") {
         const variant = (await chat.turns.variants(input.turn, options)).items.find((row) => row.active)
@@ -821,6 +843,22 @@ export class Operations {
     }
 
     throw new Error("Unknown Nexus operation.")
+  }
+
+  private async authorRules(options: RequestOptions) {
+    const rules = Schema.decodeUnknownSync(
+      Schema.Array(
+        Schema.Struct({
+          tool: Schema.String,
+          verdict: Schema.Literals(["allow", "ask", "deny"]),
+          path: Schema.optional(Schema.String),
+          match: Schema.optional(Schema.String),
+          reason: Schema.optional(Schema.String),
+          origin: Schema.optional(Schema.Literals(["model", "author", "kernel"])),
+        }),
+      ),
+    )((await this.member.profile.fetch(options)).configuration?.approval_rules ?? [])
+    return rules.map((rule) => ({ ...rule, origin: "author" as const }))
   }
 }
 

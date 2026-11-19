@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { promisify } from "node:util"
 import { scheduler } from "node:timers/promises"
 import { Schema } from "effect"
+import { containsDirectory } from "@opencode/util/path"
 import { APIError, type CommitTask, type JsonObject } from "@cybros/agent"
 import { atomic } from "./storage"
 import { resolvePath } from "./file-read"
@@ -636,8 +637,16 @@ export function processTools(table: Processes): RunnerTool[] {
   }))
 }
 
-export function processesExtension(storage: string): ExtensionModule {
+export function processesExtension(storage: string) {
+  const tables = new Set<Processes>()
+
   return {
+    liveIn(root: string) {
+      for (const table of tables) {
+        const row = table.list().find((row) => row.status !== "exited" && containsDirectory(root, row.workdir))
+        if (row) return label(row)
+      }
+    },
     descriptor: {
       id: "nexus.processes",
       name: "Processes",
@@ -650,13 +659,14 @@ export function processesExtension(storage: string): ExtensionModule {
     async register(api) {
       const table = new Processes(join(storage, "processes"))
       await table.start()
+      tables.add(table)
       const cadence = setInterval(() => {
         void table.tick()
       }, 250)
       cadence.unref()
       api.onShutdown(async () => {
         clearInterval(cadence)
-        await table.close()
+        await table.close().finally(() => tables.delete(table))
       })
       processTools(table).forEach(api.registerTool)
       api.describeStatus(() => ({ ready: !table.issue, issues: table.issue ? [table.issue] : [] }))
@@ -724,5 +734,5 @@ export function processesExtension(storage: string): ExtensionModule {
         return { process: await table.stop(value.id, { workspace: "", conversation: null, run: "user" }, false) }
       })
     },
-  }
+  } satisfies ExtensionModule & { liveIn(root: string): string | undefined }
 }
