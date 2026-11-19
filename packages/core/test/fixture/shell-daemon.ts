@@ -99,6 +99,7 @@ export const daemonShells = Effect.fn(function* () {
     directory,
     global,
     pty,
+    server,
     withShell,
     openShell,
     openLocation,
