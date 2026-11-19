@@ -393,7 +393,9 @@ test("native Code Mode uses its own language, results and copied bindings", asyn
     (await run("params.x = 2; return params.x", params, [binding], async () => null, signal)).structured_content,
   ).toBe(2)
   expect(params).toEqual({ x: 1 })
-  await expect(run("class Answer {}", {}, [binding], async () => null, signal)).rejects.toThrow("UnsupportedSyntax")
+  await expect(run("class Answer { #value = 42 }", {}, [binding], async () => null, signal)).rejects.toThrow(
+    "UnsupportedSyntax",
+  )
   expect((await run('console.log("visible"); value(false)', {}, [binding], async () => null, signal)).content).toEqual([
     { type: "text", text: "visible" },
   ])
