@@ -332,7 +332,9 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
   if (parsed.verb === "skills") {
     const action = parsed.args[0]
     if (!action) {
-      print(await call("skills"))
+      const skills = object(await call("skills"))
+      if (parsed.values.json) print(skills)
+      else terminal.write(formatSkills(skills))
       return 0
     }
     const scope = parsed.text("scope") ?? "agent"
@@ -597,12 +599,25 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
       restore: parsed.values["keep-checkpoints"] !== true,
       concealed: parsed.values.conceal === true,
     })
-    print(result)
     if (["rewind", "regenerate"].includes(parsed.verb)) {
-      const restoration = object(object(result).restoration ?? {})
-      if (restoration.door_refused || ["failed", "partial", "unavailable"].includes(String(restoration.status)))
-        return 1
+      const record = object(result)
+      const restoration = object(record.restoration)
+      if (parsed.values.json) print(result)
+      else {
+        if (record.conversation) {
+          terminal.write("conversation: " + object(record.conversation).public_id + "\n")
+          const position = /^\d+$/.test(parsed.args[1]) ? " (position " + parsed.args[1] + ")" : ""
+          terminal.write("forked_from: " + turn + position + "\n")
+        } else terminal.write("turn: " + turn + "\n")
+        if (record.variant) terminal.write("variant: " + object(record.variant).public_id + "\n")
+        terminal.write(formatRestoration(restoration))
+        if (restoration.door_refused) terminal.error("Regeneration refused: " + restoration.door_refused + "\n")
+      }
+      return restoration.door_refused || ["failed", "partial", "unavailable"].includes(String(restoration.status))
+        ? 1
+        : 0
     }
+    print(result)
     return 0
   }
   if (parsed.verb === "call_tool") {
@@ -788,6 +803,36 @@ async function turnID(
   )
   if (!turn) throw new Error("Turn " + reference + " does not exist.")
   return String(turn.public_id)
+}
+
+function formatSkills(skills: JsonObject) {
+  return ["agent", "workspace", "project"]
+    .map((scope) => {
+      if (scope === "project" && skills.project == null) return "project (no runner root set)\n"
+
+      const header = scope === "project" ? "project (announced by this runner)" : scope + "/"
+      const rows = Schema.decodeUnknownSync(Schema.Array(ObjectValue))(skills[scope])
+      const items = rows.map((row) => "  " + row.name + (row.description ? ": " + row.description : ""))
+      return [header, ...(items.length ? items : ["  (none)"])].join("\n") + "\n"
+    })
+    .join("")
+}
+
+function formatRestoration(restoration: JsonObject) {
+  const lines = ["restoration: " + restoration.status + (restoration.reason ? ": " + restoration.reason : "")]
+  for (const row of Schema.decodeUnknownSync(Schema.Array(ObjectValue))(restoration.runners)) {
+    const details = [
+      row.checkpoint,
+      row.reason,
+      row.undo && "(undo " + row.undo + ")",
+      row.skipped && "(skipped: " + JSON.stringify(row.skipped) + ")",
+      ...["outside", "ignored"].flatMap((key) =>
+        Array.isArray(row[key]) && row[key].length ? ["[" + key + ": " + row[key].join(", ") + "]"] : [],
+      ),
+    ].filter(Boolean)
+    lines.push(["runner:", row.runner_executor_public_id, row.status, ...details].join(" "))
+  }
+  return lines.join("\n") + "\n"
 }
 
 function heldTaskHint(task: JsonObject) {
