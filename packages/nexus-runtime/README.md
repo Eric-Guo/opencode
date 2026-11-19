@@ -296,6 +296,10 @@ fields to reuse that capture, including after a restart. Human surfaces pass the
 credential through `x-nexus-origin` and `x-nexus-member-token`; admission preserves
 the Human author and rejects reuse by another principal. The UI bridge keeps only
 a request-bound preparation ticket; the runtime owns the captured declaration.
+The managed runtime stores preparations locally, scoped to the paired Nexus
+origin and agent. On first use it copies legacy admission records from the Nexus
+profile before releasing those profile slots. Keep the runtime storage when moving
+an installation that has outstanding retries.
 `application.skills` returns the available skill names and descriptions for ACP. The exported
 application follower recovers the requested input and its fallback chain through
 SDK HTTP replay, independently of realtime delivery. Persona read/write/reset
