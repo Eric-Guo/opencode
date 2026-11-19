@@ -102,6 +102,7 @@ export class NexusApplication {
       hints?: (model: string) => string
       adaptations?: (model?: string) => JsonObject
     } = () => ({ code_mode: true, subagent: true, title_model: null }),
+    admissionDirectory?: string,
   ) {
     this.titles = new ConversationTitles(member, () => this.defaults().title_model)
     this.environments = new Environments(member, identity)
@@ -122,6 +123,7 @@ export class NexusApplication {
         this.lifecycle.adopt(input.workspace, input.conversation)
       },
       (target, input, body, replayed) => this.titles.accept(target, input, body, replayed),
+      admissionDirectory,
     )
     this.presets = new Presets(member, mcp)
     this.bots = new Bots(

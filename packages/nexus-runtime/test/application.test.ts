@@ -1,8 +1,83 @@
 import { expect, test } from "bun:test"
 import { Client, type JsonObject } from "@cybros/agent"
+import { createHash } from "node:crypto"
+import { tmpdir } from "../../core/test/fixture/tmpdir"
+import { InputAdmissions } from "../src/admission"
 import { NexusApplication } from "../src/application"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture, inputFixture, turnFixture } from "./fixture/conversation"
+
+test("a full profile releases legacy admissions and retries a locally prepared input after restart", async () => {
+  await using directory = await tmpdir()
+  const posted: { key: string | null; body: JsonObject }[] = []
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/profile/store_entries/0") && request.method === "DELETE" && fixture.entries.delete("0"))
+      return Response.json({ error: { code: "response_lost" } }, { status: 503 })
+    if (path.endsWith("/profile/store_entries") && request.method === "POST" && fixture.entries.size >= 64)
+      return Response.json({ error: { code: "entry_limit_reached" } }, { status: 409 })
+    if (path.endsWith("/inputs") && request.method === "POST") {
+      const body = (await request.json()) as { input: JsonObject }
+      posted.push({ key: request.headers.get("idempotency-key"), body: body.input })
+      if (posted.length === 1) return Response.json({ error: { code: "response_lost" } }, { status: 503 })
+      return Response.json(
+        { input: inputFixture(body.input) },
+        { status: 202, headers: { "Idempotency-Replayed": "true" } },
+      )
+    }
+  })
+  const open = () => new InputAdmissions(fixture.client, undefined, undefined, undefined, directory.path)
+  const target = { workspace: "workspace", conversation: "conversation" }
+  const attempt = { ...target, key: "retryable", request: { text: "Hello" } }
+  const body = { kind: "direct_reply", text: "Hello", model: { model: "provider/original" } } as const
+  const refusePreparation = async () => {
+    throw new Error("Retry must use the saved declaration")
+  }
+
+  for (let index = 0; index < 64; index++) {
+    const id = String(index)
+    const admission = index < 45
+    fixture.entries.set(id, {
+      public_id: id,
+      namespace: admission ? "opencode.input-admission" : "settings",
+      key: admission ? createHash("sha256").update(`legacy-${id}`).digest("hex") : id,
+      value: admission
+        ? { request: attempt.request, target, body, input: `legacy-input-${id}`, notes: { legacy: id } }
+        : { keep: id },
+      lock_version: 1,
+      created_at: "2026-10-01T00:00:00.000Z",
+      updated_at: "2026-10-01T00:00:00.000Z",
+    })
+  }
+
+  try {
+    await expect(open().capture(attempt, async () => body)).rejects.toMatchObject({
+      status: 503,
+      code: "response_lost",
+    })
+    expect(await open().capture(attempt, async () => body)).toEqual(body)
+    expect([...fixture.entries.keys()]).toEqual(Array.from({ length: 19 }, (_, index) => String(index + 45)))
+    expect(await open().notes(target.workspace, target.conversation, "legacy-input-0")).toEqual({ legacy: "0" })
+    expect(await open().latestModel(target.workspace, target.conversation)).toBe("provider/original")
+    expect(await open().capture({ ...attempt, key: "legacy-0" }, refusePreparation)).toEqual(body)
+
+    await expect(open().submit(attempt, refusePreparation)).rejects.toMatchObject({
+      status: 503,
+      code: "response_lost",
+    })
+    expect(await open().submit(attempt, refusePreparation)).toMatchObject({
+      input: { public_id: "input" },
+      replayed: true,
+    })
+    expect(posted).toEqual([
+      { key: "retryable", body },
+      { key: "retryable", body },
+    ])
+    expect(fixture.state.writes).toBe(0)
+  } finally {
+    fixture.server.stop(true)
+  }
+})
 
 test("Input admission freezes policy before POST and replays the same body after a lost response and restart", async () => {
   const submitted: { key: string; body: JsonObject }[] = []
