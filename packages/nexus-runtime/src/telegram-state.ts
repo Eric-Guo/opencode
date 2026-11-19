@@ -231,7 +231,7 @@ export const TelegramState = Schema.Struct({
         update: Schema.Int,
         clock: Schema.optional(Schema.Number),
         workspace: Schema.optional(Schema.String),
-        job: Schema.optional(Schema.Struct({ target: Locator, model: Schema.NullOr(Schema.String) })),
+        job: Schema.optional(Schema.Struct({ target: Schema.NullOr(Locator), model: Schema.NullOr(Schema.String) })),
         fork: Schema.optional(
           Schema.Struct({ target: Locator, turn: Schema.String, variant: Schema.optional(Schema.String) }),
         ),
