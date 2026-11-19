@@ -692,9 +692,18 @@ export function createTimelineVirtualizer(input: Input) {
       prepareNavigation()
       input.onUserScroll(root)
       dispatchIntent(direction < 0)
-      // Like the timeline's own PageUp: 80% of a page, measured above the composer that covers its bottom. The scroll
-      // event then pins at the end or loads older history near the top, as a wheel scroll does.
-      virtualizer.scrollToOffset(root.scrollTop + direction * (visibleArea()?.clientHeight || root.clientHeight) * 0.8)
+      // Like the timeline's own PageUp: 80% of a page, measured above the composer that covers its bottom.
+      const offset = root.scrollTop + direction * (visibleArea()?.clientHeight || root.clientHeight) * 0.8
+
+      // Streamed output can extend the scroll range before the browser delivers the scroll event.
+      if (direction > 0 && offset >= root.scrollHeight - root.clientHeight) {
+        input.follow.dispatch({ type: "follow" })
+        virtualizer.scrollToEnd()
+
+        return
+      }
+
+      virtualizer.scrollToOffset(offset)
     })
   })
 

@@ -1448,24 +1448,17 @@ test.describe("background work", () => {
     expect(gap).toBe(8)
 
     const title = header.getByRole("heading")
-    const before = await title.boundingBox()
-    const exit = await pauseExitAnimations(working)
+    const exit = await sampleWorkingIndicatorExit(working)
 
     await timeline.transport.send(status("idle", 1, childID))
-    await expect.poll(() => exit.evaluate((animations) => animations.length)).toBeGreaterThan(0)
-    await exit.evaluate((animations) => animations.forEach((animation) => (animation.currentTime = 100)))
-    await expect(working).toBeAttached()
-
-    const midway = await title.boundingBox()
-
-    expect(midway!.x).toBeLessThan(before!.x)
-    await exit.evaluate((animations) => animations.forEach((animation) => animation.finish()))
     await expect(working).toHaveCount(0)
 
+    const sample = await exit.jsonValue()
     const after = await title.boundingBox()
 
-    expect(after!.x).toBeLessThan(midway!.x)
-    expect(after!.x).toBeCloseTo(before!.x - 24, 0)
+    expect(sample.midway).toBeLessThan(sample.before)
+    expect(after!.x).toBeLessThan(sample.midway)
+    expect(after!.x).toBeCloseTo(sample.before - 24, 0)
     await exit.dispose()
     await header.locator('[data-slot="session-title-parent"]').click()
     await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
@@ -3289,21 +3282,31 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await page.mouse.up()
 })
 
-function pauseExitAnimations(locator: Locator) {
+function sampleWorkingIndicatorExit(locator: Locator) {
   return locator.evaluateHandle((element) => {
-    const animations: Animation[] = []
+    const title = element.nextElementSibling!
+    const before = title.getBoundingClientRect().left
+    const sample = { before, midway: before }
 
-    const pause = (event: Event) => {
-      if (!(event instanceof AnimationEvent) || event.target !== element || event.animationName !== "exit") return
+    const observer = new MutationObserver(() => {
+      if (element.getAttribute("data-visible") !== "false") return
+      observer.disconnect()
 
-      animations.push(...element.getAnimations())
-      animations.forEach((animation) => animation.pause())
-      element.removeEventListener("animationstart", pause)
-    }
+      // Sample and finish in the browser before the presence fallback timer can remove the indicator.
+      const animations = element.getAnimations()
 
-    element.addEventListener("animationstart", pause)
+      for (const animation of animations) {
+        animation.pause()
+        animation.currentTime = Number(animation.effect!.getComputedTiming().activeDuration) / 2
+      }
 
-    return animations
+      sample.midway = title.getBoundingClientRect().left
+      animations.forEach((animation) => animation.finish())
+    })
+
+    observer.observe(element, { attributes: true, attributeFilter: ["data-visible"] })
+
+    return sample
   })
 }
 
