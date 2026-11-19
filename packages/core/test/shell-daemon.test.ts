@@ -416,6 +416,42 @@ describe("Shell on the process daemon", () => {
   )
 
   // A reload or an eviction closes a Location while the server keeps running.
+  it.live("collects an empty daemon place after its last Location scope closes", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      const refs = yield* Effect.gen(function* () {
+        const descriptor = location({ directory: AbsolutePath.make(env.directory) })
+        const runs = yield* env.server.at(descriptor)
+        expect(yield* Effect.scoped(env.server.at(descriptor))).toBe(runs)
+        expect(yield* env.server.at(descriptor)).toBe(runs)
+        return { descriptor: new WeakRef(descriptor), runs: new WeakRef(runs) }
+      }).pipe(Effect.scoped)
+
+      yield* Effect.promise(async () => {
+        await Bun.sleep(0)
+        Bun.gc(true)
+      })
+      expect(refs.descriptor.deref()).toBeUndefined()
+      expect(refs.runs.deref()).toBeUndefined()
+    }),
+  )
+
+  it.live("releases an evicted place when its last daemon command is removed", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      const closing = yield* env.openLocation(env.directory)
+      const info = yield* closing.shell.create({ shell: "/bin/sh", command: "running" })
+      const descriptor = location({ directory: AbsolutePath.make(env.directory) })
+      const runs = yield* Effect.scoped(env.server.at(descriptor))
+      yield* closing.close
+
+      expect(yield* Effect.scoped(env.server.at(descriptor))).toBe(runs)
+      expect(runs.get(info.id)?.info.status).toBe("running")
+      yield* closing.shell.remove(info.id)
+      expect(yield* Effect.scoped(env.server.at(descriptor))).not.toBe(runs)
+    }),
+  )
+
   it.effect("a Location closed while the server runs keeps enforcing its commands' timeouts", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
