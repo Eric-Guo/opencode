@@ -87,6 +87,34 @@ describe("layer node", () => {
     }),
   )
 
+  it.effect("builds a shared dependency without the earlier Location roots", () =>
+    Effect.gen(function* () {
+      const tags = LayerNode.tags({ location: ["global"], global: [] })
+      const local = tags.make("location")({ service: Value, layer: valueLayer, deps: [] })
+      const shared = tags.make("global")({
+        service: Support,
+        layer: Layer.effect(
+          Support,
+          Effect.gen(function* () {
+            expect(Option.isNone(yield* Effect.serviceOption(Value))).toBe(true)
+            return Support.of({})
+          }),
+        ),
+        deps: [],
+      })
+      const consumer = tags.make("location")({
+        service: Greeting,
+        layer: Layer.effect(Greeting, Effect.as(Support, Greeting.of({ value: "ready" }))),
+        deps: [shared],
+      })
+      const context = yield* Layer.build(
+        LayerNode.compile(LayerNode.group([local, consumer]), { shared: tags.values.global }),
+      )
+      expect(Context.get(context, Value).value).toBe("production")
+      expect(Context.get(context, Greeting).value).toBe("ready")
+    }),
+  )
+
   it.effect("replaces exact declarations, not sibling names or native layer identities", () =>
     Effect.gen(function* () {
       const sibling = make({ service: Value, layer: valueLayer, deps: [] })
