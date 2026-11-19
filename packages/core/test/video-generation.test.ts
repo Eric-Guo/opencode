@@ -19,6 +19,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
+import { advance } from "./lib/clock"
 import { it } from "./lib/effect"
 import { eventually } from "./lib/eventually"
 
@@ -126,7 +127,8 @@ it.effect("waits for a job to finish and cancels a running one", () =>
       const slow = yield* generations.start({ model, prompt: "a snail" })
       const waiting = yield* generations.wait(done.id).pipe(Effect.forkChild({ startImmediately: true }))
       state.status.set("remote_1", { status: "completed" })
-      yield* settled(done.id)
+      // The waiter can still be between polls after the job settles.
+      yield* advance(() => waiting.pollUnsafe() !== undefined)
       expect(yield* Fiber.join(waiting)).toMatchObject({ id: done.id, status: "completed", blobs: [{}, {}] })
 
       yield* generations.cancel(slow.id)
