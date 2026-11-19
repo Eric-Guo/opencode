@@ -251,6 +251,65 @@ test("development CLI preserves exact old-run results, explicit pause force, aut
   }
 })
 
+test("development compact and attach address exactly one conversation or run", async () => {
+  const writes: string[] = []
+  const streams: JsonObject[] = []
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname.split("/workspaces/workspace/")[1]
+    if (request.method === "POST") writes.push(path)
+    if (path === "conversations/chat")
+      return Response.json({ conversation: conversationFixture({ public_id: "chat", active_turn_public_id: "turn" }) })
+    if (path === "conversations/chat/turns/turn/variants")
+      return Response.json({
+        turn: { public_id: "turn" },
+        variants: [{ public_id: "v", source: "model", status: "running", active: true, run_public_id: "current" }],
+      })
+    if (path === "runs/old")
+      return Response.json({
+        run: { public_id: "old", status: "running", turn: { conversation_public_id: "chat", status: "running" } },
+      })
+    if (path === "conversations/chat/compaction")
+      return Response.json(
+        { turn: { public_id: "turn", position: 1, kind: "summary", status: "running" } },
+        { status: 202 },
+      )
+    if (path === "runs/old/tasks/round/compact")
+      return Response.json({ task, summary_task_key: "summary" }, { status: 202 })
+    return Response.json({ error: { code: "not_found" } }, { status: 404 })
+  })
+  const application = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+  )
+  const terminal = {
+    signal: new AbortController().signal,
+    async command(input: JsonObject) {
+      if (input.action !== "stream.attach") return json(JSON.stringify(await application.operations.command(input)))
+      streams.push(input)
+      return null
+    },
+    write() {},
+    error() {},
+  }
+  try {
+    await expect(runDevelopment(["compact", "old", "--host-type", "run"], terminal)).rejects.toThrow(/round|task/i)
+    await expect(runDevelopment(["compact", "chat", "round"], terminal)).rejects.toThrow(/conversation/i)
+    expect(writes).toEqual([])
+    await runDevelopment(["compact", "chat"], terminal)
+    await runDevelopment(["compact", "old", "round"], terminal)
+    expect(writes).toEqual(["conversations/chat/compaction", "runs/old/tasks/round/compact"])
+
+    await runDevelopment(["attach", "old", "--no-live"], terminal)
+    expect(application.lifecycle.hostsSnapshot()).toEqual([])
+    await runDevelopment(["attach", "chat", "--conversation"], terminal)
+    expect(application.lifecycle.hostsSnapshot()).toEqual([{ workspace: "workspace", conversation: "chat" }])
+    expect(streams).toEqual([{ action: "stream.attach", addressed: true, run: "old", live: false }])
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
 test("development prompt preview uses the next input's declaration and model without admitting input", async () => {
   const estimates: JsonObject[] = []
   const rendered = {
