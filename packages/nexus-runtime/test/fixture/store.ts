@@ -24,6 +24,15 @@ export function storeFixture(route?: (request: Request) => Promise<Response | un
           : Response.json({ error: { code: "not_found" } }, { status: 404 })
       }
 
+      if (request.method === "DELETE") {
+        const entry = entries.get(id)
+        if (!entry) return Response.json({ error: { code: "not_found" } }, { status: 404 })
+        if (String(entry.lock_version) !== url.searchParams.get("lock_version"))
+          return Response.json({ error: { code: "stale_object" } }, { status: 409 })
+        entries.delete(id)
+        return new Response(null, { status: 204 })
+      }
+
       const input = (await request.json()) as {
         store_entry: { namespace: string; key: string; value: JsonValue; lock_version: number }
       }
