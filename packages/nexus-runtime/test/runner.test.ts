@@ -134,7 +134,11 @@ test("the web reader keeps a literal site and blocks private and reserved destin
       await webFetch(url, signal, async () => {
         throw new Error("Unexpected upload")
       }),
-    ).toMatchObject({ is_error: true, content: expect.stringContaining("public") })
+    ).toMatchObject({
+      is_error: true,
+      content: expect.stringContaining("public"),
+      structured_content: { error_code: "address_blocked" },
+    })
 })
 
 test("web content renders HTML as Markdown and preserves complete binary or truncated results as attachments", async () => {
