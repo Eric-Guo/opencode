@@ -134,6 +134,12 @@ test.each(channels)("macOS afterPack uses the selected channel icon for $channel
     await mkdir(resources, { recursive: true })
     await Bun.write(path.join(resources, "icon.icns"), "stale")
 
+    // afterPack verifies the architecture of its unpacked binding, including in cross-platform icon tests.
+    const binding = `darwin-${process.arch}`
+    const pkg = await previewPackage(resources, binding, "beside")
+    const header = Buffer.from(process.arch === "arm64" ? "cffaedfe0c000001" : "cffaedfe07000001", "hex")
+    await Bun.write(path.join(pkg, `ffi-rs.${binding}.node`), header)
+
     if (channel === "dev") await cp(process.execPath, path.join(resources, "opencode-cli"))
 
     if (!config.afterPack) throw new Error("Missing afterPack hook")
@@ -279,6 +285,19 @@ test("trims external dependencies without excluding runtime files", () => {
   }
 })
 
+async function previewPackage(resources: string, binding: string, layout: "beside" | "nested") {
+  const modules = path.join(resources, "app.asar.unpacked/node_modules")
+  const name = `@yuuang/ffi-rs-${binding}`
+  const pkg = path.join(layout === "nested" ? path.join(modules, "ffi-rs/node_modules") : modules, name)
+  const addon = `ffi-rs.${binding}.node`
+
+  await Bun.write(path.join(modules, "ffi-rs/package.json"), JSON.stringify({ main: "index.js", optionalDependencies: { [name]: "1.3.7" } }))
+  await Bun.write(path.join(modules, "ffi-rs/index.js"), "module.exports = {}")
+  await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon, version: "1.3.7" }))
+
+  return pkg
+}
+
 // The loader finds its binding beside it or, as an isolated install may lay it out, nested under it.
 test.each([
   ["darwin", "arm64", "darwin-arm64", "beside"], ["darwin", "x64", "darwin-x64", "beside"],
@@ -286,15 +305,11 @@ test.each([
   ["win32", "x64", "win32-x64-msvc", "nested"], ["darwin", "arm64", "darwin-arm64", "nested"],
 ] as const)("packaging %s/%s requires its unpacked preview addon, %s the loader", async (platform, arch, binding, layout) => {
   const resources = await realpath(await mkdtemp(path.join(os.tmpdir(), "preview-pack-")))
-  const modules = path.join(resources, "app.asar.unpacked/node_modules")
   const name = `@yuuang/ffi-rs-${binding}`
-  const pkg = path.join(layout === "nested" ? path.join(modules, "ffi-rs/node_modules") : modules, name)
   const addon = `ffi-rs.${binding}.node`
 
   try {
-    await Bun.write(path.join(modules, "ffi-rs/package.json"), JSON.stringify({ main: "index.js", optionalDependencies: { [name]: "1.3.7" } }))
-    await Bun.write(path.join(modules, "ffi-rs/index.js"), "module.exports = {}")
-    await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon, version: "1.3.7" }))
+    const pkg = await previewPackage(resources, binding, layout)
 
     if (platform === process.platform && arch === process.arch) {
       const source = createRequire(import.meta.resolve("ffi-rs")).resolve(name)
