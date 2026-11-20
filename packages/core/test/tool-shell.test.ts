@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream, Tracer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Schedule, Scope, Stream, Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -2271,7 +2271,7 @@ describe("ShellTool stopped", () => {
     command: string,
     id: string,
     how: "cancel" | "interrupt",
-    waitForOutput = true,
+    minimumOutputBytes = 1,
   ) =>
     Effect.gen(function* () {
       const shell = yield* Shell.Service
@@ -2286,8 +2286,16 @@ describe("ShellTool stopped", () => {
         cancel: Deferred.await(cancel),
       }).pipe(Effect.forkChild({ startImmediately: true }))
       const shellID = ID.make(yield* Deferred.await(started))
-      while (waitForOutput && (yield* shell.output(shellID, { cursor: Number.MAX_SAFE_INTEGER })).size === 0)
-        yield* Effect.sleep(Duration.millis(10))
+
+      if (minimumOutputBytes > 0) {
+        yield* shell
+          .output(shellID, { cursor: Number.MAX_SAFE_INTEGER })
+          .pipe(
+            Effect.repeat({ until: (page) => page.size >= minimumOutputBytes, schedule: Schedule.spaced("10 millis") }),
+            Effect.timeout("10 seconds"),
+          )
+      }
+
       if (how === "cancel") yield* Deferred.succeed(cancel, undefined)
       if (how === "interrupt") yield* Fiber.interrupt(fiber)
       const exit = yield* Fiber.await(fiber)
@@ -2303,6 +2311,7 @@ describe("ShellTool stopped", () => {
           Effect.gen(function* () {
             const shell = yield* Shell.Service
             const jobs = yield* Job.Service
+            const output = "first\nsecond\n"
             const { shellID, result } = yield* stopCall(
               registry,
               isWindows
@@ -2310,15 +2319,16 @@ describe("ShellTool stopped", () => {
                 : "printf 'first\\nsecond\\n'; sleep 60",
               "call-stopped",
               "cancel",
+              Buffer.byteLength(output),
             )
             const info = yield* shell.get(shellID)
             expect(info.status).toBe("killed")
-            expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe("first\nsecond\n")
+            expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe(output)
             expect(result).toEqual({
               status: "error",
               error: {
                 type: "tool.execution",
-                message: `first\nsecond\n\n[full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
+                message: `${output}\n[full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
               },
             })
             expect((yield* jobs.get(shellID))?.status).not.toBe("running")
@@ -2388,7 +2398,7 @@ describe("ShellTool stopped", () => {
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
           const shell = yield* Shell.Service
-          const { shellID, result } = yield* stopCall(registry, idleCommand, "call-silent", "cancel", false)
+          const { shellID, result } = yield* stopCall(registry, idleCommand, "call-silent", "cancel", 0)
           const info = yield* shell.get(shellID)
           // The call settles after a bounded wait for the kill, which a loaded Windows runner can outlast.
           expect(result?.error?.message?.replace("; it is still being stopped", "")).toBe(
@@ -2566,7 +2576,7 @@ describe("ShellTool stopped", () => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          const { shellID } = yield* stopCall(registry, idleCommand, "call-recorded", "interrupt", false)
+          const { shellID } = yield* stopCall(registry, idleCommand, "call-recorded", "interrupt", 0)
           const request = fake?.requests.find((item) => item.op === "create_pipe")
           expect(request?.metadata).toMatchObject({
             id: shellID,
