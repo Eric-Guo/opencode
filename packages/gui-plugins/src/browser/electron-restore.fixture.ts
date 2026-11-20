@@ -77,6 +77,7 @@ void electron.app.whenReady().then(async () => {
 
     const page = createBrowserPage(win, {
       id,
+      windows: { contents: () => win.webContents },
       toolbar: false,
       partition: "restore-fixture",
       network: null,

@@ -169,7 +169,8 @@ void electron.app.whenReady().then(async () => {
   const { createBrowserPane } = await import("./pane")
   const { createHandlePath } = await import("./disk")
   const { createPreviews } = await import("./profile/previews")
-  const { RefsStore } = await import("./refs")
+  const { createBrowserRestoreStore } = await import("./restore")
+  const { createRefs, RefsStore } = await import("./refs")
   const { createSitePermissions } = await import("./site-permissions")
   const { createSystemMedia } = await import("./system-media")
   const pages = createPages()
@@ -236,11 +237,11 @@ void electron.app.whenReady().then(async () => {
   const pane = createBrowserPane({
     toolbar: false,
     navigationDeadlineMs: 300,
-    windows: { get: (id) => (id === win.id ? win : undefined), list: () => [win], focused: () => win, on: () => () => undefined },
+    windows: { get: (id) => (id === win.id ? win : undefined), contents: () => win.webContents },
     t: (key) => key,
     serverEndpoints: { get: () => ({ id: "sidecar", url: server, headers: {}, sameMachine: true }) },
-    storage,
-    refs: storage.store("refs", RefsStore),
+    restore: createBrowserRestoreStore(storage),
+    ref: createRefs(storage.store("refs", RefsStore)),
     embeds,
     profile,
     sites: createSitePermissions(storage, () => undefined),
