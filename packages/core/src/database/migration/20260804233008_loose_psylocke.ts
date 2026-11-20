@@ -65,6 +65,43 @@ const migration: DatabaseMigration.Migration = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE IF NOT EXISTS \`session_v2\` (
+          \`id\` text PRIMARY KEY,
+          \`project_id\` text NOT NULL,
+          \`workspace_id\` text,
+          \`parent_id\` text,
+          \`fork_session_id\` text,
+          \`fork_boundary\` text,
+          \`slug\` text NOT NULL,
+          \`directory\` text NOT NULL,
+          \`path\` text,
+          \`title\` text,
+          \`version\` text NOT NULL,
+          \`share_url\` text,
+          \`summary_additions\` integer,
+          \`summary_deletions\` integer,
+          \`summary_files\` integer,
+          \`summary_diffs\` text,
+          \`metadata\` text,
+          \`cost\` real DEFAULT 0 NOT NULL,
+          \`tokens_input\` integer DEFAULT 0 NOT NULL,
+          \`tokens_output\` integer DEFAULT 0 NOT NULL,
+          \`tokens_reasoning\` integer DEFAULT 0 NOT NULL,
+          \`tokens_cache_read\` integer DEFAULT 0 NOT NULL,
+          \`tokens_cache_write\` integer DEFAULT 0 NOT NULL,
+          \`revert\` text,
+          \`permission\` text,
+          \`agent\` text,
+          \`model\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          \`time_compacting\` integer,
+          \`time_archived\` integer,
+          \`time_suspended\` integer,
+          CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE IF NOT EXISTS \`instruction_entry\` (
           \`session_id\` text NOT NULL,
           \`key\` text NOT NULL,
@@ -159,43 +196,6 @@ const migration: DatabaseMigration.Migration = {
       `)
       yield* tx.run(`DROP TABLE \`session_pending\`;`)
       yield* tx.run(`ALTER TABLE \`__new_session_pending\` RENAME TO \`session_pending\`;`)
-      yield* tx.run(`
-        CREATE TABLE IF NOT EXISTS \`session_v2\` (
-          \`id\` text PRIMARY KEY,
-          \`project_id\` text NOT NULL,
-          \`workspace_id\` text,
-          \`parent_id\` text,
-          \`fork_session_id\` text,
-          \`fork_boundary\` text,
-          \`slug\` text NOT NULL,
-          \`directory\` text NOT NULL,
-          \`path\` text,
-          \`title\` text,
-          \`version\` text NOT NULL,
-          \`share_url\` text,
-          \`summary_additions\` integer,
-          \`summary_deletions\` integer,
-          \`summary_files\` integer,
-          \`summary_diffs\` text,
-          \`metadata\` text,
-          \`cost\` real DEFAULT 0 NOT NULL,
-          \`tokens_input\` integer DEFAULT 0 NOT NULL,
-          \`tokens_output\` integer DEFAULT 0 NOT NULL,
-          \`tokens_reasoning\` integer DEFAULT 0 NOT NULL,
-          \`tokens_cache_read\` integer DEFAULT 0 NOT NULL,
-          \`tokens_cache_write\` integer DEFAULT 0 NOT NULL,
-          \`revert\` text,
-          \`permission\` text,
-          \`agent\` text,
-          \`model\` text,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          \`time_compacting\` integer,
-          \`time_archived\` integer,
-          \`time_suspended\` integer,
-          CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
       if (
         !(yield* tx.all<{ name: string }>(`PRAGMA table_info(\`event\`)`)).some((column) => column.name === "created")
       )
