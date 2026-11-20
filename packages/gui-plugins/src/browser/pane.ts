@@ -100,6 +100,8 @@ type PaneMachine = { state: PaneState }
 /** How often the pane notes each live page's process memory. */
 const MEMORY_SAMPLE_MS = 30_000
 
+const controlEvent = "rpc.experimental.browser.control"
+
 export type Pane = ReturnType<typeof createBrowserPane>
 
 export function createBrowserPane(input: {
@@ -273,7 +275,7 @@ export function createBrowserPane(input: {
 
             // The renderer never holds the managed sidecar's password; Node requests bypass
             // the webRequest header injection, so the host resolves the credential here in main.
-            const client = yield* OpenCode.make({ baseUrl: server.url }).pipe(
+            const client = yield* OpenCode.make({ baseUrl: server.url, eventTypes: [controlEvent] }).pipe(
               Effect.provideService(
                 HttpClient.HttpClient,
                 Object.keys(server.headers).length
@@ -409,7 +411,7 @@ export function createBrowserPane(input: {
                     return
                   }
 
-                  if (event.type !== "rpc.experimental.browser.control") return
+                  if (event.type !== controlEvent) return
 
                   const frame = resolveControlFrame(
                     attachment.connectionID,
