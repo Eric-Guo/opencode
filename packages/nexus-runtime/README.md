@@ -409,11 +409,14 @@ opencode nexus manage --json '{"action":"extension.call","name":"packages","inpu
 
 `package.activate`, `package.disable` and `package.rollback` use the same owner.
 Checks execute `test/**/*.{test,spec}.{ts,js}` with installed Bun, a 60-second
-process deadline and bounded output. The Agent's `list_extensions` and
-`manage_extension` tools expose these operations. Credentials in configuration
-and schema annotations are redacted. Invalid saved fields retain valid siblings
-and fall back independently; configuration diagnostics identify paths without
-including their values.
+process deadline and bounded output. The Agent's `manage_extension` tool exposes
+package operations. `list_extensions` returns `extensions` with activation
+status and registered tools for the runtime's catalog, including built-ins like
+Browser, and `packages` with the installed personal versions and selections.
+Use `tool_search` to check tool availability in the current conversation.
+Credentials in configuration and schema annotations are redacted. Invalid saved
+fields retain valid siblings and fall back independently; configuration
+diagnostics identify paths without including their values.
 
 Extensions can register documents, environment descriptions and lifecycle hooks.
 `turn.author` is ordered and fails closed before durable admission. Its authored
