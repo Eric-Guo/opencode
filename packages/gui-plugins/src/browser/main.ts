@@ -5,7 +5,8 @@ import { BrowserHistory } from "./history/ipc"
 import type { HistoryStore } from "./history/store"
 import type { Pane } from "./pane"
 import type { Profile } from "./profile"
-import { RefsStore } from "./refs"
+import { createRefs, RefsStore } from "./refs"
+import { createBrowserRestoreStore } from "./restore"
 import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import { BrowserPane } from "./ipc"
 import { BrowserProfile, type ImportResult } from "./profile/ipc"
@@ -169,8 +170,8 @@ const setup: Plugin.MainSetup = (ctx) => {
                   windows: ctx.windows,
                   t: ctx.t,
                   serverEndpoints: ctx.serverEndpoints,
-                  storage: builtinMainContext(ctx).storage,
-                  refs,
+                  restore: createBrowserRestoreStore(builtinMainContext(ctx).storage),
+                  ref: createRefs(refs),
                   embeds: ctx.embeds,
                   profile: value,
                   sites,
@@ -336,7 +337,7 @@ const setup: Plugin.MainSetup = (ctx) => {
       if (!win || win.isDestroyed()) return false
       // The window lays out in CSS pixels; its content is in device-independent ones. Each edge is rounded by itself,
       // as the page view's edges are, so the popup's edges land on the same pixels as the button's and the page's.
-      const zoom = win.webContents.getZoomFactor()
+      const zoom = ctx.windows.contents(win).getZoomFactor()
       const anchor = input.anchor
       const current = await profile()
       const tab = (await pane()).toolbarTab(caller.window, input.binding, input.tabID)
