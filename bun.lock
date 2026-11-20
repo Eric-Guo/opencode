@@ -465,6 +465,7 @@
       "version": "2.4.0",
       "dependencies": {
         "@opencode/client": "workspace:*",
+        "@opencode/gui-plugins": "workspace:*",
         "@opencode/nexus-ui": "workspace:*",
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",

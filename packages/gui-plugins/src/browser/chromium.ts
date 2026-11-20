@@ -309,7 +309,7 @@ export function createBrowserPage(
     menu: PageMenuHost
     embeds: Embeds
     /** The permission decisions the user kept for sites. */
-    sites: SitePermissions
+    sites: Pick<SitePermissions, "get" | "keep">
     /** The page browses in a remote server's partition, not the profile. */
     serverPartition?: boolean
     /**
@@ -329,7 +329,7 @@ export function createBrowserPage(
     system: SystemMedia
     /** Logs that an Electron internal is not what the page expects; the pane logs each message once. */
     warn?: (message: string) => void
-    windows: Windows
+    windows: Pick<Windows, "contents">
   },
 ) {
   const policy: Policy = {
