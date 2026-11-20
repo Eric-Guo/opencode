@@ -13,6 +13,13 @@ test("web fetch follows bounded same-site redirects, decodes compressed bodies a
       const path = new URL(request.url).pathname
       requests.push(path)
       if (path === "/redirect") return new Response(null, { status: 302, headers: { Location: "/page" } })
+      if (path === "/moved") return new Response(null, { status: 302, headers: { Location: "/news/index.html" } })
+      if (path === "/news/index.html")
+        return new Response('<a href="first">First</a><a href="/today">Today</a>', {
+          headers: { "Content-Type": "text/html" },
+        })
+      if (path === "/challenge")
+        return new Response("<h1>Verify</h1>", { status: 403, headers: { "cf-mitigated": "challenge" } })
       if (path === "/titles")
         return new Response(
           "<template><title>Hidden</title></template><title>Quarterly &amp; annual</title>" +
@@ -46,6 +53,17 @@ test("web fetch follows bounded same-site redirects, decodes compressed bodies a
     expect(page.content).toContain("# café")
     expect(page.structured_content).toMatchObject({ status: 200, final_url: new URL("/page", server.url).href })
     expect(requests).toEqual(["/redirect", "/page"])
+
+    const moved = await webFetch(new URL("/moved", server.url).href, signal, publish, options)
+    expect(moved.content).toContain(`[First](${new URL("/news/first", server.url).href})`)
+    expect(moved.content).toContain(`[Today](${new URL("/today", server.url).href})`)
+
+    const challenge = await webFetch(new URL("/challenge", server.url).href, signal, publish, options)
+    expect(challenge).toMatchObject({
+      is_error: true,
+      content: expect.stringContaining("browser_navigate"),
+      structured_content: { status: 403, error_code: "browser_challenge" },
+    })
 
     const titles = await webFetch(new URL("/titles", server.url).href, signal, publish, options)
     expect(titles.content).toEndWith("; title: Quarterly & annual\n\nSales")
@@ -207,6 +225,13 @@ test("HTML metadata and clipped multibyte tails survive rendering without hidden
     publish,
   )
   expect(page).toMatchObject({ title: "One & two", content: "visible" })
+  const links = await renderWebContent(
+    Buffer.from('<template><base href="/ignored/"></template><a href="topic/42#reply">Topic</a><base href="/discussion/">'),
+    "text/html",
+    publish,
+    { url: "https://example.test/home/" },
+  )
+  expect(links.content).toBe("[Topic](https://example.test/discussion/topic/42#reply)")
   const start = "<p>café</p>"
   const bytes = Buffer.from(start + " ".repeat(1048576 - Buffer.byteLength(start) - 1) + "界</p>")
   const cut = await renderWebContent(bytes, "text/html", publish)

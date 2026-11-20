@@ -21,13 +21,16 @@ function options() {
 }
 
 test("interactive find keeps controls and their context, not static text or picked decoration", async () => {
-  const tree = [
+  const tree: Protocol.Accessibility.AXNode[] = [
     node(1, "navigation", "Projects", 2, 3, 9),
     node(2, "StaticText", "intro".repeat(100)),
     node(3, "row", "", 4, 5),
     node(4, "cell", "Atlas"),
     node(5, "button", "Edit"),
-    node(9, "link", "Next"),
+    {
+      ...node(9, "link", "Next"),
+      properties: [{ name: "url", value: { type: "string", value: "https://example.test/topics/42" } }],
+    },
   ]
 
   const setup = options()
@@ -39,7 +42,7 @@ test("interactive find keeps controls and their context, not static text or pick
   expect(all.truncated).toBe(true)
   expect(all.refs.get("e2")).toBe(1)
   const found = await accessibilitySnapshot(tree, { ...setup, interactive: true, text: "NEXT", maxLines: 1 })
-  expect(found.content).toBe('@e3 [link] "Next" in navigation "Projects"')
+  expect(found.content).toBe('@e3 [link] "Next" href="https://example.test/topics/42" in navigation "Projects"')
   expect(found.truncated).toBe(false)
   expect((await accessibilitySnapshot(tree, { ...setup, maxLines: 2 })).content.split("\n")).toHaveLength(2)
 })
