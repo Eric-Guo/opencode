@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test"
 import { loadConfigFromFile, RendererConfigFactory } from "electron-vite"
 import { createServer } from "vite"
+import { mkdtempDisposable } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { pickerPlugin } from "./picker"
 
 test.each([true, false])(
   "serves browser-loadable picker scripts with bundled dev = %s",
@@ -77,3 +81,64 @@ test.each([true, false])(
   },
   30_000,
 )
+
+test("reads picker options from the authenticated desktop dev service", async () => {
+  await using directory = await mkdtempDisposable(join(tmpdir(), "opencode-picker-"))
+  const file = join(directory.path, "service-local.json")
+  const model = { id: "fixture/model", providerID: "fixture", name: "Fixture model", enabled: true }
+  const disabled = { ...model, id: "fixture/disabled", enabled: false }
+
+  using service = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      if (request.headers.get("authorization") !== `Basic ${btoa("opencode:fixture-password")}`)
+        return new Response(null, { status: 401 })
+
+      const path = new URL(request.url).pathname
+
+      if (path === "/api/info") return Response.json({ pid: process.pid, version: "fixture" })
+
+      if (path === "/api/model") return Response.json({ data: [model, disabled] })
+
+      if (path === "/api/model/default") return Response.json({ data: model })
+
+      return new Response(null, { status: 404 })
+    },
+  })
+
+  await Bun.write(file, JSON.stringify({ pid: process.pid, url: service.url, password: "fixture-password" }))
+
+  const previous = process.env.OPENCODE_DESKTOP_PICKER_SERVICE_FILE
+  process.env.OPENCODE_DESKTOP_PICKER_SERVICE_FILE = file
+
+  try {
+    const vite = await createServer({
+      configFile: false,
+      root: fileURLToPath(new URL("./fixtures/picker", import.meta.url)),
+      plugins: [pickerPlugin()],
+      server: { host: "127.0.0.1", port: 0 },
+      logLevel: "silent",
+    })
+
+    try {
+      await vite.listen()
+      const url = vite.resolvedUrls?.local[0]
+
+      if (!url) throw new Error("Missing fixture server URL")
+
+      const response = await fetch(new URL("/__vite_opencode_picker?options=1", url))
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        defaultModel: "Fixture model",
+        models: [{ id: "fixture/model", providerID: "fixture", name: "Fixture model" }],
+      })
+    } finally {
+      await vite.close()
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OPENCODE_DESKTOP_PICKER_SERVICE_FILE
+    else process.env.OPENCODE_DESKTOP_PICKER_SERVICE_FILE = previous
+  }
+})

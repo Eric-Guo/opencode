@@ -540,10 +540,12 @@ function createHost(input: HostInput) {
 
     if (effect.type === "prepare")
       // Global stores load in their storage namespace's one read before setup, so setup reads them as plain values.
-      return void Promise.try(effect.instance.prepare).then(
-        () => dispatch({ type: "prepared", id: effect.id, attempt: effect.attempt }),
-        (cause: unknown) => dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause }),
-      )
+      return runWithOwner(effect.instance.root, () => {
+        void Promise.try(effect.instance.prepare).then(
+          () => dispatch({ type: "prepared", id: effect.id, attempt: effect.attempt }),
+          (cause: unknown) => dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause }),
+        )
+      })
 
     if (effect.type === "start") return runWithOwner(effect.instance.root, () => start(effect))
 
