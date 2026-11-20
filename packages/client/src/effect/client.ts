@@ -14,7 +14,11 @@ const CurrentHeaders = Context.Reference<RpcCallOptions["headers"]>("@opencode/c
   defaultValue: () => undefined,
 })
 
-export const make = Effect.fn("OpenCode.make")(function* (options?: { readonly baseUrl?: URL | string }) {
+export const make = Effect.fn("OpenCode.make")(function* (options?: {
+  readonly baseUrl?: URL | string
+  /** Server-side filter for the shared event stream. The server always sends server.connected. */
+  readonly eventTypes?: ReadonlyArray<EventType>
+}) {
   const httpClient = yield* HttpClient.HttpClient
   const raw = yield* OpenCode.make(options).pipe(
     Effect.provideService(
@@ -27,7 +31,7 @@ export const make = Effect.fn("OpenCode.make")(function* (options?: { readonly b
     ),
   )
   const context = yield* Effect.context()
-  const native = raw.event.subscribe()
+  const native = raw.event.subscribe({ types: options?.eventTypes })
   // Async iterators throw a squashed cause; retain the native typed failures and defects intact.
   class EventFailure {
     constructor(readonly cause: Cause.Cause<Stream.Error<typeof native>>) {}
