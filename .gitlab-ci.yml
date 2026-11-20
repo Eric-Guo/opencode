@@ -95,6 +95,8 @@ unit:
     - chown -R pwuser:pwuser "$CI_PROJECT_DIR"
     - runuser -u pwuser -- git config --global user.email "bot@opencode.ai"
     - runuser -u pwuser -- git config --global user.name "opencode"
+    # Electron downloads on first import. Install it before the timed Electron fixtures start.
+    - runuser -u pwuser -- bun run --cwd packages/gui-plugins install-electron
     # Turbo invokes each package's test command; the root bun test command is deliberately disabled.
     - runuser -u pwuser -- bun turbo test --concurrency=2
 
