@@ -18,7 +18,12 @@ import { conventionsExtension } from "./conventions"
 import { executionExtensions } from "./execution-settings"
 import { capabilityExtensions } from "./capabilities"
 
-const Browser = Schema.Struct({ executable: Schema.String, idle_seconds: Schema.optional(Schema.Number) })
+const Browser = Schema.Struct({
+  backend: Schema.Literals(["chromium", "desktop"]),
+  executable: Schema.String,
+  desktop_session: Schema.optional(Schema.String),
+  idle_seconds: Schema.optional(Schema.Number),
+})
 const ACP = Schema.Struct({ agents: Schema.Record(Schema.String, Schema.MutableJson) })
 const Terminal = Schema.Struct({
   servers: Schema.optional(
@@ -217,31 +222,48 @@ export async function builtinExtensions(
       descriptor: {
         id: "nexus.browser",
         name: "Browser",
-        description: "Control a browser on this machine.",
+        description: "Use a private Chromium instance or an attached OpenCode desktop Browser.",
         default_enabled: !!process.env.OPENCODE_NEXUS_CHROMIUM,
         configuration_version: 1,
         restart_only: true,
         configuration_schema: {
           type: "object",
           properties: {
+            backend: { type: "string", enum: ["chromium", "desktop"], default: "chromium" },
             executable: { type: "string" },
+            desktop_session: { type: "string", description: "OpenCode session ID for the desktop Browser backend." },
             idle_seconds: { type: "number", exclusiveMinimum: 0, default: 600 },
           },
-          required: ["executable"],
+          required: ["backend", "executable"],
           additionalProperties: false,
         },
-        defaults: { executable: process.env.OPENCODE_NEXUS_CHROMIUM ?? "" },
+        defaults: { backend: "chromium", executable: process.env.OPENCODE_NEXUS_CHROMIUM ?? "" },
       },
       async register(api) {
         const configuration = Schema.decodeUnknownSync(Browser)(api.configuration)
+        const idle = (configuration.idle_seconds ?? 600) * 1000
+
+        if (configuration.backend === "desktop") {
+          if (!host) throw new Error("The desktop Browser requires the managed OpenCode service.")
+
+          const session = configuration.desktop_session?.trim()
+
+          if (!session) throw new Error("Configure an OpenCode session ID for the desktop Browser.")
+
+          const { desktopBrowserTools } = await import("./desktop-browser")
+          const browser = await host.desktopBrowser(session, api.signal)
+          const desktop = desktopBrowserTools(browser, api.signal, idle)
+
+          api.onShutdown(desktop.close)
+          desktop.tools.forEach(api.registerTool)
+          return
+        }
 
         if (!configuration.executable) throw new Error("Configure a Chromium executable before enabling Browser.")
 
         const { browserTools } = await import("./browser")
         const { BrowserSession } = await import("./browser-session")
-        const session = new BrowserSession(configuration.executable, api.signal, {
-          idle: (configuration.idle_seconds ?? 600) * 1000,
-        })
+        const session = new BrowserSession(configuration.executable, api.signal, { idle })
 
         api.onShutdown(() => session.close())
         await session.check()
