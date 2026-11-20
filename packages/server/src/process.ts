@@ -17,6 +17,7 @@ import { isPairingConnectURL } from "@opencode/protocol/groups/server"
 import { join } from "node:path"
 import type { NexusRuntime } from "@opencode/nexus-runtime"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { Session } from "@opencode/core/session"
 import { nexusEnabled } from "./handlers/nexus"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
@@ -147,7 +148,10 @@ const startScoped = Effect.fnUntraced(function* <E = never, R = never>(
     const get = () =>
       (runtime ??= (async () => {
         const { NexusRuntime, hostTools } = await import("@opencode/nexus-runtime")
-        const nexus = new NexusRuntime(storage, hostTools(Context.get(context, LocationServiceMap.Service)))
+        const nexus = new NexusRuntime(
+          storage,
+          hostTools(Context.get(context, LocationServiceMap.Service), Context.get(context, Session.Service)),
+        )
         await nexus.restore()
         return nexus
       })().catch((cause) => {
