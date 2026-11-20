@@ -20,7 +20,7 @@ export function packageTools(owner: Packages, manager: () => ExtensionManager): 
         definition: {
           name: "list_extensions",
           description:
-            "List locally installed personal extension versions, active selections, previous versions and configuration.",
+            "List this runner's extensions, including built-ins, with their activation status and registered tools. Also list installed personal package versions and selections for manage_extension. Use tool_search to check which tools are available in this conversation.",
           input_schema: { type: "object", properties: {}, additionalProperties: false },
           effect_profile: {
             kind: "read_only",
@@ -32,8 +32,21 @@ export function packageTools(owner: Packages, manager: () => ExtensionManager): 
         },
         async execute(_, context) {
           context.signal.throwIfAborted()
-          const result = await owner.list()
-          return { content: JSON.stringify(result) }
+
+          const { packages } = await owner.list()
+          const extensions = manager()
+            .list()
+            .map((row) => ({
+              id: row.id,
+              name: row.name,
+              enabled: row.enabled,
+              active: row.active,
+              ready: row.ready,
+              restart_required: row.restart_required,
+              tools: row.tools,
+            }))
+
+          return { content: JSON.stringify({ extensions, packages }) }
         },
       })
       api.registerTool({
