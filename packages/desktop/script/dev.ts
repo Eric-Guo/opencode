@@ -17,6 +17,7 @@ import { homedir, hostname, tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { nodeExecArgv } from "../../cli/src/node/target"
+import { parseCliVersion, serviceFile } from "../src/main/service/cli-version"
 import { prepareDevElectron } from "./dev-electron"
 import { prepareDevExtension } from "./dev-extension"
 import { downloadCliToResources, windowsify } from "./utils"
@@ -35,7 +36,9 @@ async function main() {
   process.env.OPENCODE_DESKTOP_ISOLATED_SERVER ??= "1"
   cloneLockedDevProfile()
   await prepareDesktop()
-  await prepareServer(options.server)
+  const version = await prepareServer(options.server)
+
+  process.env.OPENCODE_DESKTOP_PICKER_SERVICE_FILE = pickerServiceFile(version)
   await prepareDevExtension()
   await startDesktop(options.electron)
 }
@@ -68,8 +71,14 @@ function selectOptions(): DevOptions {
 }
 
 async function prepareServer(source: ServerSource) {
-  if (source.type === "download")
-    return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
+  if (source.type === "download") {
+    const binary = windowsify("resources/opencode-cli-dev")
+
+    await downloadCliToResources(source.version, binary)
+
+    return parseCliVersion((await $`${join(process.cwd(), binary)} --version`.text()).trim())
+  }
+
   process.env.OPENCODE_DESKTOP_NODE = (
     await $`${process.env.NODE_BIN ?? "node"} ${nodeExecArgv} -p process.execPath`.text()
   ).trim()
@@ -84,13 +93,34 @@ async function prepareServer(source: ServerSource) {
     )
   }
 
-  await $`${process.env.OPENCODE_DESKTOP_NODE} ${nodeExecArgv} ${join(process.env.OPENCODE_DESKTOP_CLI_DEV, "dist-node/opencode.mjs")} --version`.env(
-    process.env,
-  )
+  const version =
+    await $`${process.env.OPENCODE_DESKTOP_NODE} ${nodeExecArgv} ${join(process.env.OPENCODE_DESKTOP_CLI_DEV, "dist-node/opencode.mjs")} --version`
+      .env(process.env)
+      .text()
 
-  if (process.platform !== "win32") return
-  process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD = join(import.meta.dirname, "../../cli/script/build.ts")
-  process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT = join(import.meta.dirname, "../resources/opencode-cli-wsl")
+  if (process.platform === "win32") {
+    process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD = join(import.meta.dirname, "../../cli/script/build.ts")
+    process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT = join(import.meta.dirname, "../resources/opencode-cli-wsl")
+  }
+
+  return parseCliVersion(version.trim())
+}
+
+// Vite and Electron are sibling processes. Resolve the same registration before Electron sets its own XDG state path.
+function pickerServiceFile(version: string) {
+  const reuse = process.env.OPENCODE_DESKTOP_REUSE_SERVER === "1"
+  const testRoot = process.env.OPENCODE_DESKTOP_TEST_ROOT
+  const isolated = !reuse && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+
+  const stateHome = isolated
+    ? ((testRoot ? join(testRoot, "desktop") : process.env.OPENCODE_DESKTOP_USER_DATA) ?? defaultDevUserData())
+    : ((testRoot ? join(testRoot, "state") : process.env.XDG_STATE_HOME) ?? join(homedir(), ".local", "state"))
+
+  const file = reuse
+    ? process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE
+    : serviceFile({ version, server: process.env.OPENCODE_DESKTOP_SERVER_CHANNEL, stateHome })
+
+  return file || join(stateHome, "opencode", "service.json")
 }
 
 function defaultDevUserData() {
