@@ -77,6 +77,7 @@ void electron.app.whenReady().then(async () => {
   const gate = { held: false }
 
   const page = createBrowserPage(win, {
+    windows: { contents: () => win.webContents },
     id: tabID,
     toolbar: false,
     partition,

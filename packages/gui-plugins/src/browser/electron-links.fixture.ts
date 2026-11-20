@@ -287,6 +287,7 @@ void electron.app.whenReady().then(async () => {
   const make = (activity: TabActivity, popup?: { readonly options: Electron.BrowserWindowConstructorOptions; readonly tab: Opened; readonly refused: (url: string) => void }): Page => {
     const created = createBrowserPage(win, {
       id: Browser.TabID.make(`tab_${String(++made.count).padStart(8, "0")}-1111-1111-1111-111111111111`),
+      windows: { contents: () => win.webContents },
       toolbar: false,
       partition,
       network: null,
