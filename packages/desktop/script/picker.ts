@@ -3,11 +3,35 @@ import MagicString from "magic-string"
 import { existsSync } from "node:fs"
 import { dirname, join, relative, resolve, sep } from "node:path"
 import { parseSync, Visitor } from "vite"
+// The Node config loader bundles relative imports, including the client's TypeScript sources.
+import { OpenCode } from "../../client/src/promise/client"
+import { Service } from "../../client/src/promise/service"
 
 const attribute = "data-opencode-picker-source"
 
 export function pickerPlugin() {
-  const plugin = picker()
+  const file = process.env.OPENCODE_DESKTOP_PICKER_SERVICE_FILE
+
+  const plugin = picker({
+    async connect() {
+      const endpoint = await Service.discover({ file })
+
+      if (!endpoint) return
+
+      const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+
+      return {
+        ...client,
+        session: {
+          ...client.session,
+          wait: client.experimental.session.wait,
+          skill: (input) =>
+            client.experimental.session.skill({ sessionID: input.sessionID, id: input.skill, resume: input.resume }),
+        },
+      }
+    },
+  })
+
   const client = "/__vite_opencode_picker_client.js"
 
   let workspaceRoot = ""
