@@ -113,6 +113,8 @@ export function createBrowserPane(input: {
   readonly sites: Pick<SitePermissions, "get" | "keep">
   /** The system's camera and microphone setting, and its prompt. */
   readonly system: SystemMedia
+  /** A standalone strip follows the agent’s explicit reveal without a workspace layout controller. */
+  readonly followAgentTabs?: boolean
   /** Whether the build offers the device toolbar. */
   readonly toolbar: boolean
   /** How long a page's `navigate` command waits for its load; `NAVIGATION_DEADLINE_MS` unless given. */
@@ -307,6 +309,7 @@ export function createBrowserPane(input: {
               // Only when the user chose to share sign-ins with remote servers do they carry over, both ways, so a page
               // of a remote server is signed in where the profile is; otherwise `link` leaves the partition apart.
               const local = input.profile
+
               if (local) {
                 yield* Effect.acquireRelease(
                   Effect.promise(() => local.link(electron.session.fromPartition(partition))),
@@ -1064,7 +1067,11 @@ export function createBrowserPane(input: {
     const handle = handles.get(binding)
 
     // A hidden or minimized window hears it too: its model selects the tab, so the page shows when the person returns.
-    if (handle) emit(binding, { type: "activity", tabID, reveal: handle.background.has(tabID) ? "none" : reveal })
+    if (!handle) return
+    const show = handle.background.has(tabID) ? "none" : reveal
+
+    if (show === "tab" && input.followAgentTabs) return dispatchBinding(binding, { type: "tab.focused", tabID })
+    emit(binding, { type: "activity", tabID, reveal: show })
   }
 
   function refresh(binding: string, tabID: Browser.TabID, page: BrowserPage) {
