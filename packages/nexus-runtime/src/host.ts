@@ -13,10 +13,75 @@ import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { AppProcess } from "@opencode/util/process"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Agent } from "@opencode/core/agent"
+import { Permission } from "@opencode/core/permission"
+import { Session } from "@opencode/core/session"
+import { Tool } from "@opencode/core/tool"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { randomUUID } from "node:crypto"
+import type { DesktopBrowser } from "./desktop-browser"
 
-export function hostTools(locations: typeof LocationServiceMap.Service.Service) {
+export function hostTools(locations: typeof LocationServiceMap.Service.Service, sessions: Session.Interface) {
   return {
     process: packageProcess,
+    async desktopBrowser(id: string, signal: AbortSignal): Promise<DesktopBrowser> {
+      const sessionID = Session.ID.make(id)
+
+      await Effect.runPromise(sessions.get(sessionID), { signal })
+
+      return (operation, input, signal) =>
+        Effect.runPromise(
+          sessions.get(sessionID).pipe(
+            Effect.flatMap((session) =>
+              Effect.gen(function* () {
+                const agents = yield* Agent.Service
+                const permission = yield* Permission.Service
+                const registry = yield* Tool.Service
+                const agent = yield* agents.resolve(session.agent)
+                const name = "browser_" + operation
+                const registered = yield* registry.list()
+                const tool = registered.find((tool) => tool.id === name && tool.options?.permission === "browser")
+
+                if (!tool)
+                  return yield* new Tool.Error({
+                    message:
+                      "Enable the OpenCode Browser plugin and open the configured OpenCode session in the desktop app.",
+                  })
+                if (!agent || !(yield* permission.allows({ sessionID, action: "browser", resources: ["*"], save: [] })))
+                  return yield* new Tool.Error({
+                    message:
+                      "The configured OpenCode session needs an attached desktop Browser with browser permission.",
+                  })
+
+                // Expose only the requested browser action to execution hooks.
+                const snapshot = yield* registry.snapshot(session.permissions, {
+                  tools: {
+                    direct: new Set([name]),
+                    hidden: new Set(registered.filter((tool) => tool.id !== name).map((tool) => tool.id)),
+                  },
+                })
+                const definitions = new Map(
+                  snapshot.definitions.filter((tool) => tool.name === name).map((tool) => [name, tool]),
+                )
+
+                if (!definitions.has(name))
+                  return yield* new Tool.Error({
+                    message: "The requested browser action is unavailable in the OpenCode session.",
+                  })
+
+                return yield* snapshot.execute({
+                  sessionID,
+                  agent: agent.id,
+                  messageID: SessionMessage.ID.create(),
+                  call: { type: "tool-call", id: randomUUID(), name, input },
+                  definitions,
+                })
+              }).pipe(Effect.provide(locations.get(session.location))),
+            ),
+          ),
+          { signal },
+        )
+    },
     capture(directory: string, signal: AbortSignal) {
       return Effect.runPromise(
         Effect.gen(function* () {
