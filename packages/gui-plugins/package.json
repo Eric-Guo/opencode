@@ -7,6 +7,7 @@
   "license": "MIT",
   "exports": {
     "./renderer": "./src/renderer.ts",
+    "./browser/desktop": "./src/browser/desktop.ts",
     "./context/context-usage": "./src/context/context-usage.tsx",
     "./usage/context-usage": "./src/context/context-usage.tsx",
     "./main": "./src/main.ts",
