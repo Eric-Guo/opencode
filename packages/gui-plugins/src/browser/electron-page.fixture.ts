@@ -41,7 +41,8 @@ void electron.app.whenReady().then(async () => {
   const { createBrowserPage } = await import("./chromium")
   const { createHandlePath } = await import("./disk")
   const { createBrowserPane } = await import("./pane")
-  const { RefsStore } = await import("./refs")
+  const { createBrowserRestoreStore } = await import("./restore")
+  const { createRefs, RefsStore } = await import("./refs")
   const { activityOwner } = await import("./policy")
   const { createSitePermissions } = await import("./site-permissions")
   const { createSystemMedia } = await import("./system-media")
@@ -89,6 +90,7 @@ void electron.app.whenReady().then(async () => {
 
   const page = createBrowserPage(win, {
     id: tabID,
+    windows: { contents: () => win.webContents },
     toolbar: false,
     partition: "page-fixture",
     network: null,
@@ -208,13 +210,13 @@ void electron.app.whenReady().then(async () => {
 
   const pane = createBrowserPane({
     toolbar: false,
-    windows: { get: (id) => (id === win.id ? win : undefined), list: () => [win], focused: () => win, on: () => () => undefined },
+    windows: { get: (id) => (id === win.id ? win : undefined), contents: () => win.webContents },
     t: (key) => key,
     serverEndpoints: {
       get: () => ({ id: "fixture", url: `http://127.0.0.1:${heldAddress instanceof Object ? heldAddress.port : 0}`, headers: {}, sameMachine: true }),
     },
-    storage,
-    refs: storage.store("refs", RefsStore),
+    restore: createBrowserRestoreStore(storage),
+    ref: createRefs(storage.store("refs", RefsStore)),
     embeds,
     profile,
     sites,
