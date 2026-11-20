@@ -511,7 +511,15 @@ export async function loaded(tab: Tab, signal: AbortSignal, loader?: string) {
   })
 }
 
-export async function snapshot(tab: Tab) {
+export const SNAPSHOT_GUIDANCE = "Use browser_snapshot with query or ref, or raise max_chars/max_lines."
+
+export async function snapshot(
+  tab: Tab,
+  options: { ref?: string; query?: string; maxChars: number; maxLines: number },
+) {
+  const selected = options.ref ? tab.refs.get(options.ref) : undefined
+  if (options.ref && !selected) throw new Error("Stale or unknown ref. Take a new browser_snapshot without a ref.")
+
   const header = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String, title: Schema.String }))(
     await evaluate(tab, "({url:location.href,title:document.title})"),
   )
@@ -530,30 +538,44 @@ export async function snapshot(tab: Tab) {
   tab.frames.forEach((_, id) => {
     if (!frames.some((frame) => frame.id === id)) frames.push({ id, url: "" })
   })
-  tab.refs.clear()
-  tab.revision++
+  const refs = new Map<string, { node: number; session: string }>()
   const lines: string[] = []
-  let count = 0
+  const query = options.query?.toLowerCase()
+  const revision = tab.revision + 1
+  let foundRoot = !selected
+
   for (const frame of frames) {
     const session = tab.frames.get(frame.id) ?? tab.session
+    if (selected && session !== selected.session) continue
+
     const tree = Schema.decodeUnknownSync(Accessibility)(
       await command(tab, "Accessibility.getFullAXTree", { frameId: frame.id }, session),
     )
-    if (frame !== frames[0]) lines.push("Frame: " + shorten(frame.url, 512))
+    const root = selected
+      ? tree.nodes.find((node) => !node.ignored && node.backendDOMNodeId === selected.node)
+      : tree.nodes[0]
+    if (!root) continue
+
+    foundRoot = true
     const rows = new Map(tree.nodes.map((node) => [node.nodeId, node]))
+    const start = lines.length
     const walk = (id: string, depth: number) => {
       const node = rows.get(id)
       if (!node) return
       const visible = !node.ignored && !["none", "generic", "InlineTextBox"].includes(node.role?.value ?? "none")
-      if (visible) {
-        const ref = node.backendDOMNodeId ? "e" + tab.revision + "_" + ++count : undefined
-        if (ref) tab.refs.set(ref, { node: node.backendDOMNodeId!, session })
+      const url = node.role?.value === "link" && node.properties?.find((entry) => entry.name === "url")?.value.value
+      const href = typeof url === "string" && /^https?:\/\//.test(url) && url.length <= 2048 ? url : undefined
+
+      if (visible && (!query || node.name?.value.toLowerCase().includes(query) || href?.toLowerCase().includes(query))) {
+        const ref = node.backendDOMNodeId ? `e${revision}_${refs.size + 1}` : undefined
+        if (ref && node.backendDOMNodeId) refs.set(ref, { node: node.backendDOMNodeId, session })
         lines.push(
           "  ".repeat(Math.min(depth, 32)) +
             "- " +
             node.role?.value +
             (node.name?.value ? " " + JSON.stringify(node.name.value) : "") +
             (ref ? " [ref=" + ref + "]" : "") +
+            (href ? " href=" + JSON.stringify(href) : "") +
             (node.value?.value === undefined ? "" : " value=" + JSON.stringify(node.value.value)) +
             (node.properties ?? [])
               .filter((entry) => ["disabled", "checked", "expanded", "selected", "required"].includes(entry.name))
@@ -563,10 +585,26 @@ export async function snapshot(tab: Tab) {
       }
       node.childIds?.forEach((child) => walk(child, depth + (visible ? 1 : 0)))
     }
-    if (tree.nodes[0]) walk(tree.nodes[0].nodeId, 0)
+    walk(root.nodeId, 0)
+    if (frame !== frames[0] && lines.length > start) lines.splice(start, 0, "Frame: " + shorten(frame.url, 512))
+    if (selected) break
   }
+
+  if (!foundRoot) throw new Error("This element is absent from the current page. Take a new browser_snapshot.")
+
+  tab.refs = refs
+  tab.revision = revision
   const title = "Page: " + shorten(header.url, 512) + "\nTitle: " + shorten(header.title, 256) + "\n\n"
-  return title + clamp(lines.join("\n"), 51200 - Buffer.byteLength(title))
+  const body = lines.slice(0, options.maxLines).join("\n")
+  const budget = options.maxChars - Buffer.byteLength(title)
+  const truncated = lines.length > options.maxLines || Buffer.byteLength(body) > budget
+  const marker = "\n\n[snapshot truncated: " + SNAPSHOT_GUIDANCE + "]"
+  const text = truncated ? utf8Prefix(Buffer.from(body), budget - Buffer.byteLength(marker)) + marker : body
+
+  return {
+    content: title + (query && !lines.length ? "No snapshot entries matched the query." : text),
+    structured_content: { ...header, truncated },
+  }
 }
 
 export async function act(tab: Tab, ref: string, text?: string, submit = false) {
@@ -720,7 +758,7 @@ export function clamp(text: string, bytes: number) {
   const value = Buffer.from(text)
   if (value.length <= bytes) return text
   const marker = (omitted: number) =>
-    "\n\n[snapshot truncated: " + omitted + " more bytes; use browser_evaluate to read a region]"
+    "\n\n[Evaluation output truncated: " + omitted + " more bytes. Return a smaller value.]"
   const kept = utf8Prefix(value, Math.max(0, bytes - Buffer.byteLength(marker(value.length))))
   return kept + marker(value.length - Buffer.byteLength(kept))
 }
