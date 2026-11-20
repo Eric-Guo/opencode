@@ -81,10 +81,16 @@ it.live("Nexus lists and uses the configured session's desktop Browser without m
 
           const value: Schema.Json =
             action.type === "snapshot"
-              ? { tab, content: "OpenCode desktop fixture", truncated: false }
-              : action.type === "tabs.close"
-                ? { tabs: [], focusedTabID: null }
-                : tab
+              ? {
+                  tab,
+                  content: "… 200 nodes omitted. Use find, snapshot({tabID, ref}), or raise maxChars/maxLines.",
+                  truncated: true,
+                }
+              : action.type === "find"
+                ? { tab, content: '@e7 [link] "Read topic" href="https://example.test/topic"', truncated: false }
+                : action.type === "tabs.close"
+                  ? { tabs: [], focusedTabID: null }
+                  : tab
 
           yield* rpc.result({ ...request, outcome: { type: "success", result: { value, files: [] } } })
         }),
@@ -157,12 +163,23 @@ it.live("Nexus lists and uses the configured session's desktop Browser without m
       navigate.execute({ url: "https://example.test/" }, { ...context, signal }),
     )
 
-    expect(navigation.content).toContain("OpenCode desktop fixture")
+    expect(navigation.content).toContain("Use browser_snapshot with query or ref, or raise max_chars/max_lines.")
+    expect(navigation.content).not.toContain("{tabID, ref}")
+    expect(navigation.structured_content).toMatchObject({ truncated: true })
+
+    const snapshot = manager.tools().find((tool) => tool.definition.name === "browser_snapshot")!
+    const found = yield* Effect.tryPromise((signal) =>
+      snapshot.execute({ query: "Read topic", max_chars: 1400, max_lines: 5 }, { ...context, signal }),
+    )
+
+    expect(found.content).toContain('href="https://example.test/topic"')
+    expect(found.structured_content).toMatchObject({ truncated: false })
     yield* Effect.promise(() => manager.close())
     expect(operations).toEqual([
       { type: "tabs.open" },
       { type: "navigate", tabID: tab.id, url: "https://example.test/" },
-      { type: "snapshot", tabID: tab.id },
+      { type: "snapshot", tabID: tab.id, maxChars: 8000, maxLines: 120 },
+      { type: "find", tabID: tab.id, text: "Read topic", maxChars: 1400, maxLines: 5 },
       { type: "tabs.close", tabID: tab.id },
     ])
 

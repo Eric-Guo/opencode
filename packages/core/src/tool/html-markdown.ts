@@ -50,7 +50,7 @@ type Chunk = string | { raw: string }
 export const MAX_MARKDOWN_BYTES = 5 * 1024 * 1024
 const CONTENT_BYTES = MAX_MARKDOWN_BYTES - 64 * 1024
 
-export function convertHTMLToMarkdown(html: string) {
+export function convertHTMLToMarkdown(html: string, baseURL?: URL) {
   const output: Chunk[] = []
   const stack: Frame[] = []
   const encoder = new TextEncoder()
@@ -190,7 +190,12 @@ export function convertHTMLToMarkdown(html: string) {
           .trim()
           .replace(/([\\"])/g, "\\$1")}"`
       : ""
-  const closeLink = (link: NonNullable<Frame["link"]>) => append(`](${destination(link.href)}${title(link.title)})`)
+  const closeLink = (link: NonNullable<Frame["link"]>) => {
+    const resolved = baseURL && link.href ? URL.parse(link.href, baseURL.href) : undefined
+    const href = resolved && /^(?:http|https):$/.test(resolved.protocol) ? resolved.href : link.href
+
+    append(`](${destination(href)}${title(link.title)})`)
+  }
   const inlineMarker = (name: string) => {
     if (name === "strong" || name === "b") return "**"
     if (name === "em" || name === "i") return "*"
