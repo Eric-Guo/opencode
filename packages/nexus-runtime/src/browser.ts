@@ -7,6 +7,8 @@ import { join } from "node:path"
 import { BrowserSession, act, clamp, command, evaluate, loaded, snapshot } from "./browser-session"
 import { readEffect } from "./runner"
 
+const snapshotChars = { minimum: 1000, maximum: 50000 }
+const snapshotLines = { minimum: 1, maximum: 2000 }
 const Input = Schema.Struct({
   url: Schema.optional(Schema.String),
   ref: Schema.optional(Schema.String),
@@ -14,6 +16,9 @@ const Input = Schema.Struct({
   submit: Schema.optional(Schema.Boolean),
   expression: Schema.optional(Schema.String),
   full_page: Schema.optional(Schema.Boolean),
+  query: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048))),
+  max_chars: Schema.optional(Schema.Int.check(Schema.isBetween(snapshotChars))),
+  max_lines: Schema.optional(Schema.Int.check(Schema.isBetween(snapshotLines))),
 })
 const notice =
   "NOTE: this loop has a new browser tab; earlier refs are invalid. Use the current snapshot before acting.\n\n"
@@ -27,6 +32,20 @@ export function browserInputError(name: string, args: typeof Input.Type) {
     return "ref is required; use a handle from browser_snapshot."
   if (name === "browser_type" && args.text === undefined) return 'text is required; send "" to clear the field.'
   if (name === "browser_evaluate" && !args.expression?.trim()) return "expression is required."
+  if (name === "browser_snapshot" && args.query !== undefined && !args.query.trim()) return "query must contain text."
+  if (name === "browser_snapshot" && args.query !== undefined && args.ref !== undefined)
+    return "Pass either query to find text or ref to read a subtree."
+}
+
+export function browserSnapshotOptions(name: string, args: typeof Input.Type) {
+  const explicit = name === "browser_snapshot"
+
+  return {
+    ref: explicit ? args.ref : undefined,
+    query: explicit ? args.query?.trim() : undefined,
+    maxChars: args.max_chars ?? (explicit ? 20000 : 8000),
+    maxLines: args.max_lines ?? (explicit ? 400 : 120),
+  }
 }
 
 export function browserEvaluationScript(source: string) {
@@ -49,49 +68,82 @@ export function browserEvaluationScript(source: string) {
 }
 
 export function browserEvaluationResult(value: string) {
+  if (Buffer.byteLength(value) > 51200) return { content: clamp(value, 51200) }
+  const result = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(value)
+
   return {
-    content: clamp(value, 51200),
-    ...(Buffer.byteLength(value) <= 51200
-      ? { structured_content: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(value) }
-      : {}),
+    content: typeof result === "string" && result ? result : value,
+    structured_content: result,
+  }
+}
+
+export function browserScreenshotResult(path: string, mime: string, fullPage: boolean, bytes?: Buffer, url?: string) {
+  const png = mime === "image/png" && bytes && bytes.length >= 24 && bytes.toString("ascii", 12, 16) === "IHDR"
+  const size = png ? { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) } : undefined
+  const format = mime.slice("image/".length).toUpperCase()
+  const scope = fullPage ? "full page" : "viewport"
+
+  return {
+    content: `Saved a screenshot of the ${scope} as ${format}${size ? ` (${size.width} × ${size.height} px)` : ""} to ${path}.${url ? `\nPage: ${url}` : ""}`,
+    structured_content: { path, mime, full_page: fullPage, ...size, ...(bytes ? { bytes: bytes.length } : {}), ...(url ? { url } : {}) },
   }
 }
 
 export function browserDefinitions() {
+  const limits = {
+    max_chars: { type: "integer", ...snapshotChars, description: "Maximum size of the accessibility tree text." },
+    max_lines: { type: "integer", ...snapshotLines, description: "Maximum lines of accessibility tree text." },
+  }
+
   return [
     definition(
       "browser_navigate",
-      "Open a URL and return the resulting accessibility snapshot. Use its element refs for later actions. Refs belong to the latest snapshot.",
-      { url: string },
+      "Open a URL and return a compact accessibility snapshot. Navigation invalidates prior element refs. Use browser_snapshot to read more.",
+      { url: string, ...limits },
       ["url"],
     ),
     definition(
       "browser_snapshot",
-      "Read the page accessibility tree. Use the returned refs with browser_click and browser_type; a new-tab notice invalidates earlier refs.",
-      {},
+      "Read the page accessibility tree and web link destinations. Search by text or scope to a subtree by ref. Use refs from the latest snapshot for browser_click or browser_type.",
+      {
+        ref: { type: "string", description: "Root element ref from the latest snapshot." },
+        query: {
+          type: "string",
+          minLength: 1,
+          maxLength: 2048,
+          description: "Case-insensitive literal text. Use by itself or with output limits.",
+        },
+        ...limits,
+      },
       [],
     ),
     definition(
       "browser_click",
       "Click an element by its ref from the latest snapshot and return the resulting page.",
-      { ref: string },
+      { ref: string, ...limits },
       ["ref"],
     ),
     definition(
       "browser_type",
       "Replace a field's contents by snapshot ref. Empty text clears it. Optionally press Enter and return the resulting page.",
-      { ref: string, text: string, submit: { type: "boolean" } },
+      { ref: string, text: string, submit: { type: "boolean" }, ...limits },
       ["ref", "text"],
     ),
     definition(
       "browser_screenshot",
-      "Capture the current viewport or whole page as a PNG attachment.",
-      { full_page: { type: "boolean" } },
+      "Capture a screenshot attachment and report its scope, actual image format, and saved path.",
+      {
+        full_page: {
+          type: "boolean",
+          default: false,
+          description: "Set true for the full scrollable page. Defaults to the current viewport.",
+        },
+      },
       [],
     ),
     definition(
       "browser_evaluate",
-      "Evaluate JavaScript and return JSON. This can act on the page; prefer the other tools when they express the action.",
+      "Evaluate JavaScript in the page. Return objects or arrays directly and they will be serialized as JSON. An empty array is a valid result. This tool can also change the page.",
       { expression: string },
       ["expression"],
     ),
@@ -161,10 +213,17 @@ export function browserTools(
             const path = join(directory, name)
             await writeFile(path, bytes)
             const url = await evaluate(tab, "location.href")
-            const text = noticed("Saved a screenshot of " + url + " to " + path)
-            if (!ctx.publish) return { content: text, structured_content: { path } }
+            const result = browserScreenshotResult(
+              path,
+              "image/png",
+              args.full_page ?? false,
+              bytes,
+              typeof url === "string" && url.length <= 2048 ? url : undefined,
+            )
+            const text = noticed(result.content)
+            if (!ctx.publish) return { ...result, content: text }
             const resource = await ctx.publish(new Blob([bytes], { type: "image/png" }), name)
-            return { content: [{ type: "text", text }, resource], structured_content: { path } }
+            return { ...result, content: [{ type: "text", text }, resource] }
           }
           if (spec.name === "browser_evaluate") {
             const value = await evaluate(tab, browserEvaluationScript(args.expression!))
@@ -174,7 +233,9 @@ export function browserTools(
 
             return { ...result, content: noticed(result.content) }
           }
-          return { content: noticed(await snapshot(tab)) }
+          const result = await snapshot(tab, browserSnapshotOptions(spec.name, args))
+
+          return { ...result, content: noticed(result.content) }
         } catch (error) {
           active.throwIfAborted()
           return { is_error: true, content: noticed(error instanceof Error ? error.message : String(error)) }
