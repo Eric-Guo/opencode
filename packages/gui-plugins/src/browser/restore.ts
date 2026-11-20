@@ -40,7 +40,8 @@ export function restoredActivity(saved: StoredBrowser) {
 export function savedBrowser(state: StoredBrowser, provenance: (tabID: Browser.TabID) => TabActivity | undefined): StoredBrowser {
   const tabs = state.tabs.map((tab) => {
     const control = provenance(tab.id)?.control
-    return { id: tab.id, url: tab.url, ...(control ? { control } : {}) }
+
+    return control ? { id: tab.id, url: tab.url, control } : { id: tab.id, url: tab.url }
   })
 
   return { tabs, focusedTabID: state.focusedTabID }

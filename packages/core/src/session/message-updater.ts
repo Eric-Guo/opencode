@@ -415,11 +415,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           },
         )
       },
-      "session.file.generated": (event) => {
-        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          draft.content.push(castDraft(event.data.file))
-        })
-      },
+      "session.file.generated": (event) =>
+        adapter.appendAssistantPart(event.data.assistantMessageID, event.data.file),
       "session.retry.scheduled": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           draft.retry = {
