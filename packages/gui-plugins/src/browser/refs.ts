@@ -51,11 +51,12 @@ const block = 10_000
  * Element refs for every page of the pane. A composer chip or an agent's message can still name a ref from
  * before the pane's main entry reloaded, so a new pane starts past every ref the previous one could hand out.
  */
-export function createRefs(reserved: Persisted<number, number>) {
+export function createRefs(reserved: Pick<Persisted<number, number>, "value" | "set">) {
   const state = { next: reserved.value, end: reserved.value }
 
   return () => {
     if (state.next >= state.end) {
+      state.next = Math.max(state.next, reserved.value)
       state.end = state.next + block
       reserved.set(state.end)
     }

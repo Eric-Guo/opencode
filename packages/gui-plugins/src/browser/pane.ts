@@ -6,14 +6,12 @@ import { SessionID } from "@opencode/schema/session-id"
 import electron, { type BrowserWindow } from "electron"
 import { Cause, Deferred, Effect, ManagedRuntime, Option, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
-import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
-import type { Embeds, Log, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
+import type { Embeds, Log, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError, keepsOpenedTab, missingArtifact, PageEndedError, pageReports } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { activityOwner, agentDriven, agentTabShow, agentRefusal, childActivity, createdActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
-import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer, Viewport } from "./ipc"
 import { createPageFind } from "./page-find"
 import { exitCodeFields, type PageEnd } from "./page-log"
@@ -39,7 +37,7 @@ import {
   type PaneMachineEvent,
   type PaneState,
 } from "./pane-machine"
-import { createBrowserRestoreStore, restoredActivity } from "./restore"
+import { restoredActivity, savedBrowser, type BrowserRestore } from "./restore"
 import { createPasskeyGroups } from "./passkey-groups"
 import { guardSession } from "./session-guard"
 import { extensionResource } from "./profile/extension-api/resource"
@@ -103,17 +101,16 @@ const MEMORY_SAMPLE_MS = 30_000
 export type Pane = ReturnType<typeof createBrowserPane>
 
 export function createBrowserPane(input: {
-  readonly windows: Windows
+  readonly windows: Pick<Windows, "get" | "contents">
   readonly t: (key: string) => string
   readonly serverEndpoints: ServerEndpoints
-  readonly storage: BuiltinMainStorage
-  /** The declared store of reserved element refs. */
-  readonly refs: Persisted<number, number>
+  readonly restore: BrowserRestore
+  readonly ref: () => string
   readonly embeds: Embeds
   /** The desktop browser's one profile: cookies, site data and extensions for every session. */
-  readonly profile: Profile
+  readonly profile?: Profile
   /** The permission decisions the user kept for sites. */
-  readonly sites: SitePermissions
+  readonly sites: Pick<SitePermissions, "get" | "keep">
   /** The system's camera and microphone setting, and its prompt. */
   readonly system: SystemMedia
   /** Whether the build offers the device toolbar. */
@@ -135,8 +132,8 @@ export function createBrowserPane(input: {
   const searches = new WeakMap<BrowserPage, ReturnType<typeof createPageFind>>()
   // A second click can arrive before even about:blank has committed in the first click's new tab.
   const openingFiles = new WeakMap<BrowserPage, string>()
-  const restore = createBrowserRestoreStore(input.storage)
-  const shared: Shared = { ref: createRefs(input.refs) }
+  const restore = input.restore
+  const shared: Shared = { ref: input.ref }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
   // for them so a replacement never starts beside old pages still recording.
   const releasing = new Set<Promise<void>>()
@@ -145,7 +142,8 @@ export function createBrowserPane(input: {
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
   // Each page's download handler by its web contents ID. The profile guards its own session and owns this map; a remote
   // server's partition gets its own guard at registration, handing downloads to the same map.
-  const downloads = input.profile.downloads
+  const downloads: Profile["downloads"] = input.profile?.downloads ?? new Map()
+  const permissions: Profile["permissions"] = input.profile?.permissions ?? new Map()
   // Warnings about Electron internals a page relies on, each logged once for the pane.
   const warned = new Set<string>()
 
@@ -208,13 +206,14 @@ export function createBrowserPane(input: {
       const saved = restore.load(storageKey)
       // A server on this machine reaches the same network as this desktop, so its pages browse in the profile. Another
       // server's pages need its network through a proxy, which Chromium sets per partition.
-      const shared = server.sameMachine
-      const partition = shared ? input.profile.partition : `opencode-browser-${crypto.randomUUID()}`
+      const profile = server.sameMachine ? input.profile : undefined
+      const shared = !!profile
+      const partition = profile?.partition ?? `opencode-browser-${crypto.randomUUID()}`
 
-      const remote = shared ? undefined : electron.session.fromPartition(partition)
+      const session = profile?.session ?? electron.session.fromPartition(partition)
       const abort = new AbortController()
-      const previews = remote ? createPreviews(remote, abort.signal, input.verifier) : input.profile.previews
-      const unguard = remote ? guardSession(remote, downloads, input.profile.permissions) : () => undefined
+      const previews = profile?.previews ?? createPreviews(session, abort.signal, input.verifier)
+      const unguard = profile ? undefined : guardSession(session, downloads, permissions)
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
 
@@ -240,7 +239,7 @@ export function createBrowserPane(input: {
         abort,
         registered: Promise.withResolvers(),
         cleanup: () => {
-          unguard()
+          unguard?.()
 
           if (win.isDestroyed()) return
           input.windows.contents(win).off("destroyed", closed)
@@ -301,16 +300,19 @@ export function createBrowserPane(input: {
             handle.artifacts = () => artifactPages(previews, server, session.location.directory, abort.signal)
             handle.workspace = () => workspacePages(previews, input.verifier, session.location.directory, source, abort.signal)
 
-            if (shared) handle.network = createDirectNetwork(input.profile.session)
+            if (profile) handle.network = createDirectNetwork(profile.session)
 
             if (!shared) {
               handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
               // Only when the user chose to share sign-ins with remote servers do they carry over, both ways, so a page
               // of a remote server is signed in where the profile is; otherwise `link` leaves the partition apart.
-              yield* Effect.acquireRelease(
-                Effect.promise(() => input.profile.link(electron.session.fromPartition(partition))),
-                (unlink) => Effect.sync(unlink),
-              )
+              const local = input.profile
+              if (local) {
+                yield* Effect.acquireRelease(
+                  Effect.promise(() => local.link(electron.session.fromPartition(partition))),
+                  (unlink) => Effect.sync(unlink),
+                )
+              }
             }
 
             const connected = yield* Deferred.make<void>()
@@ -656,7 +658,7 @@ export function createBrowserPane(input: {
     if (event.type === "tab.focused" && handles.get(binding)?.shared) {
       const focused = page(binding, event.tabID)
 
-      if (focused) input.profile.extensionTabs.activated(focused.contents.id)
+      if (focused) input.profile?.extensionTabs.activated(focused.contents.id)
     }
   }
 
@@ -664,9 +666,9 @@ export function createBrowserPane(input: {
     if (effect.type === "save-restore") {
       const activities = Array.from(handles.values()).flatMap((handle) => (handle.storageKey === effect.storageKey ? [handle.activity] : []))
 
-      return restore.save(effect.storageKey, effect.snapshot, (tabID) =>
+      return restore.save(effect.storageKey, savedBrowser(effect.snapshot, (tabID) =>
         activities.map((activity) => activity.get(tabID)).find((tab) => !!tab && agentDriven(tab)),
-      )
+      ))
     }
 
     if (effect.type === "remove-restore") return restore.remove(effect.storageKey)
@@ -734,13 +736,13 @@ export function createBrowserPane(input: {
 
   /** Extensions whose pages may open in the binding's tabs: the profile's, which only the profile partition loads. */
   function extensions(binding: string) {
-    return handles.get(binding)?.shared ? input.profile.extensionIDs() : []
+    return handles.get(binding)?.shared ? input.profile?.extensionIDs() ?? [] : []
   }
 
   function release(page: BrowserPage) {
     try {
       searches.get(page)?.dispose()
-      input.profile.permissions.delete(page.nativeID)
+      permissions.delete(page.nativeID)
       grants.get(page)?.()
       downloads.delete(page.nativeID)
     } finally {
@@ -880,13 +882,13 @@ export function createBrowserPane(input: {
       artifacts: handle.artifacts?.(),
       remote: remoteSource(binding),
       local: handle.shared,
-      waitForFilters: handle.shared ? input.profile.waitForFilters : undefined,
+      waitForFilters: handle.shared ? input.profile?.waitForFilters : undefined,
       signal: handle.abort.signal,
       extensions: () => extensions(binding),
       shared,
       menu: {
         t: input.t,
-        extensions: (contents, params) => handle.shared ? input.profile.extensionMenu(contents, params) : [],
+        extensions: (contents, params) => handle.shared ? input.profile?.extensionMenu(contents, params) ?? [] : [],
         navigate: async (type) => {
           const action = type === "hardReload" ? { type: "reload", tabID: id, ignoreCache: true } as const : { type, tabID: id }
 
@@ -902,7 +904,7 @@ export function createBrowserPane(input: {
         if (!current()) return
 
         // The page held the keyboard; the window's document takes it, so the prompt can.
-        if (view?.focus && focused() && win.isFocused()) win.webContents.focus()
+        if (view?.focus && focused() && win.isFocused()) input.windows.contents(win).focus()
         emit(binding, { type: "prompt", tabID: id, prompt: view })
       },
       closeTab: () => {
@@ -946,7 +948,7 @@ export function createBrowserPane(input: {
         if (focused()) emit(binding, { type: "focused", tabID: id })
       },
       hidden: () => {
-        if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
+        if (handle.shared) input.profile?.extensionTabs.hidden(page.contents.id)
       },
       popup: (popupOptions, background, activity, refused) => {
         const agent = activityOwner(activity) === "agent"
@@ -974,7 +976,7 @@ export function createBrowserPane(input: {
     })
     void page.ready.catch(() => undefined)
 
-    if (handle.shared) {
+    if (handle.shared && input.profile) {
       grants.set(page, input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused)))
     }
 
@@ -985,7 +987,7 @@ export function createBrowserPane(input: {
       if (focused() && win.isFocused() && page.view.getVisible()) page.contents.focus()
     }))
     downloads.set(page.contents.id, page.download)
-    input.profile.permissions.set(page.contents.id, page.permissions)
+    permissions.set(page.contents.id, page.permissions)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state(), beside: options.beside })
     // Straight to the window, not through the server report: the embed is local to this desktop.
     emit(binding, { type: "embed", tabID: id, embed: page.embed })
