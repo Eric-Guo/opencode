@@ -325,7 +325,7 @@ tab; another loop keeps its tab and cookies. The native implementation uses
 Chromium's private debugging pipe and needs no Ruby or separate Node driver.
 
 To use the OpenCode desktop Browser, create a dedicated OpenCode session on
-the same managed service and open that session in the desktop app. In Nexus
+the same managed service. In Nexus
 **Plugins → Browser → Settings**, set `backend` to `desktop` and
 `desktop_session` to the OpenCode session ID, then enable Browser. The CLI can
 save the same settings:
@@ -335,12 +335,13 @@ opencode nexus configure --json '{"id":"nexus.browser","operations":[{"op":"set"
 ```
 
 If Browser reports **Restart required** after saving, restart the managed
-service and reopen the OpenCode session. Send a new Nexus message after the
-tools appear. Each Nexus conversation opens its own tab in that session's
-Review pane. These tabs share the desktop session's browser profile. Nexus
-closes the tabs it owns on idle or shutdown while the desktop is connected.
-Keep the OpenCode session open while using the tools. For screenshots, keep
-its Review pane visible in the desktop window.
+service and reopen the Nexus tab. Send a new Nexus message after the
+tools appear. In SigmaAgents, keep the Nexus tab open to attach its Browser
+pane. An OpenCode session's Review pane can also host the attachment. Each
+Nexus conversation opens its own tab in the attached pane, and the tabs
+share the attachment's browser profile. Nexus closes its tabs on idle or
+shutdown while the desktop is connected. For screenshots, keep the Browser
+pane visible.
 
 ## Runner dispatch and recovery
 
