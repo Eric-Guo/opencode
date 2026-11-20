@@ -19,15 +19,49 @@ const notice =
   "NOTE: this loop has a new browser tab; earlier refs are invalid. Use the current snapshot before acting.\n\n"
 const string = { type: "string" }
 
-export function browserTools(
-  executable: string,
-  signal: AbortSignal,
-  session = new BrowserSession(executable, signal),
-): RunnerTool[] {
-  const specs = [
+export const browserInput = Schema.decodeUnknownSync(Input, { onExcessProperty: "error" })
+
+export function browserInputError(name: string, args: typeof Input.Type) {
+  if (name === "browser_navigate" && !args.url?.trim()) return "url is required"
+  if ((name === "browser_click" || name === "browser_type") && !args.ref?.trim())
+    return "ref is required; use a handle from browser_snapshot."
+  if (name === "browser_type" && args.text === undefined) return 'text is required; send "" to clear the field.'
+  if (name === "browser_evaluate" && !args.expression?.trim()) return "expression is required."
+}
+
+export function browserEvaluationScript(source: string) {
+  return `(async()=>{
+    const seen=new WeakSet();
+    const clean=(value,depth=0)=>{
+      if(typeof value==='bigint')return value.toString();
+      if(typeof value!=='object'||value===null)return typeof value==='number'&&!Number.isFinite(value)?null:value;
+      if(seen.has(value))return '[circular]';
+      if(depth>=64)return '[too deep]';
+      seen.add(value);
+      const output=Array.isArray(value)?value.map(item=>clean(item,depth+1)):Object.fromEntries(Object.entries(value).map(([key,item])=>[key,clean(item,depth+1)]));
+      seen.delete(value);return output;
+    };
+    const source=${JSON.stringify(source)};
+    const expression=/^\\s*(?:async\\s+)?function\\b/.test(source)?'('+source+')':source;
+    const result=await (0,eval)(expression);
+    return JSON.stringify(clean(typeof result==='function'?await result():result))??'null';
+  })()`
+}
+
+export function browserEvaluationResult(value: string) {
+  return {
+    content: clamp(value, 51200),
+    ...(Buffer.byteLength(value) <= 51200
+      ? { structured_content: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(value) }
+      : {}),
+  }
+}
+
+export function browserDefinitions() {
+  return [
     definition(
       "browser_navigate",
-      "Open a URL and return the resulting accessibility snapshot. Start with its [ref=eN_N] handles; never guess selectors. Refs belong to the latest snapshot.",
+      "Open a URL and return the resulting accessibility snapshot. Use its element refs for later actions. Refs belong to the latest snapshot.",
       { url: string },
       ["url"],
     ),
@@ -61,20 +95,24 @@ export function browserTools(
       { expression: string },
       ["expression"],
     ),
-  ]
-  return specs.map((spec) => ({
-    definition: ["browser_snapshot", "browser_screenshot"].includes(spec.name)
-      ? { ...spec, effect_profile: readEffect }
-      : spec,
+  ].map((spec) =>
+    ["browser_snapshot", "browser_screenshot"].includes(spec.name) ? { ...spec, effect_profile: readEffect } : spec,
+  )
+}
+
+export function browserTools(
+  executable: string,
+  signal: AbortSignal,
+  session = new BrowserSession(executable, signal),
+): RunnerTool[] {
+  return browserDefinitions().map((spec) => ({
+    definition: spec,
     async execute(input, ctx) {
-      const args = Schema.decodeUnknownSync(Input, { onExcessProperty: "error" })(input)
-      if (spec.name === "browser_navigate" && !args.url?.trim()) return { is_error: true, content: "url is required" }
-      if (["browser_click", "browser_type"].includes(spec.name) && !args.ref?.trim())
-        return { is_error: true, content: "ref is required; use a handle from browser_snapshot." }
-      if (spec.name === "browser_type" && args.text === undefined)
-        return { is_error: true, content: 'text is required; send "" to clear the field.' }
-      if (spec.name === "browser_evaluate" && !args.expression?.trim())
-        return { is_error: true, content: "expression is required." }
+      const args = browserInput(input)
+      const error = browserInputError(spec.name, args)
+
+      if (error) return { is_error: true, content: error }
+
       const result = session.run(JSON.stringify([ctx.workspace, ctx.run]), ctx.signal, async (tab, active) => {
         const fresh = tab.fresh
         const noticed = (text: string) => (fresh ? notice : "") + text
@@ -129,32 +167,12 @@ export function browserTools(
             return { content: [{ type: "text", text }, resource], structured_content: { path } }
           }
           if (spec.name === "browser_evaluate") {
-            const value = await evaluate(
-              tab,
-              `(async()=>{
-              const seen=new WeakSet();
-              const clean=(value,depth=0)=>{
-                if(typeof value==='bigint')return value.toString();
-                if(typeof value!=='object'||value===null)return typeof value==='number'&&!Number.isFinite(value)?null:value;
-                if(seen.has(value))return '[circular]';
-                if(depth>=64)return '[too deep]';
-                seen.add(value);
-                const output=Array.isArray(value)?value.map(item=>clean(item,depth+1)):Object.fromEntries(Object.entries(value).map(([key,item])=>[key,clean(item,depth+1)]));
-                seen.delete(value);return output;
-              };
-              const source=${JSON.stringify(args.expression)};
-              const expression=/^\\s*(?:async\\s+)?function\\b/.test(source)?'('+source+')':source;
-              const result=await (0,eval)(expression);
-              return JSON.stringify(clean(typeof result==='function'?await result():result))??'null';
-            })()`,
-            )
+            const value = await evaluate(tab, browserEvaluationScript(args.expression!))
             if (typeof value !== "string") throw new Error("Page evaluation returned no JSON.")
-            return {
-              content: noticed(clamp(value, 51200)),
-              ...(Buffer.byteLength(value) <= 51200
-                ? { structured_content: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(value) }
-                : {}),
-            }
+
+            const result = browserEvaluationResult(value)
+
+            return { ...result, content: noticed(result.content) }
           }
           return { content: noticed(await snapshot(tab)) }
         } catch (error) {

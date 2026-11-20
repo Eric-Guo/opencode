@@ -305,9 +305,9 @@ application follower recovers the requested input and its fallback chain through
 SDK HTTP replay, independently of realtime delivery. Persona read/write/reset
 uses the separately stored Human platform credential established by `nexus login`.
 
-## Browser lifecycle
+## Browser backends
 
-Browser activation checks the configured Chromium executable before exposing
+The default Chromium backend checks the configured executable before exposing
 any tools. One private Chromium process shares cookies across loops. Each run
 owns a tab; calls on that tab serialize, while other runs can browse concurrently.
 `browser_snapshot` and page actions return an accessibility tree with refs such
@@ -323,6 +323,24 @@ calls. A wholly idle browser releases its context. The first result on a new or
 recreated tab warns that earlier refs are invalid. Cancellation retires its own
 tab; another loop keeps its tab and cookies. The native implementation uses
 Chromium's private debugging pipe and needs no Ruby or separate Node driver.
+
+To use the OpenCode desktop Browser, create a dedicated OpenCode session on
+the same managed service and open that session in the desktop app. In Nexus
+**Plugins → Browser → Settings**, set `backend` to `desktop` and
+`desktop_session` to the OpenCode session ID, then enable Browser. The CLI can
+save the same settings:
+
+```sh
+opencode nexus configure --json '{"id":"nexus.browser","operations":[{"op":"set","path":["backend"],"value":"desktop"},{"op":"set","path":["desktop_session"],"value":"<opencode-session-id>"}],"enabled":true}'
+```
+
+If Browser reports **Restart required** after saving, restart the managed
+service and reopen the OpenCode session. Send a new Nexus message after the
+tools appear. Each Nexus conversation opens its own tab in that session's
+Review pane. These tabs share the desktop session's browser profile. Nexus
+closes the tabs it owns on idle or shutdown while the desktop is connected.
+Keep the OpenCode session open while using the tools. For screenshots, keep
+its Review pane visible in the desktop window.
 
 ## Runner dispatch and recovery
 
