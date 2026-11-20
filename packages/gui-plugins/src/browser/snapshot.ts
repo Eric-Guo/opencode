@@ -1,4 +1,5 @@
 import type { Protocol } from "devtools-protocol"
+import { Predicate } from "effect"
 import { setImmediate } from "node:timers/promises"
 
 type Options = {
@@ -222,7 +223,9 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
       )
 
       const context = options.interactive ? [inherited, branch.item].filter(Boolean).join(" / ") : ""
-      const label = `[${role}] ${JSON.stringify(excerpt(name, interactive ? 300 : 160))}${flags.length ? ` ${flags.join(" ")}` : ""}${context ? ` in ${context}` : ""}`
+      const url = role === "link" && props.get("url")
+      const href = Predicate.isString(url) && /^https?:\/\//.test(url) && url.length <= 2048 ? ` href=${JSON.stringify(url)}` : ""
+      const label = `[${role}] ${JSON.stringify(excerpt(name, interactive ? 300 : 160))}${href}${flags.length ? ` ${flags.join(" ")}` : ""}${context ? ` in ${context}` : ""}`
 
       if (
         !query ||

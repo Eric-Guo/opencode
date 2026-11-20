@@ -90,8 +90,21 @@ export async function webFetch(
       if (
         !addresses.length ||
         addresses.some((item) => !publicAddress(item.address, options.allowPrivateNetwork === true))
-      )
-        throw new Error("Web fetch requires a public address; this host resolves to a private or reserved address.")
+      ) {
+        const reason = !addresses.length
+          ? "No IP addresses were returned for this host."
+          : "Web fetch requires a public address; this host resolves to a private or reserved address."
+        const hint =
+          !isIP(hostname) && addresses.length
+            ? " If this is a public site on a proxy or VPN, try browser_navigate with the Browser extension."
+            : ""
+
+        return {
+          is_error: true,
+          content: reason + hint,
+          structured_content: { ...details, error_code: addresses.length ? "address_blocked" : "dns_no_addresses" },
+        }
+      }
 
       // Connect to the checked IP while preserving the HTTP authority and TLS identity.
       const response = await new Promise<IncomingMessage>((resolve, reject) => {
@@ -215,18 +228,21 @@ export async function webFetch(
         details.bytes = bytes.length
         active.throwIfAborted()
 
-        if (status < 200 || status >= 300) {
+        const challenge = response.headers["cf-mitigated"] === "challenge"
+        if (status < 200 || status >= 300 || challenge) {
           const phrase = http.STATUS_CODES[status]
           const heading = shorten(initial.href, 512) + " answered " + status + (phrase ? " " + phrase : "")
-          const excerpt = decode(
-            status >= 400 ? bytes.subarray(0, 512) : bytes,
-            response.headers["content-type"] ?? "",
-            false,
-          ).trim()
+          const excerpt = challenge
+            ? ""
+            : decode(status >= 400 ? bytes.subarray(0, 512) : bytes, response.headers["content-type"] ?? "", false).trim()
+          const hint = challenge
+            ? "The site returned a browser verification page. Open the page with browser_navigate and report any verification the site requires."
+            : ""
+
           return {
             is_error: true,
-            content: excerpt ? heading + "\n\n" + excerpt : heading,
-            structured_content: details,
+            content: [heading, hint, excerpt].filter(Boolean).join("\n\n"),
+            structured_content: { ...details, ...(challenge ? { error_code: "browser_challenge" } : {}) },
           }
         }
 
@@ -321,7 +337,7 @@ export async function renderWebContent(
   }
 
   const body = decode(html ? bytes.subarray(0, 1048576) : bytes, contentType, html)
-  const rendered = html ? await markdown(body) : { text: body }
+  const rendered = html ? await markdown(body, options.url ? new URL(options.url) : undefined) : { text: body }
   const text = rendered.text.replace(INVISIBLE, "")
   const metadata = {
     ...(rendered.title ? { title: rendered.title } : {}),
@@ -343,7 +359,7 @@ export async function renderWebContent(
   return { content: [{ type: "text", text: output.text + footer }, file], structured_content: details, ...metadata }
 }
 
-async function markdown(body: string) {
+async function markdown(body: string, url?: URL) {
   const { convertHTMLToMarkdown } = await import("@opencode/core/tool/html-markdown")
   const { Parser } = await import("htmlparser2")
   const omitted = new Set(["script", "style", "noscript", "template", "svg", "iframe", "object", "embed"])
@@ -351,13 +367,15 @@ async function markdown(body: string) {
   let depth = 0
   let start = 0
   let title: string | undefined
+  let base: string | undefined
   let readingTitle = false
   const parser = new Parser({
-    onopentag(name) {
+    onopentag(name, attributes) {
       if (depth) {
         depth++
         return
       }
+      if (name === "base" && base === undefined) base = attributes.href
       if (name !== "title" && !omitted.has(name)) return
 
       parts.push(body.slice(start, parser.startIndex))
@@ -379,7 +397,10 @@ async function markdown(body: string) {
   parser.end(body)
   parts.push(body.slice(start))
   const heading = title?.replace(INVISIBLE, "").trim()
-  return { text: convertHTMLToMarkdown(parts.join("")), ...(heading ? { title: heading } : {}) }
+  const resolved = url && base !== undefined ? URL.parse(base, url.href) : undefined
+  const baseURL = resolved && /^(?:http|https):$/.test(resolved.protocol) ? resolved : url
+
+  return { text: convertHTMLToMarkdown(parts.join(""), baseURL), ...(heading ? { title: heading } : {}) }
 }
 
 async function capture(bytes: Buffer, name: string, directory?: string) {
