@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import { activityOwner, agentDriven } from "./policy"
-import { createBrowserRestoreStore, restoredActivity } from "./restore"
+import { createBrowserRestoreStore, restoredActivity, savedBrowser } from "./restore"
 
 test("keeps which tabs the agent drove across a restart, so they come back with every agent-driven limit", () => {
   const values = new Map<string, unknown>()
@@ -26,8 +26,10 @@ test("keeps which tabs the agent drove across a restart, so they come back with 
 
   store.save(
     "server\nses_a",
-    { tabs: [{ id: agentTab, url: "https://accounts.example/pk" }, { id: userTab, url: "https://docs.example/" }], focusedTabID: userTab },
-    (tabID) => (tabID === agentTab ? { agentRuns: 0, control: "agent" } : undefined),
+    savedBrowser(
+      { tabs: [{ id: agentTab, url: "https://accounts.example/pk" }, { id: userTab, url: "https://docs.example/" }], focusedTabID: userTab },
+      (tabID) => (tabID === agentTab ? { agentRuns: 0, control: "agent" } : undefined),
+    ),
   )
 
   const saved = createBrowserRestoreStore(storage).load("server\nses_a")
