@@ -120,6 +120,9 @@ function createComposerFocus() {
     // The user already put the caret in this composer.
     if (active && element.contains(active)) return "focused"
 
+    // A cold session route can mount after the mobile drawer has returned focus to Tabs.
+    if (active?.matches('[data-slot="mobile-tabs-trigger"]')) return "claimed"
+
     // A control chosen while the session was loading owns focus now.
     if (active && active !== document.body && active !== opener && !isTitlebarTabLink(active)) return "claimed"
     element.focus({ preventScroll: true })

@@ -468,9 +468,13 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(summary).toBeHidden()
 
     await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+    // The review pane moves the trigger and writes the chat width until its opening animation settles.
+    const reviewPane = page.locator('[data-slot="session-side-panel-content"]')
+    await expect(reviewPane).toBeVisible()
+    await expect.poll(() => reviewPane.evaluate((element) => element.style.opacity)).toBe("")
     await trigger.click()
     await expectAlignedWithHeader(page, direction)
-    // A review pane can finish changing the column width after the popover has opened.
+    // Resize the chat column again while the popover is open.
     const headerWidth = (await page.locator("[data-session-title]").boundingBox())!.width
     await page.locator('[data-slot="session-chat-panel"]').evaluate((element) => {
       element.style.width = `${element.clientWidth - 80}px`
