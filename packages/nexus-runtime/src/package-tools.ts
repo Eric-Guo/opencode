@@ -20,7 +20,7 @@ export function packageTools(owner: Packages, manager: () => ExtensionManager): 
         definition: {
           name: "list_extensions",
           description:
-            "List this runner's extensions, including built-ins, with their activation status and registered tools. Also list installed personal package versions and selections for manage_extension. Use tool_search to check which tools are available in this conversation.",
+            "List this runner's extensions and their registered tool names. Pass one exact name at a time to tool_search to check availability in this conversation, such as web_fetch or browser_navigate. Also list installed personal package versions and selections for manage_extension.",
           input_schema: { type: "object", properties: {}, additionalProperties: false },
           effect_profile: {
             kind: "read_only",

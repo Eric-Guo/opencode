@@ -143,7 +143,7 @@ export async function builtinExtensions(
           definition: {
             name: "web_fetch",
             description:
-              "Fetch a fully formed HTTP(S) URL. HTML becomes Markdown; other text is returned verbatim. Output is limited to 2000 lines or 50KB, with the full rendering saved to the file named in the result; continue with read on that path. Images and other binary responses are saved as readable files and attached. Cross-site redirects require a separate call. Use web_fetch instead of curl or wget for reading web content.",
+              "Read a public HTTP(S) URL. HTML becomes Markdown with absolute web links; other text is returned verbatim. Output is limited to 2000 lines or 50KB, with the full rendering saved to the file named in the result; continue with read on that path. Images and other binary responses are saved as readable files and attached. Cross-site redirects require a separate call. Use browser_navigate when the site needs a rendered browser.",
             effect_profile: { ...readEffect, effect_scope: "open" },
             timeout_ms: 60000,
             input_schema: {

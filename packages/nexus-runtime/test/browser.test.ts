@@ -74,7 +74,7 @@ test.skipIf(!chromium)(
       hostname: "127.0.0.1",
       fetch: () =>
         new Response(
-          '<title>Fixture</title><label>Name<input id="name" onkeydown="if(event.key===\'Enter\') document.title=this.value"></label><button onclick="document.title=document.querySelector(\'#name\').value">Save</button><label>Opt in<input type="checkbox"></label><label>Date<input type="date"></label>',
+          '<title>Fixture</title><label>Name<input id="name" onkeydown="if(event.key===\'Enter\') document.title=this.value"></label><button onclick="document.title=document.querySelector(\'#name\').value">Save</button><label>Opt in<input type="checkbox"></label><label>Date<input type="date"></label><a href="/topics/42">Read topic</a>',
           { headers: { "content-type": "text/html" } },
         ),
     })
@@ -114,6 +114,7 @@ test.skipIf(!chromium)(
       const opened = await run("browser_navigate", { url: server.url.href })
       expect(opened.content).toContain("new browser tab")
       expect(opened.content).toContain("Fixture")
+      expect(opened.content).toContain(`href="${new URL("/topics/42", server.url).href}"`)
       const original = ref(opened.content, "textbox")
       const typed = await run("browser_type", { ref: original, text: "Saved fixture" })
       expect(typed.is_error).not.toBe(true)
@@ -188,6 +189,18 @@ test.skipIf(!chromium)(
         { type: "resource_link", name: expect.stringMatching(/^browser-[a-f0-9]{16}\.png$/) },
       ])
       expect(await readdir(artifacts)).toHaveLength(1)
+      expect(shot.structured_content).toMatchObject({ full_page: false, mime: "image/png", width: expect.any(Number), height: expect.any(Number) })
+
+      const limited = await run("browser_snapshot", { max_lines: 1 })
+      expect(limited.structured_content).toMatchObject({ truncated: true })
+      expect(limited.content).not.toContain("Read topic")
+      const found = await run("browser_snapshot", { query: "read TOPIC" })
+      expect(found.content).toContain(`href="${new URL("/topics/42", server.url).href}"`)
+      const scoped = await run("browser_snapshot", { ref: ref(found.content, "link") })
+      expect(scoped.content).toContain("Read topic")
+      expect(scoped.content).not.toContain("textbox")
+      expect((await run("browser_snapshot", { query: "missing" })).content).toContain("No snapshot entries matched")
+
       const data = await run(
         "browser_navigate",
         {
