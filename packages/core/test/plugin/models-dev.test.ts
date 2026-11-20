@@ -43,7 +43,7 @@ const kimi = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([ModelResolver.node, Provider.node, Integration.node, KimiKeyRotation.node, Bus.node]),
     [Location.node.replace(locationLayer)],
-  ),
+  ).pipe(Layer.merge(Config.testLayer()), Layer.merge(Flag.testLayer())),
 )
 const models = (file: string) =>
   AppNodeBuilder.build(ModelsDev.node, [ModelsDev.node.replace(ModelsDev.configured({ file, fetch: false }))])
