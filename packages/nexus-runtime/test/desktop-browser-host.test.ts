@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { join } from "node:path"
 import { Context, Deferred, Effect, Fiber, Result, Stream, type Schema } from "effect"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -15,8 +16,12 @@ import { tempGlobalLayer } from "../../core/test/fixture/global"
 import { offlineModels } from "../../core/test/fixture/models"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { testEffect } from "../../core/test/lib/effect"
-import { desktopBrowserTools } from "../src/desktop-browser"
+import { builtinExtensions } from "../src/builtins"
+import { Configuration } from "../src/configuration"
+import { ExtensionManager } from "../src/extension-manager"
 import { hostTools } from "../src/host"
+import { packageTools } from "../src/package-tools"
+import { Packages } from "../src/packages"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Session.node, LocationServiceMap.node]), [
@@ -25,7 +30,7 @@ const it = testEffect(
   ]),
 )
 
-it.live("Nexus navigation uses the configured session's active Browser RPC attachment", () =>
+it.live("Nexus lists and uses the configured session's desktop Browser without managed packages", () =>
   Effect.gen(function* () {
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
     const location = Location.Ref.make({ directory })
@@ -90,27 +95,70 @@ it.live("Nexus navigation uses the configured session's active Browser RPC attac
     const connection = yield* rpc.attach({ ...attachment, version: 4 }).pipe(Effect.forkScoped)
     yield* Deferred.await(attached)
 
-    const owner = new AbortController()
-    const desktop = desktopBrowserTools(browser, owner.signal, 600000)
+    const configuration = new Configuration(join(directory, "nexus-configuration.json"))
+    const packages = new Packages(directory, configuration)
+    const extension = (yield* Effect.promise(() => builtinExtensions(host))).find(
+      (module) => module.descriptor.id === "nexus.browser",
+    )!
+    const published = Promise.withResolvers<void>()
+    const manager: ExtensionManager = new ExtensionManager(
+      configuration,
+      [packageTools(packages, () => manager), extension],
+      directory,
+      new AbortController().signal,
+      async () => published.resolve(),
+    )
+    const context = { workspace: "workspace", conversation: "conversation", run: "run", task: "task", directory }
 
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(async () => {
-        owner.abort()
-        await desktop.close()
+    yield* Effect.addFinalizer(() => Effect.promise(() => manager.close()))
+    yield* Effect.tryPromise(() =>
+      configuration.replace(extension.descriptor, {
+        enabled: false,
+        configuration: { backend: "desktop", executable: "", desktop_session: session.id },
       }),
     )
+    yield* Effect.tryPromise(() => manager.start())
 
-    const navigate = desktop.tools.find((tool) => tool.definition.name === "browser_navigate")!
-    const result = yield* Effect.tryPromise((signal) =>
-      navigate.execute(
-        { url: "https://example.test/" },
-        { workspace: "workspace", conversation: "conversation", run: "run", task: "task", directory, signal },
-      ),
+    const list = manager.tools().find((tool) => tool.definition.name === "list_extensions")!
+    const inventory = Effect.tryPromise(async (signal) => {
+      const result = await list.execute({}, { ...context, signal })
+
+      return JSON.parse(String(result.content))
+    })
+
+    expect(yield* inventory).toMatchObject({
+      packages: [],
+      extensions: expect.arrayContaining([
+        expect.objectContaining({ id: "nexus.browser", enabled: false, active: false, tools: [] }),
+      ]),
+    })
+
+    yield* Effect.tryPromise(() => manager.change({ id: "nexus.browser", enabled: true }))
+    yield* Effect.promise(() => published.promise)
+
+    const result = yield* inventory
+    expect(result).toMatchObject({
+      packages: [],
+      extensions: expect.arrayContaining([
+        expect.objectContaining({
+          id: "nexus.browser",
+          enabled: true,
+          active: true,
+          ready: true,
+          restart_required: false,
+          tools: expect.arrayContaining(["browser_navigate"]),
+        }),
+      ]),
+    })
+    expect(JSON.stringify(result)).not.toContain(session.id)
+
+    const navigate = manager.tools().find((tool) => tool.definition.name === "browser_navigate")!
+    const navigation = yield* Effect.tryPromise((signal) =>
+      navigate.execute({ url: "https://example.test/" }, { ...context, signal }),
     )
 
-    expect(result.content).toContain("OpenCode desktop fixture")
-    owner.abort()
-    yield* Effect.promise(desktop.close)
+    expect(navigation.content).toContain("OpenCode desktop fixture")
+    yield* Effect.promise(() => manager.close())
     expect(operations).toEqual([
       { type: "tabs.open" },
       { type: "navigate", tabID: tab.id, url: "https://example.test/" },
