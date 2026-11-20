@@ -47,7 +47,17 @@ export function hostTools(locations: typeof LocationServiceMap.Service.Service, 
                     message:
                       "Enable the OpenCode Browser plugin and open the configured OpenCode session in the desktop app.",
                   })
-                if (!agent || !(yield* permission.allows({ sessionID, action: "browser", resources: ["*"], save: [] })))
+
+                if (
+                  !agent ||
+                  !(yield* permission.allows({
+                    sessionID,
+                    agent: agent.id,
+                    action: "browser",
+                    resources: ["*"],
+                    save: [],
+                  }))
+                )
                   return yield* new Tool.Error({
                     message:
                       "The configured OpenCode session needs an attached desktop Browser with browser permission.",
