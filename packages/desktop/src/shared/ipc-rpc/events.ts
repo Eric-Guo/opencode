@@ -1,5 +1,5 @@
 import { desktopZoomLevels } from "@opencode/app/desktop-menu"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
 import { PluginInstalled, PluginMenubarItem, PluginPayload, PluginGuis } from "./plugins"
 
@@ -14,7 +14,7 @@ export class ToastActivated extends Schema.TaggedClass<ToastActivated>()("ToastA
 export class MenuCommandTriggered extends Schema.TaggedClass<MenuCommandTriggered>()("MenuCommandTriggered", {
   id: Schema.String,
   /** A key equivalent chose the item, rather than a click on the menu. */
-  accelerator: Schema.Boolean,
+  accelerator: Schema.Boolean.pipe(Schema.withConstructorDefault(Effect.succeed(false))),
 }) {}
 
 export class WindowFullscreenChanged extends Schema.TaggedClass<WindowFullscreenChanged>()("WindowFullscreenChanged", {

@@ -30,13 +30,15 @@ void electron.app.whenReady().then(async () => {
   const { createBrowserPane } = await import("./pane")
   const { createHandlePath } = await import("./disk")
   const { browserFailure, PageEndedError } = await import("./errors")
-  const { RefsStore } = await import("./refs")
+  const { createRefs, RefsStore } = await import("./refs")
+  const { createBrowserRestoreStore } = await import("./restore")
   const { createSitePermissions } = await import("./site-permissions")
   const { createSystemMedia } = await import("./system-media")
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()
   const origin = `http://127.0.0.1:${address instanceof Object ? address.port : 0}`
   const win = new electron.BrowserWindow({ show: false, width: 800, height: 600 })
+  const windows = { get: (id: number) => (id === win.id ? win : undefined), contents: () => win.webContents }
   const verifier = createHandlePath()
   const values = new Map<string, unknown>()
 
@@ -90,6 +92,7 @@ void electron.app.whenReady().then(async () => {
 
     const page = createBrowserPage(win, {
       id,
+      windows,
       toolbar: false,
       partition: "crash-fixture",
       network: null,
@@ -172,11 +175,11 @@ void electron.app.whenReady().then(async () => {
 
   const pane = createBrowserPane({
     toolbar: false,
-    windows: { get: (id) => (id === win.id ? win : undefined), list: () => [win], focused: () => win, on: () => () => undefined },
+    windows,
     t: (key) => key,
     serverEndpoints: { get: () => undefined },
-    storage,
-    refs: storage.store("refs", RefsStore),
+    restore: createBrowserRestoreStore(storage),
+    ref: createRefs(storage.store("refs", RefsStore)),
     embeds,
     profile,
     sites,
