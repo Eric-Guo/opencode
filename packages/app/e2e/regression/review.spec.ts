@@ -1,5 +1,5 @@
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
-import { expect, test, type Locator, type Page } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 import { base64Encode } from "@opencode/util/encode"
 import { SERVER, holdRoute, project, provider, session } from "../utils/app"
 import { browseFiles, openFileLauncher, openReviewLauncher, reviewTabs } from "../utils/side-panel"
@@ -2274,20 +2274,19 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
     const panel = page.locator("#review-panel")
-    // Once the panel settles open, its strip shows its own copy of the toggle in place of the header's. Actions wait
-    // for that copy: one that starts on the header's copy as they swap keeps waiting for it to show again.
-    const settled = panel.getByRole("button", { name: "Toggle review", exact: true })
+    const panelToggle = panel.getByRole("button", { name: "Toggle review", exact: true })
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     const closed = (await toggle.boundingBox())!
     const header = (await page.locator("[data-session-title]").boundingBox())!
     expect(closed.y).toBeGreaterThanOrEqual(header.y)
     expect(closed.y + closed.height).toBeLessThanOrEqual(header.y + header.height)
 
-    await toggle.click()
-    await expect(toggle).toHaveAttribute("aria-expanded", "true")
+    // Opening from the keyboard starts with focus on the toggle.
+    await toggle.press("Enter")
+    await expect(panelToggle).toHaveAttribute("aria-expanded", "true")
     await expect(panel).toHaveAttribute("aria-hidden", "false")
     await expect(toggle).toHaveCount(1)
-    await expect.poll(() => toggle.boundingBox()).toEqual(closed)
+    await expect.poll(() => panelToggle.boundingBox()).toEqual(closed)
     await expect
       .poll(async () => {
         const box = (await panel.boundingBox())!
@@ -2314,25 +2313,39 @@ for (const direction of ["ltr", "rtl"] as const) {
         .toBe(closed.y + closed.height / 2)
     }
 
-    await expect(settled).toBeVisible()
-    await toggle.press("Enter")
+    await panelToggle.press("Enter")
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await expect(toggle).toBeFocused()
     await expect.poll(() => toggle.boundingBox()).toEqual(closed)
     await expect(panel).toBeHidden()
 
-    // The chat's width springs; once the panel settles open, it fills the rest of the row beside the chat.
-    for (const opened of [true, false]) {
-      await toggle.click()
-      await expect(toggle).toHaveAttribute("aria-expanded", String(opened))
-      await expect(panel).toHaveAttribute("aria-hidden", String(!opened))
+    await toggle.click()
+    // The tab bar takes over the toggle once the panel settles open.
+    await expect(panelToggle).toHaveAttribute("aria-expanded", "true")
+    await expect.poll(() => panelToggle.boundingBox()).toEqual(closed)
 
-      if (opened) {
-        await expect(settled).toBeVisible()
-        await expect(() => expectHeaderClearOfToggle(page, toggle)).toPass()
+    const strip = (await panel.getByRole("tablist").boundingBox())!
+    const clearance = direction === "rtl" ? strip.x - (closed.x + closed.width) : closed.x - (strip.x + strip.width)
+    expect(clearance, "the tab strip should end before the review toggle").toBeGreaterThanOrEqual(0)
+
+    const geometry = await page.locator('[data-slot="session-chat-panel"]').evaluate((chat, direction) => {
+      const row = chat.parentElement!
+      const chatBounds = chat.getBoundingClientRect()
+      const panelBounds = document.querySelector("#review-panel")!.getBoundingClientRect()
+
+      return {
+        row: row.getBoundingClientRect().width,
+        gap: direction === "rtl" ? chatBounds.left - panelBounds.right : panelBounds.left - chatBounds.right,
+        panels: chatBounds.width + panelBounds.width + parseFloat(getComputedStyle(row).columnGap),
       }
-    }
+    }, direction)
 
+    expect(geometry.gap).toBeCloseTo(8, 1)
+    expect(Math.abs(geometry.row - geometry.panels)).toBeLessThanOrEqual(1)
+
+    await panelToggle.click()
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+    await expect(panel).toHaveAttribute("aria-hidden", "true")
     await expect(panel).toBeHidden()
   })
 }
@@ -2356,34 +2369,4 @@ function filesystemEvent(directory: string, file: string, event: "add" | "change
     location: { directory },
     data: { file, event },
   }
-}
-
-async function expectHeaderClearOfToggle(page: Page, toggle: Locator) {
-  const geometry = await page.locator('[data-slot="session-chat-panel"]').evaluate((chat) => {
-    const row = chat.parentElement!
-    const chatBounds = chat.getBoundingClientRect()
-    const panelBounds = document.querySelector("#review-panel")!.getBoundingClientRect()
-
-    return {
-      row: row.getBoundingClientRect().width,
-      gap:
-        getComputedStyle(row).direction === "rtl"
-          ? chatBounds.left - panelBounds.right
-          : panelBounds.left - chatBounds.right,
-      panels: chatBounds.width + panelBounds.width + parseFloat(getComputedStyle(row).columnGap),
-    }
-  })
-
-  expect(geometry.gap).toBeCloseTo(8, 1)
-  expect(Math.abs(geometry.row - geometry.panels)).toBeLessThanOrEqual(1)
-
-  const clip = (await toggle.boundingBox())!
-  // Header contents must make no difference to the pixels behind the toggle, which sits in the strip's last slot.
-  expect(await page.screenshot({ clip })).toEqual(
-    await page.screenshot({
-      clip,
-      style: `.session-review-v2-tabs-bar * { visibility: hidden !important; }
-        .session-review-v2-tabs-bar [data-slot="session-review-panel-toggle"] * { visibility: visible !important; }`,
-    }),
-  )
 }
