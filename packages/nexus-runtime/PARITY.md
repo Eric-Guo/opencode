@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`a91c63f44a0571f2a6cf08b85d7e568964441183`. Paths in the first column are relative
+`47209fd6063c5ded85c82b078889b4272c55f45d`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -13,8 +13,8 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The [latest verification](#model-adaptations-and-declaration-policy-november-21-2026)
-covers model adaptations, tool assembly, Subagent mode, image availability and compaction.
+contract tests below. The [latest verification](#turn-pagination-candidate-controls-and-directory-listings)
+covers turn pagination, Telegram candidate controls, raw filenames and live schedule edits.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
@@ -1273,3 +1273,29 @@ Runtime conformance passed 415 tests across 76 files with Chromium, PTY and
 WebRTC. Both runtime type checkers, the runtime build, the CLI and Server Nexus
 adapter tests, the Protocol identifier check, and the repository's
 `bun run check` passed.
+
+## Turn pagination, candidate controls and directory listings
+
+The November 21 review checked the production owners and test anchors above for
+all eleven executable non-WebUI packages. Cybros revisions `a91c63f44` and
+`47209fd60` share the same `agents/rho` tree, `3da8e3ef9`.
+
+| Reference test | TypeScript behavior and regression |
+| --- | --- |
+| `rho/test/extensions/ops_history_test.rb` and `rho-dev/test/dev_commands/conversations_test.rb` | `operations.ts` collects up to ten forward pages of 100 turns and preserves a single reverse window. `dev/terminal.ts` prints the active run, full reply, originating prompt and exclusive continuation. `dev.test.ts` exercises the CLI in text and JSON modes at the page boundary, at the cap and past the final turn. |
+| `rho-ingress-telegram/test/conversation_workflow_test.rb` | `/variants` identifies the active candidate and bounds each preview. The command and recovery paths persist the same variant, run, requester, route and source message before acknowledging a run-backed candidate. `telegram.test.ts` exercises immediate status and stop after restart, the original task ID, editing, reselection and a lost regeneration response. |
+| `rho-env/test/tools/ls_test.rb` | `runner-list.ts` passes the original bytes to the filesystem and decodes names for display. The Linux case in `runner.test.ts` checks an invalid UTF-8 directory name, its directory suffix and a valid sibling. |
+| `rho-webui/test/schedules_test.js` | The WebUI owns schedule editing. OpenCode's management protocol accepts sparse updates with the observed lock version. `runtime.test.ts` checks the exact prompt-only body sent through the Cybros SDK. The [UI ledger](../nexus-ui/docs/rho-webui-parity.md) covers form behavior. |
+
+Runtime conformance passed 418 tests on macOS with Chromium, WebRTC and PTYs.
+The Linux-only filename regression passed on Ubuntu. Both runtime type checks,
+the runtime build, the CLI and Server Nexus tests, the Protocol identifier test
+and root `bun run check` passed. Native Code Mode passed 325 tests and the Core
+integration and credential-refresh suites passed 20.
+
+On development Nexus, an isolated runtime with the source development extension
+printed a real turn and used its continuation to return the next turn as JSON.
+The source UI management bridge updated only the prompt of a scheduled job,
+retained its exact clock, model, name and approval mode, and received HTTP 409 for
+a stale lock version. The temporary schedules were canceled, workspaces deleted
+and agents removed.
