@@ -1,15 +1,65 @@
-import { APIError } from "@cybros/agent"
+import { APIError, type Variant } from "@cybros/agent"
 import type { NexusApplication } from "./application"
 import type { StoreDocument } from "./document"
 import type { TelegramState, TelegramWork } from "./telegram-state"
+
+type Watch = NonNullable<TelegramState["candidates"]>[number]
+
+export function candidateReply(operation: Watch["operation"], variant: Variant) {
+  const text =
+    operation === "regenerate"
+      ? "Regeneration requested. The selected result will be delivered here."
+      : operation === "edit"
+        ? "Edited tail candidate added."
+        : "Variant updated."
+
+  return variant.run_public_id ? text + "\nTask: " + variant.public_id : text
+}
+
+/** Record the control target and its acknowledgement together, including when recovering a lost response. */
+export function settleCandidate(state: TelegramState, watch: Watch, variant?: Variant): TelegramState {
+  const work: TelegramWork | undefined =
+    variant && (variant.public_id !== watch.previous || variant.run_public_id)
+      ? {
+          id: "candidate:" + variant.public_id,
+          route: watch.route,
+          target: watch.target,
+          requester: watch.requester,
+          speaker: watch.speaker,
+          source: watch.message === undefined ? [] : [watch.message],
+          input: variant.public_id,
+          voice: false,
+          candidate: true,
+          // Reselecting the active answer issues a receipt without scheduling another delivery.
+          ...(variant.public_id === watch.previous ? { terminal: true } : {}),
+          execution: {
+            turn_public_id: watch.turn,
+            variant_public_id: variant.public_id,
+            run_public_id: variant.run_public_id,
+          },
+        }
+      : undefined
+
+  return {
+    ...state,
+    ...(variant && state.control && state.control.update === watch.update
+      ? { control: { ...state.control, candidate_reply: candidateReply(watch.operation, variant) } }
+      : {}),
+    candidates: (state.candidates ?? []).filter((row) => row.id !== watch.id),
+    work: work && !state.work.some((row) => row.id === work.id) ? [...state.work, work] : state.work,
+  }
+}
 
 /** Candidate changes keep their own watch because they do not advance history positions. */
 export async function telegramCandidates(
   document: StoreDocument<TelegramState>,
   application: NexusApplication,
   signal: AbortSignal,
+  update?: number,
 ) {
   for (const watch of (await document.read())?.candidates ?? []) {
+    if (update !== undefined && watch.update !== update) continue
+
     const chat = application.client.workspace(watch.target.workspace).conversation(watch.target.conversation)
     const deck = await chat.turns.variants(watch.turn, { signal }).catch((error: unknown) => {
       if (error instanceof APIError && [403, 404, 410].includes(error.status)) return null
@@ -37,30 +87,7 @@ export async function telegramCandidates(
       const saved = state!.candidates?.find((row) => row.id === watch.id)
       if (!saved || saved.variant !== watch.variant || saved.operation !== watch.operation) return state!
 
-      const work: TelegramWork | undefined =
-        variant && variant.public_id !== watch.previous
-          ? {
-              id: "candidate:" + variant.public_id,
-              route: watch.route,
-              target: watch.target,
-              requester: watch.requester,
-              speaker: watch.speaker,
-              source: [],
-              input: variant.public_id,
-              voice: false,
-              candidate: true,
-              execution: {
-                turn_public_id: watch.turn,
-                variant_public_id: variant.public_id,
-                run_public_id: variant.run_public_id,
-              },
-            }
-          : undefined
-      return {
-        ...state!,
-        candidates: state!.candidates!.filter((row) => row.id !== watch.id),
-        work: work && !state!.work.some((row) => row.id === work.id) ? [...state!.work, work] : state!.work,
-      }
+      return settleCandidate(state!, watch, variant)
     })
   }
 }

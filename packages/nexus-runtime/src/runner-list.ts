@@ -1,6 +1,6 @@
 import { ToolInputError } from "./tool-error"
 import { readdir, stat } from "node:fs/promises"
-import { join } from "node:path"
+import { join, sep } from "node:path"
 import type { CommitTask, JsonObject } from "@cybros/agent"
 import { readablePath } from "./file-read"
 
@@ -12,10 +12,13 @@ export async function listDirectory(
   const path = await readablePath(root, typeof input.path === "string" ? input.path : ".")
   const limit = typeof input.limit === "number" ? input.limit : 500
   if (!Number.isSafeInteger(limit) || limit < 1) throw new ToolInputError("Listing limit must be a positive integer.")
-  const entries = (await readdir(path)).sort((a, b) => {
-    signal.throwIfAborted()
-    return a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0
-  })
+  const prefix = Buffer.from(join(path, sep))
+  const entries = (await readdir(path, { encoding: "buffer" }))
+    .map((bytes) => ({ bytes, sortKey: bytes.toString().toLowerCase() }))
+    .sort((a, b) => {
+      signal.throwIfAborted()
+      return a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0
+    })
   const selected: string[] = []
   let entryLimit = false
   for (const entry of entries) {
@@ -24,8 +27,8 @@ export async function listDirectory(
       entryLimit = true
       break
     }
-    const info = await stat(join(path, entry)).catch(() => undefined)
-    if (info) selected.push(entry + (info.isDirectory() ? "/" : ""))
+    const info = await stat(Buffer.concat([prefix, entry.bytes])).catch(() => undefined)
+    if (info) selected.push(entry.bytes.toString() + (info.isDirectory() ? "/" : ""))
   }
   if (!selected.length) return { content: "(empty directory: " + path + ")" }
   const lines: string[] = []
