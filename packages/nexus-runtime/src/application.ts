@@ -20,7 +20,7 @@ import { Bots } from "./bots"
 import { InputAdmissions } from "./admission"
 import { Operations } from "./operations"
 import { addressedAgent, foreignInput } from "./foreign-admission"
-import type { McpDirectory } from "./preset-mcp"
+import type { McpDirectory, PresetInventory } from "./preset-mcp"
 import { MemoryReviews } from "./memory-review"
 import { Until, untilParagraph } from "./until"
 import { TurnLifecycle } from "./turn-lifecycle"
@@ -92,7 +92,7 @@ export class NexusApplication {
     private readonly environment?: () => Record<string, JsonObject>,
     private readonly policy?: (workspace: string, conversation: string, preset?: string) => Promise<Preparation>,
     private readonly event?: (name: string, value: Schema.Json) => Promise<void>,
-    mcp?: () => Promise<McpDirectory>,
+    mcp?: () => Promise<McpDirectory | PresetInventory>,
     private readonly hooks?: ExtensionLifecycle,
     private readonly approvals?: {
       grant(value: ApprovalGrant): Promise<"saved" | "already">
@@ -131,7 +131,12 @@ export class NexusApplication {
       (target, input, body, replayed) => this.titles.accept(target, input, body, replayed),
       admissionDirectory,
     )
-    this.presets = new Presets(member, mcp, (policy) => (this.defaults().summarizer ?? summaryPrompt)(policy))
+    this.presets = new Presets(
+      member,
+      mcp,
+      (policy) => (this.defaults().summarizer ?? summaryPrompt)(policy),
+      (id) => this.bots.usingPreset(id),
+    )
     this.bots = new Bots(
       member,
       this.presets,
@@ -231,16 +236,21 @@ export class NexusApplication {
     return this.hooks?.bindings({ workspace, conversation }) ?? Promise.resolve([])
   }
 
-  async prepare(preset?: string, target?: { workspace: string; conversation: string }) {
+  async prepare(
+    preset?: string,
+    target?: { workspace: string; conversation: string },
+    snapshot?: Awaited<ReturnType<Presets["snapshot"]>>,
+  ) {
     const base = this.base()
-    const catalog = target ? await this.presets.catalog() : undefined
-    const selected = catalog?.presets.find((entry) => entry.public_id === (preset ?? catalog.main_preset_public_id))
+    const current = snapshot ?? (await this.presets.snapshot())
+    const catalog = current.catalog
+    const selected = catalog.presets.find((entry) => entry.public_id === (preset ?? catalog.main_preset_public_id))
     const inherited =
       target &&
       (selected?.configuration.model_mode === "follow" || (!selected?.configuration.model && !base.default_model))
         ? await this.settledModel(target.workspace, target.conversation)
         : undefined
-    const resolved = await this.presets.resolve(base, preset, inherited)
+    const resolved = await this.presets.resolve(base, preset, inherited, current)
 
     return {
       agent_configuration: Schema.decodeUnknownSync(

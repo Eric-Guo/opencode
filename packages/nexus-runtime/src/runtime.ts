@@ -34,7 +34,7 @@ import { ExtensionManager } from "./extension-manager"
 import { Packages } from "./packages"
 import { packageTools } from "./package-tools"
 import { capabilityConfiguration, summaryPrompt } from "./capabilities"
-import { mcpDirectory } from "./preset-mcp"
+import { presetInventory } from "./preset-mcp"
 import type { Nexus } from "@opencode/schema/nexus"
 import { executionConfiguration } from "./execution-settings"
 import type { BuiltinPolicy } from "./runner-inbox"
@@ -86,6 +86,8 @@ type Settings = typeof Settings.Type
 type Identity = { agent: string; name: string; runner: string; workspace: string; workspaceName: string }
 type Pairing = { code: string; url: string }
 type Connection = {
+  profileDigest?: string
+  profileWrites: Promise<void>
   configuration: AgentConfigurationInput
   member: Client
   candidates: ReadonlySet<string>
@@ -190,20 +192,35 @@ export class NexusRuntime {
     summaryPrompt(policy, (model) => this.adaptations?.summarizer(model))
 
   private declareProfile(
-    member: Client,
-    configuration: AgentConfigurationInput,
+    active: Connection,
     options?: RequestOptions,
-    rules = this.siteRules(),
+    rules?: AgentConfigurationInput["approval_rules"],
   ) {
-    const summary = this.summarizer(configuration.compaction_policy)
-
-    return member.profile.declareConfiguration(
-      {
-        configuration: { ...configuration, approval_rules: rules },
-        prompt_documents: { summarizer: summary === null ? null : { content: summary } },
-      },
-      options,
+    const publish = active.profileWrites.then(async () => {
+      const snapshot = await active.application.presets.snapshot()
+      const selected = await active.application.presets.resolve(active.configuration, undefined, undefined, snapshot)
+      const declaration = {
+        configuration: {
+          ...selected.configuration,
+          approval_rules: [...(selected.configuration.approval_rules ?? []), ...(rules ?? this.siteRules())],
+        },
+        prompt_documents: {
+          system_prompt: { content: selected.instructions },
+          summarizer: selected.summarizer === null ? null : { content: selected.summarizer },
+        },
+      }
+      const digest = createHash("sha256").update(JSON.stringify(declaration)).digest("hex")
+      if (active.profileDigest !== digest) {
+        await active.member.profile.declareConfiguration(declaration, options)
+        active.profileDigest = digest
+      }
+      return snapshot
+    })
+    active.profileWrites = publish.then(
+      () => {},
+      () => {},
     )
+    return publish
   }
 
   conversationDefaults() {
@@ -576,10 +593,12 @@ export class NexusRuntime {
           kernel_tools: adapted.kernel_tools,
           default_model: this.applicationSettings.read().default_model ?? settings.model,
           fallback_models: [...this.applicationSettings.read().fallback_models],
-          runner_tool_names: refresh().map((tool) => tool.name),
+          runner_tool_names: refresh()
+            .filter((tool) => !tool.mcp)
+            .map((tool) => tool.name),
           tool_definitions: [...applicationTools(), ...adapted.tool_definitions],
         }
-        await this.declareProfile(member, active.configuration, { signal })
+        await this.declareProfile(active, { signal })
         await registered.sync(this.extensionManager?.agents() ?? [], active.configuration, this.summarizer)
       }),
       () => {
@@ -680,9 +699,9 @@ export class NexusRuntime {
           ...capabilities,
           kernel_tools: adapted.kernel_tools,
           runner_executor_public_ids: [...new Set([runner, ...candidates.map((row) => row.public_id)])],
-          runner_tool_names: availableTools.map((tool) => tool.name),
+          runner_tool_names: availableTools.filter((tool) => !tool.mcp).map((tool) => tool.name),
         }
-        const profile = await this.declareProfile(member, configuration, { signal })
+        const profile = await member.profile.fetch({ signal })
         const identity = {
           agent: profile.member.public_id,
           name: profile.member.display_name ?? profile.member.handle,
@@ -693,7 +712,8 @@ export class NexusRuntime {
         const admissionScope = createHash("sha256")
           .update(JSON.stringify([settings.origin, identity.agent]))
           .digest("hex")
-        this.connection = {
+        const active: Connection = {
+          profileWrites: Promise.resolve(),
           member,
           configuration,
           candidates: new Set([runner, ...candidates.map((row) => row.public_id)]),
@@ -701,17 +721,18 @@ export class NexusRuntime {
           application: new NexusApplication(
             member,
             identity,
-            () => this.connection?.configuration ?? configuration,
+            () => active.configuration,
             () => ({ [identity.runner]: { "opencode.directory": this.defaultEnvironment.root } }),
             (workspace, conversation, preset) => this.policy(workspace, conversation, preset),
             (name, value) => this.extensionManager?.emit(name, value) ?? Promise.resolve(),
             () =>
-              mcpDirectory(
+              presetInventory(
                 member,
-                identity.agent,
+                identity,
                 this.extensionTools()
                   .filter((tool) => tool.role === "agent")
                   .map((tool) => tool.definition),
+                active.configuration,
               ),
             {
               agents: () => this.extensionManager?.agents().map((agent) => agent.name) ?? [],
@@ -737,7 +758,9 @@ export class NexusRuntime {
             join(this.storage, "admissions", admissionScope),
           ),
         }
-        this.connection.application.environments.configure({
+        await this.declareProfile(active, { signal })
+        this.connection = active
+        active.application.environments.configure({
           root: () => this.defaultEnvironment.root,
           documents: () => documents("runner"),
           liveProcess: processes.liveIn,
@@ -755,7 +778,7 @@ export class NexusRuntime {
             if (!active) return
             active.candidates = new Set([active.identity.runner, ...ids])
             active.configuration = { ...active.configuration, runner_executor_public_ids: [...active.candidates] }
-            await this.declareProfile(active.member, active.configuration)
+            await this.declareProfile(active)
           },
         })
         await registered.sync(this.extensionManager?.agents() ?? [], configuration, this.summarizer)
@@ -969,7 +992,8 @@ export class NexusRuntime {
       throw new Error("This conversation cannot receive input here.")
     const runner = chat.default_runner?.executor_public_id
     const modes = await this.modes(workspace, conversation)
-    const captured = await active.application.prepare(preset, { workspace, conversation })
+    const snapshot = await this.declareProfile(active, { signal: this.stop.signal })
+    const captured = await active.application.prepare(preset, { workspace, conversation }, snapshot)
     const context = await active.application.environments.capture(
       workspace,
       conversation,
@@ -1270,7 +1294,16 @@ export class NexusRuntime {
       this.statusValue = { ...this.statusValue, workspace: workspace.public_id, identity: { ...active.identity } }
       return workspace
     }
-    if (command.action.startsWith("preset.")) return active.application.presets.command(command as NexusPreset.Command)
+    if (command.action.startsWith("preset.")) {
+      const result = await active.application.presets.command(command as NexusPreset.Command)
+      if (
+        !["preset.tools", "preset.read", "preset.list", "preset.export", "preset.export-document"].includes(
+          command.action,
+        )
+      )
+        await this.declareProfile(active, { signal: this.stop.signal })
+      return result
+    }
     if (command.action.startsWith("bot.") && command.action !== "bot.submit")
       return active.application.bots.command(command as NexusBot.Command)
     if (command.action === "persona.read" || command.action === "persona.write" || command.action === "persona.reset") {
@@ -1549,10 +1582,7 @@ export class NexusRuntime {
       if (this.approvals.some((value) => JSON.stringify(value.rule) === JSON.stringify(grant.rule)))
         return "already" as const
 
-      await this.declareProfile(active.member, active.configuration, { signal: this.stop.signal }, [
-        ...this.siteRules(),
-        grant.rule,
-      ])
+      await this.declareProfile(active, { signal: this.stop.signal }, [...this.siteRules(), grant.rule])
       this.approvals.push(grant)
       return "saved" as const
     })
@@ -1593,7 +1623,7 @@ export class NexusRuntime {
       const site = webSite(detail.tool_input?.url)
       if (this.sites.has(site)) return
       const rule = { tool: "web_fetch", path: "url", match: site + "/*", verdict: "allow" as const }
-      await this.declareProfile(active.member, active.configuration, { signal }, [...this.siteRules(), rule])
+      await this.declareProfile(active, { signal }, [...this.siteRules(), rule])
       this.sites.add(site)
     })
     this.declaring = pending.catch(() => {})
@@ -1642,9 +1672,7 @@ export class NexusRuntime {
     this.stop.abort()
     await this.declaring
     if (active && this.sites.size)
-      await this.declareProfile(active.member, active.configuration, { signal: AbortSignal.timeout(5000) }, []).catch(
-        () => {},
-      )
+      await this.declareProfile(active, { signal: AbortSignal.timeout(5000) }, []).catch(() => {})
     await this.human.close()
     await this.pending?.catch(() => {})
     await this.work
