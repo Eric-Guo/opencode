@@ -384,12 +384,38 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     return 0
   }
   if (parsed.verb === "conversation") {
-    const id = await conversation(word(1, "CONVERSATION"))
     if (parsed.args[0] === "cost") {
-      print(await call("cost", { conversation: id, amount: parsed.args[2] === "off" ? null : parsed.args[2] }))
+      if (parsed.args.length < 2 || parsed.args.length > 3)
+        throw new Error("Use conversation cost CONVERSATION [AMOUNT|off].")
+
+      const row = object(
+        await call("cost", {
+          conversation: await conversation(word(1, "CONVERSATION")),
+          amount: parsed.args[2] === "off" ? null : parsed.args[2],
+        }),
+      )
+      if (parsed.values.json) {
+        print(row)
+        return 0
+      }
+
+      const usage = object(row.usage_summary)
+      const unit = usage.cost_unit ? " " + usage.cost_unit : ""
+      terminal.write(
+        [
+          "conversation: " + row.public_id,
+          "known cost: " + (usage.cost_amount ?? "unknown") + unit,
+          "cost complete: " + usage.cost_complete,
+          "cost limit: " + (row.cost_limit == null ? "off" : row.cost_limit + unit),
+          "limit reached: " + row.cost_limit_reached,
+          "Changing the limit does not restart work. To continue a held run, use retry RUN_ID [TASK_KEY].",
+          "",
+        ].join("\n"),
+      )
       return 0
     }
     if (parsed.args[0] !== "participants") throw new Error("conversation takes participants or cost.")
+    const id = await conversation(word(1, "CONVERSATION"))
     const verb = parsed.args[2]
     if (verb && !["add", "rm", "default"].includes(verb)) throw new Error("participants takes add, rm or default.")
     print(

@@ -1360,10 +1360,12 @@ export class NexusRuntime {
     }
     if (command.action === "application.operation") {
       const operation = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(command.operation)
-      return new Operations(member, active.application, {
+      const result = await new Operations(member, active.application, {
         ...active.identity,
         workspace: command.workspace ?? active.identity.workspace,
       }).command(operation)
+
+      return result ?? null
     }
     if (command.action === "application.skills") {
       const catalog = Schema.decodeUnknownSync(
