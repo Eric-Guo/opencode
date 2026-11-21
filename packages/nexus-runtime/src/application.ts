@@ -31,6 +31,8 @@ import { ConversationTitles } from "./conversation-titles"
 import { Runners } from "./runners"
 import { Workspaces } from "./workspaces"
 import type { ExtensionLifecycle } from "./extension-lifecycle"
+import { isSubagentTool } from "./bot-policy"
+import { summaryPrompt } from "./capabilities"
 
 type Preparation = {
   instructions?: string
@@ -104,6 +106,7 @@ export class NexusApplication {
       bash_timeout_seconds?: number
       hints?: (model: string) => string
       adaptations?: (model?: string) => JsonObject
+      summarizer?: (policy: AgentConfigurationInput["compaction_policy"]) => string | null
     } = () => ({ code_mode: true, subagent: true, title_model: null }),
     admissionDirectory?: string,
   ) {
@@ -128,7 +131,7 @@ export class NexusApplication {
       (target, input, body, replayed) => this.titles.accept(target, input, body, replayed),
       admissionDirectory,
     )
-    this.presets = new Presets(member, mcp)
+    this.presets = new Presets(member, mcp, (policy) => (this.defaults().summarizer ?? summaryPrompt)(policy))
     this.bots = new Bots(
       member,
       this.presets,
@@ -242,7 +245,13 @@ export class NexusApplication {
     return {
       agent_configuration: Schema.decodeUnknownSync(
         Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)),
-      )(JSON.stringify({ ...resolved.configuration, system_prompt: { content: resolved.instructions } })),
+      )(
+        JSON.stringify({
+          ...resolved.configuration,
+          system_prompt: { content: resolved.instructions },
+          summarizer: resolved.summarizer === null ? null : { content: resolved.summarizer },
+        }),
+      ),
       model: resolved.configuration.default_model ?? inherited,
       fallback_models: resolved.configuration.fallback_models ?? [],
     }
@@ -575,10 +584,7 @@ export class NexusApplication {
             return (
               name &&
               (modes.code_mode || name !== "code") &&
-              (modes.subagent ||
-                !["spawn", "delegate_task", "nexus.conversation.spawn", "nexus.graph.delegate_task"].includes(
-                  tool.canonical ?? name,
-                )) &&
+              (modes.subagent || !isSubagentTool(name, tool.canonical, tool.route)) &&
               (!prepared.tools || prepared.tools.includes(name))
             )
           })

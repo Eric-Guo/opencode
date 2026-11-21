@@ -9,9 +9,24 @@ import data from "../src/adaptation-data.json"
 test("adaptations select by lane-independent reference and apply boot aliases with anchored descriptions", async () => {
   const directory = await mkdtemp(join(tmpdir(), "nexus-adaptations-"))
   try {
-    const pack = await Adaptations.load(defaultSettings, directory, "openai_api/gpt-6.1-sol")
-    expect(pack.facts("other/gpt-6.1-sol")).toMatchObject({ row: "codex", source: "bundled" })
-    expect(pack.facts("vipai/gpt-6.2-sol")).toMatchObject({ row: "codex", source: "bundled" })
+    const pack = await Adaptations.load(defaultSettings, directory, "openai_api/gpt-6.2-sol")
+    for (const [model, row] of [
+      ["codex_subscription/gpt-6.2-sol", "codex"],
+      ["openai_api/gpt-6.1-terra", "codex"],
+      ["openrouter/openai/gpt-6.2-astra", "codex"],
+      ["anthropic/claude-sonnet-5-5", "claude"],
+      ["openrouter/anthropic/claude-haiku-5.5", "claude"],
+      ["openrouter/moonshotai/kimi-k3.1-pro", "kimi-k3"],
+      ["moonshot/kimi-k3.1-pro-highspeed", "kimi-k3"],
+      ["kimi_code/k3.1-pro-highspeed", "kimi-k3"],
+      ["openai_api/gpt-6-astra", "default"],
+      ["codex_subscription/gpt-6.1-sol", "default"],
+      ["anthropic/claude-fable-5-1", "default"],
+      ["openrouter/moonshotai/kimi-k3", "default"],
+    ])
+      expect(pack.facts(model)).toMatchObject({ row, source: "bundled" })
+
+    expect(pack.facts("openrouter/moonshotai/kimi-k3.1-pro").boot_row).toBe("codex")
     expect(pack.facts("broker/z-ai/glm-5.3")).toMatchObject({ row: "glm-5.3", boot_row: "codex" })
     expect(pack.facts("broker/z-ai/glm-5.3-flash")).toMatchObject({ row: "default" })
     const catalog = data.presets.presets.codex.aliases.map((alias) => ({
@@ -58,11 +73,50 @@ test("local adaptation rows override bundled rows, prioritize own patterns, and 
     expect(pack.facts()).toMatchObject({ row: "custom", source: "local" })
     expect(pack.hints()).toBe("Custom hint")
     expect(pack.summarizer()).toBe("Custom summary")
+    const clash = join(directory, "adaptations", "same.yml")
+
+    await writeFile(clash, "format: 1\nrow: same\nmodels: [gpt-*]\ntool_style: [nexus]\n")
+    await expect(Adaptations.load(defaultSettings, directory)).rejects.toThrow(
+      /same\.yml: model pattern gpt-\* also appears in .*custom\.yml/,
+    )
+    await rm(clash)
     await writeFile(
       join(directory, "adaptations", "custom.yml"),
       "format: 1\nrow: custom\nmodels: [gpt*]\ntool_style: [nexus]\n",
     )
     await expect(Adaptations.load(defaultSettings, directory)).rejects.toThrow("Invalid model pattern")
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("skill loading follows the served name and defers both plain and adapted spellings", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "nexus-skill-adaptation-"))
+  const canonical = "nexus.skill.load"
+  const catalog = [{ canonical_name: canonical, name: "load_skill", effect_profile: {}, definition: {}, template: null }]
+
+  try {
+    for (const adaptations of ["auto", "off", "claude"] as const) {
+      const pack = await Adaptations.load({ ...defaultSettings, adaptations }, directory)
+      const result = pack.configuration([canonical], catalog)
+
+      expect(result.kernel_tools).toEqual(adaptations === "claude" ? [] : [canonical])
+      expect(result.tool_definitions).toMatchObject([
+        { canonical, function: { name: adaptations === "claude" ? "Skill" : "load_skill" }, defer_loading: true },
+      ])
+      expect(pack.configuration([], catalog).tool_definitions).toEqual([])
+    }
+    await mkdir(join(directory, "adaptations"))
+    await writeFile(
+      join(directory, "adaptations", "custom.yml"),
+      "format: 1\nrow: custom\nmodels: [fixture]\ntool_style: [nexus]\n" +
+        "tool_descriptions: [{name: load_skill, canonical: nexus.skill.load, description: Load a project skill.}]\n",
+    )
+    const custom = await Adaptations.load(defaultSettings, directory, "provider/fixture")
+
+    expect(custom.configuration([canonical], catalog).tool_definitions).toMatchObject([
+      { canonical, function: { name: "load_skill" }, defer_loading: true, description: "Load a project skill." },
+    ])
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

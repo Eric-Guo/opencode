@@ -4,14 +4,16 @@ import { Presets } from "../src/presets"
 import { Bots } from "../src/bots"
 import { storeFixture } from "./fixture/store"
 import { conversationFixture, inputFixture } from "./fixture/conversation"
+import { summaryPrompt } from "../src/capabilities"
 
 test("Bot identities retain settings and recover switches without redirecting accepted work", async () => {
   const agents = new Map<string, JsonObject>()
   const conversations = new Map<string, JsonObject>()
   const receipts = new Map<string, string>()
   const calls: string[] = []
-  const fault = { loseConversation: false, loseInput: false }
+  const fault = { loseConversation: false, loseInput: false, refuseDeclaration: true }
   const inputs: JsonObject[] = []
+  const declarations: JsonObject[] = []
   const fixture = storeFixture(async (request) => {
     const path = new URL(request.url).pathname
 
@@ -35,6 +37,13 @@ test("Bot identities retain settings and recover switches without redirecting ac
     if (path.includes("/profile/agents/")) {
       const name = path.split("/").at(-1)!
       const input = (await request.json()) as JsonObject
+
+      declarations.push(input)
+      if (fault.refuseDeclaration) {
+        fault.refuseDeclaration = false
+        return Response.json({ error: { code: "unavailable" } }, { status: 503 })
+      }
+
       const agent: JsonObject = {
         ...input,
         name,
@@ -52,7 +61,7 @@ test("Bot identities retain settings and recover switches without redirecting ac
         steward_public_id: "human",
         kind: "agent",
         derived_from_public_id: "main",
-        summarizer: null,
+        summarizer: input.summarizer ?? null,
       }
 
       agents.set(name, agent)
@@ -107,21 +116,34 @@ test("Bot identities retain settings and recover switches without redirecting ac
 
     return Response.json({ error: { code: "not_found" } }, { status: 404 })
   })
-  const presets = new Presets(fixture.client)
+  const adaptation = { prompt: "Keep the initial summary." }
+  const presets = new Presets(fixture.client, undefined, (policy) => summaryPrompt(policy, () => adaptation.prompt))
   const bots = new Bots(
     fixture.client,
     presets,
-    () => ({ default_model: "provider/model", runner_tool_names: ["read", "write", "code"] }),
+    () => ({
+      default_model: "provider/model",
+      runner_tool_names: ["read", "write", "code"],
+      compaction_policy: { mode: "kernel" },
+    }),
     "runner",
   )
 
   try {
-    const created = await bots.command({
+    const create = {
       action: "bot.create",
       name: "assistant",
       description: "Personal assistant",
       settings: { home_workspace_public_id: "workspace" },
-    })
+    } as const
+
+    await expect(bots.command(create)).rejects.toThrow()
+    adaptation.prompt = "Use the updated adaptation."
+    const created = await bots.command(create)
+    expect(declarations.slice(0, 2).map((item) => item.summarizer)).toEqual([
+      "Keep the initial summary.",
+      "Keep the initial summary.",
+    ])
     const id = String((created as { public_id: string }).public_id)
 
     expect(conversations.size).toBe(0)
@@ -160,7 +182,10 @@ test("Bot identities retain settings and recover switches without redirecting ac
     const reconnected = new Bots(
       fixture.client,
       new Presets(fixture.client),
-      () => ({ default_model: "provider/model" }),
+      () => ({
+        default_model: "provider/model",
+        kernel_tools: ["nexus.conversation.request", "nexus.conversation.links"],
+      }),
       "runner",
     )
     const second = (await reconnected.command({ action: "bot.new", id, key: "second" })) as {
@@ -174,13 +199,19 @@ test("Bot identities retain settings and recover switches without redirecting ac
     await reconnected.submit(input)
     expect(inputs).toHaveLength(2)
     expect(inputs[1]).toEqual(inputs[0])
-    expect(inputs[0]).toMatchObject({ agent_configuration: { runner_tool_names: ["read", "write"] } })
+    expect(inputs[0]).toMatchObject({
+      agent_configuration: {
+        runner_tool_names: ["read", "write"],
+        summarizer: { content: "Use the updated adaptation." },
+      },
+    })
     await reconnected.command({
       action: "bot.configure",
       id,
       settings: { home_workspace_public_id: null, subagent: false, audience: "external" },
     })
     expect(agents.get("bot-assistant")?.configuration).toMatchObject({
+      kernel_tools: ["nexus.conversation.links"],
       runner_tool_names: [],
       runner_executor_public_ids: [],
       conversation_reach: "subtree",

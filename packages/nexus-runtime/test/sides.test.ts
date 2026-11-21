@@ -20,7 +20,7 @@ function fixture(identityWorkspace = "workspace") {
   const forkKeys: string[] = []
   const inputs: JsonObject[] = []
   const state = { loseFork: false, loseInput: false }
-  const tools = [
+  const tools: JsonObject[] = [
     {
       type: "function",
       function: { name: "read" },
@@ -163,6 +163,7 @@ function fixture(identityWorkspace = "workspace") {
     open,
     state,
     inputs,
+    tools,
     forkKeys,
     stores,
     conversations,
@@ -260,6 +261,26 @@ test("An owned foreign side preserves its answerer's write declaration and still
   await app.submit({ ...request, key: "read" })
   expect(peer.inputs[1].tool_names).toEqual(["read", "read_other"])
   expect(peer.inputs[1].agent_configuration).toBeUndefined()
+})
+
+test("Subagent off removes conversation requests from a Side's captured tools", async () => {
+  using peer = fixture()
+  peer.tools.push(
+    { type: "function", function: { name: "request" } },
+    { type: "function", function: { name: "spawn_agent" }, canonical: "nexus.conversation.spawn" },
+    { type: "function", function: { name: "links" } },
+  )
+  const app = peer.open()
+  const opened = await app.openSide({ parent: "parent", key: "side", tools: "write" })
+
+  await app.setModes("workspace", opened.conversation.public_id, { subagent: false })
+  await app.submit({
+    workspace: "workspace",
+    conversation: opened.conversation.public_id,
+    key: "side-input",
+    text: "Handle this directly",
+  })
+  expect(peer.inputs[0].tool_names).toEqual(["read", "read_other", "mcp_read", "bash", "links"])
 })
 
 test("Sides inherit the parent's selected model from durable admissions after restart", async () => {
