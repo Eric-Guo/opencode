@@ -116,7 +116,11 @@ const app = agent({name:"Fixture"})
     await emit("finished");
     return {stopReason:"end_turn"};
   }
-  if(prompt==="secret") await emit("credential: "+process.env.CREDENTIAL_TOKEN);
+  if(prompt==="secret") {
+    const secret=process.env.DEMO_PASSWD;
+    await ctx.client.notify("session/update",{sessionId:id,update:{sessionUpdate:"tool_call",toolCallId:"secret-key",title:"Credential fixture",rawInput:{[secret]:"key fixture"}}});
+    await emit("credential: "+secret);
+  }
   else await emit(JSON.stringify({pid:process.pid,session:id,cwd:sessions.get(id).cwd,model:sessions.get(id).model,prompt}));
   return {stopReason:"end_turn"};
 });
