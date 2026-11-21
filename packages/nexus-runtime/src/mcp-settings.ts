@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto"
-import { resolve } from "node:path"
 import { JsonSchema, Schema } from "effect"
+import { FileAccess } from "@opencode/core/file-access"
 import type { Mcp } from "@opencode/schema/mcp"
+import { integrationSecrets, integrationValues } from "./integration-secrets"
 
 const Timeout = Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(604800000))
 const Profile = Schema.Struct({
@@ -123,29 +124,10 @@ export function mcpSettings(
     }
 
     const row = parsed.value
-    const secrets: string[] = []
-    const missing = new Set<string>()
-    const expand = (values: Readonly<Record<string, string>>, headers: boolean) =>
-      Object.fromEntries(
-        Object.entries(values).map(([name, value]) => {
-          const expanded = literal
-            ? value
-            : value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, variable: string) => {
-                const found = environment[variable]
-
-                if (found === undefined) missing.add(variable)
-                if (found) secrets.push(found)
-
-                return found ?? ""
-              })
-
-          if (headers || /(?:key|password|secret|token|credential)/i.test(name)) secrets.push(expanded)
-
-          return [name, expanded]
-        }),
-      )
-    const env = expand(row.env ?? {}, false)
-    const headers = expand(row.headers ?? {}, true)
+    const env = integrationValues(row.env ?? {}, environment, { literal })
+    const headerValues = integrationValues(row.headers ?? {}, environment, { literal, headers: true })
+    const headers = headerValues.resolved
+    const missing = new Set([...env.missing, ...headerValues.missing])
 
     if (missing.size) {
       faults.push({ key, issue: "Unset environment variables: " + [...missing].join(", ") })
@@ -196,8 +178,8 @@ export function mcpSettings(
             ...common,
             type: "local",
             command: [row.command!, ...(row.args ?? [])],
-            cwd: resolve(directory, row.cwd || "."),
-            environment: env,
+            cwd: FileAccess.resolvePath(directory, row.cwd || "."),
+            environment: env.resolved,
           }
         : {
             ...common,
@@ -230,9 +212,7 @@ export function mcpSettings(
       tools: row.tools,
       timeout,
       profiles: row.effect_profiles ?? {},
-      secrets: [...new Set(secrets.filter((value) => Buffer.byteLength(value) >= 8))].sort(
-        (a, b) => b.length - a.length,
-      ),
+      secrets: integrationSecrets([...env.secrets, ...headerValues.secrets]),
     })
   }
 

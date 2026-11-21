@@ -7,6 +7,7 @@ import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
 import { Global } from "@opencode/util/global"
 import { tempGlobalLayer } from "../../core/test/fixture/global"
+import { withEnv } from "../../core/test/fixture/env"
 import { activateMcp } from "../src/mcp"
 import { mcpConfiguration } from "../src/mcp-settings"
 import { ExtensionManager } from "../src/extension-manager"
@@ -32,6 +33,139 @@ const it = testEffect(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(tmpdir()) }))),
     ),
   ]),
+)
+
+it.live("Nexus MCP launches configured, probed and editor stdio peers with scrubbed environments", () =>
+  withEnv(
+    { NEXUS_FIXTURE_STATE: "private-marker", FIXTURE_PARENT_KEY: "private-credential", FIXTURE_LOCALE: "kept" },
+    () =>
+      Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        const integration = yield* Integration.Service
+        const host = { mcp: async () => mcp, integration: async () => integration }
+
+        yield* Effect.promise(async () => {
+          const directory = await mkdtemp(join(tmpdir(), "nexus-mcp-env-"))
+          const peer = join(directory, "peer.mjs")
+          const owner = new AbortController()
+          const environment = {
+            privateState: false,
+            parentKey: false,
+            locale: "kept",
+          }
+          const settings = new Configuration(join(directory, "settings.json"))
+          const descriptor = {
+            id: "nexus.mcp",
+            name: "MCP fixture",
+            description: "MCP fixture",
+            default_enabled: true,
+            configuration_version: 1,
+            configuration_schema: mcpConfiguration,
+          defaults: { servers: {} },
+          }
+          const manager = new ExtensionManager(
+            settings,
+            [{ descriptor, register: (api) => activateMcp(api, host) }],
+            directory,
+            owner.signal,
+            async () => {},
+          )
+          const context = {
+            workspace: "workspace",
+            conversation: "anchor",
+            run: "run",
+            task: "task",
+            directory,
+            signal: owner.signal,
+          }
+          try {
+            await Bun.write(
+              peer,
+              `
+import { createInterface } from "node:readline"
+import { writeFileSync } from "node:fs"
+
+const env = {
+  privateState: Object.hasOwn(process.env, "NEXUS_FIXTURE_STATE"),
+  parentKey: Object.hasOwn(process.env, "FIXTURE_PARENT_KEY"),
+  locale: process.env.FIXTURE_LOCALE,
+  explicit: process.env.FIXTURE_EXPLICIT,
+}
+if (process.argv[2]) {
+  writeFileSync(process.argv[2], JSON.stringify(env))
+}
+for await (const line of createInterface({ input: process.stdin })) {
+  const request = JSON.parse(line)
+  if (request.id === undefined) continue
+  // Some legacy peers exit when probed and must be launched again for initialize.
+  if (request.method === "server/discover") process.exit(1)
+  const result = {
+    initialize: { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "peer", version: "1" } },
+    "tools/list": { tools: [{ name: "read", description: "Read fixture environment facts", inputSchema: { type: "object" } }] },
+    "tools/call": { content: [{ type: "text", text: JSON.stringify(env) }] },
+  }[request.method]
+  const reply = result ? { result } : { error: { code: -32601, message: "Method not found" } }
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: request.id, ...reply }) + "\\n")
+}
+`,
+            )
+            const probeRecord = join(directory, "probe.json")
+            const stdio = { transport: "stdio", command: process.execPath, tools: ["*"] }
+            await settings.change(descriptor, {
+              id: descriptor.id,
+              enabled: true,
+              operations: [
+                {
+                  op: "set",
+                  path: ["servers"],
+                  value: {
+                    active: { ...stdio, args: [peer], env: { FIXTURE_EXPLICIT: "configured" } },
+                    parked: { ...stdio, enabled: false, args: [peer, probeRecord], env: { FIXTURE_EXPLICIT: "probe" } },
+                  },
+                },
+              ],
+            })
+            await manager.start()
+            expect(manager.tools().map((tool) => tool.definition.name)).toEqual(["mcp__active__read"])
+            expect(await manager.tools()[0].execute({}, context)).toMatchObject({
+              content: [{ type: "text", text: JSON.stringify({ ...environment, explicit: "configured" }) }],
+            })
+            expect(await Bun.file(probeRecord).exists()).toBe(false)
+            expect(await manager.command("mcp.probe", { server: "parked" })).toMatchObject({ status: "connected" })
+            expect(await Bun.file(probeRecord).json()).toEqual({ ...environment, explicit: "probe" })
+            expect((await Effect.runPromise(mcp.servers())).map((server) => server.name)).toHaveLength(3)
+
+            const attached = await mcpSession(
+              {
+                ...context,
+                servers: [
+                  {
+                    name: "editor",
+                    command: process.execPath,
+                    args: [peer],
+                    env: [{ name: "FIXTURE_EXPLICIT", value: "${FIXTURE_PARENT_KEY}" }],
+                  },
+                ],
+              },
+              host,
+            )
+            try {
+              expect(attached.issues).toEqual([])
+              expect(await attached.tools[0].execute({}, context)).toMatchObject({
+                content: [
+                  { type: "text", text: JSON.stringify({ ...environment, explicit: "${FIXTURE_PARENT_KEY}" }) },
+                ],
+              })
+            } finally {
+              await attached.close()
+            }
+          } finally {
+            await manager.close()
+            await rm(directory, { recursive: true, force: true })
+          }
+        })
+      }),
+  ),
 )
 
 it.live("session MCP uses public names and replacement cancels an accepted blocked HTTP call before reopening", () =>
@@ -394,9 +528,10 @@ it.live("MCP tool failures retain their two axes and disabled-server probes open
                 mode === "media" ? [{ type: "resource", resource }] : [{ type: "text", text: "returned answer" }],
             },
           }
-          return message.id === undefined
-            ? new Response(null, { status: 202 })
-            : Response.json({ jsonrpc: "2.0", id: message.id, result: results[message.method] })
+          if (message.id === undefined) return new Response(null, { status: 202 })
+          const result = results[message.method]
+          const reply = result ? { result } : { error: { code: -32601, message: "Method not found" } }
+          return Response.json({ jsonrpc: "2.0", id: message.id, ...reply })
         },
       })
       const directory = await mkdtemp(join(tmpdir(), "nexus-mcp-errors-"))
