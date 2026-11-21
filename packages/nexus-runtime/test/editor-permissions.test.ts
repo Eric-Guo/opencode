@@ -1,10 +1,14 @@
 import { expect, test } from "bun:test"
 import { client, RequestError, type RequestPermissionResponse } from "@agentclientprotocol/sdk"
-import type { JsonObject } from "@cybros/agent"
 import { editorFixture } from "./fixture/editor"
 import { conversationFixture } from "./fixture/conversation"
 
-function permissionWorld(tool = "web_fetch", target: JsonObject = { kind: "builtin" }) {
+function permissionWorld(
+  tool = "web_fetch",
+  target: { kind: string; connection_public_id?: string; account_label?: string; tool_name?: string } = {
+    kind: "builtin",
+  },
+) {
   const cancelled = Promise.withResolvers<void>()
   const state = { status: "failed", canceled: false, polls: 0, approvals: 0, denials: 0, cancellations: 0 }
   const task = () => ({
@@ -17,6 +21,7 @@ function permissionWorld(tool = "web_fetch", target: JsonObject = { kind: "built
     waiting_on: [],
     tool_name: tool,
     target,
+    ...(target.kind === "mcp" ? { tool_alias: "work_fetch" } : {}),
     tool_input: { url: "https://docs.example:8443/guide" },
   })
   return {
@@ -96,7 +101,11 @@ function permissionWorld(tool = "web_fetch", target: JsonObject = { kind: "built
 
 test.each([
   { tool: "web_fetch", target: { kind: "builtin" }, label: "Allow this site until OpenCode restarts" },
-  { tool: "web_fetch", target: { kind: "mcp" }, label: "Allow this call's scope until OpenCode restarts" },
+  {
+    tool: "web_fetch",
+    target: { kind: "mcp", connection_public_id: "work", account_label: "Research", tool_name: "web_fetch" },
+    label: "Always allow this tool until OpenCode restarts",
+  },
   { tool: "bash", target: { kind: "builtin" }, label: "Allow this call's scope until OpenCode restarts" },
 ])(
   "ACP $tool persistent approval uses the shared owner and reports retention failure",
@@ -113,6 +122,15 @@ test.each([
         },
       },
       client().onRequest("session/request_permission", ({ params }) => {
+        if (target.kind === "mcp") {
+          const first = fixture.updates.find(({ update }) => update.sessionUpdate === "tool_call")
+          expect(first?.update).toMatchObject(params.toolCall)
+          expect(params.toolCall).toMatchObject({
+            title: "work_fetch https://docs.example:8443/guide (work · Research · web_fetch)",
+            kind: "other",
+            rawInput: { url: "https://docs.example:8443/guide" },
+          })
+        }
         expect(params.options.find((option) => option.kind === "allow_always")?.name).toBe(label)
         return { outcome: { outcome: "selected", optionId: "always" } }
       }),
