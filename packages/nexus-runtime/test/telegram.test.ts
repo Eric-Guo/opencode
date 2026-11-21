@@ -27,6 +27,8 @@ function fixture(group = true) {
     uncertainSend: false,
     terminal: false,
     running: false,
+    fallback: false,
+    held: undefined as JsonObject | undefined,
     formatting: false,
     loseSchedule: false,
     loseResume: false,
@@ -512,6 +514,17 @@ function fixture(group = true) {
       return Response.json({
         turn: { public_id: "turn", inherited: false },
         variants: [
+          ...(state.fallback
+            ? [
+                {
+                  public_id: "replacement",
+                  source: "fallback",
+                  origin_variant_public_id: "variant",
+                  status: "running",
+                  run_public_id: "fallback",
+                },
+              ]
+            : []),
           ...(state.regeneration === "committed" ? [{ ...regenerated, public_id: "unrelated" }, regenerated] : []),
           {
             public_id: "variant",
@@ -522,6 +535,12 @@ function fixture(group = true) {
             run_public_id: "run",
           },
         ],
+      })
+    if (state.held && /\/tasks\/hold(?:\/(approve|deny|resolution))?$/.test(path))
+      return Response.json({ task: state.held })
+    if (state.held && /\/runs\/(run|fallback)$/.test(path))
+      return Response.json({
+        run: { public_id: path.split("/").at(-1), status: "needs_attention", tasks: [state.held] },
       })
     if (path.endsWith("/runs/run"))
       return Response.json({
@@ -1612,4 +1631,119 @@ test("Telegram resume retires only pending media for its route and retries cance
     lane + "transcription-request/cancellation",
     lane + "speech-request/cancellation",
   ])
+})
+
+test("Telegram decisions bind the complete request to the original run across restart and fallback", async () => {
+  using peer = fixture(false)
+  const owner = { from: { id: 10, first_name: "Owner" }, chat: { id: 10, type: "private" } }
+  const task = {
+    key: "hold",
+    kind: "tool_task",
+    status: "needs_approval",
+    lifetime: "run",
+    wake: "foreground",
+    waiting_on: [],
+    after: [],
+    tool_name: "web_fetch",
+    tool_alias: "work_fetch",
+    target: {
+      kind: "mcp",
+      connection_public_id: "work",
+      display_name: "Docs",
+      account_label: "Research",
+      tool_name: "web_fetch",
+    },
+    tool_input: { url: "public" },
+  }
+  peer.state.running = true
+  peer.state.held = task
+  const ingress = peer.open()
+  await ingress.ingest(connection, message(1, "Read this", owner), now)
+  await ingress.tick(connection, now + 2000)
+  await ingress.tick(connection, now + 5000)
+  const old = peer.saved().deliveries.find((row) => row.kind === "approval")!
+  expect(old).toMatchObject({ run: "run", status: "sent" })
+  expect(old.text).toContain("Docs (work)\nAccount: Research\nRemote tool: web_fetch")
+  const callback = (id: number, receipt: string) => ({
+    update_id: id,
+    callback_query: {
+      id: String(id),
+      from: owner.from,
+      data: "approve:" + receipt,
+      message: { message_id: old.message, chat: owner.chat },
+    },
+  })
+  peer.state.fallback = true
+  peer.state.held = {
+    ...task,
+    tool_alias: "private_fetch",
+    target: { ...task.target, connection_public_id: "private", display_name: null, account_label: null },
+  }
+  const restored = peer.open()
+  await restored.ingest(connection, callback(2, old.id), now + 6000)
+  await restored.tick(connection, now + 9000)
+  await restored.ingest(connection, callback(3, old.id), now + 10000)
+  const replacement = peer.saved().deliveries.find((row) => row.kind === "approval")!
+  expect(replacement.id).not.toBe(old.id)
+  expect(replacement.text).toContain("Approve private_fetch?\nMCP connection: private\nRemote tool: web_fetch")
+  expect(peer.requests.filter((p) => p.endsWith("/approve"))).toEqual([])
+  await restored.tick(connection, now + 13000)
+  await restored.ingest(connection, callback(4, replacement.id), now + 14000)
+  expect(peer.requests.filter((p) => p.endsWith("/approve"))).toEqual([
+    "/agent_api/v1/workspaces/workspace/runs/fallback/tasks/hold/approve",
+  ])
+})
+
+test("Telegram offers only complete decisions up to 2000 Unicode characters", async () => {
+  using peer = fixture(false)
+  const owner = { from: { id: 10, first_name: "Owner" }, chat: { id: 10, type: "private" } }
+  const task = {
+    key: "hold",
+    kind: "tool_task",
+    status: "needs_approval",
+    lifetime: "run",
+    wake: "foreground",
+    waiting_on: [],
+    after: [],
+    tool_name: "write",
+  }
+  const size = ("Approve write?\n" + JSON.stringify({ path: "" }, null, 2)).length
+  const path = "😀".repeat(2000 - size)
+  peer.state.running = true
+  peer.state.held = { ...task, tool_input: { path } }
+  const ingress = peer.open()
+  await ingress.ingest(connection, message(1, "Do the work", owner), now)
+  await ingress.tick(connection, now + 2000)
+  await ingress.tick(connection, now + 5000)
+  const old = peer.saved().deliveries.find((row) => row.kind === "approval")!
+  expect(old.text).toContain(path)
+  peer.state.held = { ...task, tool_input: { path: path + "x" } }
+  const restored = peer.open()
+  await restored.ingest(connection, message(2, "/approve", owner), now + 6000)
+  await restored.ingest(
+    connection,
+    {
+      update_id: 3,
+      callback_query: {
+        id: "3",
+        from: owner.from,
+        data: "approve:" + old.id,
+        message: { message_id: old.message, chat: owner.chat },
+      },
+    },
+    now + 7000,
+  )
+  await restored.tick(connection, now + 9000)
+  expect(peer.saved().deliveries.find((row) => row.kind === "local")?.text).toContain("too large")
+  expect(peer.requests.some((p) => p.endsWith("/approve"))).toBe(false)
+  peer.state.held = {
+    ...task,
+    status: "awaiting_input",
+    prompt: "Options?",
+    fields: [{ name: "choice", type: "string" }],
+  }
+  await restored.tick(connection, now + 13000)
+  expect(peer.saved().deliveries.find((row) => row.kind === "local")?.text).toContain("structured request")
+  await restored.ingest(connection, message(4, "/answer yes", owner), now + 14000)
+  expect(peer.requests.some((p) => p.endsWith("/resolution"))).toBe(false)
 })

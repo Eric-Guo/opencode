@@ -24,7 +24,7 @@ import { Schema } from "effect"
 import type { Status } from "./runtime"
 import { authenticateEditor, type EditorAuthentication } from "./editor-auth"
 import { editorBridge, editorRoots } from "./editor-bridge"
-import { EditorTranscript } from "./editor-follow"
+import { EditorTranscript, editorCall } from "./editor-follow"
 import { readEditorHistory } from "./editor-replay"
 
 type Mode = "bypass" | "ask" | "rules"
@@ -131,7 +131,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
     return session
   }
   const projection = (id: string, peer: AgentContext) =>
-    new EditorTranscript(id, peer, (run, task) =>
+    new EditorTranscript(id, peer, requireSession(id).roots[0], (run, task) =>
       nexus.workspace
         .run(run)
         .task(task)
@@ -314,15 +314,19 @@ export async function editor(stream: Stream, status: Status, token: string, opti
 
             if (dismissed.has(key)) continue
 
+            await transcript.call(
+              snapshot.execution.run_public_id,
+              { task_key: task.key, status: task.status },
+              decision.detail,
+            )
             const response = await peer
               .request(
                 "session/request_permission",
                 {
                   sessionId: id,
                   toolCall: {
-                    toolCallId: snapshot.execution.run_public_id + ":" + task.key,
-                    title: task.tool_name ?? task.key,
-                    rawInput: decision.detail.tool_input,
+                    toolCallId: key,
+                    ...editorCall(task.key, decision.detail),
                   },
                   options: [
                     { optionId: "approve", name: "Allow once", kind: "allow_once" },
@@ -333,7 +337,9 @@ export async function editor(stream: Stream, status: Status, token: string, opti
                             name:
                               task.tool_name === "web_fetch" && task.target?.kind !== "mcp"
                                 ? "Allow this site until OpenCode restarts"
-                                : "Allow this call's scope until OpenCode restarts",
+                                : task.target?.kind === "mcp"
+                                  ? "Always allow this tool until OpenCode restarts"
+                                  : "Allow this call's scope until OpenCode restarts",
                             kind: "allow_always" as const,
                           },
                         ]
@@ -515,7 +521,7 @@ export async function editor(stream: Stream, status: Status, token: string, opti
       id,
       session,
       replay
-        ? await readEditorHistory(nexus.workspace, id, signal, peer)
+        ? await readEditorHistory(nexus.workspace, id, signal, { peer, root: roots[0] })
         : conversation.active_turn_public_id
           ? await nexus.workspace
               .conversation(id)
