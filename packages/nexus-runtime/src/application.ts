@@ -92,7 +92,10 @@ export class NexusApplication {
     private readonly event?: (name: string, value: Schema.Json) => Promise<void>,
     mcp?: () => Promise<McpDirectory>,
     private readonly hooks?: ExtensionLifecycle,
-    private readonly approvals?: { grant(value: ApprovalGrant): Promise<void>; list(): readonly ApprovalGrant[] },
+    private readonly approvals?: {
+      grant(value: ApprovalGrant): Promise<"saved" | "already">
+      list(): readonly ApprovalGrant[]
+    },
     private readonly realtimeFactory?: () => RealtimeClient,
     readonly defaults: () => {
       code_mode: boolean
@@ -200,7 +203,7 @@ export class NexusApplication {
   async grantRule(value: ApprovalGrant) {
     if (!this.approvals) throw new Error("Session approval grants are unavailable.")
 
-    await this.approvals.grant(value)
+    return this.approvals.grant(value)
   }
 
   rules() {
