@@ -374,10 +374,13 @@ export interface ConnectOptions {
   readonly clientInfo?: Implementation
   /** False declares no roots and leaves `roots/list` unanswered, for a connection no one directory owns. */
   readonly roots?: boolean
+  /** Shared connections leave legacy fallback to the pool's private connection. */
+  readonly shared?: boolean
   /** False ignores server list-change notifications and does not subscribe to catalogs. */
   readonly listChanged?: boolean
   /** Omit server-controlled error details when the consumer owns credential redaction. */
   readonly redactErrors?: boolean
+  readonly replaceStdioEnvironment?: boolean
   /** Experimental: declares MCP Events, a beta extension, and exposes `Connection.events` for a 2026-07-28 server that offers them. */
   readonly events?: boolean
   /** Experimental: declares MCP Skills, a beta extension, and exposes `Connection.skills` for a server that offers them. */
@@ -586,18 +589,20 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           command,
           args,
           cwd: McpStdio.resolveCwd(options.directory, config.cwd),
+          extendEnv: !options.replaceStdioEnvironment,
+          redactErrors: options.redactErrors,
           environment: {
             ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
             ...config.environment,
           },
         }).pipe(Effect.flatMap((transport) => initialize(transport, protocol)))
       // Some legacy servers exit on the auto probe's unknown request (Python SDK 1.3 does), so respawn for initialize.
-      // A shared connection (no roots) can't be legacy, so the pool opens its own private one instead.
+      // A shared connection can't be legacy, so the pool opens its own private one instead.
       return yield* spawn(protocol).pipe(
         Effect.catchIf(
           (error) =>
             protocol === "auto" &&
-            options.roots !== false &&
+            !options.shared &&
             error instanceof SdkError &&
             (error.code === SdkErrorCode.ConnectionClosed || error.code === SdkErrorCode.EraNegotiationFailed),
           () => spawn("legacy"),

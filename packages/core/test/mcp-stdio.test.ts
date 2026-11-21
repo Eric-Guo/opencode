@@ -71,6 +71,14 @@ test("closes the connection on a line one byte over 16 MiB", async () => {
   expect(output.messages).toEqual([])
 })
 
+test("scoped stdio connections omit private stderr from exit diagnostics", async () => {
+  const stderr = "synthetic private stderr"
+  const [standard, scoped] = await Promise.all([read([], { stderr }), read([], { stderr, redactErrors: true })])
+
+  expect(standard.exit).toBe("MCP server process exited with code 0: " + stderr)
+  expect(scoped.exit).toBe("MCP server process exited with code 0")
+})
+
 function frame(size: number) {
   const prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"'
   const suffix = '"}}\n'
@@ -84,10 +92,14 @@ function chunks(bytes: Uint8Array, size: number) {
 }
 
 /** Runs the transport against a process whose stdout yields `output`, then ends or, with `open`, waits to be killed. */
-async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean }) {
+async function read(
+  output: ReadonlyArray<Uint8Array>,
+  options?: { open?: boolean; stderr?: string; redactErrors?: boolean },
+) {
   const killed = Deferred.makeUnsafe<void>()
   const messages: Array<JSONRPCMessage> = []
   const errors: Array<string> = []
+  let exit: string | undefined
   const driver = Environment.makeMemoryDriver()
   const environment = Layer.succeed(
     Environment.Service,
@@ -108,7 +120,7 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
                 options?.open ? Stream.fromEffect(Deferred.await(killed)).pipe(Stream.drain) : Stream.empty,
               ),
             ),
-            stderr: Stream.empty,
+            stderr: options?.stderr ? Stream.make(encoder.encode(options.stderr)) : Stream.empty,
             all: Stream.empty,
             getInputFd: () => Sink.drain,
             getOutputFd: () => Stream.empty,
@@ -128,12 +140,17 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
           args: [],
           cwd: import.meta.dir,
           environment: {},
+          redactErrors: options?.redactErrors,
         })
         const closed = new Promise<void>((resolve) => (transport.onclose = resolve))
         transport.onmessage = (message) => messages.push(message)
-        // stdout ending reports the exit; only framing errors matter here.
         transport.onerror = (error) => {
-          if (!error.message.startsWith("MCP server process exited")) errors.push(error.message)
+          if (error.message.startsWith("MCP server process exited")) {
+            exit = error.message
+            return
+          }
+
+          errors.push(error.message)
         }
         yield* Effect.promise(() => transport.start())
         yield* Effect.promise(() => closed)
@@ -141,5 +158,5 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
     ),
   )
 
-  return { messages, errors }
+  return { messages, errors, exit }
 }

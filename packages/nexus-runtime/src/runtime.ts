@@ -1570,15 +1570,20 @@ export class NexusRuntime {
     const active = this.connection
     const pending = this.declaring.then(async () => {
       if (!active || active !== this.connection) throw new Error("Nexus connection changed.")
-      if (this.approvals.some((value) => JSON.stringify(value.rule) === JSON.stringify(grant.rule))) return
+      if (this.approvals.some((value) => JSON.stringify(value.rule) === JSON.stringify(grant.rule)))
+        return "already" as const
 
       await active.member.profile.declareConfiguration(
         { configuration: { ...active.configuration, approval_rules: [...this.siteRules(), grant.rule] } },
         { signal: this.stop.signal },
       )
       this.approvals.push(grant)
+      return "saved" as const
     })
-    this.declaring = pending.catch(() => {})
+    this.declaring = pending.then(
+      () => {},
+      () => {},
+    )
     return pending
   }
 

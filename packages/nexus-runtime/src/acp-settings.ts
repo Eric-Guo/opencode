@@ -2,6 +2,7 @@ import { access, stat } from "node:fs/promises"
 import { constants } from "node:fs"
 import { delimiter, isAbsolute, resolve } from "node:path"
 import { JsonSchema, Schema } from "effect"
+import { integrationSecrets, integrationValues } from "./integration-secrets"
 
 const Row = Schema.Struct({
   command: Schema.NonEmptyString,
@@ -74,25 +75,10 @@ export function acpSettings(input: unknown, environment: NodeJS.ProcessEnv = pro
       return
     }
     const row = decoded.value
-    const secrets: string[] = []
-    const missing = new Set<string>()
-    const env = Object.fromEntries(
-      Object.entries(row.env ?? {}).map(([key, value]) => {
-        const expanded = value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, variable: string) => {
-          const found = environment[variable]
-          if (found === undefined) {
-            missing.add(variable)
-            return ""
-          }
-          if (found) secrets.push(found)
-          return found
-        })
-        if (expanded && /(?:token|secret|password|api.?key|credential|authorization)/i.test(key)) secrets.push(expanded)
-        return [key, expanded]
-      }),
-    )
-    if (missing.size) {
-      faults.push({ name, issue: "Unset environment variables: " + [...missing].join(", ") })
+    const env = integrationValues(row.env ?? {}, environment, { extraCredential: /authorization/i })
+
+    if (env.missing.size) {
+      faults.push({ name, issue: "Unset environment variables: " + [...env.missing].join(", ") })
       return
     }
     agents.push({
@@ -100,13 +86,13 @@ export function acpSettings(input: unknown, environment: NodeJS.ProcessEnv = pro
       command: row.command,
       args: row.args ?? [],
       description: row.description.trim(),
-      env,
+      env: env.resolved,
       permissions: row.permissions ?? "allow",
       timeout_ms: row.timeout_ms ?? 600000,
       auth_method: row.auth_method ?? null,
       model: row.model ?? null,
       enabled: row.enabled ?? true,
-      secrets: [...new Set(secrets)].sort((left, right) => right.length - left.length),
+      secrets: integrationSecrets(env.secrets),
     })
   })
   return { agents, faults }
