@@ -1313,3 +1313,45 @@ test("development skills list reports runner documents and distinguishes an empt
     fixture.server.stop(true)
   }
 })
+
+test("development task and watch output identify the MCP callable, account and captured connection", async () => {
+  const task = {
+    key: "held",
+    status: "completed",
+    tool_name: "write",
+    tool_alias: "research_write",
+    target: { kind: "mcp", connection_public_id: "work", account_label: "Research", tool_name: "write" },
+  }
+  for (const args of [
+    ["watch", "run"],
+    ["task", "run", "held"],
+  ]) {
+    const output: string[] = []
+    await runDevelopment(args, {
+      signal: new AbortController().signal,
+      command: async (command): Promise<JsonValue> => {
+        switch (command.action) {
+          case "target":
+            return { workspace: "workspace", conversation: null, run: "run", side: false }
+          case "stream.open":
+            return { stream: "stream" }
+          case "stream.poll":
+            return { events: [] }
+          case "stream.close":
+            return null
+          case "run.result":
+            return { output: "" }
+          case "run":
+            return { status: "completed", tasks: [task] }
+          case "task":
+            return { task }
+          default:
+            throw new Error(String(command.action))
+        }
+      },
+      write: (line) => output.push(String(line)),
+      error: () => {},
+    })
+    expect(output.join("")).toContain("research_write [MCP work · Research · write]")
+  }
+})

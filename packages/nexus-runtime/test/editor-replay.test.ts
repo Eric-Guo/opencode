@@ -40,7 +40,10 @@ test("ACP replays paginated history by role, emits one Side context and skips su
     const url = new URL(request.url)
     const id = url.pathname.split("/").at(-1)
 
-    if (id === "history")
+    if (id === "history") {
+      if (Number(url.searchParams.get("limit")) > 50)
+        return Response.json({ error: { code: "parameter_invalid", message: "limit is invalid" } }, { status: 400 })
+
       return Response.json({
         conversation: { public_id: "conversation", title: null },
         turns: (url.searchParams.has("before_position") ? turns.slice(0, 2) : turns.slice(2)).map((turn) => ({
@@ -52,6 +55,7 @@ test("ACP replays paginated history by role, emits one Side context and skips su
         pagination: { has_older: !url.searchParams.has("before_position"), before_position: 3, has_newer: false },
         truncated: false,
       })
+    }
     const turn = turns.find((turn) => turn.public_id === id)
 
     if (turn)
