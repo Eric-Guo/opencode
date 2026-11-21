@@ -6,18 +6,19 @@ export async function readEditorHistory(
   workspace: ReturnType<Client["workspace"]>,
   id: string,
   signal: AbortSignal,
-  peer?: AgentContext,
+  client?: { peer: AgentContext; root: string },
 ) {
   const chat = workspace.conversation(id)
   const turns = new Map<number, ConversationHistoryTurn>()
   const page = { before: undefined as number | undefined }
-  const projection = peer
-    ? new EditorTranscript(id, peer, (run, task) => workspace.run(run).task(task).fetch({ signal }))
+  const peer = client?.peer
+  const projection = client
+    ? new EditorTranscript(id, client.peer, client.root, (run, task) => workspace.run(run).task(task).fetch({ signal }))
     : undefined
   const latest: { turn?: Turn } = {}
 
   do {
-    const history = await chat.history({ before_position: page.before, limit: 100 }, { signal })
+    const history = await chat.history({ before_position: page.before, limit: 50 }, { signal })
 
     for (const turn of history.turns) turns.set(turn.position, turn)
     if (!history.has_older || history.before_position === null || history.before_position === page.before) break
@@ -32,7 +33,7 @@ export async function readEditorHistory(
     const detail = await chat.turns.fetch(turn.public_id, undefined, { signal })
 
     if (detail.role === "assistant" && !detail.reference && !detail.inherited) latest.turn = detail
-    if (!peer) continue
+    if (!peer || !projection) continue
 
     const variant = detail.active_variant
     const text = async (field: "prompt" | "content", fallback: string | null) => {
@@ -101,7 +102,7 @@ export async function readEditorHistory(
       } while (!signal.aborted)
 
       for (const round of rounds.flat().filter((round) => round.mainline))
-        for (const call of round.calls.items) await projection!.call(variant.run_public_id, call)
+        for (const call of round.calls.items) await projection.call(variant.run_public_id, call)
     }
 
     const content = await text("content", turn.content)
