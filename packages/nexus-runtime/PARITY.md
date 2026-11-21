@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`42a2ecb2cb18f6ae5fd91e6971b342fb7fe51678`. Paths in the first column are relative
+`3ee7232034cb07aa114b24749571f3e13ddbba76`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -13,10 +13,54 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The [latest verification](#preset-tool-selection-acp-capture-and-t3-setup)
-covers Preset selection through admission, ACP capture and T3 project setup.
+contract tests below. The [latest verification](#approvals-task-inspection-and-editor-replay)
+covers account identity, approval delivery and editor replay.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Approvals, task inspection and editor replay
+
+The Rho and TypeScript SDK trees at `3ee723203` match the previous pin,
+`42a2ecb2c`. The [reference tests](#reference-contract-anchors) and
+[production entry points](#preset-tool-selection-acp-capture-and-t3-setup)
+cover all eleven runtime packages. The workflow tables below pair those
+entry points with their local regression suites.
+
+| Workflow and Rho reference | OpenCode entry point | Regression |
+| --- | --- | --- |
+| Editor call, permission and history, `rho-acp/test/acp/{mapping,permissions,reference_replay}_test.rb` | Nexus ACP `session/load`, `session/prompt` and `session/request_permission` through `src/editor.ts` | `editor.test.ts` replays two connections offering `write`, an error preview, a local write and a multi-edit. `editor-permissions.test.ts` compares the first tool notification with a permission discovered before any call frame. `editor-replay.test.ts` exercises the 50-turn history page limit. |
+| Account selection and reporting, `rho-mcp/test/curation_test.rb` and `rho-dev/test/dev_commands/{execution,stream}_test.rb` | Preset selection, then the source dev CLI's `task`, `watch` and `follow` commands | `policy.test.ts` distinguishes connections with the same remote tool. `dev.test.ts` reads the captured callable, connection, account and remote tool from task detail and run updates. |
+| Telegram decisions, `rho-ingress-telegram/lib/rho/ingress-telegram/bridge.rb` and `test/bridge_test.rb` | `TelegramIngress.ingest` and `tick` recover an Input and resolve its held task | `telegram.test.ts` exercises a reused task key after fallback, restart, missing labels, and the 2,000/2,001-code-point boundary with emoji. Buttons and text commands reread the persisted decision. Oversized or structured questions direct the operator to OpenCode. |
+
+**Development Nexus.** An isolated source OpenCode service paired a scratch Agent
+to `localhost:3000`. Two connections exposed `web_fetch`, one without an account
+label. The source dev CLI inspected both held tasks. Renaming the first account
+revealed that the Nexus task projection looked up its current label. Nexus now
+stores the two labels when accepting each task (Cybros commit `ceae14715`). A new held task retained
+`Research` after the connection was renamed. Earlier tasks without captured
+labels retain their connection ID. The existing SDK carries the fields.
+
+A real model called `notes_read` through a scratch Telegram Bot. The production
+ingress sent the callable, literal arguments, connection ID, account label and
+remote name to a loopback Telegram peer. A fresh ingress instance denied the
+same task from the button. The source WebUI read the held decision and task.
+ACP history replay initially received HTTP 400 for a 100-turn history request.
+With 50-turn pages it replayed the denied task as failed with its raw arguments
+and account. Nexus supplied no output preview for that denial.
+
+**Fixtures and platforms.** Development Nexus refused discovery of the loopback
+MCP endpoint, so the two scratch catalogs were seeded. The Nexus Rails MCP
+execution integration test independently exercises HTTP discovery, a real MCP
+tool call and the return to the model through a controlled peer. The ACP peer
+test supplies a completed call with `is_error: true` and an output preview.
+Telegram fallback, Unicode limits and T3 continuation use controlled peers.
+Runtime conformance passed 424 tests on macOS with isolated headless Chromium.
+The filename case skipped on macOS passed on Ubuntu. The runtime build, both
+type checks, CLI and Server adapter tests, Protocol identifier test and root
+`bun run check` passed. The Nexus MCP and contract suites passed 35 tests.
+The scratch Bots and MCP connections were removed, the workspace reached
+`deleted`, both issued keys were revoked and the scratch Agent reached
+`removed`. The installed service was ready on its original Agent and workspace.
 
 ## Application and executor
 
