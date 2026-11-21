@@ -823,11 +823,19 @@ export class Operations {
             conversation: info.turn?.conversation_public_id ?? null,
             granted_at: new Date().toISOString(),
           }
-          const failure = await this.application.grantRule(grant).then(
-            () => undefined,
-            (error: unknown) => (error instanceof Error ? error.message : String(error)),
+          const outcome = await this.application.grantRule(grant).then(
+            (status) => (status === "already" ? { already: true } : grant),
+            (error: unknown) => ({
+              refused:
+                error instanceof APIError && error.code
+                  ? error.code
+                  : error instanceof Error
+                    ? error.message
+                    : String(error),
+            }),
           )
-          return { task: result, grant: failure ? { refused: failure } : grant }
+
+          return { task: result, grant: outcome }
         }
         if (input.action === "deny") return task.deny(input.reason, options)
         if (input.action === "answer")

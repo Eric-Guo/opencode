@@ -128,22 +128,19 @@ export class AcpClient {
           ]),
         )
         return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(
-          JSON.stringify(
-            {
-              protocolVersion: result.protocolVersion,
-              agentInfo: result.agentInfo
-                ? { name: result.agentInfo.name, version: result.agentInfo.version, title: result.agentInfo.title }
-                : null,
-              capabilities: result.agentCapabilities ?? {},
-              authMethods:
-                result.authMethods?.map((method) => ({
-                  id: method.id,
-                  name: method.name,
-                  type: "type" in method && method.type === "terminal" ? "terminal" : "agent",
-                })) ?? [],
-            },
-            (_, value: unknown) => (typeof value === "string" ? capture.redact(value) : value),
-          ),
+          capture.stringify({
+            protocolVersion: result.protocolVersion,
+            agentInfo: result.agentInfo
+              ? { name: result.agentInfo.name, version: result.agentInfo.version, title: result.agentInfo.title }
+              : null,
+            capabilities: result.agentCapabilities ?? {},
+            authMethods:
+              result.authMethods?.map((method) => ({
+                id: method.id,
+                name: method.name,
+                type: "type" in method && method.type === "terminal" ? "terminal" : "agent",
+              })) ?? [],
+          }),
         )
       } finally {
         await child.close()
