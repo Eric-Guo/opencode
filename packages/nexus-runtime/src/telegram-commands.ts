@@ -4,6 +4,8 @@ import type { NexusApplication } from "./application"
 import type { StoreDocument } from "./document"
 import type { TelegramState, TelegramWork } from "./telegram-state"
 import { TURN_POSITION_CEILING } from "./history"
+import { candidateReply, settleCandidate } from "./telegram-candidates"
+import { telegramPreview } from "./telegram-render"
 
 const Page = Schema.Struct({
   next_after: Schema.optional(Schema.NullOr(Schema.String)),
@@ -98,6 +100,7 @@ export async function telegramConversationCommand(
     tracking?: {
       document: StoreDocument<TelegramState>
       update: number
+      message?: number
       route: TelegramWork["route"]
       requester: string
       speaker: () => Promise<string>
@@ -432,7 +435,19 @@ export async function telegramConversationCommand(
     await tracking?.document.change((state) => telegramSessionSwitch(state!, tracking.route, [current, selected]))
     return "Fork selected: " + JSON.stringify(receipt)
   }
-  if (action === "variants") return JSON.stringify(await scope.turns.variants(turnID, options), null, 2)
+  if (action === "variants") {
+    const deck = await scope.turns.variants(turnID, options)
+    const rows = deck.items.map(
+      (row) =>
+        row.public_id +
+        " · " +
+        row.status +
+        (row.active ? " [active]" : "") +
+        "\n" +
+        telegramPreview(row.content ?? row.content_preview ?? "", 500),
+    )
+    return telegramWindow("Candidates for turn " + position + ":\n" + rows.join("\n\n"), "")
+  }
   if (action === "undo") {
     await scope.turns.delete(turnID, options)
     return "Newest turn deleted."
@@ -466,11 +481,14 @@ export async function telegramConversationCommand(
       turn: turnID,
       previous: deck.items.find((row) => row.active)?.public_id ?? turn?.active_variant?.public_id ?? null,
       known: deck.items.map((row) => row.public_id),
+      operation,
+      update: tracking.update,
+      message: tracking.message,
       ...(variant ? { variant } : {}),
     } satisfies NonNullable<TelegramState["candidates"]>[number]
     await tracking.document.change((state) => ({
       ...state!,
-      candidates: [...(state!.candidates ?? []).filter((row) => row.id !== watch.id), { ...watch, operation }],
+      candidates: [...(state!.candidates ?? []).filter((row) => row.id !== watch.id), watch],
     }))
     const result = await execute().catch(async (error: unknown) => {
       if (error instanceof APIError && error.status < 500 && ![408, 429].includes(error.status))
@@ -480,22 +498,10 @@ export async function telegramConversationCommand(
         }))
       throw error
     })
-    await tracking.document.change((state) => ({
-      ...state!,
-      candidates: (state!.candidates ?? []).flatMap((row) =>
-        row.id !== watch.id
-          ? [row]
-          : result.public_id === watch.previous
-            ? []
-            : [{ ...watch, variant: result.public_id }],
-      ),
-    }))
+    await tracking.document.change((state) => settleCandidate(state!, watch, result))
+    return candidateReply(operation, result)
   }
-  if (!tracking) await execute()
-
-  if (action === "regenerate") return "Regeneration requested. The selected result will be delivered here."
-  if (action === "edit") return "Edited tail candidate added."
-  return "Variant updated."
+  return candidateReply(operation, await execute())
 }
 
 function telegramWindow(body: string, footer: string) {
