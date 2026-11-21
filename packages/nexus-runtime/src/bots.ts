@@ -335,6 +335,14 @@ export class Bots {
     } satisfies CreateInput
   }
 
+  async usingPreset(id: string) {
+    const agents = await this.member.profile.agents.list()
+    for (const agent of agents.filter((row) => row.scope === "instance" && row.name.startsWith("bot-"))) {
+      if ((await this.settingsDocument(agent.public_id).read())?.preset_public_id === id)
+        return agent.display_name || agent.name
+    }
+  }
+
   private settingsDocument(id: string) {
     const document =
       this.settings.get(id) ??
@@ -384,7 +392,8 @@ export class Bots {
   }
 
   private async prepare(settings: NexusBot.Settings, self?: string) {
-    const prepared = await this.presets.resolve(this.base(), settings.preset_public_id)
+    const snapshot = await this.presets.snapshot()
+    const prepared = await this.presets.resolve(this.base(), settings.preset_public_id, undefined, snapshot)
     const configuration = prepared.configuration
 
     configuration.runner_tool_names = (configuration.runner_tool_names ?? []).filter((name) => name !== "code")
@@ -401,7 +410,7 @@ export class Bots {
     if (!settings.subagent)
       configuration.kernel_tools = configuration.kernel_tools?.filter((name) => !isSubagentTool(name))
     if (settings.audience === "external") {
-      const catalog = await this.member.tools.list()
+      const catalog = snapshot.kernel ?? (await this.member.tools.list())
       const wire = Object.fromEntries(catalog.map((tool) => [tool.canonical_name, tool.name]))
       const peers = await this.externalPeers(self)
       configuration.delegation_catalog = externalRoles(configuration, peers, wire)

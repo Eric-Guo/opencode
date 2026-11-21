@@ -5299,6 +5299,7 @@ export type ExperimentalNexusManageInput = {
         readonly access_token: string
         readonly executor_access_token: string
       }
+    | { readonly action: "preset.tools" }
     | { readonly action: "preset.list" }
     | {
         readonly action: "preset.create"
