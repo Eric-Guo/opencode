@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
+import { toolAlias } from "@cybros/agent"
 import { StoreDocument } from "../src/document"
 import { Presets } from "../src/presets"
 import { readPreset, writePreset } from "../src/preset-document"
@@ -176,15 +177,31 @@ test("Preset compilation captures independent fallback and tool policies with co
       default_model: "provider/base",
       fallback_models: ["provider/fallback"],
       runner_tool_names: ["read", "write"],
-      kernel_tools: ["nexus.conversation.spawn"],
+      tool_definitions: [
+        toolAlias("spawn_agent", "nexus.conversation.spawn", {
+          omit: ["wait"],
+          params: { recipient: { maps_to: "agent" } },
+        }),
+      ],
+      compaction_policy: { mode: "kernel" },
     })
 
     expect(captured.configuration.fallback_models).toEqual([])
     expect(captured.configuration.runner_tool_names).toEqual(["read"])
+    const spawn = {
+      function: { name: "spawn_agent" },
+      params: { recipient: { maps_to: "declaration", description: expect.stringContaining("worker") } },
+      omit: ["wait", "agent"],
+    }
+
+    expect(captured.configuration.tool_definitions).toMatchObject([spawn])
+    expect(captured.summarizer).toContain("Goal:")
     expect(captured.configuration.delegation_catalog).toHaveLength(4)
     expect(captured.configuration.delegation_catalog![0]).toMatchObject({
       declaration: {
         conversation_reach: "subtree",
+        tool_definitions: [spawn],
+        summarizer: { content: expect.stringContaining("Goal:") },
         memory_context_limit: {
           bindings: [{ name: "conversation", source: { scope: "conversation" }, access: "read_write" }],
         },
