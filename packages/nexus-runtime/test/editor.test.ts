@@ -162,25 +162,51 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
               visibility: "visible",
               branches: [],
               calls: {
-                count: 1,
-                items: [{ task_key: "r1t1", name: "write", status: "completed", output_preview: "Wrote the file" }],
+                count: 4,
+                items: ["write", "edit", "work", "personal"].map((name) => ({
+                  task_key: name,
+                  name,
+                  status: "completed",
+                  is_error: name === "personal",
+                  output_preview: name === "personal" ? null : "Saved",
+                })),
               },
             },
           ],
           pagination: { next_before: null, has_older: false },
         })
-      if (path.endsWith("/runs/run/tasks/r1t1"))
+      if (/\/runs\/run\/tasks\/(write|edit|work|personal)$/.test(path))
         return Response.json({
           task: {
-            key: "r1t1",
+            key: path.split("/").at(-1),
             kind: "tool_task",
             status: "completed",
             lifetime: "foreground",
             wake: "immediate",
             after: [],
             waiting_on: [],
-            tool_name: "write",
-            tool_input: { path: join(directory, "file"), content: "new" },
+            tool_name: path.endsWith("/edit") ? "edit" : "write",
+            output_preview: path.endsWith("/personal") ? "Remote refusal" : null,
+            ...(["work", "personal"].includes(path.split("/").at(-1)!)
+              ? {
+                  tool_alias: path.split("/").at(-1) + "_write",
+                  target: {
+                    kind: "mcp",
+                    connection_public_id: path.split("/").at(-1),
+                    account_label: path.endsWith("/work") ? "Research" : null,
+                    tool_name: "write",
+                  },
+                }
+              : {}),
+            tool_input: path.endsWith("/edit")
+              ? {
+                  path: "file",
+                  edits: [
+                    { oldText: "A", newText: "B" },
+                    { oldText: "C", newText: "D" },
+                  ],
+                }
+              : { path: "file", content: "new" },
           },
         })
       if (path.endsWith("/history"))
@@ -340,16 +366,30 @@ test("ACP restores history, persists mode changes, resumes without replay and cl
     ).toMatchObject({ modes: { currentModeId: "rules" } })
     expect(updates.map((event) => event.update.sessionUpdate)).toEqual([
       "user_message_chunk",
-      "tool_call",
-      "tool_call_update",
+      ...Array.from({ length: 4 }, () => ["tool_call", "tool_call_update"] as const).flat(),
       "agent_message_chunk",
       "available_commands_update",
     ])
     expect(updates[1].update).toMatchObject({
       kind: "edit",
       rawInput: { content: "new" },
-      content: [{ type: "diff", newText: "new" }],
+      locations: [{ path: join(directory, "file") }],
+      content: [{ type: "diff", path: join(directory, "file"), newText: "new" }],
     })
+    expect(updates[3].update).toMatchObject({
+      kind: "edit",
+      content: [
+        { path: join(directory, "file"), oldText: "A", newText: "B" },
+        { path: join(directory, "file"), oldText: "C", newText: "D" },
+      ],
+    })
+    expect(updates[5].update).toMatchObject({ kind: "other", title: "work_write file (work · Research · write)" })
+    expect(updates[7].update).toMatchObject({ kind: "other", title: "personal_write file (personal · write)" })
+    for (const index of [5, 7]) {
+      expect(updates[index].update).not.toHaveProperty("locations")
+      expect(updates[index].update).not.toHaveProperty("content")
+    }
+    expect(updates[8].update).toMatchObject({ status: "failed", content: [{ content: { text: "Remote refusal" } }] })
     await peer.agent.request("session/close", { sessionId: "conversation" })
     updates.length = 0
     await peer.agent.request("session/resume", { sessionId: "conversation", cwd: directory })
@@ -452,7 +492,7 @@ test("ACP transcript keeps fallback message identities separate and does not dup
       updates.push(params)
     })
     .connect({ readable: outbound.readable, writable: inbound.writable })
-  const transcript = new EditorTranscript("conversation", connection.client)
+  const transcript = new EditorTranscript("conversation", connection.client, "/work")
 
   try {
     transcript.execution({ turn_public_id: "turn", variant_public_id: "v1", run_public_id: "r1" })

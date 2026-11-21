@@ -775,7 +775,10 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
     before: parsed.text("before"),
   })
   if (parsed.verb === "task") {
-    const hint = heldTaskHint(object(object(result).task))
+    const task = object(object(result).task)
+    const target = mcpTaskLabel(task)
+    if (target && !parsed.values.json) terminal.write(target + "\n")
+    const hint = heldTaskHint(task)
     if (hint) terminal.error(hint + "\n")
   }
   if (parsed.verb === "approve") {
@@ -923,6 +926,17 @@ function formatPhases(result: JsonValue) {
       ...(byModel.length > 1 ? byModel.map(([model, part]) => "  " + model + "  " + usage(object(part))) : []),
     ].join("\n") + "\n"
   )
+}
+
+function mcpTaskLabel(task: JsonObject) {
+  const target = object(task.target ?? {})
+  if (target.kind !== "mcp") return
+  const connection =
+    target.display_name && target.connection_public_id
+      ? target.display_name + " (" + target.connection_public_id + ")"
+      : target.display_name || target.connection_public_id
+  const facts = [connection, target.account_label, target.tool_name || task.tool_name].filter(Boolean).join(" · ")
+  return (task.tool_alias || task.tool_name || task.key) + " [MCP " + facts + "]"
 }
 
 function heldTaskHint(task: JsonObject) {
@@ -1141,13 +1155,13 @@ async function followDevelopment(
         terminal.write(
           parsed.values.json
             ? JSON.stringify(task) + "\n"
-            : `${task.status}  ${key}${task.tool_name ? "  " + task.tool_name : ""}${task.error ? "  " + JSON.stringify(task.error) : ""}\n`,
+            : `${task.status}  ${key}${task.tool_name ? "  " + (mcpTaskLabel(task) ?? task.tool_name) : ""}${task.error ? "  " + JSON.stringify(task.error) : ""}\n`,
         )
         const hint = heldTaskHint(task)
         if (hint) terminal.error(hint + "\n")
         if (["awaiting_input", "needs_approval"].includes(String(task.status))) {
           const detail = await call("task", { run: target.run, task: key })
-          terminal.write(formatDevelopment(detail))
+          terminal.write(parsed.values.json ? JSON.stringify(detail) + "\n" : formatDevelopment(detail))
         }
       }
       if (parsed.values.stream !== false) {
