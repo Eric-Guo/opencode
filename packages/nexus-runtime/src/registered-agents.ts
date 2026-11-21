@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import type { AgentConfigurationInput, Client } from "@cybros/agent"
 import type { ExtensionAgent } from "./extension-manager"
 import { StoreDocument } from "./document"
+import { summaryPrompt } from "./capabilities"
 
 /** Extension definitions are application-owned identities, separate from editable Bots and Presets. */
 export class RegisteredAgents {
@@ -16,7 +17,7 @@ export class RegisteredAgents {
     )
   }
 
-  async sync(definitions: readonly ExtensionAgent[], base: AgentConfigurationInput) {
+  async sync(definitions: readonly ExtensionAgent[], base: AgentConfigurationInput, summarizer = summaryPrompt) {
     const previous = (await this.document.read()) ?? []
     if (!definitions.length && !previous.length) return
     const existing = await this.member.profile.agents.list()
@@ -27,17 +28,20 @@ export class RegisteredAgents {
     // Save ownership before a declaration whose response may be lost; the next sync can reconcile it.
     await this.document.change(() => [...new Set([...previous, ...definitions.map((definition) => definition.name)])])
     for (const definition of definitions) {
+      const configuration = {
+        ...base,
+        ...definition.configuration,
+        // An omitted model inherits the request instead of fixing the installation default.
+        default_model: definition.configuration.default_model ?? null,
+      }
+
       await this.member.profile.agents.declare(definition.name, {
         scope: "instance",
         description: definition.description,
         display_name: definition.display_name,
         system_prompt: definition.system_prompt,
-        configuration: {
-          ...base,
-          ...definition.configuration,
-          // An omitted model inherits the request instead of fixing the installation default.
-          default_model: definition.configuration.default_model ?? null,
-        },
+        configuration,
+        summarizer: summarizer(configuration.compaction_policy),
       })
     }
     for (const name of previous.filter(

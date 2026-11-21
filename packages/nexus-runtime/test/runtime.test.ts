@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Toolsets, type CredentialDocument, type Workspace, type JsonObject } from "@cybros/agent"
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NexusRuntime } from "../src/runtime"
@@ -13,11 +13,12 @@ const Declaration = Schema.Struct({
   configuration: Schema.Struct({
     kernel_tools: Schema.Array(Schema.String),
     runner_tool_names: Schema.Array(Schema.String),
+    tool_definitions: Schema.Array(Schema.MutableJson),
     lifecycle_hooks: Schema.Record(Schema.String, Schema.MutableJson),
     image_model: Schema.NullOr(Schema.String),
-    compaction_policy: Schema.Struct({ mode: Schema.String }),
+    compaction_policy: Schema.Struct({ mode: Schema.String, model: Schema.optional(Schema.String) }),
   }),
-  prompt_documents: Schema.optional(Schema.Struct({ summarizer: Schema.Struct({ content: Schema.String }) })),
+  prompt_documents: Schema.optional(Schema.Struct({ summarizer: Schema.NullOr(Schema.Struct({ content: Schema.String })) })),
 })
 
 const Announcement = Schema.Struct({
@@ -137,6 +138,8 @@ test.each([
   })
   const scheduleWrites: JsonObject[] = []
   const downloads = { bound: false, paths: [] as string[] }
+  const policyTools: JsonObject[] = []
+  const subagentOff = { active: false }
   const announcements: (typeof Announcement.Type)[] = []
   const measured = new Date().toISOString()
   const preset = {
@@ -160,6 +163,13 @@ test.each([
     created_at: measured,
     updated_at: measured,
     value: { root: bound, directories: [], anchor: "conversation" },
+  }
+  const modes = {
+    ...binding,
+    public_id: "modes",
+    namespace: "opencode",
+    key: "modes",
+    value: { code_mode: true, subagent: false },
   }
   const workspace: Workspace = {
     public_id: "workspace",
@@ -286,13 +296,13 @@ test.each([
         expect(body.configuration).toBeDefined()
         expect(body.conversation_public_id).toBeUndefined()
         expect(body.default_runner_executor_public_id).toBeNull()
-        return Response.json({ tool_definitions: [], environment: {} })
+        return Response.json({ tool_definitions: policyTools, environment: {} })
       }
       if (path === "/agent_api/v1/tools")
         return Response.json({
-          tools: Toolsets.names("images", "schedules").map((canonical_name) => ({
+          tools: Toolsets.names("conversation", "history", "skills", "images", "schedules").map((canonical_name) => ({
             canonical_name,
-            name: canonical_name,
+            name: canonical_name === "nexus.skill.load" ? "skill" : canonical_name.split(".").at(-1),
             effect_profile: {},
             definition: {},
           })),
@@ -301,8 +311,12 @@ test.each([
         return Response.json({ store_entries: [preset], pagination: { next_after: null } })
       if (path === "/agent_api/v1/profile/store_entries/presets") return Response.json({ store_entry: preset })
       if (path.endsWith("/store_entries/binding")) return Response.json({ store_entry: binding })
+      if (path.endsWith("/store_entries/modes")) return Response.json({ store_entry: modes })
       if (path.endsWith("/store_entries"))
-        return Response.json({ store_entries: downloads.bound ? [binding] : [], pagination: { next_after: null } })
+        return Response.json({
+          store_entries: [...(downloads.bound ? [binding] : []), ...(subagentOff.active ? [modes] : [])],
+          pagination: { next_after: null },
+        })
       if (path === "/agent_api/v1/mcp_connections")
         return Response.json({ mcp_connections: [], pagination: { next_after: null } })
       if (path === "/agent_api/v1/executors") return Response.json({ executors: [] })
@@ -439,6 +453,13 @@ test.each([
     },
   })
   try {
+    if ("apiKey" in fixture) {
+      await mkdir(join(storage, "adaptations"))
+      await writeFile(
+        join(storage, "adaptations", "summary.yml"),
+        "format: 1\nrow: summary\nmodels: [summarizer]\ntool_style: [nexus]\nsummarizer_prompt: Summarize by pointers.\n",
+      )
+    }
     await atomic(join(storage, "settings.json"), {
       origin: nexus.url.origin,
       identifier: "opencode.fixture",
@@ -579,6 +600,25 @@ test.each([
       }
       if ("apiKey" in fixture) {
         await runtime.manage({ action: "settings.update", patch: { subagent_default: false } })
+        policyTools.push(
+          { type: "function", function: { name: "request" } },
+          { type: "function", function: { name: "spawn_agent" }, canonical: "nexus.conversation.spawn" },
+          { type: "function", function: { name: "links" } },
+        )
+        subagentOff.active = true
+        expect(await runtime.policy("workspace", "conversation")).toMatchObject({ tools: ["links"] })
+        subagentOff.active = false
+        policyTools.length = 0
+        await runtime.configureExtension({
+          id: "nexus.compaction",
+          operations: [{ op: "set", path: ["model"], value: "provider/summarizer" }],
+        })
+        await published(() => declarations.at(-1)?.prompt_documents?.summarizer?.content === "Summarize by pointers.")
+        expect(await runtime.policy("workspace", "conversation")).toMatchObject({
+          agent_configuration: { summarizer: { content: "Summarize by pointers." } },
+        })
+        await runtime.manage({ action: "extension.call", name: "runners", input: {} })
+        expect(declarations.at(-1)?.prompt_documents?.summarizer).toEqual({ content: "Summarize by pointers." })
         await runtime.configureExtension({
           id: "nexus.codemode",
           operations: [{ op: "set", path: ["default"], value: "off" }],
@@ -644,6 +684,7 @@ test.each([
           expect(await runtime.manage(command, nexus.url.origin, "human")).toMatchObject({
             grant: { rule: row.rule, conversation: "conversation" },
           })
+          expect(declarations.at(-1)?.prompt_documents?.summarizer).toEqual({ content: "Summarize by pointers." })
         }
         expect(calls.filter((call) => call.path.endsWith("/approve")).map((call) => call.authorization)).toEqual(
           Array(4).fill("Bearer human"),
@@ -677,8 +718,26 @@ test.each([
         expect(calls.filter((call) => call.path.endsWith("/approve")).at(-1)?.path).toBe(
           "/agent_api/v1/workspaces/second-workspace/runs/run/tasks/call/approve",
         )
+        await runtime.manage({ action: "settings.update", patch: { adaptations: "off" } })
+        expect(declarations.at(-1)).toMatchObject({
+          configuration: { compaction_policy: { mode: "kernel", model: "provider/summarizer" } },
+          prompt_documents: { summarizer: null },
+        })
+        expect(await runtime.policy("workspace", "conversation")).toMatchObject({
+          agent_configuration: { summarizer: null },
+        })
       }
       if (fixture.owned && !fixture.create) {
+        expect(declarations[0]?.configuration.kernel_tools).toContain("nexus.conversation.request")
+        expect(declarations[0]?.configuration.kernel_tools).toContain("nexus.conversation.links")
+        expect(declarations[0]?.configuration.kernel_tools).not.toContain("nexus.image.generate")
+        expect(declarations[0]?.configuration.tool_definitions).toContainEqual({
+          type: "function",
+          function: { name: "skill" },
+          canonical: "nexus.skill.load",
+          defer_loading: true,
+        })
+        expect(declarations[0]?.prompt_documents?.summarizer?.content).toContain("Goal:")
         await runtime.configureExtension({
           id: "nexus.images",
           operations: [{ op: "set", path: ["model"], value: "image-fixture" }],
@@ -690,9 +749,12 @@ test.each([
           image_model: "image-fixture",
           compaction_policy: { mode: "off" },
         })
-        expect(declaration.configuration.kernel_tools).toEqual(Toolsets.names("images"))
-        expect(declaration.prompt_documents?.summarizer.content).toContain("Goal:")
-        expect(declaration.prompt_documents?.summarizer.content).toContain("Open:")
+        expect(declaration.configuration.kernel_tools).toContain("nexus.image.generate")
+        expect(declaration.prompt_documents?.summarizer).toBeNull()
+        await runtime.configureExtension({ id: "nexus.images", operations: [{ op: "unset", path: ["model"] }] })
+        await published(() => declarations.at(-1)?.configuration.image_model === null)
+        expect(declarations.at(-1)?.configuration.image_model).toBeNull()
+        expect(declarations.at(-1)?.configuration.kernel_tools).not.toContain("nexus.image.generate")
         const hooks = { turn_start: { tool: "verify", timeout_ms: 30000 } }
         await runtime.configureExtension({
           id: "nexus.lifecycle-hooks",

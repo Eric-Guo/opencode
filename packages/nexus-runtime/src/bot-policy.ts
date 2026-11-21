@@ -26,6 +26,19 @@ const kernel = new Set([
   "nexus.conversation.read",
 ])
 const delegation = new Set(["nexus.conversation.spawn", "nexus.conversation.send", "nexus.conversation.request"])
+const subagentTools = new Map([
+  ["nexus.conversation.spawn", "spawn"],
+  ["nexus.conversation.request", "request"],
+  ["nexus.graph.delegate_task", "delegate_task"],
+])
+const subagentNames = new Set(subagentTools.values())
+
+export function isSubagentTool(name: string, canonical?: unknown, route?: unknown) {
+  if (typeof canonical === "string") return subagentTools.has(canonical)
+
+  return route == null && (subagentTools.has(name) || subagentNames.has(name))
+}
+
 const Definition = Schema.Struct({
   canonical: Schema.optional(Schema.String),
   function: Schema.optional(Schema.Struct({ name: Schema.String })),
