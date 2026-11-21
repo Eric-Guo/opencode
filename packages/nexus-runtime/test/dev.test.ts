@@ -11,7 +11,7 @@ import type { ApprovalGrant } from "../src/approval-grant"
 import { runDevelopment, parseDevelopment } from "../dev/terminal"
 import { DevelopmentStreams } from "../dev/streams"
 import { storeFixture } from "./fixture/store"
-import { conversationFixture, inputFixture } from "./fixture/conversation"
+import { conversationFixture, inputFixture, turnFixture } from "./fixture/conversation"
 
 const json = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))
 const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.MutableJson))
@@ -123,6 +123,86 @@ test("development opens an idle conversation and admits attachment-only inputs w
   } finally {
     fixture.server.stop(true)
     await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("turns traverses forward pages, prints reply prompts and offers the exclusive continuation", async () => {
+  const requests: string[] = []
+  const fixture = storeFixture((request) => {
+    const url = new URL(request.url)
+    if (url.pathname.endsWith("/conversations/chat"))
+      return Response.json({ conversation: conversationFixture({ public_id: "chat", active_turn_public_id: "last" }) })
+    if (url.pathname.endsWith("/turns/last/variants"))
+      return Response.json({ turn: { public_id: "last", inherited: false }, variants: [] })
+    if (!url.pathname.endsWith("/turns")) return
+
+    requests.push(url.search)
+    const after = Number(url.searchParams.get("after_position") ?? -1)
+    const before = Number(url.searchParams.get("before_position") ?? 1100)
+    const limit = Number(url.searchParams.get("limit") ?? 20)
+    const start = url.searchParams.has("before_position") ? Math.max(0, before - limit) : after + 1
+    const turns = Array.from({ length: Math.min(limit, before - start) }, (_, i) =>
+      turnFixture(start + i, {
+        active_variant: {
+          public_id: "v",
+          source: "run",
+          status: "completed",
+          run_public_id: "run",
+          content: "Full\nreply",
+          prompt_text: "Original\nprompt",
+        },
+      }),
+    )
+    return Response.json({
+      turns,
+      pagination: { before_position: turns[0]?.position, after_position: turns.at(-1)?.position },
+    })
+  })
+  try {
+    const app = new NexusApplication(
+      fixture.client,
+      { workspace: "workspace", agent: "main", runner: "runner" },
+      () => ({}),
+    )
+    const output: string[] = []
+    const invoke = (...args: string[]) =>
+      runDevelopment(["turns", "chat", ...args], {
+        command: async (input) => json(JSON.stringify(await app.operations.command(input))),
+        write: (value) => output.push(String(value)),
+        error() {},
+        signal: new AbortController().signal,
+      })
+    await invoke("--limit", "101")
+    expect(requests).toHaveLength(2)
+    expect(output.join("")).toContain("turn-100")
+    expect(output.join("")).toContain('"Full reply"')
+    expect(output.join("")).toContain('said: "Original prompt"')
+    expect(output.join("")).toContain("turns chat --after 100")
+    output.length = 0
+    requests.length = 0
+    await invoke("--json")
+    expect(requests).toHaveLength(10)
+    const page = JSON.parse(output.join(""))
+    expect(page.items).toHaveLength(1000)
+    expect(page).toMatchObject({ before_position: 0, after_position: 999, has_more: true })
+    output.length = 0
+    await invoke("--after", "999", "--json")
+    expect(JSON.parse(output.join(""))).toMatchObject({ before_position: 1000, after_position: 1099, has_more: false })
+    output.length = 0
+    await invoke("--after", "1099")
+    expect(output.join("")).toContain("(no turns past position 1099)")
+
+    requests.length = 0
+    const older = await app.operations.command({
+      action: "turns",
+      conversation: "chat",
+      before_position: 990,
+      limit: 36,
+    })
+    expect(older).toMatchObject({ before_position: 954, after_position: 989 })
+    expect(requests).toHaveLength(1)
+  } finally {
+    fixture.server.stop(true)
   }
 })
 
