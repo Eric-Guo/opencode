@@ -1,19 +1,20 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`791e7fc2d9a2af6b216fbe9814cc63905d1bbeab`. Paths in the first column are relative
+`a91c63f44a0571f2a6cf08b85d7e568964441183`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
 
-The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` covers
-ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
+The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` includes
+ACP PDF ingress, delegated ACP PDF forwarding, claim-scoped attachment reads
+and model adaptation updates.
 Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The [latest verification](#scoped-mcp-acp-and-development-controls-november-21-2026)
-covers scoped stdio, ACP capture, browser actions, approval receipts and phase output.
+contract tests below. The [latest verification](#model-adaptations-and-declaration-policy-november-21-2026)
+covers model adaptations, tool assembly, Subagent mode, image availability and compaction.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
@@ -1252,3 +1253,23 @@ Development Nexus started on loopback and returned HTTP 200 from `/up`.
 Using the existing pairing and a read-only run, the source development CLI
 rendered real phase and spend data and returned the structured phase report
 with `--json`.
+
+## Model adaptations and declaration policy, November 21, 2026
+
+| Rho reference contract | OpenCode behavior and evidence |
+| --- | --- |
+| `rho/test/adaptations_test.rb` and the SDK model-adaptation rows | New declarations resolve the current Codex, Claude and Kimi references across direct, subscription and broker lanes. Retired IDs use the default row under automatic adaptations. Local rows retain their precedence and reject a repeated pattern within one source. `adaptations.test.ts` covers both current and retired references, local precedence and duplicate patterns. |
+| `rho/lib/rho/adaptations.rb`, `role_declarations.rb` and `daemon/host_followers/bindings.rb` | The served skill spelling is deferred while discovery remains available. Presets apply published-role parameters to the plain and adapted spawn spellings, including child roles. Subagent off excludes conversation requests and delegation from new app, Side and Bot work. The image kernel tool enters the declaration only when its enabled extension has a model. Adaptation, Preset, Side and runtime fixtures exercise these declarations and settings transitions. |
+| `rho/test/daemon/configuration_test.rb` and the Rho profile and Preset compilers | Profiles, conversation and role declarations, Bots and registered agents compile the summary prompt from their compaction policy. Runner refreshes and approval grants preserve the prompt during complete profile writes. Disabling adaptations or compaction clears it. Bot creation retries keep the original prompt, and admitted work retains its frozen declaration. Runtime, Preset, Bot and registered-agent fixtures cover these paths. |
+
+The authenticated read-only assembly endpoint on development Nexus accepted the
+compiled Kimi, Claude and Codex declarations. It returned one deferred skill
+entry for each, kept `tool_search` and `tool_call` available, preserved
+`request` and `links`, and lowered `spawn` or `spawn_agent` to the published-role
+parameter. The development account lacked those model routes for inference, so
+model selection was exercised through the runtime conformance suite.
+
+Runtime conformance passed 415 tests across 76 files with Chromium, PTY and
+WebRTC. Both runtime type checkers, the runtime build, the CLI and Server Nexus
+adapter tests, the Protocol identifier check, and the repository's
+`bun run check` passed.
