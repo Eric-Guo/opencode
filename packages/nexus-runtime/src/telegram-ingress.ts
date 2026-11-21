@@ -573,8 +573,12 @@ export class TelegramIngress {
         action !== "new" &&
         !(action === "workspace" && state.control.workspace)
       ) {
+        if (state.candidates?.some((watch) => watch.update === update.id))
+          await telegramCandidates(document, this.application(), this.signal, update.id)
+
         await finish(
-          "The previous control may have succeeded. It was not repeated. Use /status, /history or /queue to inspect the result.",
+          (await document.read())?.control?.candidate_reply ??
+            "The previous control may have succeeded. It was not repeated. Use /status, /history or /queue to inspect the result.",
         )
         return
       }
@@ -590,6 +594,7 @@ export class TelegramIngress {
           "status",
           "tasks",
           "sessions",
+          "variants",
           "transcript",
           "context",
           "search",
@@ -2031,6 +2036,7 @@ export class TelegramIngress {
       tracking: {
         document,
         update: update.id,
+        message: update.message?.message_id,
         route: {
           connection: binding.connection_public_id!,
           chat: update.chat,
