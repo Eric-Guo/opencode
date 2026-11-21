@@ -167,8 +167,8 @@ export const NexusCommand = Schema.Union([
     version: Schema.Int,
     name: Schema.optional(Schema.String),
     approval: Schema.optional(Schema.Literals(["ask", "rules", "bypass"])),
-    prompt: Schema.String,
-    rule: Rule,
+    prompt: Schema.optional(Schema.String),
+    rule: Schema.optional(Rule),
   }),
   Schema.Struct({
     action: Schema.Literal("memory.create"),
