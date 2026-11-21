@@ -11,7 +11,7 @@ const snapshotChars = { minimum: 1000, maximum: 50000 }
 const snapshotLines = { minimum: 1, maximum: 2000 }
 const Input = Schema.Struct({
   url: Schema.optional(Schema.String),
-  ref: Schema.optional(Schema.String),
+  ref: Schema.optional(Schema.Trim),
   text: Schema.optional(Schema.String),
   submit: Schema.optional(Schema.Boolean),
   expression: Schema.optional(Schema.String),
