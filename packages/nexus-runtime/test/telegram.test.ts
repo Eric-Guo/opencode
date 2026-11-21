@@ -36,6 +36,7 @@ function fixture(group = true) {
     latest: 1,
     fork: "ok",
     regeneration: "ok",
+    variantText: "The result belongs to the original conversation.",
     discussion: [] as JsonObject[],
     waiting: [] as JsonObject[],
   }
@@ -53,7 +54,13 @@ function fixture(group = true) {
   const regenerations: (string | null)[] = []
   const contextEstimates: JsonObject[] = []
   const participationPrompts: JsonObject[] = []
-  const regenerated = { public_id: "regenerated", source: "regenerate", status: "completed", content: "New answer" }
+  const regenerated = {
+    public_id: "regenerated",
+    source: "regenerate",
+    status: "running",
+    run_public_id: "candidate-run",
+    content: "New answer",
+  }
   const service = storeFixture(async (request) => {
     const url = new URL(request.url)
     const path = url.pathname
@@ -491,6 +498,16 @@ function fixture(group = true) {
     }
     if (path.endsWith("/regeneration_receipt") && state.regeneration === "committed")
       return Response.json({ turn: { public_id: "turn", status: "completed" }, variant: regenerated })
+    if (path.endsWith("/turns/turn/edit"))
+      return Response.json({ variant: { public_id: "edited", source: "edit", status: "completed", content: "Edited" } })
+    if (path.endsWith("/turns/turn/variants/variant/activation"))
+      return Response.json({
+        variant: { public_id: "variant", source: "original", status: "running", run_public_id: "run" },
+      })
+    if (path.endsWith("/turns/turn/variants/regenerated"))
+      return Response.json({ turn: { public_id: "turn", inherited: false }, variant: regenerated })
+    if (path.endsWith("/runs/candidate-run"))
+      return Response.json({ run: { public_id: "candidate-run", status: "running" } })
     if (path.endsWith("/turns/turn/variants"))
       return Response.json({
         turn: { public_id: "turn", inherited: false },
@@ -499,8 +516,9 @@ function fixture(group = true) {
           {
             public_id: "variant",
             source: "original",
+            active: true,
             status: state.terminal ? "completed" : "running",
-            content: "The result belongs to the original conversation.",
+            content: state.variantText,
             run_public_id: "run",
           },
         ],
@@ -830,6 +848,42 @@ test("Telegram context previews use the shared Bot and each requesting speaker",
   )
 })
 
+test("Telegram returns an immediately usable candidate receipt and bounded previews", async () => {
+  using peer = fixture()
+  const from = { id: 10, first_name: "Owner" }
+  const ingress = peer.open()
+  await ingress.ingest(
+    connection,
+    message(0, "@FixtureBot first", { from, entities: [{ type: "mention", offset: 0, length: 11 }] }),
+    now - 2000,
+  )
+  peer.state.running = true
+  await ingress.tick(connection, now)
+  const original = peer.saved().work[0].input
+
+  peer.state.variantText = "x".repeat(510)
+  await ingress.ingest(connection, message(1, "/variants 1", { from }), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("variant · running [active]\n" + "x".repeat(499) + "…")
+  await ingress.ingest(connection, message(2, "/regenerate", { from }), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Task: regenerated")
+  expect(peer.saved().work.at(-1)).toMatchObject({
+    input: "regenerated",
+    requester: "10",
+    source: [102],
+    execution: { run_public_id: "candidate-run" },
+  })
+
+  const restarted = peer.open()
+  await restarted.ingest(connection, message(3, "/status regenerated", { from }), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Task regenerated")
+  await restarted.ingest(connection, message(4, "/stop regenerated", { from }), now)
+  await restarted.ingest(connection, message(5, "/stop " + original, { from }), now)
+  expect(peer.requests.filter((path) => path.endsWith("/stop"))).toEqual([
+    expect.stringContaining("/candidate-run/stop"),
+    expect.stringContaining("/run/stop"),
+  ])
+})
+
 test("Telegram tracks the exact regenerated candidate after a lost reply and drops a refused watch", async () => {
   using peer = fixture()
   const ingress = peer.open()
@@ -844,10 +898,31 @@ test("Telegram tracks the exact regenerated candidate after a lost reply and dro
   expect(peer.saved().candidates?.[0]).toMatchObject({ turn: "turn", operation: "regenerate" })
   const restarted = peer.open()
   await restarted.ingest(connection, update, now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Task: regenerated")
   await restarted.tick(connection, now)
   expect(peer.regenerations).toHaveLength(2)
   expect(peer.saved().candidates).toEqual([])
   expect(peer.saved().work.map((work) => work.input)).toEqual(["regenerated"])
+})
+
+test("Telegram follows an edited answer without a run and receipts reselecting the active variant", async () => {
+  using peer = fixture()
+  const from = { id: 10, first_name: "Owner" }
+  const ingress = peer.open()
+  await ingress.ingest(connection, message(1, "/edit 1 Edited", { from }), now)
+  expect(peer.saved().deliveries.at(-1)?.text).not.toContain("Task:")
+  expect(peer.saved().work[0]).toMatchObject({
+    input: "edited",
+    execution: { variant_public_id: "edited", run_public_id: null },
+  })
+
+  await ingress.ingest(connection, message(2, "/variant 1 variant", { from }), now)
+  expect(peer.saved().deliveries.at(-1)?.text).toContain("Task: variant")
+  expect(peer.saved().work.at(-1)).toMatchObject({
+    input: "variant",
+    terminal: true,
+    execution: { run_public_id: "run" },
+  })
 })
 
 test("Telegram rejects duplicate tokens and target reuse, including disabled bindings", () => {

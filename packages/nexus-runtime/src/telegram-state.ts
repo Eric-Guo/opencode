@@ -182,6 +182,8 @@ export const TelegramState = Schema.Struct({
         turn: Schema.String,
         previous: Schema.NullOr(Schema.String),
         known: Schema.Array(Schema.String),
+        update: Schema.optional(Schema.Int),
+        message: Schema.optional(Schema.Int),
         variant: Schema.optional(Schema.String),
         operation: Schema.optional(Schema.Literals(["activate", "edit", "regenerate"])),
       }),
@@ -230,6 +232,7 @@ export const TelegramState = Schema.Struct({
       Schema.Struct({
         update: Schema.Int,
         clock: Schema.optional(Schema.Number),
+        candidate_reply: Schema.optional(Schema.String),
         workspace: Schema.optional(Schema.String),
         job: Schema.optional(Schema.Struct({ target: Schema.NullOr(Locator), model: Schema.NullOr(Schema.String) })),
         fork: Schema.optional(

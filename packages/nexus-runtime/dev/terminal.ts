@@ -9,6 +9,7 @@ import {
   type JsonObject,
   type JsonValue,
   type RunTranscript,
+  type TurnPage,
   type TranscriptItem,
   type ProgressFrame,
 } from "@cybros/agent"
@@ -111,6 +112,7 @@ export const developmentHelp = `Nexus development controls (source checkout only
   approve HOST TASK [--always --match PREFIX] | deny HOST TASK [REASON] | answer HOST TASK TEXT
   compact CONVERSATION | compact RUN TASK | append HOST -f FILE | delete HOST
   inputs HOST | inputs rm HOST INPUT | inputs edit HOST INPUT [TEXT]
+  turns CONVERSATION [--after POSITION] [--limit COUNT] [--json]
   variant CONVERSATION TURN [VARIANT --conceal|--restore] | activate CONVERSATION TURN VARIANT
   rewind CONVERSATION TURN | regenerate CONVERSATION TURN [--keep-checkpoints]
   side CONVERSATION [--tools read|write]
@@ -676,13 +678,31 @@ export async function runDevelopment(args: readonly string[], terminal: Developm
   }
   if (parsed.verb === "turns") {
     if (!resolved.conversation) throw new Error("Turns require a conversation.")
-    print(
-      await call("turns", {
-        conversation: resolved.conversation,
-        after_position: parsed.number("after"),
-        limit: parsed.number("limit"),
-      }),
-    )
+    const after = parsed.number("after")
+    const result = await call("turns", {
+      conversation: resolved.conversation,
+      after_position: after,
+      limit: parsed.number("limit"),
+    })
+    if (parsed.values.json) {
+      print(result)
+      return 0
+    }
+
+    const page = result as unknown as TurnPage & { has_more?: boolean }
+    if (!page.items.length) terminal.write(after === undefined ? "(no turns)\n" : `(no turns past position ${after})\n`)
+    for (const turn of page.items) {
+      const variant = turn.active_variant
+      const content = variant?.content?.replace(/\s+/g, " ").trim()
+      const prompt = variant?.prompt_text?.replace(/\s+/g, " ").trim()
+      const fields = [String(turn.position).padStart(4), turn.public_id, turn.role, turn.kind, turn.status]
+      if (variant?.run_public_id) fields.push("run " + variant.run_public_id)
+      if (content) fields.push(JSON.stringify(content))
+      terminal.write(fields.join("  ") + "\n")
+      if (prompt) terminal.write("      said: " + JSON.stringify(prompt) + "\n")
+    }
+    if (page.has_more)
+      terminal.write(`more: bun dev/cli.ts turns ${resolved.conversation} --after ${page.after_position}\n`)
     return 0
   }
   if (
