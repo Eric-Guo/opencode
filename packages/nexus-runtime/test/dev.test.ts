@@ -331,6 +331,73 @@ test("development CLI preserves exact old-run results, explicit pause force, aut
   }
 })
 
+test("conversation cost reads and edits the exact decimal limit without restarting work", async () => {
+  const calls: string[] = []
+  const updates: JsonObject[] = []
+  const usage = {
+    ...object(conversationFixture().usage_summary),
+    cost_amount: "1.234567890123456789",
+    cost_complete: false,
+    cost_unit: "credits",
+  }
+  const row = conversationFixture({ usage_summary: usage, cost_limit: "1.0", cost_limit_reached: true })
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    calls.push(request.method + " " + path)
+    if (path.endsWith("/turns")) return Response.json({ turns: [], pagination: { next_before_position: null } })
+    if (!path.endsWith("/conversations/conversation")) return
+    if (request.method === "PATCH") {
+      const update = object(object(await request.json()).conversation)
+      updates.push(update)
+      row.cost_limit = update.cost_limit
+      row.cost_limit_reached = false
+    }
+    return Response.json({ conversation: row })
+  })
+  const app = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+  )
+  const output: string[] = []
+  const terminal = {
+    command: async (input: JsonObject) => json(JSON.stringify(await app.operations.command(input))),
+    write: (text: string | Uint8Array) => {
+      output.push(text.toString())
+    },
+    signal: new AbortController().signal,
+    error() {},
+  }
+  const cost = (...args: string[]) => runDevelopment(["conversation", "cost", ...args], terminal)
+  try {
+    await expect(cost()).rejects.toThrow("AMOUNT|off")
+    await expect(cost("conversation", "2", "extra")).rejects.toThrow("AMOUNT|off")
+    expect(calls).toEqual([])
+    await cost("conversation")
+    expect(output.at(-1)).toContain("known cost: 1.234567890123456789 credits")
+    expect(output.at(-1)).toContain("cost complete: false")
+    expect(output.at(-1)).toContain("limit reached: true")
+    expect(output.at(-1)).toContain("retry RUN_ID [TASK_KEY]")
+    await cost("conversation", "2.000000000000000001")
+    expect(output.at(-1)).toContain("cost limit: 2.000000000000000001 credits")
+    await cost("conversation", "off")
+    expect(output.at(-1)).toContain("cost limit: off")
+    await cost("conversation", "--json")
+    expect(JSON.parse(output.at(-1)!)).toMatchObject({
+      public_id: "conversation",
+      usage_summary: usage,
+      cost_limit: null,
+    })
+    expect(updates).toEqual([
+      { cost_limit: "2.000000000000000001", lock_version: 0 },
+      { cost_limit: null, lock_version: 0 },
+    ])
+    expect(calls.filter((call) => !call.startsWith("GET "))).toHaveLength(2)
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
 test("development compact and attach address exactly one conversation or run", async () => {
   const writes: string[] = []
   const streams: JsonObject[] = []

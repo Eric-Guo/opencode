@@ -1,7 +1,7 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`3ee7232034cb07aa114b24749571f3e13ddbba76`. Paths in the first column are relative
+`c0ebf861e5a2793cf3e384dedc1e071237a93f12`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
@@ -13,10 +13,41 @@ Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
 to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The [latest verification](#approvals-task-inspection-and-editor-replay)
-covers account identity, approval delivery and editor replay.
+contract tests below. The [latest verification](#delegation-browser-snapshots-and-conversation-controls)
+covers child exits, snapshot limits, Git review and conversation controls.
 The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
+
+## Delegation, browser snapshots and conversation controls
+
+The `agents/rho` and `sdks/typescript` trees at `c0ebf861e` match the previous
+pin, `3ee723203`. The runtime conformance suite exercised the TypeScript
+entry points in the [package mapping](#application-and-executor) on November 22, 2026.
+
+| Workflow | Observable behavior | OpenCode regression |
+| --- | --- | --- |
+| `rho-acp-client` delegation | A live child can refuse a prompt and accept the next one. An exited child returns its partial answer, redacted stderr and exit status even when the answer needs truncation. Continuing its handle reports the exit. Omitting the handle starts a fresh session. | `test/acp.test.ts` through the delegation tool and a real ACP child process |
+| `rho-browser` snapshot | The structured URL and title fit 512 and 256 UTF-8 bytes including the omission marker. The isolated Chromium renderer uses the same values in its text header. The surviving button ref remains actionable. | `test/browser.test.ts` and `test/desktop-browser.test.ts` through the Chromium and desktop adapters |
+| `rho-env` Git review | When the 32 KiB Git output budget ends inside a tracked path, the file list contains only complete status/path pairs and reports truncation. | `test/git-review.test.ts` using a real Git index with 180 tracked deletions |
+| `rho-dev` conversation controls | Cost reads report the exact ledger decimal and unit, completeness, limit and reached state. Setting or clearing the limit leaves retry to the caller. Invalid arity sends zero requests. Side followers include their readable fork source. | `test/dev.test.ts` and `test/dev-worker.test.ts` through the CLI and extension worker |
+| `rho` application operation | A successful Nexus deletion with HTTP 204 returns JSON null through the management operation. | `test/runtime.test.ts` through `NexusRuntime.manage` |
+
+**Live Nexus.** The source development CLI used the paired OpenCode service
+at `8d668a13f84` to read, set and clear a scratch conversation's limit at
+`localhost:3000`. The Human-facing UI bridge read back `2.012345` and then
+a cleared limit. The conversation stayed idle with zero model requests. On
+deletion the installed build reported a JSON validation error after Nexus had
+committed the deletion. The runtime regression covers that empty-response
+conversion in source. A second scratch conversation repeated the cost and UI
+checks and was deleted through the Human SDK. Both scratch IDs returned 404
+and the paired service reported ready.
+
+**Checks.** Runtime conformance passed 427 tests on macOS, with one Linux-only
+filename test skipped. Both runtime type checks, the runtime build, the CLI and
+Server Nexus adapter tests, the Protocol identifier test and root `bun run check`
+passed. The reference ACP child, browser snapshot, Git review and development
+conversation suites passed 50 Ruby tests. The UI has its own
+[usage and recovery verification](../nexus-ui/docs/rho-webui-parity.md#usage-and-cost-limit-recovery).
 
 ## Approvals, task inspection and editor replay
 

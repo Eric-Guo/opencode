@@ -76,6 +76,12 @@ const app = agent({name:"Fixture"})
     return {uri:block.resource.uri, mimeType:block.resource.mimeType, sha256:createHash("sha256").update(bytes).digest("hex")};
   })});
   const emit = text => ctx.client.notify("session/update",{sessionId:id,update:{sessionUpdate:"agent_message_chunk",content:{type:"text",text}}});
+  if(prompt==="exit"){
+    await emit("Partial answer "+process.env.DEMO_PASSWD+"\\n"+"entry\\n".repeat(2000));
+    process.stderr.write("Fixture exit: "+process.env.DEMO_PASSWD, () => process.exit(3));
+    await new Promise(() => {});
+  }
+  if(prompt==="refuse") throw RequestError.invalidParams(undefined,"Fixture refusal");
   if(prompt==="output-bytes"||prompt==="output-lines"){
     await emit(prompt==="output-bytes" ? "First line\\n"+"語".repeat(25000)+"\\nfinal progress" : "entry\\n".repeat(2000)+"omitted last line");
     return {stopReason:"end_turn"};

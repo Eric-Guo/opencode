@@ -186,6 +186,37 @@ test("ACP sessions reuse one child, authenticate once, select a model, and retai
   }
 }, 15000) // A resident child and an independent real SDK probe exercise authentication and session configuration.
 
+test("a refused ACP prompt keeps its session while a child exit preserves partial output and the exit reason", async () => {
+  const fixture = await acpFixture()
+  const client = new AcpClient(
+    { peer: fixture.row({ env: { DEMO_PASSWD: "fixture-password" } }) },
+    { storage: fixture.storage, directory: fixture.work },
+  )
+  const tool = client.tool()!
+  try {
+    const refused = await tool.execute({ agent: "peer", prompt: "refuse" }, fixture.context())
+    expect(refused).toMatchObject({ is_error: true, structured_content: { stopReason: "refused" } })
+    const id = sessionID(refused.structured_content).session
+    const exited = await tool.execute({ agent: "peer", session: id, prompt: "exit" }, fixture.context())
+    expect(exited).toMatchObject({ is_error: true, structured_content: { session: id, stopReason: "exited" } })
+    expect(exited.content).toContain("Partial answer [redacted]")
+    expect(exited.content).toContain("ACP answer truncated.")
+    expect(exited.content).toContain('ACP agent "peer" exited (status 3)')
+    expect(exited.content).toContain("stderr: Fixture exit: [redacted]")
+    expect(exited.content).not.toContain("fixture-password")
+    expect(await client.command({ action: "acp.sessions" })).toEqual([])
+    await expect(tool.execute({ agent: "peer", session: id, prompt: "again" }, fixture.context())).rejects.toThrow(
+      "exited (status 3); omit session",
+    )
+    const fresh = await tool.execute({ agent: "peer", prompt: "again" }, fixture.context())
+    expect(fresh.is_error).toBe(false)
+    expect(sessionID(fresh.structured_content).session).not.toBe(id)
+  } finally {
+    await client.close()
+    await fixture.close()
+  }
+})
+
 test("ACP permission decisions use tracked calls and the shared floor, never standing grants or editor filesystem access", async () => {
   const fixture = await acpFixture()
   const client = new AcpClient(
