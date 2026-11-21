@@ -450,6 +450,7 @@ test("development queued edits preserve optimistic versions and clear scheduling
 test("approval grants validate raw boundaries before approval and declare process-local provenance afterwards", async () => {
   const order: string[] = []
   const grants: ApprovalGrant[] = []
+  let rejectGrant = false
   const held = {
     tool_name: "bash",
     tool_input: { command: "npm install\n" } as JsonObject,
@@ -478,23 +479,40 @@ test("approval grants validate raw boundaries before approval and declare proces
     {
       list: () => grants,
       grant: async (grant) => {
+        if (grants.some((entry) => JSON.stringify(entry.rule) === JSON.stringify(grant.rule))) return "already"
+        if (rejectGrant) throw new Error("envelope_bound")
+
         order.push("declared")
         grants.push(grant)
+        return "saved"
       },
     },
   )
+  const output: string[] = []
+  const errors: string[] = []
+  const terminal = {
+    signal: new AbortController().signal,
+    command: async (input: JsonObject) => json(JSON.stringify(await application.operations.command(input))),
+    write: (value: string | Uint8Array) => output.push(value.toString()),
+    error: (value: string) => errors.push(value),
+  }
   try {
     await expect(
       application.operations.command({ action: "approve", run: "run", task: "call", match: "np" }),
     ).rejects.toThrow("whole-token")
     expect(order).toEqual([])
-    await application.operations.command({ action: "approve", run: "run", task: "call", always: true })
+    expect(await runDevelopment(["approve", "run", "call", "--always"], terminal)).toBe(0)
+    expect(output.join("")).toContain('granted: bash command = "npm install\\n"')
     expect(order).toEqual(["approved", "declared"])
     expect(grants[0]).toMatchObject({
       run: "run",
       task: "call",
       rule: { tool: "bash", path: "command", match: "npm install\n", verdict: "allow" },
     })
+    expect(await runDevelopment(["approve", "run", "call", "--always"], terminal)).toBe(0)
+    expect(output.at(-1)).toContain("already granted this session")
+    expect(grants).toHaveLength(1)
+    expect(order).toEqual(["approved", "declared", "approved"])
     await application.operations.command({ action: "approve", run: "run", task: "call", match: "npm " })
     expect(grants[1].rule.match).toBe("npm *")
     held.tool_name = "write"
@@ -517,6 +535,69 @@ test("approval grants validate raw boundaries before approval and declare proces
       application.operations.command({ action: "approve", run: "run", task: "call", always: true }),
     ).rejects.toThrow("HTTP(S)")
     expect(grants).toHaveLength(4)
+
+    rejectGrant = true
+    held.tool_input = { url: "https://another.example/tool" }
+    const approvals = order.filter((event) => event === "approved").length
+    expect(await runDevelopment(["approve", "run", "call", "--always"], terminal)).toBe(1)
+    expect(errors.at(-1)).toBe("The call was approved. The session grant was refused (envelope_bound).\n")
+    expect(order.filter((event) => event === "approved")).toHaveLength(approvals + 1)
+    expect(await runDevelopment(["approve", "run", "call", "--always", "--json"], terminal)).toBe(1)
+    expect(JSON.parse(output.at(-1)!)).toMatchObject({
+      task: { key: "call", status: "completed" },
+      grant: { refused: "envelope_bound" },
+    })
+    expect(order.filter((event) => event === "approved")).toHaveLength(approvals + 2)
+    expect(grants).toHaveLength(4)
+  } finally {
+    fixture.server.stop(true)
+  }
+})
+
+test("development phases reports current work, background delivery and spend with the SDK JSON available", async () => {
+  const report = {
+    phases: [{ label: "Review", keys: ["review"], done: 1, total: 2, status: "running" }],
+    current: 0,
+    background: [{ key: "worker", status: "completed", result_delivered_at: "2026-11-21T00:00:00.000Z" }],
+    spend: {
+      input_tokens: 10,
+      output_tokens: 4,
+      cost_amount: "0.3",
+      cost_unit: "USD",
+      by_model: {
+        "provider/primary": { input_tokens: 6, output_tokens: 1, cost_amount: "0.3", cost_unit: "USD" },
+        "provider/fallback": { input_tokens: 4, output_tokens: 3 },
+      },
+    },
+  }
+  const fixture = storeFixture(async (request) => {
+    const path = new URL(request.url).pathname
+    if (path.endsWith("/runs/run")) return Response.json({ run: { public_id: "run", status: "running" } })
+    if (path.endsWith("/runs/run/phases")) return Response.json(report)
+  })
+  const application = new NexusApplication(
+    fixture.client,
+    { workspace: "workspace", agent: "main", runner: "runner" },
+    () => ({}),
+  )
+  const output: string[] = []
+  const terminal = {
+    signal: new AbortController().signal,
+    command: async (input: JsonObject) => json(JSON.stringify(await application.operations.command(input))),
+    write: (value: string | Uint8Array) => output.push(value.toString()),
+    error() {},
+  }
+  try {
+    expect(await runDevelopment(["phases", "run"], terminal)).toBe(0)
+    expect(output[0]?.trimEnd().split("\n")).toEqual([
+      "> Review  1/2  running",
+      "background: worker completed  (delivered 2026-11-21T00:00:00.000Z)",
+      "spend:     10 in, 4 out — 0.3 USD",
+      "  provider/primary  6 in, 1 out — 0.3 USD",
+      "  provider/fallback  4 in, 3 out",
+    ])
+    expect(await runDevelopment(["phases", "run", "--json"], terminal)).toBe(0)
+    expect(JSON.parse(output[1])).toEqual(report)
   } finally {
     fixture.server.stop(true)
   }

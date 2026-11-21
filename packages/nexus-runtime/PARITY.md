@@ -1,21 +1,20 @@
 # Rho behavioral correspondence
 
 Reference: `agents/rho` in Cybros revision
-`b6701bdad4962b077d53a984517b7d8b8aa55c38`. Paths in the first column are relative
+`791e7fc2d9a2af6b216fbe9814cc63905d1bbeab`. Paths in the first column are relative
 to that directory. Implementation and test paths are relative to this package.
 The reference checkout is used for development review only; production and CI
 need neither that checkout nor Ruby.
 
 The production delta from `f5e4899094d8bb3ab5fdc653c7426bd7f5c226b6` covers
 ACP PDF ingress, delegated ACP PDF forwarding and claim-scoped attachment reads.
-Since the previous reference `d15b55bdd`, the three changed files under
-`agents/rho` are Ruby lockfiles for `rho`, `rho-dev` and `rho-ingress-telegram`.
+Since `b6701bdad`, Rho has updated its Ruby lockfiles and moved `rho-mcp`
+to MCP 1.11. The stdio hooks continue to use the existing child-process contract.
 
 The eleven executable non-WebUI packages have production TypeScript owners and
-contract tests below. The runtime gate passes 406 tests across 74 files with
-Chromium, PTY and WebRTC. The [latest verification](#rewind-regeneration-and-project-skills-november-19-2026)
-covers process guards, per-runner checkpoint recovery, regeneration replay and
-project skills. The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
+contract tests below. The [latest verification](#scoped-mcp-acp-and-development-controls-november-21-2026)
+covers scoped stdio, ACP capture, browser actions, approval receipts and phase output.
+The [WebUI parity ledger](../nexus-ui/docs/rho-webui-parity.md) tracks
 `rho-webui` in `packages/nexus-ui`.
 
 ## Application and executor
@@ -1229,3 +1228,27 @@ The runtime conformance suite passed **406 tests across 74 files** with
 Chromium, PTY and WebRTC. Native Code Mode passed **1,694 tests**. Both runtime
 type checkers, the runtime build, the Nexus CLI and experimental identifier
 tests, and the repository's `bun run check` passed.
+
+## Scoped MCP, ACP and development controls, November 21, 2026
+
+| Reference contract | TypeScript owner and verification |
+| --- | --- |
+| `rho-mcp/test/stdio_transport_test.rb` and `rho-env/lib/rho/env/child_env.rb` | `src/mcp.ts` uses a scoped OpenCode MCP registration with a replacement environment. The stdio child inherits ordinary launch settings, omits runtime and credential variables, and receives its explicit variables. `test/mcp-session.test.ts` exercises configured, probed and ACP-supplied rows with a real child and checks probe retirement. Core's `mcp-stdio.test.ts` checks that private stderr is drained and kept out of exit diagnostics. |
+| `rho-env/lib/rho/env/secrets.rb`, `rho-mcp/test/settings_test.rb` and `rho-acp-client/lib/rho/acp-client/capture.rb` | `src/integration-secrets.ts` shares single-pass substitution, empty-variable refusal and the eight-byte redaction floor. MCP resolves `~` through OpenCode's path resolver. ACP capture masks keys and values before publication. Settings and live child fixtures exercise those boundaries. |
+| `rho-browser/lib/rho/browser/tools/base.rb` | Shared browser input trims the opaque reference before dispatch. The Chromium regression exercises padded references for click and type, then verifies that the old reference still expires. |
+| `rho-dev/test/dev_commands/execution_test.rb` and `stream_test.rb` | The CLI reports saved, already-held and refused grants. A refusal keeps the approved task receipt and exits with status 1. Phase reports show the current phase, background delivery and spend, and expose the SDK response through `--json`. `test/dev.test.ts` drives the CLI through shared operations and a loopback API fixture. |
+
+The package-wide gate exercises application admission and recovery, executor
+ownership and filesystem/terminal claims, native Code Mode, web fetch and
+Chromium, MCP and ACP peers, Telegram and T3 protocol fixtures, and the
+source-only development controls. Runtime conformance passed 413 tests across
+76 files with Chromium, PTY and WebRTC. The selected Core MCP and Integration
+suites passed 141 tests. The Code Mode suite, CLI and Server Nexus adapter
+tests, Protocol experimental-identifier test, affected TypeScript checks,
+runtime build and root `bun run check` passed. The WebUI reference diff contains
+only Ruby lockfile changes.
+
+Development Nexus started on loopback and returned HTTP 200 from `/up`.
+Using the existing pairing and a read-only run, the source development CLI
+rendered real phase and spend data and returned the structured phase report
+with `--json`.

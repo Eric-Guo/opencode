@@ -27,12 +27,14 @@ export interface Options {
   /**
    * Environment declared by the server config, and nothing else.
    *
-   * The host environment is merged in by the spawner via `extendEnv`, which keeps the merge on the
+   * By default the host environment is merged in by the spawner, which keeps the merge on the
    * side that actually runs the process: the local driver extends with the host's `process.env`
    * (what the MCP SDK's transport did), while a workspace driver extends with the sandbox's own
    * environment. Host variables therefore never cross the seam into a remote workspace.
    */
   readonly environment: Record<string, string>
+  readonly extendEnv?: boolean
+  readonly redactErrors?: boolean
 }
 
 /**
@@ -106,7 +108,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
             ChildProcess.make(options.command, [...options.args], {
               cwd: options.cwd,
               env: options.environment,
-              extendEnv: true,
+              extendEnv: options.extendEnv ?? true,
               stdin: { stream: Stream.encodeText(Stream.fromQueue(outgoing)), endOnDone: true },
               stdout: "pipe",
               stderr: "pipe",
@@ -176,18 +178,20 @@ export const make = Effect.fnUntraced(function* (options: Options) {
 
   const startOutput = (handle: ChildProcessHandle) =>
     Effect.gen(function* () {
-      // Drain stderr into the debug log so chatty servers cannot stall on a full pipe.
+      // Always drain stderr so chatty servers cannot stall, even when the contents are private.
       const drain = yield* Effect.forkScoped(
-        handle.stderr.pipe(
-          Stream.decodeText(),
-          Stream.tap((output) => Effect.sync(() => (stderr = (stderr + output).slice(-STDERR_TAIL)))),
-          Stream.runForEach((output) =>
-            output.trim() === ""
-              ? Effect.void
-              : Effect.logDebug("mcp server stderr", { server: options.server, output }),
-          ),
-          Effect.ignore,
-        ),
+        options.redactErrors
+          ? Stream.runDrain(handle.stderr).pipe(Effect.ignore)
+          : handle.stderr.pipe(
+              Stream.decodeText(),
+              Stream.tap((output) => Effect.sync(() => (stderr = (stderr + output).slice(-STDERR_TAIL)))),
+              Stream.runForEach((output) =>
+                output.trim() === ""
+                  ? Effect.void
+                  : Effect.logDebug("mcp server stderr", { server: options.server, output }),
+              ),
+              Effect.ignore,
+            ),
       )
 
       yield* Effect.forkScoped(

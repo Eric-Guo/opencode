@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import { ToolLowering } from "@cybros/agent"
 import { createHash } from "node:crypto"
+import { join } from "node:path"
+import { Global } from "@opencode/util/global"
 import { mcpName, mcpSettings } from "../src/mcp-settings"
 import { curateMcp, curateMcpDocuments, mcpAnnouncementBytes } from "../src/mcp-curation"
 import { mcpResult } from "../src/mcp"
@@ -13,22 +15,23 @@ test("MCP settings isolate faults, expand credentials once and default the trans
         transport: "stdio",
         command: "peer",
         tools: ["read"],
-        env: { KEY: "literal-secret", EXPANDED: "${TOKEN}" },
+        env: { DEMO_PASSWD: "literal-secret", SHORT_KEY: "1234567", EXPANDED: "${TOKEN}" },
       },
       remote: { transport: "http", url: "https://example.test/mcp", tools: ["*"], headers: { Cookie: "${TOKEN}" } },
       missing: { transport: "stdio", command: "peer", tools: ["*"], env: { KEY: "${UNSET}" } },
+      empty: { transport: "stdio", command: "peer", tools: ["*"], env: { KEY: "${EMPTY}" } },
       insecure: {
         transport: "http",
         url: "http://example.test/mcp",
         tools: ["*"],
         headers: { Other: "private-value" },
       },
-      parked: { transport: "stdio", command: "absent", tools: ["*"], enabled: false },
+      parked: { transport: "stdio", command: "absent", cwd: "~/mcp", tools: ["*"], enabled: false },
       uncurated: { transport: "stdio", command: "peer" },
       invalid: { transport: "stdio", command: "peer", tools: ["*"], effect_profiles: { read: { kind: "read_only" } } },
     },
     "/project",
-    { TOKEN: "${NESTED_TOKEN}", NESTED_TOKEN: "must-not-expand" },
+    { TOKEN: "${NESTED_TOKEN}", NESTED_TOKEN: "must-not-expand", EMPTY: "" },
   )
 
   expect(settings.rows.map((row) => [row.key, row.role, row.timeout])).toEqual([
@@ -39,7 +42,9 @@ test("MCP settings isolate faults, expand credentials once and default the trans
   ])
   expect(settings.rows[0].config).toMatchObject({ environment: { EXPANDED: "${NESTED_TOKEN}" }, cwd: "/project" })
   expect(settings.rows[0].secrets).toEqual(["${NESTED_TOKEN}", "literal-secret"])
-  expect(settings.faults.map((row) => row.key)).toEqual(["missing", "insecure", "uncurated", "invalid"])
+  expect(settings.rows[2].config).toMatchObject({ cwd: join(Global.Path.home, "mcp") })
+  expect(settings.faults.map((row) => row.key)).toEqual(["missing", "empty", "insecure", "uncurated", "invalid"])
+  expect(settings.faults[1].issue).toBe("Unset environment variables: EMPTY")
   expect(JSON.stringify(settings.faults)).not.toContain("private-value")
   expect(() => mcpSettings({ "Bad Key": {} }, "/project")).toThrow("names")
   expect(() => mcpSettings({ valid: [] }, "/project")).toThrow()

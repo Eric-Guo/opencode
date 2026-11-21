@@ -25,19 +25,25 @@ const sessions = Schema.decodeUnknownSync(
 test("ACP settings isolate row faults, expand secrets once and keep legacy rows compatible", () => {
   const settings = acpSettings(
     {
-      good: { command: "peer", description: "Coding peer", env: { VALUE: "${PARENT}", API_KEY: "literal" } },
+      good: {
+        command: "peer",
+        description: "Coding peer",
+        env: { VALUE: "${PARENT}", API_KEY: "literal", DEMO_PASSWD: "literal-password" },
+      },
       missing: { command: "peer", description: "Unavailable variable", env: { VALUE: "${UNSET}" } },
+      empty: { command: "peer", description: "Empty variable", env: { VALUE: "${EMPTY}" } },
       invalid: { command: "peer", description: "Bad timeout", timeout_ms: 0 },
       whitespace: { command: "peer", description: "Blank model", model: " " },
       legacy: ["peer", "--stdio"],
       disabled: { command: "absent", description: "Disabled peer", enabled: false },
     },
-    { PARENT: "${NESTED}", NESTED: "must-not-expand" },
+    { PARENT: "${NESTED}", NESTED: "must-not-expand", EMPTY: "" },
   )
   expect(settings.agents.map((agent) => agent.name)).toEqual(["good", "legacy", "disabled"])
-  expect(settings.faults.map((row) => row.name)).toEqual(["missing", "invalid", "whitespace"])
+  expect(settings.faults.map((row) => row.name)).toEqual(["missing", "empty", "invalid", "whitespace"])
+  expect(settings.faults[1].issue).toBe("Unset environment variables: EMPTY")
   expect(settings.agents[0].env.VALUE).toBe("${NESTED}")
-  expect(settings.agents[0].secrets).toEqual(["${NESTED}", "literal"])
+  expect(settings.agents[0].secrets).toEqual(["literal-password", "${NESTED}"])
   expect(settings.agents[1]).toMatchObject({ command: "peer", args: ["--stdio"], permissions: "ask" })
   expect(acpEnvironment(settings.agents[0])).toMatchObject({ VALUE: "${NESTED}", API_KEY: "literal" })
   expect(acpEnvironment(settings.agents[0])).not.toHaveProperty("OPENCODE_NEXUS_ACP_AGENTS")
@@ -343,11 +349,11 @@ test("releasing a child during initialization cannot publish a late session or r
   }
 })
 
-test("configured secrets are redacted from replies and JSONL capture snapshots", async () => {
+test("configured secrets are redacted from replies and JSONL capture keys and values", async () => {
   const fixture = await acpFixture()
   const secret = 'fixture-"credential"\\value\nsecond line'
   const client = new AcpClient(
-    { peer: fixture.row({ env: { CREDENTIAL_TOKEN: secret } }) },
+    { peer: fixture.row({ env: { DEMO_PASSWD: secret } }) },
     { storage: fixture.storage },
   )
   const published: string[] = []
@@ -377,6 +383,7 @@ test("configured secrets are redacted from replies and JSONL capture snapshots",
       .split("\n")
       .map((line) => JSON.parse(line))
     expect(JSON.stringify(frames)).not.toContain("second line")
+    expect(JSON.stringify(frames)).toContain('"[redacted]":"key fixture"')
     expect(
       frames.some((frame) => frame.direction === "in" && JSON.stringify(frame.message).includes("[redacted]")),
     ).toBe(true)

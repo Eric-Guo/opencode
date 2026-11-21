@@ -16,12 +16,18 @@ export class AcpCapture {
     return this.secrets.reduce((text, secret) => text.replaceAll(secret, "[redacted]"), value)
   }
 
+  stringify(value: unknown) {
+    return JSON.stringify(value, (_, entry: unknown) => {
+      if (typeof entry === "string") return this.redact(entry)
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return entry
+
+      return Object.fromEntries(Object.entries(entry).map(([key, value]) => [this.redact(key), value]))
+    })
+  }
+
   record(direction: "in" | "out" | "note", message: unknown) {
     if (this.truncated || !this.path) return
-    const line =
-      JSON.stringify({ at: new Date().toISOString(), direction, message }, (_, value: unknown) =>
-        typeof value === "string" ? this.redact(value) : value,
-      ) + "\n"
+    const line = this.stringify({ at: new Date().toISOString(), direction, message }) + "\n"
     this.bytes += Buffer.byteLength(line)
     if (this.bytes > 16 * 1024 * 1024 - 1024) {
       this.truncated = true
