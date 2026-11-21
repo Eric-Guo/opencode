@@ -594,7 +594,8 @@ export async function snapshot(
 
   tab.refs = refs
   tab.revision = revision
-  const title = "Page: " + shorten(header.url, 512) + "\nTitle: " + shorten(header.title, 256) + "\n\n"
+  const page = snapshotHeader(header)
+  const title = "Page: " + page.url + "\nTitle: " + page.title + "\n\n"
   const body = lines.slice(0, options.maxLines).join("\n")
   const budget = options.maxChars - Buffer.byteLength(title)
   const truncated = lines.length > options.maxLines || Buffer.byteLength(body) > budget
@@ -603,7 +604,7 @@ export async function snapshot(
 
   return {
     content: title + (query && !lines.length ? "No snapshot entries matched the query." : text),
-    structured_content: { ...header, truncated },
+    structured_content: { ...page, truncated },
   }
 }
 
@@ -761,6 +762,10 @@ export function clamp(text: string, bytes: number) {
     "\n\n[Evaluation output truncated: " + omitted + " more bytes. Return a smaller value.]"
   const kept = utf8Prefix(value, Math.max(0, bytes - Buffer.byteLength(marker(value.length))))
   return kept + marker(value.length - Buffer.byteLength(kept))
+}
+
+export function snapshotHeader(page: { url: string; title: string }) {
+  return { url: shorten(page.url, 512), title: shorten(page.title, 256) }
 }
 
 function shorten(text: string, bytes: number) {

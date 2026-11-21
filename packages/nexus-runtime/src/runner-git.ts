@@ -63,18 +63,15 @@ async function readGitReview(root: string, input: JsonObject, active: AbortSigna
   const untracked = await git(worktree, ["ls-files", "--others", "--exclude-standard", "-z"])
   if (untracked.status !== 0 && !untracked.truncated)
     return { is_error: true, content: "git_failed: unable to list untracked files" }
-  const complete = (result: typeof names) =>
-    result.truncated ? result.text.slice(0, result.text.lastIndexOf("\0") + 1) : result.text
-  const changed = complete(names).split("\0")
+  // Git terminates each field with NUL. The final fragment can be a filename cut by maxBuffer.
+  const fields = (result: typeof names) => result.text.split("\0").slice(0, -1)
+  const changed = fields(names)
   const files: { status: string; path: string; untracked?: true }[] = [
     ...Array.from({ length: Math.floor(changed.length / 2) }, (_, index) => ({
       status: changed[index * 2],
       path: changed[index * 2 + 1],
     })),
-    ...complete(untracked)
-      .split("\0")
-      .filter(Boolean)
-      .map((path) => ({ status: "A", path, untracked: true as const })),
+    ...fields(untracked).map((path) => ({ status: "A", path, untracked: true as const })),
   ]
   const document: JsonObject = {
     root: worktree,

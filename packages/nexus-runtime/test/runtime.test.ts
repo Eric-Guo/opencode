@@ -354,9 +354,12 @@ test.each([
             services: { runner: { environment: { root: project }, tools: [], documents: [] } },
           },
         })
-      if (path.endsWith("/conversations/conversation"))
+      if (path.endsWith("/conversations/scratch") && request.method === "DELETE")
+        return new Response(null, { status: 204 })
+      if (path.endsWith("/conversations/conversation") || path.endsWith("/conversations/scratch"))
         return Response.json({
           conversation: conversationFixture({
+            public_id: path.endsWith("/scratch") ? "scratch" : "conversation",
             workspace_public_id: approval.workspace,
             answering_user_public_id: approval.agent,
             archived_at: approval.archived ? measured : null,
@@ -631,6 +634,12 @@ test.each([
         ).toBe("Bearer human")
       }
       if ("apiKey" in fixture) {
+        expect(
+          await runtime.manage({
+            action: "application.operation",
+            operation: { action: "delete", conversation: "scratch" },
+          }),
+        ).toBeNull()
         await runtime.manage({ action: "settings.update", patch: { subagent_default: false } })
         policyTools.push(
           { type: "function", function: { name: "request" } },
