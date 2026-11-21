@@ -25,8 +25,7 @@ export class AcpClient {
   private readonly settings: ReturnType<typeof acpSettings>
   private readonly children = new Map<string, AcpChild>()
   private readonly sessions = new Map<string, Session>()
-  private readonly archives = new Map<string, AcpCapture>()
-  private readonly gone = new Set<string>()
+  private readonly archives = new Map<string, { capture: AcpCapture; owner: string; agent: string; reason?: string }>()
   private readonly storage: string
   private closing?: Promise<void>
 
@@ -149,7 +148,7 @@ export class AcpClient {
     if (!("session" in command)) throw new Error("Unknown ACP command.")
     const selected = this.sessions.get(command.session)
     if (command.action === "acp.logs") {
-      const capture = selected?.child.capture ?? this.archives.get(command.session)
+      const capture = selected?.child.capture ?? this.archives.get(command.session)?.capture
       if (!capture) throw new Error("Unknown delegated session.")
       return capture.read()
     }
@@ -172,17 +171,21 @@ export class AcpClient {
     if (this.closing) throw new Error("The ACP client is shutting down.")
     const owner = JSON.stringify([context.workspace, context.conversation])
     const existing = input.session ? this.sessions.get(input.session) : undefined
+    if (input.session && !existing) {
+      const archive = this.archives.get(input.session)
+      if (archive?.owner === owner && archive.agent === agent.name)
+        throw new Error((archive.reason ?? "This delegated session has ended") + "; omit session to start a new one.")
+    }
     if (input.session && (!existing || existing.child.owner !== owner || existing.child.agent !== agent))
-      throw new Error(
-        this.gone.has(input.session)
-          ? "This delegated session has ended; omit session to start a new one."
-          : "Choose a session owned by this conversation and agent.",
-      )
+      throw new Error("Choose a session owned by this conversation and agent.")
     const key = JSON.stringify([owner, agent.name])
     const previous = existing?.child ?? this.children.get(key)
     if (previous && !previous.alive) {
       void this.retire(previous, true)
-      if (existing) throw new Error("This delegated child has exited; omit session to start a new one.")
+      if (existing)
+        throw new Error(
+          (previous.exitDescription ?? "This delegated child has ended") + "; omit session to start a new one.",
+        )
     }
     const known = previous?.alive ? previous : undefined
     const child =
@@ -262,8 +265,7 @@ export class AcpClient {
             "]"
           : ""
       const text =
-        output.text +
-        notice +
+        [output.text + notice, "diagnostic" in result ? result.diagnostic : undefined].filter(Boolean).join("\n\n") +
         result.asks
           .map((ask) => "\n\nThe agent asked: " + ask + " — declined; continue the session with an answer.")
           .join("") +
@@ -353,15 +355,16 @@ export class AcpClient {
     this.sessions.forEach((selected, id) => {
       if (selected.child !== child) return
       this.sessions.delete(id)
-      this.archives.set(id, child.capture)
-      this.gone.add(id)
+      this.archives.set(id, {
+        capture: child.capture,
+        owner: child.owner,
+        agent: child.agent.name,
+        reason: child.retired ? undefined : child.exitDescription,
+      })
     })
     Array.from(this.archives.keys())
       .slice(0, -100)
-      .forEach((id) => {
-        this.archives.delete(id)
-        this.gone.delete(id)
-      })
+      .forEach((id) => this.archives.delete(id))
   }
 
   private async retire(child: AcpChild, force = false) {

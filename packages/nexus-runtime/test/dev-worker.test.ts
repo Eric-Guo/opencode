@@ -11,6 +11,7 @@ import { ExtensionManager } from "../src/extension-manager"
 import { workerRegistration } from "../src/worker-extension"
 import { runDevelopment } from "../dev/terminal"
 import { storeFixture } from "./fixture/store"
+import { conversationFixture } from "./fixture/conversation"
 import descriptor from "../dev/extension.json"
 
 const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.MutableJson))
@@ -30,6 +31,10 @@ test("the real development extension preserves SDK methods, live iterators, iden
       requests.push(request.method + " " + new URL(request.url).pathname)
       expect(request.headers.get("authorization")).toBe("Bearer fixture")
       if (server.upgrade(request, { headers: { "Sec-WebSocket-Protocol": "actioncable-v1-json" } })) return
+      if (new URL(request.url).pathname.endsWith("/conversations/side"))
+        return Response.json({
+          conversation: conversationFixture({ public_id: "side", side: true, source_conversation_public_id: "main" }),
+        })
       return Response.json({
         run: {
           public_id: "run",
@@ -130,6 +135,12 @@ test("the real development extension preserves SDK methods, live iterators, iden
       { run: "run", conversation: "conversation", attached: true },
     ])
     expect(application.lifecycle.hostsSnapshot()).toEqual([])
+    application.lifecycle.adopt("workspace", "side")
+    expect(await manager.command("dev", { action: "followers" })).toMatchObject({ conversations: [] })
+    expect(await manager.command("dev", { action: "followers", side: true })).toMatchObject({
+      conversations: [{ public_id: "side", parent: "main" }],
+      runs: [],
+    })
     await manager.close()
     await shutdown.promise
     expect(requests.every((request) => request.startsWith("GET "))).toBe(true)
