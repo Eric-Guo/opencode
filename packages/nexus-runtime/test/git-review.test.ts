@@ -1,3 +1,4 @@
+import { $ } from "bun"
 import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -35,6 +36,25 @@ test("Git review pins comparisons and bounds text/binary patches without touchin
       patch: null,
     })
     expect(await gitReview(directory, { base, path: "missing" }, signal)).toMatchObject({ is_error: true })
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test("a Git review cut inside a tracked path returns only complete status and path pairs", async () => {
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "nexus-review-")))
+  try {
+    await initRepo(directory)
+    const names = Array.from({ length: 180 }, (_, i) => "a".repeat(185) + String(i).padStart(3, "0"))
+    const blob = (await $`git hash-object -w --stdin < ${Buffer.alloc(0)}`.cwd(directory).text()).trim()
+    const entries = Buffer.from(names.map((name) => `100644 ${blob}\t${name}\n`).join(""))
+    await $`git update-index --index-info < ${entries}`.cwd(directory).quiet()
+    await $`git commit -qm files`.cwd(directory).quiet()
+
+    const review = await gitReview(directory, {}, new AbortController().signal)
+    // Each NUL-terminated deletion record is 191 bytes. The next name crosses the 32 KiB budget.
+    expect(review.structured_content?.truncated).toBe(true)
+    expect(review.structured_content?.files).toEqual(names.slice(0, 171).map((path) => ({ status: "D", path })))
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

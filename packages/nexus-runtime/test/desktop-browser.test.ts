@@ -17,7 +17,14 @@ test("Desktop Browser serializes commands per conversation and targets only its 
       return { output: { id: "tab-first" }, content: [] }
     }
     if (operation === "tabs_open") return { output: { id: "tab-second" }, content: [] }
-    if (operation === "snapshot") return { output: { content: String(input.tabID) }, content: [] }
+    if (operation === "snapshot")
+      return {
+        output: {
+          content: String(input.tabID),
+          tab: { url: "https://example.test/" + "a".repeat(4000), title: "語".repeat(400) },
+        },
+        content: [],
+      }
 
     return { content: [] }
   }
@@ -40,6 +47,11 @@ test("Desktop Browser serializes commands per conversation and targets only its 
     const second = await navigate.execute({ url: "https://example.test/other" }, { ...context, conversation: "second" })
 
     expect(second.content).toContain("tab-second")
+    const page = second.structured_content as { url: string; title: string }
+    expect(page.url).toMatch(/^https:\/\/example\.test\/a+ …\(\d+ more bytes\)$/)
+    expect(page.title).toMatch(/^語+ …\(\d+ more bytes\)$/)
+    expect(Buffer.byteLength(page.url)).toBeLessThanOrEqual(512)
+    expect(Buffer.byteLength(page.title)).toBeLessThanOrEqual(256)
     expect(calls).toEqual([
       ["tabs_open", {}],
       ["tabs_open", {}],

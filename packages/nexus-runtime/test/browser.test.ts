@@ -113,6 +113,7 @@ test.skipIf(!chromium)(
       await browser.check()
       const opened = await run("browser_navigate", { url: server.url.href })
       expect(opened.content).toContain("new browser tab")
+      expect(opened.structured_content).toMatchObject({ url: server.url.href, title: "Fixture" })
       expect(opened.content).toContain("Fixture")
       expect(opened.content).toContain(`href="${new URL("/topics/42", server.url).href}"`)
       const original = ref(opened.content, "textbox")
@@ -207,7 +208,10 @@ test.skipIf(!chromium)(
           url:
             "data:text/html," +
             encodeURIComponent(
-              "<title>" + "t".repeat(400) + "</title><button>Still visible</button>" + "x".repeat(60000),
+              "<meta charset=utf-8><title>" +
+                "語".repeat(400) +
+                "</title><button>Still visible</button>" +
+                "x".repeat(60000),
             ),
         },
         second,
@@ -218,6 +222,13 @@ test.skipIf(!chromium)(
       expect(data.content).toContain("Still visible")
       expect(Buffer.byteLength(String(data.content))).toBeLessThanOrEqual(51200)
       expect(data.content).toContain("snapshot truncated:")
+      const [url, title] = String(data.content).split("\n")
+      expect(Buffer.byteLength(url.slice(6))).toBeLessThanOrEqual(512)
+      expect(Buffer.byteLength(title.slice(7))).toBeLessThanOrEqual(256)
+      expect(title).toContain("語")
+      expect(title).not.toContain("�")
+      expect(data.structured_content).toMatchObject({ url: url.slice(6), title: title.slice(7) })
+      expect((await run("browser_click", { ref: ref(data.content, "button") }, second)).is_error).not.toBe(true)
       const gates = Promise.withResolvers<void>()
       const started = Promise.withResolvers<void>()
       const order: string[] = []
