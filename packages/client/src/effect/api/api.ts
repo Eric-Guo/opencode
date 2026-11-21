@@ -3788,11 +3788,12 @@ export type ExperimentalNexusManageInput = {
         readonly version: number
         readonly name?: string | undefined
         readonly approval?: "ask" | "rules" | "bypass" | undefined
-        readonly prompt: string
-        readonly rule:
+        readonly prompt?: string | undefined
+        readonly rule?:
           | { readonly kind: "once"; readonly run_at: string }
           | { readonly kind: "interval"; readonly starts_at: string; readonly every_seconds: number }
           | { readonly kind: "daily"; readonly local_time: string; readonly time_zone: string }
+          | undefined
       }
     | { readonly action: "memory.create"; readonly name: string; readonly workspace?: string | undefined }
     | {

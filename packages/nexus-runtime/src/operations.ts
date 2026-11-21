@@ -10,6 +10,7 @@ import {
   type Client,
   type RequestOptions,
   type Step,
+  type TurnPage,
 } from "@cybros/agent"
 import { approvalGrant } from "./approval-grant"
 import { SkillOperation, skillOperation } from "./operation-skills"
@@ -155,11 +156,18 @@ export const Operation = Schema.Union([
     template: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
   }),
   Schema.Struct({
-    action: Schema.Literals(["history", "turns"]),
+    action: Schema.Literal("history"),
     ...Conversation,
     after_position: Schema.optional(Schema.Int),
     before_position: Schema.optional(Schema.Int),
     limit: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("turns"),
+    ...Conversation,
+    after_position: Schema.optional(Schema.Int),
+    before_position: Schema.optional(Schema.Int),
+    limit: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
   }),
   Schema.Struct({
     action: Schema.Literal("input.edit"),
@@ -630,11 +638,35 @@ export class Operations {
           },
           options,
         )
-      if (input.action === "turns")
-        return chat.turns.list(
-          { after_position: input.after_position, before_position: input.before_position, limit: input.limit },
-          options,
-        )
+      if (input.action === "turns") {
+        if (input.before_position !== undefined) {
+          if (input.after_position !== undefined) throw new Error("Choose one turn cursor.")
+
+          return chat.turns.list(
+            { before_position: input.before_position, limit: Math.min(input.limit ?? 100, 100) },
+            options,
+          )
+        }
+
+        const items: TurnPage["items"] = []
+        const limit = Math.min(input.limit ?? 1000, 1000)
+        let after = input.after_position
+        while (items.length < limit) {
+          const size = Math.min(limit - items.length, 100)
+          const page = await chat.turns.list({ after_position: after, limit: size }, options)
+          items.push(...page.items)
+          if (page.items.length < size) break
+
+          after = page.items[page.items.length - 1].position
+        }
+
+        return {
+          items,
+          before_position: items[0]?.position ?? null,
+          after_position: items.at(-1)?.position ?? null,
+          has_more: items.length === limit,
+        }
+      }
       if (input.action === "fork")
         return chat.fork(
           { turn_public_id: input.turn, variant_public_id: input.variant, title: input.title },
