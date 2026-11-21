@@ -1,4 +1,4 @@
-import { APIError, type Client, type AgentConfigurationInput } from "@cybros/agent"
+import { APIError, toolAlias, type Client, type AgentConfigurationInput, type ToolAlias } from "@cybros/agent"
 import { randomBytes } from "node:crypto"
 import { Schema } from "effect"
 import { NexusPreset } from "@opencode/schema/nexus-preset"
@@ -6,6 +6,7 @@ import { StoreDocument } from "./document"
 import { readPreset, writePreset } from "./preset-document"
 import { memoryPolicy } from "./memory-policy"
 import { applyMcp, selectedMcp, withoutMcp, type McpDirectory } from "./preset-mcp"
+import { summaryPrompt } from "./capabilities"
 
 export const guidance =
   "Complete the requested work using the available tools and verify the result. Accepted work retains its captured environment, tools and model policy. Discover capabilities before calling them. Deliver results to their original requester. Save useful confirmed facts through the available memory tools and claim saved changes only after successful tool results." +
@@ -60,6 +61,7 @@ export class Presets {
   constructor(
     member: Client,
     private readonly mcp?: () => Promise<McpDirectory>,
+    private readonly summarizer = summaryPrompt,
   ) {
     this.document = new StoreDocument(
       member.profile.storeEntries,
@@ -194,33 +196,20 @@ export class Presets {
       ? selectedMcp(directory, preset.configuration.mcp).map((entry) => entry.tool.callable_name)
       : (resolved.configuration.mcp_tools ?? []).map((tool) => tool.name)
     const roles = catalog.presets.filter((entry) => entry.role)
-    const spawn = "nexus.conversation.spawn"
-    const roleTools = resolved.configuration.kernel_tools?.includes(spawn)
-      ? [
-          {
-            type: "function" as const,
-            function: { name: "spawn" },
-            canonical: spawn,
-            params: {
-              role: {
-                maps_to: "declaration",
-                description: "Select a published role: " + roles.map((entry) => entry.role!.name).join(", "),
-              },
-            },
-            omit: ["agent"],
-          },
-        ]
-      : []
+    const description =
+      "Required. Select one published Subagent role by its exact name.\n" +
+      roles.map((entry) => "- " + entry.role!.name + ": " + entry.role!.description).join("\n")
 
     return {
       ...resolved,
+      summarizer: this.summarizer(resolved.configuration.compaction_policy),
       mcp_names: parentMcp,
       configuration: {
-        ...resolved.configuration,
-        kernel_tools: resolved.configuration.kernel_tools?.filter((name) => name !== spawn),
-        tool_definitions: [...(resolved.configuration.tool_definitions ?? []), ...roleTools],
+        ...withRoles(resolved.configuration, description),
         delegation_catalog: roles.map((entry) => {
           const child = compile(entry, base, inheritedModel, directory)
+          const childConfiguration = withRoles(child.configuration, description)
+          const summarizer = this.summarizer(childConfiguration.compaction_policy)
           const names = directory
             ? selectedMcp(directory, entry.configuration.mcp).map((entry) => entry.tool.callable_name)
             : (child.configuration.mcp_tools ?? []).map((tool) => tool.name)
@@ -246,12 +235,13 @@ export class Presets {
             Schema.fromJsonString(Schema.Record(Schema.String, Schema.MutableJson)),
           )(
             JSON.stringify({
-              ...child.configuration,
+              ...childConfiguration,
               mcp_tools: [],
               tool_definitions: directory
-                ? withoutMcp(child.configuration.tool_definitions ?? [], directory)
-                : child.configuration.tool_definitions,
+                ? withoutMcp(childConfiguration.tool_definitions, directory)
+                : childConfiguration.tool_definitions,
               system_prompt: { content: child.instructions },
+              summarizer: summarizer === null ? null : { content: summarizer },
               conversation_reach: "subtree",
               memory_context_limit: { bindings: memory.filter((binding) => binding.name === "conversation") },
               prompt_mechanism: "assembly",
@@ -271,6 +261,41 @@ export class Presets {
         }),
       },
     }
+  }
+}
+
+function withRoles(configuration: AgentConfigurationInput, description: string) {
+  const spawn = "nexus.conversation.spawn"
+  const tools = [...(configuration.tool_definitions ?? [])]
+
+  if (
+    configuration.kernel_tools?.includes(spawn) &&
+    !tools.some((tool) => "canonical" in tool && tool.canonical === spawn && (tool as ToolAlias).function.name === "spawn")
+  )
+    tools.push(toolAlias("spawn", spawn))
+
+  return {
+    ...configuration,
+    kernel_tools: configuration.kernel_tools?.filter((name) => name !== spawn),
+    tool_definitions: tools.map((tool) => {
+      if (!("canonical" in tool) || tool.canonical !== spawn) return tool
+
+      const alias = tool as ToolAlias
+      const params = Object.entries(alias.params ?? {})
+      const name =
+        params.find(([, field]) => field.maps_to === "declaration")?.[0] ??
+        params.find(([, field]) => field.maps_to === "agent")?.[0] ??
+        "role"
+
+      return {
+        ...alias,
+        params: {
+          ...Object.fromEntries(params.filter(([, field]) => !["agent", "declaration"].includes(field.maps_to))),
+          [name]: { maps_to: "declaration", description },
+        },
+        omit: [...new Set([...(alias.omit ?? []).filter((field) => field !== "declaration"), "agent"])],
+      }
+    }),
   }
 }
 
