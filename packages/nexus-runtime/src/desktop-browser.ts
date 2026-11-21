@@ -10,7 +10,7 @@ import {
   browserScreenshotResult,
   browserSnapshotOptions,
 } from "./browser"
-import { SNAPSHOT_GUIDANCE } from "./browser-session"
+import { SNAPSHOT_GUIDANCE, snapshotHeader } from "./browser-session"
 import type { RunnerTool } from "./extensions"
 
 type DesktopOperation =
@@ -159,7 +159,10 @@ export function desktopBrowserTools(browser: DesktopBrowser, owner: AbortSignal,
 
           return {
             content: notice + UNTRUSTED + "\n" + content,
-            structured_content: { ...snapshot.tab, truncated: snapshot.truncated ?? false },
+            structured_content: {
+              ...(snapshot.tab && snapshotHeader(snapshot.tab)),
+              truncated: snapshot.truncated ?? false,
+            },
           }
         })
         .catch((error: unknown) => {
