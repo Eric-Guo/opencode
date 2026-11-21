@@ -13,7 +13,7 @@ import { NexusBot } from "@opencode/schema/nexus-bot"
 import { StoreDocument } from "./document"
 import { Presets } from "./presets"
 import { InputAdmissions } from "./admission"
-import { externalBot, externalRoles } from "./bot-policy"
+import { externalBot, externalRoles, isSubagentTool } from "./bot-policy"
 import { compactionInstructions } from "./capabilities"
 
 const Locator = Schema.Struct({ public_id: Schema.String, workspace_public_id: Schema.String })
@@ -50,6 +50,7 @@ const Creation = Schema.Struct({
   settings: NexusBot.Settings,
   configuration: Schema.Record(Schema.String, Schema.MutableJson),
   instructions: Schema.String,
+  summarizer: Schema.optional(Schema.NullOr(Schema.String)),
   public_id: Schema.optional(Schema.String),
 })
 
@@ -154,7 +155,7 @@ export class Bots {
           display_name: command.display_name ?? agent.display_name,
           configuration: prepared.configuration,
           system_prompt: prepared.instructions,
-          summarizer: compactionInstructions,
+          summarizer: prepared.summarizer,
         })
         return { ...updated, settings: next }
       })
@@ -205,7 +206,7 @@ export class Bots {
           description: intent.description,
           configuration: intent.configuration,
           system_prompt: intent.instructions,
-          summarizer: compactionInstructions,
+          summarizer: intent.summarizer === undefined ? compactionInstructions : intent.summarizer,
           create_only: true,
         })
         .catch(async (error: unknown) => {
@@ -259,6 +260,7 @@ export class Bots {
         JSON.stringify(prepared.configuration),
       ),
       instructions: prepared.instructions,
+      summarizer: prepared.summarizer,
     }
   }
 
@@ -325,6 +327,7 @@ export class Bots {
         JSON.stringify({
           ...prepared.configuration,
           system_prompt: { content: [prepared.instructions, this.hints?.(model)].filter(Boolean).join("\n\n") },
+          summarizer: prepared.summarizer === null ? null : { content: prepared.summarizer },
         }),
       ),
       fallback_models: prepared.configuration.fallback_models ?? [],
@@ -393,19 +396,10 @@ export class Bots {
         }),
       )(entry)
 
-      return (
-        fields.function?.name !== "code" &&
-        (settings.subagent ||
-          !["nexus.conversation.spawn", "nexus.graph.delegate_task", "nexus.conversation.request"].includes(
-            fields.canonical ?? "",
-          ))
-      )
+      return fields.function?.name !== "code" && (settings.subagent || !isSubagentTool(fields.canonical ?? ""))
     })
     if (!settings.subagent)
-      configuration.kernel_tools = configuration.kernel_tools?.filter(
-        (name) =>
-          !["nexus.conversation.spawn", "nexus.graph.delegate_task", "nexus.conversation.request"].includes(name),
-      )
+      configuration.kernel_tools = configuration.kernel_tools?.filter((name) => !isSubagentTool(name))
     if (settings.audience === "external") {
       const catalog = await this.member.tools.list()
       const wire = Object.fromEntries(catalog.map((tool) => [tool.canonical_name, tool.name]))
@@ -416,6 +410,7 @@ export class Bots {
 
     return {
       configuration,
+      summarizer: prepared.summarizer,
       instructions:
         prepared.instructions +
         "\n\nBot main conversations keep Code Mode off." +
