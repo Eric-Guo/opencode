@@ -356,6 +356,7 @@ export class Operations {
           workspace: row.host.workspace,
           archived: !!row.info.archived_at,
           side: row.info.side,
+          ...(row.info.side && { parent: row.info.source_conversation_public_id }),
           active_turn: row.info.active_turn_public_id,
         }))
     }

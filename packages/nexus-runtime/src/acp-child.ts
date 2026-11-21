@@ -87,6 +87,13 @@ export class AcpChild {
     return this.ended.promise
   }
 
+  get exitDescription() {
+    if (!this.exit) return
+
+    const status = this.exit.signal ?? (this.exit.code === null ? "unknown status" : "status " + this.exit.code)
+    return this.capture.redact('ACP agent "' + this.agent.name + '" exited (' + status + ")")
+  }
+
   serial<A>(signal: AbortSignal, run: () => Promise<A>) {
     const state = { entered: false }
     const pending = this.queue.then(async () => {
@@ -283,6 +290,10 @@ export class AcpChild {
       const response = await this.request(pending, signal)
       return this.reply(call, response)
     } catch (error) {
+      // EOF on stdout can reject the ACP request just before the process reports its exit status.
+      if (this.connection!.signal.aborted && !this.exit && !this.retired && !signal.aborted)
+        await within(this.closed, AbortSignal.any([signal, AbortSignal.timeout(1000)])).catch(() => {})
+
       if (signal.aborted) {
         call.canceled = true
         await this.cancel(session.remote)
@@ -297,12 +308,17 @@ export class AcpChild {
         }
         throw signal.reason
       }
+      const disconnected = !this.alive
+      const diagnostic = disconnected
+        ? (this.exitDescription ?? 'ACP agent "' + this.agent.name + '" stopped answering') +
+          " during the delegation" +
+          (this.stderr.trim() ? "; stderr: " + this.stderr.trim().split("\n").at(-1) : "")
+        : this.describe(error)
+
       return {
         ...this.reply(call, { stopReason: "cancelled" }),
-        stop: this.exit ? "exited" : "refused",
-        error: true,
-        text: this.capture.redact(this.describe(error)),
-        truncated: false,
+        stop: disconnected ? "exited" : "refused",
+        diagnostic: this.capture.redact(diagnostic),
       }
     }
   }
@@ -433,10 +449,7 @@ export class AcpChild {
 
   describe(error?: unknown) {
     return (
-      'ACP agent "' +
-      this.agent.name +
-      '" ' +
-      (this.exit ? "exited (" + (this.exit.signal ?? this.exit.code ?? "unknown") + ")" : "refused the operation") +
+      (this.exitDescription ?? 'ACP agent "' + this.agent.name + '" refused the operation') +
       (error ? ": " + (error instanceof Error ? error.message : String(error)) : "") +
       (this.stderr ? "; stderr: " + this.stderr.trim() : "")
     )
